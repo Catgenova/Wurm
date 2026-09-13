@@ -97,8 +97,13 @@ export function buildHelp(win: UIWindow): void {
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
     <h3>Terraforming</h3>
     <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
-    Drop dirt to raise a corner. Flatten evens a tile out step by step. Mine rock with a pickaxe,
-    then pave gravel with the shards or chisel them into bricks for cobblestone.</p>
+    Drop dirt to raise a corner. Mine rock with a pickaxe, then pave gravel with the shards or chisel
+    them into bricks for cobblestone.</p>
+    <p><b>Flatten</b> brings a tile level with the ground you are standing on, corner by corner:
+    ground above you is scraped down and pocketed as dirt, ground below you is packed up and spends
+    dirt from your pack. Stand where you want the finished height and work outwards to terrace a
+    hillside. Flattening the tile under your own feet has nothing to match, so it comes down to that
+    tile's lowest corner instead.</p>
     <p>Dropped items lie where you stood; the tile's menu offers to pick them up again. Anything
     left outside slowly decays, even while you are away: food rots within the hour, stone lasts for
     days, and better quality holds up longer. Fill your water skin at any shore and drink from it on

@@ -54,9 +54,12 @@ rebuilds and commits the result.
   clay, peat, tar, moss, snow, gravel, cobblestone, trees (birch, pine, oak,
   maple, willow, cedar with young/mature/old sizes), bushes, kelp and reed.
 - **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
-  flatten a tile step by step, pack and cultivate, surface-mine rock for shards,
-  pave gravel with shards or chisel bricks for cobblestone, remove paving.
-  Slopes you may create are limited by your digging skill.
+  pack and cultivate, surface-mine rock for shards, pave gravel with shards or
+  chisel bricks for cobblestone, remove paving. Flatten levels a tile to the
+  height of the ground you stand on, scraping high ground down into dirt and
+  packing dirt in to bring low ground up, so a terrace can be carried outwards
+  tile by tile; flattening the tile under your feet takes it down to its own
+  lowest corner. Slopes you may create are limited by your digging skill.
 - **Gathering.** Cut down trees for logs, pick and plant sprouts, forage and
   botanize with per-tile cooldowns, drink from any water or from a water skin
   you fill at the shore.

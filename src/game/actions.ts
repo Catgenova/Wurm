@@ -87,6 +87,33 @@ const cornerUnderBuilding = (g: Game, cx: number, cy: number): string | null => 
   return null;
 };
 
+/** The four corners of a tile, north-west first and going clockwise. */
+export const tileCorners = (x: number, y: number): Array<[number, number]> => [
+  [x, y],
+  [x + 1, y],
+  [x + 1, y + 1],
+  [x, y + 1],
+];
+
+/**
+ * The height flattening works towards: the ground the player is standing on,
+ * so a terrace can be carried outwards tile by tile. Standing on the tile
+ * being flattened there is nothing to match, so it settles to its own lowest
+ * corner and the ground only ever comes down.
+ */
+export function flattenTarget(g: Game, x: number, y: number): number {
+  const w = g.world;
+  const heights = tileCorners(x, y).map(([cx, cy]) => w.getHeight(cx, cy));
+  if (g.player.tileX === x && g.player.tileY === y) return Math.min(...heights);
+  return Math.round(w.centerHeight(g.player.tileX, g.player.tileY));
+}
+
+/** True while any corner of the tile is off the height flattening aims at. */
+export function needsFlattening(g: Game, x: number, y: number): boolean {
+  const target = flattenTarget(g, x, y);
+  return tileCorners(x, y).some(([cx, cy]) => g.world.getHeight(cx, cy) !== target);
+}
+
 function maxDigSlope(g: Game): number {
   return Math.max(40, Math.floor(g.skills.get('digging') * 3));
 }
@@ -179,11 +206,12 @@ export const ACTIONS: ActionDef[] = [
     repeat: true,
     stamina: 0.03,
     baseTime: 3.5,
-    applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].digYield && g.world.slope(t.x, t.y) > 0,
+    applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].digYield && needsFlattening(g, t.x, t.y),
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('shovel')) return 'You need a shovel to flatten.';
       if (g.world.hasWater(t.x, t.y)) return 'You cannot flatten below the water level.';
+      if (flattenTarget(g, t.x, t.y) < 0) return 'The ground you stand on is below the water line.';
       const under = underBuilding(g, t.x, t.y);
       if (under) return under;
       return null;
@@ -191,32 +219,39 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return false;
       const w = g.world;
-      const cs = [
-        [t.x, t.y],
-        [t.x + 1, t.y],
-        [t.x + 1, t.y + 1],
-        [t.x, t.y + 1],
-      ];
-      let hi = 0;
-      let lo = 0;
-      for (let i = 1; i < 4; i++) {
-        if (w.getHeight(cs[i][0], cs[i][1]) > w.getHeight(cs[hi][0], cs[hi][1])) hi = i;
-        if (w.getHeight(cs[i][0], cs[i][1]) < w.getHeight(cs[lo][0], cs[lo][1])) lo = i;
+      const own = g.player.tileX === t.x && g.player.tileY === t.y;
+      const target = flattenTarget(g, t.x, t.y);
+      const cs = tileCorners(t.x, t.y);
+      // The corners furthest above and below the height we are working towards.
+      let hi = -1;
+      let lo = -1;
+      for (let i = 0; i < 4; i++) {
+        const h = w.getHeight(cs[i][0], cs[i][1]);
+        if (h > target && (hi < 0 || h > w.getHeight(cs[hi][0], cs[hi][1]))) hi = i;
+        if (h < target && (lo < 0 || h < w.getHeight(cs[lo][0], cs[lo][1]))) lo = i;
       }
-      const diff = w.getHeight(cs[hi][0], cs[hi][1]) - w.getHeight(cs[lo][0], cs[lo][1]);
-      if (diff <= 0) return false;
-      if (diff >= 2) {
-        w.setHeight(cs[hi][0], cs[hi][1], w.getHeight(cs[hi][0], cs[hi][1]) - 1);
-        w.setHeight(cs[lo][0], cs[lo][1], w.getHeight(cs[lo][0], cs[lo][1]) + 1);
+      if (hi < 0 && lo < 0) return false;
+      const raise = (i: number, by: number): void => w.setHeight(cs[i][0], cs[i][1], w.getHeight(cs[i][0], cs[i][1]) + by);
+      if (hi >= 0 && lo >= 0) {
+        // One corner down and one up: the dirt simply moves across the tile.
+        raise(hi, -1);
+        raise(lo, 1);
         g.logMsg('You move some dirt across the tile.', 'event');
-      } else {
-        w.setHeight(cs[hi][0], cs[hi][1], w.getHeight(cs[hi][0], cs[hi][1]) - 1);
+      } else if (hi >= 0) {
+        raise(hi, -1);
         g.inventory.add('dirt', { ql: g.productQl('digging', g.toolQl('shovel')) });
-        g.logMsg('You scrape off the last bump and pocket the dirt.', 'event');
+        g.logMsg('You scrape the ground down and pocket the dirt.', 'event');
+      } else {
+        if (!g.inventory.consume('dirt')) {
+          g.logMsg('You need dirt to bring this ground up to your level.', 'error');
+          return false;
+        }
+        raise(lo, 1);
+        g.logMsg('You pack dirt in to bring the ground up.', 'event');
       }
       if (TILE_DEFS[w.getTile(t.x, t.y)].turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
-      if (w.slope(t.x, t.y) === 0) {
-        g.logMsg('The tile is now flat.', 'event');
+      if (!needsFlattening(g, t.x, t.y)) {
+        g.logMsg(own ? `The tile is now flat at its lowest corner.` : 'The tile is now flat and level with the ground you stand on.', 'event');
         return false;
       }
       return true;
