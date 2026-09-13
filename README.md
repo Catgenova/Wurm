@@ -71,10 +71,14 @@ rebuilds and commits the result.
   block movement; doors let you through. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **Materials.** Planks and timbers from logs with a saw, thatch from cut
-  grass, mortar from clay and sand, bricks chiselled from rock, slate, marble
-  or sandstone shards, clay bricks and adobe by pottery, silver and gold
-  chipped from veins in the mountains.
+- **Materials and crafting.** Planks and timbers from logs with a saw,
+  shafts and mallets carved with a knife, thatch from cut grass, mortar from
+  clay and sand, bricks chiselled from rock, slate, marble or sandstone
+  shards, clay bricks and adobe by pottery, silver and gold chipped from
+  veins in the mountains. Every recipe is a tool plus materials; the crafting
+  window (R) lists what you can make right now from your inventory, with a
+  switch to show every recipe and what it lacks, and each material's own menu
+  offers the same recipes.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, roams the wild, forages berries when hungry (putting the
   tile on the same cooldown a player would), and is tamed with a berry or
@@ -153,7 +157,7 @@ first, then runs the timer; moving interrupts it.
 - Chunked offscreen terrain caching for very zoomed-out views.
 - More wildermon species, breeding, and creature combat against the player.
 - Containers and item repair.
-- Crafting (carpentry, smithing) and a crafting window.
+- Smithing: metal tools and weapons from lumps.
 - Caves and mine entrances.
 - Day/night cycle and weather.
 - Creatures and combat.

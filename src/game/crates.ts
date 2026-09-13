@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import { itemName, type Item } from './items';
 
 /**
  * Crates are the first placeable objects. Each tile is a 4 by 4 grid of
@@ -56,33 +56,7 @@ const nearCrate = (g: Game, c: PlacedCrate): boolean => {
   return Math.hypot(cx - g.player.x, cy - g.player.y) <= 2.4;
 };
 
-function makeCrate(kind: CrateKind, logsNeeded: number, material: string): ActionDef {
-  const def = CRATE_DEFS[kind];
-  return {
-    id: `make_${kind}_crate`,
-    label: `Build ${def.name.toLowerCase()}`,
-    verb: 'building a crate',
-    skill: 'carpentry',
-    tool: 'mallet',
-    stamina: 0.05,
-    baseTime: 6,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === material,
-    check: (_t, g) => {
-      if (!g.inventory.has('mallet')) return 'You need a mallet.';
-      if (g.inventory.count(material) < logsNeeded) return `A ${def.name.toLowerCase()} takes ${logsNeeded} ${itemDef(material).name.toLowerCase()}s.`;
-      return null;
-    },
-    perform: (_t, g) => {
-      if (!g.inventory.consume(material, logsNeeded)) return;
-      g.inventory.add(def.item, { ql: g.productQl('carpentry', g.toolQl('mallet')) });
-      g.logMsg(`You knock together a ${def.name.toLowerCase()}. Place it on any spot of a tile.`, 'event');
-    },
-  };
-}
-
 export const CRATE_ACTIONS: ActionDef[] = [
-  makeCrate('log', 3, 'log'),
-  makeCrate('plank', 6, 'plank'),
   {
     id: 'place_crate',
     label: 'Place crate',

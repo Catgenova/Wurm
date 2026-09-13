@@ -80,6 +80,9 @@ input.onKey = (code) => {
     case 'KeyK':
       ui.toggleWindow('skills');
       break;
+    case 'KeyR':
+      ui.toggleWindow('craft');
+      break;
     case 'KeyL':
       ui.toggleWindow('events');
       break;

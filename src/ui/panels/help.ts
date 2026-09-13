@@ -29,6 +29,7 @@ export function buildHelp(win: UIWindow): void {
     <h3>Windows</h3>
     <table>
       <tr><td><kbd>I</kbd></td><td>Inventory</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Crafting: everything you can make with what you carry</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills</td></tr>
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
@@ -39,6 +40,12 @@ export function buildHelp(win: UIWindow): void {
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
+    <h3>Crafting</h3>
+    <p>The crafting window (<kbd>R</kbd>) lists every recipe you can make right now from the tools and
+    materials in your inventory, grouped by craft: a carving knife and a log give shafts or a mallet, a
+    saw gives planks and timbers, a chisel turns shards into bricks, and so on. Tick <i>Show every
+    recipe</i> to see the rest with the missing parts marked. The same recipes are on each material's
+    own menu, where <i>All</i> keeps going until the materials run out.</p>
     <h3>Settling and building</h3>
     <p>Use the settlement deed in your inventory to found a settlement where you stand: an 11 by 11
     square around a stone token. You may hold one settlement at a time, and building is only allowed

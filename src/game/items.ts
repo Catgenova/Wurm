@@ -54,6 +54,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   log: { name: 'Log', category: 'material', weight: 24, stackable: true, decay: 18 },
   plank: { name: 'Plank', category: 'material', weight: 2, stackable: true, decay: 20 },
   timber: { name: 'Timber', category: 'material', weight: 6, stackable: true, decay: 18 },
+  shaft: { name: 'Shaft', category: 'material', weight: 1, stackable: true, decay: 20, description: 'A straight length of wood, carved from a log. Handles for tools and rails for fences.' },
   thatch: { name: 'Thatch', category: 'material', weight: 0.5, stackable: true, decay: 60 },
   sprout: { name: 'Sprout', category: 'plant', weight: 0.1, stackable: true, decay: 160, description: 'Plant it on grass or dirt to grow a tree. Wilts quickly if left lying around.' },
   blueberry: { name: 'Blueberries', category: 'food', weight: 0.1, stackable: true, food: 0.08 },

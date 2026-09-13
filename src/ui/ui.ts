@@ -22,6 +22,7 @@ import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game
 import { itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '../game/crates';
+import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
 import { WildermonPanel } from './panels/wildermon';
 import { ContextMenu, type MenuItem } from './contextmenu';
@@ -77,6 +78,8 @@ export class UI {
     new InventoryPanel(inventory, game, this.menu);
     const skills = this.windows.create({ id: 'skills', title: 'Skills', x: 364, y: 56, width: 260, height: 380, anchor: 'tr', open: false });
     new SkillsPanel(skills, game);
+    const craft = this.windows.create({ id: 'craft', title: 'Crafting', x: 364, y: 56, width: 360, height: 360, anchor: 'tr', open: false });
+    new CraftPanel(craft, game);
     const map = this.windows.create({ id: 'map', title: 'Map', x: 12, y: 370, width: 236, height: 262, anchor: 'tr', open: false });
     this.minimap = new MinimapPanel(map, game, renderer);
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 640, width: 300, height: 190, anchor: 'tr', open: false });

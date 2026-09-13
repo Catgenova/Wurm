@@ -320,12 +320,35 @@ kbd {
   top: 12px;
   left: 50%;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
   transform: translateX(-50%);
   padding: 4px;
   background: var(--ui-bg);
   border: 1px solid var(--ui-border);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+/* Narrow screens: the toolbar becomes one row that scrolls sideways. */
+@media (max-width: 720px) {
+  .toolbar {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    transform: none;
+    scrollbar-width: none;
+  }
+
+  .toolbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .tb-btn {
@@ -581,6 +604,86 @@ kbd {
   border-top: 1px solid var(--ui-border);
   color: var(--ui-dim);
   font-size: 11px;
+}
+
+/* Crafting --------------------------------------------------------------- */
+
+.craft-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-dim);
+  font-size: 11px;
+}
+
+.craft-head label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ui-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.craft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1px 8px;
+  align-items: center;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.craft-row.locked {
+  opacity: 0.75;
+}
+
+.craft-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.craft-name small {
+  margin-left: 6px;
+  color: var(--ui-dim);
+  font-weight: 400;
+}
+
+.craft-needs {
+  grid-column: 1;
+  color: var(--ui-dim);
+  font-size: 11px;
+}
+
+.craft-needs .have {
+  color: #9fcf7c;
+}
+
+.craft-needs .lack {
+  color: #e0866f;
+}
+
+.craft-needs em {
+  font-style: normal;
+  opacity: 0.7;
+}
+
+.craft-btns {
+  display: flex;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  gap: 4px;
+}
+
+.craft-btns .tb-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Skills ----------------------------------------------------------------- */

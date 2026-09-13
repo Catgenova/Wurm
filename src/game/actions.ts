@@ -7,6 +7,7 @@ import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { itemDef, itemName } from './items';
+import { RECIPE_ACTIONS } from './recipes';
 
 /**
  * What an action acts upon. Tile targets carry the corner nearest to the click
@@ -54,6 +55,8 @@ export interface ActionDef {
   quantity?: boolean;
   /** Not listed by the generic menu; the UI offers it in its own way. */
   hidden?: boolean;
+  /** For quantity actions: how many times it can be done now, for the "all" entry. */
+  maxRepeat?(t: Target, g: Game): number;
   /** Stamina drained per completion (0..1). */
   stamina: number;
   /** Seconds at skill 1. */
@@ -81,13 +84,6 @@ const underBuilding = (g: Game, x: number, y: number): string | null => (g.build
 const cornerUnderBuilding = (g: Game, cx: number, cy: number): string | null => {
   for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.buildingAt(x, y)) return 'You cannot dig under a building.';
   return null;
-};
-
-const SHARD_TO_BRICK: Record<string, string> = {
-  rock_shards: 'stone_brick',
-  slate_shards: 'slate_brick',
-  marble_shards: 'marble_brick',
-  sandstone_shards: 'sandstone_brick',
 };
 
 function maxDigSlope(g: Game): number {
@@ -623,136 +619,6 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
-    id: 'make_brick',
-    label: 'Chisel brick',
-    verb: 'chiselling',
-    skill: 'masonry',
-    tool: 'chisel',
-    stamina: 0.04,
-    baseTime: 6,
-    difficulty: 12,
-    applies: (t, g) => t.kind === 'item' && !!SHARD_TO_BRICK[g.inventory.get(t.uid)?.id ?? ''],
-    check: (_t, g) => (g.inventory.has('chisel') ? null : 'You need a stone chisel to make bricks.'),
-    perform: (t, g) => {
-      if (t.kind !== 'item') return;
-      const shards = g.inventory.get(t.uid);
-      if (!shards) return;
-      const brick = SHARD_TO_BRICK[shards.id];
-      if (!g.skillCheck('masonry', 12, g.toolQl('chisel'))) {
-        g.logMsg('The shard splits the wrong way. You fail to make a brick.', 'event');
-        return;
-      }
-      g.inventory.remove(shards.uid, 1);
-      const item = g.inventory.add(brick, { ql: g.productQl('masonry', g.toolQl('chisel')) });
-      g.logMsg(`You chisel a ${itemDef(brick).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
-    },
-  },
-  {
-    id: 'make_planks',
-    label: 'Saw into planks',
-    verb: 'sawing',
-    skill: 'carpentry',
-    tool: 'saw',
-    stamina: 0.04,
-    baseTime: 5,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'log',
-    check: (_t, g) => (g.inventory.has('saw') ? null : 'You need a saw.'),
-    perform: (t, g) => {
-      if (t.kind !== 'item') return;
-      const log = g.inventory.get(t.uid);
-      if (!log) return;
-      g.inventory.remove(log.uid, 1);
-      const item = g.inventory.add('plank', { count: 3, ql: g.productQl('carpentry', g.toolQl('saw')) });
-      g.logMsg(`You saw the log into three planks. (QL ${item.ql.toFixed(1)})`, 'event');
-    },
-  },
-  {
-    id: 'make_timbers',
-    label: 'Saw into timbers',
-    verb: 'sawing',
-    skill: 'carpentry',
-    tool: 'saw',
-    stamina: 0.04,
-    baseTime: 5,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'log',
-    check: (_t, g) => (g.inventory.has('saw') ? null : 'You need a saw.'),
-    perform: (t, g) => {
-      if (t.kind !== 'item') return;
-      const log = g.inventory.get(t.uid);
-      if (!log) return;
-      g.inventory.remove(log.uid, 1);
-      const item = g.inventory.add('timber', { count: 2, ql: g.productQl('carpentry', g.toolQl('saw')) });
-      g.logMsg(`You saw the log into two timbers. (QL ${item.ql.toFixed(1)})`, 'event');
-    },
-  },
-  {
-    id: 'make_thatch',
-    label: 'Bundle into thatch',
-    verb: 'bundling thatch',
-    skill: 'carpentry',
-    stamina: 0.02,
-    baseTime: 3,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'mixed_grass',
-    check: (_t, g) => (g.inventory.count('mixed_grass') >= 2 ? null : 'You need two bundles of mixed grass.'),
-    perform: (_t, g) => {
-      if (!g.inventory.consume('mixed_grass', 2)) return;
-      g.inventory.add('thatch', { ql: g.productQl('carpentry') });
-      g.logMsg('You bundle the grass into thatch.', 'event');
-    },
-  },
-  {
-    id: 'make_mortar',
-    label: 'Mix mortar',
-    verb: 'mixing mortar',
-    skill: 'masonry',
-    stamina: 0.03,
-    baseTime: 4,
-    applies: (t, g) => t.kind === 'item' && ['clay', 'sand'].includes(g.inventory.get(t.uid)?.id ?? ''),
-    check: (_t, g) => (g.inventory.has('clay') && g.inventory.has('sand') ? null : 'Mortar takes one clay and one sand.'),
-    perform: (_t, g) => {
-      if (!g.inventory.has('clay') || !g.inventory.has('sand')) return;
-      g.inventory.consume('clay');
-      g.inventory.consume('sand');
-      g.inventory.add('mortar', { count: 2, ql: g.productQl('masonry') });
-      g.logMsg('You mix clay and sand into two lots of mortar.', 'event');
-    },
-  },
-  {
-    id: 'make_clay_brick',
-    label: 'Shape clay brick',
-    verb: 'shaping clay',
-    skill: 'pottery',
-    stamina: 0.02,
-    baseTime: 4,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'clay',
-    perform: (_t, g) => {
-      if (!g.skillCheck('pottery', 6)) {
-        g.logMsg('The clay slumps. You fail to shape a brick.', 'event');
-        return;
-      }
-      if (!g.inventory.consume('clay')) return;
-      g.inventory.add('clay_brick', { ql: g.productQl('pottery') });
-      g.logMsg('You shape a clay brick.', 'event');
-    },
-  },
-  {
-    id: 'make_adobe',
-    label: 'Make adobe',
-    verb: 'making adobe',
-    skill: 'pottery',
-    stamina: 0.02,
-    baseTime: 4,
-    applies: (t, g) => t.kind === 'item' && ['clay', 'mixed_grass'].includes(g.inventory.get(t.uid)?.id ?? ''),
-    check: (_t, g) => (g.inventory.has('clay') && g.inventory.has('mixed_grass') ? null : 'Adobe takes one clay and one bundle of mixed grass.'),
-    perform: (_t, g) => {
-      if (!g.inventory.has('clay') || !g.inventory.has('mixed_grass')) return;
-      g.inventory.consume('clay');
-      g.inventory.consume('mixed_grass');
-      g.inventory.add('adobe', { ql: g.productQl('pottery') });
-      g.logMsg('You press clay and grass into an adobe block.', 'event');
-    },
-  },
-  {
     id: 'found_settlement',
     label: 'Found settlement here',
     verb: 'founding a settlement',
@@ -851,6 +717,7 @@ export const ACTIONS: ActionDef[] = [
   ...BUILD_ACTIONS,
   ...CREATURE_ACTIONS,
   ...CRATE_ACTIONS,
+  ...RECIPE_ACTIONS,
   {
     id: 'drop_dirt_here',
     label: 'Drop (raises the ground)',

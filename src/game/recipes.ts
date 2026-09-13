@@ -1,0 +1,144 @@
+import type { ActionDef, Target } from './actions';
+import type { Game } from './game';
+import { itemDef } from './items';
+
+/**
+ * Everything the player can make from what they carry. A recipe is a tool
+ * (kept) plus materials (used up) that become a result. Each recipe is also
+ * an item action, so it shows on the material's menu as well as in the
+ * crafting window.
+ */
+export type RecipeCategory = 'Woodwork' | 'Stonework' | 'Clay & thatch';
+
+export interface RecipeInput {
+  item: string;
+  count?: number;
+}
+
+export interface Recipe {
+  id: string;
+  category: RecipeCategory;
+  /** Item id made. */
+  result: string;
+  /** Units of the result per craft. */
+  count?: number;
+  /** Materials used up per craft; the first is the one shown in the item menu label. */
+  inputs: RecipeInput[];
+  /** Tool that must be carried but is not used up. */
+  tool?: string;
+  skill: string;
+  /** Menu label on the material, such as "Saw into planks". */
+  label: string;
+  verb: string;
+  baseTime: number;
+  stamina: number;
+  /** When set, a skill check can fail; nothing is used up on a failure. */
+  difficulty?: number;
+  done: string;
+  fail?: string;
+}
+
+export const RECIPES: Recipe[] = [
+  // Woodwork
+  { id: 'make_planks', category: 'Woodwork', result: 'plank', count: 3, inputs: [{ item: 'log' }], tool: 'saw', skill: 'carpentry', label: 'Saw into planks', verb: 'sawing', baseTime: 5, stamina: 0.04, done: 'You saw the log into three planks.' },
+  { id: 'make_timbers', category: 'Woodwork', result: 'timber', count: 2, inputs: [{ item: 'log' }], tool: 'saw', skill: 'carpentry', label: 'Saw into timbers', verb: 'sawing', baseTime: 5, stamina: 0.04, done: 'You saw the log into two timbers.' },
+  { id: 'make_shafts', category: 'Woodwork', result: 'shaft', count: 4, inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve shafts', verb: 'carving shafts', baseTime: 5, stamina: 0.03, done: 'You carve the log into four shafts.' },
+  { id: 'make_mallet', category: 'Woodwork', result: 'mallet', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve a mallet', verb: 'carving a mallet', baseTime: 8, stamina: 0.04, difficulty: 8, done: 'You carve a mallet from the log.', fail: 'The head splits as you shape it. You fail to carve a mallet.' },
+  { id: 'make_log_crate', category: 'Woodwork', result: 'crate_log', inputs: [{ item: 'log', count: 3 }], tool: 'mallet', skill: 'carpentry', label: 'Build log crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You knock together a log crate. Place it on any spot of a tile.' },
+  { id: 'make_plank_crate', category: 'Woodwork', result: 'crate_plank', inputs: [{ item: 'plank', count: 6 }], tool: 'mallet', skill: 'carpentry', label: 'Build plank crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You knock together a plank crate. Place it on any spot of a tile.' },
+  // Stonework
+  { id: 'make_stone_brick', category: 'Stonework', result: 'stone_brick', inputs: [{ item: 'rock_shards' }], tool: 'chisel', skill: 'masonry', label: 'Chisel stone brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a stone brick.', fail: 'The shard splits the wrong way. You fail to make a brick.' },
+  { id: 'make_slate_brick', category: 'Stonework', result: 'slate_brick', inputs: [{ item: 'slate_shards' }], tool: 'chisel', skill: 'masonry', label: 'Chisel slate brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a slate brick.', fail: 'The slate flakes apart. You fail to make a brick.' },
+  { id: 'make_marble_brick', category: 'Stonework', result: 'marble_brick', inputs: [{ item: 'marble_shards' }], tool: 'chisel', skill: 'masonry', label: 'Chisel marble brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a marble brick.', fail: 'The marble cracks. You fail to make a brick.' },
+  { id: 'make_sandstone_brick', category: 'Stonework', result: 'sandstone_brick', inputs: [{ item: 'sandstone_shards' }], tool: 'chisel', skill: 'masonry', label: 'Chisel sandstone brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a sandstone brick.', fail: 'The sandstone crumbles. You fail to make a brick.' },
+  { id: 'make_mortar', category: 'Stonework', result: 'mortar', count: 2, inputs: [{ item: 'clay' }, { item: 'sand' }], skill: 'masonry', label: 'Mix mortar', verb: 'mixing mortar', baseTime: 4, stamina: 0.03, done: 'You mix clay and sand into two lots of mortar.' },
+  // Clay & thatch
+  { id: 'make_clay_brick', category: 'Clay & thatch', result: 'clay_brick', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape clay brick', verb: 'shaping clay', baseTime: 4, stamina: 0.02, difficulty: 6, done: 'You shape a clay brick.', fail: 'The clay slumps. You fail to shape a brick.' },
+  { id: 'make_adobe', category: 'Clay & thatch', result: 'adobe', inputs: [{ item: 'clay' }, { item: 'mixed_grass' }], skill: 'pottery', label: 'Make adobe', verb: 'making adobe', baseTime: 4, stamina: 0.02, done: 'You press clay and grass into an adobe block.' },
+  { id: 'make_thatch', category: 'Clay & thatch', result: 'thatch', inputs: [{ item: 'mixed_grass', count: 2 }], skill: 'carpentry', label: 'Bundle into thatch', verb: 'bundling thatch', baseTime: 3, stamina: 0.02, done: 'You bundle the grass into thatch.' },
+];
+
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Stonework', 'Clay & thatch'];
+
+export interface RecipeStatus {
+  /** Tool carried, or no tool needed. */
+  tool: boolean;
+  inputs: Array<{ item: string; need: number; have: number }>;
+  /** Everything is at hand for at least one craft. */
+  ready: boolean;
+  /** How many times it can be made with what is carried. */
+  max: number;
+}
+
+export function recipeStatus(r: Recipe, g: Game): RecipeStatus {
+  const tool = !r.tool || g.inventory.has(r.tool);
+  const inputs = r.inputs.map((i) => ({ item: i.item, need: i.count ?? 1, have: g.inventory.count(i.item) }));
+  const max = tool ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
+  return { tool, inputs, ready: max >= 1, max };
+}
+
+const lower = (id: string): string => itemDef(id).name.toLowerCase();
+const plural = (id: string, n: number): string => (n === 1 ? lower(id) : `${lower(id)}${itemDef(id).stackable && !lower(id).endsWith('s') ? 's' : ''}`);
+
+/** Why a recipe cannot be made right now, or null. */
+export function recipeReason(r: Recipe, g: Game): string | null {
+  if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
+  for (const i of r.inputs) {
+    const need = i.count ?? 1;
+    if (g.inventory.count(i.item) < need) return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${x.count ?? 1} ${plural(x.item, x.count ?? 1)}`).join(', ')})` : ''}.`;
+  }
+  return null;
+}
+
+/** Use up `n` units of an item, drawing from the clicked stack first, then any other (logs differ by wood). */
+function consumeAcross(g: Game, id: string, n: number, preferUid?: number): boolean {
+  if (g.inventory.count(id) < n) return false;
+  const stacks = g.inventory.items.filter((it) => it.id === id).sort((a, b) => Number(b.uid === preferUid) - Number(a.uid === preferUid));
+  let left = n;
+  for (const st of stacks) {
+    if (left <= 0) break;
+    const take = Math.min(left, st.count);
+    if (g.inventory.remove(st.uid, take)) left -= take;
+  }
+  return left === 0;
+}
+
+export function recipeAction(r: Recipe): ActionDef {
+  const materials = r.inputs.map((i) => i.item);
+  const toolQl = (g: Game): number => (r.tool ? g.toolQl(r.tool) : 0);
+  /** Keep going while more crafts were asked for and can still be made. */
+  const more = (t: Target, g: Game): boolean => {
+    if (t.kind !== 'item' || (t.count ?? 1) <= 1) return false;
+    t.count = (t.count ?? 1) - 1;
+    return recipeReason(r, g) === null;
+  };
+  return {
+    id: r.id,
+    label: r.label,
+    verb: r.verb,
+    skill: r.skill,
+    tool: r.tool,
+    stamina: r.stamina,
+    baseTime: r.baseTime,
+    difficulty: r.difficulty,
+    quantity: true,
+    repeat: true,
+    applies: (t, g) => t.kind === 'item' && materials.includes(g.inventory.get(t.uid)?.id ?? ''),
+    check: (_t, g) => recipeReason(r, g),
+    maxRepeat: (_t, g) => recipeStatus(r, g).max,
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g))) {
+        g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
+        return more(t, g);
+      }
+      for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid)) return;
+      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql: g.productQl(r.skill, toolQl(g)) });
+      g.logMsg(`${r.done} (QL ${item.ql.toFixed(1)})`, 'event');
+      return more(t, g);
+    },
+  };
+}
+
+export const RECIPE_ACTIONS: ActionDef[] = RECIPES.map(recipeAction);
+export const RECIPE_BY_ID = new Map(RECIPES.map((r) => [r.id, r]));

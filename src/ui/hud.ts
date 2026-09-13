@@ -16,6 +16,7 @@ interface Bar {
 
 const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) => void; id?: string }> = [
   { label: 'Inventory', key: 'I', action: (cb) => cb.toggle('inventory') },
+  { label: 'Craft', key: 'R', action: (cb) => cb.toggle('craft') },
   { label: 'Skills', key: 'K', action: (cb) => cb.toggle('skills') },
   { label: 'Events', key: 'L', action: (cb) => cb.toggle('events') },
   { label: 'Map', key: 'M', action: (cb) => cb.toggle('map') },

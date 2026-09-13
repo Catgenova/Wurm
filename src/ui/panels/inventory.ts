@@ -86,12 +86,13 @@ export class InventoryPanel {
   private openMenu(item: Item, x: number, y: number): void {
     const target = { kind: 'item' as const, uid: item.uid };
     const entries: MenuItem[] = this.game.actionsFor(target).map(({ def, reason }) => {
-      if (def.quantity && item.count > 1 && !reason) {
+      const all = def.maxRepeat ? def.maxRepeat(target, this.game) : item.count;
+      if (def.quantity && all > 1 && !reason) {
         return {
           label: def.label,
           children: [
             { label: 'One', onSelect: () => this.game.requestAction(def, { ...target, count: 1 }) },
-            { label: `All (${item.count})`, onSelect: () => this.game.requestAction(def, { ...target, count: item.count }) },
+            { label: `All (${all})`, onSelect: () => this.game.requestAction(def, { ...target, count: all }) },
           ],
         };
       }
