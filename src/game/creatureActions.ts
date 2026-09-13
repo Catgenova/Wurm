@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { creatureLevel, GATHER_VERB, isBaitFor, SPECIES, STANCE_NAMES, type Creature, type Stance } from './creatures';
+import { creatureLevel, GATHER_VERB, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
 import { itemDef } from './items';
 
@@ -48,7 +48,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       }
       const mood = c.hunger < 0.3 ? 'It looks hungry.' : c.hunger < 0.6 ? 'It could eat.' : 'It looks well fed.';
       const skills = Object.entries(c.skills).map(([id, v]) => `${id} ${v.toFixed(1)}`).join(', ');
-      g.logMsg(`${c.name} (${def.name}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${def.health}. ${mood} It eats ${dietText(c)}.`, 'event');
+      const range = c.mode === 'deed' && def.gathers ? ` It works up to ${workRangeOf(c, def)} tiles from the token.` : '';
+      g.logMsg(`${c.name} (${def.name}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${def.health}.${range} ${mood} It eats ${dietText(c)}.`, 'event');
     },
   },
   {
@@ -171,7 +172,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.state = 'idle';
       c.until = g.time;
       const gathers = SPECIES[c.species].gathers;
-      const job = gathers ? `${GATHER_VERB[gathers]} around the settlement and bring what it finds to the crate` : 'stay around the settlement';
+      const job = gathers ? `${GATHER_VERB[gathers]} within ${workRangeOf(c, SPECIES[c.species])} tiles of the token and bring what it finds to the crate` : 'stay around the settlement';
       g.logMsg(`${c.name} will ${job}.`, 'system');
     },
   },

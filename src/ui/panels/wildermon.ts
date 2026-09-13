@@ -1,4 +1,4 @@
-import { creatureLevel, GATHER_VERB, SPECIES, STANCE_NAMES, type Creature } from '../../game/creatures';
+import { creatureLevel, GATHER_VERB, RANGE_PER_STEP, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
 import type { MenuItem } from '../contextmenu';
@@ -109,6 +109,10 @@ export class WildermonPanel {
     if (c.mode === 'deed') {
       const verb = def.gathers ? GATHER_VERB[def.gathers] : 'working';
       parts.push(c.carrying ? `Carrying ${itemDef(c.carrying.id).name.toLowerCase()} to the crate` : c.state === 'forage' ? `${verb[0].toUpperCase()}${verb.slice(1)}` : c.state === 'toForage' ? `Heading out to ${def.gathers ?? 'work'}` : 'Looking for work');
+    }
+    if (c.mode === 'deed' && def.gathers) {
+      const toNext = SKILL_STEP - (taskSkill(c, def) % SKILL_STEP);
+      parts.push(`Range ${workRangeOf(c, def)} tiles (+${RANGE_PER_STEP} in ${toNext.toFixed(1)} skill)`);
     }
     parts.push(`Attack ${def.attack}`);
     const skills = Object.entries(c.skills).map(([id, v]) => `${id[0].toUpperCase()}${id.slice(1)} ${v.toFixed(2)}`);

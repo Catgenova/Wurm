@@ -90,9 +90,10 @@ rebuilds and commits the result.
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
   spare tamed ones are kept at the token. A Wildermon window shows your
-  creatures' health, hunger, level and skills (wild ones stay hidden); workers
-  gain skill at half a player's pace, work at half a player's speed, and
-  improve the quality and pace of their work as they level.
+  creatures' health, hunger, level, skills and working range (wild ones stay
+  hidden); workers gain skill at half a player's pace, work at half a player's
+  speed, improve the quality and pace of their work as they level, and range
+  10 tiles further from the token for every 10 levels of their task skill.
 - **Hunting and butchering.** Wild wildermon can be attacked, and an edged
   tool hits far harder than bare hands. Whatever kills one leaves a corpse
   where it fell. Butchering it yields meat, fur, leather, bone and the

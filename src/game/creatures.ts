@@ -48,7 +48,7 @@ export interface SpeciesDef {
   timid: boolean;
   /** How it feeds itself in the wild and what it does as a job on the deed. */
   gathers: GatherKind | null;
-  /** How far from the token a deed worker will roam. */
+  /** How far from the token a deed worker roams before it earns any skill. */
   workRange: number;
   /** Body and belly colours per variant. */
   variants: Array<[string, string]>;
@@ -120,6 +120,19 @@ const WILD_SPECIES: Array<[string, number]> = [
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
+/** Every ten levels of its task skill let a worker range ten tiles further from the token. */
+export const SKILL_STEP = 10;
+export const RANGE_PER_STEP = 10;
+export const rangeSteps = (skill: number): number => Math.floor(skill / SKILL_STEP);
+/** A worker's task skill, or 0 for a species with no job. */
+export function taskSkill(c: Creature, species: SpeciesDef): number {
+  const id = workSkill(species);
+  return id ? (c.skills[id] ?? 1) : 0;
+}
+/** How far from the token this worker may range right now. */
+export function workRangeOf(c: Creature, species: SpeciesDef): number {
+  return species.workRange + rangeSteps(taskSkill(c, species)) * RANGE_PER_STEP;
+}
 /** Fresh task skills for a species. */
 const startSkills = (species: SpeciesDef): Record<string, number> => {
   const id = workSkill(species);
@@ -416,21 +429,40 @@ export class Creatures {
     return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
   }
 
-  /** Nearest tile within `range` of a point that can be gathered from right now. */
+/**
+   * Nearest tile within `range` of a point that can be gathered from right now.
+   * Searched in rings outward, stopping one ring past the first hit, so a
+   * skilled worker allowed to range a hundred tiles still costs a handful of
+   * checks while there is anything to pick near the token.
+   */
   private findForageTile(game: Game, cx: number, cy: number, range: number, kind: GatherKind): { x: number; y: number } | null {
     let best: { x: number; y: number } | null = null;
     let bestD = Infinity;
     const x0 = Math.floor(cx);
     const y0 = Math.floor(cy);
-    for (let y = y0 - range; y <= y0 + range; y++) {
-      for (let x = x0 - range; x <= x0 + range; x++) {
-        if (!this.tileOk(game, x, y) || !this.gatherable(game, x, y, kind)) continue;
-        const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) + game.rand() * 1.5;
-        if (d < bestD) {
-          bestD = d;
-          best = { x, y };
+    const visit = (x: number, y: number): void => {
+      if (!this.tileOk(game, x, y) || !this.gatherable(game, x, y, kind)) return;
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) + game.rand() * 1.5;
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    };
+    let lastRing = Infinity;
+    for (let r = 0; r <= range && r <= lastRing; r++) {
+      if (r === 0) visit(x0, y0);
+      else {
+        for (let x = x0 - r; x <= x0 + r; x++) {
+          visit(x, y0 - r);
+          visit(x, y0 + r);
+        }
+        for (let y = y0 - r + 1; y <= y0 + r - 1; y++) {
+          visit(x0 - r, y);
+          visit(x0 + r, y);
         }
       }
+      // One more ring after the first hit, so the pick is not a hard square shell.
+      if (best && lastRing === Infinity) lastRing = r + 1;
     }
     return best;
   }
@@ -471,9 +503,14 @@ export class Creatures {
     const room = Math.max(0, 1 - v / 100);
     const gain = base * Math.pow(room, 1.4) * (0.6 + 0.8 * game.rand());
     const before = creatureLevel(c);
+    const beforeSteps = rangeSteps(v);
     c.skills[id] = Math.min(100, v + gain);
     c.xp += gain;
     if (creatureLevel(c) > before) game.logMsg(`${c.name} reaches level ${creatureLevel(c)}.`, 'skill');
+    const def = this.species(c);
+    if (c.mode === 'deed' && id === workSkill(def) && rangeSteps(c.skills[id]) > beforeSteps) {
+      game.logMsg(`${c.name} knows the land better and will now work up to ${workRangeOf(c, def)} tiles from the token.`, 'skill');
+    }
     return gain;
   }
 
@@ -659,7 +696,7 @@ export class Creatures {
     }
     if (game.time < c.until) return;
     if (kind) {
-      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, def.workRange, kind);
+      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, workRangeOf(c, def), kind);
       if (t) {
         c.tx = t.x + 0.5;
         c.ty = t.y + 0.5;

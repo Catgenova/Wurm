@@ -78,6 +78,9 @@ export function buildHelp(win: UIWindow): void {
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt
     against you.</p>
+    <p>A deed worker starts within 8 tiles of the token and earns another 10 tiles of range for every
+    10 levels of its task skill, so a seasoned one works a wide stretch of country. Its card in the
+    Wildermon window shows the range it has now and how much skill the next step needs.</p>
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
     or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
     drops what it finds in the deed crate beside the token. Extra tamed wildermon are kept at the token,
