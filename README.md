@@ -1,0 +1,105 @@
+# Wurm Iso
+
+A browser remake of Wurm Online as a 2.5D isometric game. The whole page is one
+canvas; every piece of UI is an HTML overlay floating above it.
+
+No runtime dependencies: rendering is Canvas 2D, terrain and sprites are
+procedural, the UI is plain DOM. Vite + TypeScript for the toolchain.
+
+```sh
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # typecheck + production bundle in dist/
+npm run preview    # serve dist/
+```
+
+Add `?seed=12345` to the URL to generate a specific island. Progress autosaves
+to `localStorage` every 20 seconds and on unload. **New world** in the toolbar
+wipes the save.
+
+## Controls
+
+| Input | Effect |
+| --- | --- |
+| Left click | Walk to a tile (paths around trees and cliffs) |
+| W A S D / arrows | Walk, screen relative |
+| Drag (left or middle) | Look around; the camera stops following you |
+| Scroll, `+` `-` | Zoom |
+| `C` | Centre the camera on yourself again |
+| Right click | Context menu for the tile, tree or inventory item |
+| `Esc` | Stop the current action / close the menu |
+| `Enter` | Chat in the event window (`/name`, `/where`, `/help`) |
+| `I` `K` `L` `M` `F1` | Inventory, Skills, Event log, Map, Help |
+| `G` | Toggle the tile grid |
+
+## What is in the game
+
+- **Terrain like Wurm's.** A 256×256 tile island whose height map lives on tile
+  corners, so tiles are sloped quads rather than flat stamps. Heights are in
+  "dirt" units (one dig = one unit = 10 cm on a 4 m tile). Water sits at height
+  zero and floods anything below it.
+- **Tile types.** Grass, dirt, packed dirt, sand, rock, steppe, tundra, marsh,
+  clay, peat, tar, moss, snow, gravel, cobblestone, trees (birch, pine, oak,
+  maple, willow, cedar with young/mature/old sizes), bushes, kelp and reed.
+- **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
+  flatten a tile step by step, pack and cultivate, surface-mine rock for shards,
+  pave gravel with shards or chisel bricks for cobblestone, remove paving.
+  Slopes you may create are limited by your digging skill.
+- **Gathering.** Cut down trees for logs, pick and plant sprouts, forage and
+  botanize with per-tile cooldowns, drink from any water.
+- **Character.** Health, stamina, food and water; swimming drains stamina and
+  drowning sends you back to the shore. Actions take time based on skill and
+  tool quality, can fail, and raise skills with Wurm-style diminishing gains.
+- **UI.** Draggable, resizable windows that remember their layout, a status HUD,
+  action timer, right-click menus with greyed-out reasons, hover tooltips, an
+  event log with chat and a live minimap.
+
+## How it is put together
+
+```
+src/
+  main.ts            wires input, game, renderer and UI into the frame loop
+  engine/            canvas sizing, input, loop, camera (no game knowledge)
+  render/iso.ts      projection constants and world <-> iso math
+  render/renderer.ts terrain quads, water, entities, picking, overlays
+  render/sprites.ts  procedurally drawn trees, bushes and the player
+  world/             tiles, height-mapped World, noise, generator, A*
+  game/              Game state machine, actions, items, skills, player, save
+  ui/                windows, HUD, context menu, tooltip and the panels
+```
+
+**Projection.** A 2:1 diamond: tile width 64, height 32 at zoom 1. A world point
+`(x, y, h)` lands at iso `((x - y) * 32, (x + y) * 16 - h * 1.5)`. The camera
+stores an iso-space centre and a zoom. Because height only moves points
+vertically, screen x pins down `x - y` exactly, which keeps picking cheap: for a
+click we walk the possible depths `x + y` front to back and test the projected
+quads.
+
+**Draw order.** Tiles are drawn one diagonal (`x + y`) at a time from back to
+front. Trees and the player standing on a diagonal are drawn right after its
+tiles, so terrain in front occludes them correctly and nothing needs a z-buffer.
+Tile colours (base colour, slope lighting, per-tile variation, depth tint) are
+cached per tile and invalidated when a corner changes.
+
+**Water.** Any tile with a corner below zero draws its terrain first, then a
+water polygon at height zero clipped to the submerged part of the tile
+(marching-squares style), tinted by depth.
+
+**Actions.** `game/actions.ts` is a data table. Each action says which targets it
+applies to, why it may currently be unavailable (shown greyed in the menu),
+how long it takes, and what it does on completion. The game walks you into range
+first, then runs the timer; moving interrupts it.
+
+## Roadmap
+
+- Chunked offscreen terrain caching for very zoomed-out views.
+- Ground items, containers and dropping things on tiles.
+- Crafting (carpentry, smithing) and a crafting window.
+- Caves and mine entrances.
+- Day/night cycle and weather.
+- Creatures and combat.
+- Tile borders (fences, walls) and buildings.
+- Multiplayer server and persistence beyond the browser.
+
+Wurm Online is a trademark of Code Club AB. This is a fan project and is not
+affiliated with them.

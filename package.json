@@ -1,0 +1,17 @@
+{
+  "name": "wurm-iso",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A browser remake of Wurm Online as a 2.5D isometric game. Full-page canvas with HTML UI overlays.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vite": "^8.3.0"
+  }
+}
