@@ -112,7 +112,8 @@ rebuilds and commits the result.
   player would, and neither retaliates for a failed attempt. A companion
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
-  spare tamed ones are kept at the token. A Wildermon window shows your
+  spare tamed ones are kept at the token. A deed worker feeds itself from any
+  crate on the deed once its hunger falls below a quarter. A Wildermon window shows your
   creatures' health, hunger, level, skills and working range (wild ones stay
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range

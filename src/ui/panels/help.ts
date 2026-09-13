@@ -110,6 +110,9 @@ export function buildHelp(win: UIWindow): void {
     wants a crate and a campfire on the deed, and later levels want more crates, a fire burning,
     finished buildings and wildermon at work. The menu ticks off what you have and names what is
     missing. A settlement runs from level 1 to level 5.</p>
+    <p>A deed worker feeds itself: once its belly falls below a quarter it goes to whichever crate on
+    the deed holds something it eats, helps itself, and goes back to work. Keep food in a crate and your
+    workers will look after themselves.</p>
     <p>A deed worker starts within 8 tiles of the token and earns another 10 tiles of range for every
     10 levels of its task skill, so a seasoned one works a wide stretch of country. Its card in the
     Wildermon window shows the range it has now and how much skill the next step needs.</p>

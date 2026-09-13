@@ -1,7 +1,7 @@
 import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { Game } from './game';
-import { crateCentre } from './crates';
+import { crateCentre, crateName, type PlacedCrate } from './crates';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
@@ -180,6 +180,9 @@ const WILD_SPECIES: Array<[string, number]> = [
   ['bevere', 18],
   ['seavic', 18],
 ];
+
+/** A deed worker goes looking for a meal once its belly is down to this. */
+export const HUNGRY = 0.25;
 
 /** How close to open water a water-bound species will settle. */
 const WATER_RANGE = 4;
@@ -864,7 +867,7 @@ export class Creatures {
       return;
     }
     if (c.carrying) {
-      if (c.hunger < 0.4 && isBaitFor(def, c.carrying.id)) {
+      if (c.hunger < HUNGRY && isBaitFor(def, c.carrying.id)) {
         c.hunger = Math.min(1, c.hunger + 0.5);
         c.carrying = null;
         return;
@@ -885,18 +888,23 @@ export class Creatures {
       }
       return;
     }
-    if (c.hunger < 0.4 && crate && crateAt && crate.items.some((it) => isBaitFor(def, it.id))) {
-      if (Math.hypot(crateAt[0] - c.x, crateAt[1] - c.y) <= 1.3) {
-        const idx = crate.items.findIndex((it) => isBaitFor(def, it.id));
-        if (idx >= 0) {
-          const it = crate.items[idx];
-          it.count -= 1;
-          if (it.count <= 0) crate.items.splice(idx, 1);
-          game.events.emit('crate');
-          c.hunger = Math.min(1, c.hunger + 0.5);
-        }
-      } else this.stepToward(game, c, crateAt[0], crateAt[1], dt);
-      return;
+    if (c.hunger < HUNGRY) {
+      const larder = this.foodCrate(game, c, def);
+      if (larder) {
+        const [lx, ly] = crateCentre(larder);
+        if (Math.hypot(lx - c.x, ly - c.y) <= 1.3) {
+          const idx = larder.items.findIndex((it) => isBaitFor(def, it.id));
+          if (idx >= 0) {
+            const it = larder.items[idx];
+            it.count -= 1;
+            if (it.count <= 0) larder.items.splice(idx, 1);
+            game.events.emit('crate');
+            c.hunger = Math.min(1, c.hunger + 0.5);
+            game.logMsg(`${c.name} helps itself to ${itemDef(it.id).name.toLowerCase()} from the ${crateName(larder).toLowerCase()}.`, 'event');
+          }
+        } else this.stepToward(game, c, lx, ly, dt);
+        return;
+      }
     }
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
@@ -938,6 +946,23 @@ export class Creatures {
     // Nothing to do right now: potter about near the token.
     this.wanderTarget(game, c, 3, deed.x + 0.5, deed.y + 0.5);
     c.until = game.time + 4;
+  }
+
+  /** The nearest crate on the deed holding something this creature will eat. */
+  private foodCrate(game: Game, c: Creature, def: SpeciesDef): PlacedCrate | null {
+    let best: PlacedCrate | null = null;
+    let bestD = Infinity;
+    for (const crate of game.crates.values()) {
+      if (!game.onDeed(crate.x, crate.y)) continue;
+      if (!crate.items.some((it) => isBaitFor(def, it.id))) continue;
+      const [cx, cy] = crateCentre(crate);
+      const d = Math.hypot(cx - c.x, cy - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = crate;
+      }
+    }
+    return best;
   }
 
   /** Ask a tamed creature to come over, so an action on it can start where the player stands. */
