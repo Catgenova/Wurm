@@ -53,6 +53,12 @@ rebuilds and commits the result.
 - **Tile types.** Grass, dirt, packed dirt, sand, rock, steppe, tundra, marsh,
   clay, peat, tar, moss, snow, gravel, cobblestone, trees (birch, pine, oak,
   maple, willow, cedar with young/mature/old sizes), bushes, kelp and reed.
+- **Bedrock everywhere.** Every tile sits on a particular rock of a particular
+  quality, written down when the world is made and unchanged by anything done
+  to the ground above it — under grass, forest or open sea alike. Metal is laid
+  far more thickly into dry land than into ground under water, so roughly four
+  fifths of a world's ore can actually be reached: about one land tile in seven
+  carries a seam, some 3,600 of them per 256×256 world.
 - **Soil over bedrock.** Every corner carries a depth of soil on top of rock.
   Digging takes soil away and stops dead at bedrock; strip all four corners of
   a tile and it becomes rock of whatever kind lies beneath, which may be a
@@ -60,12 +66,12 @@ rebuilds and commits the result.
 - **Mining and prospecting.** Eleven metals lie in the rock, each needing its
   own mining skill to work: copper and coal at 1, tin 10, zinc 20, lead 30,
   silver 40, gold 50, adamantine 60, glimmersteel 70, mithril 80, seryll 90,
-  and each rarer than the last. Mining bare rock always yields shards or
-  metal, while cutting the face back a level is a separate roll decided by
-  mining skill and pick quality. Prospecting marks ore-bearing rock within
-  range and, on a seam itself, names the metal, the skill it takes and the
-  highest quality it will ever yield; the range is 3 tiles plus one per 10
-  levels of Prospecting. Coal outburns a log as campfire fuel.
+  and each rarer than the last. Mining bare rock yields ore or shards, while
+  cutting the face back a level is a separate roll decided by mining skill and
+  pick quality. Prospecting marks every ore-bearing tile within range, buried
+  or bare, and where you stand it names the rock, the skill any metal takes,
+  the quality ceiling and how deep it lies; the range is 3 tiles plus one per
+  10 levels of Prospecting. Coal outburns a log as campfire fuel.
 - **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
   pack and cultivate, pave gravel with shards or chisel bricks for
   cobblestone, remove paving. Flatten levels a tile to the
