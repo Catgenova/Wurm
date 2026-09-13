@@ -26,7 +26,9 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
+      <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
+    <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
     <h3>Terraforming</h3>
     <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
     Drop dirt to raise a corner. Flatten evens a tile out step by step. Mine rock with a pickaxe,

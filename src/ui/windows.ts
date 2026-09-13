@@ -12,21 +12,32 @@ export interface WindowOptions {
   open?: boolean;
 }
 
-interface SavedState {
+interface Geometry {
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+interface SavedState extends Geometry {
   open: boolean;
+  /** Expanded to (nearly) the whole viewport; x/y/w/h hold the geometry to restore. */
+  max?: boolean;
 }
 
 const STORAGE_KEY = 'wurm-iso-windows';
+const EXPAND_ICON = '⤢';
+const RESTORE_ICON = '⤡';
 
 /** A draggable, resizable overlay window in the Wurm style. */
 export class UIWindow {
   readonly el: HTMLDivElement;
   readonly body: HTMLDivElement;
   readonly titleText: HTMLSpanElement;
+  private readonly expandBtn: HTMLButtonElement;
+  private maximized = false;
+  /** Geometry to go back to when the window is restored from expanded. */
+  private normal: Geometry | null = null;
 
   constructor(
     private readonly mgr: WindowManager,
@@ -41,19 +52,29 @@ export class UIWindow {
     this.titleText = document.createElement('span');
     this.titleText.className = 'win-title-text';
     this.titleText.textContent = opts.title;
+    const buttons = document.createElement('span');
+    buttons.className = 'win-buttons';
+    this.expandBtn = document.createElement('button');
+    this.expandBtn.className = 'win-btn win-expand';
+    this.expandBtn.type = 'button';
+    this.expandBtn.title = 'Expand';
+    this.expandBtn.textContent = EXPAND_ICON;
+    this.expandBtn.addEventListener('click', () => this.toggleMaximized());
     const close = document.createElement('button');
-    close.className = 'win-close';
+    close.className = 'win-btn win-close';
     close.type = 'button';
     close.title = 'Close';
     close.textContent = '×';
     close.addEventListener('click', () => this.close());
-    title.append(this.titleText, close);
+    buttons.append(this.expandBtn, close);
+    title.append(this.titleText, buttons);
     this.body = document.createElement('div');
     this.body.className = 'win-body';
     this.el.append(title, this.body);
 
-    const w = saved?.w ?? opts.width;
-    const h = saved?.h ?? opts.height;
+    // Never start larger than the screen, whatever the saved layout says.
+    const w = Math.min(saved?.w ?? opts.width, Math.max(160, window.innerWidth - 16));
+    const h = Math.min(saved?.h ?? opts.height, Math.max(70, window.innerHeight - 16));
     this.el.style.width = `${w}px`;
     this.el.style.height = `${h}px`;
     if (saved) {
@@ -67,10 +88,11 @@ export class UIWindow {
       this.el.style.top = `${top}px`;
     }
     this.el.hidden = !(saved?.open ?? opts.open ?? true);
+    if (saved?.max) this.setMaximized(true, false);
 
     let drag: { dx: number; dy: number } | null = null;
     title.addEventListener('pointerdown', (e) => {
-      if (e.target === close || e.button !== 0) return;
+      if (buttons.contains(e.target as Node) || e.button !== 0 || this.maximized) return;
       drag = { dx: e.clientX - this.el.offsetLeft, dy: e.clientY - this.el.offsetTop };
       title.setPointerCapture(e.pointerId);
       e.preventDefault();
@@ -87,12 +109,72 @@ export class UIWindow {
       title.releasePointerCapture(e.pointerId);
       this.mgr.persist();
     });
+    title.addEventListener('dblclick', (e) => {
+      if (buttons.contains(e.target as Node)) return;
+      this.toggleMaximized();
+    });
     this.el.addEventListener('mousedown', () => this.mgr.bringToFront(this));
     this.el.addEventListener('mouseup', () => this.mgr.persist());
   }
 
   get isOpen(): boolean {
     return !this.el.hidden;
+  }
+
+  get isMaximized(): boolean {
+    return this.maximized;
+  }
+
+  toggleMaximized(): void {
+    this.setMaximized(!this.maximized);
+  }
+
+  /** Expand to nearly the whole viewport, or go back to the previous size and place. */
+  setMaximized(on: boolean, persist = true): void {
+    if (on === this.maximized) return;
+    this.maximized = on;
+    if (on) {
+      this.normal = this.geometry();
+      this.el.classList.add('maximized');
+      this.applyMaximized();
+      this.expandBtn.textContent = RESTORE_ICON;
+      this.expandBtn.title = 'Restore';
+      this.mgr.bringToFront(this);
+    } else {
+      this.el.classList.remove('maximized');
+      if (this.normal) this.applyGeometry(this.normal);
+      this.expandBtn.textContent = EXPAND_ICON;
+      this.expandBtn.title = 'Expand';
+      this.clamp();
+    }
+    if (persist) this.mgr.persist();
+  }
+
+  private applyMaximized(): void {
+    const margin = Math.max(8, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.04));
+    this.applyGeometry({
+      x: margin,
+      y: margin,
+      w: Math.max(160, window.innerWidth - margin * 2),
+      h: Math.max(70, window.innerHeight - margin * 2),
+    });
+  }
+
+  private applyGeometry(g: Geometry): void {
+    this.el.style.left = `${g.x}px`;
+    this.el.style.top = `${g.y}px`;
+    this.el.style.width = `${g.w}px`;
+    this.el.style.height = `${g.h}px`;
+  }
+
+  /** Current place and size from the inline styles, which drag, resize and code all write. */
+  private geometry(): Geometry {
+    return {
+      x: parseFloat(this.el.style.left) || 0,
+      y: parseFloat(this.el.style.top) || 0,
+      w: parseFloat(this.el.style.width) || this.opts.width,
+      h: parseFloat(this.el.style.height) || this.opts.height,
+    };
   }
 
   open(): void {
@@ -112,9 +194,13 @@ export class UIWindow {
     else this.open();
   }
 
-  /** Keep at least the title bar reachable inside the viewport. */
+  /** Keep at least the title bar reachable inside the viewport; expanded windows track the viewport. */
   clamp(): void {
     if (this.el.hidden) return;
+    if (this.maximized) {
+      this.applyMaximized();
+      return;
+    }
     const maxLeft = Math.max(0, window.innerWidth - 60);
     const maxTop = Math.max(0, window.innerHeight - 30);
     const left = Math.min(maxLeft, Math.max(-this.el.offsetWidth + 60, this.el.offsetLeft));
@@ -124,7 +210,8 @@ export class UIWindow {
   }
 
   state(): SavedState {
-    return { x: this.el.offsetLeft, y: this.el.offsetTop, w: this.el.offsetWidth, h: this.el.offsetHeight, open: this.isOpen };
+    const g = this.maximized && this.normal ? this.normal : this.geometry();
+    return { ...g, open: this.isOpen, max: this.maximized };
   }
 }
 

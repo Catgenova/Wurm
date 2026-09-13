@@ -61,7 +61,8 @@ rebuilds and commits the result.
 - **Character.** Health, stamina, food and water; swimming drains stamina and
   drowning sends you back to the shore. Actions take time based on skill and
   tool quality, can fail, and raise skills with Wurm-style diminishing gains.
-- **UI.** Draggable, resizable windows that remember their layout, a status HUD,
+- **UI.** Draggable, resizable windows that remember their layout and expand to
+  nearly the whole screen with one tap (handy on phones), a status HUD,
   action timer, right-click menus with greyed-out reasons, hover tooltips, an
   event log with chat and a live minimap.
 
