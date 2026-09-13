@@ -1,9 +1,10 @@
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData, SLAB_VARIANTS, SLAB_BY_ITEM, slabVariant } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
+import { KILN_ACTIONS } from './kiln';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { DEED_ACTIONS } from './deed';
@@ -42,6 +43,7 @@ export type Target =
   | { kind: 'crate'; id: number }
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'smelter'; id: number; itemUid?: number; count?: number }
+  | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
   | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
@@ -603,6 +605,39 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'pave_slabs',
+    label: 'Pave (slabs)',
+    verb: 'laying slabs',
+    skill: 'paving',
+    tool: 'trowel',
+    stamina: 0.04,
+    baseTime: 7,
+    difficulty: 10,
+    applies: (t, g) => t.kind === 'tile' && (!!TILE_DEFS[tile(t, g)].pavable || tile(t, g) === TileType.Gravel || tile(t, g) === TileType.Cobblestone) && tile(t, g) !== TileType.Slabs,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      const under = underBuilding(g, t.x, t.y);
+      if (under) return under;
+      if (!g.inventory.has('trowel')) return 'You need a trowel to bed a slab.';
+      const slab = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => SLAB_BY_ITEM.has(it.id));
+      if (!slab || !SLAB_BY_ITEM.has(slab.id)) return 'You need a cut slab to pave with.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const slab = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => SLAB_BY_ITEM.has(it.id));
+      const kind = slab && SLAB_BY_ITEM.get(slab.id);
+      if (!slab || kind === undefined) return;
+      if (!g.skillCheck('paving', 10, slab.ql)) {
+        g.logMsg('The slab rocks on its bed however you set it. You leave it for now.', 'event');
+        return;
+      }
+      if (!g.inventory.remove(slab.uid, 1)) return;
+      g.world.setTile(t.x, t.y, TileType.Slabs, kind);
+      g.logMsg(`You bed the ${itemDef(slab.id).name.toLowerCase()} down flat and true.`, 'event');
+    },
+  },
+  {
     id: 'remove_paving',
     label: 'Remove paving',
     verb: 'breaking up the paving',
@@ -610,11 +645,19 @@ export const ACTIONS: ActionDef[] = [
     tool: 'pickaxe',
     stamina: 0.04,
     baseTime: 5,
-    applies: (t, g) => tile(t, g) === TileType.Gravel || tile(t, g) === TileType.Cobblestone,
+    applies: (t, g) => tile(t, g) === TileType.Gravel || tile(t, g) === TileType.Cobblestone || tile(t, g) === TileType.Slabs,
     check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('pickaxe') ? null : 'You need a pickaxe to break up paving.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
+      // A slab comes up whole more often than not; gravel and cobbles do not.
+      const wasSlab = g.world.getTile(t.x, t.y) === TileType.Slabs;
+      const kind = wasSlab ? SLAB_VARIANTS[slabVariant(g.world.getData(t.x, t.y))] : null;
       g.world.setTile(t.x, t.y, TileType.Dirt);
+      if (kind && g.rand() < 0.6) {
+        const back = g.inventory.add(kind.item, { ql: g.productQl('paving') });
+        g.logMsg(`You lever the ${kind.name.toLowerCase().replace(/s$/, '')} up whole. (QL ${back.ql.toFixed(1)})`, 'event');
+        return;
+      }
       g.logMsg('You break up the paving, leaving bare dirt.', 'event');
     },
   },
@@ -851,6 +894,7 @@ export const ACTIONS: ActionDef[] = [
   ...BUTCHER_ACTIONS,
   ...CAMPFIRE_ACTIONS,
   ...SMELTER_ACTIONS,
+  ...KILN_ACTIONS,
   ...ANVIL_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,

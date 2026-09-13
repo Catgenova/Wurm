@@ -21,6 +21,7 @@ export const TileType = {
   Kelp: 18,
   Reed: 19,
   Lawn: 20,
+  Slabs: 21,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
@@ -67,7 +68,21 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1 },
   [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8 },
   [TileType.Lawn]: { name: 'Lawn', color: [104, 164, 74], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true },
+  [TileType.Slabs]: { name: 'Stone slabs', color: [172, 170, 164], speed: 1.3 },
 };
+
+/**
+ * Slab paving comes in the four stones it is cut from, kept in the tile's data
+ * byte the way a rock tile keeps its seam.
+ */
+export const SLAB_VARIANTS: Array<{ name: string; color: RGB; item: string }> = [
+  { name: 'Stone slabs', color: [172, 170, 164], item: 'stone_slab' },
+  { name: 'Slate slabs', color: [104, 112, 126], item: 'slate_slab' },
+  { name: 'Marble slabs', color: [224, 222, 216], item: 'marble_slab' },
+  { name: 'Sandstone slabs', color: [204, 180, 134], item: 'sandstone_slab' },
+];
+export const slabVariant = (data: number): number => Math.min(SLAB_VARIANTS.length - 1, data & 3);
+export const SLAB_BY_ITEM = new Map(SLAB_VARIANTS.map((v, i) => [v.item, i]));
 
 export interface TreeDef {
   name: string;

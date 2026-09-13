@@ -73,8 +73,8 @@ rebuilds and commits the result.
   the quality ceiling and how deep it lies; the range is 3 tiles plus one per
   10 levels of Prospecting. Coal outburns a log as campfire fuel.
 - **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
-  pack and cultivate, pave gravel with shards or chisel bricks for
-  cobblestone, remove paving. Flatten levels a tile to the
+  pack and cultivate, pave gravel with shards, bricks for
+  cobblestone or cut slabs for a stone floor, remove paving. Flatten levels a tile to the
   height of the ground you stand on, scraping high ground down into dirt and
   packing dirt in to bring low ground up, so a terrace can be carried outwards
   tile by tile; flattening the tile under your feet takes it down to its own
@@ -106,14 +106,27 @@ rebuilds and commits the result.
   finished, shaping themselves into hips and ridges from their neighbours.
 - **Materials and crafting.** Planks and timbers from logs with a saw,
   shafts and mallets carved with a knife, thatch from cut grass, mortar from
-  clay and sand, bricks chiselled from rock, slate, marble or sandstone
-  shards, clay bricks and adobe by pottery, silver and gold chipped from
+  clay and sand, adobe from clay and grass, silver and gold chipped from
   veins in the mountains. Every recipe is a tool plus materials; the crafting
   window (R) is a recipe book grouped by craft: every recipe shows its tool
   and materials, green when carried and red when missing, with whatever you
   can make right now at the top and a switch to hide the rest. Each
   material's own menu offers the same recipes. A deed stake, the thing you plant to found a
   settlement, is carved from a shaft with a carving knife.
+- **Stonecutting.** A chisel and the Stonecutting skill turn rock, slate,
+  marble and sandstone shards into bricks — what walls, smelters and kilns are
+  built from — or, two shards at a time, into slabs. Slabs are paving rather
+  than building material: Pave (slabs) with a trowel lays a floor of that
+  stone, each of the four a different colour, and breaking paving up with a
+  pickaxe usually lifts the slab out whole. Masonry lays the stone;
+  stonecutting cuts it.
+- **Pottery and the kiln.** Everything shaped from clay comes out soft.
+  Pottery makes unfired bricks, bowls, pots and jars, and green ware is no use
+  until it has been fired. A kiln — six stone bricks and a trowel, on any dry
+  flat ground — burns the fuel a campfire does; pack the green ware in, light
+  it, and each piece takes its own time at heat, faster and truer in a
+  well-built kiln. Fired, the bowl cooks, the pot makes pottage, the jar puts
+  up preserves, and the brick builds.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, forages berries when hungry and is tamed with a berry or
   vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is
@@ -130,7 +143,9 @@ rebuilds and commits the result.
   ceiling, with a range that grows 5 tiles per 10 levels rather than 10; and
   the Crawler, a broad sand-dwelling crab fed on vegetables, which digs sand a
   clawful at a time from the highest corner of a sand tile and carries it to
-  the deed crate. The Crawler is defensive by nature: it hits back every time
+  the deed crate; and the Noot, a plump upright waddler that settles beside the
+  clay pits, eats root vegetables, and digs clay for its deed the same way,
+  which is what keeps a potter in clay without walking the shore for it. The Crawler is defensive by nature: it hits back every time
   it is struck, and even a tamed one turns on whoever stands beside it now and
   then, though a helm blunts it. Each puts the tile on the same cooldown a
   player would, and none retaliates for a failed taming attempt. A companion

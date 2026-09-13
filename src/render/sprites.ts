@@ -726,6 +726,94 @@ export function drawSmelter(ctx: CanvasRenderingContext2D, sx: number, sy: numbe
   ctx.restore();
 }
 
+/** A kiln: a brick beehive with a stoke hole at the foot and a vent on top. */
+export function drawKiln(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, lit: boolean, working: boolean, time: number): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 24, 12, 0, 0, TAU);
+  ctx.fill();
+  const brick = '#8e6a52';
+  const dark = '#6c4e3c';
+  const pale = '#a8836a';
+  // The dome, squat and round, sitting on a low plinth.
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 21, 9, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = brick;
+  ctx.beginPath();
+  ctx.moveTo(-20, -4);
+  ctx.bezierCurveTo(-20, -30, -11, -38, 0, -38);
+  ctx.bezierCurveTo(11, -38, 20, -30, 20, -4);
+  ctx.ellipse(0, -4, 20, 8, 0, 0, Math.PI, true);
+  ctx.closePath();
+  ctx.fill();
+  // A lit face on the left, courses of brick across it.
+  ctx.fillStyle = 'rgba(255,255,255,0.09)';
+  ctx.beginPath();
+  ctx.moveTo(-20, -4);
+  ctx.bezierCurveTo(-20, -30, -11, -38, 0, -38);
+  ctx.lineTo(0, -4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(48,34,26,0.35)';
+  ctx.lineWidth = 0.9;
+  for (const [w, y] of [
+    [19.4, -11],
+    [17.2, -20],
+    [12.6, -28],
+  ] as Array<[number, number]>) {
+    ctx.beginPath();
+    ctx.ellipse(0, y, w, w * 0.36, 0, 0.15, Math.PI - 0.15);
+    ctx.stroke();
+  }
+  // The vent at the crown.
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.ellipse(0, -38, 5.4, 2.4, 0, 0, TAU);
+  ctx.fill();
+  if (lit) {
+    ctx.fillStyle = 'rgba(255,196,108,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(0, -38, 3.6, 1.5, 0, 0, TAU);
+    ctx.fill();
+  }
+  // The stoke hole, arched, with the fire showing through it when it is going.
+  ctx.fillStyle = lit ? '#f2a53f' : '#2a2320';
+  ctx.beginPath();
+  ctx.moveTo(-7, -3);
+  ctx.lineTo(-7, -12);
+  ctx.quadraticCurveTo(0, -19, 7, -12);
+  ctx.lineTo(7, -3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = pale;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  if (lit) {
+    ctx.fillStyle = 'rgba(255,240,190,0.85)';
+    const f = 3.4 + Math.sin(time * 6.5) * 1.5;
+    ctx.beginPath();
+    ctx.ellipse(0, -6, 4.6, f, 0, 0, TAU);
+    ctx.fill();
+    // Heat off the crown, heavier while there is ware inside.
+    ctx.fillStyle = 'rgba(224,218,208,0.4)';
+    const puffs = working ? 4 : 2;
+    for (let i = 0; i < puffs; i++) {
+      const t = (time * 0.45 + i / puffs) % 1;
+      ctx.globalAlpha = 0.35 * (1 - t);
+      ctx.beginPath();
+      ctx.arc(Math.sin((time + i) * 1.4) * 3.5, -42 - t * 22, 2.4 + t * 5, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
 /** An anvil on its block, coloured by the metal it was cast from. */
 export function drawAnvil(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, face: string, shade: string): void {
   ctx.save();
@@ -810,6 +898,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   else if (pose.species === 'seavic') drawSeavicBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'mola') drawMolaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'crawler') drawCrawlerBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'noot') drawNootBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -1212,6 +1301,91 @@ function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
     }
     ctx.restore();
   }
+  ctx.restore();
+}
+
+/** A Noot: upright, plump, bill first, with a flat tail to sit back on. */
+function drawNootBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  // A waddle rather than a walk: it rocks from foot to foot.
+  const rock = pose.moving ? Math.sin(pose.phase) * 0.16 : Math.sin(pose.phase * 0.35) * 0.04;
+  const bob = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.2 : 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 10, 4.5, 0, 0, TAU);
+  ctx.fill();
+  const [coat, front] = pose.colors;
+  const foot = '#e09340';
+  // Feet, planted wide and turned out.
+  ctx.fillStyle = foot;
+  for (const [fx, ph] of [
+    [-3.4, 0],
+    [3.2, Math.PI],
+  ] as Array<[number, number]>) {
+    const lift = pose.moving ? Math.max(0, Math.sin(pose.phase + ph)) * 1.4 : 0;
+    ctx.beginPath();
+    ctx.ellipse(fx, -1 - lift, 3.4, 1.6, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.rotate(rock);
+  // The flat tail it leans back on.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.moveTo(-4, -4 - bob);
+  ctx.quadraticCurveTo(-11, -2.5 - bob, -12.5, -0.6);
+  ctx.quadraticCurveTo(-8.5, -1.2, -4, -1.4 - bob);
+  ctx.closePath();
+  ctx.fill();
+  // Body: a wide-bottomed pear standing on end.
+  ctx.beginPath();
+  ctx.ellipse(0, -10 - bob, 7.4, 9.2, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = front;
+  ctx.beginPath();
+  ctx.ellipse(1.2, -9.4 - bob, 5.2, 7.4, 0.04, 0, TAU);
+  ctx.fill();
+  // Flippers: one tucked against the near side, one swinging behind.
+  const swing = pose.moving ? Math.sin(pose.phase) * 1.6 : 0;
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(-6.6, -10 - bob + swing * 0.3, 2.1, 5, 0.3 + swing * 0.06, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(6.4, -10.4 - bob - swing * 0.3, 1.9, 4.6, -0.32 - swing * 0.06, 0, TAU);
+  ctx.fill();
+  // Head, set straight on the shoulders.
+  ctx.beginPath();
+  ctx.ellipse(0.6, -20.4 - bob, 5.4, 5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = front;
+  ctx.beginPath();
+  ctx.ellipse(2.4, -19.4 - bob, 3.4, 3.6, 0.1, 0, TAU);
+  ctx.fill();
+  // The bill: broad, blunt and orange, the whole reason it is any use in a clay pit.
+  ctx.fillStyle = foot;
+  ctx.beginPath();
+  ctx.moveTo(3.4, -21.6 - bob);
+  ctx.quadraticCurveTo(10.6, -21 - bob, 11.6, -19.2 - bob);
+  ctx.quadraticCurveTo(9.4, -17.4 - bob, 3.6, -17.8 - bob);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,70,20,0.5)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(4, -19.6 - bob);
+  ctx.lineTo(11, -19.4 - bob);
+  ctx.stroke();
+  // Eye.
+  ctx.fillStyle = '#1a1712';
+  ctx.beginPath();
+  ctx.arc(2.6, -22.4 - bob, 0.95, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath();
+  ctx.arc(2.9, -22.7 - bob, 0.32, 0, TAU);
+  ctx.fill();
   ctx.restore();
 }
 

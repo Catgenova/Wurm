@@ -1,4 +1,4 @@
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, bushSpecies, rockVariant } from './tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS, treeSpecies, bushSpecies, rockVariant, slabVariant } from './tiles';
 
 export type WorldListener = (x: number, y: number) => void;
 
@@ -225,6 +225,7 @@ export class World {
     if (t === TileType.Tree) return `${TREE_DEFS[treeSpecies(this.getData(x, y))].name} tree`;
     if (t === TileType.Bush) return BUSH_DEFS[bushSpecies(this.getData(x, y))].name;
     if (t === TileType.Rock) return ROCK_VARIANTS[rockVariant(this.getData(x, y))].name;
+    if (t === TileType.Slabs) return SLAB_VARIANTS[slabVariant(this.getData(x, y))].name;
     return TILE_DEFS[t].name;
   }
 

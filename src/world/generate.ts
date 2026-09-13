@@ -115,9 +115,11 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
         if (r < 0.08) t = TileType.Peat;
         else if (r > 0.975) t = TileType.Tar;
         else if (r > 0.86) t = TileType.Reed;
+        // Clay sits in the wet ground of a marsh as readily as it does on a shore.
+        else if (r > 0.76) t = TileType.Clay;
       } else if (avg < 6 && nearWater(x, y)) {
         t = TileType.Sand;
-        if (r < 0.09) t = TileType.Clay;
+        if (r < 0.18) t = TileType.Clay;
       } else if (m < -0.3) {
         t = TileType.Steppe;
         if (r < 0.015) {

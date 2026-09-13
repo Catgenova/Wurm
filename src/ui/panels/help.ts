@@ -123,8 +123,23 @@ export function buildHelp(win: UIWindow): void {
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
     join into ridges and hips.</p>
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
-    into mortar, chisel rock, slate, marble and sandstone shards into bricks, shape clay into bricks
-    or press it with grass into adobe, and chip silver and gold from veins in the mountains.</p>
+    into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
+    <h3>Stonecutting</h3>
+    <p><b>Stonecutting</b> is the skill that turns what a pickaxe brings out of the rock into something
+    square. With a chisel, rock, slate, marble and sandstone shards become <b>bricks</b> &mdash; what
+    walls, smelters and kilns are built from &mdash; or, two shards at a time, a <b>slab</b>. Slabs are
+    not for building: they are paving. Choose <b>Pave (slabs)</b> on any tile with a trowel in hand and
+    the slab goes down as a floor of that stone, and each of the four looks quite different from the
+    others. Breaking paving up with a pickaxe usually lifts a slab out whole. Masonry still lays the
+    stone; stonecutting is what cuts it.</p>
+    <h3>Pottery and the kiln</h3>
+    <p>Clay is dug from a clay pit with a shovel, and everything made of it is shaped cold and soft.
+    <b>Pottery</b> shapes clay into <b>unfired</b> bricks, bowls, pots and jars, and green ware is no use
+    to anybody: it will not hold a stew and it will not hold up a wall. Build a <b>kiln</b> from six
+    stone bricks with a trowel, anywhere the ground is dry and flat. Feed it the same wood and coal a
+    fire takes, pack the green ware in, and light it: each piece needs its own time at heat, and a
+    well-built kiln works faster and keeps more of the potter's quality. Take the fired ware out and the
+    bowl will cook, the pot makes pottage, the jar puts up preserves, and the brick will build.</p>
     <h3>Wildermon</h3>
     <p>Wild creatures roam the island. The <b>Rabba</b> is a rabbit-like grazer that forages berries when
     hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead; the
@@ -143,7 +158,10 @@ export function buildHelp(win: UIWindow): void {
     once nobody wants to dig it themselves. It is the first of the defensive sort: strike one and it
     comes straight back at you every time, and even a tamed one is never quite tamed, so now and again it
     will round on whoever is standing next to it. A helm turns the worst of that aside. Each of them picks
-    that spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
+    that spot clean for a while, exactly as you would. The <b>Noot</b> is a plump upright waddler that
+    lives beside the clay pits, eats root vegetables, and digs <b>clay</b> with its bill for its deed,
+    carrying it to the crate a load at a time &mdash; which is what keeps a potter in clay without
+    walking the shore for it. Carry what the creature eats (a berry or vegetable for
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>

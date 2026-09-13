@@ -17,15 +17,16 @@ import {
   type Wall,
 } from '../game/building';
 import { hash2 } from '../world/noise';
-import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
+import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -45,10 +46,12 @@ export interface Pick {
   smelter?: number;
   /** An anvil under the cursor, when one is. */
   anvil?: number;
+  /** A kiln under the cursor, when one is. */
+  kiln?: number;
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'anvil';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'anvil';
   x: number;
   y: number;
   sx: number;
@@ -58,6 +61,7 @@ interface Entity {
   crateId?: number;
   fire?: PlacedCampfire;
   smelter?: PlacedSmelter;
+  kiln?: PlacedKiln;
   anvil?: PlacedAnvil;
 }
 
@@ -72,6 +76,7 @@ interface HitRect {
   crate?: number;
   fire?: number;
   smelter?: number;
+  kiln?: number;
   anvil?: number;
 }
 
@@ -139,6 +144,7 @@ export class Renderer {
   private crateHits: HitRect[] = [];
   private fireHits: HitRect[] = [];
   private smelterHits: HitRect[] = [];
+  private kilnHits: HitRect[] = [];
   private anvilHits: HitRect[] = [];
 
   constructor(
@@ -175,7 +181,12 @@ export class Renderer {
     const len = Math.hypot(gx, gy, 1);
     const dot = (-gx * LIGHT[0] - gy * LIGHT[1] + LIGHT[2]) / len;
     let shade = 0.48 + 0.6 * Math.max(0, dot);
-    const base = type === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.getData(x, y))].color : def.color;
+    const base =
+      type === TileType.Rock
+        ? ROCK_VARIANTS[rockVariant(w.getData(x, y))].color
+        : type === TileType.Slabs
+          ? SLAB_VARIANTS[slabVariant(w.getData(x, y))].color
+          : def.color;
     let r = base[0];
     let g = base[1];
     let b = base[2];
@@ -229,6 +240,7 @@ export class Renderer {
     this.crateHits.length = 0;
     this.fireHits.length = 0;
     this.smelterHits.length = 0;
+    this.kilnHits.length = 0;
     this.anvilHits.length = 0;
     this.drawnTiles = 0;
 
@@ -320,6 +332,12 @@ export class Renderer {
           for (const sm of this.game.smeltersOnTile(x, y)) {
             const [wx, wy] = smelterCentre(sm);
             this.ents.push({ kind: 'smelter', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, smelter: sm });
+          }
+        }
+        if (this.game.kilns.size) {
+          for (const kl of this.game.kilnsOnTile(x, y)) {
+            const [wx, wy] = kilnCentre(kl);
+            this.ents.push({ kind: 'kiln', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, kiln: kl });
           }
         }
         if (this.game.anvils.size) {
@@ -479,6 +497,10 @@ export class Renderer {
         });
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
         continue;
+      }
+      if (ent.kind === 'kiln' && ent.kiln) {
+        drawKiln(ctx, ent.sx, ent.sy, zoom, ent.kiln.lit, ent.kiln.jobs.length > 0, this.time);
+        this.kilnHits.push({ x: ent.x, y: ent.y, left: ent.sx - 26 * zoom, top: ent.sy - 44 * zoom, w: 52 * zoom, h: 48 * zoom, kiln: ent.kiln.id });
       }
       if (ent.kind === 'smelter' && ent.smelter) {
         drawSmelter(ctx, ent.sx, ent.sy, zoom, ent.smelter.lit, ent.smelter.jobs.length > 0, this.time);
@@ -1164,6 +1186,10 @@ export class Renderer {
     for (let i = this.smelterHits.length - 1; i >= 0; i--) {
       const h = this.smelterHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), smelter: h.smelter };
+    }
+    for (let i = this.kilnHits.length - 1; i >= 0; i--) {
+      const h = this.kilnHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), kiln: h.kiln };
     }
     for (let i = this.anvilHits.length - 1; i >= 0; i--) {
       const h = this.anvilHits[i];

@@ -7,6 +7,7 @@ import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate }
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
+import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import type { Station } from './recipes';
@@ -63,6 +64,7 @@ export interface GameInit {
   crate?: { x: number; y: number; items: Item[] } | null;
   campfires?: PlacedCampfire[];
   smelters?: PlacedSmelter[];
+  kilns?: PlacedKiln[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
@@ -111,6 +113,9 @@ export class Game {
   /** Smelters by id; each covers six subtiles. */
   readonly smelters = new Map<number, PlacedSmelter>();
   nextSmelterId = 1;
+  /** Kilns by id; each covers four subtiles. */
+  readonly kilns = new Map<number, PlacedKiln>();
+  nextKilnId = 1;
   /** Anvils by id; each covers four subtiles. */
   readonly anvils = new Map<number, PlacedAnvil>();
   nextAnvilId = 1;
@@ -173,6 +178,10 @@ export class Game {
       if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
     }
     for (const c of init.crops ?? []) this.crops.set(`${c.x},${c.y}`, c);
+    for (const k of init.kilns ?? []) {
+      this.kilns.set(k.id, k);
+      if (k.id >= this.nextKilnId) this.nextKilnId = k.id + 1;
+    }
     for (const s of init.smelters ?? []) {
       this.smelters.set(s.id, s);
       if (s.id >= this.nextSmelterId) this.nextSmelterId = s.id + 1;
@@ -319,6 +328,7 @@ export class Game {
     if (this.action) this.updateAction(dt);
     if (this.campfires.size) this.burnFires(dt);
     if (this.smelters.size) this.runSmelters(dt);
+    if (this.kilns.size) this.runKilns(dt);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
@@ -521,6 +531,10 @@ export class Game {
     if (target.kind === 'smelter') {
       const s = this.smelters.get(target.id);
       return s ? { x: s.x, y: s.y } : null;
+    }
+    if (target.kind === 'kiln') {
+      const k = this.kilns.get(target.id);
+      return k ? { x: k.x, y: k.y } : null;
     }
     if (target.kind === 'anvil') {
       const a = this.anvils.get(target.id);
@@ -839,6 +853,37 @@ export class Game {
     return null;
   }
 
+  addKiln(x: number, y: number, sx: number, sy: number, ql: number): PlacedKiln {
+    const [ax, ay] = kilnAnchor(sx, sy);
+    const k: PlacedKiln = { id: this.nextKilnId++, x, y, sx: ax, sy: ay, ql, fuel: 0, lit: false, jobs: [], output: [] };
+    this.kilns.set(k.id, k);
+    this.events.emit('smelter');
+    return k;
+  }
+
+  removeKiln(id: number): void {
+    this.kilns.delete(id);
+    this.events.emit('smelter');
+  }
+
+  kilnsOnTile(x: number, y: number): PlacedKiln[] {
+    return [...this.kilns.values()].filter((k) => k.x === x && k.y === y);
+  }
+
+  /** Why a kiln cannot stand on this block of subtiles, or null. */
+  kilnPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+    const [ax, ay] = kilnAnchor(sx, sy);
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A kiln needs dry, solid ground.';
+    if (this.world.slope(x, y) > 14) return 'The ground is too uneven to lay brick on.';
+    if (this.isToken(x, y)) return 'Not on the token.';
+    for (let dy = 0; dy < KILN_SUBTILES; dy++) {
+      for (let dx = 0; dx < KILN_SUBTILES; dx++) {
+        if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
+      }
+    }
+    return null;
+  }
+
   addAnvil(x: number, y: number, sx: number, sy: number, metal: string, ql: number): PlacedAnvil {
     const [ax, ay] = anvilAnchor(sx, sy);
     const a: PlacedAnvil = { id: this.nextAnvilId++, x, y, sx: ax, sy: ay, metal, ql };
@@ -874,6 +919,7 @@ export class Game {
     if (this.crateAt(x, y, sx, sy)) return true;
     if (this.campfireAt(x, y, sx, sy)) return true;
     for (const s of this.smelters.values()) if (s.x === x && s.y === y && smelterCovers(s, sx, sy)) return true;
+    for (const k of this.kilns.values()) if (k.x === x && k.y === y && kilnCovers(k, sx, sy)) return true;
     for (const a of this.anvils.values()) if (a.x === x && a.y === y && anvilCovers(a, sx, sy)) return true;
     return false;
   }
@@ -902,6 +948,31 @@ export class Game {
           : { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
       s.output.push(made);
       this.logMsg(`The smelter finishes a ${ITEM_DEFS[made.id]?.name.toLowerCase() ?? made.id}. (QL ${made.ql.toFixed(1)})`, 'event');
+      this.events.emit('smelter');
+    }
+  }
+
+  /** Burn fuel in every lit kiln and bring its ware on. */
+  private runKilns(dt: number): void {
+    for (const k of this.kilns.values()) {
+      if (!k.lit) continue;
+      const burn = Math.min(k.fuel, dt);
+      k.fuel -= burn;
+      if (k.fuel <= 0) {
+        k.fuel = 0;
+        k.lit = false;
+        this.logMsg('A kiln burns through the last of its fuel and goes cold.', 'event');
+        this.events.emit('smelter');
+        this.events.emit('world', k.x, k.y);
+      }
+      const job = k.jobs[0];
+      if (!job || burn <= 0) continue;
+      job.left -= burn;
+      if (job.left > 0) continue;
+      k.jobs.shift();
+      const made: Item = { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
+      k.output.push(made);
+      this.logMsg(`The kiln fires a ${ITEM_DEFS[made.id]?.name.toLowerCase() ?? made.id}. (QL ${made.ql.toFixed(1)})`, 'event');
       this.events.emit('smelter');
     }
   }

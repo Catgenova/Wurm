@@ -1,6 +1,6 @@
 import type { Game } from '../game/game';
 import type { Pick, Renderer } from '../render/renderer';
-import { TileType, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
+import { TileType, TREE_DEFS, treeSpecies, treeVariant , SLAB_BY_ITEM } from '../world/tiles';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { BUILD_ACTION_BY_ID, materialName } from '../game/buildActions';
 import {
@@ -27,6 +27,7 @@ import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
 import { smelterAnchor, smelterState, SMELTER_COST, type PlacedSmelter } from '../game/smelter';
+import { isGreenware, kilnAnchor, kilnState, KILN_COST, type PlacedKiln } from '../game/kiln';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { bedrockAt } from '../world/ore';
@@ -148,6 +149,11 @@ export class UI {
       this.menu.show(sx, sy, `Smelter (${smelterState(smelter)})`, this.smelterEntries(smelter));
       return;
     }
+    const kiln = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
+    if (kiln) {
+      this.menu.show(sx, sy, `Kiln (${kilnState(kiln)})`, this.kilnEntries(kiln));
+      return;
+    }
     const anvil = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
     if (anvil) {
       this.menu.show(sx, sy, `${anvilName(anvil)} (QL ${anvil.ql.toFixed(0)})`, this.anvilEntries(anvil));
@@ -158,6 +164,14 @@ export class UI {
       lines.push('Stone smelter');
       lines.push(smelterState(sm));
       if (sm.jobs.length) lines.push(`Working: ${itemDef(sm.jobs[0].makes).name.toLowerCase()}, ${Math.ceil(sm.jobs[0].left)}s left`);
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
+    const kl = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
+    if (kl) {
+      lines.push('Kiln');
+      lines.push(kilnState(kl));
+      if (kl.jobs.length) lines.push(`Firing: ${itemDef(kl.jobs[0].makes).name.toLowerCase()}, ${Math.ceil(kl.jobs[0].left)}s left`);
       this.tooltip.show(sx, sy, lines);
       return;
     }
@@ -323,6 +337,19 @@ export class UI {
         onSelect: () => this.game.requestAction(smelterDef, st),
       });
     }
+    const kilnDef = ACTION_BY_ID.get('build_kiln');
+    if (kilnDef && KILN_COST.every(([id, n]) => this.game.inventory.count(id) >= n)) {
+      const [ax, ay] = kilnAnchor(...subtileOf(pick.x, pick.y, pick.wx, pick.wy));
+      const st: Target = { ...target, sx: ax, sy: ay };
+      const reason = kilnDef.check?.(st, this.game) ?? null;
+      entries.push({
+        label: `Build kiln here (spots ${ax + 1},${ay + 1} to ${ax + 2},${ay + 2})`,
+        note: reason ? undefined : KILN_COST.map(([id, n]) => `${n} ${itemDef(id).name.toLowerCase()}s`).join(' and '),
+        hint: reason ?? undefined,
+        disabled: !!reason,
+        onSelect: () => this.game.requestAction(kilnDef, st),
+      });
+    }
     const anvilDef = ACTION_BY_ID.get('place_anvil');
     const anvilItem = this.game.inventory.find('anvil');
     if (anvilDef && anvilItem) {
@@ -363,6 +390,21 @@ export class UI {
     const building = this.game.buildings.buildingAt(pick.x, pick.y);
     if (building) entries.push(...this.buildingEntries(pick));
     for (const { def, reason } of this.game.actionsFor(target)) {
+      // Slabs come in four stones and they do not look alike: choose which goes down.
+      if (def.id === 'pave_slabs') {
+        const slabs = this.game.inventory.items.filter((it) => SLAB_BY_ITEM.has(it.id));
+        if (slabs.length > 1) {
+          entries.push({
+            label: def.label,
+            children: slabs.map((it) => {
+              const st: Target = { ...target, itemUid: it.uid };
+              const why = def.check?.(st, this.game) ?? null;
+              return { label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it), hint: why ?? undefined, disabled: !!why, onSelect: () => this.game.requestAction(def, st) };
+            }),
+          });
+          continue;
+        }
+      }
       entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) });
     }
     if (!building) entries.push(...this.buildingEntries(pick));
@@ -476,6 +518,49 @@ export class UI {
       entries.push({ label: `In the furnace: ${itemDef(job.makes).name.toLowerCase()}`, note: `${Math.ceil(job.left)}s left, ${s.jobs.length} in all`, disabled: true });
     }
     if (s.output.length) entries.push({ label: `Finished: ${s.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
+    return entries;
+  }
+
+  /** Fuelling, packing and unloading a kiln. */
+  private kilnEntries(k: PlacedKiln): MenuItem[] {
+    const g = this.game;
+    const kt: Target = { kind: 'kiln', id: k.id };
+    const entries: MenuItem[] = [];
+    const quantity = (def: ActionDef, it: Item): MenuItem => ({
+      label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+      children:
+        it.count > 1
+          ? [
+              { label: 'One', onSelect: () => g.requestAction(def, { ...kt, itemUid: it.uid, count: 1 } as Target) },
+              { label: `All (${it.count})`, onSelect: () => g.requestAction(def, { ...kt, itemUid: it.uid, count: it.count } as Target) },
+            ]
+          : undefined,
+      onSelect: it.count > 1 ? undefined : () => g.requestAction(def, { ...kt, itemUid: it.uid, count: 1 } as Target),
+    });
+    const fuelDef = ACTION_BY_ID.get('fuel_kiln');
+    const fuel = g.inventory.items.filter((it) => isFuel(it.id));
+    if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((it) => quantity(fuelDef, it)) });
+    const loadDef = ACTION_BY_ID.get('load_kiln');
+    const green = g.inventory.items.filter((it) => isGreenware(it.id));
+    if (loadDef) {
+      entries.push({
+        label: 'Fire clay',
+        disabled: !green.length,
+        hint: green.length ? undefined : 'You carry no unfired clay.',
+        children: green.length ? green.map((it) => quantity(loadDef, it)) : undefined,
+      });
+    }
+    for (const id of ['light_kiln', 'damp_kiln', 'kiln_take_all', 'take_apart_kiln']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def || !def.applies(kt, g)) continue;
+      const reason = def.check?.(kt, g) ?? null;
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, kt) });
+    }
+    if (k.jobs.length) {
+      const job = k.jobs[0];
+      entries.push({ label: `In the kiln: ${itemDef(job.makes).name.toLowerCase()}`, note: `${Math.ceil(job.left)}s left, ${k.jobs.length} in all`, disabled: true });
+    }
+    if (k.output.length) entries.push({ label: `Fired: ${k.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
     return entries;
   }
 
