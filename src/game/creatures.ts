@@ -16,12 +16,12 @@ import { groundStep } from './player';
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
-export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams' };
+export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine' | 'sand';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -69,6 +69,12 @@ export interface SpeciesDef {
   nearTrees?: boolean;
   /** Only settles on a seam of ore. */
   onOre?: boolean;
+  /** Only settles on sand. */
+  onSand?: boolean;
+  /** Fights back rather than bolting, every time it is struck. */
+  defensive?: boolean;
+  /** Chance a tamed one turns on the player when it has the chance. */
+  unruly?: number;
   /** Tiles of working range earned per ten levels of skill; ten by default. */
   rangePerStep?: number;
   /** Stance a newly tamed one takes; defensive unless it is a gentle sort. */
@@ -151,6 +157,34 @@ export const SPECIES: Record<string, SpeciesDef> = {
     nearWater: true,
     defaultStance: 'passive',
   },
+  crawler: {
+    id: 'crawler',
+    name: 'Crawler',
+    description: 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws faster than a man with a spade, and it has never once been sorry for pinching anybody.',
+    health: 24,
+    attack: 5,
+    speed: 1.6,
+    tameLevel: 1,
+    tameChance: 0.1,
+    diet: ['potato', 'carrot', 'cabbage', 'onion'],
+    baitHint: 'a vegetable',
+    timid: false,
+    gathers: 'sand',
+    workRange: 8,
+    variants: [
+      ['#c58a52', '#e8c79a'],
+      ['#a8623c', '#dba173'],
+      ['#8f8a6e', '#cfc7a6'],
+      ['#b5483a', '#e0937f'],
+    ],
+    butcher: { meat: 3, leather: 1, bone: 4, gland: 1 },
+    tameFail: 'takes the {food} in one claw, waves the other at you, and backs off sideways',
+    leaves: 'scuttles off sideways and buries itself in the sand',
+    onSand: true,
+    defensive: true,
+    defaultStance: 'defensive',
+    unruly: 0.12,
+  },
   mola: {
     id: 'mola',
     name: 'Mola',
@@ -207,11 +241,12 @@ export const SPECIES: Record<string, SpeciesDef> = {
 
 /** Which species roam wild, by weight. */
 const WILD_SPECIES: Array<[string, number]> = [
-  ['rabba', 30],
-  ['vola', 26],
-  ['bevere', 16],
-  ['seavic', 16],
-  ['mola', 12],
+  ['rabba', 27],
+  ['vola', 23],
+  ['bevere', 15],
+  ['seavic', 15],
+  ['mola', 10],
+  ['crawler', 10],
 ];
 
 /** A deed worker goes looking for a meal once its belly is down to this. */
@@ -242,7 +277,7 @@ export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE)
 
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
-const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine']);
+const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand']);
 export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers && INDOOR_JOBS.has(species.gathers) ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
@@ -298,6 +333,8 @@ export interface Creature {
   searchAt: number;
   /** When the player last called it over for an action; it drops everything and comes. */
   calledAt: number;
+  /** Next time an unruly one gets a chance to turn on its keeper. */
+  nipAt: number;
   /** The tile this worker walked out to work on: a tree, a seam, a field. */
   workX: number;
   workY: number;
@@ -346,6 +383,8 @@ export const WILD_TARGET = 32;
 const RESPAWN_EVERY = 45;
 /** Seconds a wild creature spends grazing. */
 const FORAGE_TIME = 2.5;
+/** Seconds between chances for an unruly companion to turn on its keeper. */
+const NIP_EVERY = 25;
 
 /** A creature's level, read off its best task skill. */
 export const creatureLevel = (c: Creature): number => 1 + Math.floor(Math.max(0, ...Object.values(c.skills), 0) / 5);
@@ -408,6 +447,7 @@ export class Creatures {
       busyUntil: 0,
       searchAt: 0,
       calledAt: -1e9,
+      nipAt: 0,
       workX: -1,
       workY: -1,
       pouch: null,
@@ -467,9 +507,11 @@ export class Creatures {
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
       const id = species ?? rollTable(WILD_SPECIES, game.rand());
       const def = SPECIES[id];
-      // A Mola settles over metal, bare or buried; everything else wants grazing.
+      // A Mola settles over metal, bare or buried, a Crawler on the sand; the rest want grazing.
       if (def?.onOre) {
         if (!bedrockAt(w, x, y).ore) continue;
+      } else if (def?.onSand) {
+        if (w.getTile(x, y) !== TileType.Sand) continue;
       } else if (!TILE_DEFS[w.getTile(x, y)].forage) continue;
       // A Bevere lives on land, but only ever within sight of water; a Seavic needs trees.
       if (def?.nearWater && !nearWater(game, x, y)) continue;
@@ -493,6 +535,7 @@ export class Creatures {
       c.moving = false;
       const def = this.species(c);
       if (c.health < def.health && game.time - c.attackedAt > 6) c.health = Math.min(def.health, c.health + dt * (c.mode === 'wild' ? 0.25 : 0.6));
+      if (def.unruly && c.mode !== 'wild') this.maybeNip(game, c, def);
       if (game.time >= c.busyUntil) {
         switch (c.mode) {
           case 'wild':
@@ -512,6 +555,23 @@ export class Creatures {
       if (arr) arr.push(c);
       else this.byTile.set(key, [c]);
     }
+  }
+
+  /**
+   * Some creatures never quite stop being wild. Now and then, with its keeper
+   * in reach, one of those gets its chance and takes it.
+   */
+  private maybeNip(game: Game, c: Creature, def: SpeciesDef): void {
+    if (game.time < c.nipAt) return;
+    c.nipAt = game.time + NIP_EVERY;
+    const p = game.player;
+    if (Math.hypot(p.x - c.x, p.y - c.y) > 2 || game.rand() >= (def.unruly ?? 0)) return;
+    const helm = game.inventory.tool('helm');
+    const soak = helm ? Math.min(0.85, 0.45 + helm.ql / 260) : 0;
+    p.stats.health = Math.max(0, p.stats.health - def.attack * 0.012 * (1 - soak));
+    p.attackedBy = c.id;
+    p.attackedAt = game.time;
+    game.logMsg(`${c.name} rounds on you and gets a claw in${helm ? ', though your helm turns the worst of it aside' : ''}.`, 'error');
   }
 
   private stepToward(game: Game, c: Creature, tx: number, ty: number, dt: number, speedMul = 1): MoveResult {
@@ -608,10 +668,40 @@ export class Creatures {
       if (!ore || (c && (c.skills[GATHER_SKILL.mine] ?? 1) < ore.level)) return false;
       return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
     }
+    if (kind === 'sand') {
+      // Only a sand tile with soft ground left on a corner, and one digger to it.
+      if (game.world.getTile(x, y) !== TileType.Sand) return false;
+      return this.sandCorner(game, x, y) !== null && this.tileOk(game, x, y) && !this.claimed(x, y, c);
+    }
     if (kind === 'farm') return !!c && this.farmJobAt(game, c, x, y) !== null;
     if (kind === 'woodcut') return game.world.getTile(x, y) === TileType.Tree && !!this.beside(game, x, y);
     const def = TILE_DEFS[game.world.getTile(x, y)];
     return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
+  }
+
+  /**
+   * The corner of a sand tile there is still a clawful to be had from: above
+   * the water, with soil over the rock. The highest goes first, so the pit a
+   * crawler digs comes out level rather than ragged.
+   */
+  private sandCorner(game: Game, x: number, y: number): [number, number] | null {
+    const w = game.world;
+    let best: [number, number] | null = null;
+    let bestH = -Infinity;
+    for (const [cx, cy] of [
+      [x, y],
+      [x + 1, y],
+      [x, y + 1],
+      [x + 1, y + 1],
+    ]) {
+      const h = w.getHeight(cx, cy);
+      if (h <= 0 || w.getDirt(cx, cy) <= 0) continue;
+      if (h > bestH) {
+        bestH = h;
+        best = [cx, cy];
+      }
+    }
+    return best;
   }
 
   /**
@@ -699,6 +789,7 @@ export class Creatures {
     if (kind === 'woodcut') return this.finishFelling(game, c);
     if (kind === 'farm') return this.finishFarming(game, c, x, y);
     if (kind === 'mine') return this.finishMining(game, c);
+    if (kind === 'sand') return this.finishSand(game, c);
     game.markForaged(x, y, kind);
     const table = GATHER_TABLE[kind];
     if (c.mode !== 'deed') {
@@ -750,6 +841,24 @@ export class Creatures {
       game.exposeRock(c.workX, c.workY);
     }
     return { uid: game.inventory.nextUid++, id: ore.yields, ql, dmg: 0, count: 1 };
+  }
+
+  /** Dig out the sand a crawler walked to, and hand it the load it carries home. */
+  private finishSand(game: Game, c: Creature): Item | null {
+    const corner = this.sandCorner(game, c.workX, c.workY);
+    if (!corner) return null;
+    const [cx, cy] = corner;
+    const w = game.world;
+    const skill = c.skills[GATHER_SKILL.sand] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.sand, 0.225);
+    // Claws take the ground down the same way a shovel does.
+    w.setHeight(cx, cy, w.getHeight(cx, cy) - 1);
+    const left = w.getDirt(cx, cy) - 1;
+    w.setDirt(cx, cy, left);
+    if (left <= 0) game.exposeRock(cx, cy);
+    game.events.emit('world', c.workX, c.workY);
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
+    return { uid: game.inventory.nextUid++, id: 'sand', ql, dmg: 0, count: 1 };
   }
 
   /** Sow, tend or harvest the field the worker is standing on. */

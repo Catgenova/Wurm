@@ -127,8 +127,13 @@ rebuilds and commits the result.
   broad-clawed mole found on metal and fed on spices, which works the seams
   for its deed, taking the nearest ore no other Mola has claimed and bringing
   back metal at the quality its own mining skill earns, up to the seam's
-  ceiling, with a range that grows 5 tiles per 10 levels rather than 10. Both put the tile on the same cooldown a
-  player would, and neither retaliates for a failed attempt. A companion
+  ceiling, with a range that grows 5 tiles per 10 levels rather than 10; and
+  the Crawler, a broad sand-dwelling crab fed on vegetables, which digs sand a
+  clawful at a time from the highest corner of a sand tile and carries it to
+  the deed crate. The Crawler is defensive by nature: it hits back every time
+  it is struck, and even a tamed one turns on whoever stands beside it now and
+  then, though a helm blunts it. Each puts the tile on the same cooldown a
+  player would, and none retaliates for a failed taming attempt. A companion
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
   spare tamed ones are kept at the token. A deed worker feeds itself from any

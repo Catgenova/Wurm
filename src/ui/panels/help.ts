@@ -137,10 +137,15 @@ export function buildHelp(win: UIWindow): void {
     working the seams for its deed: it takes the nearest ore no other Mola has claimed, and the quality
     of what it brings back is its own mining skill, up to whatever the seam holds, and it leaves alone
     any metal beyond its skill. Its range grows by 5
-    tiles every 10 levels rather than the usual 10. Both pick that
-    spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
+    tiles every 10 levels rather than the usual 10. The <b>Crawler</b> is a broad crab that lives on the
+    sand, eats vegetables, and digs sand for its deed &mdash; a clawful at a time, taken from the highest
+    corner of the tile and carried to the crate, which is where the sand for mortar and moulds comes from
+    once nobody wants to dig it themselves. It is the first of the defensive sort: strike one and it
+    comes straight back at you every time, and even a tamed one is never quite tamed, so now and again it
+    will round on whoever is standing next to it. A helm turns the worst of that aside. Each of them picks
+    that spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
-    food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt
+    food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>
     <p>Right-click any tile of your settlement for the <b>deed menu</b>: it lists the wildermon kept
     there, offers to <b>upgrade</b> the settlement, and renames or disbands it. Each upgrade pushes the

@@ -267,14 +267,15 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.gainSkill('body_strength', 0.05);
       if (c.health <= 0) return false;
       // A cornered animal gets a swipe in, and a helm turns most of it aside.
-      if (g.rand() < 0.35) {
+      // The defensive sorts never miss their chance at one.
+      if (def.defensive || g.rand() < 0.35) {
         const helm = g.inventory.tool('helm');
         const soak = helm ? Math.min(0.85, 0.45 + helm.ql / 260) : 0;
         const hurt = def.attack * 0.012 * (1 - soak);
         g.player.stats.health = Math.max(0, g.player.stats.health - hurt);
         g.player.attackedBy = c.id;
         g.player.attackedAt = g.time;
-        g.logMsg(`The ${def.name.toLowerCase()} turns on you${helm ? ', though your helm takes the worst of it' : ''}.`, 'error');
+        g.logMsg(`The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}${helm ? ', though your helm takes the worst of it' : ''}.`, 'error');
       }
       g.logMsg(`You strike the ${def.name.toLowerCase()}${weapon ? ` with your ${itemDef(weapon.id).name.toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`, 'event');
       // Keep swinging while it is still within reach.

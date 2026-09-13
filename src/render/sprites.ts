@@ -809,6 +809,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   else if (pose.species === 'bevere') drawBevereBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'seavic') drawSeavicBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'mola') drawMolaBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'crawler') drawCrawlerBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -1209,6 +1210,130 @@ function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
       ctx.lineTo(4.6, d * 1.5);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** A Crawler: a broad crab on eight legs, one claw far bigger than the other. */
+function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const swing = pose.moving ? 1 : 0.18;
+  const sway = Math.sin(pose.phase * (pose.moving ? 1 : 0.4)) * (pose.moving ? 0.5 : 0.2);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 12, 5, 0, 0, TAU);
+  ctx.fill();
+  const [shell, pale] = pose.colors;
+  const hips = [-6.2, -2.4, 1.2, 4.6];
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // The four legs on the far side stand up over the shell, as they do in this view.
+  ctx.strokeStyle = pale;
+  ctx.lineWidth = 1.1;
+  hips.forEach((hx, i) => {
+    const lift = Math.max(0, Math.sin(pose.phase + i * 0.9)) * swing * 1.3;
+    const tip = hx - 3.2 + i * 1.7;
+    ctx.beginPath();
+    ctx.moveTo(hx, -8.6);
+    ctx.quadraticCurveTo(hx - 1.4 + i * 0.5, -13.4 - lift, tip, -11.8 - lift * 0.6);
+    ctx.stroke();
+  });
+  // Carapace: broad, domed, and darker where it turns under.
+  ctx.fillStyle = shell;
+  ctx.beginPath();
+  ctx.ellipse(0, -6.8 + sway * 0.3, 9.8, 5.3, -0.03, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(0.2, -4.4 + sway * 0.3, 8.6, 2.1, -0.03, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(-2.4, -9.8 + sway * 0.3, 4.2, 1.2, -0.12, 0, TAU);
+  ctx.fill();
+  // Two seams down the shell.
+  ctx.strokeStyle = 'rgba(60,40,26,0.35)';
+  ctx.lineWidth = 0.55;
+  for (const [ax, r] of [
+    [-3.4, 3],
+    [2.6, 3.4],
+  ] as Array<[number, number]>) {
+    ctx.beginPath();
+    ctx.arc(ax, -7.4 + sway * 0.3, r, 0.5, 2.4);
+    ctx.stroke();
+  }
+  // Eyestalks on the leading edge, and the mouthparts under them.
+  ctx.strokeStyle = shell;
+  ctx.lineWidth = 1;
+  for (const ex of [4.6, 7.2]) {
+    ctx.beginPath();
+    ctx.moveTo(ex, -9.4 + sway * 0.3);
+    ctx.quadraticCurveTo(ex + 1.2, -12.4, ex + 0.7, -13.6 + sway * 0.4);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#1a1410';
+  for (const ex of [5.1, 7.7]) {
+    ctx.beginPath();
+    ctx.arc(ex, -14, 1.05, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(8.8, -7.2 + sway * 0.3, 1.5, 1.1, 0.25, 0, TAU);
+  ctx.fill();
+  // The four near legs come down in front, feet on the sand.
+  ctx.strokeStyle = shell;
+  ctx.lineWidth = 1.5;
+  hips.forEach((hx, i) => {
+    const lift = Math.max(0, Math.sin(pose.phase + 1.6 + i * 0.9)) * swing * 1.6;
+    const tip = hx - 3.4 + i * 1.8;
+    ctx.beginPath();
+    ctx.moveTo(hx, -5.4);
+    ctx.quadraticCurveTo(hx - 2.6 + i * 0.6, -4.2 - lift, tip, -0.7 - lift);
+    ctx.stroke();
+  });
+  // Both claws held out front, the big one first: it does the digging.
+  for (const [px, py, scale, tilt, ph] of [
+    [6, -2.6, 0.66, 0.16, -swing * Math.sin(pose.phase + 1.1)],
+    [7.4, -5.6, 1.08, -0.2, swing * Math.sin(pose.phase)],
+  ] as Array<[number, number, number, number, number]>) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(tilt + ph * 0.12);
+    ctx.scale(scale, scale);
+    // Upper arm out to the elbow.
+    ctx.strokeStyle = shell;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(-0.6, 1.2);
+    ctx.lineTo(2.6, 0.4);
+    ctx.stroke();
+    // The hand.
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.ellipse(5.2, -0.2, 3.6, 2.5, -0.12, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(5.4, 1, 3.2, 1.1, -0.12, 0, TAU);
+    ctx.fill();
+    // The pincer, held a crack open.
+    ctx.fillStyle = pale;
+    ctx.beginPath();
+    ctx.moveTo(7.4, -1.9);
+    ctx.quadraticCurveTo(11.6, -3.4 - ph, 13.4, -2.2 - ph * 1.2);
+    ctx.quadraticCurveTo(10.6, -1.4, 7.8, -0.9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(7.4, 1.1);
+    ctx.quadraticCurveTo(11.2, 1.8 + ph * 0.7, 13, 0.6 + ph * 0.9);
+    ctx.quadraticCurveTo(10.4, 0.2, 7.8, -0.2);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
   ctx.restore();
