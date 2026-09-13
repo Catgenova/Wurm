@@ -197,7 +197,8 @@ export class Game {
       }
     }
     this.skills = new Skills(init.skills);
-    this.time = init.time ?? 0;
+    // A new castaway washes ashore at eight in the morning, not at midnight.
+    this.time = init.time ?? (8 / 24) * DAY_SECONDS;
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
     this.creatures = Creatures.fromJSON(init.creatures);
@@ -968,12 +969,14 @@ export class Game {
 
   /**
    * Wear on a tool from one use. A poor tool goes to pieces far faster than a
-   * good one, which is most of what quality is for.
+   * good one, which is most of what quality is for — but a tool is a long-term
+   * thing, so this is a slow business: a rough shovel is good for hundreds of
+   * holes and a fine one for thousands.
    */
   wearTool(id: string, multiplier = 1): void {
     const tool = this.inventory.tool(id);
     if (!tool) return;
-    this.damageItem(tool, (0.25 + 12 / (10 + tool.ql)) * multiplier);
+    this.damageItem(tool, (0.06 + 3 / (10 + tool.ql)) * multiplier);
   }
 
   /**

@@ -16,10 +16,27 @@ const lower = (id: string): string => itemDef(id).name.toLowerCase();
 export class CraftPanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
+  private search: HTMLInputElement;
+  private query = '';
   private readyOnly = false;
 
   constructor(win: UIWindow, private readonly game: Game) {
     win.body.classList.add('inv-body');
+    this.search = document.createElement('input');
+    this.search.type = 'search';
+    this.search.className = 'panel-search';
+    this.search.placeholder = 'Search recipes: a thing, a skill, a material…';
+    this.search.addEventListener('input', () => {
+      this.query = this.search.value.trim().toLowerCase();
+      this.render();
+    });
+    this.search.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key !== 'Escape') return;
+      this.search.value = '';
+      this.query = '';
+      this.render();
+    });
     const head = document.createElement('div');
     head.className = 'craft-head';
     const hint = document.createElement('span');
@@ -37,10 +54,21 @@ export class CraftPanel {
     this.list.className = 'inv-list';
     this.footer = document.createElement('div');
     this.footer.className = 'inv-footer';
-    win.body.append(head, this.list, this.footer);
+    win.body.append(this.search, head, this.list, this.footer);
     game.events.on('inventory', () => this.render());
     game.events.on('skill', () => this.render());
     this.render();
+  }
+
+  /**
+   * Whether a recipe answers to what has been typed. Everything on the row is
+   * searchable: what it makes, the trade it takes, where it is worked and what
+   * goes into it, so "leather", "mason" and "nail" all find their own.
+   */
+  private matches(r: Recipe): boolean {
+    if (!this.query) return true;
+    const parts = [itemDef(r.result).name, r.label, r.category, skillName(r.skill), r.tool ? lower(r.tool) : '', r.station ? stationName(r.station) : '', ...r.inputs.map((i) => lower(i.item))];
+    return parts.join(' ').toLowerCase().includes(this.query);
   }
 
   render(): void {
@@ -49,7 +77,7 @@ export class CraftPanel {
     let shown = 0;
     let ready = 0;
     for (const cat of RECIPE_CATEGORIES) {
-      const rows = RECIPES.filter((r) => r.category === cat && (!this.readyOnly || statuses.get(r)?.ready));
+      const rows = RECIPES.filter((r) => r.category === cat && this.matches(r) && (!this.readyOnly || statuses.get(r)?.ready));
       // What can be made now sits above what still needs gathering.
       rows.sort((a, b) => Number(statuses.get(b)?.ready ?? false) - Number(statuses.get(a)?.ready ?? false));
       if (!rows.length) continue;
@@ -67,10 +95,14 @@ export class CraftPanel {
     if (!shown) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = 'Nothing can be made with what you carry. Untick "Only what I can make" to see what each thing needs.';
+      empty.textContent = this.query
+        ? `No recipe answers to “${this.search.value.trim()}”${this.readyOnly ? ' that you can make right now' : ''}.`
+        : 'Nothing can be made with what you carry. Untick "Only what I can make" to see what each thing needs.';
       this.list.append(empty);
     }
-    this.footer.textContent = `${ready} of ${RECIPES.length} recipes possible with what you carry`;
+    this.footer.textContent = this.query
+      ? `${shown} recipes match, ${ready} of them possible with what you carry`
+      : `${ready} of ${RECIPES.length} recipes possible with what you carry`;
   }
 
   private row(r: Recipe, st: RecipeStatus): HTMLDivElement {

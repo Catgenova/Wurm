@@ -62,6 +62,12 @@ export function buildHelp(win: UIWindow): void {
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
+    <p>The <b>inventory</b> and the <b>crafting</b> window each have a <b>search box</b> at the top.
+    The inventory searches what you are carrying by name and kind; the recipe book searches on
+    everything in a row at once &mdash; what it makes, the trade it takes, where it has to be worked and
+    what goes into it &mdash; so <i>leather</i> finds every leather thing, <i>mason</i> finds the oven
+    and the well, and <i>nail</i> finds all forty-odd recipes that want nails. The count at the foot
+    tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>Crafting</h3>
     <p>The crafting window (<kbd>R</kbd>) is your recipe book, grouped by craft: a carving knife and a
     log give shafts or a mallet, a shaft becomes a deed stake, a saw gives planks and timbers, a chisel
@@ -215,15 +221,17 @@ export function buildHelp(win: UIWindow): void {
     <p>The <b>Eat</b> button beside the food bar eats the best thing you are carrying, and the
     <b>Feed</b> button on your companion's line gives it the <i>poorest</i> thing it will take, so the
     good food stays in your pack. Both are there to save hunting through the inventory.</p>
-    <p><b>Tools wear out.</b> Every use puts damage on whatever tool the work called for, and a poor
-    tool goes to pieces far faster than a good one &mdash; which is most of what quality is for. Damage
+    <p><b>Tools wear out</b>, slowly. Every use puts a little damage on whatever tool the work called
+    for, and a poor tool goes to pieces far faster than a good one &mdash; which is most of what quality
+    is for: a rough tool is good for about three hundred jobs and a fine one for over a thousand. Damage
     also makes a tool work as though it were poorer than it is. Past <b>75 damage</b> it warns you in
     red, and again at every five points after; at 100 it breaks and is gone.</p>
     <p>Right-click anything damaged and choose <b>Repair</b>. It is its own skill: the work goes on a
     second at a time, taking damage out and a little quality with it, and you can stop whenever you
-    like. A green repairer takes about half a minute to bring a badly worn tool back and costs it
-    several points of quality; a skilled one does the same in a few seconds for a fraction of the
-    quality. Nothing repairs past quality 1, so a thing mended often enough is finished in the end.</p>
+    like. A green repairer takes about half a minute to bring a badly worn tool back and costs it a
+    couple of points of quality; a skilled one does the same in a few seconds for half a point. Nothing
+    repairs past quality 1, so a thing mended often enough is finished in the end &mdash; but that is a
+    long way off, and a good tool kept mended will outlast most of what you build with it.</p>
     <h3>Binding wounds</h3>
     <p>A wound closes on its own eventually. A dressing is faster. Cut a length of cloth into three
     <b>bandages</b> with a knife &mdash; that is the <b>First aid</b> skill &mdash; and right-click one

@@ -14,6 +14,8 @@ const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
 export class InventoryPanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
+  private search: HTMLInputElement;
+  private query = '';
   private selected: number | null = null;
 
   constructor(
@@ -21,6 +23,22 @@ export class InventoryPanel {
     private readonly game: Game,
     private readonly menu: ContextMenu,
   ) {
+    this.search = document.createElement('input');
+    this.search.type = 'search';
+    this.search.className = 'panel-search';
+    this.search.placeholder = 'Search your pack…';
+    this.search.addEventListener('input', () => {
+      this.query = this.search.value.trim().toLowerCase();
+      this.render();
+    });
+    // Escape clears the box rather than closing the window out from under you.
+    this.search.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key !== 'Escape') return;
+      this.search.value = '';
+      this.query = '';
+      this.render();
+    });
     const head = document.createElement('div');
     head.className = 'inv-head';
     head.innerHTML = '<span>Item</span><span>QL</span><span>Dmg</span><span>Wt</span>';
@@ -28,17 +46,25 @@ export class InventoryPanel {
     this.list.className = 'inv-list';
     this.footer = document.createElement('div');
     this.footer.className = 'inv-footer';
-    win.body.append(head, this.list, this.footer);
+    win.body.append(this.search, head, this.list, this.footer);
     win.body.classList.add('inv-body');
     game.events.on('inventory', () => this.render());
     this.render();
   }
 
+  /** Whether an item answers to what has been typed in the search box. */
+  private matches(item: Item): boolean {
+    if (!this.query) return true;
+    const def = itemDef(item.id);
+    return `${itemName(item)} ${def.category} ${def.description ?? ''}`.toLowerCase().includes(this.query);
+  }
+
   render(): void {
     const items = this.game.inventory.items;
+    const shown = items.filter((it) => this.matches(it));
     this.list.replaceChildren();
     for (const [cat, label] of CATEGORY_ORDER) {
-      const group = items.filter((it) => itemDef(it.id).category === cat);
+      const group = shown.filter((it) => itemDef(it.id).category === cat);
       if (!group.length) continue;
       const header = document.createElement('div');
       header.className = 'inv-group';
@@ -46,14 +72,15 @@ export class InventoryPanel {
       this.list.append(header);
       for (const item of group.sort((a, b) => itemName(a).localeCompare(itemName(b)))) this.list.append(this.row(item));
     }
-    if (!items.length) {
+    if (!shown.length) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = 'Your inventory is empty.';
+      empty.textContent = items.length ? `Nothing you are carrying answers to “${this.search.value.trim()}”.` : 'Your inventory is empty.';
       this.list.append(empty);
     }
     const weight = this.game.inventory.totalWeight();
-    this.footer.textContent = `${items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} kg`;
+    const all = `${items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} kg`;
+    this.footer.textContent = this.query ? `${shown.reduce((n, it) => n + it.count, 0)} of ${all}` : all;
   }
 
   private row(item: Item): HTMLDivElement {

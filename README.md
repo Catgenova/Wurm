@@ -147,14 +147,15 @@ rebuilds and commits the result.
 - **Eat and Feed buttons.** The Eat button by the food bar eats the best food
   you carry; the Feed button on the companion line gives your wildermon the
   poorest thing it will take, so the good food stays in the pack.
-- **Tools wear out and are repaired.** Every use damages the tool the work
-  called for, faster the poorer the tool, and damage makes it work as though it
-  were poorer still. Past 75 damage it warns in red, and again every five
-  points after; at 100 it breaks and is gone. Repair is its own skill:
-  right-click a damaged thing and the work goes a second at a time, taking
-  damage out and a little quality with it — half a minute and several points of
-  quality for a beginner, a few seconds and a fraction of that for a skilled
-  hand.
+- **Tools wear out and are repaired.** Every use puts a little damage on the
+  tool the work called for, faster the poorer the tool, and damage makes it
+  work as though it were poorer still — but slowly: a rough tool is good for
+  about three hundred jobs and a fine one for over a thousand. Past 75 damage
+  it warns in red, and again every five points after; at 100 it breaks and is
+  gone. Repair is its own skill: right-click a damaged thing and the work goes
+  a second at a time, taking damage out and a little quality with it — half a
+  minute and a couple of points of quality for a beginner, a few seconds and
+  half a point for a skilled hand.
 - **Deed orders.** The deed menu sets one stance for every wildermon kept
   there, and it fires when something wild crosses the border: aggressive ones
   break off work and go for it, defensive ones answer only what has struck at
@@ -363,6 +364,12 @@ rebuilds and commits the result.
   nearly the whole screen with one tap (handy on phones), a status HUD,
   action timer, right-click menus with greyed-out reasons, hover tooltips, an
   event log with chat and a live minimap.
+- **Search in the inventory and the recipe book.** Both windows have a search
+  box at the top. The inventory matches on name and kind; the recipe book
+  matches on everything in a row at once — the thing made, the trade, the
+  station and every material — so "leather" finds every leather craft, "mason"
+  finds the oven and the well, and "nail" finds every recipe that wants nails.
+  The footer counts the matches, and Esc in the box clears it.
 
 ## How it is put together
 

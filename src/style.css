@@ -683,6 +683,28 @@ kbd {
   }
 }
 
+/* Search box, shared by the inventory and the recipe book ------------------ */
+
+.panel-search {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  background: #17140f;
+  color: var(--ui-text);
+  font: inherit;
+  outline: none;
+}
+
+.panel-search::placeholder {
+  color: var(--ui-dim);
+}
+
+.panel-search:focus {
+  background: #1f1a14;
+}
+
 /* Crafting --------------------------------------------------------------- */
 
 .craft-head {

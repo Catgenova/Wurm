@@ -734,10 +734,11 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return;
       const item = g.inventory.get(t.uid);
       if (!item || item.dmg <= 0) return;
-      // A second's work: some of the damage comes out, and a little of the quality with it.
+      // A second's work: some of the damage comes out, and a little of the quality
+      // with it — a little, not much, so mending a thing is not the end of it.
       const skill = g.skills.get('repair');
       const healed = Math.min(item.dmg, 1.2 + skill * 0.1);
-      const lost = healed * Math.max(0.012, 0.085 - skill * 0.0007);
+      const lost = healed * Math.max(0.004, 0.03 - skill * 0.00026);
       item.dmg = Math.max(0, item.dmg - healed);
       item.ql = Math.max(1, item.ql - lost);
       g.events.emit('inventory');
