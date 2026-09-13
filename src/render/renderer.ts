@@ -23,6 +23,8 @@ import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
+import { furnitureCentre, type PlacedFurniture } from '../game/furniture';
+import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
@@ -48,10 +50,12 @@ export interface Pick {
   anvil?: number;
   /** A kiln under the cursor, when one is. */
   kiln?: number;
+  /** A piece of furniture under the cursor, when one is. */
+  furniture?: number;
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'anvil';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil';
   x: number;
   y: number;
   sx: number;
@@ -62,6 +66,7 @@ interface Entity {
   fire?: PlacedCampfire;
   smelter?: PlacedSmelter;
   kiln?: PlacedKiln;
+  piece?: PlacedFurniture;
   anvil?: PlacedAnvil;
 }
 
@@ -77,6 +82,7 @@ interface HitRect {
   fire?: number;
   smelter?: number;
   kiln?: number;
+  furniture?: number;
   anvil?: number;
 }
 
@@ -145,6 +151,7 @@ export class Renderer {
   private fireHits: HitRect[] = [];
   private smelterHits: HitRect[] = [];
   private kilnHits: HitRect[] = [];
+  private furnitureHits: HitRect[] = [];
   private anvilHits: HitRect[] = [];
 
   constructor(
@@ -241,6 +248,7 @@ export class Renderer {
     this.fireHits.length = 0;
     this.smelterHits.length = 0;
     this.kilnHits.length = 0;
+    this.furnitureHits.length = 0;
     this.anvilHits.length = 0;
     this.drawnTiles = 0;
 
@@ -338,6 +346,12 @@ export class Renderer {
           for (const kl of this.game.kilnsOnTile(x, y)) {
             const [wx, wy] = kilnCentre(kl);
             this.ents.push({ kind: 'kiln', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, kiln: kl });
+          }
+        }
+        if (this.game.furniture.size) {
+          for (const fu of this.game.furnitureOnTile(x, y)) {
+            const [wx, wy] = furnitureCentre(fu);
+            this.ents.push({ kind: 'furniture', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, piece: fu });
           }
         }
         if (this.game.anvils.size) {
@@ -497,6 +511,12 @@ export class Renderer {
         });
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
         continue;
+      }
+      if (ent.kind === 'furniture' && ent.piece) {
+        drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind);
+        const [W, D] = furnitureSpan(ent.piece.kind);
+        const h = FURNITURE_HEIGHT[ent.piece.kind] ?? 14;
+        this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: ent.piece.id });
       }
       if (ent.kind === 'kiln' && ent.kiln) {
         drawKiln(ctx, ent.sx, ent.sy, zoom, ent.kiln.lit, ent.kiln.jobs.length > 0, this.time);
@@ -1186,6 +1206,10 @@ export class Renderer {
     for (let i = this.smelterHits.length - 1; i >= 0; i--) {
       const h = this.smelterHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), smelter: h.smelter };
+    }
+    for (let i = this.furnitureHits.length - 1; i >= 0; i--) {
+      const h = this.furnitureHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), furniture: h.furniture };
     }
     for (let i = this.kilnHits.length - 1; i >= 0; i--) {
       const h = this.kilnHits[i];

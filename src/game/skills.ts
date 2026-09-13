@@ -22,6 +22,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'masonry', name: 'Masonry', group: 'Skills', start: 1 },
   { id: 'stonecutting', name: 'Stonecutting', group: 'Skills', start: 1 },
   { id: 'carpentry', name: 'Carpentry', group: 'Skills', start: 1 },
+  { id: 'fine_carpentry', name: 'Fine carpentry', group: 'Skills', start: 1 },
   { id: 'pottery', name: 'Pottery', group: 'Skills', start: 1 },
   { id: 'cooking', name: 'Cooking', group: 'Skills', start: 1 },
   { id: 'smelting', name: 'Smelting', group: 'Skills', start: 1 },

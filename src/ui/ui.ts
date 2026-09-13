@@ -28,6 +28,7 @@ import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '.
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
 import { smelterAnchor, smelterState, SMELTER_COST, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, KILN_COST, type PlacedKiln } from '../game/kiln';
+import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { bedrockAt } from '../world/ore';
@@ -149,6 +150,11 @@ export class UI {
       this.menu.show(sx, sy, `Smelter (${smelterState(smelter)})`, this.smelterEntries(smelter));
       return;
     }
+    const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
+    if (piece) {
+      this.menu.show(sx, sy, `${furnitureName(piece)} (${furnitureState(piece)})`, this.furnitureEntries(piece));
+      return;
+    }
     const kiln = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
     if (kiln) {
       this.menu.show(sx, sy, `Kiln (${kilnState(kiln)})`, this.kilnEntries(kiln));
@@ -164,6 +170,14 @@ export class UI {
       lines.push('Stone smelter');
       lines.push(smelterState(sm));
       if (sm.jobs.length) lines.push(`Working: ${itemDef(sm.jobs[0].makes).name.toLowerCase()}, ${Math.ceil(sm.jobs[0].left)}s left`);
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
+    const fu = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
+    if (fu) {
+      lines.push(furnitureName(fu));
+      lines.push(furnitureState(fu));
+      if (furnitureCapacity(fu)) lines.push('Stand next to it to put things away.');
       this.tooltip.show(sx, sy, lines);
       return;
     }
@@ -299,6 +313,28 @@ export class UI {
         const reason = placeDef.check?.(pt, this.game) ?? null;
         entries.push({ label: `Place ${itemName(it).toLowerCase()} here (spot ${sx0 + 1},${sy0 + 1})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(placeDef, pt) });
       }
+    }
+    // Setting carried furniture down on the block of subtiles under the cursor.
+    const placeFurnitureDef = ACTION_BY_ID.get('place_furniture');
+    const carried = this.game.inventory.items.filter((it) => isFurniture(it.id));
+    if (placeFurnitureDef && carried.length) {
+      const [s0, t0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+      entries.push({
+        label: 'Set furniture down here',
+        children: carried.map((it) => {
+          const def = furnitureDef(it.id);
+          const [ax, ay] = furnitureAnchor(it.id, s0, t0);
+          const ft: Target = { ...target, sx: ax, sy: ay, itemUid: it.uid };
+          const reason = placeFurnitureDef.check?.(ft, this.game) ?? null;
+          return {
+            label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+            note: reason ? undefined : `spots ${ax + 1},${ay + 1} to ${ax + def.w},${ay + def.h}`,
+            hint: reason ?? undefined,
+            disabled: !!reason,
+            onSelect: () => this.game.requestAction(placeFurnitureDef, ft),
+          };
+        }),
+      });
     }
     // Sowing on a tilled field: pick from the seeds you carry.
     const sowDef = ACTION_BY_ID.get('plant_seed');
@@ -518,6 +554,23 @@ export class UI {
       entries.push({ label: `In the furnace: ${itemDef(job.makes).name.toLowerCase()}`, note: `${Math.ceil(job.left)}s left, ${s.jobs.length} in all`, disabled: true });
     }
     if (s.output.length) entries.push({ label: `Finished: ${s.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
+    return entries;
+  }
+
+  /** Opening, emptying and lifting a piece of furniture. */
+  private furnitureEntries(f: PlacedFurniture): MenuItem[] {
+    const g = this.game;
+    const ft: Target = { kind: 'furniture', id: f.id };
+    const entries: MenuItem[] = [];
+    if (furnitureCapacity(f)) {
+      entries.push({ label: 'Open', note: `${furnitureUnits(f)} / ${furnitureCapacity(f)} things`, onSelect: () => this.cratePanel.openFurniture(f.id) });
+    }
+    for (const id of ['furniture_take_all', 'pick_up_furniture']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def || !def.applies(ft, g)) continue;
+      const reason = def.check?.(ft, g) ?? null;
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
+    }
     return entries;
   }
 

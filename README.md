@@ -113,6 +113,23 @@ rebuilds and commits the result.
   can make right now at the top and a switch to hide the rest. Each
   material's own menu offers the same recipes. A deed stake, the thing you plant to found a
   settlement, is carved from a shaft with a carving knife.
+- **Nails.** A nail mould is fired from sand at a smelter and cast on an
+  anvil: one lump of metal runs out as a hundred nails of ten grams each.
+  Everything that is nailed together needs them — crates, tool heads fitted to
+  shafts, and all twenty pieces of furniture — while sawing planks, carving
+  shafts and bundling thatch need none, so nothing in the early game waits on a
+  smith.
+- **Furniture and storage.** Fine carpentry, the furniture hand as distinct
+  from the carpentry that cuts the wood, builds twenty pieces from planks,
+  timbers, shafts and nails: stool, chair, bench, table, long table, writing
+  desk, bed, cot, chest, coffer, cupboard, wardrobe, shelves, bookshelf,
+  larder, barrel, lectern, coat rack, planter and firewood rack. Each is
+  carried like a crate and set down on the subtile grid, taking the block of
+  spots its size needs. Ten of them store things, and store more than a crate:
+  a coffer 25, a barrel or firewood rack 40, a chest 60, a cupboard 80, a
+  bookshelf 90, a wardrobe 100, shelves 120 and a larder 150. Open one to see
+  inside, or stand beside it and put things away; nothing can be lifted again
+  until it is empty.
 - **Stonecutting.** A chisel and the Stonecutting skill turn rock, slate,
   marble and sandstone shards into bricks — what walls, smelters and kilns are
   built from — or, two shards at a time, into slabs. Slabs are paving rather

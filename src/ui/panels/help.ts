@@ -124,6 +124,23 @@ export function buildHelp(win: UIWindow): void {
     join into ridges and hips.</p>
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
     into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
+    <h3>Nails, furniture and storage</h3>
+    <p>Anything that is nailed together needs <b>nails</b>, and nails need metal. Fire a <b>nail mould</b>
+    from sand at a smelter: it is a gang mould with a hundred little channels in it, so one lump of metal
+    beaten out on an anvil gives a hundred nails at ten grams apiece. Crates, tool heads fitted to their
+    shafts and every piece of furniture take them; sawing planks, carving shafts and bundling thatch do
+    not, so the early game needs no smith.</p>
+    <p><b>Fine carpentry</b> is the furniture hand, separate from the carpentry that cuts the wood. With
+    a mallet, planks, timbers, shafts and nails it builds twenty pieces &mdash; stool, chair, bench,
+    table, long table, writing desk, bed, cot, chest, coffer, cupboard, wardrobe, shelves, bookshelf,
+    larder, barrel, lectern, coat rack, planter and firewood rack. Each is carried like a crate and
+    <b>set down</b> on the block of subtiles under your cursor: right-click a tile and choose
+    <b>Set furniture down here</b>.</p>
+    <p>Ten of the twenty hold things, and hold far more than a crate does: a coffer takes 25, a barrel or
+    a firewood rack 40, a chest 60, a cupboard 80, a bookshelf 90, a wardrobe 100, shelves 120 and a
+    <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
+    stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
+    again until it has been emptied.</p>
     <h3>Stonecutting</h3>
     <p><b>Stonecutting</b> is the skill that turns what a pickaxe brings out of the rock into something
     square. With a chisel, rock, slate, marble and sandstone shards become <b>bricks</b> &mdash; what

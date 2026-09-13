@@ -5,6 +5,7 @@ import type { PlacedAnvil } from './anvil';
 import type { PlacedCampfire } from './campfire';
 import type { PlacedSmelter } from './smelter';
 import type { PlacedKiln } from './kiln';
+import type { PlacedFurniture } from './furniture';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import { SPECIES, type CreatureJSON } from './creatures';
@@ -40,6 +41,7 @@ interface SaveData {
   campfires?: PlacedCampfire[];
   smelters?: PlacedSmelter[];
   kilns?: PlacedKiln[];
+  furniture?: PlacedFurniture[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   crate?: { x: number; y: number; items: Item[] } | null;
@@ -88,6 +90,7 @@ export function saveGame(game: Game): boolean {
     campfires: [...game.campfires.values()],
     smelters: [...game.smelters.values()],
     kilns: [...game.kilns.values()],
+    furniture: [...game.furniture.values()],
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
   };
@@ -156,6 +159,7 @@ export function loadGame(): Game | null {
       campfires: data.campfires,
       smelters: data.smelters,
       kilns: data.kilns,
+      furniture: data.furniture,
       anvils: data.anvils,
       crops: data.crops,
       crate: data.crate ?? null,

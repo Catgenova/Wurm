@@ -133,9 +133,10 @@ export const ANVIL_ACTIONS: ActionDef[] = [
         return;
       }
       const ql = smithQl(g, def, mouldQl, lump.ql, a);
-      const made = g.inventory.add(def.makes, { ql, extra: metal.name });
+      const per = def.per ?? 1;
+      const made = g.inventory.add(def.makes, { ql, extra: metal.name, count: per });
       g.logMsg(
-        `You beat out a ${metal.name.toLowerCase()} ${itemDef(def.makes).name.toLowerCase()} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
+        `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${itemDef(def.makes).name.toLowerCase()}${per > 1 ? 's' : ''} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
           broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through and is done.` : ` The mould has ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left.`
         }`,
         'event',

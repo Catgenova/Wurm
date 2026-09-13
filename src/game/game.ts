@@ -8,6 +8,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureUnits, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import type { Station } from './recipes';
@@ -65,6 +66,7 @@ export interface GameInit {
   campfires?: PlacedCampfire[];
   smelters?: PlacedSmelter[];
   kilns?: PlacedKiln[];
+  furniture?: PlacedFurniture[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
@@ -116,6 +118,9 @@ export class Game {
   /** Kilns by id; each covers four subtiles. */
   readonly kilns = new Map<number, PlacedKiln>();
   nextKilnId = 1;
+  /** Furniture by id; each covers the block of subtiles its kind takes. */
+  readonly furniture = new Map<number, PlacedFurniture>();
+  nextFurnitureId = 1;
   /** Anvils by id; each covers four subtiles. */
   readonly anvils = new Map<number, PlacedAnvil>();
   nextAnvilId = 1;
@@ -181,6 +186,10 @@ export class Game {
     for (const k of init.kilns ?? []) {
       this.kilns.set(k.id, k);
       if (k.id >= this.nextKilnId) this.nextKilnId = k.id + 1;
+    }
+    for (const f of init.furniture ?? []) {
+      this.furniture.set(f.id, f);
+      if (f.id >= this.nextFurnitureId) this.nextFurnitureId = f.id + 1;
     }
     for (const s of init.smelters ?? []) {
       this.smelters.set(s.id, s);
@@ -536,6 +545,10 @@ export class Game {
       const k = this.kilns.get(target.id);
       return k ? { x: k.x, y: k.y } : null;
     }
+    if (target.kind === 'furniture') {
+      const f = this.furniture.get(target.id);
+      return f ? { x: f.x, y: f.y } : null;
+    }
     if (target.kind === 'anvil') {
       const a = this.anvils.get(target.id);
       return a ? { x: a.x, y: a.y } : null;
@@ -884,6 +897,75 @@ export class Game {
     return null;
   }
 
+  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = []): PlacedFurniture {
+    const [ax, ay] = furnitureAnchor(kind, sx, sy);
+    const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items };
+    this.furniture.set(f.id, f);
+    this.events.emit('crate');
+    return f;
+  }
+
+  removeFurniture(id: number): void {
+    this.furniture.delete(id);
+    this.events.emit('crate');
+  }
+
+  furnitureOnTile(x: number, y: number): PlacedFurniture[] {
+    return [...this.furniture.values()].filter((f) => f.x === x && f.y === y);
+  }
+
+  /** Why a piece of furniture cannot stand on this block of subtiles, or null. */
+  furniturePlaceReason(kind: string, x: number, y: number, sx: number, sy: number): string | null {
+    const def = furnitureDef(kind);
+    const [ax, ay] = furnitureAnchor(kind, sx, sy);
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'Furniture needs dry, solid ground.';
+    if (this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
+    if (this.isToken(x, y)) return 'Not on the token.';
+    for (let dy = 0; dy < def.h; dy++) {
+      for (let dx = 0; dx < def.w; dx++) {
+        if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
+      }
+    }
+    return null;
+  }
+
+  /** The piece of storage furniture closest to the player. */
+  nearestStore(): PlacedFurniture | undefined {
+    let best: PlacedFurniture | undefined;
+    let bestD = Infinity;
+    for (const f of this.furniture.values()) {
+      if (!furnitureCapacity(f)) continue;
+      const [cx, cy] = furnitureCentre(f);
+      const d = Math.hypot(cx - this.player.x, cy - this.player.y);
+      if (d < bestD) {
+        bestD = d;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  /** Put something away; false when it would not fit. */
+  furnitureAdd(f: PlacedFurniture, item: Item): boolean {
+    if (furnitureUnits(f) + item.count > furnitureCapacity(f)) return false;
+    const def = ITEM_DEFS[item.id];
+    const stack = def?.stackable ? f.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    if (stack) {
+      stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
+      stack.count += item.count;
+    } else f.items.push(item);
+    this.events.emit('crate');
+    return true;
+  }
+
+  furnitureTake(f: PlacedFurniture, uid: number): Item | null {
+    const idx = f.items.findIndex((it) => it.uid === uid);
+    if (idx < 0) return null;
+    const [item] = f.items.splice(idx, 1);
+    this.events.emit('crate');
+    return item;
+  }
+
   addAnvil(x: number, y: number, sx: number, sy: number, metal: string, ql: number): PlacedAnvil {
     const [ax, ay] = anvilAnchor(sx, sy);
     const a: PlacedAnvil = { id: this.nextAnvilId++, x, y, sx: ax, sy: ay, metal, ql };
@@ -920,6 +1002,7 @@ export class Game {
     if (this.campfireAt(x, y, sx, sy)) return true;
     for (const s of this.smelters.values()) if (s.x === x && s.y === y && smelterCovers(s, sx, sy)) return true;
     for (const k of this.kilns.values()) if (k.x === x && k.y === y && kilnCovers(k, sx, sy)) return true;
+    for (const f of this.furniture.values()) if (f.x === x && f.y === y && furnitureCovers(f, sx, sy)) return true;
     for (const a of this.anvils.values()) if (a.x === x && a.y === y && anvilCovers(a, sx, sy)) return true;
     return false;
   }

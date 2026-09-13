@@ -50,6 +50,10 @@ export const METAL_BY_LUMP = new Map(METALS.map((m) => [m.lump, m]));
 export const isLump = (id: string): boolean => METAL_BY_LUMP.has(id);
 export const isOreItem = (id: string): boolean => METAL_BY_ORE.has(id);
 
+/** Metal a single nail takes, in kilograms, and so how many come off one lump. */
+export const NAIL_WEIGHT = 0.01;
+export const NAILS_PER_LUMP = 100;
+
 export interface MouldDef {
   id: string;
   name: string;
@@ -60,8 +64,10 @@ export interface MouldDef {
   sand: number;
   /** How hard the finished piece is to get right. */
   difficulty: number;
-  /** Lumps of metal a single piece uses. */
+  /** Lumps of metal a single filling uses. */
   lumps: number;
+  /** Pieces one filling makes; one unless the mould is a gang mould. */
+  per?: number;
 }
 
 export const MOULDS: MouldDef[] = [
@@ -74,6 +80,8 @@ export const MOULDS: MouldDef[] = [
   { id: 'knife_blade_mould', name: 'Knife blade mould', makes: 'knife_blade', skill: 'blacksmithing', sand: 2, difficulty: 14, lumps: 1 },
   { id: 'sword_blade_mould', name: 'Sword blade mould', makes: 'sword_blade', skill: 'weaponsmithing', sand: 3, difficulty: 18, lumps: 2 },
   { id: 'helm_mould', name: 'Helm mould', makes: 'helm', skill: 'armorsmithing', sand: 3, difficulty: 16, lumps: 2 },
+  // A gang mould: one lump of metal runs out as a hundred nails of 0.01 kg each.
+  { id: 'nail_mould', name: 'Nail mould', makes: 'nail', skill: 'blacksmithing', sand: 2, difficulty: 6, lumps: 1, per: NAILS_PER_LUMP },
 ];
 
 export const MOULD_BY_ID = new Map(MOULDS.map((m) => [m.id, m]));

@@ -5,6 +5,7 @@ import { ANVIL_ACTIONS } from './anvil';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
+import { FURNITURE_ACTIONS } from './furniture';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { DEED_ACTIONS } from './deed';
@@ -44,6 +45,7 @@ export type Target =
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'smelter'; id: number; itemUid?: number; count?: number }
   | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
+  | { kind: 'furniture'; id: number; itemUid?: number; count?: number }
   | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
@@ -895,6 +897,7 @@ export const ACTIONS: ActionDef[] = [
   ...CAMPFIRE_ACTIONS,
   ...SMELTER_ACTIONS,
   ...KILN_ACTIONS,
+  ...FURNITURE_ACTIONS,
   ...ANVIL_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,

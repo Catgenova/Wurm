@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemDef } from './items';
+import { FURNITURE } from './furniture';
 
 /**
  * Everything the player can make from what they carry. A recipe is a tool
@@ -8,7 +9,7 @@ import { itemDef } from './items';
  * an item action, so it shows on the material's menu as well as in the
  * crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Stonework' | 'Clay & thatch' | 'Cooking' | 'Smelting';
+export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cooking' | 'Smelting';
 /** A place a recipe has to be worked at, beyond what is carried. */
 export type Station = 'campfire' | 'smelter';
 const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter' };
@@ -58,8 +59,8 @@ export const RECIPES: Recipe[] = [
   { id: 'make_shafts', category: 'Woodwork', result: 'shaft', count: 4, inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve shafts', verb: 'carving shafts', baseTime: 5, stamina: 0.03, done: 'You carve the log into four shafts.' },
   { id: 'make_mallet', category: 'Woodwork', result: 'mallet', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve a mallet', verb: 'carving a mallet', baseTime: 8, stamina: 0.04, difficulty: 8, done: 'You carve a mallet from the log.', fail: 'The head splits as you shape it. You fail to carve a mallet.' },
   { id: 'make_deed_stake', category: 'Woodwork', result: 'deed_stake', inputs: [{ item: 'shaft' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve a deed stake', verb: 'carving a deed stake', baseTime: 10, stamina: 0.05, difficulty: 10, done: 'You whittle the shaft to a point and notch it for a claim.', fail: 'The shaft splits along the grain. You fail to carve a deed stake.' },
-  { id: 'make_log_crate', category: 'Woodwork', result: 'crate_log', inputs: [{ item: 'log', count: 3 }], tool: 'mallet', skill: 'carpentry', label: 'Build log crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You knock together a log crate. Place it on any spot of a tile.' },
-  { id: 'make_plank_crate', category: 'Woodwork', result: 'crate_plank', inputs: [{ item: 'plank', count: 6 }], tool: 'mallet', skill: 'carpentry', label: 'Build plank crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You knock together a plank crate. Place it on any spot of a tile.' },
+  { id: 'make_log_crate', category: 'Woodwork', result: 'crate_log', inputs: [{ item: 'log', count: 3 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', label: 'Build log crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You nail together a log crate. Place it on any spot of a tile.' },
+  { id: 'make_plank_crate', category: 'Woodwork', result: 'crate_plank', inputs: [{ item: 'plank', count: 6 }, { item: 'nail', count: 12 }], tool: 'mallet', skill: 'carpentry', label: 'Build plank crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You nail together a plank crate. Place it on any spot of a tile.' },
   // Stonework
   { id: 'make_stone_brick', category: 'Stonework', result: 'stone_brick', inputs: [{ item: 'rock_shards' }], tool: 'chisel', skill: 'stonecutting', label: 'Chisel stone brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a stone brick.', fail: 'The shard splits the wrong way. You fail to make a brick.' },
   { id: 'make_slate_brick', category: 'Stonework', result: 'slate_brick', inputs: [{ item: 'slate_shards' }], tool: 'chisel', skill: 'stonecutting', label: 'Chisel slate brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a slate brick.', fail: 'The slate flakes apart. You fail to make a brick.' },
@@ -76,12 +77,12 @@ export const RECIPES: Recipe[] = [
   { id: 'make_clay_pot', category: 'Clay & thatch', result: 'unfired_clay_pot', inputs: [{ item: 'clay', count: 2 }], skill: 'pottery', label: 'Shape a pot', verb: 'shaping a pot', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You raise the walls of a deep pot. Fire it in a kiln.', fail: 'The pot goes out of true as you draw it up and you press it back into a lump.' },
   { id: 'make_clay_jar', category: 'Clay & thatch', result: 'unfired_clay_jar', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a jar', verb: 'shaping a jar', baseTime: 7, stamina: 0.02, difficulty: 10, done: 'You shape a jar and a lid to sit on it. Fire them in a kiln.', fail: 'The neck collapses. You fail to shape a jar.' },
   { id: 'make_adobe', category: 'Clay & thatch', result: 'adobe', inputs: [{ item: 'clay' }, { item: 'mixed_grass' }], skill: 'pottery', label: 'Make adobe', verb: 'making adobe', baseTime: 4, stamina: 0.02, done: 'You press clay and grass into an adobe block.' },
-  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
-  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
-  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
-  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
-  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
-  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
+  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
+  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
+  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
+  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
+  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
+  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
   { id: 'make_thatch', category: 'Clay & thatch', result: 'thatch', inputs: [{ item: 'mixed_grass', count: 2 }], skill: 'carpentry', label: 'Bundle into thatch', verb: 'bundling thatch', baseTime: 3, stamina: 0.02, done: 'You bundle the grass into thatch.' },
   { id: 'make_clay_bowl', category: 'Clay & thatch', result: 'unfired_clay_bowl', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a bowl', verb: 'shaping a bowl', baseTime: 6, stamina: 0.02, difficulty: 8, done: 'You shape a clay bowl. It needs a kiln before it will hold anything.', fail: 'The walls collapse as you draw them up. You fail to shape a bowl.' },
   // Cooking. Everything here needs a lit campfire to work at.
@@ -106,6 +107,7 @@ const SMELTER_RECIPES: Recipe[] = [
   { id: 'make_pickaxe_head_mould', category: 'Smelting', result: 'pickaxe_head_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a pickaxe head mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You fire a pickaxe head mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
   { id: 'make_knife_blade_mould', category: 'Smelting', result: 'knife_blade_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a knife blade mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 14, done: 'You fire a knife blade mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
   { id: 'make_sword_blade_mould', category: 'Smelting', result: 'sword_blade_mould', inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a sword blade mould', verb: 'firing a mould', baseTime: 9, stamina: 0.03, difficulty: 18, done: 'You fire a sword blade mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_nail_mould', category: 'Smelting', result: 'nail_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a nail mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 6, done: 'You fire a nail mould, a hundred little channels in a block of sand.', fail: 'The channels run together as the sand heats and the mould is spoiled.', consumeOnFail: true },
   { id: 'make_helm_mould', category: 'Smelting', result: 'helm_mould', inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a helm mould', verb: 'firing a mould', baseTime: 9, stamina: 0.03, difficulty: 16, done: 'You fire a helm mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
   { id: 'make_bronze', category: 'Smelting', result: 'bronze_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'tin_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix bronze', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of bronze.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
   { id: 'make_brass', category: 'Smelting', result: 'brass_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'zinc_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix brass', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of brass.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
@@ -115,7 +117,26 @@ const SMELTER_RECIPES: Recipe[] = [
 
 RECIPES.push(...SMELTER_RECIPES);
 
-export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Stonework', 'Clay & thatch', 'Cooking', 'Smelting'];
+/** The twenty pieces of furniture, each nailed together by a fine carpenter. */
+const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
+  id: `make_${f.id}`,
+  category: 'Furniture' as RecipeCategory,
+  result: f.id,
+  inputs: f.bill.map(([item, count]) => ({ item, count })),
+  tool: 'mallet',
+  skill: 'fine_carpentry',
+  label: `Build ${f.name.toLowerCase()}`,
+  verb: `building a ${f.name.toLowerCase()}`,
+  baseTime: f.time,
+  stamina: 0.05,
+  difficulty: f.difficulty,
+  done: `${f.done} Set it down on any spot of a tile.`,
+  fail: `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
+}));
+
+RECIPES.push(...FURNITURE_RECIPES);
+
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {

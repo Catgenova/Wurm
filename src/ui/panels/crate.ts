@@ -1,13 +1,25 @@
-import { crateCentre, crateName, CRATE_DEFS, crateUnits } from '../../game/crates';
+import { crateCentre, crateName, CRATE_DEFS } from '../../game/crates';
+import { furnitureCapacity, furnitureCentre, furnitureName } from '../../game/furniture';
 import type { Game } from '../../game/game';
-import { itemDef, itemName } from '../../game/items';
+import { itemDef, type Item, itemName } from '../../game/items';
 import type { UIWindow } from '../windows';
 
-/** Contents of one placed crate, with a Take button per item. */
+/** A crate or a piece of storage furniture, seen through the same window. */
+interface Store {
+  title: string;
+  items: Item[];
+  capacity: number;
+  centre: [number, number];
+  what: string;
+  take: (uid: number) => Item | null;
+}
+
+/** Contents of one placed container, with a Take button per item. */
 export class CratePanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
   private crateId: number | null = null;
+  private furnitureId: number | null = null;
 
   constructor(
     private readonly win: UIWindow,
@@ -26,26 +38,53 @@ export class CratePanel {
     this.render();
   }
 
-  render(): void {
+  /** Whichever container is open, seen the same way. */
+  private store(): Store | undefined {
     const crate = this.crateId !== null ? this.game.crates.get(this.crateId) : undefined;
+    if (crate) {
+      return {
+        title: crateName(crate),
+        items: crate.items,
+        capacity: CRATE_DEFS[crate.kind].capacity,
+        centre: crateCentre(crate),
+        what: 'crate',
+        take: (uid) => this.game.crateTake(crate, uid),
+      };
+    }
+    const piece = this.furnitureId !== null ? this.game.furniture.get(this.furnitureId) : undefined;
+    if (piece) {
+      return {
+        title: `${furnitureName(piece)} (QL ${piece.ql.toFixed(0)})`,
+        items: piece.items,
+        capacity: furnitureCapacity(piece),
+        centre: furnitureCentre(piece),
+        what: furnitureName(piece).toLowerCase(),
+        take: (uid) => this.game.furnitureTake(piece, uid),
+      };
+    }
+    return undefined;
+  }
+
+  render(): void {
+    const store = this.store();
     this.list.replaceChildren();
-    if (!crate) {
+    if (!store) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = 'Open a crate to see what is inside.';
+      empty.textContent = 'Open a crate or a cupboard to see what is inside.';
       this.list.append(empty);
       this.footer.textContent = '';
-      this.win.titleText.textContent = 'Crate';
+      this.win.titleText.textContent = 'Storage';
       return;
     }
-    this.win.titleText.textContent = crateName(crate);
-    if (!crate.items.length) {
+    this.win.titleText.textContent = store.title;
+    if (!store.items.length) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = 'The crate is empty.';
+      empty.textContent = `The ${store.what} is empty.`;
       this.list.append(empty);
     }
-    for (const item of [...crate.items].sort((a, b) => itemName(a).localeCompare(itemName(b)))) {
+    for (const item of [...store.items].sort((a, b) => itemName(a).localeCompare(itemName(b)))) {
       const row = document.createElement('div');
       row.className = 'inv-row';
       const name = document.createElement('span');
@@ -61,23 +100,32 @@ export class CratePanel {
       take.textContent = 'Take';
       take.addEventListener('click', (e) => {
         e.stopPropagation();
-        const [cx, cy] = crateCentre(crate);
+        const [cx, cy] = store.centre;
         if (Math.hypot(cx - this.game.player.x, cy - this.game.player.y) > 2.4) {
-          this.game.logMsg('Stand next to the crate to take things out.', 'error');
+          this.game.logMsg(`Stand next to the ${store.what} to take things out.`, 'error');
           return;
         }
-        const it = this.game.crateTake(crate, item.uid);
+        const it = store.take(item.uid);
         if (it) this.game.inventory.addItem(it);
       });
       row.append(name, ql, dmg, take);
       this.list.append(row);
     }
-    const weight = crate.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);
-    this.footer.textContent = `${crateUnits(crate)} / ${CRATE_DEFS[crate.kind].capacity} things · ${weight.toFixed(1)} kg`;
+    const weight = store.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);
+    const used = store.items.reduce((n, it) => n + it.count, 0);
+    this.footer.textContent = `${used} / ${store.capacity} things · ${weight.toFixed(1)} kg`;
   }
 
   open(id: number): void {
     this.crateId = id;
+    this.furnitureId = null;
+    this.render();
+    this.win.open();
+  }
+
+  openFurniture(id: number): void {
+    this.furnitureId = id;
+    this.crateId = null;
     this.render();
     this.win.open();
   }
