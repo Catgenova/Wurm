@@ -21,11 +21,6 @@ const campfires = (n: number): DeedRequirement => ({
   met: (g) => [...g.campfires.values()].filter((f) => g.onDeed(f.x, f.y)).length >= n,
 });
 
-const litFire = (): DeedRequirement => ({
-  label: 'A campfire burning on the deed',
-  met: (g) => [...g.campfires.values()].some((f) => f.lit && g.onDeed(f.x, f.y)),
-});
-
 const buildings = (n: number): DeedRequirement => ({
   label: n === 1 ? 'A building with every ground-floor wall up' : `${n} buildings with every ground-floor wall up`,
   met: (g) =>
@@ -35,17 +30,31 @@ const buildings = (n: number): DeedRequirement => ({
     }).length >= n,
 });
 
+const smelters = (n: number): DeedRequirement => ({
+  label: n === 1 ? 'A stone smelter on the deed' : `${n} stone smelters on the deed`,
+  met: (g) => [...g.smelters.values()].filter((s) => g.onDeed(s.x, s.y)).length >= n,
+});
+
+const anvils = (n: number): DeedRequirement => ({
+  label: n === 1 ? 'An anvil set down on the deed' : `${n} anvils set down on the deed`,
+  met: (g) => [...g.anvils.values()].filter((a) => g.onDeed(a.x, a.y)).length >= n,
+});
+
 const workers = (n: number): DeedRequirement => ({
   label: n === 1 ? 'A wildermon working the deed' : `${n} wildermon working the deed`,
   met: (g) => g.creatures.workers().length >= n,
 });
 
-/** What each level beyond the first asks for. */
+/**
+ * What each level beyond the first asks for. Upgrades are taken in order, so
+ * each level's own requirement is the new thing the settlement has to show;
+ * everything the levels below wanted is already standing.
+ */
 export const DEED_UPGRADES: Record<number, DeedRequirement[]> = {
   2: [crates(1), campfires(1)],
-  3: [crates(2), litFire(), buildings(1)],
-  4: [crates(3), buildings(2), workers(2)],
-  5: [crates(4), campfires(2), buildings(3), workers(3)],
+  3: [smelters(1)],
+  4: [anvils(1)],
+  5: [buildings(1), workers(3)],
 };
 
 export const nextDeedLevel = (g: Game): number | null => (g.deed && g.deedLevel < MAX_DEED_LEVEL ? g.deedLevel + 1 : null);

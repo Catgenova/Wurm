@@ -87,9 +87,9 @@ rebuilds and commits the result.
   Disbanding pulls the stake back up. Right-click any deed tile for the deed
   menu: manage the wildermon kept there, rename or disband, and upgrade the
   settlement. Each of the four upgrades widens the border by 2 tiles and takes
-  on one more worker, and has to be earned — level 2 wants a crate and a
-  campfire on the deed, later levels want more crates, a fire burning,
-  finished buildings and wildermon at work. Building is only possible on its land,
+  on one more worker, and is earned by building the settlement out: a crate
+  and a campfire for level 2, a stone smelter for 3, an anvil for 4, and a
+  walled building with three wildermon at work for 5. Building is only possible on its land,
   things left outside rot ten times slower there, and a green border can be
   kept on permanently from Settings.
 - **Looking inside.** A strip of arrows at the screen edge picks which storey

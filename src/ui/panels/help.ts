@@ -144,9 +144,10 @@ export function buildHelp(win: UIWindow): void {
     against you.</p>
     <p>Right-click any tile of your settlement for the <b>deed menu</b>: it lists the wildermon kept
     there, offers to <b>upgrade</b> the settlement, and renames or disbands it. Each upgrade pushes the
-    border out 2 tiles and lets one more wildermon work the deed, and each has to be earned: level 2
-    wants a crate and a campfire on the deed, and later levels want more crates, a fire burning,
-    finished buildings and wildermon at work. The menu ticks off what you have and names what is
+    border out 2 tiles and lets one more wildermon work the deed, and each is earned by building the
+    settlement out: level 2 wants a crate and a campfire, level 3 a stone smelter, level 4 an anvil set
+    down, and level 5 a building with its ground floor walled and three wildermon at work. Upgrades are
+    taken in order, so each level only asks for the new thing. The menu ticks off what you have and names what is
     missing. A settlement runs from level 1 to level 5.</p>
     <p>A deed worker feeds itself: once its belly falls below a quarter it goes to whichever crate on
     the deed holds something it eats, helps itself, and goes back to work. Keep food in a crate and your
