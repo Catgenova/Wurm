@@ -60,8 +60,9 @@ rebuilds and commits the result.
 - **Gathering.** Cut down trees for logs, pick and plant sprouts, forage and
   botanize with per-tile cooldowns, drink from any water or from a water skin
   you fill at the shore.
-- **Deeds.** A settlement deed founds an 11×11 settlement around a stone
-  token; you may hold one at a time. Building is only possible on its land,
+- **Deeds.** A deed stake, carved from a shaft with a carving knife, founds an
+  11×11 settlement around a stone token; you may hold one at a time.
+  Disbanding pulls the stake back up. Building is only possible on its land,
   things left outside rot ten times slower there, and a green border can be
   kept on permanently from Settings.
 - **Building, Wurm style.** Plan on flat packed dirt with a mallet, extend the
@@ -78,7 +79,8 @@ rebuilds and commits the result.
   veins in the mountains. Every recipe is a tool plus materials; the crafting
   window (R) lists what you can make right now from your inventory, with a
   switch to show every recipe and what it lacks, and each material's own menu
-  offers the same recipes.
+  offers the same recipes. A deed stake, the thing you plant to found a
+  settlement, is carved from a shaft with a carving knife.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, forages berries when hungry and is tamed with a berry or
   vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is

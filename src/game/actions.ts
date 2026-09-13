@@ -3,7 +3,7 @@ import { BUILD_ACTIONS } from './buildActions';
 import { BUTCHER_ACTIONS } from './butcher';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
-import type { Stance } from './creatures';
+import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
@@ -625,7 +625,7 @@ export const ACTIONS: ActionDef[] = [
     verb: 'founding a settlement',
     stamina: 0.05,
     baseTime: 4,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'settlement_deed',
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'deed_stake',
     check: (_t, g) => {
       if (g.deed) return 'You already hold a settlement. Disband it first.';
       const x = g.player.tileX;
@@ -689,14 +689,14 @@ export const ACTIONS: ActionDef[] = [
           if (c.carrying) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
           c.carrying = null;
           c.mode = 'wild';
-          c.name = c.species === 'rabba' ? 'Rabba' : c.name;
+          c.name = SPECIES[c.species]?.name ?? c.name;
           freed++;
         }
       }
       for (const c of g.crates.values()) c.deed = false;
       g.deed = null;
-      g.inventory.add('settlement_deed', { ql: 50 });
-      g.logMsg(`You disband ${name}. The deed form returns to your pack.${freed ? ` ${freed} wildermon run off into the wild.` : ''}`, 'system');
+      g.inventory.add('deed_stake', { ql: 50 });
+      g.logMsg(`You disband ${name}. You pull up the stake and pack it away.${freed ? ` ${freed} wildermon run off into the wild.` : ''}`, 'system');
     },
   },
   {

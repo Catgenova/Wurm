@@ -138,7 +138,7 @@ export class Game {
     this.inventory.add('saw', { ql: 20 });
     this.inventory.add('butchering_knife', { ql: 20 });
     this.inventory.add('water_skin', { ql: 30 });
-    this.inventory.add('settlement_deed', { ql: 50 });
+    this.inventory.add('deed_stake', { ql: 50 });
   }
 
   /** Whether the player can stand on a tile at a storey: the ground, or a finished floor, staircase or ladder. */

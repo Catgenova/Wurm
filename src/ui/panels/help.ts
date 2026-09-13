@@ -53,7 +53,8 @@ export function buildHelp(win: UIWindow): void {
     bone and the occasional gland. The <b>Butchering</b> skill and a <b>butchering knife</b> both decide
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.</p>
     <h3>Settling and building</h3>
-    <p>Use the settlement deed in your inventory to found a settlement where you stand: an 11 by 11
+    <p>Carve a <b>deed stake</b> from a shaft with a carving knife, then use it where you stand to
+    found a settlement: an 11 by 11
     square around a stone token. You may hold one settlement at a time, and building is only allowed
     on its land. Things left outside on deed land rot ten times slower.</p>
     <p>To build, flatten and pack a tile, then with a mallet choose <b>Plan building</b> on it and

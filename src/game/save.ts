@@ -119,12 +119,19 @@ export function loadGame(): Game | null {
       if ([...game.creatures.list.values()].some((c) => c.species === id)) continue;
       game.creatures.spawnSpecies(game, id, 12);
     }
+    // The settlement deed form became a carved stake; rename it wherever it sits.
+    const restake = (items: Item[]): void => {
+      for (const it of items) if (it.id === 'settlement_deed') it.id = 'deed_stake';
+    };
+    restake(game.inventory.items);
+    for (const pile of game.ground.values()) restake(pile);
+    for (const crate of game.crates.values()) restake(crate.items);
     if (game.deed && !game.deedCrate()) game.placeDeedCrate();
     game.settings.grid = data.settings?.grid ?? true;
     game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
     game.settings.deedBorder = data.settings?.deedBorder ?? true;
     game.logMsg('Your journey continues where you left off.', 'system');
-    // Older saves predate building: hand out the tools and a deed form.
+    // Older saves predate building: hand out the tools they never got.
     const granted: string[] = [];
     for (const [id, name] of [
       ['mallet', 'a mallet'],
@@ -136,10 +143,6 @@ export function loadGame(): Game | null {
         game.inventory.add(id, { ql: 20 });
         granted.push(name);
       }
-    }
-    if (!game.deed && !game.inventory.has('settlement_deed')) {
-      game.inventory.add('settlement_deed', { ql: 50 });
-      granted.push('a settlement deed');
     }
     if (granted.length) game.logMsg(`You find ${granted.join(', ')} among your things.`, 'system');
     // Things left outside kept rotting while you were away, up to a week's worth.
