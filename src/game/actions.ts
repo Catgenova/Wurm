@@ -6,6 +6,7 @@ import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
 import { FURNITURE_ACTIONS } from './furniture';
+import { GEAR_ACTIONS } from './gear';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { DEED_ACTIONS } from './deed';
@@ -59,6 +60,8 @@ export interface ActionDef {
   skill?: string;
   /** Item id of the tool that must be carried. */
   tool?: string;
+  /** Tiles away the action can be done from; one (arm's length) by default. */
+  range?: number;
   /** Acts on the corner of the tile target rather than the tile itself. */
   corner?: boolean;
   /** Completes immediately without walking or a timer. */
@@ -898,6 +901,7 @@ export const ACTIONS: ActionDef[] = [
   ...SMELTER_ACTIONS,
   ...KILN_ACTIONS,
   ...FURNITURE_ACTIONS,
+  ...GEAR_ACTIONS,
   ...ANVIL_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,

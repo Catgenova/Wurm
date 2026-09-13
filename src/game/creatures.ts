@@ -23,7 +23,7 @@ export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', bot
 /** The plain form, for "it will forage" rather than "it will foraging". */
 export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed' };
 const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [] };
-export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
+export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
 export const STANCES: Stance[] = ['passive', 'defensive', 'aggressive'];
@@ -216,7 +216,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
       ['#5c5348', '#f0ece2'],
       ['#46605c', '#e6efec'],
     ],
-    butcher: { meat: 3, fur: 2, leather: 2, bone: 2, gland: 1 },
+    butcher: { meat: 3, leather: 2, bone: 2, gland: 1, feather: 4 },
     tameFail: 'takes the {food} in its bill, honks once through it, and waddles off',
     leaves: 'waddles back to the nearest clay pit and settles into it',
     nearClay: true,
@@ -345,7 +345,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
       ['#20262c', '#dfe6ea'],
       ['#332a26', '#efe6d8'],
     ],
-    butcher: { meat: 1, fur: 1, leather: 1, bone: 1, gland: 1 },
+    butcher: { meat: 1, leather: 1, bone: 1, gland: 1, feather: 6 },
     tameFail: 'snatches the {food} and is twenty feet up a tree before you can blink',
     leaves: 'lifts off with a rattle of wings and is gone over the trees',
     nearTrees: true,
@@ -775,11 +775,9 @@ export class Creatures {
     c.nipAt = game.time + NIP_EVERY;
     const p = game.player;
     if (Math.hypot(p.x - c.x, p.y - c.y) > 2 || game.rand() >= (def.unruly ?? 0)) return;
-    const worn = game.headgear();
-    p.stats.health = Math.max(0, p.stats.health - def.attack * 0.012 * (1 - (worn?.soak ?? 0)));
     p.attackedBy = c.id;
     p.attackedAt = game.time;
-    game.logMsg(`${c.name} rounds on you and gets a claw in${worn ? `, though your ${worn.name} turns the worst of it aside` : ''}.`, 'error');
+    game.hurtPlayer(def.attack * 0.012, `${c.name} rounds on you and gets a claw in`);
   }
 
   private stepToward(game: Game, c: Creature, tx: number, ty: number, dt: number, speedMul = 1): MoveResult {
@@ -1381,11 +1379,9 @@ export class Creatures {
     if (d <= 1.1) {
       if (c.cooldown <= 0) {
         c.cooldown = 1.4;
-        const worn = game.headgear();
-        p.stats.health = Math.max(0, p.stats.health - def.attack * 0.012 * (1 - (worn?.soak ?? 0)));
         p.attackedBy = c.id;
         p.attackedAt = game.time;
-        game.logMsg(`The ${def.name.toLowerCase()} is on you${worn ? `, though your ${worn.name} turns some of it` : ''}.`, 'error');
+        game.hurtPlayer(def.attack * 0.012, `The ${def.name.toLowerCase()} is on you`);
       }
       return true;
     }

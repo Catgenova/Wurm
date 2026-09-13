@@ -9,7 +9,7 @@ export class SkillsPanel {
 
   constructor(win: UIWindow, private readonly game: Game) {
     win.body.classList.add('skills-body');
-    for (const group of ['Characteristics', 'Skills'] as const) {
+    for (const group of ['Characteristics', 'Fighting', 'Skills'] as const) {
       const header = document.createElement('div');
       header.className = 'skill-group';
       header.textContent = group;

@@ -161,12 +161,43 @@ export function buildHelp(win: UIWindow): void {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
-    <h3>Wool and cloth</h3>
-    <p><b>Tailoring</b> turns fibre into something worth having: three wool or three cotton spin and
-    weave into a length of <b>cloth</b>, and two lengths of cloth sew into a <b>wool cap</b>. A cap is
-    not a helm &mdash; it turns aside perhaps a third of a blow where a good helm turns four fifths
-    &mdash; but it is made of things you can grow and it costs no metal at all. Cloth also stuffs the
-    mattress of a bed or a cot, which is what cotton was always for.</p>
+    <h3>Wool, cloth and the loom</h3>
+    <p>Fibre becomes cloth in two steps, and each wants its own furniture. Build a <b>spindle</b> and a
+    <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into
+    <b>yarn</b>, and at the loom to weave three yarn into a length of <b>cloth</b>. Cloth stuffs a
+    mattress, sews into clothing, and twisted into a <b>bowstring</b> it is the start of every bow.</p>
+    <h3>Armour</h3>
+    <p>Armour is worn a piece at a time in five places &mdash; head, chest, arms, legs and feet &mdash;
+    and only counts where the blow actually lands. Right-click anything wearable and choose
+    <b>Wear or wield</b>; the inventory marks what is on you.</p>
+    <p>There are four kinds, each with a skill of its own that rises <b>by being hit in it</b>:
+    <b>cloth</b>, sewn by tailoring, which turns aside about a sixth and weighs nothing;
+    <b>leather</b>, cut from hide with a knife by leatherworking, about a third; <b>chain</b>, riveted
+    from moulds at an anvil by chain armoursmithing, about a half; and <b>plate</b>, beaten out whole
+    by plate armoursmithing, near two thirds. Quality and the skill behind it raise all of those, and
+    damage lowers them: armour wears where it is struck, and a piece beaten to nothing falls off you.
+    Weight is the price &mdash; a full suit of plate slows you by a quarter and makes every action cost
+    more wind, where cloth costs almost nothing.</p>
+    <p>A <b>shield</b> in the off hand is different: it does not soften a blow, it stops the whole of
+    one outright, and the shields skill and its quality decide how often. Two-handed weapons leave no
+    hand for one.</p>
+    <h3>Weapons and the bow</h3>
+    <p>Every weapon belongs to a kind, and each kind is its own subskill: <b>knives</b>, <b>swords</b>,
+    <b>axes</b>, <b>mauls</b>, <b>polearms</b> and <b>archery</b>. Swinging trains the weapon's own
+    subskill and the <b>fighting</b> skill behind it, and both decide whether a blow lands and how hard.
+    A weapon's own numbers matter as much: a hunting knife is quick and light, a maul or a battle axe is
+    slow and ends things, a spear reaches a tile further than anything else, and the two-handed ones
+    take the shield off your arm.</p>
+    <p>Heads are cast from <b>moulds</b> at an anvil and fitted to shafts: short and long sword blades,
+    axe and maul heads, spear heads, and a gang mould that turns one lump of metal into twenty-five
+    <b>arrow heads</b>. A club is simply carved from a log, which is what most people start with.</p>
+    <p>Bows are tillered with <b>bowyery</b> from shafts and a bowstring, in three sizes: a
+    <b>short bow</b> reaches six tiles, a <b>medium bow</b> nine and a <b>long bow</b> thirteen, each
+    slower to draw and heavier in the hit than the last. Arrows are made with <b>fletching</b> from a
+    shaft, three heads and three feathers &mdash; and feathers come only off a bird, so the Magga and
+    the Noot are the reason you have any. With a bow in hand, <b>Shoot</b> appears on any wild creature
+    in range; the far end of the range is a far harder shot than the near end, and every shot spends an
+    arrow.</p>
     <h3>Stonecutting</h3>
     <p><b>Stonecutting</b> is the skill that turns what a pickaxe brings out of the rock into something
     square. With a chisel, rock, slate, marble and sandstone shards become <b>bricks</b> &mdash; what

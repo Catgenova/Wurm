@@ -772,6 +772,10 @@ kbd {
   border-radius: 2px;
 }
 
+.inv-worn {
+  color: var(--ui-accent);
+}
+
 .skill-note {
   margin-left: auto;
   margin-right: 10px;

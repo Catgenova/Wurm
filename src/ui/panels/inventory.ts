@@ -62,7 +62,9 @@ export class InventoryPanel {
     row.className = 'inv-row' + (item.uid === this.selected ? ' selected' : '');
     const name = document.createElement('span');
     name.className = 'inv-name';
-    name.textContent = item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item);
+    const worn = this.game.isEquipped(item.uid);
+    name.textContent = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (worn ? ' · worn' : '');
+    if (worn) name.classList.add('inv-worn');
     const ql = document.createElement('span');
     ql.textContent = item.ql.toFixed(1);
     const dmg = document.createElement('span');

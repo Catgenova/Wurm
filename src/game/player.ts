@@ -39,6 +39,10 @@ export class Player {
   path: PathPoint[] | null = null;
   inputDir = { x: 0, y: 0 };
   stats: Stats = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
+  /** What is worn or held, by slot: the uid of the item, or null. */
+  equipped: Record<string, number | null> = { head: null, chest: null, arms: null, legs: null, feet: null, weapon: null, offhand: null };
+  /** How much armour is weighing you down, 0 for nothing worn. */
+  burden = 0;
   /** Steepest step allowed, raised by the climbing skill. */
   maxStep = MAX_STEP;
   /** Share of walking speed kept in deep water, raised by the swimming skill. */
@@ -116,6 +120,7 @@ export class Player {
     let speed = BASE_SPEED * tileDef.speed;
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
+    if (this.burden > 0) speed /= 1 + this.burden;
     // Uphill slows you down.
     const ahead = world.heightAt(this.x + vx * 0.15, this.y + vy * 0.15);
     const grade = (ahead - h) / (0.15 * UNITS_PER_TILE);

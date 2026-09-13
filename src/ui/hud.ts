@@ -1,5 +1,6 @@
 import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
+import { itemName } from '../game/items';
 import type { Renderer } from '../render/renderer';
 
 export interface HudCallbacks {
@@ -51,6 +52,7 @@ export class Hud {
   private gridBtn: HTMLButtonElement | null = null;
   private compass: HTMLSpanElement;
   private companionEl: HTMLDivElement;
+  private gearEl: HTMLDivElement;
   private storeyEl: HTMLDivElement;
   private storeyLabel: HTMLButtonElement;
   private storeyUp: HTMLButtonElement;
@@ -100,6 +102,10 @@ export class Hud {
       '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><polygon points="10,1 14,15 10,11.5 6,15" fill="#e3b657"/><polygon points="10,11.5 14,15 10,19 6,15" fill="#6b5836"/></svg><b>N</b>';
     footer.append(this.posEl, this.compass);
     status.append(footer);
+    this.gearEl = document.createElement('div');
+    this.gearEl.className = 'hud-companion hud-gear';
+    this.gearEl.hidden = true;
+    status.append(this.gearEl);
     this.companionEl = document.createElement('div');
     this.companionEl.className = 'hud-companion';
     this.companionEl.hidden = true;
@@ -212,6 +218,18 @@ export class Hud {
     this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles · ${renderer.camera.zoom.toFixed(2)}×`;
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
+    // What is in your hands and how much armour is on you.
+    const held = this.game.worn('weapon');
+    const shield = this.game.worn('offhand');
+    const pieces = (['head', 'chest', 'arms', 'legs', 'feet'] as const).filter((sl) => this.game.worn(sl)).length;
+    if (held || shield || pieces) {
+      const bits: string[] = [];
+      if (held) bits.push(itemName(held));
+      if (shield) bits.push(itemName(shield));
+      if (pieces) bits.push(`${pieces}/5 armour`);
+      this.gearEl.textContent = bits.join(' · ');
+      this.gearEl.hidden = false;
+    } else this.gearEl.hidden = true;
     const companion = this.game.creatures.active();
     if (companion) {
       const hunger = companion.hunger < 0.3 ? 'hungry' : companion.hunger < 0.6 ? 'peckish' : 'fed';

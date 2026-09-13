@@ -15,6 +15,7 @@ import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
+import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { Skills, SKILL_DEFS } from './skills';
 
 export interface ActiveAction {
@@ -69,7 +70,7 @@ export interface GameInit {
   furniture?: PlacedFurniture[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null> };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -168,6 +169,7 @@ export class Game {
       this.player.stats = { ...init.player.stats };
       this.player.level = init.player.level ?? 0;
       this.player.visualLevel = this.player.level;
+      if (init.player.equipped) this.player.equipped = { ...this.player.equipped, ...init.player.equipped };
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -313,9 +315,10 @@ export class Game {
     return Math.max(0.6, 1 - (this.skills.get('body_control') - CHAR_START) * 0.003);
   }
 
-  /** Body stamina makes the same work cost less wind. */
+  /** Body stamina makes the same work cost less wind; armour makes it dearer. */
   staminaCost(cost: number): number {
-    return cost * Math.max(0.45, 1 - (this.skills.get('body_stamina') - CHAR_START) * 0.0045);
+    const body = Math.max(0.45, 1 - (this.skills.get('body_stamina') - CHAR_START) * 0.0045);
+    return cost * body * (1 + this.burden());
   }
 
   /** Mind logic takes the edge off a difficult craft, though never more than half of it. */
@@ -323,16 +326,120 @@ export class Game {
     return Math.max(0, (this.skills.get('mind_logic') - CHAR_START) * 0.2);
   }
 
+  /** The item in a slot, if anything is there and still in the pack. */
+  worn(slot: Slot): Item | undefined {
+    const uid = this.player.equipped[slot];
+    if (uid === null || uid === undefined) return undefined;
+    const item = this.inventory.get(uid);
+    if (!item) {
+      this.player.equipped[slot] = null;
+      return undefined;
+    }
+    return item;
+  }
+
+  isEquipped(uid: number): boolean {
+    return Object.values(this.player.equipped).some((v) => v === uid);
+  }
+
+  /** Whether the thing in hand takes both of them. */
+  twoHandedInHand(): boolean {
+    const held = this.worn('weapon');
+    return !!held && !!WEAPON_BY_ID.get(held.id)?.twoHanded;
+  }
+
+  /** Put something on or take it off; a two-handed weapon pushes the shield away. */
+  equip(slot: Slot, uid: number | null): void {
+    const before = this.worn(slot);
+    this.player.equipped[slot] = uid;
+    const item = uid === null ? undefined : this.inventory.get(uid);
+    if (uid !== null && slot === 'weapon' && item && WEAPON_BY_ID.get(item.id)?.twoHanded && this.worn('offhand')) {
+      const shield = this.worn('offhand');
+      this.player.equipped.offhand = null;
+      if (shield) this.logMsg(`You need both hands for that, so the ${itemName(shield).toLowerCase()} goes on your back.`, 'info');
+    }
+    if (item) this.logMsg(`You ${slot === 'weapon' || slot === 'offhand' ? 'take up' : 'put on'} the ${itemName(item).toLowerCase()}.`, 'info');
+    else if (before) this.logMsg(`You put the ${itemName(before).toLowerCase()} away.`, 'info');
+    this.events.emit('inventory');
+  }
+
+  /** Everything worn, as pieces of armour. */
+  private wornArmour(): Array<{ slot: Slot; item: Item; def: (typeof ARMOUR_BY_ID) extends Map<string, infer V> ? V : never }> {
+    const out = [];
+    for (const slot of ['head', 'chest', 'arms', 'legs', 'feet'] as Slot[]) {
+      const item = this.worn(slot);
+      const def = item && ARMOUR_BY_ID.get(item.id);
+      if (item && def) out.push({ slot, item, def });
+    }
+    return out;
+  }
+
+  /** How much armour slows you down and tires you: the price of plate. */
+  burden(): number {
+    let sum = 0;
+    for (const { def } of this.wornArmour()) sum += ARMOUR_CLASSES[def.cls].burden / 5;
+    const shield = this.worn('offhand');
+    const sh = shield && SHIELDS[shield.id];
+    if (sh) sum += sh.burden;
+    return sum;
+  }
+
   /**
-   * What you have on your head and how much of a blow it turns aside: a helm
-   * for choice, a felted wool cap at a pinch, and bare skin otherwise.
+   * Take a blow. The hit lands somewhere, whatever is worn there turns some of
+   * it aside and wears a little for doing so, and the armour learns from it.
+   * A shield in the off hand may stop the whole thing first.
    */
-  headgear(): { name: string; soak: number } | null {
-    const helm = this.inventory.tool('helm');
-    if (helm) return { name: 'helm', soak: Math.min(0.85, 0.45 + helm.ql / 260) };
-    const cap = this.inventory.tool('wool_cap');
-    if (cap) return { name: 'wool cap', soak: Math.min(0.5, 0.18 + cap.ql / 420) };
-    return null;
+  absorb(raw: number): { taken: number; part: Slot; worn: Item | null; blocked: boolean } {
+    // The shield, first of all.
+    const shield = this.worn('offhand');
+    const sh = shield && SHIELDS[shield.id];
+    if (sh) {
+      const chance = Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400);
+      this.gainSkill('shields', 0.12);
+      if (this.rand() < chance) {
+        shield.dmg = Math.min(100, shield.dmg + raw * 3);
+        this.gainSkill('shields', 0.5);
+        this.events.emit('inventory');
+        return { taken: 0, part: 'offhand', worn: shield, blocked: true };
+      }
+    }
+    // Then wherever it lands.
+    let roll = this.rand();
+    let part: Slot = 'chest';
+    for (const [slot, share] of HIT_LOCATIONS) {
+      roll -= share;
+      if (roll <= 0) {
+        part = slot;
+        break;
+      }
+    }
+    const item = this.worn(part);
+    const def = item && ARMOUR_BY_ID.get(item.id);
+    if (!item || !def) return { taken: raw, part, worn: null, blocked: false };
+    const skillId = ARMOUR_CLASSES[def.cls].skill;
+    const soak = pieceSoak(def, item, this.skills.get(skillId));
+    // Armour is learned by being hit in it, and worn out the same way.
+    this.gainSkill(skillId, 0.4);
+    item.dmg = Math.min(100, item.dmg + raw * 4);
+    if (item.dmg >= 100) {
+      this.inventory.remove(item.uid, 1);
+      this.player.equipped[part] = null;
+      this.logMsg(`Your ${itemName(item).toLowerCase()} is beaten to pieces and falls away.`, 'error');
+    }
+    this.events.emit('inventory');
+    return { taken: raw * (1 - soak), part, worn: item, blocked: false };
+  }
+
+  /** Hurt the player through their armour, and say what happened. */
+  hurtPlayer(raw: number, what: string): void {
+    const hit = this.absorb(raw);
+    if (hit.blocked) {
+      this.logMsg(`You take ${what} on your ${itemName(hit.worn as Item).toLowerCase()}.`, 'error');
+      return;
+    }
+    this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
+    const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
+    this.logMsg(`${what}${where}.`, 'error');
   }
 
   /** Soul strength is what a wild animal reads in you when you hold out food. */
@@ -380,7 +487,8 @@ export class Game {
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
     s.thirst = Math.max(0, s.thirst - dt * 0.0006);
 
-    // What climbing and swimming have earned, applied before the next step.
+    // What climbing and swimming have earned, and what the armour costs, before the next step.
+    p.burden = this.burden();
     p.maxStep = this.climbStep();
     p.swimSpeed = Math.min(0.85, SWIM_SPEED + this.skills.get('swimming') * 0.0033);
     if (p.lastClimb > 0) {
@@ -691,7 +799,7 @@ export class Game {
     const px = this.player.tileX;
     const py = this.player.tileY;
     if (def.corner && target.kind === 'tile') return px >= target.cx - 1 && px <= target.cx && py >= target.cy - 1 && py <= target.cy;
-    return Math.max(Math.abs(px - tile.x), Math.abs(py - tile.y)) <= 1;
+    return Math.max(Math.abs(px - tile.x), Math.abs(py - tile.y)) <= (def.range ?? 1);
   }
 
   private walkToward(def: ActionDef, target: Target): boolean {
@@ -918,7 +1026,17 @@ export class Game {
   atStation(station: Station): boolean {
     if (station === 'campfire') return this.litFireNear() !== undefined;
     if (station === 'smelter') return this.hotSmelterNear() !== undefined;
-    return false;
+    return this.furnitureNear(station) !== undefined;
+  }
+
+  /** The nearest piece of furniture of a kind, within arm's reach. */
+  furnitureNear(kind: string, range = 2.4): PlacedFurniture | undefined {
+    for (const f of this.furniture.values()) {
+      if (f.kind !== kind) continue;
+      const [cx, cy] = furnitureCentre(f);
+      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return f;
+    }
+    return undefined;
   }
 
   /** The nearest smelter that is lit and within reach. */

@@ -63,6 +63,9 @@ export const FURNITURE: FurnitureDef[] = [
   piece('coat_rack', 'Coat rack', 1, 1, [['plank', 1], ['shaft', 4], ['nail', 6]], 10, 6, 'You nail up a rack of pegs for the door.'),
   piece('planter', 'Planter', 2, 1, [['plank', 6], ['nail', 10]], 10, 7, 'You nail up a planter and fill it with earth.'),
   piece('firewood_rack', 'Firewood rack', 2, 1, [['plank', 2], ['shaft', 6], ['nail', 10]], 12, 8, 'You nail up a rack to keep firewood off the wet.', 40),
+  // The two the cloth trade is built on. Stand at one to spin or weave.
+  piece('spindle', 'Spindle', 1, 1, [['plank', 2], ['shaft', 3], ['nail', 8]], 14, 9, 'You turn a spindle and set it on its stand.'),
+  piece('loom', 'Loom', 2, 2, [['plank', 8], ['timber', 4], ['shaft', 6], ['nail', 24]], 22, 18, 'You build a loom and thread the warp.'),
 ];
 
 export const FURNITURE_BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));

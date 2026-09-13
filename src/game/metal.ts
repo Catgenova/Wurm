@@ -3,7 +3,7 @@
  * lumps are mixed into alloys, sand is fired into moulds, and a mould filled
  * with metal is beaten out on an anvil.
  */
-export type SmithSkill = 'blacksmithing' | 'weaponsmithing' | 'armorsmithing';
+export type SmithSkill = 'blacksmithing' | 'weaponsmithing' | 'armorsmithing' | 'chainsmithing' | 'platesmithing';
 
 export interface MetalDef {
   id: string;
@@ -79,9 +79,28 @@ export const MOULDS: MouldDef[] = [
   { id: 'pickaxe_head_mould', name: 'Pickaxe head mould', makes: 'pickaxe_head', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
   { id: 'knife_blade_mould', name: 'Knife blade mould', makes: 'knife_blade', skill: 'blacksmithing', sand: 2, difficulty: 14, lumps: 1 },
   { id: 'sword_blade_mould', name: 'Sword blade mould', makes: 'sword_blade', skill: 'weaponsmithing', sand: 3, difficulty: 18, lumps: 2 },
-  { id: 'helm_mould', name: 'Helm mould', makes: 'helm', skill: 'armorsmithing', sand: 3, difficulty: 16, lumps: 2 },
-  // A gang mould: one lump of metal runs out as a hundred nails of 0.01 kg each.
+  { id: 'helm_mould', name: 'Helm mould', makes: 'helm', skill: 'platesmithing', sand: 3, difficulty: 16, lumps: 2 },
+  // Gang moulds: one lump of metal runs out as a great many small things.
   { id: 'nail_mould', name: 'Nail mould', makes: 'nail', skill: 'blacksmithing', sand: 2, difficulty: 6, lumps: 1, per: NAILS_PER_LUMP },
+  { id: 'arrow_head_mould', name: 'Arrow head mould', makes: 'arrow_head', skill: 'weaponsmithing', sand: 2, difficulty: 8, lumps: 1, per: 25 },
+  // Weapon heads, fitted to a shaft afterwards.
+  { id: 'short_sword_blade_mould', name: 'Short sword blade mould', makes: 'short_sword_blade', skill: 'weaponsmithing', sand: 2, difficulty: 14, lumps: 1 },
+  { id: 'long_sword_blade_mould', name: 'Long sword blade mould', makes: 'long_sword_blade', skill: 'weaponsmithing', sand: 4, difficulty: 24, lumps: 3 },
+  { id: 'axe_head_mould', name: 'Axe head mould', makes: 'axe_head', skill: 'weaponsmithing', sand: 3, difficulty: 20, lumps: 2 },
+  { id: 'maul_head_mould', name: 'Maul head mould', makes: 'maul_head', skill: 'weaponsmithing', sand: 4, difficulty: 18, lumps: 3 },
+  { id: 'spear_head_mould', name: 'Spear head mould', makes: 'spear_head', skill: 'weaponsmithing', sand: 2, difficulty: 16, lumps: 1 },
+  { id: 'shield_boss_mould', name: 'Shield boss mould', makes: 'shield_boss', skill: 'armorsmithing', sand: 3, difficulty: 14, lumps: 2 },
+  // Chain: rings drawn from a mould and riveted up.
+  { id: 'chain_coif_mould', name: 'Chain coif mould', makes: 'chain_coif', skill: 'chainsmithing', sand: 3, difficulty: 18, lumps: 2 },
+  { id: 'chain_hauberk_mould', name: 'Chain hauberk mould', makes: 'chain_hauberk', skill: 'chainsmithing', sand: 5, difficulty: 26, lumps: 5 },
+  { id: 'chain_sleeves_mould', name: 'Chain sleeves mould', makes: 'chain_sleeves', skill: 'chainsmithing', sand: 3, difficulty: 20, lumps: 3 },
+  { id: 'chain_leggings_mould', name: 'Chain leggings mould', makes: 'chain_leggings', skill: 'chainsmithing', sand: 4, difficulty: 22, lumps: 4 },
+  { id: 'chain_boots_mould', name: 'Chain boots mould', makes: 'chain_boots', skill: 'chainsmithing', sand: 3, difficulty: 18, lumps: 2 },
+  // Plate: beaten out whole, and the helm has been here since the first anvil.
+  { id: 'plate_breastplate_mould', name: 'Breastplate mould', makes: 'plate_breastplate', skill: 'platesmithing', sand: 6, difficulty: 32, lumps: 6 },
+  { id: 'plate_arms_mould', name: 'Plate arms mould', makes: 'plate_arms', skill: 'platesmithing', sand: 4, difficulty: 26, lumps: 3 },
+  { id: 'plate_legs_mould', name: 'Plate legs mould', makes: 'plate_legs', skill: 'platesmithing', sand: 5, difficulty: 28, lumps: 4 },
+  { id: 'plate_boots_mould', name: 'Plate boots mould', makes: 'plate_boots', skill: 'platesmithing', sand: 4, difficulty: 24, lumps: 3 },
 ];
 
 export const MOULD_BY_ID = new Map(MOULDS.map((m) => [m.id, m]));
@@ -113,4 +132,9 @@ export const HEAD_TO_TOOL: Record<string, string> = {
   pickaxe_head: 'pickaxe',
   knife_blade: 'butchering_knife',
   sword_blade: 'sword',
+  short_sword_blade: 'short_sword',
+  long_sword_blade: 'long_sword',
+  axe_head: 'battle_axe',
+  maul_head: 'maul',
+  spear_head: 'spear',
 };

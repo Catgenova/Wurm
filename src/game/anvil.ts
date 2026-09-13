@@ -128,11 +128,13 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const broke = mould.dmg >= 100;
       if (broke) g.inventory.remove(mould.uid, 1);
       g.events.emit('inventory');
-      if (!g.skillCheck(def.skill, def.difficulty, a.ql)) {
+      if (!g.skillCheck(def.skill, def.difficulty, a.ql, g.mindEase())) {
+        g.gainSkill(def.skill, 0.25);
         g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and you throw the metal back.${broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through.` : ''}`, 'event');
         return;
       }
       const ql = smithQl(g, def, mouldQl, lump.ql, a);
+      g.gainSkill(def.skill, 0.5);
       const per = def.per ?? 1;
       const made = g.inventory.add(def.makes, { ql, extra: metal.name, count: per });
       g.logMsg(

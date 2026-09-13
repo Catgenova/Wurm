@@ -14,6 +14,7 @@ export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
   ['leather', 'leather'],
   ['bone', 'bone'],
   ['gland', 'gland'],
+  ['feather', 'feather'],
 ];
 
 /**

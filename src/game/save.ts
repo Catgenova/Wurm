@@ -26,7 +26,7 @@ interface SaveData {
   dirt?: string;
   rock?: string;
   spawn: { x: number; y: number };
-  player: { x: number; y: number; name: string; stats: Stats; level?: number };
+  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null> };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -75,7 +75,7 @@ export function saveGame(game: Game): boolean {
     dirt: toBase64(w.dirt),
     rock: toBase64(w.rock),
     spawn: game.spawn,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),

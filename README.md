@@ -144,9 +144,32 @@ rebuilds and commits the result.
   bookshelf 90, a wardrobe 100, shelves 120 and a larder 150. Open one to see
   inside, or stand beside it and put things away; nothing can be lifted again
   until it is empty.
-- **Wool and cloth.** Tailoring spins three wool or three cotton into a length
-  of cloth, and two lengths into a wool cap — not a helm, but it turns aside
-  about a third of a blow and costs no metal. Cloth also stuffs a bed or a cot.
+- **Wool, cloth and the loom.** Fibre becomes cloth in two steps with two
+  pieces of furniture: a spindle spins wool, cotton or wemp into yarn, and a
+  loom weaves three yarn into cloth. Cloth stuffs a mattress, sews into
+  clothing, and twisted into a bowstring starts every bow.
+- **Armour.** Worn a piece at a time in five places — head, chest, arms, legs,
+  feet — and it only counts where the blow lands. Four kinds, each a skill of
+  its own that rises by being hit in it: cloth (tailoring, ~1/6 of a blow),
+  leather (leatherworking, ~1/3), chain (chain armoursmithing, ~1/2) and plate
+  (plate armoursmithing, ~2/3). Quality and skill raise those; damage lowers
+  them, and a piece beaten to nothing falls off. Weight is the price — full
+  plate slows you a quarter and makes everything cost more wind. A shield in
+  the off hand stops whole blows outright instead, as often as the shields
+  skill and its quality allow, and two-handed weapons leave no hand for one.
+- **Weapons.** Knives, swords, axes, mauls, polearms and archery are each their
+  own subskill, trained by use, with the fighting skill behind them; together
+  they decide whether a blow lands and how hard. Each weapon has its own
+  damage, pace and reach: a knife is quick, a maul or battle axe is slow and
+  final, a spear reaches a tile further, and the two-handers cost you the
+  shield. Heads come from moulds at an anvil and are fitted to shafts; a club
+  is carved from a log.
+- **Bows and fletching.** Bowyery tillers short, medium and long bows (six,
+  nine and thirteen tiles) from shafts and a bowstring. Fletching makes arrows
+  from a shaft, three arrow heads — a gang mould casts twenty-five from one
+  lump — and three feathers, which only come off a bird. With a bow in hand,
+  Shoot appears on any wild creature in range; long shots are harder than close
+  ones and every shot spends an arrow.
 - **Stonecutting.** A chisel and the Stonecutting skill turn rock, slate,
   marble and sandstone shards into bricks — what walls, smelters and kilns are
   built from — or, two shards at a time, into slabs. Slabs are paving rather

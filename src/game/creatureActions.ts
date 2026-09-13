@@ -1,7 +1,8 @@
 import type { ActionDef, Target } from './actions';
 import { creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
-import { itemDef } from './items';
+import { itemDef, itemName } from './items';
+import { hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 
 type CreatureTarget = Extract<Target, { kind: 'creature' }>;
 const isCreature = (t: Target): t is CreatureTarget => t.kind === 'creature';
@@ -28,6 +29,15 @@ export const baitHint = (c: Creature): string => SPECIES[c.species].baitHint;
 function nearPlayer(g: Game, c: Creature): boolean {
   return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 1.9;
 }
+
+/** Bare hands: what you fight with when there is nothing in them. */
+const FIST: WeaponDef = { id: 'fist', kind: 'knives', damage: 3, swing: 1.8 };
+/** How far you can reach with what is in your hand. */
+const meleeReach = (g: Game): number => {
+  const held = g.worn('weapon');
+  const w = held && WEAPON_BY_ID.get(held.id);
+  return w && !w.ammo ? Math.max(2.2, (w.range ?? 1) + 1.2) : 2.2;
+};
 
 export const CREATURE_ACTIONS: ActionDef[] = [
   {
@@ -282,7 +292,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     id: 'attack_creature',
     label: 'Attack',
     verb: 'fighting',
-    skill: 'body_strength',
+    skill: 'fighting',
     stamina: 0.07,
     baseTime: 2.5,
     repeat: true,
@@ -291,34 +301,98 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return 'It is dead or gone.';
       if (c.mode !== 'wild') return 'That one is tame. Release it first if you mean it.';
-      if (Math.hypot(c.x - g.player.x, c.y - g.player.y) > 2.2) return 'It is out of reach.';
+      if (Math.hypot(c.x - g.player.x, c.y - g.player.y) > meleeReach(g)) return 'It is out of reach.';
       return null;
     },
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
       const def = SPECIES[c.species];
-      // Bare hands bruise; an edged tool does the work properly, a sword better still.
-      const weapon = ['sword', 'butchering_knife', 'hatchet', 'carving_knife'].map((id) => g.inventory.tool(id)).find(Boolean);
-      const bonus = weapon ? (weapon.id === 'sword' ? 2.6 + weapon.ql / 70 : 1.5 + weapon.ql / 120) : 1;
-      const dmg = (2 + g.skills.get('body_strength') / 12) * bonus * (0.7 + g.rand() * 0.6);
+      const held = g.worn('weapon');
+      const wdef = held && WEAPON_BY_ID.get(held.id);
+      const bow = wdef?.ammo;
+      // A bow is no use swung; bare hands are the fallback either way.
+      const usable = wdef && !bow ? wdef : FIST;
+      const item = wdef && !bow ? held : null;
       const before = c.health;
-      g.creatures.hurt(g, c, dmg, 'player');
+      g.gainSkill('fighting', 0.3);
+      g.gainSkill(usable.kind, 0.45);
       g.gainSkill('body_strength', 0.05);
+      if (g.rand() > hitChance(g, usable)) {
+        g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'event');
+      } else {
+        const dmg = weaponDamage(g, usable, item) * (0.75 + g.rand() * 0.5);
+        g.creatures.hurt(g, c, dmg, 'player');
+        if (item) {
+          item.dmg = Math.min(100, item.dmg + 0.35);
+          g.events.emit('inventory');
+        }
+        g.logMsg(
+          `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`,
+          'event',
+        );
+      }
       if (c.health <= 0) return false;
-      // A cornered animal gets a swipe in, and a helm turns most of it aside.
-      // The defensive sorts never miss their chance at one.
+      // A cornered animal gets a swipe in, and the defensive sorts never miss their chance.
       if (def.defensive || g.rand() < 0.35) {
-        const worn = g.headgear();
-        const hurt = def.attack * 0.012 * (1 - (worn?.soak ?? 0));
-        g.player.stats.health = Math.max(0, g.player.stats.health - hurt);
         g.player.attackedBy = c.id;
         g.player.attackedAt = g.time;
-        g.logMsg(`The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}${worn ? `, though your ${worn.name} takes the worst of it` : ''}.`, 'error');
+        g.hurtPlayer(def.attack * 0.012, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`);
       }
-      g.logMsg(`You strike the ${def.name.toLowerCase()}${weapon ? ` with your ${itemDef(weapon.id).name.toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`, 'event');
       // Keep swinging while it is still within reach.
-      return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 2.2;
+      return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= meleeReach(g);
+    },
+  },
+  {
+    id: 'shoot_creature',
+    label: 'Shoot',
+    verb: 'drawing the bow',
+    skill: 'archery',
+    range: 13,
+    stamina: 0.05,
+    baseTime: 2.6,
+    repeat: true,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      const held = g.worn('weapon');
+      return !!c && c.mode === 'wild' && !!held && isBow(held.id);
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is dead or gone.';
+      const held = g.worn('weapon');
+      const bow = held && WEAPON_BY_ID.get(held.id);
+      if (!held || !bow?.ammo) return 'You have no bow in your hands.';
+      if (!g.inventory.has(bow.ammo)) return 'You are out of arrows.';
+      const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
+      if (d > (bow.range ?? 6)) return `Too far for a ${itemName(held).toLowerCase()}.`;
+      if (d < 1.2) return 'It is too close to draw on.';
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      const held = g.worn('weapon');
+      const bow = held && WEAPON_BY_ID.get(held.id);
+      if (!c || !held || !bow?.ammo) return;
+      const arrow = g.inventory.find(bow.ammo);
+      if (!arrow || !g.inventory.remove(arrow.uid, 1)) return;
+      const def = SPECIES[c.species];
+      const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
+      g.gainSkill('fighting', 0.2);
+      g.gainSkill('archery', 0.5);
+      // The far end of a bow's range is a far harder shot than the near end.
+      const reach = 1 - (d / (bow.range ?? 6)) * 0.35;
+      if (g.rand() > hitChance(g, bow) * reach) {
+        g.logMsg(`Your arrow goes wide of the ${def.name.toLowerCase()}.`, 'event');
+      } else {
+        const dmg = weaponDamage(g, bow, held) * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
+        g.creatures.hurt(g, c, dmg, 'player');
+        held.dmg = Math.min(100, held.dmg + 0.25);
+        g.events.emit('inventory');
+        g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.`, 'event');
+      }
+      if (c.health <= 0) return false;
+      return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= (bow.range ?? 6);
     },
   },
   {

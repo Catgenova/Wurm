@@ -1,7 +1,7 @@
 export interface SkillDef {
   id: string;
   name: string;
-  group: 'Characteristics' | 'Skills';
+  group: 'Characteristics' | 'Skills' | 'Fighting';
   start: number;
 }
 
@@ -33,6 +33,23 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'farming', name: 'Farming', group: 'Skills', start: 1 },
   { id: 'taming', name: 'Taming', group: 'Skills', start: 1 },
   { id: 'butchering', name: 'Butchering', group: 'Skills', start: 1 },
+  { id: 'leatherworking', name: 'Leatherworking', group: 'Skills', start: 1 },
+  { id: 'chainsmithing', name: 'Chain armoursmithing', group: 'Skills', start: 1 },
+  { id: 'platesmithing', name: 'Plate armoursmithing', group: 'Skills', start: 1 },
+  { id: 'bowyery', name: 'Bowyery', group: 'Skills', start: 1 },
+  { id: 'fletching', name: 'Fletching', group: 'Skills', start: 1 },
+  { id: 'fighting', name: 'Fighting', group: 'Fighting', start: 1 },
+  { id: 'swords', name: 'Swords', group: 'Fighting', start: 1 },
+  { id: 'axes', name: 'Axes', group: 'Fighting', start: 1 },
+  { id: 'mauls', name: 'Mauls', group: 'Fighting', start: 1 },
+  { id: 'knives', name: 'Knives', group: 'Fighting', start: 1 },
+  { id: 'polearms', name: 'Polearms', group: 'Fighting', start: 1 },
+  { id: 'archery', name: 'Archery', group: 'Fighting', start: 1 },
+  { id: 'shields', name: 'Shields', group: 'Fighting', start: 1 },
+  { id: 'cloth_armour', name: 'Cloth armour', group: 'Fighting', start: 1 },
+  { id: 'leather_armour', name: 'Leather armour', group: 'Fighting', start: 1 },
+  { id: 'chain_armour', name: 'Chain armour', group: 'Fighting', start: 1 },
+  { id: 'plate_armour', name: 'Plate armour', group: 'Fighting', start: 1 },
   { id: 'climbing', name: 'Climbing', group: 'Skills', start: 1 },
   { id: 'swimming', name: 'Swimming', group: 'Skills', start: 1 },
 ];
