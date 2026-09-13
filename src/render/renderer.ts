@@ -4,7 +4,7 @@ import type { Game } from '../game/game';
 import { hash2 } from '../world/noise';
 import { TileType, TILE_DEFS, bushSpecies, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
-import { bushSprite, drawPlayer, treeSprite, type Sprite } from './sprites';
+import { bushSprite, drawPlayer, pileSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -17,7 +17,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player';
+  kind: 'tree' | 'bush' | 'player' | 'pile';
   x: number;
   y: number;
   sx: number;
@@ -213,6 +213,10 @@ export class Renderer {
           const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : bushSprite(bushSpecies(data));
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.ents.push({ kind: t === TileType.Tree ? 'tree' : 'bush', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
+        }
+        if (this.game.ground.size && this.game.groundAt(x, y).length) {
+          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+          this.ents.push({ kind: 'pile', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: pileSprite() });
         }
       }
 

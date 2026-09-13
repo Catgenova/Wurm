@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
-import { Inventory, type Item } from './items';
+import { Inventory, ITEM_DEFS, type Item } from './items';
 import { Player } from './player';
 import { Skills, SKILL_DEFS } from './skills';
 
@@ -20,6 +20,8 @@ export interface GameInit {
   spawn: { x: number; y: number };
   player?: { x: number; y: number; name: string; stats: Player['stats'] };
   inventory?: Item[];
+  nextUid?: number;
+  ground?: Record<string, Item[]>;
   skills?: Record<string, number>;
   time?: number;
 }
@@ -39,6 +41,8 @@ export class Game {
   readonly log: LogEntry[] = [];
   readonly settings = { grid: true, rotation: 0 };
   action: ActiveAction | null = null;
+  /** Items lying on tiles, keyed by "x,y". */
+  readonly ground = new Map<string, Item[]>();
   /** Game seconds since the world was created. */
   time = 0;
   rand: () => number = Math.random;
@@ -63,8 +67,14 @@ export class Game {
       this.player.name = init.player.name;
       this.player.stats = { ...init.player.stats };
     }
-    this.inventory = new Inventory(init.inventory);
+    this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
+    if (init.ground) {
+      for (const [key, items] of Object.entries(init.ground)) {
+        if (items.length) this.ground.set(key, items);
+        for (const it of items) if (it.uid >= this.inventory.nextUid) this.inventory.nextUid = it.uid + 1;
+      }
+    }
     this.skills = new Skills(init.skills);
     this.time = init.time ?? 0;
     this.world.onChange((x, y) => this.events.emit('world', x, y));
@@ -250,14 +260,14 @@ export class Game {
     if (target.kind === 'item') return true;
     const px = this.player.tileX;
     const py = this.player.tileY;
-    if (def.corner) return px >= target.cx - 1 && px <= target.cx && py >= target.cy - 1 && py <= target.cy;
+    if (def.corner && target.kind === 'tile') return px >= target.cx - 1 && px <= target.cx && py >= target.cy - 1 && py <= target.cy;
     return Math.max(Math.abs(px - target.x), Math.abs(py - target.y)) <= 1;
   }
 
   private walkToward(def: ActionDef, target: Target): boolean {
     if (target.kind === 'item') return true;
     let candidates: Array<{ x: number; y: number }>;
-    if (def.corner) {
+    if (def.corner && target.kind === 'tile') {
       candidates = [
         { x: target.cx - 1, y: target.cy - 1 },
         { x: target.cx, y: target.cy - 1 },
@@ -314,6 +324,58 @@ export class Game {
 
   nearestCornerToPlayer(): { cx: number; cy: number } {
     return { cx: Math.round(this.player.x), cy: Math.round(this.player.y) };
+  }
+
+  /** Whether the player stands on or next to a tile with water. */
+  nearWater(): boolean {
+    const px = this.player.tileX;
+    const py = this.player.tileY;
+    for (let y = py - 1; y <= py + 1; y++) {
+      for (let x = px - 1; x <= px + 1; x++) {
+        if (this.world.inBounds(x, y) && this.world.hasWater(x, y)) return true;
+      }
+    }
+    return false;
+  }
+
+  groundAt(x: number, y: number): Item[] {
+    return this.ground.get(`${x},${y}`) ?? [];
+  }
+
+  dropOnGround(x: number, y: number, item: Item): void {
+    const key = `${x},${y}`;
+    const pile = this.ground.get(key) ?? [];
+    const def = ITEM_DEFS[item.id];
+    const stack = def?.stackable ? pile.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    if (stack) {
+      stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
+      stack.count += item.count;
+    } else pile.push(item);
+    this.ground.set(key, pile);
+    this.events.emit('world', x, y);
+  }
+
+  /** Remove one item (by uid) or everything (null) from a tile. */
+  takeFromGround(x: number, y: number, uid: number | null): Item[] {
+    const key = `${x},${y}`;
+    const pile = this.ground.get(key);
+    if (!pile) return [];
+    let taken: Item[];
+    if (uid === null) {
+      taken = pile.splice(0, pile.length);
+    } else {
+      const idx = pile.findIndex((it) => it.uid === uid);
+      taken = idx >= 0 ? pile.splice(idx, 1) : [];
+    }
+    if (!pile.length) this.ground.delete(key);
+    this.events.emit('world', x, y);
+    return taken;
+  }
+
+  groundToJSON(): Record<string, Item[]> {
+    const out: Record<string, Item[]> = {};
+    for (const [k, v] of this.ground) out[k] = v;
+    return out;
   }
 
   isForaged(x: number, y: number, kind: string): boolean {

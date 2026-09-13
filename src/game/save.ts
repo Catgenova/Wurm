@@ -16,6 +16,8 @@ interface SaveData {
   spawn: { x: number; y: number };
   player: { x: number; y: number; name: string; stats: Stats };
   inventory: Item[];
+  nextUid?: number;
+  ground?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
   settings: { grid: boolean; rotation?: number };
@@ -50,6 +52,8 @@ export function saveGame(game: Game): boolean {
     spawn: game.spawn,
     player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats },
     inventory: game.inventory.items,
+    nextUid: game.inventory.nextUid,
+    ground: game.groundToJSON(),
     skills: game.skills.toJSON(),
     time: game.time,
     settings: { ...game.settings },
@@ -87,6 +91,8 @@ export function loadGame(): Game | null {
       spawn: data.spawn,
       player: data.player,
       inventory: data.inventory,
+      nextUid: data.nextUid,
+      ground: data.ground,
       skills: data.skills,
       time: data.time,
     });

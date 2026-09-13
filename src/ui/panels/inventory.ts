@@ -1,6 +1,6 @@
 import type { Game } from '../../game/game';
 import { itemDef, itemName, type Item, type ItemCategory } from '../../game/items';
-import type { ContextMenu } from '../contextmenu';
+import type { ContextMenu, MenuItem } from '../contextmenu';
 import type { UIWindow } from '../windows';
 
 const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
@@ -70,30 +70,34 @@ export class InventoryPanel {
     const wt = document.createElement('span');
     wt.textContent = (def.weight * item.count).toFixed(1);
     row.append(name, ql, dmg, wt);
-    row.addEventListener('click', () => {
-      this.selected = item.uid;
-      this.render();
-    });
-    row.addEventListener('contextmenu', (e) => {
+    const open = (e: MouseEvent): void => {
       e.preventDefault();
       e.stopPropagation();
       this.selected = item.uid;
       this.render();
-      const target = { kind: 'item' as const, uid: item.uid };
-      const actions = this.game.actionsFor(target);
-      this.menu.show(
-        e.clientX,
-        e.clientY,
-        itemName(item),
-        actions.map(({ def: a, reason }) => ({
-          label: a.label,
-          hint: reason ?? undefined,
-          disabled: !!reason,
-          onSelect: () => this.game.requestAction(a, target),
-        })),
-      );
-      this.win.el.dispatchEvent(new MouseEvent('mousedown'));
-    });
+      this.openMenu(item, e.clientX, e.clientY);
+    };
+    row.addEventListener('click', open);
+    row.addEventListener('contextmenu', open);
     return row;
+  }
+
+  /** Action menu for an item; stack actions get a one / all submenu. */
+  private openMenu(item: Item, x: number, y: number): void {
+    const target = { kind: 'item' as const, uid: item.uid };
+    const entries: MenuItem[] = this.game.actionsFor(target).map(({ def, reason }) => {
+      if (def.quantity && item.count > 1 && !reason) {
+        return {
+          label: def.label,
+          children: [
+            { label: 'One', onSelect: () => this.game.requestAction(def, { ...target, count: 1 }) },
+            { label: `All (${item.count})`, onSelect: () => this.game.requestAction(def, { ...target, count: item.count }) },
+          ],
+        };
+      }
+      return { label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) };
+    });
+    this.win.focus();
+    this.menu.show(x, y, itemName(item), entries);
   }
 }

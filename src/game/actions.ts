@@ -2,8 +2,15 @@ import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bu
 import { itemDef, itemName } from './items';
 import type { Game } from './game';
 
-/** What an action acts upon. Tile targets carry the corner nearest to the click. */
-export type Target = { kind: 'tile'; x: number; y: number; cx: number; cy: number } | { kind: 'item'; uid: number };
+/**
+ * What an action acts upon. Tile targets carry the corner nearest to the click;
+ * item targets may carry a quantity; ground targets name an item lying on a tile
+ * (uid null means everything there).
+ */
+export type Target =
+  | { kind: 'tile'; x: number; y: number; cx: number; cy: number }
+  | { kind: 'item'; uid: number; count?: number }
+  | { kind: 'ground'; x: number; y: number; uid: number | null };
 
 export interface ActionDef {
   id: string;
@@ -19,6 +26,8 @@ export interface ActionDef {
   instant?: boolean;
   /** Keeps going while `perform` returns true. */
   repeat?: boolean;
+  /** For item actions: offer "one" and "all" when the stack has more than one. */
+  quantity?: boolean;
   /** Stamina drained per completion (0..1). */
   stamina: number;
   /** Seconds at skill 1. */
@@ -497,6 +506,97 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'drink_skin',
+    label: 'Drink',
+    verb: 'drinking',
+    stamina: 0,
+    baseTime: 1.5,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && !!itemDef(item.id).charges && !!itemDef(item.id).drink;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      return item && (item.charges ?? 0) > 0 ? null : 'It is empty.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item || !(item.charges ?? 0)) return;
+      item.charges = (item.charges ?? 1) - 1;
+      g.player.stats.thirst = Math.min(1, g.player.stats.thirst + (itemDef(item.id).drink ?? 0));
+      g.inventory.onChange?.();
+      g.logMsg(`You take a drink from the ${itemDef(item.id).name.toLowerCase()}.`, 'event');
+    },
+  },
+  {
+    id: 'fill_skin',
+    label: 'Fill with water',
+    verb: 'filling',
+    stamina: 0,
+    baseTime: 2,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && !!itemDef(item.id).charges;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (item && (item.charges ?? 0) >= (itemDef(item.id).charges ?? 0)) return 'It is already full.';
+      return g.nearWater() ? null : 'You need to stand next to water.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item) return;
+      item.charges = itemDef(item.id).charges ?? 0;
+      g.inventory.onChange?.();
+      g.logMsg(`You fill the ${itemDef(item.id).name.toLowerCase()} with water.`, 'event');
+    },
+  },
+  {
+    id: 'drop',
+    label: 'Drop',
+    verb: 'dropping',
+    instant: true,
+    quantity: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && item.id !== 'dirt';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.take(t.uid, t.count ?? 1);
+      if (!item) return;
+      g.dropOnGround(g.player.tileX, g.player.tileY, item);
+      const what = item.count > 1 ? `${item.count} × ${itemName(item).toLowerCase()}` : `the ${itemName(item).toLowerCase()}`;
+      g.logMsg(`You drop ${what} on the ground.`, 'event');
+    },
+  },
+  {
+    id: 'pick_up',
+    label: 'Pick up',
+    verb: 'picking up',
+    stamina: 0.01,
+    baseTime: 1,
+    applies: (t) => t.kind === 'ground',
+    check: (t, g) => (t.kind === 'ground' && g.groundAt(t.x, t.y).length ? null : 'There is nothing there any more.'),
+    perform: (t, g) => {
+      if (t.kind !== 'ground') return;
+      const taken = g.takeFromGround(t.x, t.y, t.uid);
+      if (!taken.length) return;
+      for (const item of taken) g.inventory.addItem(item);
+      const names = taken.map((it) => (it.count > 1 ? `${it.count} × ${itemName(it).toLowerCase()}` : itemName(it).toLowerCase()));
+      g.logMsg(`You pick up ${names.join(', ')}.`, 'event');
+    },
+  },
+  {
     id: 'make_brick',
     label: 'Chisel stone brick',
     verb: 'chiselling',
@@ -522,7 +622,7 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     id: 'drop_dirt_here',
-    label: 'Drop here',
+    label: 'Drop (raises the ground)',
     verb: 'dropping dirt',
     skill: 'digging',
     stamina: 0.02,

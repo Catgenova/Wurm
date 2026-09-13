@@ -3,6 +3,8 @@ export interface MenuItem {
   hint?: string;
   disabled?: boolean;
   onSelect?: () => void;
+  /** A submenu; the row expands in place so it works with a mouse or a finger. */
+  children?: MenuItem[];
 }
 
 /** Wurm-style right-click menu. */
@@ -42,33 +44,66 @@ export class ContextMenu {
       none.textContent = 'Nothing to do here';
       this.el.append(none);
     }
-    for (const item of items) {
-      const row = document.createElement('div');
-      row.className = 'ctx-item' + (item.disabled ? ' disabled' : '');
-      const label = document.createElement('span');
-      label.textContent = item.label;
-      row.append(label);
-      if (item.hint) {
-        const hint = document.createElement('span');
-        hint.className = 'ctx-hint';
-        hint.textContent = item.hint;
-        row.append(hint);
-        row.title = item.hint;
-      }
+    for (const item of items) this.el.append(...this.buildRow(item, 0));
+    this.el.hidden = false;
+    this.anchor = { x, y };
+    this.fit();
+  }
+
+  private anchor = { x: 0, y: 0 };
+
+  private buildRow(item: MenuItem, depth: number): HTMLElement[] {
+    const row = document.createElement('div');
+    row.className = 'ctx-item' + (item.disabled ? ' disabled' : '') + (depth ? ' ctx-child' : '');
+    row.style.paddingLeft = `${8 + depth * 14}px`;
+    const label = document.createElement('span');
+    label.textContent = item.label;
+    row.append(label);
+    if (item.children) {
+      const chevron = document.createElement('span');
+      chevron.className = 'ctx-chevron';
+      chevron.textContent = '▸';
+      row.append(chevron);
+      let open: HTMLElement[] | null = null;
       row.addEventListener('click', (e) => {
         e.stopPropagation();
         if (item.disabled) return;
-        this.hide();
-        item.onSelect?.();
+        if (open) {
+          for (const el of open) el.remove();
+          open = null;
+          chevron.textContent = '▸';
+        } else {
+          open = item.children!.flatMap((child) => this.buildRow(child, depth + 1));
+          row.after(...open);
+          chevron.textContent = '▾';
+        }
+        this.fit();
       });
-      this.el.append(row);
+      return [row];
     }
-    this.el.hidden = false;
+    if (item.hint) {
+      const hint = document.createElement('span');
+      hint.className = 'ctx-hint';
+      hint.textContent = item.hint;
+      row.append(hint);
+      row.title = item.hint;
+    }
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (item.disabled) return;
+      this.hide();
+      item.onSelect?.();
+    });
+    return [row];
+  }
+
+  /** Place the menu at its anchor, pulled back inside the viewport if it would overflow. */
+  private fit(): void {
     this.el.style.left = '0px';
     this.el.style.top = '0px';
     const rect = this.el.getBoundingClientRect();
-    const left = Math.min(x, window.innerWidth - rect.width - 4);
-    const top = Math.min(y, window.innerHeight - rect.height - 4);
+    const left = Math.min(this.anchor.x, window.innerWidth - rect.width - 4);
+    const top = Math.min(this.anchor.y, window.innerHeight - rect.height - 4);
     this.el.style.left = `${Math.max(0, left)}px`;
     this.el.style.top = `${Math.max(0, top)}px`;
   }

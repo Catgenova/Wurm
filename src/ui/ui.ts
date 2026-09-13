@@ -1,7 +1,9 @@
 import type { Game } from '../game/game';
 import type { Pick, Renderer } from '../render/renderer';
 import { TileType, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
-import { ContextMenu } from './contextmenu';
+import { ACTION_BY_ID } from '../game/actions';
+import { itemName } from '../game/items';
+import { ContextMenu, type MenuItem } from './contextmenu';
 import { Hud } from './hud';
 import { buildHelp } from './panels/help';
 import { EventLogPanel } from './panels/eventlog';
@@ -88,22 +90,27 @@ export class UI {
       lines.push(w.tileName(pick.x, pick.y));
     }
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)}`);
+    const pile = this.game.groundAt(pick.x, pick.y);
+    if (pile.length) lines.push(pile.length === 1 ? `On the ground: ${itemName(pile[0]).toLowerCase()}` : `On the ground: ${pile.length} items`);
     this.tooltip.show(sx, sy, lines);
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
-    const actions = this.game.actionsFor(target);
-    this.menu.show(
-      sx,
-      sy,
-      `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`,
-      actions.map(({ def, reason }) => ({
-        label: def.label,
-        hint: reason ?? undefined,
-        disabled: !!reason,
-        onSelect: () => this.game.requestAction(def, target),
-      })),
-    );
+    const entries: MenuItem[] = [];
+    const pile = this.game.groundAt(pick.x, pick.y);
+    const pickUp = ACTION_BY_ID.get('pick_up');
+    if (pile.length && pickUp) {
+      const children: MenuItem[] = pile.map((item) => ({
+        label: item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item),
+        onSelect: () => this.game.requestAction(pickUp, { kind: 'ground', x: pick.x, y: pick.y, uid: item.uid }),
+      }));
+      if (pile.length > 1) children.push({ label: 'Everything', onSelect: () => this.game.requestAction(pickUp, { kind: 'ground', x: pick.x, y: pick.y, uid: null }) });
+      entries.push({ label: 'Pick up', children });
+    }
+    for (const { def, reason } of this.game.actionsFor(target)) {
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) });
+    }
+    this.menu.show(sx, sy, `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`, entries);
   }
 }

@@ -388,6 +388,15 @@ kbd {
   color: var(--ui-dim);
 }
 
+.ctx-chevron {
+  color: var(--ui-accent);
+  font-size: 12px;
+}
+
+.ctx-child {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .ctx-hint {
   max-width: 220px;
   overflow: hidden;

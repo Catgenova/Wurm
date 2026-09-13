@@ -175,6 +175,41 @@ export function bushSprite(species: number): Sprite {
   return spr;
 }
 
+/** A small heap of dropped goods. */
+export function pileSprite(): Sprite {
+  const key = 'pile';
+  let spr = cache.get(key);
+  if (spr) return spr;
+  spr = makeSprite(36, 30, 18, 27, (ctx) => {
+    const bx = 18;
+    const by = 27;
+    shadow(ctx, bx, by, 11, 4);
+    ctx.fillStyle = '#8a6a42';
+    ctx.beginPath();
+    ctx.moveTo(bx - 9, by);
+    ctx.quadraticCurveTo(bx - 10, by - 12, bx - 3, by - 14);
+    ctx.quadraticCurveTo(bx + 1, by - 18, bx + 4, by - 14);
+    ctx.quadraticCurveTo(bx + 11, by - 11, bx + 9, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#5e4630';
+    ctx.fillRect(bx - 3, by - 15, 7, 2.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(bx + 2, by - 13);
+    ctx.quadraticCurveTo(bx + 11, by - 10, bx + 9, by);
+    ctx.lineTo(bx + 2, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#c9a15c';
+    ctx.beginPath();
+    ctx.arc(bx - 4, by - 6, 2.2, 0, TAU);
+    ctx.fill();
+  });
+  cache.set(key, spr);
+  return spr;
+}
+
 export interface PlayerPose {
   phase: number;
   moving: boolean;

@@ -8,8 +8,10 @@ export interface ItemDef {
   stackable?: boolean;
   /** Restores this much hunger (0..1) when eaten. */
   food?: number;
-  /** Restores this much thirst (0..1) when drunk. */
+  /** Restores this much thirst (0..1) per drink. */
   drink?: number;
+  /** Container capacity in drinks; the item carries `charges` of them. */
+  charges?: number;
   description?: string;
 }
 
@@ -19,7 +21,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   hatchet: { name: 'Hatchet', category: 'tool', weight: 2, description: 'A small axe for felling trees.' },
   carving_knife: { name: 'Carving knife', category: 'tool', weight: 0.5, description: 'A knife for carving wood.' },
   chisel: { name: 'Stone chisel', category: 'tool', weight: 1, description: 'A chisel for shaping stone.' },
-  water_skin: { name: 'Water skin', category: 'misc', weight: 0.5, description: 'Holds water for the road.' },
+  water_skin: { name: 'Water skin', category: 'misc', weight: 0.5, drink: 0.35, charges: 5, description: 'Holds water for the road. Fill it at any shore.' },
   dirt: { name: 'Dirt', category: 'material', weight: 20, stackable: true, description: 'A pile of dirt. Drop it to raise the ground.' },
   sand: { name: 'Sand', category: 'material', weight: 20, stackable: true },
   clay: { name: 'Clay', category: 'material', weight: 2, stackable: true },
@@ -55,6 +57,8 @@ export interface Item {
   count: number;
   /** Free text qualifier such as a wood or tree species. */
   extra?: string;
+  /** Remaining drinks in a container. */
+  charges?: number;
 }
 
 export function itemDef(id: string): ItemDef {
@@ -63,18 +67,21 @@ export function itemDef(id: string): ItemDef {
 
 export function itemName(item: Item): string {
   const def = itemDef(item.id);
-  return item.extra ? `${def.name} (${item.extra.toLowerCase()})` : def.name;
+  let name = item.extra ? `${def.name} (${item.extra.toLowerCase()})` : def.name;
+  if (def.charges) name += ` (${item.charges ?? 0}/${def.charges})`;
+  return name;
 }
 
 export class Inventory {
   items: Item[] = [];
   onChange?: () => void;
-  private nextUid = 1;
+  /** Next item uid; shared with items lying on the ground so uids never collide. */
+  nextUid = 1;
 
-  constructor(items?: Item[]) {
+  constructor(items?: Item[], nextUid?: number) {
     if (items) {
       this.items = items;
-      this.nextUid = items.reduce((m, it) => Math.max(m, it.uid), 0) + 1;
+      this.nextUid = Math.max(nextUid ?? 1, items.reduce((m, it) => Math.max(m, it.uid), 0) + 1);
     }
   }
 
@@ -82,19 +89,42 @@ export class Inventory {
     const def = itemDef(id);
     const count = opts.count ?? 1;
     const ql = Math.max(1, Math.min(100, opts.ql ?? 20));
+    const item: Item = { uid: this.nextUid++, id, ql, dmg: 0, count, extra: opts.extra };
+    if (def.charges) item.charges = def.charges;
+    return this.addItem(item);
+  }
+
+  /** Put an existing item into the inventory, merging it into a matching stack. */
+  addItem(item: Item): Item {
+    const def = itemDef(item.id);
+    if (item.uid >= this.nextUid) this.nextUid = item.uid + 1;
     if (def.stackable) {
-      const existing = this.items.find((it) => it.id === id && it.extra === opts.extra);
+      const existing = this.items.find((it) => it.id === item.id && it.extra === item.extra && it.uid !== item.uid);
       if (existing) {
-        existing.ql = (existing.ql * existing.count + ql * count) / (existing.count + count);
-        existing.count += count;
+        existing.ql = (existing.ql * existing.count + item.ql * item.count) / (existing.count + item.count);
+        existing.count += item.count;
         this.onChange?.();
         return existing;
       }
     }
-    const item: Item = { uid: this.nextUid++, id, ql, dmg: 0, count, extra: opts.extra };
     this.items.push(item);
     this.onChange?.();
     return item;
+  }
+
+  /** Take `count` units out as a separate item (the whole item when it has no more than that). */
+  take(uid: number, count = 1): Item | null {
+    const idx = this.items.findIndex((it) => it.uid === uid);
+    if (idx < 0) return null;
+    const item = this.items[idx];
+    if (count >= item.count) {
+      this.items.splice(idx, 1);
+      this.onChange?.();
+      return item;
+    }
+    item.count -= count;
+    this.onChange?.();
+    return { ...item, uid: this.nextUid++, count };
   }
 
   /** Removes `count` units of an item; returns false when there were not enough. */

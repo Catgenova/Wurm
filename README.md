@@ -58,7 +58,11 @@ rebuilds and commits the result.
   pave gravel with shards or chisel bricks for cobblestone, remove paving.
   Slopes you may create are limited by your digging skill.
 - **Gathering.** Cut down trees for logs, pick and plant sprouts, forage and
-  botanize with per-tile cooldowns, drink from any water.
+  botanize with per-tile cooldowns, drink from any water or from a water skin
+  you fill at the shore.
+- **Items.** Click an item for its actions: eat, drink, fill, drop one or all,
+  chisel, examine. Dropped items lie on the tile as a pile and can be picked up
+  from that tile's menu.
 - **Character.** Health, stamina, food and water; swimming drains stamina and
   drowning sends you back to the shore. Actions take time based on skill and
   tool quality, can fail, and raise skills with Wurm-style diminishing gains.

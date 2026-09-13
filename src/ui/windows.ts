@@ -125,6 +125,11 @@ export class UIWindow {
     return this.maximized;
   }
 
+  /** Raise above the other windows. */
+  focus(): void {
+    this.mgr.bringToFront(this);
+  }
+
   toggleMaximized(): void {
     this.setMaximized(!this.maximized);
   }
