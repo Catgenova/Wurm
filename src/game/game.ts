@@ -2,10 +2,10 @@ import { generateWorld } from '../world/generate';
 import { TileType } from '../world/tiles';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
-import { Buildings, type BuildingsJSON, type Building } from './building';
+import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
-import { Player } from './player';
+import { groundStep, Player } from './player';
 import { Skills, SKILL_DEFS } from './skills';
 
 export interface ActiveAction {
@@ -38,7 +38,7 @@ export interface GameInit {
   spawn: { x: number; y: number };
   deed?: Deed | null;
   buildings?: BuildingsJSON;
-  player?: { x: number; y: number; name: string; stats: Player['stats'] };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -92,6 +92,8 @@ export class Game {
     if (init.player) {
       this.player.name = init.player.name;
       this.player.stats = { ...init.player.stats };
+      this.player.level = init.player.level ?? 0;
+      this.player.visualLevel = this.player.level;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -121,8 +123,43 @@ export class Game {
     this.inventory.add('settlement_deed', { ql: 50 });
   }
 
-  /** Walls stop steps between tiles. */
-  readonly wallBlocks = (x0: number, y0: number, x1: number, y1: number): boolean => this.buildings.blocks(x0, y0, x1, y1);
+  /** Whether the player can stand on a tile at a storey: the ground, or a finished floor, staircase or ladder. */
+  standable(x: number, y: number, level: number): boolean {
+    if (!this.world.isPassable(x, y)) return false;
+    if (level <= 0) return true;
+    const f = this.buildings.floor(level, x, y);
+    return !!f && isDone(f) && walkableKind(floorKind(f));
+  }
+
+  /** A finished staircase or ladder occupying a tile's floor slot at a storey. */
+  private connector(x: number, y: number, level: number): boolean {
+    const f = this.buildings.floor(level, x, y);
+    return !!f && isDone(f) && connectsDown(floorKind(f));
+  }
+
+  /**
+   * The one rule for moving between neighbouring tiles: stepping onto a
+   * staircase or ladder from below takes you up a storey, stepping off one
+   * can take you down, walls of the storey you cross on block you, and on
+   * the ground cliffs do too. Returns the storey you arrive on or null.
+   */
+  readonly stepRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
+    const b = this.buildings;
+    if (this.connector(x1, y1, level + 1) && !b.blocksAt(level, x0, y0, x1, y1)) return level + 1;
+    if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
+      if (level === 0 && !groundStep(this.world, x0, y0, x1, y1)) return null;
+      return level;
+    }
+    if (level > 0 && this.connector(x0, y0, level) && this.standable(x1, y1, level - 1) && !b.blocksAt(level - 1, x0, y0, x1, y1)) {
+      return level - 1;
+    }
+    return null;
+  };
+
+  /** Height of the player's feet, storeys included. */
+  playerHeight(): number {
+    return this.world.heightAt(this.player.x, this.player.y) + this.player.visualLevel * 30;
+  }
 
   onDeed(x: number, y: number): boolean {
     const d = this.deed;
@@ -170,7 +207,7 @@ export class Game {
   update(dt: number): void {
     this.time += dt;
     const p = this.player;
-    const moved = p.update(dt, this.world, this.wallBlocks);
+    const moved = p.update(dt, this.world, this.stepRule);
     const s = p.stats;
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
     s.thirst = Math.max(0, s.thirst - dt * 0.0006);
@@ -355,10 +392,10 @@ export class Game {
     this.cancelAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return;
-    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, this.wallBlocks)) return;
+    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, this.stepRule, MAX_LEVELS)) return;
     const candidates = this.neighbours(x, y).filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
-    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, this.wallBlocks)) return;
+    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, this.stepRule, MAX_LEVELS)) return;
     this.logMsg("You can't find a way there.", 'error');
   }
 
@@ -386,7 +423,7 @@ export class Game {
     candidates = candidates.filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
     for (const c of candidates) {
-      if (this.player.walkTo(this.world, c.x, c.y, this.wallBlocks)) return true;
+      if (this.player.walkTo(this.world, c.x, c.y, this.stepRule, MAX_LEVELS)) return true;
     }
     return false;
   }
@@ -499,6 +536,7 @@ export class Game {
     p.stop();
     p.x = this.spawn.x + 0.5;
     p.y = this.spawn.y + 0.5;
+    p.level = 0;
     this.cancelAction(true);
     this.logMsg('You have died. You wake up, shivering, where you first came ashore.', 'error');
   }

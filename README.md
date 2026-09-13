@@ -68,7 +68,9 @@ rebuilds and commits the result.
   footprint, plan walls on tile borders (solid, window, bay, door, double door)
   in twelve materials, feed them materials to build, lay floors with the paving
   skill, and plan another storey only once every wall below is built. Walls
-  block movement; doors let you through.
+  block movement; doors let you through. Staircases and ladders on an upper
+  storey take you up and down, and roofs go on once the top storey's walls are
+  finished, shaping themselves into hips and ridges from their neighbours.
 - **Materials.** Planks and timbers from logs with a saw, thatch from cut
   grass, mortar from clay and sand, bricks chiselled from rock, slate, marble
   or sandstone shards, clay bricks and adobe by pottery, silver and gold
@@ -130,7 +132,6 @@ first, then runs the timer; moving interrupts it.
 ## Roadmap
 
 - Chunked offscreen terrain caching for very zoomed-out views.
-- Roofs, stairs and walking on upper storeys.
 - Containers and item repair.
 - Crafting (carpentry, smithing) and a crafting window.
 - Caves and mine entrances.

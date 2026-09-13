@@ -3,7 +3,20 @@ import type { Pick, Renderer } from '../render/renderer';
 import { TileType, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { BUILD_ACTION_BY_ID, materialName } from '../game/buildActions';
-import { describeNeeds, floorBill, isDone, MATERIALS, progressOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES, workLevel } from '../game/building';
+import {
+  describeNeeds,
+  FLOOR_KIND_NAMES,
+  floorBill,
+  floorKind,
+  isDone,
+  MATERIALS,
+  progressOf,
+  SIDE_NAMES,
+  wallBill,
+  WALL_TYPE_BY_ID,
+  WALL_TYPES,
+  workLevel,
+} from '../game/building';
 import { itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { ContextMenu, type MenuItem } from './contextmenu';
@@ -114,6 +127,14 @@ export class UI {
       } else {
         lines.push(`${SIDE_NAMES[side]} side: no wall`);
       }
+      const floor = this.game.buildings.floor(level, pick.x, pick.y);
+      if (floor) {
+        const k = floorKind(floor);
+        const mat = MATERIALS.find((m) => m.id === floor.material)?.name.toLowerCase() ?? floor.material;
+        lines.push(`${k === 'ladder' ? 'ladder' : `${mat} ${FLOOR_KIND_NAMES[k]}`}${isDone(floor) ? '' : ` · ${Math.round(progressOf(floor) * 100)}% built`}`);
+      }
+      const roof = this.game.buildings.floor(b.levels, pick.x, pick.y);
+      if (roof) lines.push(`roof${isDone(roof) ? '' : ` · ${Math.round(progressOf(roof) * 100)}% built`}`);
     }
     const pile = this.game.groundAt(pick.x, pick.y);
     if (pile.length === 1) {
@@ -210,12 +231,13 @@ export class UI {
       }
     }
     const floor = bld.floor(level, x, y);
-    const floorLabel = level > 0 ? 'floor' : 'flooring';
+    const plan = act('plan_floor');
     if (floor) {
-      if (!isDone(floor)) entries.push(item(act('build_floor'), base, `Build ${floorLabel} · needs ${describeNeeds(floor, materialName)}`));
-      entries.push(item(act('remove_floor'), base, `Remove ${floorLabel}`));
+      const what = floorKind(floor) === 'floor' && level === 0 ? 'flooring' : FLOOR_KIND_NAMES[floorKind(floor)];
+      if (!isDone(floor)) entries.push(item(act('build_floor'), base, `Build ${what} · needs ${describeNeeds(floor, materialName)}`));
+      entries.push(item(act('remove_floor'), base, `Remove ${what}`));
     } else {
-      const plan = act('plan_floor');
+      const floorLabel = level > 0 ? 'floor' : 'flooring';
       const probe = plan.check?.({ ...base, material: 'log' }, g) ?? null;
       if (probe) entries.push({ label: `Plan ${floorLabel}`, hint: probe, disabled: true });
       else {
@@ -224,7 +246,45 @@ export class UI {
           children: MATERIALS.map((m) => ({
             label: m.name,
             note: describeNeeds(floorBill(m.id), materialName),
-            onSelect: () => g.requestAction(plan, { ...base, material: m.id }),
+            onSelect: () => g.requestAction(plan, { ...base, material: m.id, floorKind: 'floor' }),
+          })),
+        });
+        if (level > 0) {
+          const stairs = plan.check?.({ ...withSide, material: 'log', floorKind: 'stairs' }, g) ?? null;
+          if (stairs) entries.push({ label: `Plan staircase (up from the ${sideName})`, hint: stairs, disabled: true });
+          else {
+            entries.push({
+              label: `Plan staircase (up from the ${sideName})`,
+              children: MATERIALS.map((m) => ({
+                label: m.name,
+                note: describeNeeds(floorBill(m.id, 'stairs'), materialName),
+                onSelect: () => g.requestAction(plan, { ...withSide, material: m.id, floorKind: 'stairs' }),
+              })),
+            });
+            entries.push({
+              label: `Plan ladder (on the ${sideName} side)`,
+              note: describeNeeds(floorBill('plank', 'ladder'), materialName),
+              onSelect: () => g.requestAction(plan, { ...withSide, material: 'plank', floorKind: 'ladder' }),
+            });
+          }
+        }
+      }
+    }
+    const roof = bld.floor(b.levels, x, y);
+    const roofTarget: Target = { ...base, floorKind: 'roof' };
+    if (roof) {
+      if (!isDone(roof)) entries.push(item(act('build_floor'), roofTarget, `Build roof · needs ${describeNeeds(roof, materialName)}`));
+      entries.push(item(act('remove_floor'), roofTarget, 'Remove roof'));
+    } else {
+      const probe = plan.check?.({ ...roofTarget, material: 'log' }, g) ?? null;
+      if (probe) entries.push({ label: 'Plan roof', hint: probe, disabled: true });
+      else {
+        entries.push({
+          label: 'Plan roof',
+          children: MATERIALS.map((m) => ({
+            label: m.name,
+            note: describeNeeds(floorBill(m.id, 'roof'), materialName),
+            onSelect: () => g.requestAction(plan, { ...roofTarget, material: m.id }),
           })),
         });
       }

@@ -24,6 +24,10 @@ export class Player {
   /** Last movement direction in world space; the renderer turns it into a screen facing. */
   dirX = 1;
   dirY = 0;
+  /** Storey the player stands on; 0 is the ground. */
+  level = 0;
+  /** Eased copy of `level` for drawing, so climbing stairs is not a jump. */
+  visualLevel = 0;
   moving = false;
   swimming = false;
   walkPhase = 0;
@@ -45,11 +49,10 @@ export class Player {
   }
 
   /** Path to a tile; returns false when unreachable. */
-  walkTo(world: World, tx: number, ty: number, blocks: StepBlock = () => false): boolean {
-    const path = findPath(world, this.tileX, this.tileY, tx, ty, pathOptions(world, blocks));
+  walkTo(world: World, tx: number, ty: number, rule?: StepRule, levels = 1): boolean {
+    const path = findPath(world, this.tileX, this.tileY, this.level, tx, ty, pathOptions(world, rule, levels));
     if (!path) return false;
     this.path = path.length ? path : null;
-    if (!this.path) return true;
     return true;
   }
 
@@ -60,7 +63,11 @@ export class Player {
   }
 
   /** Returns the distance actually moved this frame (tiles). */
-  update(dt: number, world: World, blocks: StepBlock = () => false): number {
+  update(dt: number, world: World, rule?: StepRule): number {
+    this.visualLevel += (this.level - this.visualLevel) * Math.min(1, dt * 7);
+    if (Math.abs(this.level - this.visualLevel) < 0.01) this.visualLevel = this.level;
+    const step = (x0: number, y0: number, x1: number, y1: number): number | null =>
+      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1) ? this.level : null;
     let vx = 0;
     let vy = 0;
     let distanceLimit = Infinity;
@@ -103,23 +110,14 @@ export class Player {
     const grade = (ahead - h) / (0.15 * UNITS_PER_TILE);
     if (grade > 0) speed /= 1 + grade * 1.6;
 
-    const step = Math.min(speed * dt, distanceLimit);
-    const nx = this.x + vx * step;
-    const ny = this.y + vy * step;
+    const len = Math.min(speed * dt, distanceLimit);
+    const nx = this.x + vx * len;
+    const ny = this.y + vy * len;
     let moved = 0;
-    if (canOccupy(world, this.x, this.y, nx, ny, blocks)) {
-      this.x = nx;
-      this.y = ny;
-      moved = step;
-    } else if (canOccupy(world, this.x, this.y, nx, this.y, blocks)) {
-      this.x = nx;
-      moved = Math.abs(vx * step);
-    } else if (canOccupy(world, this.x, this.y, this.x, ny, blocks)) {
-      this.y = ny;
-      moved = Math.abs(vy * step);
-    } else {
-      this.path = null;
-    }
+    if (this.tryMove(world, nx, ny, step)) moved = len;
+    else if (this.tryMove(world, nx, this.y, step)) moved = Math.abs(vx * len);
+    else if (this.tryMove(world, this.x, ny, step)) moved = Math.abs(vy * len);
+    else this.path = null;
 
     if (moved > 0) {
       this.dirX = vx;
@@ -129,30 +127,42 @@ export class Player {
     if (this.moving) this.walkPhase += dt * 11 * (speed / BASE_SPEED);
     return moved;
   }
+
+  /** Move to a point if the tile it lies on can be entered from here; updates the storey. */
+  private tryMove(world: World, nx: number, ny: number, step: (x0: number, y0: number, x1: number, y1: number) => number | null): boolean {
+    const tx = Math.floor(nx);
+    const ty = Math.floor(ny);
+    if (!world.isPassable(tx, ty)) return false;
+    const fx = this.tileX;
+    const fy = this.tileY;
+    if (fx !== tx || fy !== ty) {
+      const level = step(fx, fy, tx, ty);
+      if (level === null) return false;
+      this.level = level;
+    }
+    this.x = nx;
+    this.y = ny;
+    return true;
+  }
+}
+
+/** Terrain-only rule for a step between tiles: no cliffs steeper than MAX_STEP. */
+export function groundStep(world: World, x0: number, y0: number, x1: number, y1: number): boolean {
+  return Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= MAX_STEP;
 }
 
 /** Something (a wall) that forbids stepping from one tile to another. */
 export type StepBlock = (x0: number, y0: number, x1: number, y1: number) => boolean;
 
-/** Whether a point can be stepped onto from another point. */
-export function canOccupy(world: World, fromX: number, fromY: number, toX: number, toY: number, blocks: StepBlock = () => false): boolean {
-  const tx = Math.floor(toX);
-  const ty = Math.floor(toY);
-  if (!world.isPassable(tx, ty)) return false;
-  const fx = Math.floor(fromX);
-  const fy = Math.floor(fromY);
-  if ((fx !== tx || fy !== ty) && blocks(fx, fy, tx, ty)) return false;
-  const dist = Math.hypot(toX - fromX, toY - fromY);
-  if (dist < 1e-6) return true;
-  const dh = Math.abs(world.heightAt(toX, toY) - world.heightAt(fromX, fromY));
-  return dh / (dist * UNITS_PER_TILE) <= MAX_STEP / UNITS_PER_TILE;
-}
+/** Decides a step between tiles: the storey you land on, or null when it is not allowed. */
+export type StepRule = (x0: number, y0: number, level: number, x1: number, y1: number) => number | null;
 
-export function pathOptions(world: World, blocks: StepBlock = () => false) {
+export function pathOptions(world: World, rule?: StepRule, levels = 1) {
   return {
     passable: (x: number, y: number) => world.isPassable(x, y),
-    stepOk: (x0: number, y0: number, x1: number, y1: number) =>
-      Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= MAX_STEP && !blocks(x0, y0, x1, y1),
+    step: (x0: number, y0: number, level: number, x1: number, y1: number): number | null =>
+      rule ? rule(x0, y0, level, x1, y1) : groundStep(world, x0, y0, x1, y1) ? level : null,
+    levels,
     cost: (x: number, y: number) => {
       const def = TILE_DEFS[world.getTile(x, y)];
       let c = 1 / def.speed;

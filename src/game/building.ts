@@ -103,13 +103,31 @@ export interface Wall extends Bill {
   material: string;
 }
 
+/**
+ * What occupies a tile's floor slot on a storey. Stairs and ladders sit on the
+ * upper storey and connect it with the one below; a roof sits one level above
+ * the top storey.
+ */
+export type FloorKind = 'floor' | 'stairs' | 'ladder' | 'roof';
+export const FLOOR_KIND_NAMES: Record<FloorKind, string> = { floor: 'floor', stairs: 'staircase', ladder: 'ladder', roof: 'roof' };
+
 export interface FloorTile extends Bill {
   building: number;
   level: number;
   x: number;
   y: number;
   material: string;
+  kind?: FloorKind;
+  /** For stairs and ladders: the side where you step on from below. */
+  facing?: Side;
 }
+
+export const floorKind = (f: FloorTile): FloorKind => f.kind ?? 'floor';
+/** Whether a finished floor tile can be stood on. */
+export const walkableKind = (k: FloorKind): boolean => k !== 'roof';
+export const connectsDown = (k: FloorKind): boolean => k === 'stairs' || k === 'ladder';
+/** Rise of a roof ridge above its eaves, in terrain units. */
+export const ROOF_RISE = 22;
 
 export interface Building {
   id: number;
@@ -140,7 +158,12 @@ function scaledBill(material: string, factor: number): Bill {
 }
 
 export const wallBill = (material: string, type: WallType): Bill => scaledBill(material, WALL_TYPE_BY_ID.get(type)?.factor ?? 1);
-export const floorBill = (material: string): Bill => scaledBill(material, 0.5);
+
+/** Materials for a floor slot: floors and roofs take half a wall, stairs three quarters, ladders are two planks. */
+export function floorBill(material: string, kind: FloorKind = 'floor'): Bill {
+  if (kind === 'ladder') return { needed: { plank: 2 }, total: { plank: 2 } };
+  return scaledBill(material, kind === 'stairs' ? 0.75 : 0.5);
+}
 
 export const tileKey = (x: number, y: number): string => `${x},${y}`;
 const wallKey = (level: number, b: Border): string => `${level}:${b.dir}:${b.x},${b.y}`;
@@ -224,10 +247,21 @@ export class Buildings {
     return this.floors.get(floorKey(level, x, y));
   }
 
-  setFloor(b: Building, level: number, x: number, y: number, material: string): FloorTile {
-    const f: FloorTile = { building: b.id, level, x, y, material, ...floorBill(material) };
+  setFloor(b: Building, level: number, x: number, y: number, material: string, kind: FloorKind = 'floor', facing?: Side): FloorTile {
+    const f: FloorTile = { building: b.id, level, x, y, material, kind, facing, ...floorBill(material, kind) };
     this.floors.set(floorKey(level, x, y), f);
     return f;
+  }
+
+  /** A finished roof tile at a level, if any. */
+  roofAt(level: number, x: number, y: number): FloorTile | undefined {
+    const f = this.floors.get(floorKey(level, x, y));
+    return f && floorKind(f) === 'roof' ? f : undefined;
+  }
+
+  hasRoof(b: Building): boolean {
+    for (const f of this.floors.values()) if (f.building === b.id && floorKind(f) === 'roof') return true;
+    return false;
   }
 
   removeFloor(level: number, x: number, y: number): void {
@@ -274,6 +308,11 @@ export class Buildings {
 
   /** Whether a finished, impassable ground-floor wall stops a step between two tiles. */
   blocks(x0: number, y0: number, x1: number, y1: number): boolean {
+    return this.blocksAt(0, x0, y0, x1, y1);
+  }
+
+  /** Same, for the walls of a given storey. */
+  blocksAt(level: number, x0: number, y0: number, x1: number, y1: number): boolean {
     if (!this.walls.size) return false;
     const dx = x1 - x0;
     const dy = y1 - y0;
@@ -281,12 +320,12 @@ export class Buildings {
     if (Math.abs(dx) + Math.abs(dy) === 1) {
       const border: Border =
         dx === 1 ? { x: x1, y: y0, dir: 'v' } : dx === -1 ? { x: x0, y: y0, dir: 'v' } : dy === 1 ? { x: x0, y: y1, dir: 'h' } : { x: x0, y: y0, dir: 'h' };
-      const w = this.wallOnBorder(0, border);
+      const w = this.wallOnBorder(level, border);
       return !!w && isDone(w) && !(WALL_TYPE_BY_ID.get(w.type)?.passable ?? false);
     }
     // Diagonal: allowed only when at least one of the two L-shaped routes is open.
-    const viaX = !this.blocks(x0, y0, x1, y0) && !this.blocks(x1, y0, x1, y1);
-    const viaY = !this.blocks(x0, y0, x0, y1) && !this.blocks(x0, y1, x1, y1);
+    const viaX = !this.blocksAt(level, x0, y0, x1, y0) && !this.blocksAt(level, x1, y0, x1, y1);
+    const viaY = !this.blocksAt(level, x0, y0, x0, y1) && !this.blocksAt(level, x0, y1, x1, y1);
     return !(viaX || viaY);
   }
 

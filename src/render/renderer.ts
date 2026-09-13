@@ -1,7 +1,21 @@
 import { Camera } from '../engine/camera';
 import type { FullscreenCanvas } from '../engine/canvas';
 import type { Game } from '../game/game';
-import { borderOf, borderPoints, isDone, MATERIAL_BY_ID, progressOf, WALL_HEIGHT, workLevel, type Border, type FloorTile, type Side, type Wall } from '../game/building';
+import {
+  borderOf,
+  borderPoints,
+  floorKind,
+  isDone,
+  MATERIAL_BY_ID,
+  progressOf,
+  ROOF_RISE,
+  WALL_HEIGHT,
+  workLevel,
+  type Border,
+  type FloorTile,
+  type Side,
+  type Wall,
+} from '../game/building';
 import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
@@ -246,13 +260,13 @@ export class Renderer {
       }
 
       if (d === playerDepth) {
-        const ph = world.heightAt(player.x, player.y);
+        const ph = Math.max(world.heightAt(player.x, player.y), -4) + player.visualLevel * WALL_HEIGHT;
         this.ents.push({
           kind: 'player',
           x: player.tileX,
           y: player.tileY,
           sx: cam.worldToScreenX(player.x, player.y),
-          sy: cam.worldToScreenY(player.x, player.y, Math.max(ph, -4)),
+          sy: cam.worldToScreenY(player.x, player.y, ph),
           spr: null,
         });
       }
@@ -397,19 +411,222 @@ export class Renderer {
         backA = borderOf(x, y, 'n');
         backB = borderOf(x, y, 'w');
     }
+    const playerLevel = this.game.player.level;
     const maxLevels = building ? building.levels : this.maxLevelsAround(x, y);
-    for (let level = 0; level < maxLevels; level++) {
+    // Floors, stairs and ladders for each storey, walls of each storey, then the roof one level up.
+    for (let level = 0; level <= maxLevels; level++) {
       if (building) {
         const floor = bld.floor(level, x, y);
-        if (floor) this.drawFloor(floor, x, y, base, inside?.id === building.id && level > 0 ? 0.35 : 1);
+        if (floor) {
+          const dim = inside?.id === building.id && level > playerLevel;
+          const alpha = dim ? 0.35 : 1;
+          switch (floorKind(floor)) {
+            case 'stairs':
+              this.drawStairs(floor, x, y, base, alpha);
+              break;
+            case 'ladder':
+              this.drawLadder(floor, x, y, base, alpha);
+              break;
+            case 'roof':
+              this.drawRoof(floor, x, y, base, alpha);
+              break;
+            default:
+              this.drawFloor(floor, x, y, base, alpha);
+          }
+        }
       }
+      if (level >= maxLevels) break;
       for (const border of [backA, backB]) {
         const wall = bld.wallOnBorder(level, border);
         if (!wall) continue;
-        const dim = inside?.id === wall.building && (inFront || level > 0);
+        const dim = inside?.id === wall.building && inFront;
         this.drawWall(wall, border, base, dim ? 0.35 : 1);
       }
     }
+  }
+
+  /** World point on a tile from a coordinate across (t) and away from the climbing side (s). */
+  private static stairPoint(x: number, y: number, facing: Side, t: number, s: number): [number, number] {
+    switch (facing) {
+      case 'n':
+        return [x + t, y + s];
+      case 's':
+        return [x + t, y + 1 - s];
+      case 'w':
+        return [x + s, y + t];
+      default:
+        return [x + 1 - s, y + t];
+    }
+  }
+
+  /** A staircase climbing from the storey below to this floor's storey, starting at its facing side. */
+  private drawStairs(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const mat = MATERIAL_BY_ID.get(floor.material);
+    if (!mat) return;
+    const facing = floor.facing ?? 's';
+    const h0 = base + (floor.level - 1) * WALL_HEIGHT;
+    const h1 = base + floor.level * WALL_HEIGHT;
+    const done = isDone(floor);
+    const STEPS = 6;
+    const P = (t: number, s: number, h: number): [number, number] => {
+      const [wx, wy] = Renderer.stairPoint(x, y, facing, t, s);
+      return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
+    };
+    const quad = (a: [number, number], b: [number, number], c: [number, number], d: [number, number]): void => {
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.lineTo(c[0], c[1]);
+      ctx.lineTo(d[0], d[1]);
+      ctx.closePath();
+    };
+    // Draw the steps back to front in view space.
+    const order = Array.from({ length: STEPS }, (_, i) => i).sort((a, b) => {
+      const [ax, ay] = Renderer.stairPoint(x, y, facing, 0.5, (a + 0.5) / STEPS);
+      const [bx, by] = Renderer.stairPoint(x, y, facing, 0.5, (b + 0.5) / STEPS);
+      return cam.rotateX(ax, ay) + cam.rotateY(ax, ay) - (cam.rotateX(bx, by) + cam.rotateY(bx, by));
+    });
+    ctx.globalAlpha = alpha * (done ? 1 : 0.45);
+    for (const i of order) {
+      const s0 = i / STEPS;
+      const s1 = (i + 1) / STEPS;
+      const hp = h0 + ((h1 - h0) * i) / STEPS;
+      const h = h0 + ((h1 - h0) * (i + 1)) / STEPS;
+      quad(P(0, s0, hp), P(1, s0, hp), P(1, s0, h), P(0, s0, h));
+      ctx.fillStyle = rgb(mat.trim, 0.9);
+      ctx.fill();
+      quad(P(0, s0, h), P(1, s0, h), P(1, s1, h), P(0, s1, h));
+      ctx.fillStyle = rgb(mat.floor, 1);
+      ctx.fill();
+      ctx.strokeStyle = rgb(mat.trim, 0.8);
+      ctx.stroke();
+    }
+    if (!done) {
+      quad(P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1));
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** An opening in this storey's floor with a ladder up from the storey below on the facing side. */
+  private drawLadder(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const facing = floor.facing ?? 's';
+    const h0 = base + (floor.level - 1) * WALL_HEIGHT;
+    const h1 = base + floor.level * WALL_HEIGHT;
+    const done = isDone(floor);
+    const P = (t: number, s: number, h: number): [number, number] => {
+      const [wx, wy] = Renderer.stairPoint(x, y, facing, t, s);
+      return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
+    };
+    ctx.globalAlpha = alpha * (done ? 1 : 0.45);
+    // the opening
+    const o = [P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)];
+    ctx.beginPath();
+    ctx.moveTo(o[0][0], o[0][1]);
+    for (let i = 1; i < 4; i++) ctx.lineTo(o[i][0], o[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(30, 22, 16, 0.55)';
+    ctx.fill();
+    ctx.strokeStyle = done ? 'rgba(120, 90, 50, 0.9)' : PLAN_COLOR;
+    if (!done) ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // rails and rungs, inset a little from the climbing side
+    ctx.strokeStyle = '#b08850';
+    ctx.lineWidth = 2;
+    for (const t of [0.4, 0.6]) {
+      const a = P(t, 0.12, h0);
+      const b = P(t, 0.12, h1 + 3);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    for (let k = 1; k <= 7; k++) {
+      const h = h0 + ((h1 - h0) * k) / 8;
+      const a = P(0.4, 0.12, h);
+      const b = P(0.6, 0.12, h);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** A roof tile: eaves at the corners, ridges where neighbouring roof tiles meet, hips elsewhere. */
+  private drawRoof(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const bld = this.game.buildings;
+    const mat = MATERIAL_BY_ID.get(floor.material);
+    if (!mat) return;
+    const level = floor.level;
+    const eave = base + level * WALL_HEIGHT;
+    const done = isDone(floor);
+    const roof = (tx: number, ty: number): boolean => !!bld.roofAt(level, tx, ty) || (bld.floor(level, tx, ty) !== undefined && floorKind(bld.floor(level, tx, ty) as FloorTile) === 'roof');
+    // A corner is interior when all four tiles around it carry roof.
+    const cornerH = (cx: number, cy: number): number => (roof(cx - 1, cy - 1) && roof(cx, cy - 1) && roof(cx - 1, cy) && roof(cx, cy) ? eave + ROOF_RISE : eave);
+    const corners: Array<[number, number, number]> = [
+      [x, y, cornerH(x, y)],
+      [x + 1, y, cornerH(x + 1, y)],
+      [x + 1, y + 1, cornerH(x + 1, y + 1)],
+      [x, y + 1, cornerH(x, y + 1)],
+    ];
+    const ridge = eave + ROOF_RISE * 0.7;
+    const avg = corners.reduce((s, c) => s + c[2], 0) / 4;
+    const centreH = Math.max(avg, ridge);
+    // Edge midpoints rise to the ridge where a neighbouring tile is roofed too, so rows form ridges.
+    const neighbours: Array<[number, number]> = [
+      [x, y - 1],
+      [x + 1, y],
+      [x, y + 1],
+      [x - 1, y],
+    ];
+    const cx = x + 0.5;
+    const cy = y + 0.5;
+    const csx = cam.worldToScreenX(cx, cy);
+    const csy = cam.worldToScreenY(cx, cy, centreH);
+    const cu = cam.rotateX(cx, cy);
+    const cv = cam.rotateY(cx, cy);
+    const tri = (a: [number, number, number], b: [number, number, number]): void => {
+      const mx = (a[0] + b[0]) / 2;
+      const my = (a[1] + b[1]) / 2;
+      const du = cam.rotateX(mx, my) - cu;
+      const dv = cam.rotateY(mx, my) - cv;
+      const sx = du - dv;
+      const sy = du + dv;
+      const shade = sx < 0 && sy < 0 ? 1 : sx > 0 && sy < 0 ? 0.86 : sx < 0 ? 0.78 : 0.64;
+      ctx.beginPath();
+      ctx.moveTo(csx, csy);
+      ctx.lineTo(cam.worldToScreenX(a[0], a[1]), cam.worldToScreenY(a[0], a[1], a[2]));
+      ctx.lineTo(cam.worldToScreenX(b[0], b[1]), cam.worldToScreenY(b[0], b[1], b[2]));
+      ctx.closePath();
+      ctx.fillStyle = rgb(mat.floor, 0.9 * shade);
+      ctx.fill();
+      ctx.strokeStyle = rgb(mat.trim, shade, done ? 0.55 : 1);
+      if (!done) ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    ctx.globalAlpha = alpha * (done ? 1 : 0.4);
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i];
+      const b = corners[(i + 1) % 4];
+      const [nx, ny] = neighbours[i];
+      const mid: [number, number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, roof(nx, ny) ? ridge : eave];
+      tri(a, mid);
+      tri(mid, b);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** Storeys of any building touching a tile's borders, for tiles just outside a footprint. */

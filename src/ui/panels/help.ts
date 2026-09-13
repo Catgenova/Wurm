@@ -47,7 +47,11 @@ export function buildHelp(win: UIWindow): void {
     there: solid, window, bay window, door or double door, in log, plank, timbercraft, cobblestone,
     slate, marble, sandstone, stone brick, clay adobe, clay bricks, ornate silver or ornate gold. Then
     <b>Build wall</b> feeds it materials one at a time. Floors are planned the same way and laid with
-    the paving skill. Another storey can only be planned once every wall of the storey below is built.</p>
+    the paving skill. Another storey can only be planned once every wall of the storey below is built.
+    On an upper storey, plan a <b>staircase</b> or <b>ladder</b> instead of a plain floor to climb up:
+    walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
+    Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
+    join into ridges and hips.</p>
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
     into mortar, chisel rock, slate, marble and sandstone shards into bricks, shape clay into bricks
     or press it with grass into adobe, and chip silver and gold from veins in the mountains.</p>

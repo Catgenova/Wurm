@@ -2,16 +2,22 @@ import type { World } from './world';
 
 export interface PathOptions {
   passable: (x: number, y: number) => boolean;
-  /** Whether stepping between two adjacent tiles is allowed (slope checks). */
-  stepOk: (x0: number, y0: number, x1: number, y1: number) => boolean;
+  /**
+   * The storey you arrive on when stepping from one tile to a neighbour, or
+   * null when the step is not allowed (slopes, walls, missing floors).
+   */
+  step: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null;
   /** Extra cost multiplier for entering a tile. */
   cost: (x: number, y: number) => number;
+  /** How many storeys the search may use; 1 keeps everything on the ground. */
+  levels?: number;
   maxNodes?: number;
 }
 
 export interface PathPoint {
   x: number;
   y: number;
+  level: number;
 }
 
 const DIRS = [
@@ -51,14 +57,20 @@ function getBuffers(size: number): Buffers {
   return buffers;
 }
 
-/** A* over the tile grid with 8-way movement. Returns tile coordinates from the tile after the start up to the goal. */
-export function findPath(world: World, sx: number, sy: number, tx: number, ty: number, opts: PathOptions): PathPoint[] | null {
+/**
+ * A* over the tile grid with 8-way movement, across storeys. Returns the tiles
+ * after the start up to the goal, which is reached on whichever storey the
+ * search arrives first.
+ */
+export function findPath(world: World, sx: number, sy: number, sl: number, tx: number, ty: number, opts: PathOptions): PathPoint[] | null {
   if (!world.inBounds(sx, sy) || !world.inBounds(tx, ty)) return null;
   if (!opts.passable(tx, ty)) return null;
   if (sx === tx && sy === ty) return [];
 
   const w = world.w;
-  const size = w * world.h;
+  const layer = w * world.h;
+  const levels = Math.max(1, opts.levels ?? 1);
+  const size = layer * levels;
   const b = getBuffers(size);
   const gen = ++generation;
   const maxNodes = opts.maxNodes ?? 30000;
@@ -114,8 +126,9 @@ export function findPath(world: World, sx: number, sy: number, tx: number, ty: n
   };
   const getState = (idx: number): number => (state[idx] - gen * 4 >= 0 && state[idx] - gen * 4 < 4 ? state[idx] - gen * 4 : 0);
 
-  const start = sy * w + sx;
-  const goal = ty * w + tx;
+  const start = Math.min(levels - 1, sl) * layer + sy * w + sx;
+  const goalTile = ty * w + tx;
+  let goal = -1;
   b.g[start] = 0;
   b.parent[start] = -1;
   mark(start, OPEN);
@@ -125,11 +138,16 @@ export function findPath(world: World, sx: number, sy: number, tx: number, ty: n
   while (heapSize > 0) {
     const cur = pop();
     if (getState(cur) === CLOSED) continue;
-    if (cur === goal) break;
+    if (cur % layer === goalTile) {
+      goal = cur;
+      break;
+    }
     mark(cur, CLOSED);
     if (++expanded > maxNodes) return null;
-    const cx = cur % w;
-    const cy = (cur - cx) / w;
+    const cl = Math.floor(cur / layer);
+    const tileIdx = cur - cl * layer;
+    const cx = tileIdx % w;
+    const cy = (tileIdx - cx) / w;
     for (let k = 0; k < 8; k++) {
       const nx = cx + DIRS[k][0];
       const ny = cy + DIRS[k][1];
@@ -138,8 +156,9 @@ export function findPath(world: World, sx: number, sy: number, tx: number, ty: n
         // Never cut a blocked corner on a diagonal move.
         if (!opts.passable(cx + DIRS[k][0], cy) || !opts.passable(cx, cy + DIRS[k][1])) continue;
       }
-      if (!opts.stepOk(cx, cy, nx, ny)) continue;
-      const nidx = ny * w + nx;
+      const nl = opts.step(cx, cy, cl, nx, ny);
+      if (nl === null || nl < 0 || nl >= levels) continue;
+      const nidx = nl * layer + ny * w + nx;
       if (getState(nidx) === CLOSED) continue;
       const stepCost = (k >= 4 ? Math.SQRT2 : 1) * opts.cost(nx, ny);
       const ng = b.g[cur] + stepCost;
@@ -151,12 +170,14 @@ export function findPath(world: World, sx: number, sy: number, tx: number, ty: n
     }
   }
 
-  if (getState(goal) === 0) return null;
+  if (goal < 0) return null;
   const path: PathPoint[] = [];
   let idx = goal;
   while (idx !== -1 && idx !== start) {
-    const x = idx % w;
-    path.push({ x, y: (idx - x) / w });
+    const level = Math.floor(idx / layer);
+    const t = idx - level * layer;
+    const x = t % w;
+    path.push({ x, y: (t - x) / w, level });
     idx = b.parent[idx];
   }
   path.reverse();

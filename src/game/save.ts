@@ -15,7 +15,7 @@ interface SaveData {
   tiles: string;
   data: string;
   spawn: { x: number; y: number };
-  player: { x: number; y: number; name: string; stats: Stats };
+  player: { x: number; y: number; name: string; stats: Stats; level?: number };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -53,7 +53,7 @@ export function saveGame(game: Game): boolean {
     tiles: toBase64(w.tiles),
     data: toBase64(w.data),
     spawn: game.spawn,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),

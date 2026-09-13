@@ -1,6 +1,6 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
 import { BUILD_ACTIONS } from './buildActions';
-import type { Side, WallType } from './building';
+import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { itemDef, itemName } from './items';
 
@@ -11,7 +11,7 @@ import { itemDef, itemName } from './items';
  * means everything there).
  */
 export type Target =
-  | { kind: 'tile'; x: number; y: number; cx: number; cy: number; side?: Side; wallType?: WallType; material?: string; buildingId?: number }
+  | { kind: 'tile'; x: number; y: number; cx: number; cy: number; side?: Side; wallType?: WallType; material?: string; floorKind?: FloorKind; buildingId?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null };
 

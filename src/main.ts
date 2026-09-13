@@ -40,7 +40,7 @@ game.hooks = {
 
 const player = game.player;
 camera.rotation = game.settings.rotation & 3;
-camera.focus(player.x, player.y, game.world.heightAt(player.x, player.y), null);
+camera.focus(player.x, player.y, game.playerHeight(), null);
 
 declare global {
   interface Window {
@@ -157,7 +157,7 @@ const loop = new GameLoop(
     game.update(dt);
 
     if (camera.follow) {
-      camera.focus(player.x, player.y, Math.max(-4, game.world.heightAt(player.x, player.y)), dt);
+      camera.focus(player.x, player.y, Math.max(-4, game.playerHeight()), dt);
     }
 
     if (input.pointer.overCanvas && !input.dragging && !ui.menu.isOpen) {

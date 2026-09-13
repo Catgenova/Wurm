@@ -1,6 +1,8 @@
 import type { ActionDef, Target } from './actions';
 import {
   describeNeeds,
+  FLOOR_KIND_NAMES,
+  floorKind,
   isDone,
   MATERIAL_BY_ID,
   MAX_LEVELS,
@@ -8,6 +10,7 @@ import {
   WALL_TYPE_BY_ID,
   type Bill,
   type Building,
+  type FloorKind,
   type MaterialDef,
   workLevel,
 } from './building';
@@ -230,6 +233,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = buildingOf(g, t);
       if (!b) return 'No building here.';
       if (b.levels >= MAX_LEVELS) return `Buildings cannot be taller than ${MAX_LEVELS} storeys.`;
+      if (g.buildings.hasRoof(b)) return 'Take the roof off first.';
       if (!g.buildings.levelComplete(b, b.levels - 1)) return 'All walls of the storey below must be built first.';
       return null;
     },
@@ -257,36 +261,47 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (tool) return tool;
       const b = buildingOf(g, t);
       if (!b) return 'No building here.';
-      if (g.buildings.floor(topLevel(b), t.x, t.y)) return 'There is already a floor planned here.';
+      const kind: FloorKind = t.floorKind ?? 'floor';
+      const level = kind === 'roof' ? b.levels : topLevel(b);
+      if (kind === 'roof') {
+        if (!g.buildings.levelComplete(b, b.levels - 1)) return 'All walls of the top storey must be built before roofing.';
+      } else if (kind === 'stairs' || kind === 'ladder') {
+        if (level < 1) return 'Stairs and ladders belong to an upper storey; plan another storey first.';
+        if (!t.side) return 'Choose the side to climb from.';
+        if (level > 1 && !g.buildings.floor(level - 1, t.x, t.y)) return 'Plan the floor of the storey below first.';
+      }
+      if (g.buildings.floor(level, t.x, t.y)) return kind === 'roof' ? 'There is already roof planned here.' : 'There is already a floor planned here.';
       return null;
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.material) return;
       const b = buildingOf(g, t);
       if (!b) return;
-      const floor = g.buildings.setFloor(b, topLevel(b), t.x, t.y, t.material);
-      g.logMsg(`You plan a ${material(t.material)?.name.toLowerCase()} floor. It needs ${needsText(floor)}.`, 'event');
+      const kind: FloorKind = t.floorKind ?? 'floor';
+      const level = kind === 'roof' ? b.levels : topLevel(b);
+      const floor = g.buildings.setFloor(b, level, t.x, t.y, t.material, kind, kind === 'stairs' || kind === 'ladder' ? t.side : undefined);
+      const what = kind === 'ladder' ? 'ladder' : `${material(t.material)?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
+      g.logMsg(`You plan a ${what}. It needs ${needsText(floor)}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },
   {
     id: 'build_floor',
     label: 'Build floor',
-    verb: 'laying the floor',
+    verb: 'building',
     hidden: true,
     repeat: true,
-    skill: 'paving',
     stamina: 0.03,
     baseTime: 5,
     applies: (t, g) => isTile(t) && !!buildingOf(g, t),
     check: (t, g) => {
       if (!isTile(t)) return null;
       const b = buildingOf(g, t);
-      const floor = b && g.buildings.floor(topLevel(b), t.x, t.y);
-      if (!floor) return 'There is no floor planned here.';
-      if (isDone(floor)) return 'That floor is finished.';
+      const floor = b && g.buildings.floor(t.floorKind === 'roof' ? b.levels : topLevel(b), t.x, t.y);
+      if (!floor) return 'There is nothing planned here.';
+      if (isDone(floor)) return 'That is already finished.';
       const mat = material(floor.material);
-      const tool = mat ? needTool(g, mat.tool) : null;
+      const tool = floorKind(floor) === 'ladder' ? needTool(g, 'mallet') : mat ? needTool(g, mat.tool) : null;
       if (tool) return tool;
       if (!nextAvailable(g, floor)) return `You need ${needsText(floor)}.`;
       return null;
@@ -294,16 +309,21 @@ export const BUILD_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (!isTile(t)) return false;
       const b = buildingOf(g, t);
-      const floor = b && g.buildings.floor(topLevel(b), t.x, t.y);
+      const floor = b && g.buildings.floor(t.floorKind === 'roof' ? b.levels : topLevel(b), t.x, t.y);
       if (!floor || isDone(floor)) return false;
       const used = consumeUnit(g, floor);
       if (!used) return false;
+      const kind = floorKind(floor);
+      const mat = material(floor.material);
+      // Floors are paving; stairs, ladders and roofs are carpentry or masonry by material.
+      g.gainSkill(kind === 'floor' ? 'paving' : kind === 'ladder' ? 'carpentry' : (mat?.skill ?? 'carpentry'), 0.4);
       g.events.emit('world', t.x, t.y);
+      const what = kind === 'ladder' ? 'ladder' : `${mat?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
       if (isDone(floor)) {
-        g.logMsg(`You finish laying the ${material(floor.material)?.name.toLowerCase()} floor.`, 'event');
+        g.logMsg(`You finish the ${what}.`, 'event');
         return false;
       }
-      g.logMsg(`You lay ${materialName(used, 1)} into the floor. Still needed: ${needsText(floor)}.`, 'event');
+      g.logMsg(`You work ${materialName(used, 1)} into the ${FLOOR_KIND_NAMES[kind]}. Still needed: ${needsText(floor)}.`, 'event');
       return nextAvailable(g, floor) !== null;
     },
   },
@@ -319,17 +339,25 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!isTile(t)) return null;
       const b = buildingOf(g, t);
       if (!b) return 'No building here.';
-      const level = topLevel(b);
-      if (!g.buildings.floor(level, t.x, t.y)) return 'There is no floor here.';
-      for (const side of ['n', 'e', 's', 'w'] as const) if (g.buildings.wall(level, t.x, t.y, side)) return 'Take down the walls standing on it first.';
+      const level = t.floorKind === 'roof' ? b.levels : topLevel(b);
+      const floor = g.buildings.floor(level, t.x, t.y);
+      if (!floor) return 'There is nothing here to remove.';
+      if (floorKind(floor) !== 'roof') {
+        for (const side of ['n', 'e', 's', 'w'] as const) if (g.buildings.wall(level, t.x, t.y, side)) return 'Take down the walls standing on it first.';
+      }
       return null;
     },
     perform: (t, g) => {
       if (!isTile(t)) return;
       const b = buildingOf(g, t);
       if (!b) return;
-      g.buildings.removeFloor(topLevel(b), t.x, t.y);
-      g.logMsg('You tear up the floor.', 'event');
+      const level = t.floorKind === 'roof' ? b.levels : topLevel(b);
+      const floor = g.buildings.floor(level, t.x, t.y);
+      if (!floor) return;
+      g.buildings.removeFloor(level, t.x, t.y);
+      const p = g.player;
+      if (p.tileX === t.x && p.tileY === t.y && p.level >= level && level > 0) p.level = level - 1;
+      g.logMsg(`You remove the ${FLOOR_KIND_NAMES[floorKind(floor)]}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },
@@ -346,6 +374,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = buildingOf(g, t);
       if (!b || b.levels <= 1) return 'There is no upper storey.';
       const level = b.levels - 1;
+      if (g.buildings.hasRoof(b)) return 'Take the roof off first.';
       for (const w of g.buildings.walls.values()) if (w.building === b.id && w.level === level) return 'Take down the walls of the top storey first.';
       for (const f of g.buildings.floors.values()) if (f.building === b.id && f.level === level) return 'Tear up the floors of the top storey first.';
       return null;
