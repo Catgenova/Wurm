@@ -27,6 +27,12 @@ export class SettingsPanel {
     };
     add('Show tile grid', 'Outline every tile. Also toggled with G.', () => game.settings.grid, (v) => (game.settings.grid = v));
     add(
+      'Cut away walls facing you',
+      'Take away the walls standing between you and the inside of a building. Also toggled with X, or the ◪ button beside the storey arrows.',
+      () => game.settings.cutaway,
+      (v) => (game.settings.cutaway = v),
+    );
+    add(
       'Always show deed border',
       'Draw the green boundary of your settlement at all times. Otherwise it only shows while pointing at the token.',
       () => game.settings.deedBorder,

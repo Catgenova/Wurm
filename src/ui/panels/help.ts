@@ -30,6 +30,8 @@ export function buildHelp(win: UIWindow): void {
     <table>
       <tr><td><kbd>I</kbd></td><td>Inventory</td></tr>
       <tr><td><kbd>R</kbd></td><td>Crafting: everything you can make with what you carry</td></tr>
+      <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Look at the storey above or below</td></tr>
+      <tr><td><kbd>X</kbd></td><td>Cut away the walls facing you</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills</td></tr>
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
@@ -95,6 +97,16 @@ export function buildHelp(win: UIWindow): void {
     <b>corpse</b> on the ground. Right-click the tile and choose <b>Butcher</b> for meat, fur, leather,
     bone and the occasional gland. The <b>Butchering</b> skill and a <b>butchering knife</b> both decide
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.</p>
+    <h3>Looking inside a building</h3>
+    <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
+    <b>storey you are looking at</b>: the ceilings above it are lifted off so you can see straight down
+    into that floor, and everything above it goes with them. The label reads <i>1st</i>, <i>2nd</i> and
+    so on, and clicking it returns to <i>Auto</i>, which simply follows whichever storey you are
+    standing on. <kbd>Page Up</kbd> and <kbd>Page Down</kbd> do the same as the arrows.</p>
+    <p>The <b>◪</b> button beside them, <kbd>X</kbd>, or the matching box in Settings, <b>cuts away the
+    walls facing you</b> &mdash; the ones standing between your eye and the inside of a building &mdash;
+    leaving the far walls in place so the rooms still read. Together the two let you look into any
+    floor of a tall building from outside it.</p>
     <h3>Settling and building</h3>
     <p>Carve a <b>deed stake</b> from a shaft with a carving knife, then use it where you stand to
     found a settlement: an 11 by 11
@@ -105,7 +117,7 @@ export function buildHelp(win: UIWindow): void {
     there: solid, window, bay window, door or double door, in log, plank, timbercraft, cobblestone,
     slate, marble, sandstone, stone brick, clay adobe, clay bricks, ornate silver or ornate gold. Then
     <b>Build wall</b> feeds it materials one at a time. Floors are planned the same way and laid with
-    the paving skill. Another storey can only be planned once every wall of the storey below is built.
+    the paving skill. Another storey can only be planned once every wall of the storey below is built, up to ten in all.
     On an upper storey, plan a <b>staircase</b> or <b>ladder</b> instead of a plain floor to climb up:
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles

@@ -30,7 +30,7 @@ interface SaveData {
   ground?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
-  settings: { grid: boolean; rotation?: number; deedBorder?: boolean };
+  settings: { grid: boolean; rotation?: number; deedBorder?: boolean; cutaway?: boolean };
   savedAt: number;
   deed?: Deed | null;
   buildings?: BuildingsJSON;
@@ -173,6 +173,7 @@ export function loadGame(): Game | null {
     game.settings.grid = data.settings?.grid ?? true;
     game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
     game.settings.deedBorder = data.settings?.deedBorder ?? true;
+    game.settings.cutaway = data.settings?.cutaway ?? false;
     game.logMsg('Your journey continues where you left off.', 'system');
     // Older saves predate building: hand out the tools they never got.
     const granted: string[] = [];

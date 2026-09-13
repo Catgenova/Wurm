@@ -83,6 +83,15 @@ input.onKey = (code) => {
     case 'KeyR':
       ui.toggleWindow('craft');
       break;
+    case 'PageUp':
+      ui.hud.stepStorey(1);
+      break;
+    case 'PageDown':
+      ui.hud.stepStorey(-1);
+      break;
+    case 'KeyX':
+      ui.hud.toggleCutaway();
+      break;
     case 'KeyL':
       ui.toggleWindow('events');
       break;

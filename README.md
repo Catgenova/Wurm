@@ -92,6 +92,11 @@ rebuilds and commits the result.
   finished buildings and wildermon at work. Building is only possible on its land,
   things left outside rot ten times slower there, and a green border can be
   kept on permanently from Settings.
+- **Looking inside.** A strip of arrows at the screen edge picks which storey
+  you are looking at, lifting the ceilings above it off, with Auto to follow
+  your own floor again; Page Up and Page Down do the same. A cutaway toggle
+  (X) takes away the walls standing between you and the inside of a building
+  while leaving the far walls in place.
 - **Building, Wurm style.** Plan on flat packed dirt with a mallet, extend the
   footprint, plan walls on tile borders (solid, window, bay, door, double door)
   in twelve materials, feed them materials to build, lay floors with the paving

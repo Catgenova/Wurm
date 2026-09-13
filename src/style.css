@@ -606,6 +606,68 @@ kbd {
   font-size: 11px;
 }
 
+/* Storey view ------------------------------------------------------------ */
+
+.storey {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+  transform: translateY(-50%);
+  padding: 5px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+}
+
+.storey-btn {
+  padding: 2px 8px;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.storey-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.storey-label {
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--ui-dim);
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.storey-label.pinned {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.storey-cut {
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-top: 1px solid var(--ui-border);
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .storey {
+    top: auto;
+    bottom: 96px;
+    transform: none;
+  }
+}
+
 /* Crafting --------------------------------------------------------------- */
 
 .craft-head {

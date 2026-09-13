@@ -90,7 +90,15 @@ export class Game {
   readonly skills: Skills;
   readonly events = new Emitter<GameEvents>();
   readonly log: LogEntry[] = [];
-  readonly settings = { grid: true, rotation: 0, deedBorder: true };
+  readonly settings = {
+    grid: true,
+    rotation: 0,
+    deedBorder: true,
+    /** Hide walls standing between the viewer and the inside of a building. */
+    cutaway: false,
+    /** Storey being looked at, 0 for the ground floor; null follows the player. */
+    viewLevel: null as number | null,
+  };
   readonly buildings: Buildings;
   readonly creatures: Creatures;
   deed: Deed | null = null;

@@ -550,11 +550,13 @@ export class Renderer {
     }
     const playerLevel = this.game.player.level;
     const maxLevels = building ? building.levels : this.maxLevelsAround(x, y);
+    const { cutaway, viewLevel } = this.game.settings;
     // Floors, stairs and ladders for each storey, walls of each storey, then the roof one level up.
     for (let level = 0; level <= maxLevels; level++) {
       if (building) {
         const floor = bld.floor(level, x, y);
-        if (floor) {
+        // Looking at one storey means lifting the ceilings above it off.
+        if (floor && !(viewLevel !== null && floor.level > viewLevel)) {
           const dim = inside?.id === building.id && level > playerLevel;
           const alpha = dim ? 0.35 : 1;
           switch (floorKind(floor)) {
@@ -573,9 +575,17 @@ export class Renderer {
         }
       }
       if (level >= maxLevels) break;
+      if (viewLevel !== null && level > viewLevel) continue;
       for (const border of [backA, backB]) {
         const wall = bld.wallOnBorder(level, border);
         if (!wall) continue;
+        /*
+         * Every wall is drawn once, by whichever tile has it as a back edge.
+         * When that tile is not part of the wall's own building the wall
+         * stands between the viewer and the inside: those are the ones a
+         * cutaway takes away.
+         */
+        if (cutaway && building?.id !== wall.building) continue;
         const dim = inside?.id === wall.building && inFront;
         this.drawWall(wall, border, base, dim ? 0.35 : 1);
       }

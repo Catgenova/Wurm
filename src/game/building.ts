@@ -57,7 +57,7 @@ export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 
 /** Height of one storey in terrain units (3 m). */
 export const WALL_HEIGHT = 30;
-export const MAX_LEVELS = 5;
+export const MAX_LEVELS = 10;
 
 export type Side = 'n' | 'e' | 's' | 'w';
 export const SIDE_NAMES: Record<Side, string> = { n: 'north', e: 'east', s: 'south', w: 'west' };

@@ -1,3 +1,4 @@
+import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
 import type { Renderer } from '../render/renderer';
 
@@ -31,6 +32,13 @@ const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) =>
 ];
 
 /** Status bars, the action timer and the toolbar. */
+/** 1st, 2nd, 3rd, 4th... for the storey label. */
+function ordinal(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+  return `${n}${suffix}`;
+}
+
 export class Hud {
   private bars: Record<string, Bar> = {};
   private nameEl: HTMLDivElement;
@@ -42,6 +50,11 @@ export class Hud {
   private gridBtn: HTMLButtonElement | null = null;
   private compass: HTMLSpanElement;
   private companionEl: HTMLDivElement;
+  private storeyEl: HTMLDivElement;
+  private storeyLabel: HTMLButtonElement;
+  private storeyUp: HTMLButtonElement;
+  private storeyDown: HTMLButtonElement;
+  private cutBtn: HTMLButtonElement;
 
   constructor(
     root: HTMLElement,
@@ -124,9 +137,64 @@ export class Hud {
     hint.textContent = 'Esc or move to stop';
     this.actionEl.append(this.actionLabel, track, hint);
     root.append(this.actionEl);
+
+    /*
+     * The storey control: which floor of a building you are looking at, and
+     * whether the walls between you and it are taken away.
+     */
+    this.storeyEl = document.createElement('div');
+    this.storeyEl.className = 'storey';
+    this.storeyEl.hidden = true;
+    const mk = (cls: string, text: string, title: string, onClick: () => void): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = text;
+      b.title = title;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onClick();
+      });
+      return b;
+    };
+    this.storeyUp = mk('tb-btn storey-btn', '▲', 'Look at the storey above (Page Up)', () => this.stepStorey(1));
+    this.storeyLabel = mk('storey-label', 'Auto', 'Click to follow your own storey again', () => {
+      this.game.settings.viewLevel = null;
+    });
+    this.storeyDown = mk('tb-btn storey-btn', '▼', 'Look at the storey below (Page Down)', () => this.stepStorey(-1));
+    this.cutBtn = mk('tb-btn storey-cut', '◪', 'Cut away the walls facing you (X)', () => {
+      this.game.settings.cutaway = !this.game.settings.cutaway;
+    });
+    this.storeyEl.append(this.storeyUp, this.storeyLabel, this.storeyDown, this.cutBtn);
+    root.append(this.storeyEl);
+  }
+
+  /** Move the view a storey up or down, starting from where the player stands. */
+  stepStorey(step: number): void {
+    const s = this.game.settings;
+    const from = s.viewLevel ?? this.game.player.level;
+    s.viewLevel = Math.max(0, Math.min(MAX_LEVELS - 1, from + step));
+  }
+
+  toggleCutaway(): void {
+    this.game.settings.cutaway = !this.game.settings.cutaway;
+  }
+
+  private refreshStorey(): void {
+    const s = this.game.settings;
+    // Only worth showing once there is something built to look into.
+    this.storeyEl.hidden = this.game.buildings.list.size === 0 && s.viewLevel === null;
+    if (this.storeyEl.hidden) return;
+    const level = s.viewLevel;
+    this.storeyLabel.textContent = level === null ? 'Auto' : ordinal(level + 1);
+    this.storeyLabel.classList.toggle('pinned', level !== null);
+    this.storeyUp.disabled = level !== null && level >= MAX_LEVELS - 1;
+    this.storeyDown.disabled = level === 0;
+    this.cutBtn.classList.toggle('active', s.cutaway);
   }
 
   update(renderer: Renderer, fps: number): void {
+    this.refreshStorey();
     const p = this.game.player;
     this.nameEl.textContent = p.name;
     for (const [id, bar] of Object.entries(this.bars)) {
