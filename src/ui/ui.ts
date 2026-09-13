@@ -685,6 +685,17 @@ export class UI {
       });
       for (const r of progress) children.push({ label: `${r.met ? '✓' : '✗'} ${r.label}`, disabled: true });
     }
+    // Standing orders for everything kept here.
+    const stance = g.deedStance();
+    children.push({
+      label: `Orders: ${STANCE_NAMES[stance]}`,
+      note: 'Applies to every wildermon on the deed',
+      children: STANCES.map((st) => ({
+        label: st === stance ? `${STANCE_NAMES[st]} (current)` : STANCE_NAMES[st],
+        note: st === 'aggressive' ? 'Goes for anything wild that crosses the border' : st === 'defensive' ? 'Fights back when it or you are attacked' : 'Never fights, whatever walks in',
+        onSelect: () => g.setDeedStance(st),
+      })),
+    });
     for (const id of ['rename_deed', 'disband_deed']) {
       const def = ACTION_BY_ID.get(id);
       if (!def) continue;

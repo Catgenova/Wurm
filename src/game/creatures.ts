@@ -1243,6 +1243,56 @@ export class Creatures {
     c.until = game.time + 1;
   }
 
+  /**
+   * What a worker does about company. Aggressive ones go for anything wild that
+   * crosses the border; defensive ones only answer what has already struck at
+   * them or at their keeper; passive ones carry on working whatever happens.
+   * Returns true when the creature is dealing with it rather than working.
+   */
+  private defendDeed(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): boolean {
+    if (c.stance === 'passive') {
+      c.enemy = null;
+      return false;
+    }
+    const range = deed.radius + 1;
+    const inside = (o: Creature): boolean => Math.max(Math.abs(o.x - deed.x), Math.abs(o.y - deed.y)) <= range;
+    if (c.enemy !== null && c.enemy !== PLAYER_ATTACKER) {
+      const e = this.list.get(c.enemy);
+      if (!e || e.mode !== 'wild' || !inside(e)) c.enemy = null;
+      else {
+        if (Math.hypot(e.x - c.x, e.y - c.y) <= 1) {
+          if (c.cooldown <= 0) {
+            this.attack(game, c, e);
+            c.cooldown = 1.2;
+          }
+        } else if (this.stepToward(game, c, e.x, e.y, dt, 1.3) === 'blocked') c.enemy = null;
+        return true;
+      }
+    }
+    if (game.time < c.searchAt) return false;
+    c.searchAt = game.time + 1.5;
+    const recent = (at: number): boolean => game.time - at < 8;
+    let best: Creature | null = null;
+    let bestD = Infinity;
+    for (const o of this.list.values()) {
+      if (o.id === c.id || o.mode !== 'wild' || !inside(o)) continue;
+      // A defensive one waits to be given a reason; an aggressive one does not.
+      if (c.stance === 'defensive') {
+        const struck = (recent(c.attackedAt) && c.attackedBy === o.id) || (recent(game.player.attackedAt) && game.player.attackedBy === o.id);
+        if (!struck) continue;
+      }
+      const d = Math.hypot(o.x - c.x, o.y - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+    if (!best) return false;
+    c.enemy = best.id;
+    game.logMsg(`${c.name} breaks off and goes for the ${this.species(best).name.toLowerCase()} on the deed.`, 'event');
+    return true;
+  }
+
   /** A guard walks its border and goes for anything wild that crosses it. */
   private guardStep(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): void {
     const range = deed.radius + 1;
@@ -1460,6 +1510,8 @@ export class Creatures {
     if (this.comeWhenCalled(c, dt, game)) return;
     const def = this.species(c);
     const kind = def.gathers;
+    // Standing orders come before any job: an intruder is everyone's business.
+    if (this.defendDeed(game, c, dt, deed)) return;
     if (kind === 'guard') {
       this.guardStep(game, c, dt, deed);
       return;

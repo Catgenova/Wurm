@@ -1,6 +1,7 @@
 import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
+import { ACTION_BY_ID } from '../game/actions';
 import type { Renderer } from '../render/renderer';
 
 export interface HudCallbacks {
@@ -53,6 +54,9 @@ export class Hud {
   private compass: HTMLSpanElement;
   private companionEl: HTMLDivElement;
   private gearEl: HTMLDivElement;
+  private eatBtn!: HTMLButtonElement;
+  private feedBtn!: HTMLButtonElement;
+  private companionText = document.createElement('span');
   private storeyEl: HTMLDivElement;
   private storeyLabel: HTMLButtonElement;
   private storeyUp: HTMLButtonElement;
@@ -88,6 +92,15 @@ export class Hud {
       const value = document.createElement('span');
       value.className = 'hud-bar-value';
       row.append(name, track, value);
+      if (id === 'hunger') {
+        this.eatBtn = document.createElement('button');
+        this.eatBtn.type = 'button';
+        this.eatBtn.className = 'hud-mini';
+        this.eatBtn.textContent = 'Eat';
+        this.eatBtn.title = 'Eat the best food you are carrying';
+        this.eatBtn.addEventListener('click', () => this.eatBest());
+        row.append(this.eatBtn);
+      }
       status.append(row);
       this.bars[id] = { fill, value };
     }
@@ -109,6 +122,13 @@ export class Hud {
     this.companionEl = document.createElement('div');
     this.companionEl.className = 'hud-companion';
     this.companionEl.hidden = true;
+    this.feedBtn = document.createElement('button');
+    this.feedBtn.type = 'button';
+    this.feedBtn.className = 'hud-mini';
+    this.feedBtn.textContent = 'Feed';
+    this.feedBtn.title = 'Feed your companion the poorest thing it will eat';
+    this.feedBtn.addEventListener('click', () => this.feedCompanion());
+    this.companionEl.append(this.feedBtn);
     status.append(this.companionEl);
     root.append(status);
 
@@ -190,6 +210,30 @@ export class Hud {
     this.game.settings.cutaway = !this.game.settings.cutaway;
   }
 
+  /** Eat the best thing you are carrying, without hunting for it in the pack. */
+  private eatBest(): void {
+    const food = this.game.bestFood();
+    if (!food) {
+      this.game.logMsg('You have nothing worth eating.', 'error');
+      return;
+    }
+    const def = ACTION_BY_ID.get('eat');
+    if (def) this.game.requestAction(def, { kind: 'item', uid: food.uid });
+  }
+
+  /** Feed your companion the poorest thing it will take, and keep the rest. */
+  private feedCompanion(): void {
+    const c = this.game.creatures.active();
+    if (!c) return;
+    const food = this.game.worstFoodFor(c);
+    if (!food) {
+      this.game.logMsg(`You have nothing ${c.name} will eat.`, 'error');
+      return;
+    }
+    const def = ACTION_BY_ID.get('feed');
+    if (def) this.game.requestAction(def, { kind: 'creature', id: c.id, itemUid: food.uid });
+  }
+
   private refreshStorey(): void {
     const s = this.game.settings;
     // Only worth showing once there is something built to look into.
@@ -233,9 +277,12 @@ export class Hud {
     const companion = this.game.creatures.active();
     if (companion) {
       const hunger = companion.hunger < 0.3 ? 'hungry' : companion.hunger < 0.6 ? 'peckish' : 'fed';
-      this.companionEl.textContent = `${companion.name} · ♥ ${Math.ceil(companion.health)} · ${hunger} · ${companion.stance}`;
+      this.companionText.textContent = `${companion.name} · ♥ ${Math.ceil(companion.health)} · ${hunger} · ${companion.stance} `;
+      if (!this.companionText.parentElement) this.companionEl.prepend(this.companionText);
+      this.feedBtn.disabled = !this.game.worstFoodFor(companion);
       this.companionEl.hidden = false;
     } else this.companionEl.hidden = true;
+    this.eatBtn.disabled = !this.game.bestFood();
     if (this.gridBtn) this.gridBtn.classList.toggle('active', this.game.settings.grid);
 
     const a = this.game.action;

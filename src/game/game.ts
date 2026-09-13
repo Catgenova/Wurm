@@ -10,7 +10,7 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureUnits, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
-import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
+import { CALL_WINDOW, Creatures, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
@@ -36,6 +36,8 @@ export interface Deed {
   radius: number;
   /** Upgrades bought so far; level 1 is a freshly founded settlement. */
   level?: number;
+  /** Standing orders for every wildermon kept here. */
+  stance?: Stance;
 }
 
 export const DEED_RADIUS = 5;
@@ -84,6 +86,8 @@ const QUIET_SKILLS = new Set(['climbing', 'swimming']);
 const BASE_QUEUE = 3;
 /** Where every characteristic starts, and so what counts as a point gained. */
 const CHAR_START = 20;
+/** Damage at which a tool starts warning you, and every five points after. */
+const DAMAGE_WARN = 75;
 const FORAGE_COOLDOWN = 180;
 /** How long ore stays lit after prospecting. */
 const PROSPECT_MARK_TIME = 120;
@@ -324,6 +328,47 @@ export class Game {
   /** Mind logic takes the edge off a difficult craft, though never more than half of it. */
   mindEase(): number {
     return Math.max(0, (this.skills.get('mind_logic') - CHAR_START) * 0.2);
+  }
+
+  /** The orders every wildermon on the deed works under. */
+  deedStance(): Stance {
+    return this.deed?.stance ?? 'defensive';
+  }
+
+  /** Give every wildermon kept here the same orders. */
+  setDeedStance(stance: Stance): void {
+    if (!this.deed) return;
+    this.deed.stance = stance;
+    let n = 0;
+    for (const c of this.creatures.list.values()) {
+      if (c.mode !== 'deed' && c.mode !== 'stored') continue;
+      c.stance = stance;
+      c.enemy = null;
+      n++;
+    }
+    this.logMsg(`The wildermon of ${this.deed.name} are set to ${stance}${n ? `; ${n} of them take the word` : ''}.`, 'system');
+    this.events.emit('creature');
+  }
+
+  /** The best food you are carrying, for the eat button. */
+  bestFood(): Item | undefined {
+    let best: Item | undefined;
+    for (const it of this.inventory.items) {
+      if (!ITEM_DEFS[it.id]?.food) continue;
+      if (!best || it.ql > best.ql) best = it;
+    }
+    return best;
+  }
+
+  /** The poorest thing your companion will eat, for the feed button: keep the good stuff. */
+  worstFoodFor(c: Creature): Item | undefined {
+    const def = this.creatures.species(c);
+    let worst: Item | undefined;
+    for (const it of this.inventory.items) {
+      if (!def.diet.includes(it.id)) continue;
+      if (!worst || it.ql < worst.ql) worst = it;
+    }
+    return worst;
   }
 
   /** The item in a slot, if anything is there and still in the pack. */
@@ -638,6 +683,7 @@ export class Game {
       return;
     }
     const again = a.def.perform(a.target, this) === true;
+    if (a.def.tool) this.wearTool(a.def.tool);
     const cost = this.staminaCost(a.def.stamina);
     this.player.stats.stamina = Math.max(0, this.player.stats.stamina - cost);
     if (a.def.skill) this.gainSkill(a.def.skill);
@@ -847,7 +893,38 @@ export class Game {
   }
 
   toolQl(id: string): number {
-    return this.inventory.tool(id)?.ql ?? 0;
+    const tool = this.inventory.tool(id);
+    // A battered tool works like a poorer one than it was.
+    return tool ? tool.ql * Math.max(0.3, 1 - tool.dmg / 160) : 0;
+  }
+
+  /**
+   * Wear on a tool from one use. A poor tool goes to pieces far faster than a
+   * good one, which is most of what quality is for.
+   */
+  wearTool(id: string, multiplier = 1): void {
+    const tool = this.inventory.tool(id);
+    if (!tool) return;
+    this.damageItem(tool, (0.25 + 12 / (10 + tool.ql)) * multiplier);
+  }
+
+  /**
+   * Put damage on a thing, saying so in red as it passes three quarters gone
+   * and at every twentieth after that, and taking it away when it is finished.
+   */
+  damageItem(item: Item, amount: number): void {
+    if (amount <= 0) return;
+    const before = item.dmg;
+    item.dmg = Math.min(100, item.dmg + amount);
+    const step = (v: number): number => Math.floor((v - DAMAGE_WARN) / 5);
+    if (item.dmg >= 100) {
+      this.inventory.remove(item.uid, 1);
+      for (const [slot, uid] of Object.entries(this.player.equipped)) if (uid === item.uid) this.player.equipped[slot] = null;
+      this.logMsg(`Your ${itemName(item).toLowerCase()} finally goes to pieces and is gone.`, 'error');
+    } else if (item.dmg >= DAMAGE_WARN && (before < DAMAGE_WARN || step(item.dmg) > step(before))) {
+      this.logMsg(`Your ${itemName(item).toLowerCase()} is at ${Math.floor(item.dmg)} damage. Repair it before it breaks.`, 'error');
+    }
+    this.events.emit('inventory');
   }
 
   /** Wurm-flavoured success roll: better skill and tools help, difficulty hurts. */

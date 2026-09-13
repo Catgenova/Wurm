@@ -196,6 +196,11 @@ kbd {
   font-size: 11px;
 }
 
+/* The food row carries an Eat button, so it gets a fourth column. */
+.hud-bar-row:has(.hud-mini) {
+  grid-template-columns: 52px 1fr 36px auto;
+}
+
 .hud-bar-label {
   color: var(--ui-dim);
 }
@@ -259,6 +264,9 @@ kbd {
 }
 
 .hud-companion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 5px;
   padding-top: 5px;
   border-top: 1px solid #3a3128;
@@ -770,6 +778,28 @@ kbd {
   justify-content: space-between;
   padding: 2px 4px;
   border-radius: 2px;
+}
+
+.hud-mini {
+  margin-left: 0;
+  padding: 0 6px;
+  border: 1px solid #5a4c38;
+  border-radius: 2px;
+  background: #2a231b;
+  color: var(--ui-accent);
+  font: inherit;
+  font-size: 10px;
+  line-height: 15px;
+  cursor: pointer;
+}
+
+.hud-mini:hover:not(:disabled) {
+  background: #3a3024;
+}
+
+.hud-mini:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .inv-worn {

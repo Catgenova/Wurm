@@ -161,6 +161,19 @@ export function buildHelp(win: UIWindow): void {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <h3>Eating, and keeping your things</h3>
+    <p>The <b>Eat</b> button beside the food bar eats the best thing you are carrying, and the
+    <b>Feed</b> button on your companion's line gives it the <i>poorest</i> thing it will take, so the
+    good food stays in your pack. Both are there to save hunting through the inventory.</p>
+    <p><b>Tools wear out.</b> Every use puts damage on whatever tool the work called for, and a poor
+    tool goes to pieces far faster than a good one &mdash; which is most of what quality is for. Damage
+    also makes a tool work as though it were poorer than it is. Past <b>75 damage</b> it warns you in
+    red, and again at every five points after; at 100 it breaks and is gone.</p>
+    <p>Right-click anything damaged and choose <b>Repair</b>. It is its own skill: the work goes on a
+    second at a time, taking damage out and a little quality with it, and you can stop whenever you
+    like. A green repairer takes about half a minute to bring a badly worn tool back and costs it
+    several points of quality; a skilled one does the same in a few seconds for a fraction of the
+    quality. Nothing repairs past quality 1, so a thing mended often enough is finished in the end.</p>
     <h3>Wool, cloth and the loom</h3>
     <p>Fibre becomes cloth in two steps, and each wants its own furniture. Build a <b>spindle</b> and a
     <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into
@@ -252,7 +265,11 @@ export function buildHelp(win: UIWindow): void {
     food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>
     <p>Right-click any tile of your settlement for the <b>deed menu</b>: it lists the wildermon kept
-    there, offers to <b>upgrade</b> the settlement, and renames or disbands it. Each upgrade pushes the
+    there, sets their <b>orders</b>, offers to <b>upgrade</b> the settlement, and renames or disbands it.
+    Orders apply to every wildermon on the deed at once and take effect the moment something wild
+    crosses the border: <b>aggressive</b> and they break off work and go for it, <b>defensive</b> and
+    they only answer what has already struck at them or at you, <b>passive</b> and they carry on working
+    whatever walks in. Each upgrade pushes the
     border out 2 tiles and lets one more wildermon work the deed, and each is earned by building the
     settlement out: level 2 wants a crate and a campfire, level 3 a stone smelter, level 4 an anvil set
     down, and level 5 a building with its ground floor walled and three wildermon at work. Upgrades are

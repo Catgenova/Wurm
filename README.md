@@ -144,6 +144,21 @@ rebuilds and commits the result.
   bookshelf 90, a wardrobe 100, shelves 120 and a larder 150. Open one to see
   inside, or stand beside it and put things away; nothing can be lifted again
   until it is empty.
+- **Eat and Feed buttons.** The Eat button by the food bar eats the best food
+  you carry; the Feed button on the companion line gives your wildermon the
+  poorest thing it will take, so the good food stays in the pack.
+- **Tools wear out and are repaired.** Every use damages the tool the work
+  called for, faster the poorer the tool, and damage makes it work as though it
+  were poorer still. Past 75 damage it warns in red, and again every five
+  points after; at 100 it breaks and is gone. Repair is its own skill:
+  right-click a damaged thing and the work goes a second at a time, taking
+  damage out and a little quality with it — half a minute and several points of
+  quality for a beginner, a few seconds and a fraction of that for a skilled
+  hand.
+- **Deed orders.** The deed menu sets one stance for every wildermon kept
+  there, and it fires when something wild crosses the border: aggressive ones
+  break off work and go for it, defensive ones answer only what has struck at
+  them or at you, passive ones carry on working.
 - **Wool, cloth and the loom.** Fibre becomes cloth in two steps with two
   pieces of furniture: a spindle spins wool, cotton or wemp into yarn, and a
   loom weaves three yarn into cloth. Cloth stuffs a mattress, sews into

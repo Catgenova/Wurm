@@ -706,6 +706,47 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'repair_item',
+    label: 'Repair',
+    verb: 'repairing',
+    skill: 'repair',
+    repeat: true,
+    stamina: 0.02,
+    baseTime: 1,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && item.dmg > 0;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (item.dmg <= 0) return 'There is nothing wrong with it.';
+      if (item.ql <= 1) return 'It is worn away to nothing and will not take another repair.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item || item.dmg <= 0) return;
+      // A second's work: some of the damage comes out, and a little of the quality with it.
+      const skill = g.skills.get('repair');
+      const healed = Math.min(item.dmg, 1.2 + skill * 0.1);
+      const lost = healed * Math.max(0.012, 0.085 - skill * 0.0007);
+      item.dmg = Math.max(0, item.dmg - healed);
+      item.ql = Math.max(1, item.ql - lost);
+      g.events.emit('inventory');
+      g.gainSkill('repair', 0.25);
+      if (item.dmg <= 0) {
+        g.logMsg(`The ${itemName(item).toLowerCase()} is as sound as it will ever be again. (QL ${item.ql.toFixed(1)})`, 'event');
+        return false;
+      }
+      // Keep at it while there is damage left and wind to do it with.
+      return true;
+    },
+  },
+  {
     id: 'drink_skin',
     label: 'Drink',
     verb: 'drinking',
