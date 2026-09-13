@@ -164,11 +164,20 @@ rebuilds and commits the result.
   the piece and past 10 damage it must be repaired before the work can go on.
   What you need is decided by the material — a file and a whetstone for metal,
   a carving knife and a file for wood, a needle for cloth, an awl and needle
-  for leather, a chisel and whetstone for stone — plus a little of the material
+  for tanned leather, a chisel and whetstone for stone — plus a little of the material
   itself per pass. Whetstones are chiselled from shards and needles and awls
   carved from bone, so most improving starts long before a forge; a file is
   cast from its own mould, which is what gates metal. The judging skill is
   whichever one would have made the thing, and nothing improves past it.
+- **Ashes, lye and tanning.** Every fire leaves ashes behind — a campfire, a
+  smelter or a kiln, about one lot per two minutes of burning — and Take ashes
+  rakes them out lit or cold. A bucket is three planks and six nails; fill it
+  at any shore, and two lots of ashes leached into a bucket of water make lye,
+  which is what the Alchemy skill is for. One bucket of lye tans one raw hide:
+  leatherworking and a carving knife take the hair off and work the skin soft,
+  giving leather and the empty bucket back. Leather is what caps, jerkins,
+  sleeves, trousers and boots are cut from, and what an awl and needle work
+  into a leather piece when improving it.
 - **Wool, cloth and the loom.** Fibre becomes cloth in two steps with two
   pieces of furniture: a spindle spins wool, cotton or wemp into yarn, and a
   loom weaves three yarn into cloth. Cloth stuffs a mattress, sews into
@@ -176,7 +185,7 @@ rebuilds and commits the result.
 - **Armour.** Worn a piece at a time in five places — head, chest, arms, legs,
   feet — and it only counts where the blow lands. Four kinds, each a skill of
   its own that rises by being hit in it: cloth (tailoring, ~1/6 of a blow),
-  leather (leatherworking, ~1/3), chain (chain armoursmithing, ~1/2) and plate
+  leather (leatherworking, cut from tanned hide, ~1/3), chain (chain armoursmithing, ~1/2) and plate
   (plate armoursmithing, ~2/3). Quality and skill raise those; damage lowers
   them, and a piece beaten to nothing falls off. Weight is the price — full
   plate slows you a quarter and makes everything cost more wind. A shield in
@@ -278,9 +287,10 @@ rebuilds and commits the result.
   the fuel runs out; an unlit one gives its wood back.
 - **Hunting and butchering.** Wild wildermon can be attacked, and an edged
   tool hits far harder than bare hands. Whatever kills one leaves a corpse
-  where it fell. Butchering it yields meat, fur, leather, bone and the
+  where it fell. Butchering it yields meat, fur, raw hide, bone and the
   occasional gland, with the Butchering skill and a butchering knife deciding
-  how much of the carcass survives the job.
+  how much of the carcass survives the job. A hide is no use to anybody until
+  it has been through lye.
 - **Placeable crates on a subtile grid.** Tiles are divided into 4×4 spots;
   a log or plank crate (crafted from logs or planks with a mallet) takes one
   spot, snaps to the grid, holds 30 or 60 things, and can be emptied and

@@ -11,7 +11,7 @@ import { itemDef, itemName, type Item } from './items';
 export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
   ['meat', 'meat'],
   ['fur', 'fur'],
-  ['leather', 'leather'],
+  ['leather', 'hide'],
   ['bone', 'bone'],
   ['gland', 'gland'],
   ['feather', 'feather'],
@@ -37,7 +37,7 @@ export function butcherPreview(g: Game, item: Item): string {
   if (!def) return '';
   const knife = g.inventory.tool('butchering_knife');
   const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
-  const parts = BUTCHER_PARTS.filter(([p]) => (def.butcher[p] ?? 0) > 0).map(([p]) => itemDef(p).name.toLowerCase());
+  const parts = BUTCHER_PARTS.filter(([p]) => (def.butcher[p] ?? 0) > 0).map(([, id]) => itemDef(id).name.toLowerCase());
   return `about ${Math.round(share * 100)}% of its ${parts.join(', ')}`;
 }
 
@@ -65,7 +65,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
       const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
       const ql = g.productQl('butchering', knife ? knife.ql : 0) * (0.6 + item.ql / 250);
       const taken: string[] = [];
-      for (const [part] of BUTCHER_PARTS) {
+      for (const [part, id] of BUTCHER_PARTS) {
         const base = def.butcher[part] ?? 0;
         if (!base) continue;
         let count = Math.floor(base * share);
@@ -73,8 +73,8 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
         if (g.rand() < base * share - count) count += 1;
         if (part === 'gland' && count > 0 && g.rand() > GLAND_CHANCE * (0.5 + share)) count = 0;
         if (count <= 0) continue;
-        const made = g.inventory.add(part, { count, ql: Math.max(1, Math.min(100, ql)) });
-        taken.push(made.count > 1 && count > 1 ? `${count} × ${itemDef(part).name.toLowerCase()}` : itemDef(part).name.toLowerCase());
+        const made = g.inventory.add(id, { count, ql: Math.max(1, Math.min(100, ql)) });
+        taken.push(made.count > 1 && count > 1 ? `${count} × ${itemDef(id).name.toLowerCase()}` : itemDef(id).name.toLowerCase());
       }
       removeCorpse(g, t, item);
       if (!taken.length) {

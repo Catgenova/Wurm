@@ -18,7 +18,32 @@ export interface PlacedCampfire {
   /** Seconds of burning left in it. */
   fuel: number;
   lit: boolean;
+  /** Ashes waiting to be raked out. */
+  ash?: number;
 }
+
+/** Anything that burns fuel and leaves ashes behind. */
+export interface Hearth {
+  x: number;
+  y: number;
+  ash?: number;
+}
+
+/**
+ * Rake out whatever ashes have built up. Shared by the campfire, the smelter
+ * and the kiln, since all three burn the same wood the same way.
+ */
+export function rakeAshes(g: Game, h: Hearth, what: string): void {
+  const whole = Math.floor(h.ash ?? 0);
+  if (whole <= 0) return;
+  h.ash = (h.ash ?? 0) - whole;
+  const got = g.inventory.add('ash', { count: whole, ql: 20 });
+  g.logMsg(`You rake ${whole} ${whole === 1 ? 'lot' : 'lots'} of ashes out of the ${what}. (QL ${got.ql.toFixed(0)})`, 'event');
+  g.events.emit('world', h.x, h.y);
+}
+
+/** Whether there is a whole lot of ashes in there yet. */
+export const hasAshes = (h: Hearth): boolean => Math.floor(h.ash ?? 0) >= 1;
 
 /** A campfire covers two subtiles each way, so four of the sixteen on a tile. */
 export const FIRE_SUBTILES = 2;
@@ -161,6 +186,27 @@ export const CAMPFIRE_ACTIONS: ActionDef[] = [
       f.fuel = Math.min(FIRE_CAPACITY, f.fuel + per * fits);
       g.events.emit('world', f.x, f.y);
       g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} to the fire. ${fireBurnsFor(f)} of fuel.`, 'event');
+    },
+  },
+  {
+    id: 'take_ashes_fire',
+    label: 'Rake out the ashes',
+    verb: 'raking out ashes',
+    stamina: 0.02,
+    baseTime: 2,
+    applies: (t, g) => {
+      const f = fireOf(g, t);
+      return !!f && hasAshes(f);
+    },
+    check: (t, g) => {
+      const f = fireOf(g, t);
+      if (!f) return 'It is gone.';
+      if (!nearFire(g, f)) return 'Stand next to the fire.';
+      return hasAshes(f) ? null : 'There are no ashes worth taking yet.';
+    },
+    perform: (t, g) => {
+      const f = fireOf(g, t);
+      if (f) rakeAshes(g, f, 'campfire');
     },
   },
   {

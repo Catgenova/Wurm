@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
+import { FIRE_CAPACITY, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
@@ -38,6 +38,8 @@ export interface PlacedSmelter {
   jobs: SmeltJob[];
   /** Finished pieces waiting to be taken out. */
   output: Item[];
+  /** Ashes waiting to be raked out. */
+  ash?: number;
 }
 
 /** A smelter is three subtiles one way and two the other: six in all. */
@@ -278,6 +280,27 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       g.events.emit('smelter');
       const names = taken.map((it) => (it.count > 1 ? `${it.count} × ${itemName(it).toLowerCase()}` : itemName(it).toLowerCase()));
       g.logMsg(`You draw ${names.join(', ')} from the smelter.`, 'event');
+    },
+  },
+  {
+    id: 'take_ashes_smelter',
+    label: 'Rake out the ashes',
+    verb: 'raking out ashes',
+    stamina: 0.02,
+    baseTime: 2,
+    applies: (t, g) => {
+      const h = smelterOf(g, t);
+      return !!h && hasAshes(h);
+    },
+    check: (t, g) => {
+      const h = smelterOf(g, t);
+      if (!h) return 'It is gone.';
+      if (!nearSmelter(g, h)) return 'Stand next to the smelter.';
+      return hasAshes(h) ? null : 'There are no ashes worth taking yet.';
+    },
+    perform: (t, g) => {
+      const h = smelterOf(g, t);
+      if (h) rakeAshes(g, h, 'smelter');
     },
   },
   {

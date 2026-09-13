@@ -10,7 +10,7 @@ import { MOULDS } from './metal';
  * an item action, so it shows on the material's menu as well as in the
  * crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Cooking' | 'Smelting';
+export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Cooking' | 'Smelting';
 /** A place a recipe has to be worked at, beyond what is carried. */
 export type Station = 'campfire' | 'smelter' | 'spindle' | 'loom';
 const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter', spindle: 'spindle', loom: 'loom' };
@@ -49,6 +49,8 @@ export interface Recipe {
    * how little of that quality is lost in the pouring.
    */
   qlFromInputs?: boolean;
+  /** Things handed back when it succeeds, such as the bucket the lye was in. */
+  returns?: Array<[string, number]>;
   done: string;
   fail?: string;
 }
@@ -105,6 +107,7 @@ export const RECIPES: Recipe[] = [
   { id: 'make_leather_sleeves', category: 'Cloth', result: 'leather_sleeves', inputs: [{ item: 'leather', count: 3 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather sleeves', verb: 'working leather', baseTime: 12, stamina: 0.04, difficulty: 19, done: 'You cut and stitch a pair of leather sleeves.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
   { id: 'make_leather_trousers', category: 'Cloth', result: 'leather_trousers', inputs: [{ item: 'leather', count: 4 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather trousers', verb: 'working leather', baseTime: 14, stamina: 0.05, difficulty: 20, done: 'You cut and stitch a pair of leather trousers.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
   { id: 'make_leather_boots', category: 'Cloth', result: 'leather_boots', inputs: [{ item: 'leather', count: 3 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather boots', verb: 'working leather', baseTime: 13, stamina: 0.04, difficulty: 18, done: 'You cut and stitch a pair of leather boots.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
+  { id: 'make_bucket', category: 'Woodwork', result: 'bucket', inputs: [{ item: 'plank', count: 3 }, { item: 'nail', count: 6 }], tool: 'mallet', skill: 'carpentry', label: 'Build a bucket', verb: 'building a bucket', baseTime: 7, stamina: 0.03, difficulty: 12, done: 'You raise the staves and hoop a bucket.', fail: 'The staves will not pull together and the bucket leaks.' },
   // Weapons: a head from the anvil and a length of wood to put it on.
   { id: 'fit_short_sword_blade', category: 'Woodwork', result: 'short_sword', inputs: [{ item: 'short_sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 6, stamina: 0.03, done: 'You bind a grip to the blade and the short sword is finished.' },
   { id: 'fit_long_sword_blade', category: 'Woodwork', result: 'long_sword', inputs: [{ item: 'long_sword_blade' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 8, stamina: 0.04, done: 'You bind a two-handed grip to the blade and the long sword is finished.' },
@@ -120,6 +123,9 @@ export const RECIPES: Recipe[] = [
   { id: 'make_medium_bow', category: 'Woodwork', result: 'medium_bow', inputs: [{ item: 'shaft', count: 3 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', label: 'Tiller a medium bow', verb: 'tillering a bow', baseTime: 15, stamina: 0.05, difficulty: 22, done: 'You tiller a medium bow and string it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
   { id: 'make_long_bow', category: 'Woodwork', result: 'long_bow', inputs: [{ item: 'shaft', count: 4 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', label: 'Tiller a long bow', verb: 'tillering a bow', baseTime: 18, stamina: 0.06, difficulty: 30, done: 'You tiller a long bow and string it. It takes an age to draw and ends most things at the end of it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
   { id: 'make_arrows', category: 'Woodwork', result: 'arrow', count: 3, inputs: [{ item: 'shaft' }, { item: 'arrow_head', count: 3 }, { item: 'feather', count: 3 }], tool: 'carving_knife', skill: 'fletching', label: 'Fletch arrows', verb: 'fletching', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You split the shaft, set the heads and fletch three arrows.', fail: 'The fletching will not sit straight and the arrows are spoiled.', consumeOnFail: true },
+  // Alchemy: ashes leached in water, and what lye is for.
+  { id: 'make_lye', category: 'Alchemy', result: 'lye_bucket', inputs: [{ item: 'water_bucket' }, { item: 'ash', count: 2 }], skill: 'alchemy', label: 'Leach into lye', verb: 'making lye', baseTime: 12, stamina: 0.03, difficulty: 14, done: 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', fail: 'The ashes settle out again and you are left with dirty water.', consumeOnFail: true },
+  { id: 'tan_hide', category: 'Alchemy', result: 'leather', inputs: [{ item: 'hide' }, { item: 'lye_bucket' }], tool: 'carving_knife', skill: 'leatherworking', returns: [['bucket', 1]], label: 'Tan in lye', verb: 'tanning a hide', baseTime: 14, stamina: 0.05, difficulty: 16, done: 'The lye takes the hair off the hide and you work it soft. It is leather now, and the bucket is empty.', fail: 'The hide is left too long in the lye and comes out brittle and useless.', consumeOnFail: true },
   { id: 'make_thatch', category: 'Clay & thatch', result: 'thatch', inputs: [{ item: 'mixed_grass', count: 2 }], skill: 'carpentry', label: 'Bundle into thatch', verb: 'bundling thatch', baseTime: 3, stamina: 0.02, done: 'You bundle the grass into thatch.' },
   { id: 'make_clay_bowl', category: 'Clay & thatch', result: 'unfired_clay_bowl', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a bowl', verb: 'shaping a bowl', baseTime: 6, stamina: 0.02, difficulty: 8, done: 'You shape a clay bowl. It needs a kiln before it will hold anything.', fail: 'The walls collapse as you draw them up. You fail to shape a bowl.' },
   // Cooking. Everything here needs a lit campfire to work at.
@@ -181,7 +187,7 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
 
 RECIPES.push(...FURNITURE_RECIPES);
 
-export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Cooking', 'Smelting'];
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {
@@ -285,6 +291,7 @@ export function recipeAction(r: Recipe): ActionDef {
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid)) return;
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g));
       const item = g.inventory.add(r.result, { count: r.count ?? 1, ql });
+      for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', 0.25);
       g.logMsg(`${r.done} (QL ${item.ql.toFixed(1)})`, 'event');

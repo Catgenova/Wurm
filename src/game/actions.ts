@@ -774,6 +774,46 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'fill_bucket',
+    label: 'Fill with water',
+    verb: 'filling the bucket',
+    stamina: 0.01,
+    baseTime: 2,
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'bucket',
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      if (g.inventory.get(t.uid)?.id !== 'bucket') return 'That is not an empty bucket.';
+      return g.nearWater() ? null : 'You need to stand next to water.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item || item.id !== 'bucket' || !g.inventory.remove(item.uid, 1)) return;
+      g.inventory.add('water_bucket', { ql: item.ql });
+      g.logMsg('You dip the bucket full of water.', 'event');
+    },
+  },
+  {
+    id: 'empty_bucket',
+    label: 'Empty it out',
+    verb: 'emptying the bucket',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const id = g.inventory.get(t.uid)?.id;
+      return id === 'water_bucket' || id === 'lye_bucket';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item || !g.inventory.remove(item.uid, 1)) return;
+      g.inventory.add('bucket', { ql: item.ql });
+      g.logMsg(`You tip the ${itemDef(item.id).name.toLowerCase()} out.`, 'event');
+    },
+  },
+  {
     id: 'fill_skin',
     label: 'Fill with water',
     verb: 'filling',

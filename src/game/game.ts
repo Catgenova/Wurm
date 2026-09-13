@@ -86,6 +86,8 @@ const QUIET_SKILLS = new Set(['climbing', 'swimming']);
 const BASE_QUEUE = 3;
 /** Where every characteristic starts, and so what counts as a point gained. */
 const CHAR_START = 20;
+/** Ashes left per second of burning: a log's worth of fire leaves about five. */
+const ASH_RATE = 1 / 120;
 /** Damage at which a tool starts warning you, and every five points after. */
 const DAMAGE_WARN = 75;
 const FORAGE_COOLDOWN = 180;
@@ -1130,6 +1132,7 @@ export class Game {
   private burnFires(dt: number): void {
     for (const f of this.campfires.values()) {
       if (!f.lit) continue;
+      f.ash = (f.ash ?? 0) + Math.min(f.fuel, dt) * ASH_RATE;
       f.fuel -= dt;
       if (f.fuel > 0) continue;
       f.fuel = 0;
@@ -1337,6 +1340,7 @@ export class Game {
     for (const s of this.smelters.values()) {
       if (!s.lit) continue;
       const burn = Math.min(s.fuel, dt);
+      s.ash = (s.ash ?? 0) + burn * ASH_RATE;
       s.fuel -= burn;
       if (s.fuel <= 0) {
         s.fuel = 0;
@@ -1365,6 +1369,7 @@ export class Game {
     for (const k of this.kilns.values()) {
       if (!k.lit) continue;
       const burn = Math.min(k.fuel, dt);
+      k.ash = (k.ash ?? 0) + burn * ASH_RATE;
       k.fuel -= burn;
       if (k.fuel <= 0) {
         k.fuel = 0;

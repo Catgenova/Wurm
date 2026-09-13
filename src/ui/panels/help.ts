@@ -114,9 +114,10 @@ export function buildHelp(win: UIWindow): void {
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a
-    <b>corpse</b> on the ground. Right-click the tile and choose <b>Butcher</b> for meat, fur, leather,
+    <b>corpse</b> on the ground. Right-click the tile and choose <b>Butcher</b> for meat, fur, <b>hide</b>,
     bone and the occasional gland. The <b>Butchering</b> skill and a <b>butchering knife</b> both decide
-    how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.</p>
+    how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
+    A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
     <b>storey you are looking at</b>: the ceilings above it are lifted off so you can see straight down
@@ -184,7 +185,7 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><b>Metal</b></td><td>A <b>file</b> and a <b>whetstone</b>, and a lump of metal per pass</td></tr>
       <tr><td><b>Wood</b></td><td>A <b>carving knife</b> and a <b>file</b>, and a plank or shaft</td></tr>
       <tr><td><b>Cloth</b></td><td>A <b>needle</b>, and a length of cloth</td></tr>
-      <tr><td><b>Leather</b></td><td>An <b>awl</b> and a <b>needle</b>, and a hide</td></tr>
+      <tr><td><b>Leather</b></td><td>An <b>awl</b> and a <b>needle</b>, and a piece of tanned leather</td></tr>
       <tr><td><b>Stone</b></td><td>A <b>chisel</b> and a <b>whetstone</b>, and shards</td></tr>
     </table>
     <p>A <b>whetstone</b> is chiselled from two rock shards, and a <b>needle</b> and an <b>awl</b> are
@@ -195,6 +196,22 @@ export function buildHelp(win: UIWindow): void {
     bows, tailoring, leatherworking, carpentry, fine carpentry and stonecutting for the rest &mdash; and
     <b>nothing can be improved past that skill</b>. Improving raises the skill as you go, so a long
     session lifts its own ceiling a little.</p>
+    <h3>Ashes, lye and tanning</h3>
+    <p>Nothing burns away to nothing. Any fire that has been alight a while &mdash; a <b>campfire</b>, a
+    <b>smelter</b> or a <b>kiln</b> &mdash; leaves <b>ashes</b> under it, about one lot for every two
+    minutes it burns, and you can <b>Take ashes</b> from it whether it is lit or cold. They pile up
+    while you work, so a smelter you have been running all morning is worth raking out.</p>
+    <p>A <b>bucket</b> is three planks and six nails with a mallet. Stand at any shore and <b>Fill</b>
+    it; on dry land it will not fill. Two lots of ashes leached into a bucket of water make a
+    <b>bucket of lye</b> &mdash; that is the <b>Alchemy</b> skill, and it is the only thing alchemy is
+    for so far. Lye is sharp stuff and one bucket does one skin. <b>Empty</b> a bucket at any time to
+    get the plain bucket back.</p>
+    <p><b>Tanning</b> is leatherworking: a raw <b>hide</b>, a bucket of lye and a carving knife. The lye
+    takes the hair off, you work the skin soft, and it comes out as <b>leather</b> with the bucket
+    empty in your hand again. Leather is what every leather thing is cut from &mdash; cap, jerkin,
+    sleeves, trousers and boots &mdash; and what an awl and needle work into a leather piece when you
+    improve it. Fail the tanning and the hide is left too long and spoils, so tan where your skill can
+    manage it.</p>
     <h3>Wool, cloth and the loom</h3>
     <p>Fibre becomes cloth in two steps, and each wants its own furniture. Build a <b>spindle</b> and a
     <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into
@@ -206,7 +223,7 @@ export function buildHelp(win: UIWindow): void {
     <b>Wear or wield</b>; the inventory marks what is on you.</p>
     <p>There are four kinds, each with a skill of its own that rises <b>by being hit in it</b>:
     <b>cloth</b>, sewn by tailoring, which turns aside about a sixth and weighs nothing;
-    <b>leather</b>, cut from hide with a knife by leatherworking, about a third; <b>chain</b>, riveted
+    <b>leather</b>, cut from tanned hide with a knife by leatherworking, about a third; <b>chain</b>, riveted
     from moulds at an anvil by chain armoursmithing, about a half; and <b>plate</b>, beaten out whole
     by plate armoursmithing, near two thirds. Quality and the skill behind it raise all of those, and
     damage lowers them: armour wears where it is struck, and a piece beaten to nothing falls off you.
