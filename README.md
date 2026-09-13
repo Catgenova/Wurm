@@ -93,7 +93,9 @@ rebuilds and commits the result.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, forages berries when hungry and is tamed with a berry or
   vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is
-  tamed with a spice or vegetable. Both put the tile on the same cooldown a
+  tamed with a spice or vegetable; the Bevere, a flat-tailed gnawer that only
+  lives within sight of water, is placid by nature, eats vegetables and
+  starches, and fells trees for its deed, carrying the logs to the crate. Both put the tile on the same cooldown a
   player would, and neither retaliates for a failed attempt. A companion
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
@@ -102,6 +104,13 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Farming.** Till grass or dirt into a field with a rake, sow seeds gathered
+  while foraging and botanizing, and grow thirteen crops across vegetables,
+  starches, spices and fibre. Each crop runs through four stages with its own
+  timing and its own model per stage, and each stage can be tended once: an
+  untended field gives 1 crop and 1 seed, a fully tended one gives 4 crops and
+  2 seeds. Tilling and tending train Farming, which sets the quality of the
+  harvest.
 - **Campfires and cooking.** Lay a campfire from two shafts on a two by two
   block of subtiles, feed it shafts, thatch, planks, timbers or logs for burn
   time, and light it. A burning fire is the station every cooking recipe

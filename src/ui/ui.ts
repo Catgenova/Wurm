@@ -25,6 +25,7 @@ import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '.
 import { butcherPreview } from '../game/butcher';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
+import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
 import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
@@ -128,6 +129,7 @@ export class UI {
     }
     const w = this.game.world;
     const lines: string[] = [];
+    const growing = this.game.cropAt(pick.x, pick.y);
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {
       const def = SPECIES[creature.species];
@@ -156,9 +158,12 @@ export class UI {
     if (t === TileType.Tree) {
       const data = w.getData(pick.x, pick.y);
       lines.push(`${['Young', 'Mature', 'Old'][treeVariant(data)]} ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} tree`);
+    } else if (growing) {
+      lines.push(`${cropDef(growing.id).name} field`);
     } else {
       lines.push(w.tileName(pick.x, pick.y));
     }
+    if (growing) lines.push(describeCrop(growing, this.game.time));
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)}`);
     const deed = this.game.deed;
     if (deed && this.game.isToken(pick.x, pick.y)) lines.push(`Settlement token of ${deed.name}`);
@@ -246,6 +251,30 @@ export class UI {
         const reason = placeDef.check?.(pt, this.game) ?? null;
         entries.push({ label: `Place ${itemName(it).toLowerCase()} here (spot ${sx0 + 1},${sy0 + 1})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(placeDef, pt) });
       }
+    }
+    // Sowing on a tilled field: pick from the seeds you carry.
+    const sowDef = ACTION_BY_ID.get('plant_seed');
+    if (sowDef && sowDef.applies(target, this.game) && !this.game.cropAt(pick.x, pick.y)) {
+      const seeds = this.game.inventory.items.filter((it) => CROP_BY_SEED.has(it.id));
+      entries.push({
+        label: 'Sow',
+        disabled: !seeds.length,
+        hint: seeds.length ? undefined : 'You carry no seeds. Forage and botanize for them.',
+        children: seeds.length
+          ? seeds.map((it) => {
+              const crop = CROP_BY_SEED.get(it.id)!;
+              const st: Target = { ...target, itemUid: it.uid };
+              const reason = sowDef.check?.(st, this.game) ?? null;
+              return {
+                label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+                note: `${crop.name}, ${crop.stageSeconds}s a stage`,
+                hint: reason ?? undefined,
+                disabled: !!reason,
+                onSelect: () => this.game.requestAction(sowDef, st),
+              };
+            })
+          : undefined,
+      });
     }
     const pile = this.game.groundAt(pick.x, pick.y);
     const pickUp = ACTION_BY_ID.get('pick_up');

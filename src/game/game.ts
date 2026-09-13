@@ -5,6 +5,7 @@ import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
 import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
+import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
@@ -59,6 +60,7 @@ export interface GameInit {
   /** Pre-crate-grid saves kept a single deed crate. */
   crate?: { x: number; y: number; items: Item[] } | null;
   campfires?: PlacedCampfire[];
+  crops?: Crop[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
   inventory?: Item[];
   nextUid?: number;
@@ -92,6 +94,8 @@ export class Game {
   /** Campfires by id; each covers a two by two block of subtiles. */
   readonly campfires = new Map<number, PlacedCampfire>();
   nextFireId = 1;
+  /** Crops growing on tilled fields, keyed by "x,y". */
+  readonly crops = new Map<string, Crop>();
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Items lying on tiles, keyed by "x,y". */
@@ -146,6 +150,7 @@ export class Game {
       this.campfires.set(f.id, f);
       if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
     }
+    for (const c of init.crops ?? []) this.crops.set(`${c.x},${c.y}`, c);
     this.world.onChange((x, y) => this.events.emit('world', x, y));
   }
 
@@ -159,6 +164,7 @@ export class Game {
     this.inventory.add('trowel', { ql: 20 });
     this.inventory.add('saw', { ql: 20 });
     this.inventory.add('butchering_knife', { ql: 20 });
+    this.inventory.add('rake', { ql: 20 });
     this.inventory.add('water_skin', { ql: 30 });
     this.inventory.add('deed_stake', { ql: 50 });
   }
@@ -282,6 +288,7 @@ export class Game {
 
     if (this.action) this.updateAction(dt);
     if (this.campfires.size) this.burnFires(dt);
+    if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
     this.decayClock += dt;
@@ -727,6 +734,38 @@ export class Game {
       this.logMsg('A campfire burns down to ashes.', 'event');
       this.events.emit('world', f.x, f.y);
       this.events.emit('crate');
+    }
+  }
+
+  cropAt(x: number, y: number): Crop | undefined {
+    return this.crops.get(`${x},${y}`);
+  }
+
+  plantCrop(x: number, y: number, id: string, seedQl: number): Crop {
+    const c: Crop = { x, y, id, stage: 0, stageAt: this.time, tended: 0, tendedNow: false, ql: seedQl };
+    this.crops.set(`${x},${y}`, c);
+    this.events.emit('world', x, y);
+    return c;
+  }
+
+  removeCrop(x: number, y: number): void {
+    this.crops.delete(`${x},${y}`);
+    this.events.emit('world', x, y);
+  }
+
+  /** Move every crop on to its next stage once its time is up. */
+  private growCrops(): void {
+    for (const c of this.crops.values()) {
+      if (c.stage >= RIPE) continue;
+      const per = cropDef(c.id).stageSeconds;
+      let moved = false;
+      while (c.stage < RIPE && this.time - c.stageAt >= per) {
+        c.stage += 1;
+        c.stageAt += per;
+        c.tendedNow = false;
+        moved = true;
+      }
+      if (moved) this.events.emit('world', c.x, c.y);
     }
   }
 

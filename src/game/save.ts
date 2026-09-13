@@ -1,6 +1,7 @@
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
 import type { PlacedCampfire } from './campfire';
+import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import { SPECIES, type CreatureJSON } from './creatures';
 import type { Item } from './items';
@@ -31,6 +32,7 @@ interface SaveData {
   creatures?: { nextId: number; list: CreatureJSON[] };
   crates?: PlacedCrate[];
   campfires?: PlacedCampfire[];
+  crops?: Crop[];
   crate?: { x: number; y: number; items: Item[] } | null;
 }
 
@@ -73,6 +75,7 @@ export function saveGame(game: Game): boolean {
     creatures: game.creatures.toJSON(),
     crates: [...game.crates.values()],
     campfires: [...game.campfires.values()],
+    crops: [...game.crops.values()],
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -115,6 +118,7 @@ export function loadGame(): Game | null {
       creatures: data.creatures,
       crates: data.crates,
       campfires: data.campfires,
+      crops: data.crops,
       crate: data.crate ?? null,
     });
     if (!data.creatures) game.creatures.spawnWild(game, 45);
@@ -142,6 +146,7 @@ export function loadGame(): Game | null {
       ['trowel', 'a trowel'],
       ['saw', 'a saw'],
       ['butchering_knife', 'a butchering knife'],
+      ['rake', 'a rake'],
     ]) {
       if (!game.inventory.has(id)) {
         game.inventory.add(id, { ql: 20 });

@@ -416,6 +416,140 @@ export function crateSprite(kind: 'log' | 'plank' = 'plank'): Sprite {
 }
 
 /**
+ * A crop growing on a tilled field. Each of the four stages gets its own
+ * model, and each family of crop its own shape: roots keep their heads down
+ * and swell late, leaves spread, grain runs up into ears, herbs stay low and
+ * bushy, and fibre opens into bolls. Ripe plants carry their produce.
+ */
+export function cropSprite(cropId: string, stage: number, look: string, leaf: string, fruit: string): Sprite {
+  const key = `crop:${cropId}:${stage}`;
+  let spr = cache.get(key);
+  if (spr) return spr;
+  const rng = mulberry32(hashString(cropId) + stage * 7919);
+  // A tile's worth of furrows, anchored at the tile centre.
+  spr = makeSprite(96, 72, 48, 54, (ctx) => {
+    const cx = 48;
+    const cy = 52;
+    const iso = (u: number, v: number): [number, number] => [cx + (u - v) * 44, cy + (u + v) * 22];
+    ctx.lineCap = 'round';
+    // Furrows run across the field under the plants.
+    ctx.strokeStyle = 'rgba(70,50,32,0.45)';
+    ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i++) {
+      const f = i * 0.19;
+      const [ax, ay] = iso(f - 0.46, f + 0.46);
+      const [bx, by] = iso(f + 0.46, f - 0.46);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+    }
+    if (stage === 0) {
+      // Sown: only the seed and the disturbed earth show.
+      ctx.fillStyle = 'rgba(58,42,26,0.7)';
+      for (let i = 0; i < 14; i++) {
+        const [px, py] = iso((rng() - 0.5) * 0.8, (rng() - 0.5) * 0.8);
+        ctx.beginPath();
+        ctx.ellipse(px, py, 1.5, 1, 0, 0, TAU);
+        ctx.fill();
+      }
+      cache.set(key, spr!);
+      return;
+    }
+    const grown = stage / 3;
+    const plants: Array<[number, number]> = [];
+    for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) plants.push([u * 0.26 + (rng() - 0.5) * 0.08, v * 0.26 + (rng() - 0.5) * 0.08]);
+    plants.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+    for (const [u, v] of plants) {
+      const [px, py] = iso(u, v);
+      const h = (look === 'grain' ? 10 : look === 'leaf' ? 6 : 5) * (0.45 + grown * 0.85);
+      const w = (look === 'leaf' ? 7 : 4.5) * (0.5 + grown * 0.7);
+      ctx.strokeStyle = leaf;
+      ctx.fillStyle = leaf;
+      if (look === 'grain') {
+        // A stalk with an ear on top once it is up.
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(px + 1, py - h * 0.6, px + 1.6, py - h);
+        ctx.stroke();
+        if (stage >= 2) {
+          ctx.fillStyle = stage === 3 ? fruit : leaf;
+          ctx.beginPath();
+          ctx.ellipse(px + 1.8, py - h - 1.6, 1.7, 3.4 * (stage === 3 ? 1.15 : 0.8), 0.2, 0, TAU);
+          ctx.fill();
+        }
+      } else if (look === 'leaf') {
+        // A rosette of broad leaves, closing into a head when ripe.
+        const blades = 5;
+        for (let i = 0; i < blades; i++) {
+          const a = (i / blades) * TAU + u;
+          ctx.beginPath();
+          ctx.ellipse(px + Math.cos(a) * w * 0.35, py - h * 0.35 + Math.sin(a) * w * 0.18, w * 0.5, h * 0.32, a * 0.3, 0, TAU);
+          ctx.fill();
+        }
+        if (stage === 3) {
+          ctx.fillStyle = fruit;
+          ctx.beginPath();
+          ctx.ellipse(px, py - h * 0.55, w * 0.42, h * 0.42, 0, 0, TAU);
+          ctx.fill();
+        }
+      } else if (look === 'fibre') {
+        ctx.lineWidth = 1.2;
+        for (const d of [-1, 0, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.quadraticCurveTo(px + d * 2, py - h * 0.6, px + d * 3.4, py - h);
+          ctx.stroke();
+        }
+        if (stage === 3) {
+          ctx.fillStyle = fruit;
+          for (const d of [-1, 1]) {
+            ctx.beginPath();
+            ctx.arc(px + d * 3.2, py - h - 0.5, 2.2, 0, TAU);
+            ctx.fill();
+          }
+        }
+      } else {
+        // Roots and herbs: a low tuft, with the crop showing at the soil when ripe.
+        ctx.lineWidth = 1.4;
+        for (const d of [-1.2, 0, 1.2]) {
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.quadraticCurveTo(px + d * 1.6, py - h * 0.7, px + d * 2.6, py - h);
+          ctx.stroke();
+        }
+        if (stage === 3) {
+          ctx.fillStyle = fruit;
+          if (look === 'root') {
+            ctx.beginPath();
+            ctx.ellipse(px, py + 0.6, 3.2, 2.1, 0, 0, TAU);
+            ctx.fill();
+          } else {
+            for (const d of [-1, 1]) {
+              ctx.beginPath();
+              ctx.arc(px + d * 2.2, py - h * 0.75, 1.5, 0, TAU);
+              ctx.fill();
+            }
+          }
+        }
+      }
+    }
+  });
+  cache.set(key, spr);
+  return spr;
+}
+
+function hashString(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
  * A campfire filling a two by two block of subtiles: a ring of stones, logs
  * laid across it, and flames that flicker while it burns. Drawn live rather
  * than cached so the fire moves.
@@ -515,6 +649,7 @@ export interface CreaturePose {
 /** Draws a wildermon of any species with its feet at (sx, sy), then its health bar and name. */
 export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   if (pose.species === 'vola') drawVolaBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'bevere') drawBevereBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -667,6 +802,82 @@ function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
     }
     ctx.restore();
   }
+  ctx.restore();
+}
+
+/**
+ * A Bevere: heavy in the haunches, low to the ground, with a broad scaled tail
+ * it drags behind, small round ears and a pair of orange teeth.
+ */
+function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const waddle = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.1 : 0;
+  const sway = pose.moving ? Math.sin(pose.phase) * 2.2 : Math.sin(pose.phase * 0.3) * 0.6;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+  ctx.fill();
+  const [fur, belly] = pose.colors;
+  // The tail: a broad paddle dragged behind, swinging as it walks.
+  ctx.save();
+  ctx.translate(-7, -3 - waddle);
+  ctx.rotate(sway * 0.05);
+  ctx.fillStyle = '#4a3c34';
+  ctx.beginPath();
+  ctx.ellipse(-4.5, 1.5, 6.2, 2.9, -0.12, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 0.5;
+  for (const d of [-2.5, 0, 2.5]) {
+    ctx.beginPath();
+    ctx.moveTo(-8.5, 1.5 + d * 0.35);
+    ctx.lineTo(-1, 1.5 + d * 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // Hind foot and body.
+  ctx.fillStyle = '#3f342c';
+  ctx.beginPath();
+  ctx.ellipse(-3.5, -0.8, 2.8, 1.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -6 - waddle, 8.6, 5.4, -0.05, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(0, -4 - waddle, 6, 2.6, -0.05, 0, TAU);
+  ctx.fill();
+  // Head: blunt and set low on the shoulders.
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.arc(6.5, -8 - waddle, 4.4, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(9.8, -6.6 - waddle, 2.6, 2.1, 0.15, 0, TAU);
+  ctx.fill();
+  // Small round ear.
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.arc(4.2, -11 - waddle, 1.5, 0, TAU);
+  ctx.fill();
+  // Eye, nose and the orange teeth it is known for.
+  ctx.fillStyle = '#241a12';
+  ctx.beginPath();
+  ctx.arc(7.6, -9 - waddle, 0.8, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(11.8, -6.8 - waddle, 0.8, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#e0a03c';
+  ctx.fillRect(10.3, -5.6 - waddle, 1.5, 2.2);
+  // Front paw.
+  ctx.fillStyle = '#3f342c';
+  ctx.beginPath();
+  ctx.ellipse(5.4 + (pose.moving ? Math.sin(pose.phase) * 1.2 : 0), -0.9, 2.3, 1.4, 0, 0, TAU);
+  ctx.fill();
   ctx.restore();
 }
 

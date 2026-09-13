@@ -20,9 +20,10 @@ import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
+import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, drawCampfire, drawCreature, drawPlayer, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, crateSprite, cropSprite, drawCampfire, drawCreature, drawPlayer, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -41,7 +42,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop';
   x: number;
   y: number;
   sx: number;
@@ -285,6 +286,21 @@ export class Renderer {
         if (this.game.isToken(x, y)) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.ents.push({ kind: 'token', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: tokenSprite() });
+        }
+        if (this.game.crops.size) {
+          const crop = this.game.cropAt(x, y);
+          if (crop) {
+            const def = cropDef(crop.id);
+            const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+            this.ents.push({
+              kind: 'crop',
+              x,
+              y,
+              sx: baseX,
+              sy: baseY + hh - avg * hs,
+              spr: cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1]),
+            });
+          }
         }
         if (this.game.campfires.size) {
           for (const fire of this.game.campfiresOnTile(x, y)) {

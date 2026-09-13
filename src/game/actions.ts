@@ -1,6 +1,7 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
 import { BUILD_ACTIONS } from './buildActions';
 import { CAMPFIRE_ACTIONS } from './campfire';
+import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
@@ -760,6 +761,7 @@ export const ACTIONS: ActionDef[] = [
   ...BUTCHER_ACTIONS,
   ...CAMPFIRE_ACTIONS,
   ...DEED_ACTIONS,
+  ...FARM_ACTIONS,
   {
     id: 'drop_dirt_here',
     label: 'Drop (raises the ground)',

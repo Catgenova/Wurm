@@ -1,4 +1,4 @@
-import { TILE_DEFS } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { Game } from './game';
 import { crateCentre } from './crates';
@@ -13,12 +13,12 @@ import { groundStep } from './player';
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
-export type GatherKind = 'forage' | 'botanize';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing' };
+export type GatherKind = 'forage' | 'botanize' | 'woodcut';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -60,6 +60,10 @@ export interface SpeciesDef {
   tameFail: string;
   /** How it leaves when released. */
   leaves: string;
+  /** Only settles within a few tiles of open water. */
+  nearWater?: boolean;
+  /** Stance a newly tamed one takes; defensive unless it is a gentle sort. */
+  defaultStance?: Stance;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -111,15 +115,58 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFail: 'snuffles the {food} out of your palm, then shuffles away and buries itself in the leaf litter',
     leaves: 'shuffles off and burrows out of sight',
   },
+  bevere: {
+    id: 'bevere',
+    name: 'Bevere',
+    description: 'A broad, flat-tailed gnawer with orange teeth and oiled fur. It never strays far from water, and it fells a tree faster than a man with a hatchet.',
+    health: 26,
+    attack: 3,
+    speed: 1.8,
+    tameLevel: 1,
+    tameChance: 0.1,
+    diet: ['potato', 'carrot', 'cabbage', 'onion', 'corn', 'wheat', 'acorn', 'nuts'],
+    baitHint: 'a vegetable or something starchy',
+    timid: true,
+    gathers: 'woodcut',
+    workRange: 8,
+    /** It will not settle more than this far from water. */
+    variants: [
+      ['#6b4a2e', '#a67c4e'],
+      ['#4f3a2a', '#8a6a48'],
+      ['#7d5636', '#c09163'],
+      ['#3b2f26', '#6f5a44'],
+    ],
+    butcher: { meat: 3, fur: 3, leather: 3, bone: 2, gland: 1 },
+    tameFail: 'takes the {food} in both paws, eats it without hurry, and slips back into the water',
+    leaves: 'slaps its tail and slides into the water',
+    nearWater: true,
+    defaultStance: 'passive',
+  },
 };
 
 /** Which species roam wild, by weight. */
 const WILD_SPECIES: Array<[string, number]> = [
-  ['rabba', 55],
-  ['vola', 45],
+  ['rabba', 42],
+  ['vola', 38],
+  ['bevere', 20],
 ];
 
+/** How close to open water a water-bound species will settle. */
+const WATER_RANGE = 4;
+
+/** Whether open water lies within a few tiles of here. */
+export function nearWater(game: Game, x: number, y: number, range = WATER_RANGE): boolean {
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      if (game.world.inBounds(x + dx, y + dy) && game.world.hasWater(x + dx, y + dy)) return true;
+    }
+  }
+  return false;
+}
+
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
+/** What a wild one does to feed itself; felling trees puts no food in its belly. */
+export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers === 'woodcut' ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
 /** Every ten levels of its task skill let a worker range ten tiles further from the token. */
@@ -174,6 +221,9 @@ export interface Creature {
   searchAt: number;
   /** When the player last called it over for an action; it drops everything and comes. */
   calledAt: number;
+  /** The tree tile a feller is working on, when it is felling one. */
+  fellX: number;
+  fellY: number;
 }
 
 export interface CreatureJSON {
@@ -253,7 +303,7 @@ export class Creatures {
       x,
       y,
       mode,
-      stance: 'defensive',
+      stance: def.defaultStance ?? 'defensive',
       health: def.health,
       hunger: 0.6 + rand() * 0.4,
       carrying: null,
@@ -274,6 +324,8 @@ export class Creatures {
       busyUntil: 0,
       searchAt: 0,
       calledAt: -1e9,
+      fellX: -1,
+      fellY: -1,
     };
   }
 
@@ -327,7 +379,10 @@ export class Creatures {
       if (!this.tileOk(game, x, y) || !TILE_DEFS[w.getTile(x, y)].forage) continue;
       if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
-      this.spawn(species ?? rollTable(WILD_SPECIES, game.rand()), x + 0.5, y + 0.5, 'wild', game.rand);
+      const id = species ?? rollTable(WILD_SPECIES, game.rand());
+      // A Bevere lives on land, but only ever within sight of water.
+      if (SPECIES[id]?.nearWater && !nearWater(game, x, y)) continue;
+      this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
       placed++;
     }
     return placed;
@@ -383,10 +438,10 @@ export class Creatures {
       c.x = nx;
       c.y = ny;
       moved = true;
-    } else if (this.canMove(game, c.x, c.y, nx, c.y)) {
+    } else if (Math.abs(nx - c.x) > 1e-6 && this.canMove(game, c.x, c.y, nx, c.y)) {
       c.x = nx;
       moved = true;
-    } else if (this.canMove(game, c.x, c.y, c.x, ny)) {
+    } else if (Math.abs(ny - c.y) > 1e-6 && this.canMove(game, c.x, c.y, c.x, ny)) {
       c.y = ny;
       moved = true;
     }
@@ -425,10 +480,40 @@ export class Creatures {
     c.until = game.time + 2;
   }
 
-  /** Whether a tile can be foraged or botanized right now. */
+  /** Whether a tile can be foraged, botanized or felled right now. */
   private gatherable(game: Game, x: number, y: number, kind: GatherKind): boolean {
+    if (kind === 'woodcut') return game.world.getTile(x, y) === TileType.Tree && !!this.beside(game, x, y);
     const def = TILE_DEFS[game.world.getTile(x, y)];
     return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
+  }
+
+  /**
+   * A tree blocks movement, so a feller works from a tile beside it: the one
+   * nearest whoever is walking there, since it cannot path around the trunk.
+   */
+  private beside(game: Game, x: number, y: number, fromX = x, fromY = y): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestD = Infinity;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!this.tileOk(game, nx, ny)) continue;
+      const d = Math.hypot(nx + 0.5 - fromX, ny + 0.5 - fromY);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: nx, y: ny };
+      }
+    }
+    return best;
   }
 
 /**
@@ -443,7 +528,9 @@ export class Creatures {
     const x0 = Math.floor(cx);
     const y0 = Math.floor(cy);
     const visit = (x: number, y: number): void => {
-      if (!this.tileOk(game, x, y) || !this.gatherable(game, x, y, kind)) return;
+      // A tree is never walkable, so a feller judges the tile beside it instead.
+      if (kind !== 'woodcut' && !this.tileOk(game, x, y)) return;
+      if (!this.gatherable(game, x, y, kind)) return;
       const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) + game.rand() * 1.5;
       if (d < bestD) {
         bestD = d;
@@ -482,6 +569,7 @@ export class Creatures {
   private finishForage(game: Game, c: Creature, kind: GatherKind): Item | null {
     const x = Math.floor(c.x);
     const y = Math.floor(c.y);
+    if (kind === 'woodcut') return this.finishFelling(game, c);
     game.markForaged(x, y, kind);
     const table = GATHER_TABLE[kind];
     if (c.mode !== 'deed') {
@@ -497,6 +585,25 @@ export class Creatures {
     const id = rollTable(table, game.rand());
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
     return { uid: game.inventory.nextUid++, id, ql, dmg: 0, count: 1 };
+  }
+
+  /** Fell the tree a worker walked to, and hand it the log it carries home. */
+  private finishFelling(game: Game, c: Creature): Item | null {
+    const tx = c.fellX;
+    const ty = c.fellY;
+    if (game.world.getTile(tx, ty) !== TileType.Tree) return null;
+    const data = game.world.getData(tx, ty);
+    const def = TREE_DEFS[treeSpecies(data)];
+    const logs = def.logs + (treeVariant(data) === 2 ? 1 : 0);
+    game.world.setTile(tx, ty, TileType.Grass);
+    const skill = c.skills[GATHER_SKILL.woodcut] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.woodcut, 0.225);
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
+    // The rest of the tree is left at the stump; it can only carry one at a time.
+    if (logs > 1) {
+      game.dropOnGround(tx, ty, { uid: game.inventory.nextUid++, id: 'log', ql, dmg: 0, count: logs - 1, extra: def.name });
+    }
+    return { uid: game.inventory.nextUid++, id: 'log', ql, dmg: 0, count: 1, extra: def.name };
   }
 
   /** Same diminishing curve as the player's skills. */
@@ -519,7 +626,7 @@ export class Creatures {
   private updateWild(c: Creature, dt: number, game: Game): void {
     c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.wild);
     const def = this.species(c);
-    const kind = def.gathers;
+    const kind = wildGather(def);
     if (c.state === 'flee') {
       if (game.time >= c.until) c.state = 'idle';
       else if (this.stepToward(game, c, c.tx, c.ty, dt, 1.6) !== 'moving') c.state = 'idle';
@@ -681,7 +788,9 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        if (kind && this.gatherable(game, Math.floor(c.x), Math.floor(c.y), kind)) this.beginForage(game, c, kind);
+        const wx = kind === 'woodcut' ? c.fellX : Math.floor(c.x);
+        const wy = kind === 'woodcut' ? c.fellY : Math.floor(c.y);
+        if (kind && this.gatherable(game, wx, wy, kind)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') {
         c.state = 'idle';
@@ -700,10 +809,16 @@ export class Creatures {
     if (kind) {
       const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, workRangeOf(c, def), kind);
       if (t) {
-        c.tx = t.x + 0.5;
-        c.ty = t.y + 0.5;
-        c.state = 'toForage';
-        return;
+        // A tree cannot be stood on, so a feller walks to the tile beside it.
+        const spot = kind === 'woodcut' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
+        if (spot) {
+          c.fellX = t.x;
+          c.fellY = t.y;
+          c.tx = spot.x + 0.5;
+          c.ty = spot.y + 0.5;
+          c.state = 'toForage';
+          return;
+        }
       }
     }
     // Nothing to do right now: potter about near the token.

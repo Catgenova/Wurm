@@ -47,6 +47,16 @@ export function buildHelp(win: UIWindow): void {
     them and red when you do not, and whatever you can make right now sits at the top of its group. Tick
     <i>Only what I can make</i> to hide the rest. The same recipes are on each material's own menu,
     where <i>All</i> keeps going until the materials run out.</p>
+    <h3>Farming</h3>
+    <p>With a <b>rake</b> in your pack, <b>Till</b> any grass or dirt to rake it into a field. Seeds turn
+    up while foraging and botanizing &mdash; vegetables and starches in the one, spices and fibres in the
+    other &mdash; and a field's menu offers to <b>Sow</b> whichever you carry. A crop goes through four
+    stages: sown, sprouting, growing and ripe, each drawn differently, and every crop takes its own time
+    per stage, from quick mint to slow corn.</p>
+    <p>Each stage can be <b>Tended</b> once, and tending is what makes a field pay: an untended crop
+    gives 1 crop and 1 seed, while one tended at every stage gives <b>4 crops and 2 seeds</b>. Tending
+    and tilling both train <b>Farming</b>, and your farming skill sets the quality of what you harvest.
+    Harvesting takes the field back to dirt, ready to be raked again.</p>
     <h3>Campfires and cooking</h3>
     <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from two shafts; it
     fills a two by two block of the tile's spots. Feed it wooden things &mdash; shafts, thatch, planks,
@@ -83,7 +93,9 @@ export function buildHelp(win: UIWindow): void {
     or press it with grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Wildermon</h3>
     <p>Wild creatures roam the island. The <b>Rabba</b> is a rabbit-like grazer that forages berries when
-    hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead. Both pick that
+    hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead; the
+    <b>Bevere</b> is a flat-tailed gnawer that never settles far from water, eats vegetables and
+    starchy things, is placid by nature, and fells trees for its deed, carrying the logs to the crate. Both pick that
     spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt
