@@ -10,6 +10,8 @@ import { GEAR_ACTIONS } from './gear';
 import { IMPROVE_ACTIONS } from './improve';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
+import { ARCHAEOLOGY_ACTIONS } from './archaeology';
+import { FIRST_AID_ACTIONS } from './firstaid';
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
@@ -974,8 +976,31 @@ export const ACTIONS: ActionDef[] = [
       g.logMsg('You cut two bundles of mixed grass.', 'event');
     },
   },
+  {
+    id: 'cut_reeds',
+    label: 'Cut reeds',
+    verb: 'cutting reeds',
+    skill: 'foraging',
+    tool: 'carving_knife',
+    stamina: 0.03,
+    baseTime: 4,
+    applies: (t, g) => tile(t, g) === TileType.Reed,
+    check: (t, g) => {
+      if (!g.inventory.has('carving_knife')) return 'You need a knife to cut reeds.';
+      return t.kind === 'tile' && g.isForaged(t.x, t.y, 'reed') ? 'The reeds here are cut back to the water.' : null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      g.markForaged(t.x, t.y, 'reed');
+      const count = 2 + (g.rand() < g.skills.get('foraging') / 140 ? 1 : 0);
+      g.inventory.add('reed', { count, ql: g.productQl('foraging', g.toolQl('carving_knife')) });
+      g.logMsg(`You cut ${count} reeds out of the bed.`, 'event');
+    },
+  },
   ...BUILD_ACTIONS,
   ...CREATURE_ACTIONS,
+  ...ARCHAEOLOGY_ACTIONS,
+  ...FIRST_AID_ACTIONS,
   ...CRATE_ACTIONS,
   ...RECIPE_ACTIONS,
   ...BUTCHER_ACTIONS,

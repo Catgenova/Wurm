@@ -169,6 +169,32 @@ rebuilds and commits the result.
   carved from bone, so most improving starts long before a forge; a file is
   cast from its own mould, which is what gates metal. The judging skill is
   whichever one would have made the thing, and nothing improves past it.
+- **Grain, the quern and bread.** Wheat and corn are useless until they have
+  been milled. A quern — two stones dressed flat and grooved, chiselled from
+  three rock shards — grinds two wheat into flour or two corn into cornmeal
+  under the Milling skill. Flour and a bucket of water make dough (the bucket
+  comes back), dough baked at a fire makes bread, and cornmeal boiled in a
+  clay bowl makes porridge.
+- **First aid.** Cloth cuts into three bandages with a knife. Right-click one
+  to bind your wounds: each strip treats one wound and is used up, and the work
+  carries on while you are hurt and still carrying cloth. A clean dressing is
+  worth what your skill and the cloth are worth, a slipped one about a third.
+  The same bandages treat a hurt tame wildermon standing beside you.
+- **Reeds, papyrus and books.** Reed beds can be cut with a knife. Four reeds
+  soaked in a bucket of water and pressed give three sheets of papyrus
+  (Papyrusmaking). Ink is alchemy: a gland — the rare part off a carcass, and
+  until now good for nothing — ground with ashes into water. Six sheets, two
+  leather boards, ink and a needle bind a book, and studying one raises mind
+  logic and wears its pages. A lectern doubles what an hour is worth.
+- **Archaeology and restoration.** Investigate any soil or sand with a trowel
+  and the ground gives up fragments of what the old people left. Each fragment
+  names its relic and which piece it is, and comes up damaged, so Repair earns
+  its keep. Eight things lie under the island, from an old pot in two pieces to
+  an ancient helm in five; the harder ones are only recognised as archaeology
+  rises. With every piece in hand, Restore puts the thing back together — a
+  failure marks all the pieces instead — and what comes out is only as good as
+  what went in. Some are treasure (statuette, bronze mirror, bone comb, old
+  lamp) and some are an old file, an old blade or an ancient helm.
 - **Ashes, lye and tanning.** Every fire leaves ashes behind — a campfire, a
   smelter or a kiln, about one lot per two minutes of burning — and Take ashes
   rakes them out lit or cold. A bucket is three planks and six nails; fill it

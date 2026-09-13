@@ -90,6 +90,15 @@ export function buildHelp(win: UIWindow): void {
     everything else and unlock when you stand by a lit fire; burning a dish costs you the ingredients,
     so cook where your skill can manage. A fire burns its fuel down in real time and goes cold when it
     runs out, and an unlit one can be taken apart to get the wood back.</p>
+    <h3>Grain, the quern and bread</h3>
+    <p>Wheat and corn are not food until they have been through a <b>quern</b>: two stones dressed flat,
+    grooved and pierced, chiselled out of three rock shards by a stonecutter. Turning it is the
+    <b>Milling</b> skill. Two wheat grind down to a lot of <b>flour</b>, two corn to <b>cornmeal</b>,
+    and a badly ground batch is nothing but grit.</p>
+    <p>Flour and a bucket of water are worked into <b>dough</b> &mdash; two rounds at a time, and the
+    bucket comes back empty &mdash; and a round of dough baked on a hot stone at a lit fire is
+    <b>bread</b>, which is the first food that keeps and travels. Cornmeal boiled in a clay bowl makes
+    two bowls of <b>porridge</b>. Both are cooking rather than milling: the mill only makes the meal.</p>
     <h3>Metal</h3>
     <p>Mining a seam brings up <b>ore</b>, not finished metal. A <b>stone smelter</b>, built on your deed
     from 8 stone bricks and 4 mortar with a trowel, fills six spots of a tile and turns ore into lumps.
@@ -175,6 +184,16 @@ export function buildHelp(win: UIWindow): void {
     like. A green repairer takes about half a minute to bring a badly worn tool back and costs it
     several points of quality; a skilled one does the same in a few seconds for a fraction of the
     quality. Nothing repairs past quality 1, so a thing mended often enough is finished in the end.</p>
+    <h3>Binding wounds</h3>
+    <p>A wound closes on its own eventually. A dressing is faster. Cut a length of cloth into three
+    <b>bandages</b> with a knife &mdash; that is the <b>First aid</b> skill &mdash; and right-click one
+    to <b>bind your wounds</b>. Each strip goes on one wound and is used up; the work keeps on while
+    you are still hurt and still carrying cloth. A clean dressing puts back the whole of what your
+    skill and the cloth are worth, and a slipped one about a third of it.</p>
+    <p>The same hands do as much for a hurt <b>wildermon</b>. Stand beside a tame one that has been in
+    a fight and choose <b>Treat its wounds</b>: it takes a bandage and puts back a share of its whole
+    health, which is far more forgiving than waiting for it to mend itself. A wild creature will not
+    stand still for you.</p>
     <h3>Improving</h3>
     <p>A finished thing can be made better than it was made. Right-click it and choose <b>Improve</b>:
     each pass eats a little stock, and a success raises the quality &mdash; a great deal at first and
@@ -212,6 +231,18 @@ export function buildHelp(win: UIWindow): void {
     sleeves, trousers and boots &mdash; and what an awl and needle work into a leather piece when you
     improve it. Fail the tanning and the hide is left too long and spoils, so tan where your skill can
     manage it.</p>
+    <h3>Reeds, papyrus and books</h3>
+    <p>The <b>reed beds</b> along the shallows are worth cutting. Take a knife to one and you get
+    reeds; cut it again too soon and there is nothing left to take. Four reeds soaked in a bucket of
+    water, split, laid crosswise and pressed give three sheets of <b>papyrus</b>, which is the
+    <b>Papyrusmaking</b> skill.</p>
+    <p><b>Ink</b> is the alchemist's part: a gland &mdash; the rare thing off a carcass, and until now
+    good for nothing &mdash; ground with two lots of ashes into a bucket of water until it flows black.
+    Six sheets, two leather boards, a lot of ink and a needle bind into a <b>book</b>.</p>
+    <p>Right-click a book and <b>Study</b> it. Half an hour with it raises <b>mind logic</b>, which is
+    what decides how many jobs you can keep in your head at once, and wears the pages a little as you
+    go. Held in one hand it is hard going; on a <b>lectern</b>, which until now had nothing to hold, you
+    get twice as much out of the same hour.</p>
     <h3>Wool, cloth and the loom</h3>
     <p>Fibre becomes cloth in two steps, and each wants its own furniture. Build a <b>spindle</b> and a
     <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into
@@ -265,6 +296,24 @@ export function buildHelp(win: UIWindow): void {
     fire takes, pack the green ware in, and light it: each piece needs its own time at heat, and a
     well-built kiln works faster and keeps more of the potter's quality. Take the fired ware out and the
     bowl will cook, the pot makes pottage, the jar puts up preserves, and the brick will build.</p>
+    <h3>Digging up the past</h3>
+    <p>People lived here before you did and left their things in the ground. Right-click any soil or
+    sand and choose <b>Investigate</b>: with a <b>trowel</b> and the <b>Archaeology</b> skill you go
+    through the topsoil carefully, and now and then it gives up a <b>fragment</b> of something old.
+    Ground you have been over is no good again for a while, so keep walking.</p>
+    <p>Nothing comes out of the ground whole or sound. A fragment names what it is a piece of and which
+    piece it is &mdash; <i>ancient helm 4/5</i> &mdash; and carries a good deal of damage, which
+    <b>Repair</b> takes out. There are eight things under the island, from an <b>old pot</b> in two
+    pieces to an <b>ancient helm</b> in five, and a relic is only recognised once your archaeology has
+    come far enough to know what it is looking at. The commonplace turns up far more often than the
+    rare, and the ground is kind enough to favour a piece you are still short of.</p>
+    <p>With every piece in hand, right-click one and choose <b>Restore</b>. That is the
+    <b>Restoration</b> skill: a success puts the thing back together, and a failure marks all the
+    pieces and leaves you to mend them. What comes out is only as good as the pieces that went in, so
+    a careful excavator and a patient repairer make a better relic than either alone. Some of it is
+    treasure and nothing more &mdash; a statuette, a bronze mirror, a bone comb, an old lamp &mdash;
+    and some of it is an <b>old file</b>, an <b>old blade</b> or an <b>ancient helm</b>, which are the
+    real prize: a file before you have a forge to cast one in.</p>
     <h3>Wildermon</h3>
     <p>Wild creatures roam the island. The <b>Rabba</b> is a rabbit-like grazer that forages berries when
     hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead; the

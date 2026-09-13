@@ -1,6 +1,7 @@
 import { FullscreenCanvas } from './engine/canvas';
 import { Input } from './engine/input';
 import { GameLoop } from './engine/loop';
+import { partsMissing, piecesHeld, RELICS } from './game/archaeology';
 import { ACTIONS } from './game/actions';
 import { FURNITURE } from './game/furniture';
 import { RECIPES } from './game/recipes';
@@ -47,10 +48,10 @@ camera.focus(player.x, player.y, game.playerHeight(), null);
 declare global {
   interface Window {
     /** Console handle for poking at the running game. */
-    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE };
+    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; RELICS: typeof RELICS; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld } };
   }
 }
-window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE };
+window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, RELICS, arch: { partsMissing, piecesHeld } };
 
 input.onClick = (x, y, button) => {
   // A press that closed an open menu is spent, unless it is asking for a new menu.

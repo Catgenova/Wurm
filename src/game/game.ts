@@ -91,6 +91,11 @@ const ASH_RATE = 1 / 120;
 /** Damage at which a tool starts warning you, and every five points after. */
 const DAMAGE_WARN = 75;
 const FORAGE_COOLDOWN = 180;
+/**
+ * The things a single tile can be worked over for, each with its own
+ * cooldown: picking berries does not stop you cutting the grass.
+ */
+const FORAGE_KINDS = ['forage', 'botanize', 'grass', 'reed', 'dig'];
 /** How long ore stays lit after prospecting. */
 const PROSPECT_MARK_TIME = 120;
 const MAX_LOG = 400;
@@ -1463,7 +1468,7 @@ export class Game {
   }
 
   private forageKey(x: number, y: number, kind: string): number {
-    const k = kind === 'forage' ? 0 : kind === 'botanize' ? 1 : 2;
+    const k = Math.max(0, FORAGE_KINDS.indexOf(kind));
     return k * this.world.w * this.world.h + y * this.world.w + x;
   }
 

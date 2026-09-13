@@ -68,7 +68,7 @@ export function improvable(id: string): { material: MaterialDef; skill: string }
   if (WOOD_TOOLS.has(id)) return { material: MATERIALS.wood, skill: 'carpentry' };
   if (WEAPON_BY_ID.has(id)) return { material: MATERIALS.metal, skill: 'weaponsmithing' };
   if (FURNITURE_BY_ID.has(id)) return { material: MATERIALS.wood, skill: 'fine_carpentry' };
-  if (id === 'whetstone') return { material: MATERIALS.stone, skill: 'stonecutting' };
+  if (id === 'whetstone' || id === 'quern') return { material: MATERIALS.stone, skill: 'stonecutting' };
   // Everything else — food, materials, moulds, green ware — is left as it was made.
   return null;
 }
