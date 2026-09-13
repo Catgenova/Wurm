@@ -17,7 +17,7 @@ import {
   WALL_TYPES,
   workLevel,
 } from '../game/building';
-import { CREATURE_ACTION_BY_ID } from '../game/creatureActions';
+import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
 import { itemDef, itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
@@ -385,7 +385,7 @@ export class UI {
       if (m) entries.push(m);
     };
     push(item('examine_creature'));
-    push(item('tame', target, 'Tame (uses a berry or vegetable)'));
+    push(item('tame', target, `Tame (uses ${baitHint(c)})`));
     if (c.mode === 'active') {
       entries.push({
         label: `Stance: ${STANCE_NAMES[c.stance]}`,
