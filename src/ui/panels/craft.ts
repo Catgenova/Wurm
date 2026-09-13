@@ -1,7 +1,7 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { RECIPE_CATEGORIES, RECIPES, recipeStatus, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { RECIPE_CATEGORIES, RECIPES, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 
@@ -23,7 +23,7 @@ export class CraftPanel {
     const head = document.createElement('div');
     head.className = 'craft-head';
     const hint = document.createElement('span');
-    hint.textContent = 'Tool plus materials from your inventory';
+    hint.textContent = 'Tool, place and materials each recipe needs';
     const toggle = document.createElement('label');
     const box = document.createElement('input');
     box.type = 'checkbox';
@@ -86,6 +86,13 @@ export class CraftPanel {
     const needs = document.createElement('div');
     needs.className = 'craft-needs';
     const parts: HTMLSpanElement[] = [];
+    if (r.station) {
+      const station = document.createElement('span');
+      station.className = st.station ? 'have' : 'lack';
+      station.textContent = stationName(r.station);
+      station.title = st.station ? 'You are standing at one' : 'Not within reach of one';
+      parts.push(station);
+    }
     if (r.tool) {
       const tool = document.createElement('span');
       tool.className = st.tool ? 'have' : 'lack';

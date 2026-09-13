@@ -16,6 +16,8 @@ export type Stance = 'passive' | 'defensive' | 'aggressive';
 export type GatherKind = 'forage' | 'botanize';
 export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing' };
 export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing' };
+/** The plain form, for "it will forage" rather than "it will foraging". */
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize' };
 const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
 /** Marks a creature as last hurt by the player rather than another creature. */

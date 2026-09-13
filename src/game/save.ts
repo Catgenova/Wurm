@@ -1,5 +1,6 @@
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
+import type { PlacedCampfire } from './campfire';
 import type { PlacedCrate } from './crates';
 import { SPECIES, type CreatureJSON } from './creatures';
 import type { Item } from './items';
@@ -29,6 +30,7 @@ interface SaveData {
   buildings?: BuildingsJSON;
   creatures?: { nextId: number; list: CreatureJSON[] };
   crates?: PlacedCrate[];
+  campfires?: PlacedCampfire[];
   crate?: { x: number; y: number; items: Item[] } | null;
 }
 
@@ -70,6 +72,7 @@ export function saveGame(game: Game): boolean {
     buildings: game.buildings.toJSON(),
     creatures: game.creatures.toJSON(),
     crates: [...game.crates.values()],
+    campfires: [...game.campfires.values()],
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -111,6 +114,7 @@ export function loadGame(): Game | null {
       buildings: data.buildings,
       creatures: data.creatures,
       crates: data.crates,
+      campfires: data.campfires,
       crate: data.crate ?? null,
     });
     if (!data.creatures) game.creatures.spawnWild(game, 45);

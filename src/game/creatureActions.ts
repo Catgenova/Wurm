@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { creatureLevel, GATHER_VERB, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
 import { itemDef } from './items';
 
@@ -158,7 +158,15 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       return !!c && (c.mode === 'active' || c.mode === 'stored');
     },
-    check: (_t, g) => (g.deed ? null : 'You have no settlement to assign it to.'),
+    check: (t, g) => {
+      if (!g.deed) return 'You have no settlement to assign it to.';
+      const c = creatureOf(g, t);
+      const working = g.creatures.workers().length;
+      if (c && c.mode !== 'deed' && working >= g.workerCap) {
+        return `${g.deed.name} has work for ${g.workerCap} wildermon at level ${g.deedLevel}. Upgrade the settlement to take on more.`;
+      }
+      return null;
+    },
     perform: (t, g) => {
       const c = creatureOf(g, t);
       const d = g.deed;
@@ -172,7 +180,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.state = 'idle';
       c.until = g.time;
       const gathers = SPECIES[c.species].gathers;
-      const job = gathers ? `${GATHER_VERB[gathers]} within ${workRangeOf(c, SPECIES[c.species])} tiles of the token and bring what it finds to the crate` : 'stay around the settlement';
+      const job = gathers ? `${GATHER_DO[gathers]} within ${workRangeOf(c, SPECIES[c.species])} tiles of the token and bring what it finds to the crate` : 'stay around the settlement';
       g.logMsg(`${c.name} will ${job}.`, 'system');
     },
   },

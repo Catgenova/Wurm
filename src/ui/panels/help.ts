@@ -47,6 +47,16 @@ export function buildHelp(win: UIWindow): void {
     them and red when you do not, and whatever you can make right now sits at the top of its group. Tick
     <i>Only what I can make</i> to hide the rest. The same recipes are on each material's own menu,
     where <i>All</i> keeps going until the materials run out.</p>
+    <h3>Campfires and cooking</h3>
+    <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from two shafts; it
+    fills a two by two block of the tile's spots. Feed it wooden things &mdash; shafts, thatch, planks,
+    timbers, logs &mdash; and each is worth so many minutes of burning, then <b>Light</b> it. A burning
+    fire is the place to <b>Cook</b>: raw meat becomes cooked meat worth twice the meal, potatoes bake
+    in the embers, onions and nuts roast, and with a <b>clay bowl</b> you can stew berries into compote
+    or simmer meat and vegetables into a proper stew. Cooking recipes sit in the crafting window with
+    everything else and unlock when you stand by a lit fire; burning a dish costs you the ingredients,
+    so cook where your skill can manage. A fire burns its fuel down in real time and goes cold when it
+    runs out, and an unlit one can be taken apart to get the wood back.</p>
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a
@@ -78,6 +88,12 @@ export function buildHelp(win: UIWindow): void {
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt
     against you.</p>
+    <p>Right-click any tile of your settlement for the <b>deed menu</b>: it lists the wildermon kept
+    there, offers to <b>upgrade</b> the settlement, and renames or disbands it. Each upgrade pushes the
+    border out 2 tiles and lets one more wildermon work the deed, and each has to be earned: level 2
+    wants a crate and a campfire on the deed, and later levels want more crates, a fire burning,
+    finished buildings and wildermon at work. The menu ticks off what you have and names what is
+    missing. A settlement runs from level 1 to level 5.</p>
     <p>A deed worker starts within 8 tiles of the token and earns another 10 tiles of range for every
     10 levels of its task skill, so a seasoned one works a wide stretch of country. Its card in the
     Wildermon window shows the range it has now and how much skill the next step needs.</p>

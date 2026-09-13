@@ -4,7 +4,9 @@ import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
 import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
+import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
+import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { groundStep, Player } from './player';
@@ -26,9 +28,19 @@ export interface Deed {
   x: number;
   y: number;
   radius: number;
+  /** Upgrades bought so far; level 1 is a freshly founded settlement. */
+  level?: number;
 }
 
 export const DEED_RADIUS = 5;
+/** Every upgrade pushes the border out this far and takes on one more worker. */
+export const DEED_RADIUS_PER_LEVEL = 2;
+export const DEED_WORKERS_AT_LEVEL_ONE = 1;
+export const MAX_DEED_LEVEL = 5;
+
+export const deedLevel = (d: Deed | null): number => Math.max(1, Math.min(MAX_DEED_LEVEL, d?.level ?? 1));
+export const deedRadiusAt = (level: number): number => DEED_RADIUS + (level - 1) * DEED_RADIUS_PER_LEVEL;
+export const deedWorkersAt = (level: number): number => DEED_WORKERS_AT_LEVEL_ONE + (level - 1);
 
 /** UI prompts the game needs; main.ts wires them to the browser. */
 export interface GameHooks {
@@ -46,6 +58,7 @@ export interface GameInit {
   crates?: PlacedCrate[];
   /** Pre-crate-grid saves kept a single deed crate. */
   crate?: { x: number; y: number; items: Item[] } | null;
+  campfires?: PlacedCampfire[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
   inventory?: Item[];
   nextUid?: number;
@@ -76,6 +89,9 @@ export class Game {
   /** Placed crates by id; each sits on one subtile. */
   readonly crates = new Map<number, PlacedCrate>();
   nextCrateId = 1;
+  /** Campfires by id; each covers a two by two block of subtiles. */
+  readonly campfires = new Map<number, PlacedCampfire>();
+  nextFireId = 1;
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Items lying on tiles, keyed by "x,y". */
@@ -126,6 +142,10 @@ export class Game {
       if (c.id >= this.nextCrateId) this.nextCrateId = c.id + 1;
     }
     if (init.crate && !this.crates.size) this.addCrate('plank', init.crate.x, init.crate.y, 1, 1, init.crate.items, true);
+    for (const f of init.campfires ?? []) {
+      this.campfires.set(f.id, f);
+      if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
+    }
     this.world.onChange((x, y) => this.events.emit('world', x, y));
   }
 
@@ -184,6 +204,16 @@ export class Game {
   onDeed(x: number, y: number): boolean {
     const d = this.deed;
     return !!d && Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius;
+  }
+
+  /** The settlement's upgrade level, 1 when freshly founded. */
+  get deedLevel(): number {
+    return deedLevel(this.deed);
+  }
+
+  /** How many wildermon may work the deed at this level. */
+  get workerCap(): number {
+    return deedWorkersAt(this.deedLevel);
   }
 
   isToken(x: number, y: number): boolean {
@@ -251,6 +281,7 @@ export class Game {
     if (s.health <= 0) this.die();
 
     if (this.action) this.updateAction(dt);
+    if (this.campfires.size) this.burnFires(dt);
     this.creatures.update(dt, this);
 
     this.decayClock += dt;
@@ -445,6 +476,10 @@ export class Game {
       const c = this.crates.get(target.id);
       return c ? { x: c.x, y: c.y } : null;
     }
+    if (target.kind === 'campfire') {
+      const f = this.campfires.get(target.id);
+      return f ? { x: f.x, y: f.y } : null;
+    }
     return { x: target.x, y: target.y };
   }
 
@@ -617,6 +652,82 @@ export class Game {
     const [item] = crate.items.splice(idx, 1);
     this.events.emit('crate');
     return item;
+  }
+
+  addCampfire(x: number, y: number, sx: number, sy: number, fuel = 0, lit = false): PlacedCampfire {
+    const [ax, ay] = fireAnchor(sx, sy);
+    const fire: PlacedCampfire = { id: this.nextFireId++, x, y, sx: ax, sy: ay, fuel, lit };
+    this.campfires.set(fire.id, fire);
+    this.events.emit('crate');
+    return fire;
+  }
+
+  removeCampfire(id: number): void {
+    this.campfires.delete(id);
+    this.events.emit('crate');
+  }
+
+  campfiresOnTile(x: number, y: number): PlacedCampfire[] {
+    const out: PlacedCampfire[] = [];
+    for (const f of this.campfires.values()) if (f.x === x && f.y === y) out.push(f);
+    return out;
+  }
+
+  /** The fire covering a subtile, if any. */
+  campfireAt(x: number, y: number, sx: number, sy: number): PlacedCampfire | undefined {
+    for (const f of this.campfires.values()) if (f.x === x && f.y === y && fireCovers(f, sx, sy)) return f;
+    return undefined;
+  }
+
+  /** Why a campfire cannot go on this spot, or null when it can. */
+  firePlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+    const [ax, ay] = fireAnchor(sx, sy);
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A fire needs dry, open ground.';
+    if (this.world.slope(x, y) > 20) return 'The ground is too steep to lay a fire.';
+    if (this.isToken(x, y)) return 'Not on the token.';
+    if (this.buildings.buildingAt(x, y)) return 'Not inside a building.';
+    for (let dy = 0; dy < FIRE_SUBTILES; dy++) {
+      for (let dx = 0; dx < FIRE_SUBTILES; dx++) {
+        if (this.crateAt(x, y, ax + dx, ay + dy)) return 'A crate is standing in the way.';
+        if (this.campfireAt(x, y, ax + dx, ay + dy)) return 'There is already a fire there.';
+      }
+    }
+    return null;
+  }
+
+  /** The nearest lit fire within reach, for cooking. */
+  litFireNear(range = 2.4): PlacedCampfire | undefined {
+    let best: PlacedCampfire | undefined;
+    let bestD = range;
+    for (const f of this.campfires.values()) {
+      if (!f.lit) continue;
+      const [cx, cy] = fireCentre(f);
+      const d = Math.hypot(cx - this.player.x, cy - this.player.y);
+      if (d <= bestD) {
+        bestD = d;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  /** Whether the player is standing somewhere a recipe's station requires. */
+  atStation(station: Station): boolean {
+    return station === 'campfire' ? this.litFireNear() !== undefined : false;
+  }
+
+  /** Burn down every lit fire; one that runs out goes cold. */
+  private burnFires(dt: number): void {
+    for (const f of this.campfires.values()) {
+      if (!f.lit) continue;
+      f.fuel -= dt;
+      if (f.fuel > 0) continue;
+      f.fuel = 0;
+      f.lit = false;
+      this.logMsg('A campfire burns down to ashes.', 'event');
+      this.events.emit('world', f.x, f.y);
+      this.events.emit('crate');
+    }
   }
 
   groundAt(x: number, y: number): Item[] {

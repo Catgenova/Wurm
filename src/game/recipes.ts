@@ -8,7 +8,10 @@ import { itemDef } from './items';
  * an item action, so it shows on the material's menu as well as in the
  * crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Stonework' | 'Clay & thatch';
+export type RecipeCategory = 'Woodwork' | 'Stonework' | 'Clay & thatch' | 'Cooking';
+/** A place a recipe has to be worked at, beyond what is carried. */
+export type Station = 'campfire';
+const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire' };
 
 export interface RecipeInput {
   item: string;
@@ -26,14 +29,18 @@ export interface Recipe {
   inputs: RecipeInput[];
   /** Tool that must be carried but is not used up. */
   tool?: string;
+  /** Something that must be standing nearby, such as a lit fire to cook on. */
+  station?: Station;
   skill: string;
   /** Menu label on the material, such as "Saw into planks". */
   label: string;
   verb: string;
   baseTime: number;
   stamina: number;
-  /** When set, a skill check can fail; nothing is used up on a failure. */
+  /** When set, a skill check can fail. */
   difficulty?: number;
+  /** Food burns: a failed attempt eats the ingredients anyway. */
+  consumeOnFail?: boolean;
   done: string;
   fail?: string;
 }
@@ -57,13 +64,24 @@ export const RECIPES: Recipe[] = [
   { id: 'make_clay_brick', category: 'Clay & thatch', result: 'clay_brick', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape clay brick', verb: 'shaping clay', baseTime: 4, stamina: 0.02, difficulty: 6, done: 'You shape a clay brick.', fail: 'The clay slumps. You fail to shape a brick.' },
   { id: 'make_adobe', category: 'Clay & thatch', result: 'adobe', inputs: [{ item: 'clay' }, { item: 'mixed_grass' }], skill: 'pottery', label: 'Make adobe', verb: 'making adobe', baseTime: 4, stamina: 0.02, done: 'You press clay and grass into an adobe block.' },
   { id: 'make_thatch', category: 'Clay & thatch', result: 'thatch', inputs: [{ item: 'mixed_grass', count: 2 }], skill: 'carpentry', label: 'Bundle into thatch', verb: 'bundling thatch', baseTime: 3, stamina: 0.02, done: 'You bundle the grass into thatch.' },
+  { id: 'make_clay_bowl', category: 'Clay & thatch', result: 'clay_bowl', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a bowl', verb: 'shaping a bowl', baseTime: 6, stamina: 0.02, difficulty: 8, done: 'You shape and fire a clay bowl.', fail: 'The walls collapse as you draw them up. You fail to shape a bowl.' },
+  // Cooking. Everything here needs a lit campfire to work at.
+  { id: 'cook_meat', category: 'Cooking', result: 'cooked_meat', inputs: [{ item: 'meat' }], station: 'campfire', skill: 'cooking', label: 'Cook over the fire', verb: 'cooking', baseTime: 8, stamina: 0.02, difficulty: 6, done: 'You cook the meat through.', fail: 'You char the outside and leave the middle raw. The meat is ruined.', consumeOnFail: true },
+  { id: 'bake_potato', category: 'Cooking', result: 'baked_potato', inputs: [{ item: 'potato' }], station: 'campfire', skill: 'cooking', label: 'Bake in the embers', verb: 'baking', baseTime: 7, stamina: 0.02, done: 'You rake a potato out of the embers.' },
+  { id: 'roast_onion', category: 'Cooking', result: 'roast_onion', inputs: [{ item: 'onion' }], station: 'campfire', skill: 'cooking', label: 'Roast over the fire', verb: 'roasting', baseTime: 6, stamina: 0.02, done: 'You roast an onion until it is sweet.' },
+  { id: 'roast_nuts', category: 'Cooking', result: 'roast_nuts', inputs: [{ item: 'nuts' }], station: 'campfire', skill: 'cooking', label: 'Roast the nuts', verb: 'roasting nuts', baseTime: 4, stamina: 0.01, done: 'You roast the nuts on a hot stone.' },
+  { id: 'make_compote', category: 'Cooking', result: 'berry_compote', inputs: [{ item: 'blueberry', count: 3 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Stew into compote', verb: 'stewing berries', baseTime: 10, stamina: 0.02, done: 'You stew the berries down into a compote.' },
+  { id: 'make_stew', category: 'Cooking', result: 'stew', inputs: [{ item: 'cooked_meat' }, { item: 'potato' }, { item: 'onion' }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Simmer a stew', verb: 'simmering a stew', baseTime: 16, stamina: 0.03, difficulty: 10, done: 'You simmer meat and vegetables into a thick stew.', fail: 'The pot catches and the stew is spoiled.', consumeOnFail: true },
 ];
 
-export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Stonework', 'Clay & thatch'];
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Stonework', 'Clay & thatch', 'Cooking'];
+export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {
   /** Tool carried, or no tool needed. */
   tool: boolean;
+  /** Standing at the station it needs, or none needed. */
+  station: boolean;
   inputs: Array<{ item: string; need: number; have: number }>;
   /** Everything is at hand for at least one craft. */
   ready: boolean;
@@ -73,9 +91,10 @@ export interface RecipeStatus {
 
 export function recipeStatus(r: Recipe, g: Game): RecipeStatus {
   const tool = !r.tool || g.inventory.has(r.tool);
+  const station = !r.station || g.atStation(r.station);
   const inputs = r.inputs.map((i) => ({ item: i.item, need: i.count ?? 1, have: g.inventory.count(i.item) }));
-  const max = tool ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
-  return { tool, inputs, ready: max >= 1, max };
+  const max = tool && station ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
+  return { tool, station, inputs, ready: max >= 1, max };
 }
 
 const lower = (id: string): string => itemDef(id).name.toLowerCase();
@@ -84,11 +103,18 @@ const plural = (id: string, n: number): string => (n === 1 ? lower(id) : `${lowe
 /** Why a recipe cannot be made right now, or null. */
 export function recipeReason(r: Recipe, g: Game): string | null {
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
+  if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
   for (const i of r.inputs) {
     const need = i.count ?? 1;
     if (g.inventory.count(i.item) < need) return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${x.count ?? 1} ${plural(x.item, x.count ?? 1)}`).join(', ')})` : ''}.`;
   }
   return null;
+}
+
+/** Human readable list of what a recipe needs: "clay bowl · 1 cooked meat · 1 potato". */
+export function recipeNeeds(r: Recipe): string {
+  const parts = r.inputs.map((i) => `${i.count ?? 1} ${plural(i.item, i.count ?? 1)}`);
+  return (r.tool ? [lower(r.tool), ...parts] : parts).join(' · ');
 }
 
 /** Use up `n` units of an item, drawing from the clicked stack first, then any other (logs differ by wood). */
@@ -130,6 +156,7 @@ export function recipeAction(r: Recipe): ActionDef {
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g))) {
+        if (r.consumeOnFail) for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid);
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         return more(t, g);
       }

@@ -19,9 +19,10 @@ import {
 import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, drawCreature, drawPlayer, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, crateSprite, drawCampfire, drawCreature, drawPlayer, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -35,10 +36,12 @@ export interface Pick {
   creature?: number;
   /** A crate under the cursor, when one is. */
   crate?: number;
+  /** A campfire under the cursor, when one is. */
+  fire?: number;
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire';
   x: number;
   y: number;
   sx: number;
@@ -46,6 +49,7 @@ interface Entity {
   spr: Sprite | null;
   creature?: Creature;
   crateId?: number;
+  fire?: PlacedCampfire;
 }
 
 interface HitRect {
@@ -57,6 +61,7 @@ interface HitRect {
   h: number;
   creature?: number;
   crate?: number;
+  fire?: number;
 }
 
 const VOID_COLOR = '#12395f';
@@ -121,6 +126,7 @@ export class Renderer {
   private playerFacing = 1;
   private creatureHits: HitRect[] = [];
   private crateHits: HitRect[] = [];
+  private fireHits: HitRect[] = [];
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -208,6 +214,7 @@ export class Renderer {
     this.treeHits.length = 0;
     this.creatureHits.length = 0;
     this.crateHits.length = 0;
+    this.fireHits.length = 0;
     this.drawnTiles = 0;
 
     for (let d = dLo; d <= dHi; d++) {
@@ -278,6 +285,12 @@ export class Renderer {
         if (this.game.isToken(x, y)) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.ents.push({ kind: 'token', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: tokenSprite() });
+        }
+        if (this.game.campfires.size) {
+          for (const fire of this.game.campfiresOnTile(x, y)) {
+            const [wx, wy] = fireCentre(fire);
+            this.ents.push({ kind: 'campfire', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, fire });
+          }
         }
         if (this.game.crates.size) {
           for (const crate of this.game.cratesOnTile(x, y)) {
@@ -423,6 +436,11 @@ export class Renderer {
           label: cr.mode === 'wild' ? undefined : cr.name,
         });
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
+        continue;
+      }
+      if (ent.kind === 'campfire' && ent.fire) {
+        drawCampfire(ctx, ent.sx, ent.sy, zoom, ent.fire.lit, ent.fire.fuel, this.time);
+        this.fireHits.push({ x: ent.x, y: ent.y, left: ent.sx - 22 * zoom, top: ent.sy - 20 * zoom, w: 44 * zoom, h: 30 * zoom, fire: ent.fire.id });
         continue;
       }
       const spr = ent.spr;
@@ -1047,6 +1065,10 @@ export class Renderer {
     for (let i = this.crateHits.length - 1; i >= 0; i--) {
       const h = this.crateHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), crate: h.crate };
+    }
+    for (let i = this.fireHits.length - 1; i >= 0; i--) {
+      const h = this.fireHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), fire: h.fire };
     }
     for (let i = this.treeHits.length - 1; i >= 0; i--) {
       const h = this.treeHits[i];

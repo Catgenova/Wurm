@@ -65,7 +65,12 @@ rebuilds and commits the result.
   you fill at the shore.
 - **Deeds.** A deed stake, carved from a shaft with a carving knife, founds an
   11×11 settlement around a stone token; you may hold one at a time.
-  Disbanding pulls the stake back up. Building is only possible on its land,
+  Disbanding pulls the stake back up. Right-click any deed tile for the deed
+  menu: manage the wildermon kept there, rename or disband, and upgrade the
+  settlement. Each of the four upgrades widens the border by 2 tiles and takes
+  on one more worker, and has to be earned — level 2 wants a crate and a
+  campfire on the deed, later levels want more crates, a fire burning,
+  finished buildings and wildermon at work. Building is only possible on its land,
   things left outside rot ten times slower there, and a green border can be
   kept on permanently from Settings.
 - **Building, Wurm style.** Plan on flat packed dirt with a mallet, extend the
@@ -97,6 +102,12 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Campfires and cooking.** Lay a campfire from two shafts on a two by two
+  block of subtiles, feed it shafts, thatch, planks, timbers or logs for burn
+  time, and light it. A burning fire is the station every cooking recipe
+  needs: cooked meat, baked potatoes, roast onions and nuts, and with a clay
+  bowl, berry compote and stew. Fires burn down in real time and go cold when
+  the fuel runs out; an unlit one gives its wood back.
 - **Hunting and butchering.** Wild wildermon can be attacked, and an edged
   tool hits far harder than bare hands. Whatever kills one leaves a corpse
   where it fell. Butchering it yields meat, fur, leather, bone and the

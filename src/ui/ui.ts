@@ -19,10 +19,14 @@ import {
 } from '../game/building';
 import { CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
-import { itemName } from '../game/items';
+import { itemDef, itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
+import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
+import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
+import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
+import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
 import { WildermonPanel } from './panels/wildermon';
@@ -133,6 +137,14 @@ export class UI {
       this.tooltip.show(sx, sy, lines);
       return;
     }
+    const fire = pick.fire !== undefined ? this.game.campfires.get(pick.fire) : undefined;
+    if (fire) {
+      lines.push('Campfire');
+      lines.push(fireState(fire));
+      if (fire.lit) lines.push('Stand here to cook.');
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
     const crate = pick.crate !== undefined ? this.game.crates.get(pick.crate) : undefined;
     if (crate) {
       lines.push(crateName(crate));
@@ -202,16 +214,27 @@ export class UI {
       this.menu.show(sx, sy, crateName(crate), entries);
       return;
     }
+    const fire = pick.fire !== undefined ? this.game.campfires.get(pick.fire) : undefined;
+    if (fire) {
+      this.menu.show(sx, sy, `Campfire (${fireState(fire)})`, this.campfireEntries(fire));
+      return;
+    }
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
-    if (this.game.isToken(pick.x, pick.y)) {
-      const kept = [...this.game.creatures.list.values()].filter((c) => c.mode === 'stored' || c.mode === 'deed');
-      if (kept.length) {
-        entries.push({
-          label: 'Wildermon',
-          children: kept.map((c) => ({ label: `${c.name} (${this.game.creatures.describe(c)})`, children: this.creatureEntries(c.id) })),
-        });
-      }
+    if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
+    // Laying a campfire on the block of subtiles under the cursor.
+    const fireDef = ACTION_BY_ID.get('build_campfire');
+    if (fireDef && this.game.inventory.count('shaft') >= FIRE_COST) {
+      const [ax, ay] = fireAnchor(...subtileOf(pick.x, pick.y, pick.wx, pick.wy));
+      const ft: Target = { ...target, sx: ax, sy: ay };
+      const reason = fireDef.check?.(ft, this.game) ?? null;
+      entries.push({
+        label: `Build campfire here (spots ${ax + 1},${ay + 1} to ${ax + 2},${ay + 2})`,
+        hint: reason ?? undefined,
+        note: reason ? undefined : `Uses ${FIRE_COST} shafts`,
+        disabled: !!reason,
+        onSelect: () => this.game.requestAction(fireDef, ft),
+      });
     }
     // Placing a carried crate on the subtile under the cursor.
     const crateItems = this.game.inventory.items.filter((it) => crateKindOfItem(it.id));
@@ -256,6 +279,93 @@ export class UI {
     if (!building) entries.push(...this.buildingEntries(pick));
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;
     this.menu.show(sx, sy, title, entries);
+  }
+
+  /** Feeding, lighting and cooking at a campfire. */
+  private campfireEntries(fire: PlacedCampfire): MenuItem[] {
+    const g = this.game;
+    const ft: Target = { kind: 'campfire', id: fire.id };
+    const entries: MenuItem[] = [];
+    const fuelDef = ACTION_BY_ID.get('fuel_campfire');
+    const wood = g.inventory.items.filter((it) => isFuel(it.id));
+    if (fuelDef && wood.length) {
+      entries.push({
+        label: 'Fuel',
+        children: wood.map((it) => ({
+          label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+          children:
+            it.count > 1
+              ? [
+                  { label: 'One', onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 }) },
+                  { label: `All (${it.count})`, onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: it.count }) },
+                ]
+              : undefined,
+          onSelect: it.count > 1 ? undefined : () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 }),
+        })),
+      });
+    }
+    for (const id of ['light_campfire', 'put_out_campfire', 'take_apart_campfire']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def || !def.applies(ft, g)) continue;
+      const reason = def.check?.(ft, g) ?? null;
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
+    }
+    // Cooking recipes are ordinary recipes that need a lit fire; offer the ones you could do here.
+    const cookable = RECIPES.filter((r) => r.station === 'campfire');
+    const children: MenuItem[] = cookable.map((r) => {
+      const def = ACTION_BY_ID.get(r.id);
+      const st = recipeStatus(r, g);
+      const material = g.inventory.find(r.inputs[0].item);
+      const reason = def ? recipeReason(r, g) : 'Not possible.';
+      return {
+        label: `${itemDef(r.result).name}${(r.count ?? 1) > 1 ? ` × ${r.count}` : ''}`,
+        note: recipeNeeds(r),
+        hint: reason ?? undefined,
+        disabled: !!reason || !def || !material,
+        onSelect: () => {
+          if (def && material) g.requestAction(def, { kind: 'item', uid: material.uid, count: st.max });
+        },
+      };
+    });
+    entries.push({ label: 'Cook', children });
+    return entries;
+  }
+
+  /** The settlement menu: its wildermon, its upgrade, its name. */
+  private deedEntry(): MenuItem {
+    const g = this.game;
+    const d = g.deed!;
+    const level = g.deedLevel;
+    const kept = [...g.creatures.list.values()].filter((c) => c.mode === 'stored' || c.mode === 'deed');
+    const children: MenuItem[] = [];
+    const workers = g.creatures.workers().length;
+    children.push({
+      label: `Wildermon (${workers} of ${g.workerCap} working)`,
+      disabled: !kept.length,
+      hint: kept.length ? undefined : 'None kept here yet.',
+      children: kept.length ? kept.map((c) => ({ label: `${c.name} (${g.creatures.describe(c)})`, children: this.creatureEntries(c.id) })) : undefined,
+    });
+    const upgrade = DEED_ACTION_BY_ID.get('upgrade_deed');
+    if (upgrade) {
+      const reason = upgradeReason(g);
+      const progress = upgradeProgress(g);
+      const t: Target = { kind: 'tile', x: d.x, y: d.y, cx: d.x, cy: d.y };
+      children.push({
+        label: level < MAX_DEED_LEVEL ? `Upgrade to level ${level + 1}` : `Level ${level}, fully grown`,
+        note: level < MAX_DEED_LEVEL ? `Border ${d.radius + 2} tiles, ${deedWorkersAt(level + 1)} workers` : undefined,
+        hint: reason ?? undefined,
+        disabled: !!reason,
+        onSelect: () => g.requestAction(upgrade, t),
+      });
+      for (const r of progress) children.push({ label: `${r.met ? '✓' : '✗'} ${r.label}`, disabled: true });
+    }
+    for (const id of ['rename_deed', 'disband_deed']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def) continue;
+      const t: Target = { kind: 'tile', x: d.x, y: d.y, cx: d.x, cy: d.y };
+      children.push({ label: def.label, onSelect: () => g.requestAction(def, t) });
+    }
+    return { label: `${d.name} · level ${level}`, children };
   }
 
   /** Actions for a wildermon: taming and feeding, or for a tamed one its stance, job and home. */

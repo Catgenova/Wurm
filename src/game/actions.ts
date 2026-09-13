@@ -1,6 +1,8 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
 import { BUILD_ACTIONS } from './buildActions';
+import { CAMPFIRE_ACTIONS } from './campfire';
 import { BUTCHER_ACTIONS } from './butcher';
+import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
 import { SPECIES, type Stance } from './creatures';
@@ -34,6 +36,7 @@ export type Target =
       itemUid?: number;
     }
   | { kind: 'crate'; id: number }
+  | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
@@ -679,7 +682,7 @@ export const ACTIONS: ActionDef[] = [
         return;
       }
       if (!g.inventory.remove(t.uid, 1)) return;
-      g.deed = { name: name.trim().slice(0, 32), x: g.player.tileX, y: g.player.tileY, radius: DEED_RADIUS };
+      g.deed = { name: name.trim().slice(0, 32), x: g.player.tileX, y: g.player.tileY, radius: DEED_RADIUS, level: 1 };
       g.placeDeedCrate();
       g.logMsg(`You found the settlement of ${g.deed.name}. The land ${DEED_RADIUS * 2 + 1} tiles across around the token is yours to build on. A deed crate stands beside the token.`, 'system');
       g.events.emit('world', g.deed.x, g.deed.y);
@@ -755,6 +758,8 @@ export const ACTIONS: ActionDef[] = [
   ...CRATE_ACTIONS,
   ...RECIPE_ACTIONS,
   ...BUTCHER_ACTIONS,
+  ...CAMPFIRE_ACTIONS,
+  ...DEED_ACTIONS,
   {
     id: 'drop_dirt_here',
     label: 'Drop (raises the ground)',
