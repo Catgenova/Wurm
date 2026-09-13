@@ -41,8 +41,10 @@ export function buildHelp(win: UIWindow): void {
     <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
     Drop dirt to raise a corner. Flatten evens a tile out step by step. Mine rock with a pickaxe,
     then pave gravel with the shards or chisel them into bricks for cobblestone.</p>
-    <p>Dropped items lie where you stood; the tile's menu offers to pick them up again. Fill your
-    water skin at any shore and drink from it on the road.</p>
+    <p>Dropped items lie where you stood; the tile's menu offers to pick them up again. Anything
+    left outside slowly decays, even while you are away: food rots within the hour, stone lasts for
+    days, and better quality holds up longer. Fill your water skin at any shore and drink from it on
+    the road.</p>
     <p>Your skills rise with everything you do. Better skill means faster, more successful actions and
     the freedom to shape steeper slopes.</p>
   `;

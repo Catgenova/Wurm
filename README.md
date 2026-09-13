@@ -62,7 +62,10 @@ rebuilds and commits the result.
   you fill at the shore.
 - **Items.** Click an item for its actions: eat, drink, fill, drop one or all,
   chisel, examine. Dropped items lie on the tile as a pile and can be picked up
-  from that tile's menu.
+  from that tile's menu. Anything left on the ground decays over real time,
+  including time spent away (capped at a week): food rots in about half an
+  hour, stone lasts days, and quality slows it down. When damage hits 100 the
+  item rots away.
 - **Character.** Health, stamina, food and water; swimming drains stamina and
   drowning sends you back to the shore. Actions take time based on skill and
   tool quality, can fail, and raise skills with Wurm-style diminishing gains.
@@ -114,7 +117,9 @@ first, then runs the timer; moving interrupts it.
 ## Roadmap
 
 - Chunked offscreen terrain caching for very zoomed-out views.
-- Ground items, containers and dropping things on tiles.
+- Deeds: found a settlement around a token, with slower decay and protected
+  terrain on its land (the decay rate already has the hook for it).
+- Containers and item repair.
 - Crafting (carpentry, smithing) and a crafting window.
 - Caves and mine entrances.
 - Day/night cycle and weather.

@@ -12,8 +12,13 @@ export interface ItemDef {
   drink?: number;
   /** Container capacity in drinks; the item carries `charges` of them. */
   charges?: number;
+  /** Damage taken per real hour while lying on the ground; defaults by category. */
+  decay?: number;
   description?: string;
 }
+
+/** Ground decay per hour by category: food rots in about half an hour, tools last most of a day. */
+const CATEGORY_DECAY: Record<ItemCategory, number> = { food: 200, plant: 100, material: 25, tool: 12, misc: 12 };
 
 export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel: { name: 'Shovel', category: 'tool', weight: 3, description: 'A shovel for digging, flattening and packing dirt.' },
@@ -27,17 +32,17 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   clay: { name: 'Clay', category: 'material', weight: 2, stackable: true },
   peat: { name: 'Peat', category: 'material', weight: 2, stackable: true },
   tar: { name: 'Tar', category: 'material', weight: 2, stackable: true },
-  rock_shards: { name: 'Rock shards', category: 'material', weight: 20, stackable: true, description: 'Chunks of rock. Paves gravel or becomes bricks.' },
-  stone_brick: { name: 'Stone brick', category: 'material', weight: 15, stackable: true },
-  log: { name: 'Log', category: 'material', weight: 24, stackable: true },
-  sprout: { name: 'Sprout', category: 'plant', weight: 0.1, stackable: true, description: 'Plant it on grass or dirt to grow a tree.' },
+  rock_shards: { name: 'Rock shards', category: 'material', weight: 20, stackable: true, decay: 5, description: 'Chunks of rock. Paves gravel or becomes bricks.' },
+  stone_brick: { name: 'Stone brick', category: 'material', weight: 15, stackable: true, decay: 3 },
+  log: { name: 'Log', category: 'material', weight: 24, stackable: true, decay: 18 },
+  sprout: { name: 'Sprout', category: 'plant', weight: 0.1, stackable: true, decay: 160, description: 'Plant it on grass or dirt to grow a tree. Wilts quickly if left lying around.' },
   blueberry: { name: 'Blueberries', category: 'food', weight: 0.1, stackable: true, food: 0.08 },
   raspberry: { name: 'Raspberries', category: 'food', weight: 0.1, stackable: true, food: 0.08 },
   strawberry: { name: 'Strawberries', category: 'food', weight: 0.1, stackable: true, food: 0.08 },
   lingonberry: { name: 'Lingonberries', category: 'food', weight: 0.1, stackable: true, food: 0.06 },
   acorn: { name: 'Acorn', category: 'food', weight: 0.05, stackable: true, food: 0.02 },
   nuts: { name: 'Nuts', category: 'food', weight: 0.1, stackable: true, food: 0.05 },
-  mixed_grass: { name: 'Mixed grass', category: 'material', weight: 0.1, stackable: true },
+  mixed_grass: { name: 'Mixed grass', category: 'material', weight: 0.1, stackable: true, decay: 120 },
   sage: { name: 'Sage', category: 'plant', weight: 0.05, stackable: true, food: 0.01 },
   basil: { name: 'Basil', category: 'plant', weight: 0.05, stackable: true, food: 0.01 },
   thyme: { name: 'Thyme', category: 'plant', weight: 0.05, stackable: true, food: 0.01 },
@@ -63,6 +68,13 @@ export interface Item {
 
 export function itemDef(id: string): ItemDef {
   return ITEM_DEFS[id] ?? { name: id, category: 'misc', weight: 1 };
+}
+
+/** Damage per real hour for an item lying on the ground; better quality holds up longer. */
+export function groundDecayRate(item: Item): number {
+  const def = itemDef(item.id);
+  const base = def.decay ?? CATEGORY_DECAY[def.category];
+  return base * Math.max(0.3, 1.4 - item.ql / 120);
 }
 
 export function itemName(item: Item): string {

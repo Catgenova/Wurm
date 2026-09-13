@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
-import { Inventory, ITEM_DEFS, type Item } from './items';
+import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { Player } from './player';
 import { Skills, SKILL_DEFS } from './skills';
 
@@ -28,6 +28,8 @@ export interface GameInit {
 
 const FORAGE_COOLDOWN = 180;
 const MAX_LOG = 400;
+/** Seconds between ground decay passes while playing. */
+const DECAY_STEP = 5;
 
 /** Central simulation state: the world, the player and everything they do. */
 export class Game {
@@ -48,6 +50,7 @@ export class Game {
   rand: () => number = Math.random;
   private foraged = new Map<string, number>();
   private drownWarning = 0;
+  private decayClock = 0;
 
   static create(seed: number, size = 256): Game {
     const gen = generateWorld(seed, size);
@@ -123,6 +126,48 @@ export class Game {
     if (s.health <= 0) this.die();
 
     if (this.action) this.updateAction(dt);
+
+    this.decayClock += dt;
+    if (this.decayClock >= DECAY_STEP && this.ground.size) {
+      this.applyDecay(this.decayClock);
+      this.decayClock = 0;
+    } else if (this.decayClock >= DECAY_STEP) {
+      this.decayClock = 0;
+    }
+  }
+
+  /**
+   * Age everything lying on the ground by `seconds` of real time. Items that
+   * reach 100 damage rot away. Returns how many units were lost.
+   */
+  applyDecay(seconds: number): number {
+    const hours = seconds / 3600;
+    let lost = 0;
+    for (const [key, pile] of this.ground) {
+      const [xs, ys] = key.split(',');
+      const x = Number(xs);
+      const y = Number(ys);
+      const mult = this.decayMultiplier(x, y);
+      for (let i = pile.length - 1; i >= 0; i--) {
+        const item = pile[i];
+        item.dmg = Math.min(100, item.dmg + groundDecayRate(item) * hours * mult);
+        if (item.dmg >= 100) {
+          pile.splice(i, 1);
+          lost += item.count;
+          if (seconds < 60 && Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y) < 16) {
+            this.logMsg(`The ${itemName(item).toLowerCase()} lying on the ground rots away.`, 'event');
+          }
+        }
+      }
+      if (!pile.length) this.ground.delete(key);
+      this.events.emit('world', x, y);
+    }
+    return lost;
+  }
+
+  /** How fast things rot at a spot: 1 in the wild. A deed would lower this for its land. */
+  decayMultiplier(_x: number, _y: number): number {
+    return 1;
   }
 
   private updateAction(dt: number): void {

@@ -91,7 +91,12 @@ export class UI {
     }
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)}`);
     const pile = this.game.groundAt(pick.x, pick.y);
-    if (pile.length) lines.push(pile.length === 1 ? `On the ground: ${itemName(pile[0]).toLowerCase()}` : `On the ground: ${pile.length} items`);
+    if (pile.length === 1) {
+      const it = pile[0];
+      lines.push(`On the ground: ${itemName(it).toLowerCase()}${it.count > 1 ? ` ×${it.count}` : ''}${it.dmg >= 1 ? ` · ${Math.round(it.dmg)}% damage` : ''}`);
+    } else if (pile.length) {
+      lines.push(`On the ground: ${pile.length} items`);
+    }
     this.tooltip.show(sx, sy, lines);
   }
 
@@ -102,7 +107,7 @@ export class UI {
     const pickUp = ACTION_BY_ID.get('pick_up');
     if (pile.length && pickUp) {
       const children: MenuItem[] = pile.map((item) => ({
-        label: item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item),
+        label: (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (item.dmg >= 1 ? ` · dmg ${Math.round(item.dmg)}` : ''),
         onSelect: () => this.game.requestAction(pickUp, { kind: 'ground', x: pick.x, y: pick.y, uid: item.uid }),
       }));
       if (pile.length > 1) children.push({ label: 'Everything', onSelect: () => this.game.requestAction(pickUp, { kind: 'ground', x: pick.x, y: pick.y, uid: null }) });

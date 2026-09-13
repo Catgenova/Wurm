@@ -99,6 +99,12 @@ export function loadGame(): Game | null {
     game.settings.grid = data.settings?.grid ?? true;
     game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
     game.logMsg('Your journey continues where you left off.', 'system');
+    // Things left outside kept rotting while you were away, up to a week's worth.
+    const away = Math.max(0, Math.min(7 * 86400, (Date.now() - (data.savedAt ?? Date.now())) / 1000));
+    if (away > 60 && game.ground.size) {
+      const lost = game.applyDecay(away);
+      if (lost) game.logMsg(`While you were away, ${lost === 1 ? 'an item' : `${lost} items`} left on the ground rotted away.`, 'event');
+    }
     return game;
   } catch {
     return null;
