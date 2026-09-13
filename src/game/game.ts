@@ -77,7 +77,7 @@ export class Game {
   /** Game seconds since the world was created. */
   time = 0;
   rand: () => number = Math.random;
-  private foraged = new Map<string, number>();
+  private foraged = new Map<number, number>();
   private drownWarning = 0;
   private decayClock = 0;
 
@@ -590,13 +590,18 @@ export class Game {
     return out;
   }
 
+  private forageKey(x: number, y: number, kind: string): number {
+    const k = kind === 'forage' ? 0 : kind === 'botanize' ? 1 : 2;
+    return k * this.world.w * this.world.h + y * this.world.w + x;
+  }
+
   isForaged(x: number, y: number, kind: string): boolean {
-    const t = this.foraged.get(`${kind}:${x},${y}`);
+    const t = this.foraged.get(this.forageKey(x, y, kind));
     return t !== undefined && this.time - t < FORAGE_COOLDOWN;
   }
 
   markForaged(x: number, y: number, kind: string): void {
-    this.foraged.set(`${kind}:${x},${y}`, this.time);
+    this.foraged.set(this.forageKey(x, y, kind), this.time);
   }
 
   private die(): void {

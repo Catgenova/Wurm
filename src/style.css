@@ -266,6 +266,41 @@ kbd {
   font-size: 11px;
 }
 
+.pals-body {
+  padding: 4px 8px;
+}
+
+.pal-card {
+  margin: 4px 0 8px;
+  padding: 6px 8px;
+  border: 1px solid #3f3428;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.pal-name {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+.pal-level {
+  color: var(--ui-accent);
+  font-size: 11px;
+}
+
+.pal-info {
+  margin-top: 4px;
+  color: var(--ui-dim);
+  font-size: 11px;
+}
+
 .tb-small {
   padding: 1px 7px;
   font-size: 11px;

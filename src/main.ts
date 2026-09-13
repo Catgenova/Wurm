@@ -93,6 +93,9 @@ input.onKey = (code) => {
     case 'KeyO':
       ui.toggleWindow('settings');
       break;
+    case 'KeyP':
+      ui.toggleWindow('wildermon');
+      break;
     case 'KeyG':
       game.settings.grid = !game.settings.grid;
       break;

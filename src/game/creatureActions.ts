@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { isBaitFor, SPECIES, STANCE_NAMES, type Creature, type Stance } from './creatures';
+import { creatureLevel, isBaitFor, SPECIES, STANCE_NAMES, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
 import { itemDef, itemName } from './items';
 
@@ -39,8 +39,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return;
       const def = SPECIES[c.species];
+      if (c.mode === 'wild') {
+        g.logMsg(`A wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}. You would have to tame it to learn more.`, 'event');
+        return;
+      }
       const mood = c.hunger < 0.3 ? 'It looks hungry.' : c.hunger < 0.6 ? 'It could eat.' : 'It looks well fed.';
-      g.logMsg(`${c.name} (${def.name}, ${g.creatures.describe(c)}): ${def.description} Health ${Math.ceil(c.health)}/${def.health}. ${mood} It eats ${dietText(c)}.`, 'event');
+      const skills = Object.entries(c.skills).map(([id, v]) => `${id} ${v.toFixed(1)}`).join(', ');
+      g.logMsg(`${c.name} (${def.name}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${def.health}. ${mood} It eats ${dietText(c)}.`, 'event');
     },
   },
   {

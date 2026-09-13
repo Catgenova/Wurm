@@ -33,6 +33,7 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
+      <tr><td><kbd>P</kbd></td><td>Wildermon: your tamed creatures' stats and actions</td></tr>
       <tr><td><kbd>O</kbd></td><td>Settings (tile grid, deed border)</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
@@ -63,7 +64,13 @@ export function buildHelp(win: UIWindow): void {
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
     or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
     drops what it finds in the deed crate beside the token. Extra tamed wildermon are kept at the token,
-    whose menu lists them. Feed them from your pack; deed workers help themselves from the crate.</p>
+    whose menu lists them. Feed them from your pack; deed workers help themselves from the crate.
+    The <b>Wildermon</b> window (<kbd>P</kbd>) shows the condition, level and skills of every creature
+    you own; wild ones keep theirs to themselves. Deed workers learn from their work, gaining skill at
+    half a player's pace and working at half a player's speed, and better skill means better quality
+    finds and quicker work.</p>
+    <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
+    can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
     <h3>Terraforming</h3>
     <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
     Drop dirt to raise a corner. Flatten evens a tile out step by step. Mine rock with a pickaxe,

@@ -1,3 +1,4 @@
+import { mulberry32 } from '../world/noise';
 import { BUSH_DEFS, TREE_DEFS } from '../world/tiles';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
@@ -271,6 +272,84 @@ export function tokenSprite(): Sprite {
     ctx.lineTo(bx, by - 58);
     ctx.closePath();
     ctx.fill();
+  });
+  cache.set(key, spr);
+  return spr;
+}
+
+export const GRASS_VARIANTS = 10;
+const BLADE_GREENS = ['#5b9a3a', '#6aae45', '#4d8b31', '#79b64c', '#63a03d'];
+const BERRY_COLORS = ['#b52d3f', '#3b5fb0', '#c8394e', '#4a2f7a'];
+const FLOWER_COLORS = ['#fff6d5', '#f2d34c', '#f0a3c0', '#ffffff'];
+
+/**
+ * Grass tufts for a grass tile. `state` bit 0 = can be foraged (berries
+ * show), bit 1 = can be botanized (flowers show); 0 = grazed bare. Ten
+ * variations per state, seeded so the same tile always gets the same tuft.
+ */
+export function grassSprite(state: number, variant: number): Sprite {
+  const key = `grass:${state}:${variant}`;
+  let spr = cache.get(key);
+  if (spr) return spr;
+  const rng = mulberry32(1000 + variant * 131 + state * 17);
+  spr = makeSprite(52, 34, 26, 24, (ctx) => {
+    const cx = 26;
+    const cy = 20;
+    const forage = (state & 1) !== 0;
+    const botanize = (state & 2) !== 0;
+    const tufts = state === 0 ? 2 + Math.floor(rng() * 2) : 4 + Math.floor(rng() * 3);
+    ctx.lineCap = 'round';
+    const points: Array<[number, number]> = [];
+    for (let i = 0; i < tufts; i++) {
+      // Spread tufts over the diamond's inner ellipse.
+      const a = rng() * Math.PI * 2;
+      const r = Math.sqrt(rng());
+      const px = cx + Math.cos(a) * r * 19;
+      const py = cy + Math.sin(a) * r * 8;
+      points.push([px, py]);
+      const blades = 3 + Math.floor(rng() * 3);
+      const tall = state === 0 ? 3 + rng() * 2.5 : 4.5 + rng() * 4;
+      const lean = (rng() - 0.5) * 3;
+      for (let b = 0; b < blades; b++) {
+        const dx = (b - (blades - 1) / 2) * 1.4 + (rng() - 0.5);
+        const h = tall * (0.7 + rng() * 0.5);
+        ctx.strokeStyle = BLADE_GREENS[Math.floor(rng() * BLADE_GREENS.length)];
+        ctx.lineWidth = 1 + rng() * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(px + dx, py);
+        ctx.quadraticCurveTo(px + dx + lean * 0.5, py - h * 0.6, px + dx + lean + (rng() - 0.5) * 2, py - h);
+        ctx.stroke();
+      }
+    }
+    if (forage) {
+      const berries = 3 + Math.floor(rng() * 2);
+      for (let i = 0; i < berries; i++) {
+        const [px, py] = points[Math.floor(rng() * points.length)];
+        ctx.fillStyle = BERRY_COLORS[Math.floor(rng() * BERRY_COLORS.length)];
+        ctx.beginPath();
+        ctx.arc(px + (rng() - 0.5) * 5, py - 1 - rng() * 3, 1.3, 0, TAU);
+        ctx.fill();
+      }
+    }
+    if (botanize) {
+      const flowers = 2 + Math.floor(rng() * 2);
+      for (let i = 0; i < flowers; i++) {
+        const [px, py] = points[Math.floor(rng() * points.length)];
+        const fx = px + (rng() - 0.5) * 6;
+        const fy = py - 3 - rng() * 4;
+        ctx.fillStyle = FLOWER_COLORS[Math.floor(rng() * FLOWER_COLORS.length)];
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) {
+          const ang = (k / 4) * TAU + rng() * 0.3;
+          circle(ctx, fx + Math.cos(ang) * 1.1, fy + Math.sin(ang) * 1.1, 0.9);
+        }
+        ctx.fill();
+        ctx.fillStyle = '#e0a020';
+        ctx.beginPath();
+        ctx.arc(fx, fy, 0.6, 0, TAU);
+        ctx.fill();
+      }
+    }
   });
   cache.set(key, spr);
   return spr;

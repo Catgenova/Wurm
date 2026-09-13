@@ -22,6 +22,7 @@ import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game
 import { itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { CratePanel } from './panels/crate';
+import { WildermonPanel } from './panels/wildermon';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { SettingsPanel } from './panels/settings';
 import { Hud } from './hud';
@@ -49,6 +50,7 @@ export class UI {
   private readonly eventLog: EventLogPanel;
   private readonly settings: SettingsPanel;
   private readonly cratePanel: CratePanel;
+  private readonly wildermon: WildermonPanel;
 
   constructor(
     private readonly game: Game,
@@ -80,6 +82,13 @@ export class UI {
     this.settings = new SettingsPanel(settings, game);
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
     this.cratePanel = new CratePanel(crate, game);
+    const pals = this.windows.create({ id: 'wildermon', title: 'Wildermon', x: 364, y: 330, width: 330, height: 320, anchor: 'tr', open: false });
+    this.wildermon = new WildermonPanel(
+      pals,
+      game,
+      (id) => this.creatureEntries(id),
+      (x, y, title, items) => this.menu.show(x, y, title, items),
+    );
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (window.innerHeight - 460) / 2)}px`;
@@ -99,6 +108,7 @@ export class UI {
     this.hud.update(this.renderer, fps);
     this.minimap.update();
     this.settings.refresh();
+    this.wildermon.update(performance.now());
   }
 
   /** Describe what is under the cursor. */
@@ -113,7 +123,8 @@ export class UI {
     if (creature) {
       const def = SPECIES[creature.species];
       lines.push(`${creature.name}${creature.name !== def.name ? ` the ${def.name}` : ''} · ${this.game.creatures.describe(creature)}`);
-      lines.push(`Health ${Math.ceil(creature.health)}/${def.health} · ${creature.hunger < 0.3 ? 'hungry' : creature.hunger < 0.6 ? 'peckish' : 'well fed'}`);
+      // Only your own wildermon show their condition.
+      if (creature.mode !== 'wild') lines.push(`Health ${Math.ceil(creature.health)}/${def.health} · ${creature.hunger < 0.3 ? 'hungry' : creature.hunger < 0.6 ? 'peckish' : 'well fed'}`);
       this.tooltip.show(sx, sy, lines);
       return;
     }

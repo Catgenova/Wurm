@@ -20,7 +20,7 @@ import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, drawPlayer, drawRabba, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, crateSprite, drawPlayer, drawRabba, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -187,6 +187,7 @@ export class Renderer {
     const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / HALF_H) - 2;
     const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / HALF_H) + 1;
     const grid = this.game.settings.grid && zoom >= 0.7;
+    const grassDetail = zoom >= 0.75;
     const player = this.game.player;
     const rot = cam.rotation;
     const tb = this.tileBuf;
@@ -249,6 +250,14 @@ export class Renderer {
         if (wet) this.drawWater(u, v, x, y, c);
 
         const t = world.getTile(x, y);
+        if (t === TileType.Grass && grassDetail && !wet) {
+          // Tufts show what the tile still has to give: berries to forage, flowers to botanize.
+          const state = (this.game.isForaged(x, y, 'forage') ? 0 : 1) | (this.game.isForaged(x, y, 'botanize') ? 0 : 2);
+          const spr = grassSprite(state, (x * 7 + y * 13 + ((x ^ y) & 3)) % GRASS_VARIANTS);
+          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+          const gy = baseY + hh - avg * hs;
+          ctx.drawImage(spr.canvas, baseX - spr.ax * zoom, gy - spr.ay * zoom, spr.w * zoom, spr.h * zoom);
+        }
         if (t === TileType.Tree || t === TileType.Bush) {
           const data = world.getData(x, y);
           const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : bushSprite(bushSpecies(data));

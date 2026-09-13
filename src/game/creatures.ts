@@ -80,6 +80,10 @@ export interface Creature {
   health: number;
   hunger: number;
   carrying: Item | null;
+  /** Total experience earned from work. */
+  xp: number;
+  /** Task skills, on the same 1..100 scale as the player's. */
+  skills: Record<string, number>;
   // Runtime state below; not saved.
   state: string;
   until: number;
@@ -109,6 +113,8 @@ export interface CreatureJSON {
   health: number;
   hunger: number;
   carrying: Item | null;
+  xp?: number;
+  skills?: Record<string, number>;
 }
 
 export interface Crate {
@@ -119,7 +125,16 @@ export interface Crate {
 
 export const WILD_TARGET = 32;
 const RESPAWN_EVERY = 45;
+/** Seconds a wild creature spends grazing. */
 const FORAGE_TIME = 2.5;
+
+/** A creature's level, read off its best task skill. */
+export const creatureLevel = (c: Creature): number => 1 + Math.floor(Math.max(0, ...Object.values(c.skills), 0) / 5);
+
+/** How long a deed worker takes over a task: twice what a player of the same skill would. */
+export function workDuration(skill: number): number {
+  return 2 * Math.max(1.2, 5 * (1 - skill / 140));
+}
 
 type MoveResult = 'arrived' | 'moving' | 'blocked';
 
@@ -157,6 +172,8 @@ export class Creatures {
       health: def.health,
       hunger: 0.6 + rand() * 0.4,
       carrying: null,
+      xp: 0,
+      skills: { foraging: 1 },
       state: 'idle',
       until: 0,
       tx: x,
@@ -264,7 +281,8 @@ export class Creatures {
     const dy = ty - c.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 0.12) return 'arrived';
-    const step = Math.min(this.species(c).speed * speedMul * dt, dist);
+    const pace = c.mode === 'deed' ? 1 + (c.skills.foraging ?? 1) / 500 : 1;
+    const step = Math.min(this.species(c).speed * speedMul * pace * dt, dist);
     const vx = dx / dist;
     const vy = dy / dist;
     const nx = c.x + vx * step;
@@ -338,17 +356,42 @@ export class Creatures {
 
   private beginForage(game: Game, c: Creature): void {
     c.state = 'forage';
-    c.until = game.time + FORAGE_TIME;
+    c.until = game.time + (c.mode === 'deed' ? workDuration(c.skills.foraging ?? 1) : FORAGE_TIME);
   }
 
-  /** Finish a forage: the tile goes on cooldown as if a player had picked it over. */
+  /**
+   * Finish a forage: the tile goes on cooldown as if a player had picked it
+   * over. Workers roll like a player of their skill and learn from it at half
+   * a player's pace.
+   */
   private finishForage(game: Game, c: Creature): Item | null {
     const x = Math.floor(c.x);
     const y = Math.floor(c.y);
     game.markForaged(x, y, 'forage');
-    if (game.rand() < 0.25) return null;
+    if (c.mode !== 'deed') {
+      if (game.rand() < 0.25) return null;
+      const id = rollTable(FORAGE_TABLE, game.rand());
+      return { uid: game.inventory.nextUid++, id, ql: 5 + game.rand() * 30, dmg: 0, count: 1 };
+    }
+    const skill = c.skills.foraging ?? 1;
+    this.gainSkill(game, c, 'foraging', 0.225);
+    const chance = Math.min(0.98, Math.max(0.3, 0.6 + (skill / 100) * 0.38 - 5 / 150));
+    if (game.rand() < 0.2 || game.rand() >= chance) return null;
     const id = rollTable(FORAGE_TABLE, game.rand());
-    return { uid: game.inventory.nextUid++, id, ql: 5 + game.rand() * 30, dmg: 0, count: 1 };
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
+    return { uid: game.inventory.nextUid++, id, ql, dmg: 0, count: 1 };
+  }
+
+  /** Same diminishing curve as the player's skills. */
+  gainSkill(game: Game, c: Creature, id: string, base: number): number {
+    const v = c.skills[id] ?? 1;
+    const room = Math.max(0, 1 - v / 100);
+    const gain = base * Math.pow(room, 1.4) * (0.6 + 0.8 * game.rand());
+    const before = creatureLevel(c);
+    c.skills[id] = Math.min(100, v + gain);
+    c.xp += gain;
+    if (creatureLevel(c) > before) game.logMsg(`${c.name} reaches level ${creatureLevel(c)}.`, 'skill');
+    return gain;
   }
 
   private updateWild(c: Creature, dt: number, game: Game): void {
@@ -594,6 +637,8 @@ export class Creatures {
         health: c.health,
         hunger: c.hunger,
         carrying: c.carrying,
+        xp: c.xp,
+        skills: c.skills,
       })),
     };
   }
@@ -604,7 +649,7 @@ export class Creatures {
     cs.nextId = data.nextId ?? 1;
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, xp: j.xp ?? 0, skills: { foraging: 1, ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

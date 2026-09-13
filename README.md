@@ -81,7 +81,13 @@ rebuilds and commits the result.
   vegetable at a low chance that never provokes it. A companion follows you
   with a Passive, Defensive or Aggressive stance; a deed worker forages around
   the settlement and delivers to the deed crate; spare tamed ones are kept at
-  the token.
+  the token. A Wildermon window shows your creatures' health, hunger, level
+  and skills (wild ones stay hidden); workers gain skill at half a player's
+  pace, work at half a player's speed, and improve the quality and pace of
+  their work as they level.
+- **Living grass.** Grass tiles carry tufts in four states with ten variants
+  each: berries when the tile can be foraged, flowers when it can be
+  botanized, both, or grazed bare after being picked over.
 - **Items.** Click an item for its actions: eat, drink, fill, drop one or all,
   chisel, examine. Dropped items lie on the tile as a pile and can be picked up
   from that tile's menu. Anything left on the ground decays over real time,
