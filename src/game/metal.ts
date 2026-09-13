@@ -90,6 +90,7 @@ export const MOULDS: MouldDef[] = [
   { id: 'maul_head_mould', name: 'Maul head mould', makes: 'maul_head', skill: 'weaponsmithing', sand: 4, difficulty: 18, lumps: 3 },
   { id: 'spear_head_mould', name: 'Spear head mould', makes: 'spear_head', skill: 'weaponsmithing', sand: 2, difficulty: 16, lumps: 1 },
   { id: 'shield_boss_mould', name: 'Shield boss mould', makes: 'shield_boss', skill: 'armorsmithing', sand: 3, difficulty: 14, lumps: 2 },
+  { id: 'file_mould', name: 'File mould', makes: 'file', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
   // Chain: rings drawn from a mould and riveted up.
   { id: 'chain_coif_mould', name: 'Chain coif mould', makes: 'chain_coif', skill: 'chainsmithing', sand: 3, difficulty: 18, lumps: 2 },
   { id: 'chain_hauberk_mould', name: 'Chain hauberk mould', makes: 'chain_hauberk', skill: 'chainsmithing', sand: 5, difficulty: 26, lumps: 5 },

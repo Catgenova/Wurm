@@ -159,6 +159,16 @@ rebuilds and commits the result.
   there, and it fires when something wild crosses the border: aggressive ones
   break off work and go for it, defensive ones answer only what has struck at
   them or at you, passive ones carry on working.
+- **Improving.** Anything finished can be bettered: each pass spends stock and
+  raises quality, fast at first and slowly near the top, while a failure marks
+  the piece and past 10 damage it must be repaired before the work can go on.
+  What you need is decided by the material — a file and a whetstone for metal,
+  a carving knife and a file for wood, a needle for cloth, an awl and needle
+  for leather, a chisel and whetstone for stone — plus a little of the material
+  itself per pass. Whetstones are chiselled from shards and needles and awls
+  carved from bone, so most improving starts long before a forge; a file is
+  cast from its own mould, which is what gates metal. The judging skill is
+  whichever one would have made the thing, and nothing improves past it.
 - **Wool, cloth and the loom.** Fibre becomes cloth in two steps with two
   pieces of furniture: a spindle spins wool, cotton or wemp into yarn, and a
   loom weaves three yarn into cloth. Cloth stuffs a mattress, sews into

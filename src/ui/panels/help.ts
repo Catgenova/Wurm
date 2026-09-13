@@ -174,6 +174,27 @@ export function buildHelp(win: UIWindow): void {
     like. A green repairer takes about half a minute to bring a badly worn tool back and costs it
     several points of quality; a skilled one does the same in a few seconds for a fraction of the
     quality. Nothing repairs past quality 1, so a thing mended often enough is finished in the end.</p>
+    <h3>Improving</h3>
+    <p>A finished thing can be made better than it was made. Right-click it and choose <b>Improve</b>:
+    each pass eats a little stock, and a success raises the quality &mdash; a great deal at first and
+    very little near the end. A failure marks the piece instead, and once it is knocked about past 10
+    damage you must <b>Repair</b> it before you can work on it again.</p>
+    <p><b>What you need depends on what it is made of.</b></p>
+    <table>
+      <tr><td><b>Metal</b></td><td>A <b>file</b> and a <b>whetstone</b>, and a lump of metal per pass</td></tr>
+      <tr><td><b>Wood</b></td><td>A <b>carving knife</b> and a <b>file</b>, and a plank or shaft</td></tr>
+      <tr><td><b>Cloth</b></td><td>A <b>needle</b>, and a length of cloth</td></tr>
+      <tr><td><b>Leather</b></td><td>An <b>awl</b> and a <b>needle</b>, and a hide</td></tr>
+      <tr><td><b>Stone</b></td><td>A <b>chisel</b> and a <b>whetstone</b>, and shards</td></tr>
+    </table>
+    <p>A <b>whetstone</b> is chiselled from two rock shards, and a <b>needle</b> and an <b>awl</b> are
+    carved from bone with a knife, so cloth, leather, wood and stone can all be bettered long before you
+    have a forge. A <b>file</b> is cast from its own mould at an anvil, which is what gates metal.</p>
+    <p>The skill the work is judged by is the one that would have made the thing &mdash; blacksmithing
+    for tools, weaponsmithing for weapons, chain and plate armoursmithing for their armour, bowyery for
+    bows, tailoring, leatherworking, carpentry, fine carpentry and stonecutting for the rest &mdash; and
+    <b>nothing can be improved past that skill</b>. Improving raises the skill as you go, so a long
+    session lifts its own ceiling a little.</p>
     <h3>Wool, cloth and the loom</h3>
     <p>Fibre becomes cloth in two steps, and each wants its own furniture. Build a <b>spindle</b> and a
     <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into

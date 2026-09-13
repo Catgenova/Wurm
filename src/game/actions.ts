@@ -7,6 +7,7 @@ import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
 import { FURNITURE_ACTIONS } from './furniture';
 import { GEAR_ACTIONS } from './gear';
+import { IMPROVE_ACTIONS } from './improve';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { DEED_ACTIONS } from './deed';
@@ -943,6 +944,7 @@ export const ACTIONS: ActionDef[] = [
   ...KILN_ACTIONS,
   ...FURNITURE_ACTIONS,
   ...GEAR_ACTIONS,
+  ...IMPROVE_ACTIONS,
   ...ANVIL_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,
