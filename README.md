@@ -80,15 +80,21 @@ rebuilds and commits the result.
   switch to show every recipe and what it lacks, and each material's own menu
   offers the same recipes.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
-  rabbit-like grazer, roams the wild, forages berries when hungry (putting the
-  tile on the same cooldown a player would), and is tamed with a berry or
-  vegetable at a low chance that never provokes it. A companion follows you
-  with a Passive, Defensive or Aggressive stance; a deed worker forages around
-  the settlement and delivers to the deed crate; spare tamed ones are kept at
-  the token. A Wildermon window shows your creatures' health, hunger, level
-  and skills (wild ones stay hidden); workers gain skill at half a player's
-  pace, work at half a player's speed, and improve the quality and pace of
-  their work as they level.
+  rabbit-like grazer, forages berries when hungry and is tamed with a berry or
+  vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is
+  tamed with a spice or vegetable. Both put the tile on the same cooldown a
+  player would, and neither retaliates for a failed attempt. A companion
+  follows you with a Passive, Defensive or Aggressive stance; a deed worker
+  forages or botanizes around the settlement and delivers to the deed crate;
+  spare tamed ones are kept at the token. A Wildermon window shows your
+  creatures' health, hunger, level and skills (wild ones stay hidden); workers
+  gain skill at half a player's pace, work at half a player's speed, and
+  improve the quality and pace of their work as they level.
+- **Hunting and butchering.** Wild wildermon can be attacked, and an edged
+  tool hits far harder than bare hands. Whatever kills one leaves a corpse
+  where it fell. Butchering it yields meat, fur, leather, bone and the
+  occasional gland, with the Butchering skill and a butchering knife deciding
+  how much of the carcass survives the job.
 - **Placeable crates on a subtile grid.** Tiles are divided into 4×4 spots;
   a log or plank crate (crafted from logs or planks with a mallet) takes one
   spot, snaps to the grid, holds 30 or 60 things, and can be emptied and

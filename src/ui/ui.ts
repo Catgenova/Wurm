@@ -22,6 +22,7 @@ import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game
 import { itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '../game/crates';
+import { butcherPreview } from '../game/butcher';
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
 import { WildermonPanel } from './panels/wildermon';
@@ -233,6 +234,20 @@ export class UI {
       if (pile.length > 1) children.push({ label: 'Everything', onSelect: () => this.game.requestAction(pickUp, { kind: 'ground', x: pick.x, y: pick.y, uid: null }) });
       entries.push({ label: 'Pick up', children });
     }
+    // Anything else that can be done to a thing lying here, such as butchering a corpse.
+    for (const item of pile) {
+      const gt: Target = { kind: 'ground', x: pick.x, y: pick.y, uid: item.uid };
+      for (const { def, reason } of this.game.actionsFor(gt)) {
+        if (def.id === 'pick_up') continue;
+        entries.push({
+          label: `${def.label} the ${itemName(item).toLowerCase()}`,
+          hint: reason ?? undefined,
+          note: def.id === 'butcher' ? butcherPreview(this.game, item) : undefined,
+          disabled: !!reason,
+          onSelect: () => this.game.requestAction(def, gt),
+        });
+      }
+    }
     const building = this.game.buildings.buildingAt(pick.x, pick.y);
     if (building) entries.push(...this.buildingEntries(pick));
     for (const { def, reason } of this.game.actionsFor(target)) {
@@ -289,6 +304,7 @@ export class UI {
     push(item('store_creature'));
     push(item('rename_creature'));
     push(item('release_creature'));
+    push(item('attack_creature'));
     return entries;
   }
 

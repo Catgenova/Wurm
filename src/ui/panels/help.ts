@@ -46,6 +46,12 @@ export function buildHelp(win: UIWindow): void {
     saw gives planks and timbers, a chisel turns shards into bricks, and so on. Tick <i>Show every
     recipe</i> to see the rest with the missing parts marked. The same recipes are on each material's
     own menu, where <i>All</i> keeps going until the materials run out.</p>
+    <h3>Hunting and butchering</h3>
+    <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
+    than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a
+    <b>corpse</b> on the ground. Right-click the tile and choose <b>Butcher</b> for meat, fur, leather,
+    bone and the occasional gland. The <b>Butchering</b> skill and a <b>butchering knife</b> both decide
+    how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.</p>
     <h3>Settling and building</h3>
     <p>Use the settlement deed in your inventory to found a settlement where you stand: an 11 by 11
     square around a stone token. You may hold one settlement at a time, and building is only allowed
@@ -64,10 +70,12 @@ export function buildHelp(win: UIWindow): void {
     into mortar, chisel rock, slate, marble and sandstone shards into bricks, shape clay into bricks
     or press it with grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Wildermon</h3>
-    <p>Wild creatures roam the island. The first is the <b>Rabba</b>, a rabbit-like grazer that forages
-    berries when hungry (and picks that spot clean for a while). Carry a berry or vegetable, long-press
-    or right-click one and choose <b>Tame</b>: the food is used up, success is uncommon at low taming
-    skill, and a Rabba never holds a failed attempt against you.</p>
+    <p>Wild creatures roam the island. The <b>Rabba</b> is a rabbit-like grazer that forages berries when
+    hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead. Both pick that
+    spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
+    a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
+    food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt
+    against you.</p>
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
     or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
     drops what it finds in the deed crate beside the token. Extra tamed wildermon are kept at the token,

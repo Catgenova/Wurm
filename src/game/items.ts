@@ -29,6 +29,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   mallet: { name: 'Mallet', category: 'tool', weight: 1.5, description: 'Plans buildings and drives wooden walls together.' },
   trowel: { name: 'Trowel', category: 'tool', weight: 1, description: 'Lays bricks, mortar and stone floors.' },
   saw: { name: 'Saw', category: 'tool', weight: 1.5, description: 'Cuts logs into planks and timbers.' },
+  butchering_knife: { name: 'Butchering knife', category: 'tool', weight: 1, description: 'A broad blade for butchering corpses. Yields more from a carcass than bare hands.' },
   settlement_deed: { name: 'Settlement deed', category: 'misc', weight: 0.1, decay: 0.5, description: 'Found a settlement where you stand: 11 by 11 tiles around a token. You may hold one deed at a time.' },
   crate_log: { name: 'Log crate', category: 'misc', weight: 30, decay: 6, description: 'A rough crate that holds 30 things. Place it on any spot of a tile.' },
   crate_plank: { name: 'Plank crate', category: 'misc', weight: 15, decay: 6, description: 'A neat crate that holds 60 things. Place it on any spot of a tile.' },
@@ -54,6 +55,10 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   log: { name: 'Log', category: 'material', weight: 24, stackable: true, decay: 18 },
   plank: { name: 'Plank', category: 'material', weight: 2, stackable: true, decay: 20 },
   timber: { name: 'Timber', category: 'material', weight: 6, stackable: true, decay: 18 },
+  fur: { name: 'Fur', category: 'material', weight: 1, stackable: true, decay: 16, description: 'A soft pelt taken from a butchered wildermon.' },
+  leather: { name: 'Leather', category: 'material', weight: 1.5, stackable: true, decay: 12, description: 'Hide cured enough to work with.' },
+  bone: { name: 'Bone', category: 'material', weight: 1, stackable: true, decay: 8 },
+  gland: { name: 'Gland', category: 'material', weight: 0.2, stackable: true, decay: 90, description: 'A small scent gland. Rare, and prized by alchemists.' },
   shaft: { name: 'Shaft', category: 'material', weight: 1, stackable: true, decay: 20, description: 'A straight length of wood, carved from a log. Handles for tools and rails for fences.' },
   thatch: { name: 'Thatch', category: 'material', weight: 0.5, stackable: true, decay: 60 },
   sprout: { name: 'Sprout', category: 'plant', weight: 0.1, stackable: true, decay: 160, description: 'Plant it on grass or dirt to grow a tree. Wilts quickly if left lying around.' },
@@ -63,6 +68,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lingonberry: { name: 'Lingonberries', category: 'food', weight: 0.1, stackable: true, food: 0.06 },
   acorn: { name: 'Acorn', category: 'food', weight: 0.05, stackable: true, food: 0.02 },
   nuts: { name: 'Nuts', category: 'food', weight: 0.1, stackable: true, food: 0.05 },
+  meat: { name: 'Meat', category: 'food', weight: 0.5, stackable: true, food: 0.18, decay: 160, description: 'Raw meat from a butchered wildermon.' },
   mixed_grass: { name: 'Mixed grass', category: 'material', weight: 0.1, stackable: true, decay: 120 },
   sage: { name: 'Sage', category: 'plant', weight: 0.05, stackable: true, food: 0.01 },
   basil: { name: 'Basil', category: 'plant', weight: 0.05, stackable: true, food: 0.01 },
@@ -73,6 +79,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   wemp_seeds: { name: 'Wemp seeds', category: 'plant', weight: 0.05, stackable: true },
   potato: { name: 'Potato', category: 'food', weight: 0.2, stackable: true, food: 0.1 },
   onion: { name: 'Onion', category: 'food', weight: 0.15, stackable: true, food: 0.06 },
+  corpse: { name: 'Corpse', category: 'misc', weight: 12, decay: 90, description: 'A dead wildermon. Butcher it for meat, fur, leather, bones and glands before it rots.' },
 };
 
 export interface Item {

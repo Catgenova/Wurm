@@ -1,7 +1,7 @@
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
 import type { PlacedCrate } from './crates';
-import type { CreatureJSON } from './creatures';
+import { SPECIES, type CreatureJSON } from './creatures';
 import type { Item } from './items';
 import { Game, type Deed } from './game';
 import type { Stats } from './player';
@@ -114,6 +114,11 @@ export function loadGame(): Game | null {
       crate: data.crate ?? null,
     });
     if (!data.creatures) game.creatures.spawnWild(game, 45);
+    // Saves made before a species existed have none of it; seed a few so the island is not one-note.
+    for (const id of Object.keys(SPECIES)) {
+      if ([...game.creatures.list.values()].some((c) => c.species === id)) continue;
+      game.creatures.spawnSpecies(game, id, 12);
+    }
     if (game.deed && !game.deedCrate()) game.placeDeedCrate();
     game.settings.grid = data.settings?.grid ?? true;
     game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
@@ -125,6 +130,7 @@ export function loadGame(): Game | null {
       ['mallet', 'a mallet'],
       ['trowel', 'a trowel'],
       ['saw', 'a saw'],
+      ['butchering_knife', 'a butchering knife'],
     ]) {
       if (!game.inventory.has(id)) {
         game.inventory.add(id, { ql: 20 });

@@ -1,4 +1,4 @@
-import { creatureLevel, SPECIES, STANCE_NAMES, type Creature } from '../../game/creatures';
+import { creatureLevel, GATHER_VERB, SPECIES, STANCE_NAMES, type Creature } from '../../game/creatures';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
 import type { MenuItem } from '../contextmenu';
@@ -41,7 +41,7 @@ export class WildermonPanel {
     if (!owned.length) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = 'You have no tamed wildermon yet. Carry a berry and try Tame on a wild Rabba.';
+      empty.textContent = 'You have no tamed wildermon yet. Carry a berry for a Rabba or a spice for a Vola, then try Tame on a wild one.';
       this.list.append(empty);
       return;
     }
@@ -106,7 +106,10 @@ export class WildermonPanel {
     info.className = 'pal-info';
     const parts: string[] = [];
     if (c.mode === 'active') parts.push(`Stance: ${STANCE_NAMES[c.stance]}`);
-    if (c.mode === 'deed') parts.push(c.carrying ? `Carrying ${itemDef(c.carrying.id).name.toLowerCase()} to the crate` : c.state === 'forage' ? 'Foraging' : c.state === 'toForage' ? 'Heading out to forage' : 'Looking for work');
+    if (c.mode === 'deed') {
+      const verb = def.gathers ? GATHER_VERB[def.gathers] : 'working';
+      parts.push(c.carrying ? `Carrying ${itemDef(c.carrying.id).name.toLowerCase()} to the crate` : c.state === 'forage' ? `${verb[0].toUpperCase()}${verb.slice(1)}` : c.state === 'toForage' ? `Heading out to ${def.gathers ?? 'work'}` : 'Looking for work');
+    }
     parts.push(`Attack ${def.attack}`);
     const skills = Object.entries(c.skills).map(([id, v]) => `${id[0].toUpperCase()}${id.slice(1)} ${v.toFixed(2)}`);
     parts.push(...skills);

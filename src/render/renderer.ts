@@ -21,7 +21,7 @@ import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpeci
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, drawPlayer, drawRabba, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, crateSprite, drawCreature, drawPlayer, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -413,7 +413,8 @@ export class Renderer {
         const cr = ent.creature;
         const def = SPECIES[cr.species] ?? SPECIES.rabba;
         const dx = cam.rotateX(cr.dirX, cr.dirY) - cam.rotateY(cr.dirX, cr.dirY);
-        drawRabba(ctx, ent.sx, ent.sy, zoom, {
+        drawCreature(ctx, ent.sx, ent.sy, zoom, {
+          species: def.id,
           facing: dx >= 0 ? 1 : -1,
           phase: cr.walkPhase,
           moving: cr.moving,

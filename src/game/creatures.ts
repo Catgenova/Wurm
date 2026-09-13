@@ -1,5 +1,5 @@
 import { TILE_DEFS } from '../world/tiles';
-import { FORAGE_TABLE, rollTable } from './forage';
+import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { Game } from './game';
 import { crateCentre } from './crates';
 import { itemDef, type Item } from './items';
@@ -12,6 +12,14 @@ import { groundStep } from './player';
 
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
+/** What a creature gathers from the land, as a wild grazer and as a deed job. */
+export type GatherKind = 'forage' | 'botanize';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE };
+export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
+/** Marks a creature as last hurt by the player rather than another creature. */
+export const PLAYER_ATTACKER = -1;
 export const STANCES: Stance[] = ['passive', 'defensive', 'aggressive'];
 export const STANCE_NAMES: Record<Stance, string> = { passive: 'Passive', defensive: 'Defensive', aggressive: 'Aggressive' };
 export const STANCE_HINTS: Record<Stance, string> = {
@@ -34,14 +42,22 @@ export interface SpeciesDef {
   tameChance: number;
   /** Items it eats and that work as taming bait. */
   diet: string[];
+  /** Short description of its bait for menus: "a berry or vegetable". */
+  baitHint: string;
   /** Runs rather than fights when hurt. */
   timid: boolean;
-  /** Forages for food, and does so as a job on the deed. */
-  forages: boolean;
+  /** How it feeds itself in the wild and what it does as a job on the deed. */
+  gathers: GatherKind | null;
   /** How far from the token a deed worker will roam. */
   workRange: number;
   /** Body and belly colours per variant. */
   variants: Array<[string, string]>;
+  /** What a full butchering of its corpse can yield. */
+  butcher: Partial<Record<ButcherPart, number>>;
+  /** How it shrugs off a failed taming attempt. */
+  tameFail: string;
+  /** How it leaves when released. */
+  leaves: string;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -55,8 +71,9 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameLevel: 1,
     tameChance: 0.12,
     diet: ['blueberry', 'raspberry', 'strawberry', 'lingonberry', 'potato', 'onion'],
+    baitHint: 'a berry or vegetable',
     timid: true,
-    forages: true,
+    gathers: 'forage',
     workRange: 8,
     variants: [
       ['#9a7048', '#d2b08a'],
@@ -64,10 +81,50 @@ export const SPECIES: Record<string, SpeciesDef> = {
       ['#c9b58a', '#ede2c8'],
       ['#eae6de', '#ffffff'],
     ],
+    butcher: { meat: 3, fur: 2, leather: 2, bone: 3, gland: 1 },
+    tameFail: 'nibbles the {food}, twitches its nose, and hops off unconvinced',
+    leaves: 'bounds off into the wild',
+  },
+  vola: {
+    id: 'vola',
+    name: 'Vola',
+    description: 'A velvet-furred digger with a pink snout and broad shovel paws. It noses through the undergrowth for herbs and roots and would rather burrow than bite.',
+    health: 16,
+    attack: 2,
+    speed: 1.9,
+    tameLevel: 1,
+    tameChance: 0.12,
+    diet: ['sage', 'basil', 'thyme', 'mint', 'rosemary', 'potato', 'onion'],
+    baitHint: 'a spice or vegetable',
+    timid: true,
+    gathers: 'botanize',
+    workRange: 8,
+    variants: [
+      ['#4a3b33', '#7d6a5c'],
+      ['#6f6c68', '#a09a92'],
+      ['#7d5a3c', '#b8926a'],
+      ['#2b2624', '#5b524c'],
+    ],
+    butcher: { meat: 2, fur: 3, leather: 2, bone: 2, gland: 1 },
+    tameFail: 'snuffles the {food} out of your palm, then shuffles away and buries itself in the leaf litter',
+    leaves: 'shuffles off and burrows out of sight',
   },
 };
 
+/** Which species roam wild, by weight. */
+const WILD_SPECIES: Array<[string, number]> = [
+  ['rabba', 55],
+  ['vola', 45],
+];
+
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
+/** The task skill a species trains, if it has a job. */
+export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
+/** Fresh task skills for a species. */
+const startSkills = (species: SpeciesDef): Record<string, number> => {
+  const id = workSkill(species);
+  return id ? { [id]: 1 } : {};
+};
 
 export interface Creature {
   id: number;
@@ -168,7 +225,7 @@ export class Creatures {
       hunger: 0.6 + rand() * 0.4,
       carrying: null,
       xp: 0,
-      skills: { foraging: 1 },
+      skills: startSkills(def),
       state: 'idle',
       until: 0,
       tx: x,
@@ -223,6 +280,11 @@ export class Creatures {
 
   /** Drop wild creatures on grazing land away from the player and the deed. */
   spawnWild(game: Game, count: number, minDistance = 12): number {
+    return this.spawnSpecies(game, null, count, minDistance);
+  }
+
+  /** As spawnWild, but for one species; pass null to roll the wild mix. */
+  spawnSpecies(game: Game, species: string | null, count: number, minDistance = 12): number {
     const w = game.world;
     let placed = 0;
     for (let tries = 0; tries < count * 40 && placed < count; tries++) {
@@ -231,7 +293,7 @@ export class Creatures {
       if (!this.tileOk(game, x, y) || !TILE_DEFS[w.getTile(x, y)].forage) continue;
       if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
-      this.spawn('rabba', x + 0.5, y + 0.5, 'wild', game.rand);
+      this.spawn(species ?? rollTable(WILD_SPECIES, game.rand()), x + 0.5, y + 0.5, 'wild', game.rand);
       placed++;
     }
     return placed;
@@ -276,7 +338,7 @@ export class Creatures {
     const dy = ty - c.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 0.12) return 'arrived';
-    const pace = c.mode === 'deed' ? 1 + (c.skills.foraging ?? 1) / 500 : 1;
+    const pace = c.mode === 'deed' ? 1 + Math.max(1, ...Object.values(c.skills)) / 500 : 1;
     const step = Math.min(this.species(c).speed * speedMul * pace * dt, dist);
     const vx = dx / dist;
     const vy = dy / dist;
@@ -329,16 +391,21 @@ export class Creatures {
     c.until = game.time + 2;
   }
 
-  /** Nearest tile within `range` of a point that can be foraged right now. */
-  private findForageTile(game: Game, cx: number, cy: number, range: number): { x: number; y: number } | null {
-    const w = game.world;
+  /** Whether a tile can be foraged or botanized right now. */
+  private gatherable(game: Game, x: number, y: number, kind: GatherKind): boolean {
+    const def = TILE_DEFS[game.world.getTile(x, y)];
+    return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
+  }
+
+  /** Nearest tile within `range` of a point that can be gathered from right now. */
+  private findForageTile(game: Game, cx: number, cy: number, range: number, kind: GatherKind): { x: number; y: number } | null {
     let best: { x: number; y: number } | null = null;
     let bestD = Infinity;
     const x0 = Math.floor(cx);
     const y0 = Math.floor(cy);
     for (let y = y0 - range; y <= y0 + range; y++) {
       for (let x = x0 - range; x <= x0 + range; x++) {
-        if (!this.tileOk(game, x, y) || !TILE_DEFS[w.getTile(x, y)].forage || game.isForaged(x, y, 'forage')) continue;
+        if (!this.tileOk(game, x, y) || !this.gatherable(game, x, y, kind)) continue;
         const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) + game.rand() * 1.5;
         if (d < bestD) {
           bestD = d;
@@ -349,30 +416,32 @@ export class Creatures {
     return best;
   }
 
-  private beginForage(game: Game, c: Creature): void {
+  private beginForage(game: Game, c: Creature, kind: GatherKind): void {
     c.state = 'forage';
-    c.until = game.time + (c.mode === 'deed' ? workDuration(c.skills.foraging ?? 1) : FORAGE_TIME);
+    c.until = game.time + (c.mode === 'deed' ? workDuration(c.skills[GATHER_SKILL[kind]] ?? 1) : FORAGE_TIME);
   }
 
   /**
-   * Finish a forage: the tile goes on cooldown as if a player had picked it
+   * Finish gathering: the tile goes on cooldown as if a player had picked it
    * over. Workers roll like a player of their skill and learn from it at half
    * a player's pace.
    */
-  private finishForage(game: Game, c: Creature): Item | null {
+  private finishForage(game: Game, c: Creature, kind: GatherKind): Item | null {
     const x = Math.floor(c.x);
     const y = Math.floor(c.y);
-    game.markForaged(x, y, 'forage');
+    game.markForaged(x, y, kind);
+    const table = GATHER_TABLE[kind];
     if (c.mode !== 'deed') {
       if (game.rand() < 0.25) return null;
-      const id = rollTable(FORAGE_TABLE, game.rand());
+      const id = rollTable(table, game.rand());
       return { uid: game.inventory.nextUid++, id, ql: 5 + game.rand() * 30, dmg: 0, count: 1 };
     }
-    const skill = c.skills.foraging ?? 1;
-    this.gainSkill(game, c, 'foraging', 0.225);
+    const skillId = GATHER_SKILL[kind];
+    const skill = c.skills[skillId] ?? 1;
+    this.gainSkill(game, c, skillId, 0.225);
     const chance = Math.min(0.98, Math.max(0.3, 0.6 + (skill / 100) * 0.38 - 5 / 150));
     if (game.rand() < 0.2 || game.rand() >= chance) return null;
-    const id = rollTable(FORAGE_TABLE, game.rand());
+    const id = rollTable(table, game.rand());
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
     return { uid: game.inventory.nextUid++, id, ql, dmg: 0, count: 1 };
   }
@@ -391,6 +460,8 @@ export class Creatures {
 
   private updateWild(c: Creature, dt: number, game: Game): void {
     c.hunger = Math.max(0, c.hunger - dt * 0.004);
+    const def = this.species(c);
+    const kind = def.gathers;
     if (c.state === 'flee') {
       if (game.time >= c.until) c.state = 'idle';
       else if (this.stepToward(game, c, c.tx, c.ty, dt, 1.6) !== 'moving') c.state = 'idle';
@@ -398,8 +469,8 @@ export class Creatures {
     }
     if (c.state === 'forage') {
       if (game.time >= c.until) {
-        const food = this.finishForage(game, c);
-        if (food) c.hunger = Math.min(1, c.hunger + 0.5);
+        const food = kind ? this.finishForage(game, c, kind) : null;
+        if (food && isBaitFor(def, food.id)) c.hunger = Math.min(1, c.hunger + 0.5);
         c.state = 'idle';
         c.until = game.time + 2 + game.rand() * 3;
       }
@@ -408,14 +479,14 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        if (!game.isForaged(Math.floor(c.x), Math.floor(c.y), 'forage')) this.beginForage(game, c);
+        if (kind && this.gatherable(game, Math.floor(c.x), Math.floor(c.y), kind)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') c.state = 'idle';
       return;
     }
-    if (c.hunger < 0.5 && game.time >= c.searchAt) {
+    if (kind && c.hunger < 0.5 && game.time >= c.searchAt) {
       c.searchAt = game.time + 4;
-      const t = this.findForageTile(game, c.x, c.y, 3);
+      const t = this.findForageTile(game, c.x, c.y, 3, kind);
       if (t) {
         c.tx = t.x + 0.5;
         c.ty = t.y + 0.5;
@@ -501,11 +572,12 @@ export class Creatures {
       return;
     }
     const def = this.species(c);
+    const kind = def.gathers;
     const crate = game.deedCrate();
     const crateAt = crate ? crateCentre(crate) : null;
     if (c.state === 'forage') {
       if (game.time >= c.until) {
-        c.carrying = this.finishForage(game, c);
+        c.carrying = kind ? this.finishForage(game, c, kind) : null;
         c.state = 'idle';
         c.until = game.time + 0.5;
       }
@@ -549,7 +621,7 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        if (!game.isForaged(Math.floor(c.x), Math.floor(c.y), 'forage')) this.beginForage(game, c);
+        if (kind && this.gatherable(game, Math.floor(c.x), Math.floor(c.y), kind)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') {
         c.state = 'idle';
@@ -565,8 +637,8 @@ export class Creatures {
       return;
     }
     if (game.time < c.until) return;
-    if (def.forages) {
-      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, def.workRange);
+    if (kind) {
+      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, def.workRange, kind);
       if (t) {
         c.tx = t.x + 0.5;
         c.ty = t.y + 0.5;
@@ -581,40 +653,53 @@ export class Creatures {
 
   attack(game: Game, a: Creature, t: Creature): void {
     const dmg = this.species(a).attack * (0.7 + game.rand() * 0.6);
+    this.hurt(game, t, dmg, a);
+  }
+
+  /** Deal damage from a creature or the player; timid wild creatures bolt, and a kill leaves a corpse. */
+  hurt(game: Game, t: Creature, dmg: number, by: Creature | 'player'): void {
+    const from = by === 'player' ? game.player : by;
     t.health -= dmg;
-    t.attackedBy = a.id;
+    t.attackedBy = by === 'player' ? PLAYER_ATTACKER : by.id;
     t.attackedAt = game.time;
     if (t.mode === 'wild' && this.species(t).timid) {
-      const dx = t.x - a.x;
-      const dy = t.y - a.y;
+      const dx = t.x - from.x;
+      const dy = t.y - from.y;
       const len = Math.hypot(dx, dy) || 1;
       t.tx = t.x + (dx / len) * 5;
       t.ty = t.y + (dy / len) * 5;
       t.state = 'flee';
       t.until = game.time + 3;
     }
-    if (t.mode === 'active' && game.time - (t.busyUntil ?? 0) > 0) game.logMsg(`${t.name} is hurt by a ${this.species(a).name.toLowerCase()}!`, 'error');
-    if (t.health <= 0) this.kill(game, t, a);
+    if (t.mode === 'active' && by !== 'player' && game.time - (t.busyUntil ?? 0) > 0) game.logMsg(`${t.name} is hurt by a ${this.species(by).name.toLowerCase()}!`, 'error');
+    if (t.health <= 0) this.kill(game, t, by);
   }
 
-  kill(game: Game, t: Creature, killer: Creature | null): void {
+  /** Remove a creature and leave its corpse lying on the tile, ready for butchering. */
+  kill(game: Game, t: Creature, killer: Creature | 'player' | null): void {
     this.list.delete(t.id);
     for (const o of this.list.values()) if (o.enemy === t.id) o.enemy = null;
-    const owned = killer && killer.mode !== 'wild';
-    if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'error');
-    else if (owned && killer) game.logMsg(`${killer.name} killed a wild ${this.species(t).name.toLowerCase()}.`, 'event');
+    const def = this.species(t);
+    const x = Math.floor(t.x);
+    const y = Math.floor(t.y);
+    game.dropOnGround(x, y, { uid: game.inventory.nextUid++, id: 'corpse', ql: 15 + game.rand() * 35, dmg: 0, count: 1, extra: def.name });
+    if (killer === 'player') game.logMsg(`You kill the wild ${def.name.toLowerCase()}. Its corpse lies where it fell.`, 'event');
+    else if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'error');
+    else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'event');
   }
 
   describe(c: Creature): string {
+    const job = this.species(c).gathers;
+    const verb = job ? GATHER_VERB[job] : 'busy';
     switch (c.mode) {
       case 'active':
         return `your companion · ${STANCE_NAMES[c.stance].toLowerCase()}`;
       case 'deed':
-        return c.carrying ? `deed worker · carrying ${itemDef(c.carrying.id).name.toLowerCase()}` : c.state === 'forage' ? 'deed worker · foraging' : 'deed worker';
+        return c.carrying ? `deed worker · carrying ${itemDef(c.carrying.id).name.toLowerCase()}` : c.state === 'forage' ? `deed worker · ${verb}` : 'deed worker';
       case 'stored':
         return 'kept at the token';
       default:
-        return c.state === 'forage' ? 'wild · foraging' : c.state === 'flee' ? 'wild · fleeing' : 'wild';
+        return c.state === 'forage' ? `wild · ${verb}` : c.state === 'flee' ? 'wild · fleeing' : 'wild';
     }
   }
 
@@ -645,7 +730,7 @@ export class Creatures {
     cs.nextId = data.nextId ?? 1;
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, xp: j.xp ?? 0, skills: { foraging: 1, ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, xp: j.xp ?? 0, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

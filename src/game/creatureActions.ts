@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { creatureLevel, isBaitFor, SPECIES, STANCE_NAMES, type Creature, type Stance } from './creatures';
+import { creatureLevel, GATHER_VERB, isBaitFor, SPECIES, STANCE_NAMES, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
 import { itemDef } from './items';
 
@@ -21,6 +21,9 @@ const dietText = (c: Creature): string => {
   const names = SPECIES[c.species].diet.map((id) => itemDef(id).name.toLowerCase());
   return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
 };
+
+/** "a berry or vegetable" for a Rabba, "a spice or vegetable" for a Vola. */
+export const baitHint = (c: Creature): string => SPECIES[c.species].baitHint;
 
 function nearPlayer(g: Game, c: Creature): boolean {
   return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 1.9;
@@ -70,7 +73,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!c || c.mode !== 'wild') return;
       const def = SPECIES[c.species];
       if (!nearPlayer(g, c)) {
-        g.logMsg(`The ${def.name.toLowerCase()} hopped off before it noticed your offering.`, 'event');
+        g.logMsg(`The ${def.name.toLowerCase()} moved off before it noticed your offering.`, 'event');
         return;
       }
       const food = bait(g, c);
@@ -94,7 +97,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         }
         g.gainSkill('taming', 0.7);
       } else {
-        g.logMsg(`The ${def.name.toLowerCase()} nibbles the ${foodName}, twitches its nose, and hops off unconvinced.`, 'event');
+        g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.`, 'event');
         g.gainSkill('taming', 0.35);
         c.state = 'idle';
         c.until = g.time;
@@ -167,7 +170,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.enemy = null;
       c.state = 'idle';
       c.until = g.time;
-      const job = SPECIES[c.species].forages ? 'forage around the settlement and bring what it finds to the crate' : 'stay around the settlement';
+      const gathers = SPECIES[c.species].gathers;
+      const job = gathers ? `${GATHER_VERB[gathers]} around the settlement and bring what it finds to the crate` : 'stay around the settlement';
       g.logMsg(`${c.name} will ${job}.`, 'system');
     },
   },
@@ -226,6 +230,39 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'attack_creature',
+    label: 'Attack',
+    verb: 'fighting',
+    skill: 'body_strength',
+    stamina: 0.07,
+    baseTime: 2.5,
+    repeat: true,
+    applies: (t, g) => creatureOf(g, t)?.mode === 'wild',
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is dead or gone.';
+      if (c.mode !== 'wild') return 'That one is tame. Release it first if you mean it.';
+      if (Math.hypot(c.x - g.player.x, c.y - g.player.y) > 2.2) return 'It is out of reach.';
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      const def = SPECIES[c.species];
+      // Bare hands bruise; an edged tool does the work properly.
+      const weapon = ['butchering_knife', 'hatchet', 'carving_knife'].map((id) => g.inventory.tool(id)).find(Boolean);
+      const bonus = weapon ? 1.5 + weapon.ql / 120 : 1;
+      const dmg = (2 + g.skills.get('body_strength') / 12) * bonus * (0.7 + g.rand() * 0.6);
+      const before = c.health;
+      g.creatures.hurt(g, c, dmg, 'player');
+      g.gainSkill('body_strength', 0.05);
+      if (c.health <= 0) return false;
+      g.logMsg(`You strike the ${def.name.toLowerCase()}${weapon ? ` with your ${itemDef(weapon.id).name.toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`, 'event');
+      // Keep swinging while it is still within reach.
+      return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 2.2;
+    },
+  },
+  {
     id: 'rename_creature',
     label: 'Rename',
     verb: 'renaming',
@@ -270,7 +307,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.stance = 'passive';
       c.enemy = null;
       c.name = SPECIES[c.species].name;
-      g.logMsg(`The ${c.name.toLowerCase()} bounds off into the wild.`, 'system');
+      g.logMsg(`The ${c.name.toLowerCase()} ${SPECIES[c.species].leaves}.`, 'system');
     },
   },
 ];

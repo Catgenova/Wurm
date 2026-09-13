@@ -136,6 +136,7 @@ export class Game {
     this.inventory.add('mallet', { ql: 20 });
     this.inventory.add('trowel', { ql: 20 });
     this.inventory.add('saw', { ql: 20 });
+    this.inventory.add('butchering_knife', { ql: 20 });
     this.inventory.add('water_skin', { ql: 30 });
     this.inventory.add('settlement_deed', { ql: 50 });
   }

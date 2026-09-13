@@ -423,10 +423,19 @@ export interface CreaturePose {
   /** 0..1 health fraction; a bar shows when below 1. */
   health: number;
   label?: string;
+  /** Species id; decides which body is drawn. */
+  species?: string;
+}
+
+/** Draws a wildermon of any species with its feet at (sx, sy), then its health bar and name. */
+export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  if (pose.species === 'vola') drawVolaBody(ctx, sx, sy, zoom, pose);
+  else drawRabbaBody(ctx, sx, sy, zoom, pose);
+  drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
 
 /** A Rabba: round body, long ears, twitchy. Feet at (sx, sy). */
-export function drawRabba(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+function drawRabbaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   ctx.translate(sx, sy);
   ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
@@ -473,6 +482,110 @@ export function drawRabba(ctx: CanvasRenderingContext2D, sx: number, sy: number,
   ctx.arc(9, -9.5 - hop, 0.8, 0, TAU);
   ctx.fill();
   ctx.restore();
+}
+
+/**
+ * A Vola: a low, velvety digger. Broad pale shovel paws in front, a pink
+ * snout, tiny eyes and a stubby tail. It waddles rather than hops.
+ */
+function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  // A waddle: the body rocks side to side instead of leaving the ground.
+  const rock = pose.moving ? Math.sin(pose.phase) * 0.9 : Math.sin(pose.phase * 0.25) * 0.15;
+  const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.8 : 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+  ctx.fill();
+  const [fur, belly] = pose.colors;
+  const paw = '#e9cdbd';
+  // hind foot
+  ctx.fillStyle = paw;
+  ctx.beginPath();
+  ctx.ellipse(-5, -1.6, 2.4, 1.4, 0, 0, TAU);
+  ctx.fill();
+  // tail: short and tapered
+  ctx.strokeStyle = belly;
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-7.5, -4.5 - lift);
+  ctx.quadraticCurveTo(-10.5, -5.5 - lift, -11, -8 - lift);
+  ctx.stroke();
+  // body: a long low loaf that tapers into the snout
+  ctx.save();
+  ctx.rotate(rock * 0.03);
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -5 - lift, 8.2, 4.4, -0.06, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -3.4 - lift, 5.6, 2.2, -0.06, 0, TAU);
+  ctx.fill();
+  // head runs straight on from the body, no neck
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(6, -5.6 - lift, 4, 3.6, 0, 0, TAU);
+  ctx.fill();
+  // snout
+  ctx.fillStyle = '#e8a0a4';
+  ctx.beginPath();
+  ctx.ellipse(9.6, -4.9 - lift, 2.1, 1.5, 0.25, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#c9767c';
+  ctx.beginPath();
+  ctx.arc(11.1, -4.7 - lift, 0.7, 0, TAU);
+  ctx.fill();
+  // whiskers
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 0.5;
+  for (const a of [-0.35, 0, 0.35]) {
+    ctx.beginPath();
+    ctx.moveTo(10.4, -4.9 - lift);
+    ctx.lineTo(13.6, -4.9 - lift + a * 3.4);
+    ctx.stroke();
+  }
+  // eye: a bead, nearly buried in fur
+  ctx.fillStyle = '#221712';
+  ctx.beginPath();
+  ctx.arc(6.4, -6.6 - lift, 0.7, 0, TAU);
+  ctx.fill();
+  // ear: a small fold, no pinna
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(3.4, -7.6 - lift, 1.2, 0.9, -0.3, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  // digging paws: broad, pale and turned outward, swinging as it walks
+  const dig = pose.moving ? Math.sin(pose.phase) * 1.6 : 0;
+  ctx.fillStyle = paw;
+  for (const [px, py, ph] of [
+    [5.6, -1.2, dig],
+    [3.2, -1.6, -dig],
+  ] as Array<[number, number, number]>) {
+    ctx.save();
+    ctx.translate(px + ph * 0.6, py - Math.max(0, ph) * 0.5);
+    ctx.rotate(0.3);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 2.8, 1.7, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#c9a692';
+    ctx.lineWidth = 0.4;
+    for (const c of [-1.1, 0, 1.1]) {
+      ctx.beginPath();
+      ctx.moveTo(1.2, c * 0.5);
+      ctx.lineTo(3.1, c * 0.75);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   if (pose.health < 1) {
     const w = 18 * zoom;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
