@@ -6,6 +6,7 @@ import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, t
 import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { cropDef, RIPE, type Crop } from './farming';
+import { rockKindAt } from '../world/ore';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
@@ -70,6 +71,8 @@ export interface GameInit {
 }
 
 const FORAGE_COOLDOWN = 180;
+/** How long ore stays lit after prospecting. */
+const PROSPECT_MARK_TIME = 120;
 const MAX_LOG = 400;
 /** Seconds between ground decay passes while playing. */
 const DECAY_STEP = 5;
@@ -96,6 +99,8 @@ export class Game {
   nextFireId = 1;
   /** Crops growing on tilled fields, keyed by "x,y". */
   readonly crops = new Map<string, Crop>();
+  /** Tiles a prospector has marked, and when the marks fade. */
+  prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Items lying on tiles, keyed by "x,y". */
@@ -735,6 +740,26 @@ export class Game {
       this.events.emit('world', f.x, f.y);
       this.events.emit('crate');
     }
+  }
+
+  /**
+   * Bring the tiles around a corner in line with the soil left on it: strip
+   * the last dirt from all four corners of a tile and its bedrock shows.
+   */
+  exposeRock(cx: number, cy: number): void {
+    this.world.reconcileAround(cx, cy, (x, y) => rockKindAt(this.world.seed, x, y, this.world.centerHeight(x, y)));
+  }
+
+  /** Light up the ore a prospector just read, for a while. */
+  markProspected(tiles: number[]): void {
+    this.prospected = tiles.length ? { tiles: new Set(tiles), until: this.time + PROSPECT_MARK_TIME } : null;
+  }
+
+  /** Whether a tile is currently marked by prospecting. */
+  isProspected(x: number, y: number): boolean {
+    const p = this.prospected;
+    if (!p || this.time >= p.until) return false;
+    return p.tiles.has(y * this.world.w + x);
   }
 
   cropAt(x: number, y: number): Crop | undefined {

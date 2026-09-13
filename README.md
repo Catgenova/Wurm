@@ -53,9 +53,18 @@ rebuilds and commits the result.
 - **Tile types.** Grass, dirt, packed dirt, sand, rock, steppe, tundra, marsh,
   clay, peat, tar, moss, snow, gravel, cobblestone, trees (birch, pine, oak,
   maple, willow, cedar with young/mature/old sizes), bushes, kelp and reed.
+- **Soil over bedrock.** Every corner carries a depth of soil on top of rock.
+  Digging takes soil away and stops dead at bedrock; strip all four corners of
+  a tile and it becomes rock of whatever kind lies beneath, which may be a
+  metal seam. Dropping dirt buries it again.
+- **Mining and prospecting.** Mining bare rock always yields shards or metal,
+  while cutting the face back a level is a separate roll decided by mining
+  skill and pick quality. Prospecting marks ore-bearing rock within range and,
+  on a seam itself, names the highest quality it will ever yield; the range is
+  3 tiles plus one per 10 levels of Prospecting.
 - **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
-  pack and cultivate, surface-mine rock for shards, pave gravel with shards or
-  chisel bricks for cobblestone, remove paving. Flatten levels a tile to the
+  pack and cultivate, pave gravel with shards or chisel bricks for
+  cobblestone, remove paving. Flatten levels a tile to the
   height of the ground you stand on, scraping high ground down into dirt and
   packing dirt in to bring low ground up, so a terrace can be carried outwards
   tile by tile; flattening the tile under your feet takes it down to its own

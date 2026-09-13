@@ -128,9 +128,17 @@ export function buildHelp(win: UIWindow): void {
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
     <h3>Terraforming</h3>
-    <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
-    Drop dirt to raise a corner. Mine rock with a pickaxe, then pave gravel with the shards or chisel
-    them into bricks for cobblestone.</p>
+    <p>Every corner of the map has soil sitting on bedrock. <b>Digging</b> lowers the corner nearest to
+    where you click (the small marker) and takes a spadeful of that soil; when the last of it is gone
+    your shovel grates on rock and will go no further. Strip all four corners of a tile bare and the
+    rock beneath is exposed, and the tile becomes rock &mdash; whatever kind lies there, which may be a
+    seam of silver or gold. Drop dirt on a corner to bury the rock again.</p>
+    <p><b>Mining</b> with a pickaxe works that bare rock. Every swing that bites gives you shards or
+    metal; cutting the face back a whole level is a separate roll, and how often it happens depends on
+    your mining skill and the quality of your pick. <b>Prospecting</b> reads the ground: it marks every
+    ore-bearing rock tile within range for a while, and prospecting the seam itself tells you the
+    highest quality it will ever give up, however good the miner. The range starts at 3 tiles and grows
+    by one for every 10 levels of the skill.</p>
     <p><b>Flatten</b> brings a tile level with the ground you are standing on, corner by corner:
     ground above you is scraped down and pocketed as dirt, ground below you is packed up and spends
     dirt from your pack. Stand where you want the finished height and work outwards to terrace a

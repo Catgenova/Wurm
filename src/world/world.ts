@@ -12,20 +12,85 @@ export class World {
   /** Corner grid width (w + 1). */
   readonly cw: number;
   readonly heights: Int16Array;
+  /** Soil depth over bedrock at each corner. Dig it away and you are on rock. */
+  readonly dirt: Uint8Array;
   readonly tiles: Uint8Array;
   readonly data: Uint8Array;
+  /** The seed this world was made from, so rock kinds stay consistent. */
+  seed = 0;
   minHeight = 0;
   maxHeight = 0;
   private listeners: WorldListener[] = [];
 
-  constructor(w: number, h: number, heights?: Int16Array, tiles?: Uint8Array, data?: Uint8Array) {
+  constructor(w: number, h: number, heights?: Int16Array, tiles?: Uint8Array, data?: Uint8Array, dirt?: Uint8Array) {
     this.w = w;
     this.h = h;
     this.cw = w + 1;
     this.heights = heights ?? new Int16Array((w + 1) * (h + 1));
     this.tiles = tiles ?? new Uint8Array(w * h);
     this.data = data ?? new Uint8Array(w * h);
+    this.dirt = dirt ?? new Uint8Array((w + 1) * (h + 1));
     this.recomputeRange();
+  }
+
+  /** Soil left over the bedrock at a corner; 0 means the rock is bare. */
+  getDirt(cx: number, cy: number): number {
+    const x = cx < 0 ? 0 : cx > this.w ? this.w : cx;
+    const y = cy < 0 ? 0 : cy > this.h ? this.h : cy;
+    return this.dirt[y * this.cw + x];
+  }
+
+  setDirt(cx: number, cy: number, v: number): void {
+    if (!this.cornerInBounds(cx, cy)) return;
+    this.dirt[cy * this.cw + cx] = Math.max(0, Math.min(255, v));
+  }
+
+  /** Height of the bedrock under a corner. */
+  rockHeight(cx: number, cy: number): number {
+    return this.getHeight(cx, cy) - this.getDirt(cx, cy);
+  }
+
+  /** Whether every corner of a tile is bare rock. */
+  allBare(x: number, y: number): boolean {
+    return this.getDirt(x, y) === 0 && this.getDirt(x + 1, y) === 0 && this.getDirt(x + 1, y + 1) === 0 && this.getDirt(x, y + 1) === 0;
+  }
+
+  /**
+   * Bring a tile's type in line with the soil on its corners: strip the last
+   * dirt off all four and the rock beneath is exposed; put soil back on any
+   * corner and it is ground again.
+   */
+  reconcile(x: number, y: number, rockKind: (x: number, y: number) => number): void {
+    if (!this.inBounds(x, y)) return;
+    const t = this.getTile(x, y);
+    const bare = this.allBare(x, y);
+    if (bare && t !== TileType.Rock && t !== TileType.Snow) {
+      this.setTile(x, y, TileType.Rock, rockKind(x, y));
+    } else if (!bare && t === TileType.Rock) {
+      this.setTile(x, y, TileType.Dirt);
+    }
+  }
+
+  /** Reconcile every tile touching a corner. */
+  reconcileAround(cx: number, cy: number, rockKind: (x: number, y: number) => number): void {
+    for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) this.reconcile(x, y, rockKind);
+  }
+
+  /** Fill in soil depths for a world that was saved before rock had a depth. */
+  deriveDirt(depth = 10): void {
+    for (let cy = 0; cy <= this.h; cy++) {
+      for (let cx = 0; cx <= this.w; cx++) {
+        let d = depth;
+        for (let y = cy - 1; y <= cy; y++) {
+          for (let x = cx - 1; x <= cx; x++) {
+            if (!this.inBounds(x, y)) continue;
+            const t = this.getTile(x, y);
+            if (t === TileType.Rock || t === TileType.Snow) d = 0;
+          }
+        }
+        this.dirt[cy * this.cw + cx] = d;
+      }
+    }
   }
 
   onChange(fn: WorldListener): void {

@@ -889,6 +889,32 @@ export class Renderer {
   }
 
   /** The deed's boundary as a line that follows the ground. */
+  /** Ore a prospector has read, glowing until the marks fade. */
+  private drawProspected(ctx: CanvasRenderingContext2D): void {
+    const p = this.game.prospected;
+    if (!p || this.game.time >= p.until) return;
+    const w = this.game.world;
+    // Fade out over the last few seconds rather than blinking off.
+    const left = p.until - this.game.time;
+    const pulse = 0.72 + Math.sin(this.time * 3) * 0.22;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, left / 8) * pulse;
+    for (const key of p.tiles) {
+      const x = key % w.w;
+      const y = (key - x) / w.w;
+      this.tilePath(ctx, x, y);
+      ctx.fillStyle = '#ffcf3d';
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#5a3c00';
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#fff3c0';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   private drawDeedBorder(ctx: CanvasRenderingContext2D): void {
     const deed = this.game.deed;
     if (!deed) return;
@@ -1014,6 +1040,7 @@ export class Renderer {
     }
 
     const hover = this.hover;
+    this.drawProspected(ctx);
     if (game.deed && (game.settings.deedBorder || (hover && game.isToken(hover.x, hover.y)))) this.drawDeedBorder(ctx);
     if (hover) {
       this.tilePath(ctx, hover.x, hover.y);

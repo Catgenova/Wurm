@@ -26,6 +26,7 @@ import { butcherPreview } from '../game/butcher';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
+import { oreAt } from '../world/ore';
 import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
 import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
@@ -164,7 +165,10 @@ export class UI {
       lines.push(w.tileName(pick.x, pick.y));
     }
     if (growing) lines.push(describeCrop(growing, this.game.time));
-    lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)}`);
+    const soil = w.getDirt(pick.cx, pick.cy);
+    lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)} · ${soil > 0 ? `${soil} soil over rock` : 'bare rock'}`);
+    const ore = oreAt(w, pick.x, pick.y);
+    if (ore) lines.push(this.game.isProspected(pick.x, pick.y) ? `${ore.name} · yields up to QL ${ore.maxQl}` : ore.name);
     const deed = this.game.deed;
     if (deed && this.game.isToken(pick.x, pick.y)) lines.push(`Settlement token of ${deed.name}`);
     else if (deed && this.game.onDeed(pick.x, pick.y)) lines.push(`Part of ${deed.name}`);

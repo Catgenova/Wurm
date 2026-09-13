@@ -13,6 +13,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'soul_strength', name: 'Soul strength', group: 'Characteristics', start: 20 },
   { id: 'digging', name: 'Digging', group: 'Skills', start: 1 },
   { id: 'mining', name: 'Mining', group: 'Skills', start: 1 },
+  { id: 'prospecting', name: 'Prospecting', group: 'Skills', start: 1 },
   { id: 'woodcutting', name: 'Woodcutting', group: 'Skills', start: 1 },
   { id: 'forestry', name: 'Forestry', group: 'Skills', start: 1 },
   { id: 'foraging', name: 'Foraging', group: 'Skills', start: 1 },

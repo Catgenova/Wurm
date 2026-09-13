@@ -18,6 +18,7 @@ interface SaveData {
   heights: string;
   tiles: string;
   data: string;
+  dirt?: string;
   spawn: { x: number; y: number };
   player: { x: number; y: number; name: string; stats: Stats; level?: number };
   inventory: Item[];
@@ -61,6 +62,7 @@ export function saveGame(game: Game): boolean {
     heights: toBase64(new Uint8Array(w.heights.buffer, w.heights.byteOffset, w.heights.byteLength)),
     tiles: toBase64(w.tiles),
     data: toBase64(w.data),
+    dirt: toBase64(w.dirt),
     spawn: game.spawn,
     player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level },
     inventory: game.inventory.items,
@@ -102,7 +104,11 @@ export function loadGame(): Game | null {
     const tiles = fromBase64(data.tiles);
     const extra = fromBase64(data.data);
     if (tiles.length !== size * size || extra.length !== size * size) return null;
-    const world = new World(size, size, heights, tiles, extra);
+    const dirtBytes = data.dirt ? fromBase64(data.dirt) : null;
+    const world = new World(size, size, heights, tiles, extra, dirtBytes && dirtBytes.length === (size + 1) * (size + 1) ? dirtBytes : undefined);
+    world.seed = data.seed;
+    // Worlds saved before rock had a depth get soil worked out from their tiles.
+    if (!dirtBytes || dirtBytes.length !== (size + 1) * (size + 1)) world.deriveDirt();
     const game = new Game({
       seed: data.seed,
       world,

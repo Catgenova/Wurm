@@ -1,4 +1,5 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
+import { isOreKind, oreAt, oreMaxQl } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { FARM_ACTIONS } from './farming';
@@ -118,6 +119,12 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
   return tileCorners(x, y).some(([cx, cy]) => g.world.getHeight(cx, cy) !== target);
 }
 
+/** The chance a swing cuts the rock face back, from skill and the pick. */
+export const mineChance = (skill: number, pickQl: number): number => Math.max(0.08, Math.min(0.85, 0.1 + skill * 0.005 + pickQl * 0.002));
+
+/** How far a prospector reads the ground: one tile further every ten levels. */
+export const prospectRadius = (skill: number): number => 3 + Math.floor(skill / 10);
+
 function maxDigSlope(g: Game): number {
   return Math.max(40, Math.floor(g.skills.get('digging') * 3));
 }
@@ -183,6 +190,7 @@ export const ACTIONS: ActionDef[] = [
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
       if (g.world.getHeight(t.cx, t.cy) <= 0) return 'You cannot dig below the water level.';
+      if (g.world.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock. Only a pickaxe will take it lower.';
       if (slopeAfter(g, t.cx, t.cy, -1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
       return null;
     },
@@ -195,7 +203,13 @@ export const ACTIONS: ActionDef[] = [
         return;
       }
       w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
+      const left = w.getDirt(t.cx, t.cy) - 1;
+      w.setDirt(t.cx, t.cy, left);
       if (def.turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
+      if (left <= 0) {
+        g.logMsg('Your shovel grates on bare rock.', 'event');
+        g.exposeRock(t.cx, t.cy);
+      }
       const yieldId = def.digYield ?? 'dirt';
       const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You dig up some ${itemDef(yieldId).name.toLowerCase()} from the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
@@ -235,7 +249,17 @@ export const ACTIONS: ActionDef[] = [
         if (h < target && (lo < 0 || h < w.getHeight(cs[lo][0], cs[lo][1]))) lo = i;
       }
       if (hi < 0 && lo < 0) return false;
-      const raise = (i: number, by: number): void => w.setHeight(cs[i][0], cs[i][1], w.getHeight(cs[i][0], cs[i][1]) + by);
+      const raise = (i: number, by: number): void => {
+        const [cx, cy] = cs[i];
+        w.setHeight(cx, cy, w.getHeight(cx, cy) + by);
+        w.setDirt(cx, cy, w.getDirt(cx, cy) + by);
+        g.exposeRock(cx, cy);
+      };
+      // Only soil can be moved with a shovel; bedrock needs a pickaxe.
+      if (hi >= 0 && w.getDirt(cs[hi][0], cs[hi][1]) <= 0) {
+        g.logMsg('The high corner is bare rock. Mine it down instead.', 'error');
+        return false;
+      }
       if (hi >= 0 && lo >= 0) {
         // One corner down and one up: the dirt simply moves across the tile.
         raise(hi, -1);
@@ -283,6 +307,8 @@ export const ACTIONS: ActionDef[] = [
       if (!g.inventory.consume('dirt')) return;
       const w = g.world;
       w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) + 1);
+      w.setDirt(t.cx, t.cy, w.getDirt(t.cx, t.cy) + 1);
+      g.exposeRock(t.cx, t.cy);
       const type = w.getTile(t.x, t.y);
       if (type === TileType.Grass || type === TileType.Lawn) w.setTile(t.x, t.y, TileType.Dirt);
       g.logMsg(`You drop the dirt on the ${cornerName(t)} corner, raising the ground.`, 'event');
@@ -302,22 +328,75 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to mine.';
-      if (g.world.getHeight(t.cx, t.cy) <= 0) return 'You cannot mine below the water level.';
+      if (g.world.rockHeight(t.cx, t.cy) <= 0) return 'You cannot mine below the water level.';
       return null;
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const w = g.world;
-      if (!g.skillCheck('mining', 12, g.toolQl('pickaxe'))) {
+      const pickQl = g.toolQl('pickaxe');
+      if (!g.skillCheck('mining', 12, pickQl)) {
         g.logMsg('The rock is hard and you fail to loosen anything.', 'event');
         return;
       }
-      w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
       const type = w.getTile(t.x, t.y);
-      const yieldId = type === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.getData(t.x, t.y))].yields : 'rock_shards';
-      const item = g.inventory.add(yieldId, { ql: g.productQl('mining', g.toolQl('pickaxe')) });
+      const kind = type === TileType.Rock ? rockVariant(w.getData(t.x, t.y)) : 0;
+      const yieldId = type === TileType.Rock ? ROCK_VARIANTS[kind].yields : 'rock_shards';
+      // An ore body only ever gives up so much quality, however good the miner.
+      const cap = isOreKind(kind) ? oreMaxQl(w.seed, t.x, t.y) : 100;
+      const item = g.inventory.add(yieldId, { ql: Math.min(cap, g.productQl('mining', pickQl)) });
       const what = itemDef(yieldId).name.toLowerCase();
       g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
+      // Cutting the face back is a separate matter, and mostly a question of skill.
+      if (g.rand() < mineChance(g.skills.get('mining'), pickQl)) {
+        w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
+        w.setDirt(t.cx, t.cy, 0);
+        g.exposeRock(t.cx, t.cy);
+        g.logMsg('A slab breaks away and the face drops.', 'event');
+      }
+    },
+  },
+  {
+    id: 'prospect',
+    label: 'Prospect',
+    verb: 'prospecting',
+    skill: 'prospecting',
+    tool: 'pickaxe',
+    stamina: 0.03,
+    baseTime: 5,
+    applies: (t, g) => t.kind === 'tile' && g.inventory.has('pickaxe'),
+    check: (_t, g) => (g.inventory.has('pickaxe') ? null : 'You need a pickaxe to prospect.'),
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const w = g.world;
+      const radius = prospectRadius(g.skills.get('prospecting'));
+      const found: string[] = [];
+      const tiles: number[] = [];
+      for (let y = t.y - radius; y <= t.y + radius; y++) {
+        for (let x = t.x - radius; x <= t.x + radius; x++) {
+          if (!w.inBounds(x, y)) continue;
+          const ore = oreAt(w, x, y);
+          if (!ore) continue;
+          tiles.push(y * w.w + x);
+          found.push(ore.name.toLowerCase());
+        }
+      }
+      g.markProspected(tiles);
+      // Standing on the rock itself tells you what the seam is worth.
+      const here = oreAt(w, t.x, t.y);
+      if (here) {
+        g.logMsg(`You sample the ${here.name.toLowerCase()}. This seam will give up nothing finer than quality ${here.maxQl}.`, 'event');
+      } else if (w.getTile(t.x, t.y) === TileType.Rock) {
+        g.logMsg(`Plain ${ROCK_VARIANTS[rockVariant(w.getData(t.x, t.y))].name.toLowerCase()}, with no metal in it.`, 'event');
+      }
+      if (!found.length) {
+        g.logMsg(`You read the rock ${radius} tiles about you and find no sign of metal.`, 'event');
+        return;
+      }
+      const tally = new Map<string, number>();
+      for (const n of found) tally.set(n, (tally.get(n) ?? 0) + 1);
+      const parts = [...tally].map(([n, c]) => (c > 1 ? `${c} tiles of ${n}` : `a tile of ${n}`));
+      g.logMsg(`Within ${radius} tiles you read ${parts.join(' and ')}. They are marked for a while.`, 'event');
     },
   },
   {

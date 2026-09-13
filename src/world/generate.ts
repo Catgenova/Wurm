@@ -1,5 +1,6 @@
 import { hash2, mulberry32, Noise2D, smoothstep } from './noise';
 import { TileType, packTreeData } from './tiles';
+import { rockKindAt } from './ore';
 import { World } from './world';
 
 export interface GeneratedWorld {
@@ -68,6 +69,7 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
     return false;
   };
 
+  world.seed = seed;
   const c = [0, 0, 0, 0];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -149,19 +151,40 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
     }
   }
 
-  // Kinds of rock: slate and marble in broad bands, sandstone on lower ground, rare metal veins.
+  // Kinds of rock: slate and marble in broad bands, sandstone on lower ground,
+  // rare metal veins. The same function answers for rock uncovered later by digging.
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (world.getTile(x, y) !== TileType.Rock) continue;
-      const n = patch.fbm(x * 0.045 + 50, y * 0.045 + 50, 3);
-      const r = hash2(x, y, seed + 11);
-      let v = 0;
-      if (r < 0.005) v = 5;
-      else if (r < 0.018) v = 4;
-      else if (n > 0.34) v = 1;
-      else if (n < -0.42) v = 2;
-      else if (n > 0.05 && world.centerHeight(x, y) < 80) v = 3;
+      const v = rockKindAt(seed, x, y, world.centerHeight(x, y));
       if (v) world.setTile(x, y, TileType.Rock, v);
+    }
+  }
+
+  // Soil over the bedrock: deep in the lowlands, thin on the heights, none at
+  // all where rock already breaks the surface.
+  const soil = new Noise2D(mulberry32((seed + 404) >>> 0));
+  for (let cy = 0; cy <= size; cy++) {
+    for (let cx = 0; cx <= size; cx++) {
+      let bare = false;
+      for (let y = cy - 1; y <= cy && !bare; y++) {
+        for (let x = cx - 1; x <= cx; x++) {
+          if (!world.inBounds(x, y)) continue;
+          const t = world.getTile(x, y);
+          if (t === TileType.Rock || t === TileType.Snow) {
+            bare = true;
+            break;
+          }
+        }
+      }
+      if (bare) {
+        world.dirt[cy * world.cw + cx] = 0;
+        continue;
+      }
+      const h = world.getHeight(cx, cy);
+      const n = soil.fbm(cx * 0.03, cy * 0.03, 3);
+      const depth = 14 + n * 8 - Math.max(0, h) * 0.045;
+      world.dirt[cy * world.cw + cx] = Math.max(2, Math.min(40, Math.round(depth)));
     }
   }
 
