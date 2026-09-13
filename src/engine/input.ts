@@ -89,7 +89,18 @@ export class Input {
         this.press = null;
       }
     });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    /*
+     * Right-click opens the game's own menu, which pops up under the cursor
+     * before the browser fires contextmenu. The event then targets that menu
+     * rather than the canvas, so suppressing it on the canvas alone lets the
+     * browser menu through on top. Catch it on the window instead, and leave
+     * text fields alone so copy and paste still work there.
+     */
+    window.addEventListener('contextmenu', (e) => {
+      const el = e.target;
+      if (el instanceof Element && el.closest('input, textarea, [contenteditable="true"]')) return;
+      e.preventDefault();
+    });
     canvas.addEventListener(
       'wheel',
       (e) => {

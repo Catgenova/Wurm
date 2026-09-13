@@ -175,6 +175,17 @@ export interface CreatureJSON {
   skills?: Record<string, number>;
 }
 
+/**
+ * How fast hunger drains, per second. Roughly the pace a player's own hunger
+ * falls, so a wildermon goes most of an hour between meals rather than
+ * needing one every few minutes.
+ */
+const HUNGER_RATE: Record<Exclude<CreatureMode, 'stored'>, number> = {
+  wild: 0.0005,
+  active: 0.00025,
+  deed: 0.0004,
+};
+
 export const WILD_TARGET = 32;
 const RESPAWN_EVERY = 45;
 /** Seconds a wild creature spends grazing. */
@@ -459,7 +470,7 @@ export class Creatures {
   }
 
   private updateWild(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * 0.004);
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.wild);
     const def = this.species(c);
     const kind = def.gathers;
     if (c.state === 'flee') {
@@ -505,7 +516,7 @@ export class Creatures {
   }
 
   private updateActive(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * 0.002);
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.active);
     const p = game.player;
     const distP = Math.hypot(p.x - c.x, p.y - c.y);
     if (distP > 18) {
@@ -565,7 +576,7 @@ export class Creatures {
   }
 
   private updateWorker(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * 0.003);
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed);
     const deed = game.deed;
     if (!deed) {
       c.mode = 'wild';
