@@ -82,7 +82,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const foodName = itemDef(food.id).name.toLowerCase();
       g.inventory.remove(food.uid, 1);
       const skill = g.skills.get('taming');
-      const chance = Math.min(0.95, def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0));
+      const chance = Math.min(0.95, def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + g.soulBonus());
       c.hunger = Math.min(1, c.hunger + 0.25);
       if (g.rand() < chance) {
         c.name = def.name;
@@ -97,9 +97,11 @@ export const CREATURE_ACTIONS: ActionDef[] = [
           g.logMsg(`The ${def.name.toLowerCase()} takes the ${foodName} from your hand and trusts you. ${c.name} now follows you.`, 'system');
         }
         g.gainSkill('taming', 0.7);
+        g.gainSkill('soul_strength', 0.4);
       } else {
         g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.`, 'event');
         g.gainSkill('taming', 0.35);
+        g.gainSkill('soul_strength', 0.2);
         c.state = 'idle';
         c.until = g.time;
       }

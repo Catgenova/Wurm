@@ -231,7 +231,7 @@ export function recipeAction(r: Recipe): ActionDef {
     maxRepeat: (_t, g) => recipeStatus(r, g).max,
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g))) {
+      if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g), g.mindEase())) {
         if (r.consumeOnFail) for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid);
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         return more(t, g);
@@ -240,6 +240,8 @@ export function recipeAction(r: Recipe): ActionDef {
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid)) return;
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g));
       const item = g.inventory.add(r.result, { count: r.count ?? 1, ql });
+      // Working a thing out with your hands is what sharpens the head.
+      g.gainSkill('mind_logic', 0.25);
       g.logMsg(`${r.done} (QL ${item.ql.toFixed(1)})`, 'event');
       return more(t, g);
     },

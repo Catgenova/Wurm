@@ -47,6 +47,7 @@ export class Hud {
   private actionEl: HTMLDivElement;
   private actionLabel: HTMLDivElement;
   private actionFill: HTMLDivElement;
+  private queueEl: HTMLDivElement;
   private gridBtn: HTMLButtonElement | null = null;
   private compass: HTMLSpanElement;
   private companionEl: HTMLDivElement;
@@ -132,10 +133,13 @@ export class Hud {
     this.actionFill = document.createElement('div');
     this.actionFill.className = 'action-fill';
     track.append(this.actionFill);
+    this.queueEl = document.createElement('div');
+    this.queueEl.className = 'action-queue';
+    this.queueEl.hidden = true;
     const hint = document.createElement('div');
     hint.className = 'action-hint';
     hint.textContent = 'Esc or move to stop';
-    this.actionEl.append(this.actionLabel, track, hint);
+    this.actionEl.append(this.actionLabel, track, this.queueEl, hint);
     root.append(this.actionEl);
 
     /*
@@ -230,5 +234,11 @@ export class Hud {
       this.actionLabel.textContent = `${a.def.label} · ${Math.max(0, a.duration - a.elapsed).toFixed(1)}s`;
       this.actionFill.style.width = `${pct}%`;
     }
+    // What is lined up behind it, and how much room is left in your head.
+    const queue = this.game.queue;
+    if (queue.length) {
+      this.queueEl.hidden = false;
+      this.queueEl.textContent = `Then: ${queue.map((q) => q.def.label.toLowerCase()).join(' → ')} · ${queue.length + 1}/${this.game.queueCapacity()}`;
+    } else this.queueEl.hidden = true;
   }
 }

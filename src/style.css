@@ -408,6 +408,13 @@ kbd {
   background: linear-gradient(#e3b657, #a97e2a);
 }
 
+.action-queue {
+  margin-top: 4px;
+  color: var(--ui-accent);
+  font-size: 11px;
+  opacity: 0.85;
+}
+
 .action-hint {
   margin-top: 4px;
   color: var(--ui-dim);
@@ -763,6 +770,14 @@ kbd {
   justify-content: space-between;
   padding: 2px 4px;
   border-radius: 2px;
+}
+
+.skill-note {
+  margin-left: auto;
+  margin-right: 10px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  opacity: 0.8;
 }
 
 .skill-value {

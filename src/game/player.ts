@@ -14,6 +14,8 @@ export interface Stats {
 export const MAX_STEP = 32;
 /** Water deeper than this (in height units below the surface) means swimming. */
 export const SWIM_DEPTH = 4;
+/** Share of walking speed kept in deep water before any swimming skill. */
+export const SWIM_SPEED = 0.42;
 const BASE_SPEED = 2.4; // tiles per second
 const ARRIVE = 0.06;
 
@@ -37,6 +39,12 @@ export class Player {
   path: PathPoint[] | null = null;
   inputDir = { x: 0, y: 0 };
   stats: Stats = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
+  /** Steepest step allowed, raised by the climbing skill. */
+  maxStep = MAX_STEP;
+  /** Share of walking speed kept in deep water, raised by the swimming skill. */
+  swimSpeed = SWIM_SPEED;
+  /** Steepness of the last step taken between tiles, for the climbing skill. */
+  lastClimb = 0;
 
   constructor(x: number, y: number) {
     this.x = x;
@@ -70,7 +78,7 @@ export class Player {
     this.visualLevel += (this.level - this.visualLevel) * Math.min(1, dt * 7);
     if (Math.abs(this.level - this.visualLevel) < 0.01) this.visualLevel = this.level;
     const step = (x0: number, y0: number, x1: number, y1: number): number | null =>
-      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1) ? this.level : null;
+      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1, this.maxStep) ? this.level : null;
     let vx = 0;
     let vy = 0;
     let distanceLimit = Infinity;
@@ -106,7 +114,7 @@ export class Player {
 
     const tileDef = TILE_DEFS[world.getTile(this.tileX, this.tileY)];
     let speed = BASE_SPEED * tileDef.speed;
-    if (this.swimming) speed *= 0.42;
+    if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     // Uphill slows you down.
     const ahead = world.heightAt(this.x + vx * 0.15, this.y + vy * 0.15);
@@ -141,6 +149,7 @@ export class Player {
     if (fx !== tx || fy !== ty) {
       const level = step(fx, fy, tx, ty);
       if (level === null) return false;
+      this.lastClimb = Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy));
       this.level = level;
     }
     this.x = nx;
@@ -149,9 +158,12 @@ export class Player {
   }
 }
 
-/** Terrain-only rule for a step between tiles: no cliffs steeper than MAX_STEP. */
-export function groundStep(world: World, x0: number, y0: number, x1: number, y1: number): boolean {
-  return Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= MAX_STEP;
+/**
+ * Terrain-only rule for a step between tiles: nothing steeper than `maxStep`,
+ * which for the player grows with climbing and for everything else is MAX_STEP.
+ */
+export function groundStep(world: World, x0: number, y0: number, x1: number, y1: number, maxStep = MAX_STEP): boolean {
+  return Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= maxStep;
 }
 
 /** Something (a wall) that forbids stepping from one tile to another. */

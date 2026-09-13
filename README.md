@@ -113,6 +113,20 @@ rebuilds and commits the result.
   can make right now at the top and a switch to hide the rest. Each
   material's own menu offers the same recipes. A deed stake, the thing you plant to found a
   settlement, is carved from a shaft with a carving knife.
+- **Queued actions.** Ask for a job while one is already going and it lines up
+  behind it instead of cancelling it, starting the moment the first is done and
+  walking you over if it must. Three fit in your head to begin with, one more
+  per 10 points of mind logic, and the action bar shows what is waiting.
+  Walking off or pressing Esc forgets the lot.
+- **Characteristics that matter.** All five start at 20 and rise from the work
+  that uses them: body strength is how hard you hit, body stamina how little
+  wind an action costs and how fast it returns, body control how quickly
+  everything is done, mind logic how many jobs you can line up and how often a
+  hard craft comes out right, and soul strength how readily a wild animal
+  trusts you. Climbing raises the step you can take between tiles — slopes that
+  turn you back at the start open up later — and swimming makes deep water
+  faster and cheaper. The Skills window spells out what each is worth right
+  now.
 - **Nails.** A nail mould is fired from sand at a smelter and cast on an
   anvil: one lump of metal runs out as a hundred nails of ten grams each.
   Everything that is nailed together needs them — crates, tool heads fitted to

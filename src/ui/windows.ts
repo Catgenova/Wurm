@@ -182,10 +182,14 @@ export class UIWindow {
     };
   }
 
+  /** Called whenever the window is shown, so a panel can bring itself up to date. */
+  onOpen: (() => void) | null = null;
+
   open(): void {
     this.el.hidden = false;
     this.mgr.bringToFront(this);
     this.clamp();
+    this.onOpen?.();
     this.mgr.persist();
   }
 

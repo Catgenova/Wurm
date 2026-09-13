@@ -14,7 +14,7 @@ import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
-import { groundStep, Player } from './player';
+import { groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
 import { Skills, SKILL_DEFS } from './skills';
 
 export interface ActiveAction {
@@ -77,6 +77,12 @@ export interface GameInit {
   time?: number;
 }
 
+/** Skills picked up by doing something else, which do not narrate themselves. */
+const QUIET_SKILLS = new Set(['climbing', 'swimming']);
+/** Actions you can hold in your head before any mind logic is earned. */
+const BASE_QUEUE = 3;
+/** Where every characteristic starts, and so what counts as a point gained. */
+const CHAR_START = 20;
 const FORAGE_COOLDOWN = 180;
 /** How long ore stays lit after prospecting. */
 const PROSPECT_MARK_TIME = 120;
@@ -130,6 +136,8 @@ export class Game {
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
+  /** Actions lined up behind the one in hand, oldest first. */
+  readonly queue: Array<{ def: ActionDef; target: Target }> = [];
   /** Items lying on tiles, keyed by "x,y". */
   readonly ground = new Map<string, Item[]>();
   /** Game seconds since the world was created. */
@@ -137,6 +145,7 @@ export class Game {
   rand: () => number = Math.random;
   private foraged = new Map<number, number>();
   private drownWarning = 0;
+  private swimClock = 0;
   private decayClock = 0;
 
   static create(seed: number, size = 256): Game {
@@ -241,7 +250,7 @@ export class Game {
     const b = this.buildings;
     if (this.connector(x1, y1, level + 1) && !b.blocksAt(level, x0, y0, x1, y1)) return level + 1;
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
-      if (level === 0 && !groundStep(this.world, x0, y0, x1, y1)) return null;
+      if (level === 0 && !groundStep(this.world, x0, y0, x1, y1, this.climbStep())) return null;
       return level;
     }
     if (level > 0 && this.connector(x0, y0, level) && this.standable(x1, y1, level - 1) && !b.blocksAt(level - 1, x0, y0, x1, y1)) {
@@ -290,14 +299,57 @@ export class Game {
     return null;
   }
 
+  /**
+   * How many actions you can hold in your head at once, the one in hand
+   * included: three to start with, and one more for every ten points of mind
+   * logic above where you began.
+   */
+  queueCapacity(): number {
+    return BASE_QUEUE + Math.floor(Math.max(0, this.skills.get('mind_logic') - CHAR_START) / 10);
+  }
+
+  /** Body control quickens every action; the effect is small but it is always there. */
+  controlSpeed(): number {
+    return Math.max(0.6, 1 - (this.skills.get('body_control') - CHAR_START) * 0.003);
+  }
+
+  /** Body stamina makes the same work cost less wind. */
+  staminaCost(cost: number): number {
+    return cost * Math.max(0.45, 1 - (this.skills.get('body_stamina') - CHAR_START) * 0.0045);
+  }
+
+  /** Mind logic takes the edge off a difficult craft, though never more than half of it. */
+  mindEase(): number {
+    return Math.max(0, (this.skills.get('mind_logic') - CHAR_START) * 0.2);
+  }
+
+  /** Soul strength is what a wild animal reads in you when you hold out food. */
+  soulBonus(): number {
+    return Math.max(0, (this.skills.get('soul_strength') - CHAR_START) * 0.002);
+  }
+
+  /** Steepest step the player can take, which climbing raises. */
+  climbStep(): number {
+    return MAX_STEP + this.skills.get('climbing') * 0.4;
+  }
+
   /** Raise a skill and announce it. Returns the gain. */
   gainSkill(id: string, base = 0.45): number {
     const def = SKILL_DEFS.find((d) => d.id === id);
+    const before = this.skills.get(id);
     const gain = this.skills.gain(id, base, this.rand);
-    if (gain > 0.00005 && def) {
-      this.logMsg(`${def.name} increased by ${gain.toFixed(4)} to ${this.skills.get(id).toFixed(4)}.`, 'skill');
-      this.events.emit('skill', id, gain);
+    if (gain <= 0.00005 || !def) return gain;
+    const now = this.skills.get(id);
+    // What you pick up in the background says less about itself than what you set out to do.
+    if (def.group === 'Characteristics' || QUIET_SKILLS.has(id)) {
+      if (Math.floor(now) > Math.floor(before)) {
+        const room = id === 'mind_logic' && this.queueCapacity() > BASE_QUEUE + Math.floor(Math.max(0, before - CHAR_START) / 10);
+        this.logMsg(`${def.name} is now ${Math.floor(now)}.${room ? ` You can keep ${this.queueCapacity()} jobs in your head.` : ''}`, 'skill');
+      }
+    } else {
+      this.logMsg(`${def.name} increased by ${gain.toFixed(4)} to ${now.toFixed(4)}.`, 'skill');
     }
+    this.events.emit('skill', id, gain);
     return gain;
   }
 
@@ -316,9 +368,23 @@ export class Game {
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
     s.thirst = Math.max(0, s.thirst - dt * 0.0006);
 
+    // What climbing and swimming have earned, applied before the next step.
+    p.maxStep = this.climbStep();
+    p.swimSpeed = Math.min(0.85, SWIM_SPEED + this.skills.get('swimming') * 0.0033);
+    if (p.lastClimb > 0) {
+      // Only ground that would have turned you back at the start teaches you anything.
+      if (p.lastClimb > MAX_STEP / 3) this.gainSkill('climbing', 0.04 + (p.lastClimb / MAX_STEP) * 0.12);
+      p.lastClimb = 0;
+    }
     const performing = this.action?.state === 'performing';
     if (p.swimming) {
-      s.stamina = Math.max(0, s.stamina - dt * 0.03);
+      // Deep water is its own teacher, and a strong swimmer tires more slowly.
+      this.swimClock += dt;
+      if (this.swimClock >= 1) {
+        this.swimClock = 0;
+        this.gainSkill('swimming', 0.09);
+      }
+      s.stamina = Math.max(0, s.stamina - dt * 0.03 * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
       if (s.stamina <= 0) {
         s.health = Math.max(0, s.health - dt * 0.05);
         if (this.time - this.drownWarning > 4) {
@@ -327,7 +393,9 @@ export class Game {
         }
       }
     } else if (!performing) {
-      const regen = moved > 0 ? 0.012 : 0.05;
+      // Body stamina is what gets your wind back between jobs.
+      const wind = 1 + Math.max(0, this.skills.get('body_stamina') - CHAR_START) * 0.005;
+      const regen = (moved > 0 ? 0.012 : 0.05) * wind;
       const starving = s.hunger <= 0 || s.thirst <= 0 ? 0.3 : 1;
       s.stamina = Math.min(1, s.stamina + dt * regen * starving);
       if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1) s.health = Math.min(1, s.health + dt * 0.004);
@@ -401,6 +469,7 @@ export class Game {
           const pet = a.target.kind === 'creature' ? this.creatures.get(a.target.id) : undefined;
           this.logMsg(a.waitUntil !== undefined && pet ? `${pet.name} cannot get to you.` : 'You are too far away from that.', 'error');
           this.action = null;
+          this.nextInQueue();
           this.events.emit('action');
         }
       }
@@ -421,6 +490,7 @@ export class Game {
     if (reason) {
       this.logMsg(reason, 'error');
       this.action = null;
+      this.nextInQueue();
       this.events.emit('action');
       return;
     }
@@ -443,23 +513,30 @@ export class Game {
     if (reason) {
       this.logMsg(reason, 'error');
       this.action = null;
+      this.nextInQueue();
       this.events.emit('action');
       return;
     }
     const again = a.def.perform(a.target, this) === true;
-    this.player.stats.stamina = Math.max(0, this.player.stats.stamina - a.def.stamina);
+    const cost = this.staminaCost(a.def.stamina);
+    this.player.stats.stamina = Math.max(0, this.player.stats.stamina - cost);
     if (a.def.skill) this.gainSkill(a.def.skill);
+    // The body learns from the work itself: wind from spending it, control from doing it.
+    if (cost > 0) this.gainSkill('body_stamina', 0.05 + cost * 0.6);
+    this.gainSkill('body_control', 0.05);
     if (again && a.def.repeat && this.player.stats.stamina > 0.05 && this.action === a) {
       a.elapsed = 0;
       a.duration = this.duration(a.def);
     } else if (this.action === a) {
       this.action = null;
+      this.nextInQueue();
     }
     this.events.emit('action');
   }
 
   cancelAction(silent = false): void {
     const a = this.action;
+    this.clearQueue(silent || !a);
     if (!a) return;
     this.action = null;
     if (!silent && a.state === 'performing') this.logMsg(`You stop ${a.def.verb}.`, 'info');
@@ -490,7 +567,23 @@ export class Game {
       this.logMsg('You are too exhausted to do that. Rest a moment.', 'error');
       return;
     }
-    this.cancelAction(true);
+    // Something already in hand: line this one up behind it instead of dropping it.
+    if (this.action) {
+      const room = this.queueCapacity() - 1 - this.queue.length;
+      if (room <= 0) {
+        this.logMsg(`You can only keep ${this.queueCapacity()} jobs in your head at once. Mind logic is what widens that.`, 'error');
+        return;
+      }
+      this.queue.push({ def, target });
+      this.logMsg(`${def.label} is next, ${this.queue.length + 1} of ${this.queueCapacity()} in hand.`, 'info');
+      this.events.emit('action');
+      return;
+    }
+    this.startAction(def, target);
+  }
+
+  /** Put an action in hand and either begin it or start walking to it. */
+  private startAction(def: ActionDef, target: Target): void {
     this.action = { def, target, state: 'walking', elapsed: 0, duration: this.duration(def) };
     if (this.inRange(def, target)) {
       this.beginPerform();
@@ -506,7 +599,30 @@ export class Game {
     } else if (!this.walkToward(def, target)) {
       this.logMsg("You can't find a way to get there.", 'error');
       this.action = null;
+      this.nextInQueue();
     }
+    this.events.emit('action');
+  }
+
+  /** Take the next job off the queue, if there is one. */
+  private nextInQueue(): boolean {
+    const next = this.queue.shift();
+    if (!next) return false;
+    const reason = next.def.check?.(next.target, this);
+    if (reason) {
+      this.logMsg(`${next.def.label}: ${reason}`, 'error');
+      return this.nextInQueue();
+    }
+    this.startAction(next.def, next.target);
+    return true;
+  }
+
+  /** Forget everything lined up; moving off or stopping does this. */
+  clearQueue(silent = false): void {
+    if (!this.queue.length) return;
+    const n = this.queue.length;
+    this.queue.length = 0;
+    if (!silent) this.logMsg(`You put ${n === 1 ? 'the other job' : `the other ${n} jobs`} out of your mind.`, 'info');
     this.events.emit('action');
   }
 
@@ -607,7 +723,7 @@ export class Game {
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
     const toolQl = def.tool ? this.toolQl(def.tool) : 0;
-    return Math.max(1.2, def.baseTime * (1 - skill / 140) * (1 - toolQl / 400));
+    return Math.max(1.2, def.baseTime * (1 - skill / 140) * (1 - toolQl / 400) * this.controlSpeed());
   }
 
   toolQl(id: string): number {
@@ -615,9 +731,11 @@ export class Game {
   }
 
   /** Wurm-flavoured success roll: better skill and tools help, difficulty hurts. */
-  skillCheck(skill: string, difficulty = 10, toolQl = 0): boolean {
+  skillCheck(skill: string, difficulty = 10, toolQl = 0, ease = 0): boolean {
     const s = this.skills.get(skill);
-    const chance = Math.min(0.98, Math.max(0.3, 0.6 + (s / 100) * 0.38 + toolQl / 500 - difficulty / 150));
+    // A clear head makes a hard piece of work easier, but never simple.
+    const d = ease > 0 ? Math.max(difficulty * 0.5, difficulty - ease) : difficulty;
+    const chance = Math.min(0.98, Math.max(0.3, 0.6 + (s / 100) * 0.38 + toolQl / 500 - d / 150));
     return this.rand() < chance;
   }
 

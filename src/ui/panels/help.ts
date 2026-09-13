@@ -23,9 +23,29 @@ export function buildHelp(win: UIWindow): void {
     <table>
       <tr><td><kbd>Right click</kbd></td><td>Actions for a tile or tree</td></tr>
       <tr><td><kbd>Click</kbd> an item</td><td>Its actions: eat, drink, drop, examine…</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>Stop the current action</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Stop the current action and forget what is lined up</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>Talk in the event window</td></tr>
     </table>
+    <p>Ask for a second job while the first is still going and it <b>lines up behind it</b> rather than
+    pushing it aside: it starts the moment the one in hand is done, walking you over if it needs to. The
+    bar above the action shows what is waiting. You can keep <b>three</b> jobs in your head to begin
+    with, and one more for every ten points of <b>mind logic</b>, which is earned by crafting. Walking
+    off, stopping with <kbd>Esc</kbd> or clicking somewhere else forgets the lot.</p>
+    <h3>What the characteristics are for</h3>
+    <p>The five characteristics start at 20 and rise slowly from the work that uses them, and each one
+    does something plain:</p>
+    <table>
+      <tr><td><b>Body strength</b></td><td>How hard you hit. Earned by fighting.</td></tr>
+      <tr><td><b>Body stamina</b></td><td>Less wind spent per action and quicker to get it back. Earned by spending it.</td></tr>
+      <tr><td><b>Body control</b></td><td>Everything takes less time. Earned by doing anything at all.</td></tr>
+      <tr><td><b>Mind logic</b></td><td>Jobs you can line up, and difficult crafts come out right more often. Earned by crafting.</td></tr>
+      <tr><td><b>Soul strength</b></td><td>A wild animal is readier to trust you. Earned by taming, success or not.</td></tr>
+    </table>
+    <p><b>Climbing</b> raises the step you can take between tiles &mdash; ground that turns you back at
+    the start is walkable once you have worked at it &mdash; and it is earned by walking steep ground.
+    <b>Swimming</b> makes deep water less of a wade and costs less wind, and is earned by being out of
+    your depth. Neither announces every scrap it picks up; both say so as they pass each whole point,
+    and the Skills window (<kbd>K</kbd>) shows what each one is worth right now.</p>
     <h3>Windows</h3>
     <table>
       <tr><td><kbd>I</kbd></td><td>Inventory</td></tr>
