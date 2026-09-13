@@ -37,6 +37,7 @@ import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipe
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
 import { TilePanel } from './panels/tile';
+import type { DragPayload } from './dragdrop';
 import { WildermonPanel } from './panels/wildermon';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { SettingsPanel } from './panels/settings';
@@ -89,7 +90,7 @@ export class UI {
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });
     this.eventLog = new EventLogPanel(events, game);
     const inventory = this.windows.create({ id: 'inventory', title: 'Inventory', x: 12, y: 56, width: 340, height: 300, anchor: 'tr' });
-    new InventoryPanel(inventory, game, this.menu);
+    new InventoryPanel(inventory, game, this.menu, (p) => this.moveDragged(p, 'inventory'));
     const skills = this.windows.create({ id: 'skills', title: 'Skills', x: 364, y: 56, width: 260, height: 380, anchor: 'tr', open: false });
     new SkillsPanel(skills, game);
     const craft = this.windows.create({ id: 'craft', title: 'Crafting', x: 364, y: 56, width: 360, height: 360, anchor: 'tr', open: false });
@@ -101,7 +102,7 @@ export class UI {
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 640, width: 300, height: 190, anchor: 'tr', open: false });
     this.settings = new SettingsPanel(settings, game);
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
-    this.cratePanel = new CratePanel(crate, game);
+    this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'));
     const pals = this.windows.create({ id: 'wildermon', title: 'Wildermon', x: 364, y: 330, width: 330, height: 320, anchor: 'tr', open: false });
     this.wildermon = new WildermonPanel(
       pals,
@@ -117,6 +118,56 @@ export class UI {
 
   toggleWindow(id: string): void {
     this.windows.toggle(id);
+  }
+
+  /** Open the storage window on a crate or a piece of furniture. */
+  openCrate(id: number): void {
+    this.cratePanel.open(id);
+  }
+
+  openFurniture(id: number): void {
+    this.cratePanel.openFurniture(id);
+  }
+
+  /**
+   * Carry a dragged thing from one window to the other. The same rules apply as
+   * to the menu entries that do the same job: you have to be able to reach the
+   * container, and it has to be willing to hold what you are giving it.
+   */
+  private moveDragged(p: DragPayload, to: 'inventory' | 'store'): void {
+    const g = this.game;
+    const store = this.cratePanel.currentStore();
+    if (!store) return;
+    if (!this.cratePanel.withinReach()) {
+      g.logMsg(`Stand next to the ${store.what} to move things in and out of it.`, 'error');
+      return;
+    }
+    if (to === 'inventory') {
+      const item = store.take(p.uid);
+      if (!item) return;
+      g.inventory.addItem(item);
+      g.logMsg(`You take the ${p.name.toLowerCase()} out of the ${store.what}.`, 'event');
+      return;
+    }
+    const held = g.inventory.get(p.uid);
+    if (!held) return;
+    if (g.isEquipped(held.uid)) {
+      g.logMsg(`Take the ${p.name.toLowerCase()} off first.`, 'error');
+      return;
+    }
+    const refused = store.refuses(held);
+    if (refused) {
+      g.logMsg(refused, 'error');
+      return;
+    }
+    const item = g.inventory.take(held.uid, held.count);
+    if (!item) return;
+    if (!store.add(item)) {
+      g.inventory.addItem(item);
+      g.logMsg(`The ${store.what} will not take the ${p.name.toLowerCase()}.`, 'error');
+      return;
+    }
+    g.logMsg(`You put the ${p.name.toLowerCase()} in the ${store.what}.`, 'event');
   }
 
   /**

@@ -70,6 +70,9 @@ export function buildHelp(win: UIWindow): void {
     bare ground: a chest, a smelter, a campfire, a wildermon. The game can be played from it with one
     button, which is what it is for. If you would rather keep to the right-click menu, untick
     <i>Open the tile window on a click</i> in Settings and it will stay where you put it.</p>
+    <p><b>Trees are picked by their ground, not their canopy.</b> A mature tree is drawn leaning over
+    the tiles behind it; the tile it stands on is the one that answers to a click or a hover, so the
+    cursor never latches onto a tree it is nowhere near.</p>
     <p>The <b>inventory</b> and the <b>crafting</b> window each have a <b>search box</b> at the top.
     The inventory searches what you are carrying by name and kind; the recipe book searches on
     everything in a row at once &mdash; what it makes, the trade it takes, where it has to be worked and
@@ -429,8 +432,8 @@ export function buildHelp(win: UIWindow): void {
     Wildermon window shows the range it has now and how much skill the next step needs.</p>
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
     or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
-    drops what it finds in the deed crate beside the token. Extra tamed wildermon are kept at the token,
-    whose menu lists them. Feed them from your pack; deed workers help themselves from the crate.
+    drops what it finds in the settlement's storage. Extra tamed wildermon are kept at the token,
+    whose menu lists them. Feed them from your pack; deed workers help themselves from storage.
     The <b>Wildermon</b> window (<kbd>P</kbd>) shows the condition, level and skills of every creature
     you own; wild ones keep theirs to themselves. Deed workers learn from their work, gaining skill at
     half a player's pace and working at half a player's speed, and better skill means better quality
@@ -439,6 +442,18 @@ export function buildHelp(win: UIWindow): void {
     logs or a <b>plank crate</b> from six planks (with a mallet), then right-click the spot on a tile
     where you want it; it snaps to the grid. Crates hold 30 or 60 things, can be opened, emptied and
     picked up again when empty. The deed crate beside the token is one of them.</p>
+    <p><b>Where a worker puts things.</b> A deed worker fills the deed crate first, and when that is
+    full it walks to the nearest other thing on the deed that will take what it is carrying &mdash;
+    another crate, a bulk bin, a chest, a larder, a cart. A <b>trash crate</b> is never chosen, so
+    nothing anybody worked for ends up in it. When <b>everything on the deed is full</b> the worker
+    keeps hold of its load and stands about near the token rather than tipping it on the ground, and
+    says so once: empty something or build more storage and it picks up where it left off. Seed for
+    sowing and wood for stoking come out of any store on the deed, not only the deed crate.</p>
+    <p><b>Moving things by hand.</b> Anything in the inventory or in an open container can be
+    <b>dragged</b> from one window to the other. The rules are the same as the menu's: you have to be
+    standing next to the container, and it has to be willing to hold what you are giving it &mdash; a
+    bulk bin will not take a tool, a barrel takes no solids, a full crate is full. It says which when
+    it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
     <h3>Terraforming</h3>

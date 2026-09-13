@@ -1,17 +1,21 @@
-import { crateCentre, crateName, CRATE_DEFS } from '../../game/crates';
-import { furnitureCapacity, furnitureCentre, furnitureName } from '../../game/furniture';
+import { crateCentre, crateName, crateUnits, CRATE_DEFS } from '../../game/crates';
+import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
 import type { Game } from '../../game/game';
 import { itemDef, type Item, itemName } from '../../game/items';
+import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 
 /** A crate or a piece of storage furniture, seen through the same window. */
-interface Store {
+export interface Store {
   title: string;
   items: Item[];
   capacity: number;
   centre: [number, number];
   what: string;
   take: (uid: number) => Item | null;
+  /** Why it will not take this, or null. */
+  refuses: (item: Item) => string | null;
+  add: (item: Item) => boolean;
 }
 
 /** Contents of one placed container, with a Take button per item. */
@@ -24,6 +28,7 @@ export class CratePanel {
   constructor(
     private readonly win: UIWindow,
     private readonly game: Game,
+    private readonly dropped?: (p: DragPayload) => void,
   ) {
     win.body.classList.add('inv-body');
     const head = document.createElement('div');
@@ -34,11 +39,28 @@ export class CratePanel {
     this.footer = document.createElement('div');
     this.footer.className = 'inv-footer';
     win.body.append(head, this.list, this.footer);
+    makeDropZone(
+      this.list,
+      (p) => p.from === 'inventory' && this.store() !== undefined,
+      (p) => this.dropped?.(p),
+    );
     game.events.on('crate', () => this.render());
     this.render();
   }
 
   /** Whichever container is open, seen the same way. */
+  currentStore(): Store | undefined {
+    return this.store();
+  }
+
+  /** Whether the player is close enough to reach into it. */
+  withinReach(): boolean {
+    const store = this.store();
+    if (!store) return false;
+    const [cx, cy] = store.centre;
+    return Math.hypot(cx - this.game.player.x, cy - this.game.player.y) <= 2.4;
+  }
+
   private store(): Store | undefined {
     const crate = this.crateId !== null ? this.game.crates.get(this.crateId) : undefined;
     if (crate) {
@@ -49,6 +71,8 @@ export class CratePanel {
         centre: crateCentre(crate),
         what: 'crate',
         take: (uid) => this.game.crateTake(crate, uid),
+        refuses: (item) => (crateUnits(crate) + item.count > CRATE_DEFS[crate.kind].capacity ? `The ${crateName(crate).toLowerCase()} is full.` : null),
+        add: (item) => this.game.crateAdd(crate, item),
       };
     }
     const piece = this.furnitureId !== null ? this.game.furniture.get(this.furnitureId) : undefined;
@@ -60,6 +84,8 @@ export class CratePanel {
         centre: furnitureCentre(piece),
         what: furnitureName(piece).toLowerCase(),
         take: (uid) => this.game.furnitureTake(piece, uid),
+        refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureUnits(piece) + item.count > furnitureCapacity(piece) ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
+        add: (item) => this.game.furnitureAdd(piece, item),
       };
     }
     return undefined;
@@ -109,6 +135,7 @@ export class CratePanel {
         if (it) this.game.inventory.addItem(it);
       });
       row.append(name, ql, dmg, take);
+      makeDraggable(row, { uid: item.uid, from: 'store', name: itemName(item) });
       this.list.append(row);
     }
     const weight = store.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);

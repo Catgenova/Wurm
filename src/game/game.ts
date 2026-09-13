@@ -3,7 +3,7 @@ import { TileType } from '../world/tiles';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
-import { CRATE_DEFS, crateCentre, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
+import { CRATE_DEFS, crateCentre, crateName, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
@@ -29,6 +29,22 @@ export interface ActiveAction {
 }
 
 /** A settlement: a square of land around a token that the player may build on. */
+/** One place on the deed that holds things, whatever it is underneath. */
+export interface DeedStore {
+  x: number;
+  y: number;
+  centre: [number, number];
+  items: Item[];
+  name: string;
+  /** The settlement's own crate, which a worker fills before any other. */
+  deed: boolean;
+  /** Whether this would take the thing being carried. */
+  room(item: Item): boolean;
+  add(item: Item): boolean;
+  /** Tell the windows something in here changed. */
+  changed(): void;
+}
+
 export interface Deed {
   name: string;
   x: number;
@@ -1434,6 +1450,56 @@ export class Game {
     }
     return best;
   }
+
+  /**
+   * Every place on the deed that holds things, seen the same way: crates,
+   * bins, chests, larders, carts. A worker looking for somewhere to put a load
+   * down, something to eat or a seed to sow asks this rather than knowing
+   * about the deed crate and nothing else. A trash crate is never offered,
+   * since nothing a worker carries is meant for it.
+   */
+  deedStores(): DeedStore[] {
+    // A field worker asks this for every tile it looks at, so build the list
+    // once a tick. The entries hold the crates and pieces themselves, so what
+    // is inside them is always current; only the set of them is cached.
+    const stamp = this.crates.size * 1000 + this.furniture.size;
+    if (this.storeCache && this.storeCache.at === this.time && this.storeCache.stamp === stamp) return this.storeCache.stores;
+    const out: DeedStore[] = [];
+    for (const c of this.crates.values()) {
+      if (!this.onDeed(c.x, c.y)) continue;
+      const cap = CRATE_DEFS[c.kind].capacity;
+      out.push({
+        x: c.x,
+        y: c.y,
+        centre: crateCentre(c),
+        items: c.items,
+        name: crateName(c),
+        deed: !!c.deed,
+        room: (item) => crateUnits(c) + item.count <= cap,
+        add: (item) => this.crateAdd(c, item),
+        changed: () => this.events.emit('crate'),
+      });
+    }
+    for (const f of this.furniture.values()) {
+      const def = furnitureDef(f.kind);
+      if (!def.capacity || def.trash || !this.onDeed(f.x, f.y)) continue;
+      out.push({
+        x: f.x,
+        y: f.y,
+        centre: furnitureCentre(f),
+        items: f.items,
+        name: def.name,
+        deed: false,
+        room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= (def.capacity ?? 0),
+        add: (item) => this.furnitureAdd(f, item),
+        changed: () => this.events.emit('crate'),
+      });
+    }
+    this.storeCache = { at: this.time, stamp, stores: out };
+    return out;
+  }
+
+  private storeCache: { at: number; stamp: number; stores: DeedStore[] } | null = null;
 
   /** Put something away; false when it would not fit. */
   furnitureAdd(f: PlacedFurniture, item: Item): boolean {

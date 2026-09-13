@@ -270,6 +270,12 @@ rebuilds and commits the result.
   it, and each piece takes its own time at heat, faster and truer in a
   well-built kiln. Fired, the bowl cooks, the pot makes pottage, the jar puts
   up preserves, and the brick builds.
+- **Where deed workers put things.** A worker fills the deed crate first, then
+  the nearest other store on the deed that will take its load — crate, bulk
+  bin, chest, larder, cart — never a trash crate. When everything is full it
+  holds on to what it is carrying and waits near the token instead of tipping
+  it on the ground, saying so once. Seed for sowing and wood for stoking are
+  drawn from any store on the deed, not only the deed crate.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, forages berries when hungry and is tamed with a berry or
   vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is
@@ -371,6 +377,11 @@ rebuilds and commits the result.
   nearly the whole screen with one tap (handy on phones), a status HUD,
   action timer, right-click menus with greyed-out reasons, hover tooltips, an
   event log with chat and a live minimap.
+- **Dragging between windows.** Anything in the inventory or an open container
+  can be dragged from one window to the other, under the same rules the menus
+  use: you must be within reach of the container, and it must accept what you
+  are giving it — a bulk bin refuses tools, a barrel refuses solids, a full
+  crate is full — and it says which when it will not go.
 - **The tile window.** Clicking a tile chooses it: it is outlined in the
   world and the Tile window (T) fills with everything that could be done to
   it — the same entries the right-click menu shows, built from the same list,

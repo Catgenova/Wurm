@@ -1,6 +1,7 @@
 import type { Game } from '../../game/game';
 import { itemDef, itemName, type Item, type ItemCategory } from '../../game/items';
 import type { ContextMenu, MenuItem } from '../contextmenu';
+import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 
 const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
@@ -22,6 +23,7 @@ export class InventoryPanel {
     private readonly win: UIWindow,
     private readonly game: Game,
     private readonly menu: ContextMenu,
+    private readonly dropped?: (p: DragPayload) => void,
   ) {
     this.search = document.createElement('input');
     this.search.type = 'search';
@@ -48,6 +50,11 @@ export class InventoryPanel {
     this.footer.className = 'inv-footer';
     win.body.append(this.search, head, this.list, this.footer);
     win.body.classList.add('inv-body');
+    makeDropZone(
+      this.list,
+      (p) => p.from === 'store',
+      (p) => this.dropped?.(p),
+    );
     game.events.on('inventory', () => this.render());
     this.render();
   }
@@ -108,6 +115,7 @@ export class InventoryPanel {
     };
     row.addEventListener('click', open);
     row.addEventListener('contextmenu', open);
+    makeDraggable(row, { uid: item.uid, from: 'inventory', name: itemName(item) });
     return row;
   }
 

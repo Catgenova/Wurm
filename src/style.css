@@ -683,6 +683,21 @@ kbd {
   }
 }
 
+/* Dragging things between windows ------------------------------------------ */
+
+.inv-row[draggable='true'] {
+  cursor: grab;
+}
+
+.inv-row.drag-source {
+  opacity: 0.45;
+}
+
+.inv-list.drop-target {
+  background: rgba(227, 182, 87, 0.1);
+  box-shadow: inset 0 0 0 1px var(--ui-accent);
+}
+
 /* Tile window ------------------------------------------------------------- */
 
 .tile-head {

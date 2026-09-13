@@ -1,7 +1,6 @@
 import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
-import type { Game } from './game';
-import { crateCentre, crateName, type PlacedCrate } from './crates';
+import type { DeedStore, Game } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { mineChance } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -530,6 +529,8 @@ export interface Creature {
   cooldown: number;
   busyUntil: number;
   searchAt: number;
+  /** When it last said it had nowhere to put a load down. */
+  noRoomAt: number;
   /** When the player last called it over for an action; it drops everything and comes. */
   calledAt: number;
   /** Next time an unruly one gets a chance to turn on its keeper. */
@@ -649,6 +650,7 @@ export class Creatures {
       cooldown: 0,
       busyUntil: 0,
       searchAt: 0,
+      noRoomAt: 0,
       calledAt: -1e9,
       nipAt: 0,
       workX: -1,
@@ -850,11 +852,18 @@ export class Creatures {
     return crop.tendedNow ? null : 'tend';
   }
 
-  /** A seed from its cheeks, or failing that one out of the deed crate. */
-  private seedFor(game: Game, c: Creature): Item | null {
-    if (c.pouch && CROP_BY_SEED.has(c.pouch.id) && c.pouch.count > 0) return c.pouch;
-    const crate = game.deedCrate();
-    return crate?.items.find((it) => CROP_BY_SEED.has(it.id) && it.count > 0) ?? null;
+  /**
+   * A seed to put in the ground: one out of its own cheeks first, and failing
+   * that one from any store on the deed — the settlement crate, a bin, a chest,
+   * whichever has seed in it. `store` is null when the seed is its own.
+   */
+  private seedFor(game: Game, c: Creature): { seed: Item; store: DeedStore | null } | null {
+    if (c.pouch && CROP_BY_SEED.has(c.pouch.id) && c.pouch.count > 0) return { seed: c.pouch, store: null };
+    for (const store of game.deedStores()) {
+      const seed = store.items.find((it: Item) => CROP_BY_SEED.has(it.id) && it.count > 0);
+      if (seed) return { seed, store };
+    }
+    return null;
   }
 
   /** Whether another worker is already on its way to this tile, or working it. */
@@ -1117,14 +1126,14 @@ export class Creatures {
     this.gainSkill(game, c, GATHER_SKILL.farm, 0.225);
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
     if (job === 'sow') {
-      const seed = this.seedFor(game, c);
-      if (!seed) return null;
+      const found = this.seedFor(game, c);
+      if (!found) return null;
+      const { seed, store } = found;
       seed.count -= 1;
-      if (seed === c.pouch && seed.count <= 0) c.pouch = null;
-      if (seed !== c.pouch) {
-        const crate = game.deedCrate();
-        if (crate && seed.count <= 0) crate.items.splice(crate.items.indexOf(seed), 1);
-        game.events.emit('crate');
+      if (!store && seed.count <= 0) c.pouch = null;
+      if (store) {
+        if (seed.count <= 0) store.items.splice(store.items.indexOf(seed), 1);
+        store.changed();
       }
       const def = CROP_BY_SEED.get(seed.id);
       if (def) game.plantCrop(x, y, def.id, seed.ql);
@@ -1179,15 +1188,15 @@ export class Creatures {
    * Fetch wood from the crate for whatever is burning low. Returns true when
    * the stoker has taken the job in hand this tick.
    */
-  private stokeStep(game: Game, c: Creature, dt: number, crate: PlacedCrate | undefined): boolean {
+  private stokeStep(game: Game, c: Creature, dt: number): boolean {
     const def = this.species(c);
     const hearth = this.coldHearth(game, c, workRangeOf(c, def));
     if (!hearth) return false;
-    // Nothing to carry: go to the crate and take a piece of wood out of it.
-    if (!crate) return false;
-    const fuel = crate.items.find((it) => isFuel(it.id));
-    if (!fuel) return false;
-    const [cx, cy] = crateCentre(crate);
+    // Nothing to carry: go to whichever store has wood in it and take a piece.
+    const store = game.deedStores().find((st) => st.items.some((it: Item) => isFuel(it.id)));
+    const fuel = store?.items.find((it: Item) => isFuel(it.id));
+    if (!store || !fuel) return false;
+    const [cx, cy] = store.centre;
     if (Math.hypot(cx - c.x, cy - c.y) > 1.3) {
       if (this.stepToward(game, c, cx, cy, dt) === 'blocked') {
         c.state = 'idle';
@@ -1196,8 +1205,8 @@ export class Creatures {
       return true;
     }
     fuel.count -= 1;
-    if (fuel.count <= 0) crate.items.splice(crate.items.indexOf(fuel), 1);
-    game.events.emit('crate');
+    if (fuel.count <= 0) store.items.splice(store.items.indexOf(fuel), 1);
+    store.changed();
     c.carrying = { uid: game.inventory.nextUid++, id: fuel.id, ql: fuel.ql, dmg: 0, count: 1 };
     c.workX = hearth.x;
     c.workY = hearth.y;
@@ -1516,10 +1525,8 @@ export class Creatures {
       this.guardStep(game, c, dt, deed);
       return;
     }
-    const crate = game.deedCrate();
-    const crateAt = crate ? crateCentre(crate) : null;
     if (kind === 'stoke' && !c.carrying && c.state !== 'forage') {
-      if (this.stokeStep(game, c, dt, crate)) return;
+      if (this.stokeStep(game, c, dt)) return;
     }
     if (c.state === 'forage') {
       if (game.time >= c.until) {
@@ -1539,17 +1546,26 @@ export class Creatures {
         c.carrying = null;
         return;
       }
-      if (!crate || !crateAt) {
-        game.dropOnGround(deed.x, deed.y, c.carrying);
-        c.carrying = null;
+      const store = this.storeFor(game, c, c.carrying);
+      if (!store) {
+        // Everything on the deed is full. A worker will not tip a load out on
+        // the ground: it holds on to it and waits for room.
+        if (game.time - c.noRoomAt > 60) {
+          c.noRoomAt = game.time;
+          game.logMsg(`${c.name} is holding ${itemDef(c.carrying.id).name.toLowerCase()} with nowhere on the deed to put it. Empty something, or build more storage.`, 'error');
+        }
+        this.wanderTarget(game, c, 2, deed.x + 0.5, deed.y + 0.5);
+        c.state = 'wander';
+        c.until = game.time + 5;
         return;
       }
-      if (Math.hypot(crateAt[0] - c.x, crateAt[1] - c.y) <= 1.3) {
-        if (!game.crateAdd(crate, c.carrying)) game.dropOnGround(crate.x, crate.y, c.carrying);
+      const [dx, dy] = store.centre;
+      if (Math.hypot(dx - c.x, dy - c.y) <= 1.3) {
+        if (!store.add(c.carrying)) return;
         c.carrying = null;
         c.state = 'idle';
         c.until = game.time + 1;
-      } else if (this.stepToward(game, c, crateAt[0], crateAt[1], dt) === 'blocked') {
+      } else if (this.stepToward(game, c, dx, dy, dt) === 'blocked') {
         c.state = 'idle';
         c.until = game.time + 2;
       }
@@ -1558,16 +1574,16 @@ export class Creatures {
     if (c.hunger < HUNGRY) {
       const larder = this.foodCrate(game, c, def);
       if (larder) {
-        const [lx, ly] = crateCentre(larder);
+        const [lx, ly] = larder.centre;
         if (Math.hypot(lx - c.x, ly - c.y) <= 1.3) {
           const idx = larder.items.findIndex((it) => isBaitFor(def, it.id));
           if (idx >= 0) {
             const it = larder.items[idx];
             it.count -= 1;
             if (it.count <= 0) larder.items.splice(idx, 1);
-            game.events.emit('crate');
+            larder.changed();
             c.hunger = Math.min(1, c.hunger + 0.5);
-            game.logMsg(`${c.name} helps itself to ${itemDef(it.id).name.toLowerCase()} from the ${crateName(larder).toLowerCase()}.`, 'event');
+            game.logMsg(`${c.name} helps itself to ${itemDef(it.id).name.toLowerCase()} from the ${larder.name.toLowerCase()}.`, 'event');
           }
         } else this.stepToward(game, c, lx, ly, dt);
         return;
@@ -1616,18 +1632,39 @@ export class Creatures {
     c.until = game.time + 4;
   }
 
-  /** The nearest crate on the deed holding something this creature will eat. */
-  private foodCrate(game: Game, c: Creature, def: SpeciesDef): PlacedCrate | null {
-    let best: PlacedCrate | null = null;
+  /**
+   * Where a load should go: the settlement's own crate while it has room, and
+   * failing that the nearest other store that will take it. Null means every
+   * place on the deed is full, which is a reason to stop rather than to tip the
+   * load out on the ground.
+   */
+  private storeFor(game: Game, c: Creature, item: Item): DeedStore | null {
+    const stores = game.deedStores().filter((s) => s.room(item));
+    if (!stores.length) return null;
+    const own = stores.find((s) => s.deed);
+    if (own) return own;
+    let best = stores[0];
     let bestD = Infinity;
-    for (const crate of game.crates.values()) {
-      if (!game.onDeed(crate.x, crate.y)) continue;
-      if (!crate.items.some((it) => isBaitFor(def, it.id))) continue;
-      const [cx, cy] = crateCentre(crate);
-      const d = Math.hypot(cx - c.x, cy - c.y);
+    for (const s of stores) {
+      const d = Math.hypot(s.centre[0] - c.x, s.centre[1] - c.y);
       if (d < bestD) {
         bestD = d;
-        best = crate;
+        best = s;
+      }
+    }
+    return best;
+  }
+
+  /** The nearest store on the deed holding something this creature will eat. */
+  private foodCrate(game: Game, c: Creature, def: SpeciesDef): DeedStore | null {
+    let best: DeedStore | null = null;
+    let bestD = Infinity;
+    for (const store of game.deedStores()) {
+      if (!store.items.some((it: Item) => isBaitFor(def, it.id))) continue;
+      const d = Math.hypot(store.centre[0] - c.x, store.centre[1] - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = store;
       }
     }
     return best;

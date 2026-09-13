@@ -140,7 +140,6 @@ export class Renderer {
   selected: { x: number; y: number } | null = null;
   fps = 0;
   private colors: (string | null)[];
-  private treeHits: HitRect[] = [];
   private pts = new Float64Array(8);
   private cornerBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
@@ -244,7 +243,6 @@ export class Renderer {
     const bottomMargin = 220 * zoom;
     const pts = this.pts;
     const c = this.cornerBuf;
-    this.treeHits.length = 0;
     this.creatureHits.length = 0;
     this.crateHits.length = 0;
     this.fireHits.length = 0;
@@ -553,9 +551,7 @@ export class Renderer {
       const left = ent.sx - spr.ax * zoom;
       const top = ent.sy - spr.ay * zoom;
       ctx.drawImage(spr.canvas, left, top, dw, dh);
-      if (ent.kind === 'tree') {
-        this.treeHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.22, top: top + dh * 0.12, w: dw * 0.56, h: dh * 0.86 });
-      } else if (ent.kind === 'crate' && ent.crateId !== undefined) {
+      if (ent.kind === 'crate' && ent.crateId !== undefined) {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
     }
@@ -1216,6 +1212,12 @@ export class Renderer {
   static readonly SIDES = SIDES;
 
   /** Screen point to tile, taking terrain height into account; creatures and trees are picked by their sprite. */
+  /**
+   * What is under a screen point. Things standing on the ground are picked by
+   * their sprite; a tree is not, because a tree is the tile rather than a thing
+   * on it — its canopy leans over the tiles behind it, and catching clicks with
+   * it put the cursor on a tile a long way from where it was pointing.
+   */
   pick(sx: number, sy: number): Pick | null {
     for (let i = this.creatureHits.length - 1; i >= 0; i--) {
       const h = this.creatureHits[i];
@@ -1244,10 +1246,6 @@ export class Renderer {
     for (let i = this.fireHits.length - 1; i >= 0; i--) {
       const h = this.fireHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), fire: h.fire };
-    }
-    for (let i = this.treeHits.length - 1; i >= 0; i--) {
-      const h = this.treeHits[i];
-      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return this.makePick(h.x, h.y, sx, sy);
     }
     const cam = this.camera;
     const world = this.game.world;
