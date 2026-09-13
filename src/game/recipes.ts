@@ -9,7 +9,7 @@ import { FURNITURE } from './furniture';
  * an item action, so it shows on the material's menu as well as in the
  * crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cooking' | 'Smelting';
+export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Cooking' | 'Smelting';
 /** A place a recipe has to be worked at, beyond what is carried. */
 export type Station = 'campfire' | 'smelter';
 const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter' };
@@ -83,6 +83,10 @@ export const RECIPES: Recipe[] = [
   { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
   { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
   { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
+  // Cloth: wool off a living Woola, or cotton off the field.
+  { id: 'weave_wool', category: 'Cloth', result: 'cloth', inputs: [{ item: 'wool', count: 3 }], skill: 'tailoring', label: 'Spin and weave', verb: 'weaving', baseTime: 8, stamina: 0.03, difficulty: 10, done: 'You spin the wool and weave a length of cloth.', fail: 'The yarn breaks again and again and the wool is a tangle.', consumeOnFail: true },
+  { id: 'weave_cotton', category: 'Cloth', result: 'cloth', inputs: [{ item: 'cotton', count: 3 }], skill: 'tailoring', label: 'Spin and weave', verb: 'weaving', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You spin the cotton and weave a length of cloth.', fail: 'The yarn breaks again and again and the cotton is a tangle.', consumeOnFail: true },
+  { id: 'make_wool_cap', category: 'Cloth', result: 'wool_cap', inputs: [{ item: 'cloth', count: 2 }], skill: 'tailoring', label: 'Sew a wool cap', verb: 'sewing a cap', baseTime: 10, stamina: 0.03, difficulty: 14, done: 'You felt and sew a thick wool cap.', fail: 'The seams will not sit true and you unpick the lot.' },
   { id: 'make_thatch', category: 'Clay & thatch', result: 'thatch', inputs: [{ item: 'mixed_grass', count: 2 }], skill: 'carpentry', label: 'Bundle into thatch', verb: 'bundling thatch', baseTime: 3, stamina: 0.02, done: 'You bundle the grass into thatch.' },
   { id: 'make_clay_bowl', category: 'Clay & thatch', result: 'unfired_clay_bowl', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a bowl', verb: 'shaping a bowl', baseTime: 6, stamina: 0.02, difficulty: 8, done: 'You shape a clay bowl. It needs a kiln before it will hold anything.', fail: 'The walls collapse as you draw them up. You fail to shape a bowl.' },
   // Cooking. Everything here needs a lit campfire to work at.
@@ -136,7 +140,7 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
 
 RECIPES.push(...FURNITURE_RECIPES);
 
-export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cooking', 'Smelting'];
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {

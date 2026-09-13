@@ -889,6 +889,8 @@ export interface CreaturePose {
   label?: string;
   /** Species id; decides which body is drawn. */
   species?: string;
+  /** How much fleece is on it, 0..1, for the species that grow one. */
+  fleece?: number;
 }
 
 /** Draws a wildermon of any species with its feet at (sx, sy), then its health bar and name. */
@@ -899,6 +901,11 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   else if (pose.species === 'mola') drawMolaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'crawler') drawCrawlerBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'noot') drawNootBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'embra') drawEmbraBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'quarra') drawQuarraBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'woola') drawWoolaBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'ulva') drawUlvaBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'magga') drawMaggaBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -1301,6 +1308,363 @@ function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
     }
     ctx.restore();
   }
+  ctx.restore();
+}
+
+/** An Embra: low, soot-dark and softly alight along the back. */
+function drawEmbraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1 : 0;
+  const glow = 0.55 + Math.sin(pose.phase * 1.6) * 0.2;
+  const [coat, ember] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 10, 4.6, 0, 0, TAU);
+  ctx.fill();
+  // The heat it carries, showing under it before the body is drawn.
+  ctx.globalAlpha = glow * 0.5;
+  ctx.fillStyle = ember;
+  ctx.beginPath();
+  ctx.ellipse(0, -1, 9, 3.4, 0, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  for (const [lx, ph] of [[-5, 0], [-1.5, 1.6], [2, 3.1], [5, 4.6]] as Array<[number, number]>) {
+    const step = pose.moving ? Math.sin(pose.phase + ph) * 1.4 : 0;
+    ctx.beginPath();
+    ctx.moveTo(lx, -5 - lift);
+    ctx.lineTo(lx + step, -0.8);
+    ctx.stroke();
+  }
+  // A long, low body with a ridge of banked coals down it.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(0, -7 - lift, 9.4, 4.6, -0.03, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = ember;
+  ctx.globalAlpha = glow;
+  for (const [rx, r] of [[-5.5, 1.5], [-2, 1.9], [1.6, 1.7], [5, 1.3]] as Array<[number, number]>) {
+    ctx.beginPath();
+    ctx.ellipse(rx, -10.4 - lift, r, r * 0.7, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Head, low and blunt, with one banked eye.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(8.6, -7.6 - lift, 4.2, 3.6, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = ember;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.ellipse(10.6, -7.8 - lift, 1.1, 0.8, 0.2, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#12100e';
+  ctx.beginPath();
+  ctx.arc(9.4, -9 - lift, 0.75, 0, TAU);
+  ctx.fill();
+  // A tail like a poker, trailing sparks when it moves.
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-8.6, -7 - lift);
+  ctx.quadraticCurveTo(-12.5, -7.5 - lift, -13.4, -10.5 - lift);
+  ctx.stroke();
+  if (pose.moving) {
+    ctx.fillStyle = ember;
+    for (let i = 0; i < 3; i++) {
+      const t = (pose.phase * 0.3 + i / 3) % 1;
+      ctx.globalAlpha = 0.6 * (1 - t);
+      ctx.beginPath();
+      ctx.arc(-13.4 - t * 4, -11 - t * 5 - lift, 0.9 * (1 - t) + 0.3, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+/** A Quarra: a slab of a creature with a jaw made for stone. */
+function drawQuarraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const plod = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.8 : 0;
+  const [stone, pale] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 12, 5.4, 0, 0, TAU);
+  ctx.fill();
+  // Four short, thick legs.
+  ctx.fillStyle = stone;
+  for (const [lx, ph] of [[-6.5, 0], [-2.5, Math.PI], [3, 0.8], [6.5, 3.6]] as Array<[number, number]>) {
+    const step = pose.moving ? Math.max(0, Math.sin(pose.phase + ph)) * 1.2 : 0;
+    ctx.beginPath();
+    ctx.ellipse(lx, -2.4 - step, 2.2, 2.6, 0, 0, TAU);
+    ctx.fill();
+  }
+  // Body: a boulder with a flat back.
+  ctx.beginPath();
+  ctx.moveTo(-9.5, -5 - plod);
+  ctx.quadraticCurveTo(-10.5, -12 - plod, -3, -12.6 - plod);
+  ctx.lineTo(5, -12.2 - plod);
+  ctx.quadraticCurveTo(10, -11.6 - plod, 9.6, -5 - plod);
+  ctx.quadraticCurveTo(0, -2.6 - plod, -9.5, -5 - plod);
+  ctx.closePath();
+  ctx.fill();
+  // Plates of lighter stone across the back.
+  ctx.fillStyle = pale;
+  for (const [px, w] of [[-5.5, 3.4], [-0.5, 3.8], [4.4, 3]] as Array<[number, number]>) {
+    ctx.beginPath();
+    ctx.ellipse(px, -11.4 - plod, w, 1.5, -0.04, 0, TAU);
+    ctx.fill();
+  }
+  // Head: mostly jaw, set low and forward.
+  ctx.fillStyle = stone;
+  ctx.beginPath();
+  ctx.ellipse(11, -7.4 - plod, 4.6, 3.8, -0.1, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.moveTo(8.6, -5.4 - plod);
+  ctx.lineTo(15.8, -6.2 - plod);
+  ctx.lineTo(15.2, -4 - plod);
+  ctx.lineTo(8.8, -3.8 - plod);
+  ctx.closePath();
+  ctx.fill();
+  // Chisel teeth.
+  ctx.fillStyle = '#f2efe6';
+  for (const tx of [10.2, 12.2, 14.2]) {
+    ctx.beginPath();
+    ctx.moveTo(tx, -5.6 - plod);
+    ctx.lineTo(tx + 1.1, -5.6 - plod);
+    ctx.lineTo(tx + 0.55, -4.2 - plod);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#1d1c1a';
+  ctx.beginPath();
+  ctx.arc(11.6, -9.4 - plod, 0.85, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A Woola: a fleece with a face, and the fleece shows what is on it. */
+function drawWoolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const bob = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.2 : 0;
+  const [fleece, shade] = pose.colors;
+  // How much wool is on it, passed through on the health slot's sibling.
+  const full = pose.fleece ?? 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 10, 4.6, 0, 0, TAU);
+  ctx.fill();
+  // Legs, thin and dark under all that wool.
+  ctx.strokeStyle = '#4a423a';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  for (const [lx, ph] of [[-4.5, 0], [-2, 2.2], [2.5, 1.1], [5, 3.3]] as Array<[number, number]>) {
+    const step = pose.moving ? Math.sin(pose.phase + ph) * 1.3 : 0;
+    ctx.beginPath();
+    ctx.moveTo(lx, -6 - bob);
+    ctx.lineTo(lx + step, -0.6);
+    ctx.stroke();
+  }
+  // The fleece itself: a cloud of overlapping curls that thins as it is shorn.
+  const r = 4.4 + full * 3.2;
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -9 - bob, r + 1.4, r * 0.85, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = fleece;
+  for (const [cx, cy, cr] of [
+    [-5, -9.5, 0.62],
+    [-1.5, -11, 0.72],
+    [2, -10.4, 0.66],
+    [4.6, -8.6, 0.55],
+    [-3.5, -7.4, 0.55],
+    [0.6, -7, 0.6],
+  ] as Array<[number, number, number]>) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - bob, r * cr, r * cr * 0.82, 0, 0, TAU);
+    ctx.fill();
+  }
+  // Head: bare, dark and entirely untroubled.
+  ctx.fillStyle = '#574e44';
+  ctx.beginPath();
+  ctx.ellipse(8, -8.6 - bob, 3.4, 3, -0.1, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(10.6, -7.6 - bob, 2, 1.5, 0.15, 0, TAU);
+  ctx.fill();
+  // Ears out sideways.
+  ctx.strokeStyle = '#574e44';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(6.6, -10.4 - bob);
+  ctx.lineTo(4.6, -11.6 - bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(7.4, -10.2 - bob);
+  ctx.lineTo(6.6, -12 - bob);
+  ctx.stroke();
+  ctx.fillStyle = '#14110f';
+  ctx.beginPath();
+  ctx.arc(9, -9.4 - bob, 0.7, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** An Ulva: long in the leg, low in the head, and coming your way. */
+function drawUlvaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const run = pose.moving ? Math.sin(pose.phase) : Math.sin(pose.phase * 0.3) * 0.15;
+  const lift = pose.moving ? Math.abs(Math.sin(pose.phase * 2)) * 0.9 : 0;
+  const [coat, belly] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 11, 4.6, 0, 0, TAU);
+  ctx.fill();
+  // Legs: two pairs, swinging opposite.
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = 'round';
+  for (const [lx, ph, len] of [
+    [-5.6, 0, 8],
+    [-4.2, Math.PI, 8],
+    [4.4, Math.PI, 8.5],
+    [5.8, 0, 8.5],
+  ] as Array<[number, number, number]>) {
+    const swing = Math.sin(pose.phase + ph) * (pose.moving ? 2.4 : 0.3);
+    ctx.beginPath();
+    ctx.moveTo(lx, -9 - lift);
+    ctx.quadraticCurveTo(lx + swing * 0.5, -9 + len * 0.5 - lift, lx + swing, -0.8);
+    ctx.stroke();
+  }
+  // A deep chest tapering to the hips.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.moveTo(-7.5, -9.5 - lift);
+  ctx.quadraticCurveTo(-2, -13.4 - lift, 5, -13 - lift);
+  ctx.quadraticCurveTo(9.4, -12.6 - lift, 9, -8.4 - lift);
+  ctx.quadraticCurveTo(2, -7 - lift, -7, -7.6 - lift);
+  ctx.closePath();
+  ctx.fill();
+  // A pale throat and chest, tucked under the ribs rather than hung below them.
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(3.4, -8.6 - lift, 3.2, 1.5, -0.18, 0, TAU);
+  ctx.fill();
+  // Tail, low and level when hunting.
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(-7.4, -10 - lift);
+  ctx.quadraticCurveTo(-12, -9.6 - lift + run * 0.8, -14.6, -11.6 - lift + run * 1.4);
+  ctx.stroke();
+  // Head held out level, muzzle first.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(9.6, -11 - lift, 4, 3.2, -0.12, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(11.4, -12.4 - lift);
+  ctx.lineTo(16.4, -10.6 - lift);
+  ctx.lineTo(11.4, -8.8 - lift);
+  ctx.closePath();
+  ctx.fill();
+  // Ears pricked forward.
+  for (const [ex, ey] of [[8, -13.6], [10.4, -13.2]] as Array<[number, number]>) {
+    ctx.beginPath();
+    ctx.moveTo(ex - 1.1, ey + 1.4 - lift);
+    ctx.lineTo(ex + 0.3, ey - 2.6 - lift);
+    ctx.lineTo(ex + 1.5, ey + 1 - lift);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#e8d76a';
+  ctx.beginPath();
+  ctx.ellipse(10.6, -11.6 - lift, 0.9, 0.7, -0.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#100e0c';
+  ctx.beginPath();
+  ctx.arc(16.2, -10.6 - lift, 0.7, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A Magga: black and white, long-tailed, and always about to take something. */
+function drawMaggaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3.2 : 0;
+  const [feather, pale] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.26)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 7.5, 3.4, 0, 0, TAU);
+  ctx.fill();
+  // Spindly legs, tucked when it hops.
+  ctx.strokeStyle = '#d8a04c';
+  ctx.lineWidth = 1.1;
+  ctx.lineCap = 'round';
+  for (const lx of [-1.4, 1.4]) {
+    ctx.beginPath();
+    ctx.moveTo(lx, -5 - hop);
+    ctx.lineTo(lx + (hop > 0 ? 1 : 0), -0.6 - hop * 0.5);
+    ctx.stroke();
+  }
+  // Long tail, angled up behind.
+  ctx.fillStyle = feather;
+  ctx.beginPath();
+  ctx.moveTo(-2.5, -7 - hop);
+  ctx.lineTo(-12.5, -11.5 - hop);
+  ctx.lineTo(-11.5, -9 - hop);
+  ctx.lineTo(-2.5, -5 - hop);
+  ctx.closePath();
+  ctx.fill();
+  // Body and the white flash on the flank.
+  ctx.beginPath();
+  ctx.ellipse(0, -7.6 - hop, 5.4, 4.2, -0.1, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(0.8, -6.8 - hop, 3.4, 2.6, -0.1, 0, TAU);
+  ctx.fill();
+  // Folded wing over the white.
+  ctx.fillStyle = feather;
+  ctx.beginPath();
+  ctx.ellipse(-1.4, -8.6 - hop, 4, 2, -0.25, 0, TAU);
+  ctx.fill();
+  // Head and beak.
+  ctx.beginPath();
+  ctx.ellipse(5, -11.4 - hop, 3, 2.8, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#2b2b2e';
+  ctx.beginPath();
+  ctx.moveTo(7.2, -12 - hop);
+  ctx.lineTo(11.4, -11 - hop);
+  ctx.lineTo(7.2, -10 - hop);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#f6f4ee';
+  ctx.beginPath();
+  ctx.arc(6, -12.2 - hop, 0.9, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#100e0c';
+  ctx.beginPath();
+  ctx.arc(6.2, -12.2 - hop, 0.5, 0, TAU);
+  ctx.fill();
   ctx.restore();
 }
 

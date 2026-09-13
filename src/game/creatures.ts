@@ -7,6 +7,7 @@ import { mineChance } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
+import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -16,12 +17,12 @@ import { groundStep } from './player';
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
-export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine' | 'sand' | 'clay';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay' };
+export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine' | 'sand' | 'clay' | 'quarry' | 'stoke' | 'fetch' | 'guard';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -73,6 +74,14 @@ export interface SpeciesDef {
   onSand?: boolean;
   /** Only settles within a few tiles of a clay pit. */
   nearClay?: boolean;
+  /** Only settles on the black ground: tar, peat and the marshes they lie in. */
+  nearTar?: boolean;
+  /** Only settles on bare rock with no metal in it. */
+  onStone?: boolean;
+  /** Hunts the player on sight rather than waiting to be struck. */
+  hunter?: boolean;
+  /** Grows a fleece that can be shorn, and how fast. */
+  fleece?: number;
   /** Fights back rather than bolting, every time it is struck. */
   defensive?: boolean;
   /** Chance a tamed one turns on the player when it has the chance. */
@@ -212,6 +221,135 @@ export const SPECIES: Record<string, SpeciesDef> = {
     leaves: 'waddles back to the nearest clay pit and settles into it',
     nearClay: true,
   },
+  embra: {
+    id: 'embra',
+    name: 'Embra',
+    description: 'A soot-dark, slow-blinking creature that sleeps in the peat and tar of the marshes and wakes up wherever there is a fire. It carries wood the way other creatures carry food, and it will not eat anything raw.',
+    health: 24,
+    attack: 4,
+    speed: 1.5,
+    tameLevel: 1,
+    tameChance: 0.1,
+    diet: ['cooked_meat', 'baked_potato', 'roast_onion', 'roast_nuts', 'berry_compote', 'stew', 'pottage'],
+    baitHint: 'something cooked',
+    timid: true,
+    gathers: 'stoke',
+    workRange: 10,
+    variants: [
+      ['#3c3631', '#e08a3c'],
+      ['#4a3d33', '#f0a850'],
+      ['#33312e', '#d2702c'],
+      ['#453a3a', '#e8c35a'],
+    ],
+    butcher: { meat: 2, fur: 2, leather: 2, bone: 2, gland: 2 },
+    tameFail: 'sniffs at the {food}, finds it cold, and turns its back on you',
+    leaves: 'settles into the warm ash and pays you no more attention',
+    nearTar: true,
+  },
+  quarra: {
+    id: 'quarra',
+    name: 'Quarra',
+    description: 'A low, broad creature with a jaw like a chisel and a hide the colour of the rock it sits on. It eats clay by the mouthful and spends the rest of the day taking the mountain apart a piece at a time.',
+    health: 34,
+    attack: 5,
+    speed: 1.2,
+    tameLevel: 1,
+    tameChance: 0.09,
+    diet: ['clay'],
+    baitHint: 'a lump of clay',
+    timid: false,
+    gathers: 'quarry',
+    workRange: 8,
+    rangePerStep: 6,
+    variants: [
+      ['#8d8a84', '#c3bfb6'],
+      ['#6f7684', '#a9b0bc'],
+      ['#9a8f7e', '#cfc6b4'],
+      ['#7c7269', '#b4aa9c'],
+    ],
+    butcher: { meat: 4, leather: 3, bone: 4, gland: 1 },
+    tameFail: 'takes the {food} in one bite, considers you, and goes back to the rock',
+    leaves: 'lumbers off and settles against the nearest stone face',
+    onStone: true,
+  },
+  woola: {
+    id: 'woola',
+    name: 'Woola',
+    description: 'A round, mild grazer under a deep fleece, which it grows back as fast as you can take it off. It has no opinion about anything and no job worth speaking of, and everyone keeps one anyway.',
+    health: 26,
+    attack: 2,
+    speed: 1.3,
+    tameLevel: 1,
+    tameChance: 0.2,
+    diet: ['mixed_grass', 'cabbage', 'carrot', 'wheat', 'corn'],
+    baitHint: 'grass or greens',
+    timid: true,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#efe9dc', '#d8cfbc'],
+      ['#e3d6c2', '#c6b69c'],
+      ['#4c4742', '#6d665e'],
+      ['#f4efe6', '#cdc0ac'],
+    ],
+    butcher: { meat: 3, fur: 3, leather: 2, bone: 2 },
+    tameFail: 'eats the {food} without appearing to notice you at all',
+    leaves: 'wanders off grazing and does not look back',
+    fleece: 1 / 900,
+  },
+  ulva: {
+    id: 'ulva',
+    name: 'Ulva',
+    description: 'Grey, lean and long in the leg, and the first thing on this island that will come at you without being struck first. Tame one and it will do the same for everything that comes near your border.',
+    health: 34,
+    attack: 9,
+    speed: 2.1,
+    tameLevel: 30,
+    tameChance: 0.06,
+    diet: ['meat', 'cooked_meat'],
+    baitHint: 'meat',
+    timid: false,
+    gathers: 'guard',
+    workRange: 12,
+    variants: [
+      ['#6b6a66', '#cfcac0'],
+      ['#4c4a47', '#b2ada4'],
+      ['#7d7263', '#d9d2c4'],
+      ['#5a5f66', '#bcc2c8'],
+    ],
+    butcher: { meat: 5, fur: 4, leather: 4, bone: 4, gland: 2 },
+    tameFail: 'takes the {food} off your palm with its teeth and watches you back away',
+    leaves: 'trots to the edge of the field, looks back once, and is gone',
+    hunter: true,
+    defensive: true,
+    defaultStance: 'aggressive',
+  },
+  magga: {
+    id: 'magga',
+    name: 'Magga',
+    description: 'A sharp-eyed black and white bird that lives in the treetops and cannot leave anything shiny where it lies. Tamed, it clears a settlement of everything dropped and forgotten; wild, it is the reason your things are not where you left them.',
+    health: 16,
+    attack: 3,
+    speed: 2,
+    tameLevel: 5,
+    tameChance: 0.14,
+    diet: ['blueberry', 'raspberry', 'strawberry', 'lingonberry', 'acorn', 'nuts'],
+    baitHint: 'a berry or a handful of nuts',
+    timid: true,
+    gathers: 'fetch',
+    workRange: 12,
+    rangePerStep: 12,
+    variants: [
+      ['#26282e', '#f2f0ea'],
+      ['#2e2a33', '#e6e3dc'],
+      ['#20262c', '#dfe6ea'],
+      ['#332a26', '#efe6d8'],
+    ],
+    butcher: { meat: 1, fur: 1, leather: 1, bone: 1, gland: 1 },
+    tameFail: 'snatches the {food} and is twenty feet up a tree before you can blink',
+    leaves: 'lifts off with a rattle of wings and is gone over the trees',
+    nearTrees: true,
+  },
   mola: {
     id: 'mola',
     name: 'Mola',
@@ -275,8 +413,18 @@ const WILD_SPECIES: Array<[string, number]> = [
   ['mola', 10],
   ['crawler', 10],
   ['noot', 10],
+  ['woola', 12],
+  ['magga', 10],
+  ['quarra', 8],
+  ['embra', 6],
+  ['ulva', 6],
 ];
 
+/** How far off a hunter picks up your scent, and how far you must get to lose it. */
+const HUNT_SIGHT = 7;
+const HUNT_GIVE_UP = 13;
+/** Fuel in a hearth above which a stoker leaves it alone: ten minutes' worth. */
+const HEARTH_FULL = 600;
 /** A deed worker goes looking for a meal once its belly is down to this. */
 export const HUNGRY = 0.25;
 
@@ -303,6 +451,17 @@ export function nearClay(game: Game, x: number, y: number, range = WATER_RANGE):
   return false;
 }
 
+/** Whether there is black burnable ground — tar, peat or the marsh they sit in — nearby. */
+export function nearTar(game: Game, x: number, y: number, range = WATER_RANGE): boolean {
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      const t = game.world.inBounds(x + dx, y + dy) ? game.world.getTile(x + dx, y + dy) : null;
+      if (t === TileType.Tar || t === TileType.Peat || t === TileType.Marsh) return true;
+    }
+  }
+  return false;
+}
+
 /** Whether there are trees to live in within a few tiles of here. */
 export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE): boolean {
   for (let dy = -range; dy <= range; dy++) {
@@ -315,7 +474,7 @@ export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE)
 
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
-const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay']);
+const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard']);
 export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers && INDOOR_JOBS.has(species.gathers) ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
@@ -352,6 +511,8 @@ export interface Creature {
   carrying: Item | null;
   /** Total experience earned from work. */
   xp: number;
+  /** How much fleece has grown back, 0..1, for the species that carry one. */
+  fleece: number;
   /** Task skills, on the same 1..100 scale as the player's. */
   skills: Record<string, number>;
   // Runtime state below; not saved.
@@ -378,11 +539,13 @@ export interface Creature {
   workY: number;
   /** Seeds held in the cheeks, for a farm worker to sow. */
   pouch: Item | null;
-  /** What a farm worker walked out to do: sow, tend or harvest. */
-  job: FarmJob | null;
+  /** What the worker walked out to do: a farm job, or the hearth a stoker is feeding. */
+  job: FarmJob | Hearth | null;
 }
 
 export type FarmJob = 'sow' | 'tend' | 'harvest';
+/** The three things a stoker keeps alight. */
+export type Hearth = 'campfire' | 'smelter' | 'kiln';
 
 export interface CreatureJSON {
   id: number;
@@ -398,6 +561,7 @@ export interface CreatureJSON {
   carrying: Item | null;
   pouch?: Item | null;
   xp?: number;
+  fleece?: number;
   skills?: Record<string, number>;
 }
 
@@ -469,6 +633,7 @@ export class Creatures {
       hunger: 0.6 + rand() * 0.4,
       carrying: null,
       xp: 0,
+      fleece: 0.6 + rand() * 0.4,
       skills: startSkills(def),
       state: 'idle',
       until: 0,
@@ -550,11 +715,15 @@ export class Creatures {
         if (!bedrockAt(w, x, y).ore) continue;
       } else if (def?.onSand) {
         if (w.getTile(x, y) !== TileType.Sand) continue;
+      } else if (def?.onStone) {
+        // Bare rock with nothing in it: the Mola takes the seams, the Quarra the rest.
+        if (w.getTile(x, y) !== TileType.Rock || bedrockAt(w, x, y).ore) continue;
       } else if (!TILE_DEFS[w.getTile(x, y)].forage) continue;
       // A Bevere lives on land, but only ever within sight of water; a Seavic needs trees.
       if (def?.nearWater && !nearWater(game, x, y)) continue;
       if (def?.nearTrees && !nearTrees(game, x, y)) continue;
       if (def?.nearClay && !nearClay(game, x, y)) continue;
+      if (def?.nearTar && !nearTar(game, x, y)) continue;
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
       placed++;
     }
@@ -574,6 +743,7 @@ export class Creatures {
       c.moving = false;
       const def = this.species(c);
       if (c.health < def.health && game.time - c.attackedAt > 6) c.health = Math.min(def.health, c.health + dt * (c.mode === 'wild' ? 0.25 : 0.6));
+      if (def.fleece && c.fleece < 1) c.fleece = Math.min(1, c.fleece + dt * def.fleece);
       if (def.unruly && c.mode !== 'wild') this.maybeNip(game, c, def);
       if (game.time >= c.busyUntil) {
         switch (c.mode) {
@@ -605,12 +775,11 @@ export class Creatures {
     c.nipAt = game.time + NIP_EVERY;
     const p = game.player;
     if (Math.hypot(p.x - c.x, p.y - c.y) > 2 || game.rand() >= (def.unruly ?? 0)) return;
-    const helm = game.inventory.tool('helm');
-    const soak = helm ? Math.min(0.85, 0.45 + helm.ql / 260) : 0;
-    p.stats.health = Math.max(0, p.stats.health - def.attack * 0.012 * (1 - soak));
+    const worn = game.headgear();
+    p.stats.health = Math.max(0, p.stats.health - def.attack * 0.012 * (1 - (worn?.soak ?? 0)));
     p.attackedBy = c.id;
     p.attackedAt = game.time;
-    game.logMsg(`${c.name} rounds on you and gets a claw in${helm ? ', though your helm turns the worst of it aside' : ''}.`, 'error');
+    game.logMsg(`${c.name} rounds on you and gets a claw in${worn ? `, though your ${worn.name} turns the worst of it aside` : ''}.`, 'error');
   }
 
   private stepToward(game: Game, c: Creature, tx: number, ty: number, dt: number, speedMul = 1): MoveResult {
@@ -711,6 +880,19 @@ export class Creatures {
       // Soft ground left on a corner of the right sort of tile, and one digger to it.
       if (game.world.getTile(x, y) !== (kind === 'sand' ? TileType.Sand : TileType.Clay)) return false;
       return this.sandCorner(game, x, y) !== null && this.tileOk(game, x, y) && !this.claimed(x, y, c);
+    }
+    // Stoking and guarding are not tile work; they never send a worker walking to one.
+    if (kind === 'stoke' || kind === 'guard') return false;
+    if (kind === 'quarry') {
+      // Bare stone with no metal in it, and one cutter to a face.
+      const rock = bedrockAt(game.world, x, y);
+      if (game.world.getTile(x, y) !== TileType.Rock || rock.ore) return false;
+      return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
+    }
+    if (kind === 'fetch') {
+      // Anything lying on the deed that is not already somebody's errand.
+      if (!game.onDeed(x, y) || !game.groundAt(x, y).length) return false;
+      return this.tileOk(game, x, y) && !this.claimed(x, y, c);
     }
     if (kind === 'farm') return !!c && this.farmJobAt(game, c, x, y) !== null;
     if (kind === 'woodcut') return game.world.getTile(x, y) === TileType.Tree && !!this.beside(game, x, y);
@@ -829,6 +1011,9 @@ export class Creatures {
     if (kind === 'farm') return this.finishFarming(game, c, x, y);
     if (kind === 'mine') return this.finishMining(game, c);
     if (kind === 'sand' || kind === 'clay') return this.finishDigging(game, c, kind === 'sand' ? 'sand' : 'clay');
+    if (kind === 'stoke' || kind === 'guard') return null;
+    if (kind === 'quarry') return this.finishQuarry(game, c);
+    if (kind === 'fetch') return this.finishFetch(game, c);
     game.markForaged(x, y, kind);
     const table = GATHER_TABLE[kind];
     if (c.mode !== 'deed') {
@@ -900,6 +1085,32 @@ export class Creatures {
     return { uid: game.inventory.nextUid++, id: yields, ql, dmg: 0, count: 1 };
   }
 
+  /** Cut stone from the face a quarrier walked to. */
+  private finishQuarry(game: Game, c: Creature): Item | null {
+    const w = game.world;
+    const rock = bedrockAt(w, c.workX, c.workY);
+    if (w.getTile(c.workX, c.workY) !== TileType.Rock || rock.ore) return null;
+    const skill = c.skills[GATHER_SKILL.quarry] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.quarry, 0.225);
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
+    // Cutting the face back is its own matter, as it is for a miner.
+    if (game.rand() < mineChance(skill, 30) && w.rockHeight(c.workX, c.workY) > 1) {
+      w.setHeight(c.workX, c.workY, w.getHeight(c.workX, c.workY) - 1);
+      w.setDirt(c.workX, c.workY, 0);
+      game.exposeRock(c.workX, c.workY);
+    }
+    return { uid: game.inventory.nextUid++, id: rock.yields, ql, dmg: 0, count: 1 };
+  }
+
+  /** Pick up one thing lying on the tile a fetcher walked to. */
+  private finishFetch(game: Game, c: Creature): Item | null {
+    const pile = game.groundAt(c.workX, c.workY);
+    if (!pile.length) return null;
+    this.gainSkill(game, c, GATHER_SKILL.fetch, 0.12);
+    const [item] = game.takeFromGround(c.workX, c.workY, pile[0].uid);
+    return item ?? null;
+  }
+
   /** Sow, tend or harvest the field the worker is standing on. */
   private finishFarming(game: Game, c: Creature, x: number, y: number): Item | null {
     const job = this.farmJobAt(game, c, x, y);
@@ -940,6 +1151,148 @@ export class Creatures {
     else if (!c.pouch) c.pouch = seeds;
     else game.dropOnGround(x, y, seeds);
     return { uid: game.inventory.nextUid++, id: def.produce, ql: grade, dmg: 0, count: y2.produce };
+  }
+
+  /**
+   * A fire, furnace or kiln on the deed that is running low, nearest first.
+   * Anything with less than a few minutes in it counts as wanting wood.
+   */
+  private coldHearth(game: Game, c: Creature, range: number): { x: number; y: number; fuel: number; lit: boolean; kind: Hearth; id: number } | null {
+    const deed = game.deed;
+    if (!deed) return null;
+    let best: { x: number; y: number; fuel: number; lit: boolean; kind: Hearth; id: number } | null = null;
+    let bestD = Infinity;
+    const consider = (x: number, y: number, fuel: number, lit: boolean, kind: Hearth, id: number): void => {
+      if (fuel >= HEARTH_FULL) return;
+      if (Math.max(Math.abs(x - deed.x), Math.abs(y - deed.y)) > range) return;
+      const d = Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y, fuel, lit, kind, id };
+      }
+    };
+    for (const f of game.campfires.values()) consider(...(fireCentre(f).map(Math.floor) as [number, number]), f.fuel, f.lit, 'campfire', f.id);
+    for (const sm of game.smelters.values()) consider(sm.x, sm.y, sm.fuel, sm.lit, 'smelter', sm.id);
+    for (const k of game.kilns.values()) consider(k.x, k.y, k.fuel, k.lit, 'kiln', k.id);
+    return best;
+  }
+
+  /**
+   * Fetch wood from the crate for whatever is burning low. Returns true when
+   * the stoker has taken the job in hand this tick.
+   */
+  private stokeStep(game: Game, c: Creature, dt: number, crate: PlacedCrate | undefined): boolean {
+    const def = this.species(c);
+    const hearth = this.coldHearth(game, c, workRangeOf(c, def));
+    if (!hearth) return false;
+    // Nothing to carry: go to the crate and take a piece of wood out of it.
+    if (!crate) return false;
+    const fuel = crate.items.find((it) => isFuel(it.id));
+    if (!fuel) return false;
+    const [cx, cy] = crateCentre(crate);
+    if (Math.hypot(cx - c.x, cy - c.y) > 1.3) {
+      if (this.stepToward(game, c, cx, cy, dt) === 'blocked') {
+        c.state = 'idle';
+        c.until = game.time + 2;
+      }
+      return true;
+    }
+    fuel.count -= 1;
+    if (fuel.count <= 0) crate.items.splice(crate.items.indexOf(fuel), 1);
+    game.events.emit('crate');
+    c.carrying = { uid: game.inventory.nextUid++, id: fuel.id, ql: fuel.ql, dmg: 0, count: 1 };
+    c.workX = hearth.x;
+    c.workY = hearth.y;
+    c.job = hearth.kind;
+    return true;
+  }
+
+  /** Carry the wood to the hearth it was fetched for, feed it and light it. */
+  private feedFire(game: Game, c: Creature, dt: number): void {
+    const carrying = c.carrying;
+    if (!carrying) return;
+    const tx = c.workX + 0.5;
+    const ty = c.workY + 0.5;
+    if (Math.hypot(tx - c.x, ty - c.y) > 1.6) {
+      if (this.stepToward(game, c, tx, ty, dt) === 'blocked') {
+        c.state = 'idle';
+        c.until = game.time + 2;
+      }
+      return;
+    }
+    const per = FUEL_VALUES[carrying.id] ?? 0;
+    const light = (fuel: number, lit: boolean, set: (f: number, l: boolean) => void, what: string): void => {
+      const now = Math.min(FIRE_CAPACITY, fuel + per);
+      set(now, lit || now > 0);
+      this.gainSkill(game, c, GATHER_SKILL.stoke, 0.18);
+      if (!lit) game.logMsg(`${c.name} gets the ${what} going again.`, 'event');
+    };
+    if (c.job === 'campfire') {
+      const f = [...game.campfires.values()].find((k) => Math.floor(fireCentre(k)[0]) === c.workX && Math.floor(fireCentre(k)[1]) === c.workY);
+      if (f) light(f.fuel, f.lit, (fuel, lit) => { f.fuel = fuel; f.lit = lit; }, 'campfire');
+    } else if (c.job === 'smelter') {
+      const sm = [...game.smelters.values()].find((k) => k.x === c.workX && k.y === c.workY);
+      if (sm) light(sm.fuel, sm.lit, (fuel, lit) => { sm.fuel = fuel; sm.lit = lit; }, 'smelter');
+    } else if (c.job === 'kiln') {
+      const k = [...game.kilns.values()].find((n) => n.x === c.workX && n.y === c.workY);
+      if (k) light(k.fuel, k.lit, (fuel, lit) => { k.fuel = fuel; k.lit = lit; }, 'kiln');
+    }
+    game.events.emit('smelter');
+    game.events.emit('world', c.workX, c.workY);
+    c.carrying = null;
+    c.job = null;
+    c.state = 'idle';
+    c.until = game.time + 1;
+  }
+
+  /** A guard walks its border and goes for anything wild that crosses it. */
+  private guardStep(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): void {
+    const range = deed.radius + 1;
+    if (c.enemy !== null) {
+      const e = this.list.get(c.enemy);
+      const gone = !e || e.mode !== 'wild' || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 3;
+      if (gone) c.enemy = null;
+      else {
+        const d = Math.hypot(e.x - c.x, e.y - c.y);
+        if (d <= 1) {
+          if (c.cooldown <= 0) {
+            this.attack(game, c, e);
+            c.cooldown = 1.2;
+          }
+        } else if (this.stepToward(game, c, e.x, e.y, dt, 1.3) === 'blocked') c.enemy = null;
+        return;
+      }
+    }
+    if (game.time >= c.searchAt) {
+      c.searchAt = game.time + 1.5;
+      let best: Creature | null = null;
+      let bestD = Infinity;
+      for (const o of this.list.values()) {
+        if (o.id === c.id || o.mode !== 'wild') continue;
+        if (Math.max(Math.abs(o.x - deed.x), Math.abs(o.y - deed.y)) > range) continue;
+        const d = Math.hypot(o.x - c.x, o.y - c.y);
+        if (d < bestD) {
+          bestD = d;
+          best = o;
+        }
+      }
+      if (best) {
+        c.enemy = best.id;
+        this.gainSkill(game, c, GATHER_SKILL.guard, 0.1);
+        return;
+      }
+    }
+    // Nothing about: walk the border.
+    if (c.state === 'wander') {
+      if (this.stepToward(game, c, c.tx, c.ty, dt, 0.8) !== 'moving') {
+        c.state = 'idle';
+        c.until = game.time + 2;
+      }
+      return;
+    }
+    if (game.time < c.until) return;
+    this.wanderTarget(game, c, Math.max(2, deed.radius), deed.x + 0.5, deed.y + 0.5);
+    c.until = game.time + 4;
   }
 
   /** Same diminishing curve as the player's skills. */
@@ -985,6 +1338,7 @@ export class Creatures {
       } else if (r === 'blocked') c.state = 'idle';
       return;
     }
+    if (def.hunter && this.huntStep(game, c, def, dt)) return;
     if (kind && c.hunger < 0.5 && game.time >= c.searchAt) {
       c.searchAt = game.time + 4;
       const t = this.findForageTile(game, c.x, c.y, 3, kind, c);
@@ -1003,6 +1357,40 @@ export class Creatures {
       return;
     }
     if (game.time >= c.until) this.wanderTarget(game, c, 4);
+  }
+
+  /**
+   * A hunter closing on the player. It gives up when you get far enough away
+   * or when it has been badly enough hurt to think better of it.
+   */
+  private huntStep(game: Game, c: Creature, def: SpeciesDef, dt: number): boolean {
+    const p = game.player;
+    const d = Math.hypot(p.x - c.x, p.y - c.y);
+    const hunting = c.enemy === PLAYER_ATTACKER;
+    if (hunting && (d > HUNT_GIVE_UP || c.health < def.health * 0.3)) {
+      c.enemy = null;
+      return false;
+    }
+    if (!hunting) {
+      if (d > HUNT_SIGHT || game.time < c.searchAt) return false;
+      c.searchAt = game.time + 2;
+      if (!this.tileOk(game, Math.floor(p.x), Math.floor(p.y))) return false;
+      c.enemy = PLAYER_ATTACKER;
+      game.logMsg(`A ${def.name.toLowerCase()} has your scent.`, 'error');
+    }
+    if (d <= 1.1) {
+      if (c.cooldown <= 0) {
+        c.cooldown = 1.4;
+        const worn = game.headgear();
+        p.stats.health = Math.max(0, p.stats.health - def.attack * 0.012 * (1 - (worn?.soak ?? 0)));
+        p.attackedBy = c.id;
+        p.attackedAt = game.time;
+        game.logMsg(`The ${def.name.toLowerCase()} is on you${worn ? `, though your ${worn.name} turns some of it` : ''}.`, 'error');
+      }
+      return true;
+    }
+    if (this.stepToward(game, c, p.x, p.y, dt, 1.15) === 'blocked') c.enemy = null;
+    return true;
   }
 
   private updateActive(c: Creature, dt: number, game: Game): void {
@@ -1038,7 +1426,7 @@ export class Creatures {
       }
     }
     if (c.enemy !== null) {
-      const e = this.list.get(c.enemy);
+      const e = c.enemy === PLAYER_ATTACKER ? undefined : this.list.get(c.enemy);
       if (!e || e.mode === 'stored' || Math.hypot(e.x - p.x, e.y - p.y) > 9) {
         c.enemy = null;
       } else {
@@ -1076,14 +1464,25 @@ export class Creatures {
     if (this.comeWhenCalled(c, dt, game)) return;
     const def = this.species(c);
     const kind = def.gathers;
+    if (kind === 'guard') {
+      this.guardStep(game, c, dt, deed);
+      return;
+    }
     const crate = game.deedCrate();
     const crateAt = crate ? crateCentre(crate) : null;
+    if (kind === 'stoke' && !c.carrying && c.state !== 'forage') {
+      if (this.stokeStep(game, c, dt, crate)) return;
+    }
     if (c.state === 'forage') {
       if (game.time >= c.until) {
         c.carrying = kind ? this.finishForage(game, c, kind) : null;
         c.state = 'idle';
         c.until = game.time + 0.5;
       }
+      return;
+    }
+    if (c.carrying && kind === 'stoke') {
+      this.feedFire(game, c, dt);
       return;
     }
     if (c.carrying) {
@@ -1278,6 +1677,7 @@ export class Creatures {
         carrying: c.carrying,
         pouch: c.pouch,
         xp: c.xp,
+        fleece: c.fleece,
         skills: c.skills,
       })),
     };
@@ -1289,7 +1689,7 @@ export class Creatures {
     cs.nextId = data.nextId ?? 1;
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

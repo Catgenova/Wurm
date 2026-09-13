@@ -507,6 +507,7 @@ export class Renderer {
           moving: cr.moving,
           colors: def.variants[cr.variant] ?? def.variants[0],
           health: cr.health / def.health,
+          fleece: cr.fleece,
           label: cr.mode === 'wild' ? undefined : cr.name,
         });
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });

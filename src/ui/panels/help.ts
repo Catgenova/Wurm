@@ -161,6 +161,12 @@ export function buildHelp(win: UIWindow): void {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <h3>Wool and cloth</h3>
+    <p><b>Tailoring</b> turns fibre into something worth having: three wool or three cotton spin and
+    weave into a length of <b>cloth</b>, and two lengths of cloth sew into a <b>wool cap</b>. A cap is
+    not a helm &mdash; it turns aside perhaps a third of a blow where a good helm turns four fifths
+    &mdash; but it is made of things you can grow and it costs no metal at all. Cloth also stuffs the
+    mattress of a bed or a cot, which is what cotton was always for.</p>
     <h3>Stonecutting</h3>
     <p><b>Stonecutting</b> is the skill that turns what a pickaxe brings out of the rock into something
     square. With a chisel, rock, slate, marble and sandstone shards become <b>bricks</b> &mdash; what
@@ -195,7 +201,19 @@ export function buildHelp(win: UIWindow): void {
     once nobody wants to dig it themselves. It is the first of the defensive sort: strike one and it
     comes straight back at you every time, and even a tamed one is never quite tamed, so now and again it
     will round on whoever is standing next to it. A helm turns the worst of that aside. Each of them picks
-    that spot clean for a while, exactly as you would. The <b>Noot</b> is a plump upright waddler that
+    that spot clean for a while, exactly as you would. The <b>Quarra</b> is a slab of a creature with a
+    jaw made for stone: it sits on bare rock, eats clay, and cuts rock, slate, marble and sandstone into
+    shards for the deed, which is what keeps a mason in brick. The <b>Embra</b> sleeps in the peat and
+    tar of the marshes, eats nothing that has not been cooked, and keeps every fire, smelter and kiln on
+    the deed fed and lit from the crate &mdash; the one chore you otherwise have to come home for. The
+    <b>Magga</b> is a magpie that clears a settlement of everything dropped and forgotten and puts it in
+    the crate; wild ones do the reverse, so do not leave anything lying about near their trees. The
+    <b>Woola</b> is a mild grazer that does no work at all: it grows a fleece, and once it has grown you
+    <b>shear</b> it with a knife for <b>wool</b>, which grows back in about a quarter of an hour. The
+    <b>Ulva</b> is the first thing on this island that will come at you unprovoked: it hunts by scent
+    from seven tiles off and does not stop until you are well away or it is badly hurt. It takes taming
+    30 to try, and a tamed one keeps watch over the deed, going for anything wild that crosses the
+    border. The <b>Noot</b> is a plump upright waddler that
     lives beside the clay pits, eats root vegetables, and digs <b>clay</b> with its bill for its deed,
     carrying it to the crate a load at a time &mdash; which is what keeps a potter in clay without
     walking the shore for it. Carry what the creature eats (a berry or vegetable for

@@ -323,6 +323,18 @@ export class Game {
     return Math.max(0, (this.skills.get('mind_logic') - CHAR_START) * 0.2);
   }
 
+  /**
+   * What you have on your head and how much of a blow it turns aside: a helm
+   * for choice, a felted wool cap at a pinch, and bare skin otherwise.
+   */
+  headgear(): { name: string; soak: number } | null {
+    const helm = this.inventory.tool('helm');
+    if (helm) return { name: 'helm', soak: Math.min(0.85, 0.45 + helm.ql / 260) };
+    const cap = this.inventory.tool('wool_cap');
+    if (cap) return { name: 'wool cap', soak: Math.min(0.5, 0.18 + cap.ql / 420) };
+    return null;
+  }
+
   /** Soul strength is what a wild animal reads in you when you hold out food. */
   soulBonus(): number {
     return Math.max(0, (this.skills.get('soul_strength') - CHAR_START) * 0.002);

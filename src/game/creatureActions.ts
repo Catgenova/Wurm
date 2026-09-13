@@ -108,6 +108,44 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'shear',
+    label: 'Shear',
+    verb: 'shearing',
+    skill: 'tailoring',
+    tool: 'carving_knife',
+    stamina: 0.04,
+    baseTime: 6,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && !!SPECIES[c.species]?.fleece && c.mode !== 'wild';
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      if (!SPECIES[c.species]?.fleece) return 'There is nothing on it worth shearing.';
+      if (c.mode === 'wild') return 'Tame it first; it will not stand still for you otherwise.';
+      if (!g.inventory.has('carving_knife')) return 'You need a knife to shear with.';
+      if (c.fleece < 0.35) return `${c.name} has hardly any fleece back yet.`;
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c || c.fleece < 0.35) return;
+      if (!nearPlayer(g, c)) {
+        g.logMsg(`${c.name} moved off before you could start.`, 'event');
+        return;
+      }
+      // A full fleece is three, a half-grown one is one, and quality follows the fleece.
+      const n = Math.max(1, Math.round(c.fleece * 3));
+      const ql = Math.max(1, Math.min(100, 15 + c.fleece * 45 + g.skills.get('tailoring') * 0.4));
+      const wool = g.inventory.add('wool', { count: n, ql });
+      c.fleece = 0;
+      g.gainSkill('tailoring', 0.4);
+      g.gainSkill('taming', 0.1);
+      g.logMsg(`You shear ${c.name} and come away with ${n} wool. (QL ${wool.ql.toFixed(1)}) It will grow back.`, 'event');
+    },
+  },
+  {
     id: 'feed',
     label: 'Feed',
     verb: 'feeding',
@@ -271,13 +309,12 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       // A cornered animal gets a swipe in, and a helm turns most of it aside.
       // The defensive sorts never miss their chance at one.
       if (def.defensive || g.rand() < 0.35) {
-        const helm = g.inventory.tool('helm');
-        const soak = helm ? Math.min(0.85, 0.45 + helm.ql / 260) : 0;
-        const hurt = def.attack * 0.012 * (1 - soak);
+        const worn = g.headgear();
+        const hurt = def.attack * 0.012 * (1 - (worn?.soak ?? 0));
         g.player.stats.health = Math.max(0, g.player.stats.health - hurt);
         g.player.attackedBy = c.id;
         g.player.attackedAt = g.time;
-        g.logMsg(`The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}${helm ? ', though your helm takes the worst of it' : ''}.`, 'error');
+        g.logMsg(`The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}${worn ? `, though your ${worn.name} takes the worst of it` : ''}.`, 'error');
       }
       g.logMsg(`You strike the ${def.name.toLowerCase()}${weapon ? ` with your ${itemDef(weapon.id).name.toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`, 'event');
       // Keep swinging while it is still within reach.

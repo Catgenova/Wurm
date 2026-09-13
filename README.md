@@ -144,6 +144,9 @@ rebuilds and commits the result.
   bookshelf 90, a wardrobe 100, shelves 120 and a larder 150. Open one to see
   inside, or stand beside it and put things away; nothing can be lifted again
   until it is empty.
+- **Wool and cloth.** Tailoring spins three wool or three cotton into a length
+  of cloth, and two lengths into a wool cap — not a helm, but it turns aside
+  about a third of a blow and costs no metal. Cloth also stuffs a bed or a cot.
 - **Stonecutting.** A chisel and the Stonecutting skill turn rock, slate,
   marble and sandstone shards into bricks — what walls, smelters and kilns are
   built from — or, two shards at a time, into slabs. Slabs are paving rather
@@ -174,9 +177,20 @@ rebuilds and commits the result.
   ceiling, with a range that grows 5 tiles per 10 levels rather than 10; and
   the Crawler, a broad sand-dwelling crab fed on vegetables, which digs sand a
   clawful at a time from the highest corner of a sand tile and carries it to
-  the deed crate; and the Noot, a plump upright waddler that settles beside the
+  the deed crate; the Noot, a plump upright waddler that settles beside the
   clay pits, eats root vegetables, and digs clay for its deed the same way,
-  which is what keeps a potter in clay without walking the shore for it. The Crawler is defensive by nature: it hits back every time
+  which is what keeps a potter in clay without walking the shore for it; the
+  Quarra, a stone-jawed thing that sits on bare rock, eats clay and cuts rock,
+  slate, marble and sandstone into shards; the Embra, which sleeps in peat and
+  tar, eats only cooked food, and keeps every fire, smelter and kiln on the
+  deed fed and lit from the crate; the Magga, a magpie that clears a settlement
+  of everything dropped and forgotten and puts it in the crate, while wild ones
+  do the reverse; the Woola, a mild grazer that does no work but grows a fleece
+  you shear with a knife for wool, back again in a quarter of an hour; and the
+  Ulva, the one creature that hunts the player unprovoked, tracking by scent
+  from seven tiles and giving up only when you are well away or it is badly
+  hurt — taming 30 to try, and a tamed one keeps watch over the deed and goes
+  for anything wild that crosses the border. The Crawler is defensive by nature: it hits back every time
   it is struck, and even a tamed one turns on whoever stands beside it now and
   then, though a helm blunts it. Each puts the tile on the same cooldown a
   player would, and none retaliates for a failed taming attempt. A companion
