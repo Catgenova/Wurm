@@ -68,6 +68,27 @@ export function buildHelp(win: UIWindow): void {
     everything else and unlock when you stand by a lit fire; burning a dish costs you the ingredients,
     so cook where your skill can manage. A fire burns its fuel down in real time and goes cold when it
     runs out, and an unlit one can be taken apart to get the wood back.</p>
+    <h3>Metal</h3>
+    <p>Mining a seam brings up <b>ore</b>, not finished metal. A <b>stone smelter</b>, built on your deed
+    from 8 stone bricks and 4 mortar with a trowel, fills six spots of a tile and turns ore into lumps.
+    Feed it the same fuel a campfire takes (coal burns longest), light it, and charge it with ore: each
+    piece takes its own time to run, longer for fine ore and stubborn metal, shorter in a better
+    smelter. Draw the lumps off when they are done.</p>
+    <p>Lumps of the same metal gather into one larger lump whose quality is the average of what went in,
+    weighted by size, so a poor lump drags a good stack down. At a hot smelter you can also mix
+    <b>alloys</b> &mdash; bronze, brass, pewter and electrum &mdash; and their quality comes from the
+    metal you put in rather than from your hands; skill only decides how little is lost in the pouring.</p>
+    <p>Sand fired in a smelter makes <b>moulds</b>: an anvil mould, a pan mould, heads for rakes,
+    shovels, hatchets, pickaxes and knives, a sword blade and a helm. A mould wears every time it is
+    filled and <b>cannot be mended</b>; a fine one is simply good for more fillings before it cracks
+    through. Pour metal into an <b>anvil mould</b> at the smelter and it cools into an anvil of that
+    metal, which you set down on four spots of a tile.</p>
+    <p>Every other mould is taken to an <b>anvil</b>, filled with the metal of your choosing, and beaten
+    out using <b>blacksmithing</b>, <b>weaponsmithing</b> or <b>armoursmithing</b>, whichever that piece
+    calls for. The skill decides whether the piece comes out at all and how good it is, alongside the
+    mould, the metal and the anvil. Tool heads and blades are finished by fitting a shaft to them. A
+    sword hits far harder than any working tool, and a helm turns aside most of what a cornered animal
+    does to you when you attack it.</p>
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a

@@ -14,6 +14,7 @@ export type GameEvents = {
   stats: [];
   world: [x: number, y: number];
   crate: [];
+  smelter: [];
   reset: [];
 };
 

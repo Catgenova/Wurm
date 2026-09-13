@@ -1,7 +1,9 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
+import { ANVIL_ACTIONS } from './anvil';
 import { CAMPFIRE_ACTIONS } from './campfire';
+import { SMELTER_ACTIONS } from './smelter';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { DEED_ACTIONS } from './deed';
@@ -39,6 +41,8 @@ export type Target =
     }
   | { kind: 'crate'; id: number }
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
+  | { kind: 'smelter'; id: number; itemUid?: number; count?: number }
+  | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
@@ -846,6 +850,8 @@ export const ACTIONS: ActionDef[] = [
   ...RECIPE_ACTIONS,
   ...BUTCHER_ACTIONS,
   ...CAMPFIRE_ACTIONS,
+  ...SMELTER_ACTIONS,
+  ...ANVIL_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,
   {

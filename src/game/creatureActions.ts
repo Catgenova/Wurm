@@ -258,14 +258,24 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return;
       const def = SPECIES[c.species];
-      // Bare hands bruise; an edged tool does the work properly.
-      const weapon = ['butchering_knife', 'hatchet', 'carving_knife'].map((id) => g.inventory.tool(id)).find(Boolean);
-      const bonus = weapon ? 1.5 + weapon.ql / 120 : 1;
+      // Bare hands bruise; an edged tool does the work properly, a sword better still.
+      const weapon = ['sword', 'butchering_knife', 'hatchet', 'carving_knife'].map((id) => g.inventory.tool(id)).find(Boolean);
+      const bonus = weapon ? (weapon.id === 'sword' ? 2.6 + weapon.ql / 70 : 1.5 + weapon.ql / 120) : 1;
       const dmg = (2 + g.skills.get('body_strength') / 12) * bonus * (0.7 + g.rand() * 0.6);
       const before = c.health;
       g.creatures.hurt(g, c, dmg, 'player');
       g.gainSkill('body_strength', 0.05);
       if (c.health <= 0) return false;
+      // A cornered animal gets a swipe in, and a helm turns most of it aside.
+      if (g.rand() < 0.35) {
+        const helm = g.inventory.tool('helm');
+        const soak = helm ? Math.min(0.85, 0.45 + helm.ql / 260) : 0;
+        const hurt = def.attack * 0.012 * (1 - soak);
+        g.player.stats.health = Math.max(0, g.player.stats.health - hurt);
+        g.player.attackedBy = c.id;
+        g.player.attackedAt = g.time;
+        g.logMsg(`The ${def.name.toLowerCase()} turns on you${helm ? ', though your helm takes the worst of it' : ''}.`, 'error');
+      }
       g.logMsg(`You strike the ${def.name.toLowerCase()}${weapon ? ` with your ${itemDef(weapon.id).name.toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`, 'event');
       // Keep swinging while it is still within reach.
       return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 2.2;

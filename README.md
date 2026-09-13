@@ -133,6 +133,19 @@ rebuilds and commits the result.
   untended field gives 1 crop and 1 seed, a fully tended one gives 4 crops and
   2 seeds. Tilling and tending train Farming, which sets the quality of the
   harvest, and a harvested field stays tilled so it can be sown again.
+- **Metal, from seam to tool.** Mining brings up ore. A stone smelter, built
+  on a deed from bricks and mortar over six subtiles, burns fuel to turn ore
+  into lumps, with each piece timed by its own quality and the smelter's.
+  Lumps of a metal merge into larger lumps whose quality is the size-weighted
+  average, and a hot smelter also mixes bronze, brass, pewter and electrum,
+  taking their quality from the metal rather than the smith. Sand fired in the
+  smelter makes moulds — an anvil, a pan, tool heads, a sword blade, a helm —
+  which wear a little with every filling and can never be mended. An anvil
+  mould cools in the smelter into an anvil of that metal, placed on four
+  subtiles; every other mould is beaten out at an anvil using blacksmithing,
+  weaponsmithing or armoursmithing. Heads and blades are finished with a
+  shaft. A sword hits far harder than a working tool, and a helm blunts the
+  swipe a cornered animal takes at you.
 - **Campfires and cooking.** Lay a campfire from two shafts on a two by two
   block of subtiles, feed it shafts, thatch, planks, timbers or logs for burn
   time, and light it. A burning fire is the station every cooking recipe

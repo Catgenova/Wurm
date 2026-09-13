@@ -8,10 +8,10 @@ import { itemDef } from './items';
  * an item action, so it shows on the material's menu as well as in the
  * crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Stonework' | 'Clay & thatch' | 'Cooking';
+export type RecipeCategory = 'Woodwork' | 'Stonework' | 'Clay & thatch' | 'Cooking' | 'Smelting';
 /** A place a recipe has to be worked at, beyond what is carried. */
-export type Station = 'campfire';
-const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire' };
+export type Station = 'campfire' | 'smelter';
+const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter' };
 
 export interface RecipeInput {
   item: string;
@@ -41,6 +41,12 @@ export interface Recipe {
   difficulty?: number;
   /** Food burns: a failed attempt eats the ingredients anyway. */
   consumeOnFail?: boolean;
+  /**
+   * The product's quality comes from what went into it rather than from the
+   * worker's hands. Mixing two fine lumps gives fine metal; skill only decides
+   * how little of that quality is lost in the pouring.
+   */
+  qlFromInputs?: boolean;
   done: string;
   fail?: string;
 }
@@ -63,6 +69,12 @@ export const RECIPES: Recipe[] = [
   // Clay & thatch
   { id: 'make_clay_brick', category: 'Clay & thatch', result: 'clay_brick', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape clay brick', verb: 'shaping clay', baseTime: 4, stamina: 0.02, difficulty: 6, done: 'You shape a clay brick.', fail: 'The clay slumps. You fail to shape a brick.' },
   { id: 'make_adobe', category: 'Clay & thatch', result: 'adobe', inputs: [{ item: 'clay' }, { item: 'mixed_grass' }], skill: 'pottery', label: 'Make adobe', verb: 'making adobe', baseTime: 4, stamina: 0.02, done: 'You press clay and grass into an adobe block.' },
+  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
+  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
+  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
+  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
+  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
+  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
   { id: 'make_thatch', category: 'Clay & thatch', result: 'thatch', inputs: [{ item: 'mixed_grass', count: 2 }], skill: 'carpentry', label: 'Bundle into thatch', verb: 'bundling thatch', baseTime: 3, stamina: 0.02, done: 'You bundle the grass into thatch.' },
   { id: 'make_clay_bowl', category: 'Clay & thatch', result: 'clay_bowl', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a bowl', verb: 'shaping a bowl', baseTime: 6, stamina: 0.02, difficulty: 8, done: 'You shape and fire a clay bowl.', fail: 'The walls collapse as you draw them up. You fail to shape a bowl.' },
   // Cooking. Everything here needs a lit campfire to work at.
@@ -71,10 +83,30 @@ export const RECIPES: Recipe[] = [
   { id: 'roast_onion', category: 'Cooking', result: 'roast_onion', inputs: [{ item: 'onion' }], station: 'campfire', skill: 'cooking', label: 'Roast over the fire', verb: 'roasting', baseTime: 6, stamina: 0.02, done: 'You roast an onion until it is sweet.' },
   { id: 'roast_nuts', category: 'Cooking', result: 'roast_nuts', inputs: [{ item: 'nuts' }], station: 'campfire', skill: 'cooking', label: 'Roast the nuts', verb: 'roasting nuts', baseTime: 4, stamina: 0.01, done: 'You roast the nuts on a hot stone.' },
   { id: 'make_compote', category: 'Cooking', result: 'berry_compote', inputs: [{ item: 'blueberry', count: 3 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Stew into compote', verb: 'stewing berries', baseTime: 10, stamina: 0.02, done: 'You stew the berries down into a compote.' },
+  { id: 'fry_meat', category: 'Cooking', result: 'cooked_meat', count: 2, inputs: [{ item: 'meat', count: 2 }], tool: 'frying_pan', station: 'campfire', skill: 'cooking', label: 'Fry in the pan', verb: 'frying', baseTime: 9, stamina: 0.02, done: 'You fry the meat through in the pan, and none of it is wasted.' },
   { id: 'make_stew', category: 'Cooking', result: 'stew', inputs: [{ item: 'cooked_meat' }, { item: 'potato' }, { item: 'onion' }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Simmer a stew', verb: 'simmering a stew', baseTime: 16, stamina: 0.03, difficulty: 10, done: 'You simmer meat and vegetables into a thick stew.', fail: 'The pot catches and the stew is spoiled.', consumeOnFail: true },
+  ...[],
 ];
 
-export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Stonework', 'Clay & thatch', 'Cooking'];
+const SMELTER_RECIPES: Recipe[] = [
+  { id: 'make_anvil_mould', category: 'Smelting', result: 'anvil_mould', inputs: [{ item: 'sand', count: 4 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a anvil mould', verb: 'firing a mould', baseTime: 10, stamina: 0.03, difficulty: 10, done: 'You fire a anvil mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_pan_mould', category: 'Smelting', result: 'pan_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a pan mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 8, done: 'You fire a pan mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_rake_head_mould', category: 'Smelting', result: 'rake_head_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a rake head mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 10, done: 'You fire a rake head mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_shovel_head_mould', category: 'Smelting', result: 'shovel_head_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a shovel head mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 10, done: 'You fire a shovel head mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_hatchet_head_mould', category: 'Smelting', result: 'hatchet_head_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a hatchet head mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You fire a hatchet head mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_pickaxe_head_mould', category: 'Smelting', result: 'pickaxe_head_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a pickaxe head mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You fire a pickaxe head mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_knife_blade_mould', category: 'Smelting', result: 'knife_blade_mould', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a knife blade mould', verb: 'firing a mould', baseTime: 8, stamina: 0.03, difficulty: 14, done: 'You fire a knife blade mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_sword_blade_mould', category: 'Smelting', result: 'sword_blade_mould', inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a sword blade mould', verb: 'firing a mould', baseTime: 9, stamina: 0.03, difficulty: 18, done: 'You fire a sword blade mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_helm_mould', category: 'Smelting', result: 'helm_mould', inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'blacksmithing', label: 'Fire a helm mould', verb: 'firing a mould', baseTime: 9, stamina: 0.03, difficulty: 16, done: 'You fire a helm mould from the sand.', fail: 'The sand slumps as it heats and the mould is spoiled.', consumeOnFail: true },
+  { id: 'make_bronze', category: 'Smelting', result: 'bronze_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'tin_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix bronze', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of bronze.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
+  { id: 'make_brass', category: 'Smelting', result: 'brass_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'zinc_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix brass', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of brass.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
+  { id: 'make_pewter', category: 'Smelting', result: 'pewter_lump', count: 4, inputs: [{ item: 'tin_lump', count: 3 }, { item: 'lead_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix pewter', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 10, done: 'You mix a crucible of pewter.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
+  { id: 'make_electrum', category: 'Smelting', result: 'electrum_lump', count: 4, inputs: [{ item: 'silver_lump', count: 2 }, { item: 'gold_lump', count: 2 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix electrum', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 18, done: 'You mix a crucible of electrum.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
+];
+
+RECIPES.push(...SMELTER_RECIPES);
+
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Stonework', 'Clay & thatch', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {
@@ -115,6 +147,20 @@ export function recipeReason(r: Recipe, g: Game): string | null {
 export function recipeNeeds(r: Recipe): string {
   const parts = r.inputs.map((i) => `${i.count ?? 1} ${plural(i.item, i.count ?? 1)}`);
   return (r.tool ? [lower(r.tool), ...parts] : parts).join(' · ');
+}
+
+/** The quality of what a recipe is about to consume, weighted by how much of each it takes. */
+function inputQl(g: Game, r: Recipe): number {
+  let total = 0;
+  let weight = 0;
+  for (const i of r.inputs) {
+    const need = i.count ?? 1;
+    const stack = g.inventory.find(i.item);
+    if (!stack) continue;
+    total += stack.ql * need;
+    weight += need;
+  }
+  return weight ? total / weight : 1;
 }
 
 /** Use up `n` units of an item, drawing from the clicked stack first, then any other (logs differ by wood). */
@@ -160,8 +206,10 @@ export function recipeAction(r: Recipe): ActionDef {
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         return more(t, g);
       }
+      const fromInputs = r.qlFromInputs ? inputQl(g, r) : 0;
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid)) return;
-      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql: g.productQl(r.skill, toolQl(g)) });
+      const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g));
+      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql });
       g.logMsg(`${r.done} (QL ${item.ql.toFixed(1)})`, 'event');
       return more(t, g);
     },

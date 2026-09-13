@@ -19,11 +19,13 @@ import {
 import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
+import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, cropSprite, drawCampfire, drawCreature, drawPlayer, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -39,10 +41,14 @@ export interface Pick {
   crate?: number;
   /** A campfire under the cursor, when one is. */
   fire?: number;
+  /** A smelter under the cursor, when one is. */
+  smelter?: number;
+  /** An anvil under the cursor, when one is. */
+  anvil?: number;
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'anvil';
   x: number;
   y: number;
   sx: number;
@@ -51,6 +57,8 @@ interface Entity {
   creature?: Creature;
   crateId?: number;
   fire?: PlacedCampfire;
+  smelter?: PlacedSmelter;
+  anvil?: PlacedAnvil;
 }
 
 interface HitRect {
@@ -63,6 +71,8 @@ interface HitRect {
   creature?: number;
   crate?: number;
   fire?: number;
+  smelter?: number;
+  anvil?: number;
 }
 
 const VOID_COLOR = '#12395f';
@@ -128,6 +138,8 @@ export class Renderer {
   private creatureHits: HitRect[] = [];
   private crateHits: HitRect[] = [];
   private fireHits: HitRect[] = [];
+  private smelterHits: HitRect[] = [];
+  private anvilHits: HitRect[] = [];
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -216,6 +228,8 @@ export class Renderer {
     this.creatureHits.length = 0;
     this.crateHits.length = 0;
     this.fireHits.length = 0;
+    this.smelterHits.length = 0;
+    this.anvilHits.length = 0;
     this.drawnTiles = 0;
 
     for (let d = dLo; d <= dHi; d++) {
@@ -300,6 +314,18 @@ export class Renderer {
               sy: baseY + hh - avg * hs,
               spr: cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1]),
             });
+          }
+        }
+        if (this.game.smelters.size) {
+          for (const sm of this.game.smeltersOnTile(x, y)) {
+            const [wx, wy] = smelterCentre(sm);
+            this.ents.push({ kind: 'smelter', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, smelter: sm });
+          }
+        }
+        if (this.game.anvils.size) {
+          for (const an of this.game.anvilsOnTile(x, y)) {
+            const [wx, wy] = anvilCentre(an);
+            this.ents.push({ kind: 'anvil', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, anvil: an });
           }
         }
         if (this.game.campfires.size) {
@@ -452,6 +478,22 @@ export class Renderer {
           label: cr.mode === 'wild' ? undefined : cr.name,
         });
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
+        continue;
+      }
+      if (ent.kind === 'smelter' && ent.smelter) {
+        drawSmelter(ctx, ent.sx, ent.sy, zoom, ent.smelter.lit, ent.smelter.jobs.length > 0, this.time);
+        this.smelterHits.push({ x: ent.x, y: ent.y, left: ent.sx - 34 * zoom, top: ent.sy - 58 * zoom, w: 68 * zoom, h: 62 * zoom, smelter: ent.smelter.id });
+        continue;
+      }
+      if (ent.kind === 'anvil' && ent.anvil) {
+        // An anvil takes the colour of the metal it was cast from.
+        const metal = ent.anvil.metal;
+        const rock = ROCK_VARIANTS.find((r) => r.yields === `${metal}_ore`);
+        const c = rock ? rock.color : ([150, 150, 156] as const);
+        const face = `rgb(${c[0]},${c[1]},${c[2]})`;
+        const shade = `rgb(${Math.round(c[0] * 0.68)},${Math.round(c[1] * 0.68)},${Math.round(c[2] * 0.68)})`;
+        drawAnvil(ctx, ent.sx, ent.sy, zoom, face, shade);
+        this.anvilHits.push({ x: ent.x, y: ent.y, left: ent.sx - 20 * zoom, top: ent.sy - 27 * zoom, w: 40 * zoom, h: 30 * zoom, anvil: ent.anvil.id });
         continue;
       }
       if (ent.kind === 'campfire' && ent.fire) {
@@ -1108,6 +1150,14 @@ export class Renderer {
     for (let i = this.crateHits.length - 1; i >= 0; i--) {
       const h = this.crateHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), crate: h.crate };
+    }
+    for (let i = this.smelterHits.length - 1; i >= 0; i--) {
+      const h = this.smelterHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), smelter: h.smelter };
+    }
+    for (let i = this.anvilHits.length - 1; i >= 0; i--) {
+      const h = this.anvilHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), anvil: h.anvil };
     }
     for (let i = this.fireHits.length - 1; i >= 0; i--) {
       const h = this.fireHits[i];

@@ -19,11 +19,14 @@ import {
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
-import { itemDef, itemName } from '../game/items';
+import { itemDef, itemName, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
+import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
+import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
+import { smelterAnchor, smelterState, SMELTER_COST, type PlacedSmelter } from '../game/smelter';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { bedrockAt } from '../world/ore';
@@ -137,6 +140,31 @@ export class UI {
       lines.push(`${creature.name}${creature.name !== def.name ? ` the ${def.name}` : ''} · ${this.game.creatures.describe(creature)}`);
       // Only your own wildermon show their condition.
       if (creature.mode !== 'wild') lines.push(`Health ${Math.ceil(creature.health)}/${def.health} · ${creature.hunger < 0.3 ? 'hungry' : creature.hunger < 0.6 ? 'peckish' : 'well fed'}`);
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
+    const smelter = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
+    if (smelter) {
+      this.menu.show(sx, sy, `Smelter (${smelterState(smelter)})`, this.smelterEntries(smelter));
+      return;
+    }
+    const anvil = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
+    if (anvil) {
+      this.menu.show(sx, sy, `${anvilName(anvil)} (QL ${anvil.ql.toFixed(0)})`, this.anvilEntries(anvil));
+      return;
+    }
+    const sm = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
+    if (sm) {
+      lines.push('Stone smelter');
+      lines.push(smelterState(sm));
+      if (sm.jobs.length) lines.push(`Working: ${itemDef(sm.jobs[0].makes).name.toLowerCase()}, ${Math.ceil(sm.jobs[0].left)}s left`);
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
+    const an = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
+    if (an) {
+      lines.push(anvilName(an));
+      lines.push(`QL ${an.ql.toFixed(1)} · bring a mould and metal`);
       this.tooltip.show(sx, sy, lines);
       return;
     }
@@ -282,6 +310,32 @@ export class UI {
           : undefined,
       });
     }
+    const smelterDef = ACTION_BY_ID.get('build_smelter');
+    if (smelterDef && SMELTER_COST.every(([id, n]) => this.game.inventory.count(id) >= n)) {
+      const [ax, ay] = smelterAnchor(...subtileOf(pick.x, pick.y, pick.wx, pick.wy));
+      const st: Target = { ...target, sx: ax, sy: ay };
+      const reason = smelterDef.check?.(st, this.game) ?? null;
+      entries.push({
+        label: `Build smelter here (spots ${ax + 1},${ay + 1} to ${ax + 3},${ay + 2})`,
+        note: reason ? undefined : SMELTER_COST.map(([id, n]) => `${n} ${itemDef(id).name.toLowerCase()}`).join(' and '),
+        hint: reason ?? undefined,
+        disabled: !!reason,
+        onSelect: () => this.game.requestAction(smelterDef, st),
+      });
+    }
+    const anvilDef = ACTION_BY_ID.get('place_anvil');
+    const anvilItem = this.game.inventory.find('anvil');
+    if (anvilDef && anvilItem) {
+      const [ax, ay] = anvilAnchor(...subtileOf(pick.x, pick.y, pick.wx, pick.wy));
+      const st: Target = { ...target, sx: ax, sy: ay, itemUid: anvilItem.uid };
+      const reason = anvilDef.check?.(st, this.game) ?? null;
+      entries.push({
+        label: `Set the anvil down here (spots ${ax + 1},${ay + 1} to ${ax + 2},${ay + 2})`,
+        hint: reason ?? undefined,
+        disabled: !!reason,
+        onSelect: () => this.game.requestAction(anvilDef, st),
+      });
+    }
     const pile = this.game.groundAt(pick.x, pick.y);
     const pickUp = ACTION_BY_ID.get('pick_up');
     if (pile.length && pickUp) {
@@ -363,6 +417,105 @@ export class UI {
       };
     });
     entries.push({ label: 'Cook', children });
+    return entries;
+  }
+
+  /** Fuelling, charging and drawing off a smelter. */
+  private smelterEntries(s: PlacedSmelter): MenuItem[] {
+    const g = this.game;
+    const st: Target = { kind: 'smelter', id: s.id };
+    const entries: MenuItem[] = [];
+    const quantity = (def: ActionDef, it: Item, extra: Partial<Target> = {}): MenuItem => ({
+      label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+      children:
+        it.count > 1
+          ? [
+              { label: 'One', onSelect: () => g.requestAction(def, { ...st, itemUid: it.uid, count: 1, ...extra } as Target) },
+              { label: `All (${it.count})`, onSelect: () => g.requestAction(def, { ...st, itemUid: it.uid, count: it.count, ...extra } as Target) },
+            ]
+          : undefined,
+      onSelect: it.count > 1 ? undefined : () => g.requestAction(def, { ...st, itemUid: it.uid, count: 1, ...extra } as Target),
+    });
+    const fuelDef = ACTION_BY_ID.get('fuel_smelter');
+    const fuel = g.inventory.items.filter((it) => isFuel(it.id));
+    if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((it) => quantity(fuelDef, it)) });
+    const smeltDef = ACTION_BY_ID.get('smelt_ore');
+    const ores = g.inventory.items.filter((it) => isOreItem(it.id));
+    if (smeltDef) {
+      entries.push({
+        label: 'Smelt ore',
+        disabled: !ores.length,
+        hint: ores.length ? undefined : 'You carry no ore.',
+        children: ores.length ? ores.map((it) => quantity(smeltDef, it)) : undefined,
+      });
+    }
+    const castDef = ACTION_BY_ID.get('cast_anvil');
+    const lumps = g.inventory.items.filter((it) => isLump(it.id));
+    if (castDef && g.inventory.has('anvil_mould')) {
+      entries.push({
+        label: 'Cast an anvil',
+        disabled: !lumps.length,
+        hint: lumps.length ? undefined : 'You carry no metal.',
+        children: lumps.length
+          ? lumps.map((it) => {
+              const t: Target = { ...st, itemUid: it.uid };
+              const reason = castDef.check?.(t, g) ?? null;
+              return { label: `${itemName(it)} (${it.count})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(castDef, t) };
+            })
+          : undefined,
+      });
+    }
+    for (const id of ['light_smelter', 'damp_smelter', 'smelter_take_all', 'take_apart_smelter']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def || !def.applies(st, g)) continue;
+      const reason = def.check?.(st, g) ?? null;
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, st) });
+    }
+    if (s.jobs.length) {
+      const job = s.jobs[0];
+      entries.push({ label: `In the furnace: ${itemDef(job.makes).name.toLowerCase()}`, note: `${Math.ceil(job.left)}s left, ${s.jobs.length} in all`, disabled: true });
+    }
+    if (s.output.length) entries.push({ label: `Finished: ${s.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
+    return entries;
+  }
+
+  /** Beating a filled mould out on an anvil. */
+  private anvilEntries(a: PlacedAnvil): MenuItem[] {
+    const g = this.game;
+    const at: Target = { kind: 'anvil', id: a.id };
+    const entries: MenuItem[] = [];
+    const smithDef = ACTION_BY_ID.get('smith');
+    const moulds = g.inventory.items.filter((it) => isMould(it.id) && MOULD_BY_ID.get(it.id)?.makes !== 'anvil');
+    const lumps = g.inventory.items.filter((it) => isLump(it.id));
+    if (smithDef) {
+      entries.push({
+        label: 'Smith',
+        disabled: !moulds.length || !lumps.length,
+        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? 'You carry no metal.' : undefined,
+        children:
+          moulds.length && lumps.length
+            ? moulds.map((mould) => {
+                const def = MOULD_BY_ID.get(mould.id)!;
+                return {
+                  label: itemName(mould),
+                  note: `${itemDef(def.makes).name.toLowerCase()} · ${def.lumps} lump${def.lumps > 1 ? 's' : ''} · ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left`,
+                  children: lumps.map((lump) => {
+                    const t: Target = { ...at, mouldUid: mould.uid, itemUid: lump.uid };
+                    const reason = smithDef.check?.(t, g) ?? null;
+                    return {
+                      label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count})`,
+                      hint: reason ?? undefined,
+                      disabled: !!reason,
+                      onSelect: () => g.requestAction(smithDef, t),
+                    };
+                  }),
+                };
+              })
+            : undefined,
+      });
+    }
+    const up = ACTION_BY_ID.get('pick_up_anvil');
+    if (up) entries.push({ label: up.label, onSelect: () => g.requestAction(up, at) });
     return entries;
   }
 

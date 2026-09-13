@@ -4,7 +4,9 @@ import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
 import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
+import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
+import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { cropDef, RIPE, type Crop } from './farming';
 import { rockKindAt } from '../world/ore';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
@@ -61,6 +63,8 @@ export interface GameInit {
   /** Pre-crate-grid saves kept a single deed crate. */
   crate?: { x: number; y: number; items: Item[] } | null;
   campfires?: PlacedCampfire[];
+  smelters?: PlacedSmelter[];
+  anvils?: PlacedAnvil[];
   crops?: Crop[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
   inventory?: Item[];
@@ -97,6 +101,12 @@ export class Game {
   /** Campfires by id; each covers a two by two block of subtiles. */
   readonly campfires = new Map<number, PlacedCampfire>();
   nextFireId = 1;
+  /** Smelters by id; each covers six subtiles. */
+  readonly smelters = new Map<number, PlacedSmelter>();
+  nextSmelterId = 1;
+  /** Anvils by id; each covers four subtiles. */
+  readonly anvils = new Map<number, PlacedAnvil>();
+  nextAnvilId = 1;
   /** Crops growing on tilled fields, keyed by "x,y". */
   readonly crops = new Map<string, Crop>();
   /** Tiles a prospector has marked, and when the marks fade. */
@@ -156,6 +166,14 @@ export class Game {
       if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
     }
     for (const c of init.crops ?? []) this.crops.set(`${c.x},${c.y}`, c);
+    for (const s of init.smelters ?? []) {
+      this.smelters.set(s.id, s);
+      if (s.id >= this.nextSmelterId) this.nextSmelterId = s.id + 1;
+    }
+    for (const a of init.anvils ?? []) {
+      this.anvils.set(a.id, a);
+      if (a.id >= this.nextAnvilId) this.nextAnvilId = a.id + 1;
+    }
     this.world.onChange((x, y) => this.events.emit('world', x, y));
   }
 
@@ -293,6 +311,7 @@ export class Game {
 
     if (this.action) this.updateAction(dt);
     if (this.campfires.size) this.burnFires(dt);
+    if (this.smelters.size) this.runSmelters(dt);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
@@ -491,6 +510,14 @@ export class Game {
     if (target.kind === 'campfire') {
       const f = this.campfires.get(target.id);
       return f ? { x: f.x, y: f.y } : null;
+    }
+    if (target.kind === 'smelter') {
+      const s = this.smelters.get(target.id);
+      return s ? { x: s.x, y: s.y } : null;
+    }
+    if (target.kind === 'anvil') {
+      const a = this.anvils.get(target.id);
+      return a ? { x: a.x, y: a.y } : null;
     }
     return { x: target.x, y: target.y };
   }
@@ -725,7 +752,19 @@ export class Game {
 
   /** Whether the player is standing somewhere a recipe's station requires. */
   atStation(station: Station): boolean {
-    return station === 'campfire' ? this.litFireNear() !== undefined : false;
+    if (station === 'campfire') return this.litFireNear() !== undefined;
+    if (station === 'smelter') return this.hotSmelterNear() !== undefined;
+    return false;
+  }
+
+  /** The nearest smelter that is lit and within reach. */
+  hotSmelterNear(range = 2.6): PlacedSmelter | undefined {
+    for (const s of this.smelters.values()) {
+      if (!s.lit) continue;
+      const [cx, cy] = smelterCentre(s);
+      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return s;
+    }
+    return undefined;
   }
 
   /** Burn down every lit fire; one that runs out goes cold. */
@@ -760,6 +799,104 @@ export class Game {
     const p = this.prospected;
     if (!p || this.time >= p.until) return false;
     return p.tiles.has(y * this.world.w + x);
+  }
+
+  addSmelter(x: number, y: number, sx: number, sy: number, ql: number): PlacedSmelter {
+    const [ax, ay] = smelterAnchor(sx, sy);
+    const s: PlacedSmelter = { id: this.nextSmelterId++, x, y, sx: ax, sy: ay, ql, fuel: 0, lit: false, jobs: [], output: [] };
+    this.smelters.set(s.id, s);
+    this.events.emit('smelter');
+    return s;
+  }
+
+  removeSmelter(id: number): void {
+    this.smelters.delete(id);
+    this.events.emit('smelter');
+  }
+
+  smeltersOnTile(x: number, y: number): PlacedSmelter[] {
+    return [...this.smelters.values()].filter((s) => s.x === x && s.y === y);
+  }
+
+  /** Why a smelter cannot stand on this block of subtiles, or null. */
+  smelterPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+    const [ax, ay] = smelterAnchor(sx, sy);
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A smelter needs dry, solid ground.';
+    if (this.world.slope(x, y) > 12) return 'The ground is too uneven to lay stone on.';
+    if (this.isToken(x, y)) return 'Not on the token.';
+    for (let dy = 0; dy < SMELTER_H; dy++) {
+      for (let dx = 0; dx < SMELTER_W; dx++) {
+        if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
+      }
+    }
+    return null;
+  }
+
+  addAnvil(x: number, y: number, sx: number, sy: number, metal: string, ql: number): PlacedAnvil {
+    const [ax, ay] = anvilAnchor(sx, sy);
+    const a: PlacedAnvil = { id: this.nextAnvilId++, x, y, sx: ax, sy: ay, metal, ql };
+    this.anvils.set(a.id, a);
+    this.events.emit('smelter');
+    return a;
+  }
+
+  removeAnvil(id: number): void {
+    this.anvils.delete(id);
+    this.events.emit('smelter');
+  }
+
+  anvilsOnTile(x: number, y: number): PlacedAnvil[] {
+    return [...this.anvils.values()].filter((a) => a.x === x && a.y === y);
+  }
+
+  anvilPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+    const [ax, ay] = anvilAnchor(sx, sy);
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'An anvil needs dry, level ground.';
+    if (this.world.slope(x, y) > 16) return 'The ground is too uneven.';
+    if (this.isToken(x, y)) return 'Not on the token.';
+    for (let dy = 0; dy < ANVIL_SUBTILES; dy++) {
+      for (let dx = 0; dx < ANVIL_SUBTILES; dx++) {
+        if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
+      }
+    }
+    return null;
+  }
+
+  /** Whether anything already stands on one subtile. */
+  occupiedSubtile(x: number, y: number, sx: number, sy: number): boolean {
+    if (this.crateAt(x, y, sx, sy)) return true;
+    if (this.campfireAt(x, y, sx, sy)) return true;
+    for (const s of this.smelters.values()) if (s.x === x && s.y === y && smelterCovers(s, sx, sy)) return true;
+    for (const a of this.anvils.values()) if (a.x === x && a.y === y && anvilCovers(a, sx, sy)) return true;
+    return false;
+  }
+
+  /** Burn fuel in every lit smelter and move its work along. */
+  private runSmelters(dt: number): void {
+    for (const s of this.smelters.values()) {
+      if (!s.lit) continue;
+      const burn = Math.min(s.fuel, dt);
+      s.fuel -= burn;
+      if (s.fuel <= 0) {
+        s.fuel = 0;
+        s.lit = false;
+        this.logMsg('A smelter burns through the last of its fuel and goes cold.', 'event');
+        this.events.emit('smelter');
+        this.events.emit('world', s.x, s.y);
+      }
+      const job = s.jobs[0];
+      if (!job || burn <= 0) continue;
+      job.left -= burn;
+      if (job.left > 0) continue;
+      s.jobs.shift();
+      const made: Item =
+        job.makes === 'anvil'
+          ? { uid: this.inventory.nextUid++, id: 'anvil', ql: job.ql, dmg: 0, count: 1, extra: job.item.id.replace('_lump', '') }
+          : { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
+      s.output.push(made);
+      this.logMsg(`The smelter finishes a ${ITEM_DEFS[made.id]?.name.toLowerCase() ?? made.id}. (QL ${made.ql.toFixed(1)})`, 'event');
+      this.events.emit('smelter');
+    }
   }
 
   cropAt(x: number, y: number): Crop | undefined {

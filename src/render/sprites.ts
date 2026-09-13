@@ -634,6 +634,163 @@ export function drawCampfire(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   ctx.restore();
 }
 
+/** A stone smelter: a squat chimney with a firebox that glows when hot. */
+export function drawSmelter(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, lit: boolean, working: boolean, time: number): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 34, 17, 0, 0, TAU);
+  ctx.fill();
+  // The stone base, drawn as an iso block three subtiles by two.
+  const w = 32;
+  const d = 16;
+  const h = 30;
+  const base = '#7d7a74';
+  const dark = '#5c5а56'.replace('а', 'a');
+  const top = '#928e86';
+  ctx.fillStyle = base;
+  ctx.beginPath();
+  ctx.moveTo(-w, -d / 2);
+  ctx.lineTo(0, d / 2);
+  ctx.lineTo(0, d / 2 - h);
+  ctx.lineTo(-w, -d / 2 - h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(0, d / 2);
+  ctx.lineTo(w, -d / 2);
+  ctx.lineTo(w, -d / 2 - h);
+  ctx.lineTo(0, d / 2 - h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = top;
+  ctx.beginPath();
+  ctx.moveTo(-w, -d / 2 - h);
+  ctx.lineTo(0, d / 2 - h);
+  ctx.lineTo(w, -d / 2 - h);
+  ctx.lineTo(0, -d / 2 - h - d / 2 - 4);
+  ctx.closePath();
+  ctx.fill();
+  // Courses of stone.
+  ctx.strokeStyle = 'rgba(40,38,34,0.35)';
+  ctx.lineWidth = 1;
+  for (const k of [0.3, 0.6]) {
+    ctx.beginPath();
+    ctx.moveTo(-w, -d / 2 - h * k);
+    ctx.lineTo(0, d / 2 - h * k);
+    ctx.lineTo(w, -d / 2 - h * k);
+    ctx.stroke();
+  }
+  // The chimney.
+  ctx.fillStyle = top;
+  ctx.fillRect(-7, -h - 26, 14, 16);
+  ctx.fillStyle = dark;
+  ctx.fillRect(3, -h - 26, 4, 16);
+  ctx.fillStyle = '#3b3833';
+  ctx.beginPath();
+  ctx.ellipse(0, -h - 26, 7, 3, 0, 0, TAU);
+  ctx.fill();
+  // The firebox mouth, and the heat coming out of it.
+  const mouthY = -h * 0.42;
+  ctx.fillStyle = lit ? '#f0a03c' : '#2b2723';
+  ctx.beginPath();
+  ctx.moveTo(-11, mouthY + 6);
+  ctx.lineTo(0, mouthY + 12);
+  ctx.lineTo(11, mouthY + 6);
+  ctx.lineTo(11, mouthY - 7);
+  ctx.lineTo(0, mouthY - 1);
+  ctx.lineTo(-11, mouthY - 7);
+  ctx.closePath();
+  ctx.fill();
+  if (lit) {
+    ctx.fillStyle = 'rgba(255,238,180,0.85)';
+    const f = 3 + Math.sin(time * 6) * 1.4;
+    ctx.beginPath();
+    ctx.ellipse(0, mouthY + 3, 6, f, 0, 0, TAU);
+    ctx.fill();
+    // Smoke from the chimney, thicker while there is work in it.
+    ctx.fillStyle = 'rgba(220,216,210,0.35)';
+    const puffs = working ? 4 : 2;
+    for (let i = 0; i < puffs; i++) {
+      const t = (time * 0.5 + i / puffs) % 1;
+      ctx.globalAlpha = 0.4 * (1 - t);
+      ctx.beginPath();
+      ctx.arc(Math.sin((time + i) * 1.5) * 4, -h - 30 - t * 26, 3 + t * 6, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+/** An anvil on its block, coloured by the metal it was cast from. */
+export function drawAnvil(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, face: string, shade: string): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 20, 10, 0, 0, TAU);
+  ctx.fill();
+  // Oak block.
+  ctx.fillStyle = '#6b5236';
+  ctx.beginPath();
+  ctx.moveTo(-13, -4);
+  ctx.lineTo(0, 2);
+  ctx.lineTo(13, -4);
+  ctx.lineTo(13, -12);
+  ctx.lineTo(0, -6);
+  ctx.lineTo(-13, -12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#4e3c28';
+  ctx.beginPath();
+  ctx.moveTo(0, 2);
+  ctx.lineTo(13, -4);
+  ctx.lineTo(13, -12);
+  ctx.lineTo(0, -6);
+  ctx.closePath();
+  ctx.fill();
+  // The anvil: waist, body and horn.
+  ctx.fillStyle = shade;
+  ctx.fillRect(-4, -18, 8, 8);
+  ctx.fillStyle = face;
+  ctx.beginPath();
+  ctx.moveTo(-11, -18);
+  ctx.lineTo(11, -18);
+  ctx.lineTo(14, -22);
+  ctx.lineTo(-9, -22);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.moveTo(11, -18);
+  ctx.lineTo(14, -22);
+  ctx.lineTo(14, -25);
+  ctx.lineTo(11, -21);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = face;
+  ctx.beginPath();
+  ctx.moveTo(-9, -22);
+  ctx.lineTo(14, -22);
+  ctx.lineTo(11, -25);
+  ctx.lineTo(-7, -25);
+  ctx.closePath();
+  ctx.fill();
+  // The horn.
+  ctx.beginPath();
+  ctx.moveTo(-7, -25);
+  ctx.quadraticCurveTo(-16, -25, -19, -22);
+  ctx.quadraticCurveTo(-14, -21, -9, -22);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 export interface CreaturePose {
   facing: number;
   phase: number;

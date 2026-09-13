@@ -118,17 +118,17 @@ export const ROCK_VARIANTS: RockVariantDef[] = [
   { name: 'Marble', color: [216, 214, 208], yields: 'marble_shards' },
   { name: 'Sandstone', color: [198, 172, 124], yields: 'sandstone_shards' },
   // Metal, in order of the skill it takes to work.
-  { name: 'Copper vein', color: [162, 116, 74], yields: 'copper_lump', level: 1 },
+  { name: 'Copper vein', color: [162, 116, 74], yields: 'copper_ore', level: 1 },
   { name: 'Coal seam', color: [58, 56, 58], yields: 'coal', level: 1 },
-  { name: 'Tin vein', color: [178, 180, 174], yields: 'tin_lump', level: 10 },
-  { name: 'Zinc vein', color: [154, 166, 172], yields: 'zinc_lump', level: 20 },
-  { name: 'Lead vein', color: [108, 112, 124], yields: 'lead_lump', level: 30 },
-  { name: 'Silver vein', color: [186, 190, 198], yields: 'silver_lump', level: 40 },
-  { name: 'Gold vein', color: [198, 168, 86], yields: 'gold_lump', level: 50 },
-  { name: 'Adamantine vein', color: [96, 128, 152], yields: 'adamantine_lump', level: 60 },
-  { name: 'Glimmersteel vein', color: [206, 216, 230], yields: 'glimmersteel_lump', level: 70 },
-  { name: 'Mithril vein', color: [138, 166, 214], yields: 'mithril_lump', level: 80 },
-  { name: 'Seryll vein', color: [214, 196, 132], yields: 'seryll_lump', level: 90 },
+  { name: 'Tin vein', color: [178, 180, 174], yields: 'tin_ore', level: 10 },
+  { name: 'Zinc vein', color: [154, 166, 172], yields: 'zinc_ore', level: 20 },
+  { name: 'Lead vein', color: [108, 112, 124], yields: 'lead_ore', level: 30 },
+  { name: 'Silver vein', color: [186, 190, 198], yields: 'silver_ore', level: 40 },
+  { name: 'Gold vein', color: [198, 168, 86], yields: 'gold_ore', level: 50 },
+  { name: 'Adamantine vein', color: [96, 128, 152], yields: 'adamantine_ore', level: 60 },
+  { name: 'Glimmersteel vein', color: [206, 216, 230], yields: 'glimmersteel_ore', level: 70 },
+  { name: 'Mithril vein', color: [138, 166, 214], yields: 'mithril_ore', level: 80 },
+  { name: 'Seryll vein', color: [214, 196, 132], yields: 'seryll_ore', level: 90 },
 ];
 /** Four bits of the data byte, so there is room for every kind of seam. */
 export const rockVariant = (data: number): number => Math.min(ROCK_VARIANTS.length - 1, data & 15);
