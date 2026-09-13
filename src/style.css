@@ -145,6 +145,18 @@ kbd {
     padding-top: 2px;
     padding-bottom: 2px;
   }
+
+  .ctx-title {
+    padding: 8px 10px 9px;
+  }
+
+  .ctx-item {
+    padding: 9px 10px;
+  }
+
+  .tb-btn {
+    padding: 7px 10px;
+  }
 }
 
 .win-body {
