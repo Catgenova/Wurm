@@ -1,5 +1,6 @@
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
+import type { Crate, CreatureJSON } from './creatures';
 import { Game, type Deed } from './game';
 import type { Item } from './items';
 import type { Stats } from './player';
@@ -25,6 +26,8 @@ interface SaveData {
   savedAt: number;
   deed?: Deed | null;
   buildings?: BuildingsJSON;
+  creatures?: { nextId: number; list: CreatureJSON[] };
+  crate?: Crate | null;
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -63,6 +66,8 @@ export function saveGame(game: Game): boolean {
     savedAt: Date.now(),
     deed: game.deed,
     buildings: game.buildings.toJSON(),
+    creatures: game.creatures.toJSON(),
+    crate: game.crate,
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -102,7 +107,11 @@ export function loadGame(): Game | null {
       time: data.time,
       deed: data.deed ?? null,
       buildings: data.buildings,
+      creatures: data.creatures,
+      crate: data.crate ?? null,
     });
+    if (!data.creatures) game.creatures.spawnWild(game, 45);
+    if (game.deed && !game.crate) game.placeCrate();
     game.settings.grid = data.settings?.grid ?? true;
     game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
     game.settings.deedBorder = data.settings?.deedBorder ?? true;

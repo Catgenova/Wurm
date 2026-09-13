@@ -13,6 +13,7 @@ export type GameEvents = {
   action: [];
   stats: [];
   world: [x: number, y: number];
+  crate: [];
   reset: [];
 };
 

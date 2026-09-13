@@ -26,6 +26,9 @@ export class Player {
   dirY = 0;
   /** Storey the player stands on; 0 is the ground. */
   level = 0;
+  /** Last creature that hurt the player, for defensive companions. */
+  attackedBy: number | null = null;
+  attackedAt = -1e9;
   /** Eased copy of `level` for drawing, so climbing stairs is not a jump. */
   visualLevel = 0;
   moving = false;

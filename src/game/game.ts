@@ -3,6 +3,7 @@ import { TileType } from '../world/tiles';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
+import { Creatures, type Crate, type CreatureJSON } from './creatures';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { groundStep, Player } from './player';
@@ -38,6 +39,8 @@ export interface GameInit {
   spawn: { x: number; y: number };
   deed?: Deed | null;
   buildings?: BuildingsJSON;
+  creatures?: { nextId: number; list: CreatureJSON[] };
+  crate?: Crate | null;
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
   inventory?: Item[];
   nextUid?: number;
@@ -63,7 +66,10 @@ export class Game {
   readonly log: LogEntry[] = [];
   readonly settings = { grid: true, rotation: 0, deedBorder: true };
   readonly buildings: Buildings;
+  readonly creatures: Creatures;
   deed: Deed | null = null;
+  /** The settlement's crate: deed workers deliver here. */
+  crate: Crate | null = null;
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Items lying on tiles, keyed by "x,y". */
@@ -79,6 +85,7 @@ export class Game {
     const gen = generateWorld(seed, size);
     const game = new Game({ seed, world: gen.world, spawn: gen.spawn });
     game.giveStarterKit();
+    game.creatures.spawnWild(game, 45);
     game.logMsg('Welcome to Wurm Iso. You wash ashore on an untouched island with a few tools and your wits.', 'system');
     game.logMsg('Left-click to walk. Right-click a tile for actions. Drag to look around, scroll to zoom. Press F1 for help.', 'system');
     return game;
@@ -107,6 +114,8 @@ export class Game {
     this.time = init.time ?? 0;
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
+    this.creatures = Creatures.fromJSON(init.creatures);
+    this.crate = init.crate ?? null;
     this.world.onChange((x, y) => this.events.emit('world', x, y));
   }
 
@@ -231,6 +240,7 @@ export class Game {
     if (s.health <= 0) this.die();
 
     if (this.action) this.updateAction(dt);
+    this.creatures.update(dt, this);
 
     this.decayClock += dt;
     if (this.decayClock >= DECAY_STEP && this.ground.size) {
@@ -316,6 +326,10 @@ export class Game {
     a.elapsed = 0;
     a.duration = this.duration(a.def);
     this.player.stop();
+    if (a.target.kind === 'creature') {
+      const c = this.creatures.get(a.target.id);
+      if (c) c.busyUntil = this.time + a.duration + 0.2;
+    }
     this.logMsg(`You start ${a.def.verb}.`, 'info');
     this.events.emit('action');
   }
@@ -399,16 +413,30 @@ export class Game {
     this.logMsg("You can't find a way there.", 'error');
   }
 
+  /** The tile a target occupies right now, or null for inventory items. */
+  targetTile(target: Target): { x: number; y: number } | null {
+    if (target.kind === 'item') return null;
+    if (target.kind === 'creature') {
+      const c = this.creatures.get(target.id);
+      return c ? { x: Math.floor(c.x), y: Math.floor(c.y) } : null;
+    }
+    return { x: target.x, y: target.y };
+  }
+
   inRange(def: ActionDef, target: Target): boolean {
     if (target.kind === 'item') return true;
+    const tile = this.targetTile(target);
+    if (!tile) return false;
     const px = this.player.tileX;
     const py = this.player.tileY;
     if (def.corner && target.kind === 'tile') return px >= target.cx - 1 && px <= target.cx && py >= target.cy - 1 && py <= target.cy;
-    return Math.max(Math.abs(px - target.x), Math.abs(py - target.y)) <= 1;
+    return Math.max(Math.abs(px - tile.x), Math.abs(py - tile.y)) <= 1;
   }
 
   private walkToward(def: ActionDef, target: Target): boolean {
     if (target.kind === 'item') return true;
+    const tile = this.targetTile(target);
+    if (!tile) return false;
     let candidates: Array<{ x: number; y: number }>;
     if (def.corner && target.kind === 'tile') {
       candidates = [
@@ -418,7 +446,7 @@ export class Game {
         { x: target.cx, y: target.cy },
       ];
     } else {
-      candidates = [{ x: target.x, y: target.y }, ...this.neighbours(target.x, target.y)];
+      candidates = [{ x: tile.x, y: tile.y }, ...this.neighbours(tile.x, tile.y)];
     }
     candidates = candidates.filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
@@ -479,6 +507,47 @@ export class Game {
       }
     }
     return false;
+  }
+
+  /** Put the settlement crate on a free tile beside the token. */
+  placeCrate(): void {
+    const d = this.deed;
+    if (!d) return;
+    for (const [dx, dy] of [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+      [1, 1],
+    ]) {
+      const x = d.x + dx;
+      const y = d.y + dy;
+      if (this.world.inBounds(x, y) && this.world.isPassable(x, y) && !this.world.hasWater(x, y) && !this.buildings.buildingAt(x, y)) {
+        this.crate = { x, y, items: [] };
+        return;
+      }
+    }
+    this.crate = { x: d.x, y: d.y, items: [] };
+  }
+
+  crateAdd(item: Item): void {
+    if (!this.crate) return;
+    const def = ITEM_DEFS[item.id];
+    const stack = def?.stackable ? this.crate.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    if (stack) {
+      stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
+      stack.count += item.count;
+    } else this.crate.items.push(item);
+    this.events.emit('crate');
+  }
+
+  crateTake(uid: number): Item | null {
+    if (!this.crate) return null;
+    const idx = this.crate.items.findIndex((it) => it.uid === uid);
+    if (idx < 0) return null;
+    const [item] = this.crate.items.splice(idx, 1);
+    this.events.emit('crate');
+    return item;
   }
 
   groundAt(x: number, y: number): Item[] {

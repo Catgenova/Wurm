@@ -258,6 +258,19 @@ kbd {
   transition: transform 0.25s ease;
 }
 
+.hud-companion {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid #3a3128;
+  color: var(--ui-accent);
+  font-size: 11px;
+}
+
+.tb-small {
+  padding: 1px 7px;
+  font-size: 11px;
+}
+
 .hud-fps {
   position: absolute;
   right: 12px;

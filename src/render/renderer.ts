@@ -19,7 +19,8 @@ import {
 import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
-import { bushSprite, drawPlayer, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
+import { SPECIES, type Creature } from '../game/creatures';
+import { bushSprite, crateSprite, drawPlayer, drawRabba, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -29,15 +30,18 @@ export interface Pick {
   wy: number;
   cx: number;
   cy: number;
+  /** A creature under the cursor, when one is. */
+  creature?: number;
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature';
   x: number;
   y: number;
   sx: number;
   sy: number;
   spr: Sprite | null;
+  creature?: Creature;
 }
 
 interface HitRect {
@@ -47,6 +51,7 @@ interface HitRect {
   top: number;
   w: number;
   h: number;
+  creature?: number;
 }
 
 const VOID_COLOR = '#12395f';
@@ -109,6 +114,7 @@ export class Renderer {
   private drawnTiles = 0;
   private tileBuf = [0, 0];
   private playerFacing = 1;
+  private creatureHits: HitRect[] = [];
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -193,6 +199,7 @@ export class Renderer {
     const pts = this.pts;
     const c = this.cornerBuf;
     this.treeHits.length = 0;
+    this.creatureHits.length = 0;
     this.drawnTiles = 0;
 
     for (let d = dLo; d <= dHi; d++) {
@@ -255,6 +262,24 @@ export class Renderer {
         if (this.game.isToken(x, y)) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.ents.push({ kind: 'token', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: tokenSprite() });
+        }
+        const crate = this.game.crate;
+        if (crate && crate.x === x && crate.y === y) {
+          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+          this.ents.push({ kind: 'crate', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: crateSprite() });
+        }
+        if (this.game.creatures.list.size) {
+          for (const cr of this.game.creatures.atTile(x, y)) {
+            this.ents.push({
+              kind: 'creature',
+              x,
+              y,
+              sx: cam.worldToScreenX(cr.x, cr.y),
+              sy: cam.worldToScreenY(cr.x, cr.y, Math.max(world.heightAt(cr.x, cr.y), -4)),
+              spr: null,
+              creature: cr,
+            });
+          }
         }
         if (this.game.buildings.list.size) this.drawStructures(x, y, rot, d > playerDepth);
       }
@@ -364,6 +389,21 @@ export class Renderer {
           swimming: player.swimming,
           working: this.game.action?.state === 'performing',
         });
+        continue;
+      }
+      if (ent.kind === 'creature' && ent.creature) {
+        const cr = ent.creature;
+        const def = SPECIES[cr.species] ?? SPECIES.rabba;
+        const dx = cam.rotateX(cr.dirX, cr.dirY) - cam.rotateY(cr.dirX, cr.dirY);
+        drawRabba(ctx, ent.sx, ent.sy, zoom, {
+          facing: dx >= 0 ? 1 : -1,
+          phase: cr.walkPhase,
+          moving: cr.moving,
+          colors: def.variants[cr.variant] ?? def.variants[0],
+          health: cr.health / def.health,
+          label: cr.mode === 'wild' ? undefined : cr.name,
+        });
+        this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
         continue;
       }
       const spr = ent.spr;
@@ -950,8 +990,12 @@ export class Renderer {
   /** Sides in drawing order, exported for menus. */
   static readonly SIDES = SIDES;
 
-  /** Screen point to tile, taking terrain height into account; trees are picked by their sprite. */
+  /** Screen point to tile, taking terrain height into account; creatures and trees are picked by their sprite. */
   pick(sx: number, sy: number): Pick | null {
+    for (let i = this.creatureHits.length - 1; i >= 0; i--) {
+      const h = this.creatureHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), creature: h.creature };
+    }
     for (let i = this.treeHits.length - 1; i >= 0; i--) {
       const h = this.treeHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return this.makePick(h.x, h.y, sx, sy);

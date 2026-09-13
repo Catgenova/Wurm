@@ -39,6 +39,7 @@ export class Hud {
   private actionFill: HTMLDivElement;
   private gridBtn: HTMLButtonElement | null = null;
   private compass: HTMLSpanElement;
+  private companionEl: HTMLDivElement;
 
   constructor(
     root: HTMLElement,
@@ -83,6 +84,10 @@ export class Hud {
       '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><polygon points="10,1 14,15 10,11.5 6,15" fill="#e3b657"/><polygon points="10,11.5 14,15 10,19 6,15" fill="#6b5836"/></svg><b>N</b>';
     footer.append(this.posEl, this.compass);
     status.append(footer);
+    this.companionEl = document.createElement('div');
+    this.companionEl.className = 'hud-companion';
+    this.companionEl.hidden = true;
+    status.append(this.companionEl);
     root.append(status);
 
     const toolbar = document.createElement('div');
@@ -133,6 +138,12 @@ export class Hud {
     this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles · ${renderer.camera.zoom.toFixed(2)}×`;
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
+    const companion = this.game.creatures.active();
+    if (companion) {
+      const hunger = companion.hunger < 0.3 ? 'hungry' : companion.hunger < 0.6 ? 'peckish' : 'fed';
+      this.companionEl.textContent = `${companion.name} · ♥ ${Math.ceil(companion.health)} · ${hunger} · ${companion.stance}`;
+      this.companionEl.hidden = false;
+    } else this.companionEl.hidden = true;
     if (this.gridBtn) this.gridBtn.classList.toggle('active', this.game.settings.grid);
 
     const a = this.game.action;

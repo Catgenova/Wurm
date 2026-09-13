@@ -55,6 +55,15 @@ export function buildHelp(win: UIWindow): void {
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
     into mortar, chisel rock, slate, marble and sandstone shards into bricks, shape clay into bricks
     or press it with grass into adobe, and chip silver and gold from veins in the mountains.</p>
+    <h3>Wildermon</h3>
+    <p>Wild creatures roam the island. The first is the <b>Rabba</b>, a rabbit-like grazer that forages
+    berries when hungry (and picks that spot clean for a while). Carry a berry or vegetable, long-press
+    or right-click one and choose <b>Tame</b>: the food is used up, success is uncommon at low taming
+    skill, and a Rabba never holds a failed attempt against you.</p>
+    <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
+    or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
+    drops what it finds in the deed crate beside the token. Extra tamed wildermon are kept at the token,
+    whose menu lists them. Feed them from your pack; deed workers help themselves from the crate.</p>
     <h3>Terraforming</h3>
     <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
     Drop dirt to raise a corner. Flatten evens a tile out step by step. Mine rock with a pickaxe,

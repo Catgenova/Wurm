@@ -276,6 +276,135 @@ export function tokenSprite(): Sprite {
   return spr;
 }
 
+/** The settlement crate. */
+export function crateSprite(): Sprite {
+  const key = 'crate';
+  let spr = cache.get(key);
+  if (spr) return spr;
+  spr = makeSprite(44, 40, 22, 36, (ctx) => {
+    const bx = 22;
+    const by = 36;
+    shadow(ctx, bx, by, 15, 6);
+    // left face, right face, top
+    ctx.fillStyle = '#8a6a42';
+    ctx.beginPath();
+    ctx.moveTo(bx - 14, by - 7);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(bx, by - 14);
+    ctx.lineTo(bx - 14, by - 21);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#6a4f30';
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx + 14, by - 7);
+    ctx.lineTo(bx + 14, by - 21);
+    ctx.lineTo(bx, by - 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#b08850';
+    ctx.beginPath();
+    ctx.moveTo(bx - 14, by - 21);
+    ctx.lineTo(bx, by - 14);
+    ctx.lineTo(bx + 14, by - 21);
+    ctx.lineTo(bx, by - 28);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#4a3520';
+    ctx.lineWidth = 1.2;
+    for (const k of [0.33, 0.66]) {
+      ctx.beginPath();
+      ctx.moveTo(bx - 14, by - 7 - 14 * k);
+      ctx.lineTo(bx, by - 14 * k);
+      ctx.lineTo(bx + 14, by - 7 - 14 * k);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx, by - 14);
+    ctx.stroke();
+  });
+  cache.set(key, spr);
+  return spr;
+}
+
+export interface CreaturePose {
+  facing: number;
+  phase: number;
+  moving: boolean;
+  colors: [string, string];
+  /** 0..1 health fraction; a bar shows when below 1. */
+  health: number;
+  label?: string;
+}
+
+/** A Rabba: round body, long ears, twitchy. Feet at (sx, sy). */
+export function drawRabba(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3 : 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 7, 3, 0, 0, TAU);
+  ctx.fill();
+  const [fur, belly] = pose.colors;
+  // ears
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(3.5, -16 - hop, 1.7, 5, -0.15, 0, TAU);
+  ctx.ellipse(6.5, -15.5 - hop, 1.7, 4.6, 0.25, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#e8a6a6';
+  ctx.beginPath();
+  ctx.ellipse(3.5, -16 - hop, 0.7, 3, -0.15, 0, TAU);
+  ctx.fill();
+  // body and belly
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -6 - hop, 7.5, 5.2, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(0.5, -4.5 - hop, 4.5, 2.6, 0, 0, TAU);
+  ctx.fill();
+  // tail, head, eye, nose
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.arc(-7.5, -6.5 - hop, 2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.arc(5, -10 - hop, 4.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#2a1a10';
+  ctx.beginPath();
+  ctx.arc(6.5, -11 - hop, 0.9, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#d98f8f';
+  ctx.beginPath();
+  ctx.arc(9, -9.5 - hop, 0.8, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  if (pose.health < 1) {
+    const w = 18 * zoom;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(sx - w / 2, sy - 24 * zoom, w, 3 * zoom);
+    ctx.fillStyle = pose.health > 0.5 ? '#7ccf5a' : pose.health > 0.25 ? '#e3b657' : '#e0574d';
+    ctx.fillRect(sx - w / 2, sy - 24 * zoom, w * Math.max(0, pose.health), 3 * zoom);
+  }
+  if (pose.label) {
+    ctx.font = `${Math.max(9, 10 * zoom)}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.strokeText(pose.label, sx, sy - 26 * zoom);
+    ctx.fillStyle = '#e3b657';
+    ctx.fillText(pose.label, sx, sy - 26 * zoom);
+  }
+}
+
 export interface PlayerPose {
   phase: number;
   moving: boolean;

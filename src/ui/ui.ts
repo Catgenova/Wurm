@@ -17,8 +17,11 @@ import {
   WALL_TYPES,
   workLevel,
 } from '../game/building';
+import { CREATURE_ACTION_BY_ID } from '../game/creatureActions';
+import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
 import { itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
+import { CratePanel } from './panels/crate';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { SettingsPanel } from './panels/settings';
 import { Hud } from './hud';
@@ -45,6 +48,7 @@ export class UI {
   private readonly minimap: MinimapPanel;
   private readonly eventLog: EventLogPanel;
   private readonly settings: SettingsPanel;
+  private readonly cratePanel: CratePanel;
 
   constructor(
     private readonly game: Game,
@@ -74,6 +78,8 @@ export class UI {
     this.minimap = new MinimapPanel(map, game, renderer);
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 640, width: 300, height: 190, anchor: 'tr', open: false });
     this.settings = new SettingsPanel(settings, game);
+    const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
+    this.cratePanel = new CratePanel(crate, game);
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (window.innerHeight - 460) / 2)}px`;
@@ -103,6 +109,14 @@ export class UI {
     }
     const w = this.game.world;
     const lines: string[] = [];
+    const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
+    if (creature) {
+      const def = SPECIES[creature.species];
+      lines.push(`${creature.name}${creature.name !== def.name ? ` the ${def.name}` : ''} · ${this.game.creatures.describe(creature)}`);
+      lines.push(`Health ${Math.ceil(creature.health)}/${def.health} · ${creature.hunger < 0.3 ? 'hungry' : creature.hunger < 0.6 ? 'peckish' : 'well fed'}`);
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
     const t = w.getTile(pick.x, pick.y);
     if (t === TileType.Tree) {
       const data = w.getData(pick.x, pick.y);
@@ -147,8 +161,25 @@ export class UI {
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {
+    const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
+    if (creature) {
+      this.menu.show(sx, sy, `${creature.name} (${this.game.creatures.describe(creature)})`, this.creatureEntries(creature.id));
+      return;
+    }
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
+    if (this.game.isToken(pick.x, pick.y)) {
+      const kept = [...this.game.creatures.list.values()].filter((c) => c.mode === 'stored' || c.mode === 'deed');
+      if (kept.length) {
+        entries.push({
+          label: 'Wildermon',
+          children: kept.map((c) => ({ label: `${c.name} (${this.game.creatures.describe(c)})`, children: this.creatureEntries(c.id) })),
+        });
+      }
+    }
+    if (this.game.crate && this.game.crate.x === pick.x && this.game.crate.y === pick.y) {
+      entries.push({ label: 'Open crate', onSelect: () => this.cratePanel.open() });
+    }
     const pile = this.game.groundAt(pick.x, pick.y);
     const pickUp = ACTION_BY_ID.get('pick_up');
     if (pile.length && pickUp) {
@@ -167,6 +198,55 @@ export class UI {
     if (!building) entries.push(...this.buildingEntries(pick));
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;
     this.menu.show(sx, sy, title, entries);
+  }
+
+  /** Actions for a wildermon: taming and feeding, or for a tamed one its stance, job and home. */
+  private creatureEntries(id: number): MenuItem[] {
+    const g = this.game;
+    const c = g.creatures.get(id);
+    if (!c) return [];
+    const target: Target = { kind: 'creature', id };
+    const entries: MenuItem[] = [];
+    const item = (actionId: string, t: Target = target, label?: string): MenuItem | null => {
+      const def = CREATURE_ACTION_BY_ID.get(actionId);
+      if (!def || !def.applies(t, g)) return null;
+      const reason = def.check?.(t, g) ?? null;
+      return { label: label ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, t) };
+    };
+    const push = (m: MenuItem | null): void => {
+      if (m) entries.push(m);
+    };
+    push(item('examine_creature'));
+    push(item('tame', target, 'Tame (uses a berry or vegetable)'));
+    if (c.mode === 'active') {
+      entries.push({
+        label: `Stance: ${STANCE_NAMES[c.stance]}`,
+        children: STANCES.map((s) => ({
+          label: s === c.stance ? `${STANCE_NAMES[s]} (current)` : STANCE_NAMES[s],
+          note: STANCE_HINTS[s],
+          onSelect: () => {
+            const def = CREATURE_ACTION_BY_ID.get('set_stance');
+            if (def) g.requestAction(def, { ...target, stance: s });
+          },
+        })),
+      });
+    }
+    if (c.mode === 'active' || c.mode === 'deed') {
+      const def = SPECIES[c.species];
+      const food = g.inventory.items.filter((it) => isBaitFor(def, it.id));
+      if (food.length) {
+        entries.push({
+          label: 'Feed',
+          children: food.map((it) => ({ label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it), onSelect: () => g.requestAction(CREATURE_ACTION_BY_ID.get('feed') as ActionDef, { ...target, itemUid: it.uid }) })),
+        });
+      } else push(item('feed'));
+    }
+    push(item('assign_deed'));
+    push(item('take_creature'));
+    push(item('store_creature'));
+    push(item('rename_creature'));
+    push(item('release_creature'));
+    return entries;
   }
 
   /** Planning and construction entries for a tile: footprint, walls on the nearest side, floors, storeys. */

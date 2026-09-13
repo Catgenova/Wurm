@@ -75,6 +75,13 @@ rebuilds and commits the result.
   grass, mortar from clay and sand, bricks chiselled from rock, slate, marble
   or sandstone shards, clay bricks and adobe by pottery, silver and gold
   chipped from veins in the mountains.
+- **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
+  rabbit-like grazer, roams the wild, forages berries when hungry (putting the
+  tile on the same cooldown a player would), and is tamed with a berry or
+  vegetable at a low chance that never provokes it. A companion follows you
+  with a Passive, Defensive or Aggressive stance; a deed worker forages around
+  the settlement and delivers to the deed crate; spare tamed ones are kept at
+  the token.
 - **Items.** Click an item for its actions: eat, drink, fill, drop one or all,
   chisel, examine. Dropped items lie on the tile as a pile and can be picked up
   from that tile's menu. Anything left on the ground decays over real time,
@@ -132,6 +139,7 @@ first, then runs the timer; moving interrupts it.
 ## Roadmap
 
 - Chunked offscreen terrain caching for very zoomed-out views.
+- More wildermon species, breeding, and creature combat against the player.
 - Containers and item repair.
 - Crafting (carpentry, smithing) and a crafting window.
 - Caves and mine entrances.

@@ -1,5 +1,8 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
 import { BUILD_ACTIONS } from './buildActions';
+import { CREATURE_ACTIONS } from './creatureActions';
+import type { Stance } from './creatures';
+import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { itemDef, itemName } from './items';
@@ -13,7 +16,8 @@ import { itemDef, itemName } from './items';
 export type Target =
   | { kind: 'tile'; x: number; y: number; cx: number; cy: number; side?: Side; wallType?: WallType; material?: string; floorKind?: FloorKind; buildingId?: number }
   | { kind: 'item'; uid: number; count?: number }
-  | { kind: 'ground'; x: number; y: number; uid: number | null };
+  | { kind: 'ground'; x: number; y: number; uid: number | null }
+  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
 
 export interface ActionDef {
   id: string;
@@ -83,36 +87,6 @@ function slopeAfter(g: Game, cx: number, cy: number, delta: number): number {
   return s;
 }
 
-const FORAGE_TABLE: Array<[string, number]> = [
-  ['blueberry', 18],
-  ['raspberry', 18],
-  ['strawberry', 14],
-  ['lingonberry', 14],
-  ['acorn', 10],
-  ['nuts', 10],
-  ['potato', 6],
-  ['onion', 6],
-];
-const BOTANIZE_TABLE: Array<[string, number]> = [
-  ['sage', 15],
-  ['basil', 15],
-  ['thyme', 15],
-  ['mint', 15],
-  ['rosemary', 12],
-  ['cotton_seeds', 10],
-  ['wemp_seeds', 10],
-  ['mixed_grass', 8],
-];
-
-function rollTable(table: Array<[string, number]>, r: number): string {
-  const total = table.reduce((s, e) => s + e[1], 0);
-  let acc = r * total;
-  for (const [id, wgt] of table) {
-    acc -= wgt;
-    if (acc <= 0) return id;
-  }
-  return table[table.length - 1][0];
-}
 
 export const ACTIONS: ActionDef[] = [
   {
@@ -142,6 +116,7 @@ export const ACTIONS: ActionDef[] = [
       else if (g.onDeed(t.x, t.y) && g.deed) extra += ` This is part of ${g.deed.name}.`;
       const b = g.buildings.buildingAt(t.x, t.y);
       if (b) extra += ` It belongs to ${b.name}, ${b.levels === 1 ? 'a single-storey building' : `${b.levels} storeys tall`}.`;
+      if (g.crate && g.crate.x === t.x && g.crate.y === t.y) extra += ` The deed crate stands here with ${g.crate.items.length ? `${g.crate.items.reduce((n, it) => n + it.count, 0)} things` : 'nothing'} in it.`;
       g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');
     },
   },
@@ -785,7 +760,8 @@ export const ACTIONS: ActionDef[] = [
       }
       if (!g.inventory.remove(t.uid, 1)) return;
       g.deed = { name: name.trim().slice(0, 32), x: g.player.tileX, y: g.player.tileY, radius: DEED_RADIUS };
-      g.logMsg(`You found the settlement of ${g.deed.name}. The land ${DEED_RADIUS * 2 + 1} tiles across around the token is yours to build on.`, 'system');
+      g.placeCrate();
+      g.logMsg(`You found the settlement of ${g.deed.name}. The land ${DEED_RADIUS * 2 + 1} tiles across around the token is yours to build on. A deed crate stands beside the token.`, 'system');
       g.events.emit('world', g.deed.x, g.deed.y);
     },
   },
@@ -815,11 +791,30 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => t.kind === 'tile' && g.isToken(t.x, t.y),
     perform: (_t, g) => {
       if (!g.deed) return;
-      if (!g.hooks.confirm(`Disband ${g.deed.name}? Its buildings stay but nothing new can be built there, and things left outside will rot at full speed.`)) return;
+      if (!g.hooks.confirm(`Disband ${g.deed.name}? Its buildings stay but nothing new can be built there, things left outside will rot at full speed, the crate is tipped out and any wildermon kept here run wild.`)) return;
       const name = g.deed.name;
+      const d = g.deed;
+      let freed = 0;
+      for (const c of g.creatures.list.values()) {
+        if (c.mode === 'stored' || c.mode === 'deed') {
+          if (c.mode === 'stored') {
+            c.x = d.x + 0.5;
+            c.y = d.y + 1.5;
+          }
+          if (c.carrying) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
+          c.carrying = null;
+          c.mode = 'wild';
+          c.name = c.species === 'rabba' ? 'Rabba' : c.name;
+          freed++;
+        }
+      }
+      if (g.crate) {
+        for (const it of g.crate.items) g.dropOnGround(g.crate.x, g.crate.y, it);
+        g.crate = null;
+      }
       g.deed = null;
       g.inventory.add('settlement_deed', { ql: 50 });
-      g.logMsg(`You disband ${name}. The deed form returns to your pack.`, 'system');
+      g.logMsg(`You disband ${name}. The deed form returns to your pack.${freed ? ` ${freed} wildermon run off into the wild.` : ''}`, 'system');
     },
   },
   {
@@ -839,6 +834,7 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   ...BUILD_ACTIONS,
+  ...CREATURE_ACTIONS,
   {
     id: 'drop_dirt_here',
     label: 'Drop (raises the ground)',
