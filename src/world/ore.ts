@@ -43,15 +43,30 @@ const ORE_CHANCE: Array<[kind: number, upTo: number]> = [
   [5, 0.052], // coal
   [4, 0.076], // copper
 ];
+/** The ladder as fractions of all ore, so its shape survives any density. */
+const ORE_SHARE: Array<[kind: number, upTo: number]> = ORE_CHANCE.map(([k, upTo]) => [k, upTo / 0.076]);
 
-export function rockKindAt(seed: number, x: number, y: number): number {
+/**
+ * How much of the ground carries metal. Two thirds of the map is sea, and ore
+ * on the seabed is ore nobody can reach, so dry land is made far richer than
+ * the water and the island keeps most of the metal.
+ */
+export const ORE_DENSITY = { land: 0.15, water: 0.02 };
+
+/** The seam under a tile, given how much metal that ground holds. */
+export function oreKindFor(seed: number, x: number, y: number, density: number): number {
   const r = hashTile(x, y, seed + 11);
-  for (const [kind, upTo] of ORE_CHANCE) if (r < upTo) return kind;
+  if (r >= density) return -1;
+  const t = r / density;
+  for (const [kind, upTo] of ORE_SHARE) if (t < upTo) return kind;
+  return -1;
+}
+
+/** The plain stone under a tile, in broad bands. */
+export function stoneKindAt(seed: number, x: number, y: number): number {
   const n = bandNoise(seed + 50).fbm(x * 0.045 + 50, y * 0.045 + 50, 3);
   if (n > 0.34) return 1;
   if (n < -0.42) return 2;
-  // A broad band of sandstone through the low country, read from the seed
-  // rather than the ground's present height, which the player can change.
   const deep = bandNoise(seed + 51).fbm(x * 0.012 + 9, y * 0.012 + 9, 2);
   if (n > 0.05 && deep < 0.2) return 3;
   return 0;
@@ -83,9 +98,8 @@ export function oreMaxQl(seed: number, x: number, y: number): number {
  * prospecting reads; mining still needs the rock uncovered first.
  */
 export function bedrockAt(world: World, x: number, y: number): OreInfo {
-  // A tile already showing rock keeps the kind written into it; everything
-  // else is read straight from the seed.
-  const kind = world.getTile(x, y) === TileType.Rock ? Math.min(ROCK_VARIANTS.length - 1, world.getData(x, y) & 15) : rockKindAt(world.seed, x, y);
+  // The world holds a kind for every tile, settled when it was made.
+  const kind = Math.min(ROCK_VARIANTS.length - 1, world.rockKind(x, y));
   const def = ROCK_VARIANTS[kind];
   return { kind, name: def.name, yields: def.yields, maxQl: oreMaxQl(world.seed, x, y), level: def.level ?? 1, ore: isOreKind(kind) };
 }

@@ -172,7 +172,9 @@ export function buildHelp(win: UIWindow): void {
     mining skill and the quality of your pick.</p>
     <p>Every tile in the world sits on a particular rock of a particular quality &mdash; under grass,
     under a forest, under the sea, everywhere &mdash; settled when the world was made and unchanged by
-    anything you do to the ground above it. <b>Prospecting</b> is how you read it. It marks every
+    anything you do to the ground above it. Metal is laid far more thickly under dry land than under
+    the sea, so most of what an island holds can actually be reached: about one land tile in seven
+    carries some seam. <b>Prospecting</b> is how you read it. It marks every
     ore-bearing tile within range, buried or bare, and sampling where you stand names the rock, the
     mining skill any metal takes to work, the highest quality it will ever give up, and how deep it
     lies. The range starts at 3 tiles and grows by one for every 10 levels of the skill. Metal found

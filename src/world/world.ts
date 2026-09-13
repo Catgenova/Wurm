@@ -16,13 +16,15 @@ export class World {
   readonly dirt: Uint8Array;
   readonly tiles: Uint8Array;
   readonly data: Uint8Array;
+  /** The rock under every tile, settled when the world was made. */
+  readonly rock: Uint8Array;
   /** The seed this world was made from, so rock kinds stay consistent. */
   seed = 0;
   minHeight = 0;
   maxHeight = 0;
   private listeners: WorldListener[] = [];
 
-  constructor(w: number, h: number, heights?: Int16Array, tiles?: Uint8Array, data?: Uint8Array, dirt?: Uint8Array) {
+  constructor(w: number, h: number, heights?: Int16Array, tiles?: Uint8Array, data?: Uint8Array, dirt?: Uint8Array, rock?: Uint8Array) {
     this.w = w;
     this.h = h;
     this.cw = w + 1;
@@ -30,7 +32,18 @@ export class World {
     this.tiles = tiles ?? new Uint8Array(w * h);
     this.data = data ?? new Uint8Array(w * h);
     this.dirt = dirt ?? new Uint8Array((w + 1) * (h + 1));
+    this.rock = rock ?? new Uint8Array(w * h);
     this.recomputeRange();
+  }
+
+  /** The kind of rock under a tile, bare or buried. */
+  rockKind(x: number, y: number): number {
+    if (!this.inBounds(x, y)) return 0;
+    return this.rock[y * this.w + x];
+  }
+
+  setRockKind(x: number, y: number, kind: number): void {
+    if (this.inBounds(x, y)) this.rock[y * this.w + x] = kind;
   }
 
   /** Soil left over the bedrock at a corner; 0 means the rock is bare. */
@@ -60,29 +73,30 @@ export class World {
    * dirt off all four and the rock beneath is exposed; put soil back on any
    * corner and it is ground again.
    */
-  reconcile(x: number, y: number, rockKind: (x: number, y: number) => number): void {
+  reconcile(x: number, y: number): void {
     if (!this.inBounds(x, y)) return;
     const t = this.getTile(x, y);
     const bare = this.allBare(x, y);
     if (bare && t !== TileType.Rock && t !== TileType.Snow) {
-      this.setTile(x, y, TileType.Rock, rockKind(x, y));
+      this.setTile(x, y, TileType.Rock, this.rockKind(x, y));
     } else if (!bare && t === TileType.Rock) {
       this.setTile(x, y, TileType.Dirt);
     }
   }
 
   /** Reconcile every tile touching a corner. */
-  reconcileAround(cx: number, cy: number, rockKind: (x: number, y: number) => number): void {
-    for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) this.reconcile(x, y, rockKind);
+  reconcileAround(cx: number, cy: number): void {
+    for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) this.reconcile(x, y);
   }
 
-  /** Re-read every rock tile's kind from the world's own rules, without redrawing. */
-  rederiveRock(kind: (x: number, y: number) => number): void {
+  /** Fill in the rock under every tile, and keep bare rock tiles showing it. */
+  fillRock(kind: (x: number, y: number) => number): void {
     for (let y = 0; y < this.h; y++) {
       for (let x = 0; x < this.w; x++) {
         const i = y * this.w + x;
-        if (this.tiles[i] !== TileType.Rock) continue;
-        this.data[i] = kind(x, y);
+        const k = kind(x, y);
+        this.rock[i] = k;
+        if (this.tiles[i] === TileType.Rock) this.data[i] = k;
       }
     }
   }

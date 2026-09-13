@@ -1,6 +1,6 @@
 import { hash2, mulberry32, Noise2D, smoothstep } from './noise';
 import { TileType, packTreeData } from './tiles';
-import { rockKindAt } from './ore';
+import { oreKindFor, ORE_DENSITY, stoneKindAt } from './ore';
 import { World } from './world';
 
 export interface GeneratedWorld {
@@ -151,15 +151,17 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
     }
   }
 
-  // Kinds of rock: slate and marble in broad bands, sandstone on lower ground,
-  // rare metal veins. The same function answers for rock uncovered later by digging.
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (world.getTile(x, y) !== TileType.Rock) continue;
-      const v = rockKindAt(seed, x, y);
-      if (v) world.setTile(x, y, TileType.Rock, v);
-    }
-  }
+  /*
+   * The rock under every tile, settled once and for all. Slate and marble run
+   * in broad bands with sandstone through the low country, and metal is laid
+   * into it — far more thickly under dry land than under the sea, since ore on
+   * the seabed is ore nobody can reach.
+   */
+  world.fillRock((x, y) => {
+    const density = world.hasWater(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
+    const ore = oreKindFor(seed, x, y, density);
+    return ore >= 0 ? ore : stoneKindAt(seed, x, y);
+  });
 
   // Soil over the bedrock: deep in the lowlands, thin on the heights, none at
   // all where rock already breaks the surface.

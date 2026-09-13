@@ -1,4 +1,4 @@
-import { rockKindAt } from '../world/ore';
+import { oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
 import type { PlacedAnvil } from './anvil';
@@ -22,6 +22,7 @@ interface SaveData {
   tiles: string;
   data: string;
   dirt?: string;
+  rock?: string;
   spawn: { x: number; y: number };
   player: { x: number; y: number; name: string; stats: Stats; level?: number };
   inventory: Item[];
@@ -68,6 +69,7 @@ export function saveGame(game: Game): boolean {
     tiles: toBase64(w.tiles),
     data: toBase64(w.data),
     dirt: toBase64(w.dirt),
+    rock: toBase64(w.rock),
     spawn: game.spawn,
     player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level },
     inventory: game.inventory.items,
@@ -112,12 +114,28 @@ export function loadGame(): Game | null {
     const extra = fromBase64(data.data);
     if (tiles.length !== size * size || extra.length !== size * size) return null;
     const dirtBytes = data.dirt ? fromBase64(data.dirt) : null;
-    const world = new World(size, size, heights, tiles, extra, dirtBytes && dirtBytes.length === (size + 1) * (size + 1) ? dirtBytes : undefined);
+    const rockBytes = data.rock ? fromBase64(data.rock) : null;
+    const world = new World(
+      size,
+      size,
+      heights,
+      tiles,
+      extra,
+      dirtBytes && dirtBytes.length === (size + 1) * (size + 1) ? dirtBytes : undefined,
+      rockBytes && rockBytes.length === size * size ? rockBytes : undefined,
+    );
     world.seed = data.seed;
     // Worlds saved before rock had a depth get soil worked out from their tiles.
     if (!dirtBytes || dirtBytes.length !== (size + 1) * (size + 1)) world.deriveDirt();
-    // Rock kinds come from the seed, so a world saved under an older table is brought up to date.
-    world.rederiveRock((x, y) => rockKindAt(world.seed, x, y));
+    // Worlds saved before the rock was written down get it laid in now, on the
+    // same terms a new world would: metal thick under land, thin under water.
+    if (!rockBytes || rockBytes.length !== size * size) {
+      world.fillRock((x, y) => {
+        const density = world.hasWater(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
+        const ore = oreKindFor(world.seed, x, y, density);
+        return ore >= 0 ? ore : stoneKindAt(world.seed, x, y);
+      });
+    }
     const game = new Game({
       seed: data.seed,
       world,

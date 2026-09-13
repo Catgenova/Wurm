@@ -8,7 +8,6 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { cropDef, RIPE, type Crop } from './farming';
-import { rockKindAt } from '../world/ore';
 import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
@@ -786,7 +785,7 @@ export class Game {
    * the last dirt from all four corners of a tile and its bedrock shows.
    */
   exposeRock(cx: number, cy: number): void {
-    this.world.reconcileAround(cx, cy, (x, y) => rockKindAt(this.world.seed, x, y));
+    this.world.reconcileAround(cx, cy);
   }
 
   /** Light up the ore a prospector just read, for a while. */
