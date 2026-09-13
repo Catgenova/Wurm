@@ -99,7 +99,11 @@ export function buildHelp(win: UIWindow): void {
     starchy things, is placid by nature, and fells trees for its deed, carrying the logs to the crate;
     the <b>Seavic</b> is a squirrel that lives among the trees, eats acorns and nuts, is placid too, and
     runs a farm for its deed &mdash; sowing seed from the crate, tending every stage and carrying the
-    harvest back. It cannot rake a field of its own, so it only works ground you have tilled. Both pick that
+    harvest back. It cannot rake a field of its own, so it only works ground you have tilled. The
+    <b>Mola</b> is a heavier mole built around its claws, found sitting on metal, living on spices, and
+    working the seams for its deed: it takes the nearest ore no other Mola has claimed, and the quality
+    of what it brings back is its own mining skill, up to whatever the seam holds. Its range grows by 5
+    tiles every 10 levels rather than the usual 10. Both pick that
     spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt

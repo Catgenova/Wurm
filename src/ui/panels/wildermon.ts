@@ -1,4 +1,5 @@
 import { creatureLevel, GATHER_VERB, RANGE_PER_STEP, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
 import type { MenuItem } from '../contextmenu';
@@ -112,7 +113,7 @@ export class WildermonPanel {
     }
     if (c.mode === 'deed' && def.gathers) {
       const toNext = SKILL_STEP - (taskSkill(c, def) % SKILL_STEP);
-      parts.push(`Range ${workRangeOf(c, def)} tiles (+${RANGE_PER_STEP} in ${toNext.toFixed(1)} skill)`);
+      parts.push(`Range ${workRangeOf(c, def)} tiles (+${def.rangePerStep ?? RANGE_PER_STEP} in ${toNext.toFixed(1)} skill)`);
     }
     parts.push(`Attack ${def.attack}`);
     const skills = Object.entries(c.skills).map(([id, v]) => `${id[0].toUpperCase()}${id.slice(1)} ${v.toFixed(2)}`);

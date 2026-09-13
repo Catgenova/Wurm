@@ -651,6 +651,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   if (pose.species === 'vola') drawVolaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'bevere') drawBevereBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'seavic') drawSeavicBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'mola') drawMolaBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -966,6 +967,93 @@ function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
   ctx.beginPath();
   ctx.ellipse(4, -9.5 - hop + paw, 1.5, 1.1, 0.3, 0, TAU);
   ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * A Mola: a Vola's bigger cousin, built around its claws. Heavy shoulders, a
+ * blunt pink snout and two great pale digging hands it keeps out in front.
+ */
+function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const dig = pose.moving ? Math.sin(pose.phase) : Math.sin(pose.phase * 0.6) * 0.35;
+  const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.9 : 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+  ctx.fill();
+  const [fur, belly] = pose.colors;
+  const claw = '#efe3d2';
+  // Stubby tail and hind foot.
+  ctx.strokeStyle = belly;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-8, -4 - lift);
+  ctx.quadraticCurveTo(-10.5, -4.5 - lift, -10.8, -7);
+  ctx.stroke();
+  ctx.fillStyle = '#3a332e';
+  ctx.beginPath();
+  ctx.ellipse(-5, -1.4, 2.6, 1.5, 0, 0, TAU);
+  ctx.fill();
+  // A body that swells at the shoulders rather than the hips.
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(0.5, -6 - lift, 8.8, 5.2, -0.08, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(4.5, -7.5 - lift, 5.4, 4.6, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(0, -4 - lift, 5.6, 2.2, -0.08, 0, TAU);
+  ctx.fill();
+  // Head running straight out of the shoulders into a bare snout.
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(8.4, -7.4 - lift, 3.6, 3.2, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#e8a0a4';
+  ctx.beginPath();
+  ctx.ellipse(11.8, -6.6 - lift, 2.4, 1.7, 0.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#c9767c';
+  ctx.beginPath();
+  ctx.arc(13.4, -6.4 - lift, 0.75, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#1e1611';
+  ctx.beginPath();
+  ctx.arc(8.6, -8.8 - lift, 0.7, 0, TAU);
+  ctx.fill();
+  // The claws: broad pale spades, working one forward one back.
+  for (const [px, py, ph, scale] of [
+    [7.6, -1.6, dig, 1],
+    [4.4, -2.2, -dig, 0.88],
+  ] as Array<[number, number, number, number]>) {
+    ctx.save();
+    ctx.translate(px + ph * 1.5, py - Math.max(0, ph) * 1.2);
+    ctx.rotate(0.25 + ph * 0.18);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = fur;
+    ctx.beginPath();
+    ctx.ellipse(-1.6, 0, 2.4, 1.9, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = claw;
+    ctx.beginPath();
+    ctx.ellipse(1.2, 0, 3.2, 2.3, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#b9a894';
+    ctx.lineWidth = 0.55;
+    for (const d of [-1.3, -0.45, 0.45, 1.3]) {
+      ctx.beginPath();
+      ctx.moveTo(1.6, d * 1.1);
+      ctx.lineTo(4.6, d * 1.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }
 

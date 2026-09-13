@@ -108,7 +108,11 @@ rebuilds and commits the result.
   the Seavic, a squirrel that lives among trees, eats acorns and nuts, is
   placid too, and runs a deed's farm — sowing seed from the crate, tending
   every stage and carrying the harvest back, though it cannot till a field of
-  its own and works only ground the player has raked. Both put the tile on the same cooldown a
+  its own and works only ground the player has raked; and the Mola, a
+  broad-clawed mole found on metal and fed on spices, which works the seams
+  for its deed, taking the nearest ore no other Mola has claimed and bringing
+  back metal at the quality its own mining skill earns, up to the seam's
+  ceiling, with a range that grows 5 tiles per 10 levels rather than 10. Both put the tile on the same cooldown a
   player would, and neither retaliates for a failed attempt. A companion
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
