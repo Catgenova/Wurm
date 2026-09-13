@@ -1,6 +1,7 @@
 import { FullscreenCanvas } from './engine/canvas';
 import { Input } from './engine/input';
 import { GameLoop } from './engine/loop';
+import { ACTIONS } from './game/actions';
 import { Game } from './game/game';
 import { clearSave, loadGame, saveGame } from './game/save';
 import { Renderer } from './render/renderer';
@@ -32,6 +33,11 @@ const ui = new UI(game, renderer, uiRoot, canvasEl, {
   turn: turnView,
 });
 
+game.hooks = {
+  prompt: (question, fallback) => window.prompt(question, fallback),
+  confirm: (question) => window.confirm(question),
+};
+
 const player = game.player;
 camera.rotation = game.settings.rotation & 3;
 camera.focus(player.x, player.y, game.world.heightAt(player.x, player.y), null);
@@ -39,10 +45,10 @@ camera.focus(player.x, player.y, game.world.heightAt(player.x, player.y), null);
 declare global {
   interface Window {
     /** Console handle for poking at the running game. */
-    wurm: { game: Game; renderer: Renderer; camera: typeof camera };
+    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS };
   }
 }
-window.wurm = { game, renderer, camera };
+window.wurm = { game, renderer, camera, ACTIONS };
 
 input.onClick = (x, y, button) => {
   // A press that closed an open menu is spent, unless it is asking for a new menu.
@@ -83,6 +89,9 @@ input.onKey = (code) => {
     case 'F1':
     case 'KeyH':
       ui.toggleWindow('help');
+      break;
+    case 'KeyO':
+      ui.toggleWindow('settings');
       break;
     case 'KeyG':
       game.settings.grid = !game.settings.grid;

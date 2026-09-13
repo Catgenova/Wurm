@@ -1,5 +1,6 @@
 import { World } from '../world/world';
-import { Game } from './game';
+import type { BuildingsJSON } from './building';
+import { Game, type Deed } from './game';
 import type { Item } from './items';
 import type { Stats } from './player';
 
@@ -20,8 +21,10 @@ interface SaveData {
   ground?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
-  settings: { grid: boolean; rotation?: number };
+  settings: { grid: boolean; rotation?: number; deedBorder?: boolean };
   savedAt: number;
+  deed?: Deed | null;
+  buildings?: BuildingsJSON;
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -58,6 +61,8 @@ export function saveGame(game: Game): boolean {
     time: game.time,
     settings: { ...game.settings },
     savedAt: Date.now(),
+    deed: game.deed,
+    buildings: game.buildings.toJSON(),
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -95,10 +100,30 @@ export function loadGame(): Game | null {
       ground: data.ground,
       skills: data.skills,
       time: data.time,
+      deed: data.deed ?? null,
+      buildings: data.buildings,
     });
     game.settings.grid = data.settings?.grid ?? true;
     game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
+    game.settings.deedBorder = data.settings?.deedBorder ?? true;
     game.logMsg('Your journey continues where you left off.', 'system');
+    // Older saves predate building: hand out the tools and a deed form.
+    const granted: string[] = [];
+    for (const [id, name] of [
+      ['mallet', 'a mallet'],
+      ['trowel', 'a trowel'],
+      ['saw', 'a saw'],
+    ]) {
+      if (!game.inventory.has(id)) {
+        game.inventory.add(id, { ql: 20 });
+        granted.push(name);
+      }
+    }
+    if (!game.deed && !game.inventory.has('settlement_deed')) {
+      game.inventory.add('settlement_deed', { ql: 50 });
+      granted.push('a settlement deed');
+    }
+    if (granted.length) game.logMsg(`You find ${granted.join(', ')} among your things.`, 'system');
     // Things left outside kept rotting while you were away, up to a week's worth.
     const away = Math.max(0, Math.min(7 * 86400, (Date.now() - (data.savedAt ?? Date.now())) / 1000));
     if (away > 60 && game.ground.size) {

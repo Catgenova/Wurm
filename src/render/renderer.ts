@@ -1,10 +1,11 @@
 import { Camera } from '../engine/camera';
 import type { FullscreenCanvas } from '../engine/canvas';
 import type { Game } from '../game/game';
+import { borderOf, borderPoints, isDone, MATERIAL_BY_ID, progressOf, WALL_HEIGHT, workLevel, type Border, type FloorTile, type Side, type Wall } from '../game/building';
 import { hash2 } from '../world/noise';
-import { TileType, TILE_DEFS, bushSpecies, treeSpecies, treeVariant } from '../world/tiles';
+import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
-import { bushSprite, drawPlayer, pileSprite, treeSprite, type Sprite } from './sprites';
+import { bushSprite, drawPlayer, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -17,7 +18,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token';
   x: number;
   y: number;
   sx: number;
@@ -36,6 +37,23 @@ interface HitRect {
 
 const VOID_COLOR = '#12395f';
 const GRID_COLOR = 'rgba(0,0,0,0.16)';
+const DEED_COLOR = 'rgba(96, 230, 110, 0.9)';
+const DEED_SHADOW = 'rgba(0, 40, 0, 0.6)';
+const PLAN_COLOR = 'rgba(120, 220, 140, 0.95)';
+const SIDES: Side[] = ['n', 'e', 's', 'w'];
+
+/** Which side of a tile a picked point is closest to. */
+export function nearestSide(x: number, y: number, wx: number, wy: number): Side {
+  const dn = wy - y;
+  const ds = y + 1 - wy;
+  const dw = wx - x;
+  const de = x + 1 - wx;
+  const m = Math.min(dn, ds, dw, de);
+  return m === dn ? 'n' : m === ds ? 's' : m === dw ? 'w' : 'e';
+}
+
+const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
+  `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
 const WATER_STEPS = 24;
 const WATER_SHALLOW = [86, 168, 190];
 const WATER_DEEP = [16, 58, 118];
@@ -104,16 +122,18 @@ export class Renderer {
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
   private computeColor(x: number, y: number): string {
     const w = this.game.world;
-    const def = TILE_DEFS[w.getTile(x, y)];
+    const type = w.getTile(x, y);
+    const def = TILE_DEFS[type];
     const c = w.corners(x, y, this.cornerBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
     const gy = (c[2] + c[3] - (c[0] + c[1])) / 2 / UNITS_PER_TILE;
     const len = Math.hypot(gx, gy, 1);
     const dot = (-gx * LIGHT[0] - gy * LIGHT[1] + LIGHT[2]) / len;
     let shade = 0.48 + 0.6 * Math.max(0, dot);
-    let r = def.color[0];
-    let g = def.color[1];
-    let b = def.color[2];
+    const base = type === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.getData(x, y))].color : def.color;
+    let r = base[0];
+    let g = base[1];
+    let b = base[2];
     const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
     if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * 0.1;
     else {
@@ -218,6 +238,11 @@ export class Renderer {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.ents.push({ kind: 'pile', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: pileSprite() });
         }
+        if (this.game.isToken(x, y)) {
+          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+          this.ents.push({ kind: 'token', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: tokenSprite() });
+        }
+        if (this.game.buildings.list.size) this.drawStructures(x, y, rot, d > playerDepth);
       }
 
       if (d === playerDepth) {
@@ -340,6 +365,248 @@ export class Renderer {
     }
   }
 
+  /**
+   * Floors and walls belonging to a tile. Walls are drawn on the two borders
+   * that are the tile's back edges in the current rotation, so every wall is
+   * drawn exactly once, after the ground behind it and before whatever stands
+   * in front. Walls of the building the player is inside go translucent once
+   * they would hide the player.
+   */
+  private drawStructures(x: number, y: number, rot: number, inFront: boolean): void {
+    const bld = this.game.buildings;
+    const w = this.game.world;
+    const inside = bld.buildingAt(this.game.player.tileX, this.game.player.tileY);
+    const building = bld.buildingAt(x, y);
+    const base = w.getHeight(x, y);
+    let backA: Border;
+    let backB: Border;
+    switch (rot) {
+      case 1:
+        backA = borderOf(x, y, 'n');
+        backB = borderOf(x, y, 'e');
+        break;
+      case 2:
+        backA = borderOf(x, y, 'e');
+        backB = borderOf(x, y, 's');
+        break;
+      case 3:
+        backA = borderOf(x, y, 's');
+        backB = borderOf(x, y, 'w');
+        break;
+      default:
+        backA = borderOf(x, y, 'n');
+        backB = borderOf(x, y, 'w');
+    }
+    const maxLevels = building ? building.levels : this.maxLevelsAround(x, y);
+    for (let level = 0; level < maxLevels; level++) {
+      if (building) {
+        const floor = bld.floor(level, x, y);
+        if (floor) this.drawFloor(floor, x, y, base, inside?.id === building.id && level > 0 ? 0.35 : 1);
+      }
+      for (const border of [backA, backB]) {
+        const wall = bld.wallOnBorder(level, border);
+        if (!wall) continue;
+        const dim = inside?.id === wall.building && (inFront || level > 0);
+        this.drawWall(wall, border, base, dim ? 0.35 : 1);
+      }
+    }
+  }
+
+  /** Storeys of any building touching a tile's borders, for tiles just outside a footprint. */
+  private maxLevelsAround(x: number, y: number): number {
+    let m = 0;
+    for (const [dx, dy] of [
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+      [0, 1],
+    ]) {
+      const b = this.game.buildings.buildingAt(x + dx, y + dy);
+      if (b && b.levels > m) m = b.levels;
+    }
+    return m;
+  }
+
+  private drawFloor(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const mat = MATERIAL_BY_ID.get(floor.material);
+    if (!mat) return;
+    const h = base + floor.level * WALL_HEIGHT + 0.5;
+    const done = isDone(floor);
+    ctx.globalAlpha = alpha * (done ? 1 : 0.4);
+    ctx.beginPath();
+    ctx.moveTo(cam.worldToScreenX(x, y), cam.worldToScreenY(x, y, h));
+    ctx.lineTo(cam.worldToScreenX(x + 1, y), cam.worldToScreenY(x + 1, y, h));
+    ctx.lineTo(cam.worldToScreenX(x + 1, y + 1), cam.worldToScreenY(x + 1, y + 1, h));
+    ctx.lineTo(cam.worldToScreenX(x, y + 1), cam.worldToScreenY(x, y + 1, h));
+    ctx.closePath();
+    ctx.fillStyle = rgb(mat.floor, 0.95);
+    ctx.fill();
+    ctx.strokeStyle = done ? rgb(mat.trim, 1) : PLAN_COLOR;
+    if (!done) ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const mat = MATERIAL_BY_ID.get(wall.material);
+    if (!mat) return;
+    const [ax, ay, bx, by] = borderPoints(border);
+    const h0 = base + wall.level * WALL_HEIGHT;
+    const h1 = h0 + WALL_HEIGHT;
+    // A point on the wall face: t along the border, k up the height.
+    const px = (t: number, k: number): number => cam.worldToScreenX(ax + (bx - ax) * t, ay + (by - ay) * t);
+    const py = (t: number, k: number): number => cam.worldToScreenY(ax + (bx - ax) * t, ay + (by - ay) * t, h0 + (h1 - h0) * k);
+    const quad = (t0: number, t1: number, k0: number, k1: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t0, k0), py(t0, k0));
+      ctx.lineTo(px(t1, k0), py(t1, k0));
+      ctx.lineTo(px(t1, k1), py(t1, k1));
+      ctx.lineTo(px(t0, k1), py(t0, k1));
+      ctx.closePath();
+    };
+    // The face running along the view's x axis catches the light.
+    const vx = cam.rotateX(bx - ax, by - ay);
+    const vy = cam.rotateY(bx - ax, by - ay);
+    const lit = Math.abs(vx) >= Math.abs(vy) ? (vx > 0 ? 1 : 0.8) : 0.72;
+    const done = isDone(wall);
+    ctx.globalAlpha = alpha;
+    if (!done) {
+      const progress = progressOf(wall);
+      quad(0, 1, 0, 1);
+      ctx.fillStyle = rgb(mat.color, lit, 0.22);
+      ctx.fill();
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (progress > 0) {
+        quad(0, 1, 0, progress);
+        ctx.fillStyle = rgb(mat.color, lit, 0.85);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+    quad(0, 1, 0, 1);
+    ctx.fillStyle = rgb(mat.color, lit);
+    ctx.fill();
+    ctx.strokeStyle = rgb(mat.trim, lit);
+    ctx.stroke();
+    if (mat.id === 'log') {
+      ctx.strokeStyle = rgb(mat.trim, lit, 0.5);
+      for (let k = 0.2; k < 1; k += 0.2) {
+        ctx.beginPath();
+        ctx.moveTo(px(0, k), py(0, k));
+        ctx.lineTo(px(1, k), py(1, k));
+        ctx.stroke();
+      }
+    } else if (mat.id === 'timbercraft') {
+      ctx.strokeStyle = rgb(mat.trim, lit);
+      ctx.lineWidth = 2;
+      for (const t of [0.33, 0.66]) {
+        ctx.beginPath();
+        ctx.moveTo(px(t, 0), py(t, 0));
+        ctx.lineTo(px(t, 1), py(t, 1));
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(px(0, 0.5), py(0, 0.5));
+      ctx.lineTo(px(1, 0.5), py(1, 0.5));
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    } else if (mat.kind === 'stone' && mat.id !== 'marble') {
+      ctx.strokeStyle = rgb(mat.trim, lit, 0.35);
+      for (let k = 0.25; k < 1; k += 0.25) {
+        ctx.beginPath();
+        ctx.moveTo(px(0, k), py(0, k));
+        ctx.lineTo(px(1, k), py(1, k));
+        ctx.stroke();
+      }
+    }
+    if (mat.id.startsWith('ornate')) {
+      ctx.strokeStyle = rgb(mat.trim, 1);
+      ctx.lineWidth = 2;
+      quad(0.06, 0.94, 0.08, 0.92);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    switch (wall.type) {
+      case 'window':
+        quad(0.32, 0.68, 0.4, 0.78);
+        ctx.fillStyle = 'rgba(150, 200, 235, 0.75)';
+        ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit);
+        ctx.stroke();
+        break;
+      case 'bay':
+        quad(0.2, 0.8, 0.35, 0.82);
+        ctx.fillStyle = 'rgba(150, 200, 235, 0.75)';
+        ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        break;
+      case 'door':
+        quad(0.36, 0.64, 0, 0.72);
+        ctx.fillStyle = 'rgba(40, 28, 18, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit);
+        ctx.stroke();
+        break;
+      case 'double_door':
+        quad(0.22, 0.78, 0, 0.74);
+        ctx.fillStyle = 'rgba(40, 28, 18, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px(0.5, 0), py(0.5, 0));
+        ctx.lineTo(px(0.5, 0.74), py(0.5, 0.74));
+        ctx.stroke();
+        break;
+      default:
+        break;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** The deed's boundary as a line that follows the ground. */
+  private drawDeedBorder(ctx: CanvasRenderingContext2D): void {
+    const deed = this.game.deed;
+    if (!deed) return;
+    const w = this.game.world;
+    const cam = this.camera;
+    const x0 = deed.x - deed.radius;
+    const y0 = deed.y - deed.radius;
+    const x1 = deed.x + deed.radius + 1;
+    const y1 = deed.y + deed.radius + 1;
+    ctx.beginPath();
+    const pt = (x: number, y: number, first: boolean): void => {
+      const sx = cam.worldToScreenX(x, y);
+      const sy = cam.worldToScreenY(x, y, w.getHeight(x, y) + 0.5);
+      if (first) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    };
+    for (let x = x0; x <= x1; x++) pt(x, y0, x === x0);
+    for (let y = y0 + 1; y <= y1; y++) pt(x1, y, false);
+    for (let x = x1 - 1; x >= x0; x--) pt(x, y1, false);
+    for (let y = y1 - 1; y > y0; y--) pt(x0, y, false);
+    ctx.closePath();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = DEED_SHADOW;
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = DEED_COLOR;
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
   /** Water surface at height 0, clipped to the part of the tile that lies below it. Built in view space. */
   private drawWater(u: number, v: number, x: number, y: number, c: number[]): void {
     const poly = this.waterPoly;
@@ -435,6 +702,7 @@ export class Renderer {
     }
 
     const hover = this.hover;
+    if (game.deed && (game.settings.deedBorder || (hover && game.isToken(hover.x, hover.y)))) this.drawDeedBorder(ctx);
     if (hover) {
       this.tilePath(ctx, hover.x, hover.y);
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
@@ -443,9 +711,27 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.stroke();
       ctx.lineWidth = 1;
-      this.cornerMarker(ctx, hover.cx, hover.cy, zoom, 'rgba(255,235,150,0.9)');
+      const building = game.buildings.buildingAt(hover.x, hover.y);
+      if (building) {
+        // Show which border a wall would go on, at the storey being worked on.
+        const side = nearestSide(hover.x, hover.y, hover.wx, hover.wy);
+        const [ax, ay, bx, by] = borderPoints(borderOf(hover.x, hover.y, side));
+        const h = w.getHeight(hover.x, hover.y) + workLevel(building) * WALL_HEIGHT + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cam.worldToScreenX(ax, ay), cam.worldToScreenY(ax, ay, h));
+        ctx.lineTo(cam.worldToScreenX(bx, by), cam.worldToScreenY(bx, by, h));
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = PLAN_COLOR;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      } else {
+        this.cornerMarker(ctx, hover.cx, hover.cy, zoom, 'rgba(255,235,150,0.9)');
+      }
     }
   }
+
+  /** Sides in drawing order, exported for menus. */
+  static readonly SIDES = SIDES;
 
   /** Screen point to tile, taking terrain height into account; trees are picked by their sprite. */
   pick(sx: number, sy: number): Pick | null {

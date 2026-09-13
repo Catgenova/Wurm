@@ -388,6 +388,37 @@ kbd {
   color: var(--ui-dim);
 }
 
+.ctx-note {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ui-dim);
+  font-size: 11px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+
+.setting-row input {
+  margin: 3px 0 0;
+  accent-color: var(--ui-accent);
+}
+
+.setting-row b {
+  display: block;
+  font-weight: 600;
+}
+
+.setting-row small {
+  display: block;
+  color: var(--ui-dim);
+}
+
 .ctx-chevron {
   color: var(--ui-accent);
   font-size: 12px;

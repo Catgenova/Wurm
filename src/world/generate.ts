@@ -149,6 +149,22 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
     }
   }
 
+  // Kinds of rock: slate and marble in broad bands, sandstone on lower ground, rare metal veins.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (world.getTile(x, y) !== TileType.Rock) continue;
+      const n = patch.fbm(x * 0.045 + 50, y * 0.045 + 50, 3);
+      const r = hash2(x, y, seed + 11);
+      let v = 0;
+      if (r < 0.005) v = 5;
+      else if (r < 0.018) v = 4;
+      else if (n > 0.34) v = 1;
+      else if (n < -0.42) v = 2;
+      else if (n > 0.05 && world.centerHeight(x, y) < 80) v = 3;
+      if (v) world.setTile(x, y, TileType.Rock, v);
+    }
+  }
+
   return { world, spawn: findSpawn(world) };
 }
 

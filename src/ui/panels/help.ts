@@ -33,10 +33,24 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
+      <tr><td><kbd>O</kbd></td><td>Settings (tile grid, deed border)</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
+    <h3>Settling and building</h3>
+    <p>Use the settlement deed in your inventory to found a settlement where you stand: an 11 by 11
+    square around a stone token. You may hold one settlement at a time, and building is only allowed
+    on its land. Things left outside on deed land rot ten times slower.</p>
+    <p>To build, flatten and pack a tile, then with a mallet choose <b>Plan building</b> on it and
+    <b>Add to building</b> on neighbouring flat packed tiles. Point at a tile's edge and <b>Plan wall</b>
+    there: solid, window, bay window, door or double door, in log, plank, timbercraft, cobblestone,
+    slate, marble, sandstone, stone brick, clay adobe, clay bricks, ornate silver or ornate gold. Then
+    <b>Build wall</b> feeds it materials one at a time. Floors are planned the same way and laid with
+    the paving skill. Another storey can only be planned once every wall of the storey below is built.</p>
+    <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
+    into mortar, chisel rock, slate, marble and sandstone shards into bricks, shape clay into bricks
+    or press it with grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Terraforming</h3>
     <p>Digging lowers the corner nearest to where you click (the small marker) and gives you dirt.
     Drop dirt to raise a corner. Flatten evens a tile out step by step. Mine rock with a pickaxe,

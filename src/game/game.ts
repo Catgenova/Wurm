@@ -1,6 +1,8 @@
 import { generateWorld } from '../world/generate';
+import { TileType } from '../world/tiles';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
+import { Buildings, type BuildingsJSON, type Building } from './building';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { Player } from './player';
@@ -14,10 +16,28 @@ export interface ActiveAction {
   duration: number;
 }
 
+/** A settlement: a square of land around a token that the player may build on. */
+export interface Deed {
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+export const DEED_RADIUS = 5;
+
+/** UI prompts the game needs; main.ts wires them to the browser. */
+export interface GameHooks {
+  prompt: (question: string, fallback: string) => string | null;
+  confirm: (question: string) => boolean;
+}
+
 export interface GameInit {
   seed: number;
   world: World;
   spawn: { x: number; y: number };
+  deed?: Deed | null;
+  buildings?: BuildingsJSON;
   player?: { x: number; y: number; name: string; stats: Player['stats'] };
   inventory?: Item[];
   nextUid?: number;
@@ -41,7 +61,10 @@ export class Game {
   readonly skills: Skills;
   readonly events = new Emitter<GameEvents>();
   readonly log: LogEntry[] = [];
-  readonly settings = { grid: true, rotation: 0 };
+  readonly settings = { grid: true, rotation: 0, deedBorder: true };
+  readonly buildings: Buildings;
+  deed: Deed | null = null;
+  hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Items lying on tiles, keyed by "x,y". */
   readonly ground = new Map<string, Item[]>();
@@ -80,6 +103,8 @@ export class Game {
     }
     this.skills = new Skills(init.skills);
     this.time = init.time ?? 0;
+    this.deed = init.deed ?? null;
+    this.buildings = Buildings.fromJSON(init.buildings);
     this.world.onChange((x, y) => this.events.emit('world', x, y));
   }
 
@@ -89,7 +114,50 @@ export class Game {
     this.inventory.add('pickaxe', { ql: 20 });
     this.inventory.add('carving_knife', { ql: 20 });
     this.inventory.add('chisel', { ql: 15 });
+    this.inventory.add('mallet', { ql: 20 });
+    this.inventory.add('trowel', { ql: 20 });
+    this.inventory.add('saw', { ql: 20 });
     this.inventory.add('water_skin', { ql: 30 });
+    this.inventory.add('settlement_deed', { ql: 50 });
+  }
+
+  /** Walls stop steps between tiles. */
+  readonly wallBlocks = (x0: number, y0: number, x1: number, y1: number): boolean => this.buildings.blocks(x0, y0, x1, y1);
+
+  onDeed(x: number, y: number): boolean {
+    const d = this.deed;
+    return !!d && Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius;
+  }
+
+  isToken(x: number, y: number): boolean {
+    return !!this.deed && this.deed.x === x && this.deed.y === y;
+  }
+
+  insideBuilding(): Building | undefined {
+    return this.buildings.buildingAt(this.player.tileX, this.player.tileY);
+  }
+
+  /** Why a tile cannot take a building plan, or null when it can. */
+  planReason(x: number, y: number): string | null {
+    if (!this.deed || !this.onDeed(x, y)) return 'You may only build on your own deed.';
+    if (this.isToken(x, y)) return 'The settlement token stands here.';
+    if (this.buildings.buildingAt(x, y)) return 'That tile is already part of a building.';
+    if (this.world.getTile(x, y) !== TileType.PackedDirt) return 'Buildings need flat packed dirt. Pack the tile first.';
+    if (this.world.slope(x, y) !== 0) return 'The tile must be perfectly flat. Flatten it first.';
+    if (this.world.hasWater(x, y)) return 'You cannot build in water.';
+    if (this.groundAt(x, y).length) return 'Clear away the items lying there first.';
+    return null;
+  }
+
+  /** Raise a skill and announce it. Returns the gain. */
+  gainSkill(id: string, base = 0.45): number {
+    const def = SKILL_DEFS.find((d) => d.id === id);
+    const gain = this.skills.gain(id, base, this.rand);
+    if (gain > 0.00005 && def) {
+      this.logMsg(`${def.name} increased by ${gain.toFixed(4)} to ${this.skills.get(id).toFixed(4)}.`, 'skill');
+      this.events.emit('skill', id, gain);
+    }
+    return gain;
   }
 
   logMsg(text: string, kind: LogKind = 'info'): void {
@@ -102,7 +170,7 @@ export class Game {
   update(dt: number): void {
     this.time += dt;
     const p = this.player;
-    const moved = p.update(dt, this.world);
+    const moved = p.update(dt, this.world, this.wallBlocks);
     const s = p.stats;
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
     s.thirst = Math.max(0, s.thirst - dt * 0.0006);
@@ -165,9 +233,9 @@ export class Game {
     return lost;
   }
 
-  /** How fast things rot at a spot: 1 in the wild. A deed would lower this for its land. */
-  decayMultiplier(_x: number, _y: number): number {
-    return 1;
+  /** How fast things rot at a spot: full speed in the wild, a tenth of that on deed land. */
+  decayMultiplier(x: number, y: number): number {
+    return this.onDeed(x, y) ? 0.1 : 1;
   }
 
   private updateAction(dt: number): void {
@@ -227,14 +295,7 @@ export class Game {
     }
     const again = a.def.perform(a.target, this) === true;
     this.player.stats.stamina = Math.max(0, this.player.stats.stamina - a.def.stamina);
-    if (a.def.skill) {
-      const def = SKILL_DEFS.find((d) => d.id === a.def.skill);
-      const gain = this.skills.gain(a.def.skill, 0.45, this.rand);
-      if (gain > 0.00005 && def) {
-        this.logMsg(`${def.name} increased by ${gain.toFixed(4)} to ${this.skills.get(a.def.skill).toFixed(4)}.`, 'skill');
-        this.events.emit('skill', a.def.skill, gain);
-      }
-    }
+    if (a.def.skill) this.gainSkill(a.def.skill);
     if (again && a.def.repeat && this.player.stats.stamina > 0.05 && this.action === a) {
       a.elapsed = 0;
       a.duration = this.duration(a.def);
@@ -256,7 +317,7 @@ export class Game {
   actionsFor(target: Target): Array<{ def: ActionDef; reason: string | null }> {
     const out: Array<{ def: ActionDef; reason: string | null }> = [];
     for (const def of ACTIONS) {
-      if (!def.applies(target, this)) continue;
+      if (def.hidden || !def.applies(target, this)) continue;
       out.push({ def, reason: def.check?.(target, this) ?? null });
     }
     return out;
@@ -294,10 +355,10 @@ export class Game {
     this.cancelAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return;
-    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y)) return;
+    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, this.wallBlocks)) return;
     const candidates = this.neighbours(x, y).filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
-    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y)) return;
+    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, this.wallBlocks)) return;
     this.logMsg("You can't find a way there.", 'error');
   }
 
@@ -325,7 +386,7 @@ export class Game {
     candidates = candidates.filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
     for (const c of candidates) {
-      if (this.player.walkTo(this.world, c.x, c.y)) return true;
+      if (this.player.walkTo(this.world, c.x, c.y, this.wallBlocks)) return true;
     }
     return false;
   }

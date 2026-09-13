@@ -1,6 +1,6 @@
 import type { Game } from '../../game/game';
 import type { Renderer } from '../../render/renderer';
-import { TileType, TILE_DEFS } from '../../world/tiles';
+import { ROCK_VARIANTS, TileType, TILE_DEFS, rockVariant } from '../../world/tiles';
 import type { UIWindow } from '../windows';
 
 /** A small overview map, re-painted per tile as the world changes. */
@@ -50,10 +50,15 @@ export class MinimapPanel {
     const t = w.getTile(x, y);
     const def = TILE_DEFS[t];
     const h = w.centerHeight(x, y);
-    let r = def.color[0];
-    let g = def.color[1];
-    let b = def.color[2];
-    if (w.hasWater(x, y)) {
+    const base = t === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.getData(x, y))].color : def.color;
+    let r = base[0];
+    let g = base[1];
+    let b = base[2];
+    if (this.game.buildings.buildingAt(x, y)) {
+      r = 84;
+      g = 60;
+      b = 40;
+    } else if (w.hasWater(x, y)) {
       const k = Math.max(0.35, 1 - Math.max(0, -h) / 60);
       r = 30 * k + 20;
       g = 80 * k + 30;
@@ -102,6 +107,13 @@ export class MinimapPanel {
     corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x * scale, c.y * scale) : ctx.lineTo(c.x * scale, c.y * scale)));
     ctx.closePath();
     ctx.stroke();
+    const deed = this.game.deed;
+    if (deed) {
+      ctx.strokeStyle = 'rgba(96, 230, 110, 0.95)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect((deed.x - deed.radius) * scale, (deed.y - deed.radius) * scale, (deed.radius * 2 + 1) * scale, (deed.radius * 2 + 1) * scale);
+      ctx.lineWidth = 1;
+    }
     const p = this.game.player;
     ctx.fillStyle = '#ffe36e';
     ctx.beginPath();

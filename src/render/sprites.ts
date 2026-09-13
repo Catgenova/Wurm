@@ -210,6 +210,72 @@ export function pileSprite(): Sprite {
   return spr;
 }
 
+/** The settlement token: a carved stone pillar with a gilded cap. */
+export function tokenSprite(): Sprite {
+  const key = 'token';
+  let spr = cache.get(key);
+  if (spr) return spr;
+  spr = makeSprite(40, 76, 20, 72, (ctx) => {
+    const bx = 20;
+    const by = 72;
+    shadow(ctx, bx, by, 13, 5);
+    // plinth
+    ctx.fillStyle = '#6f6a62';
+    ctx.beginPath();
+    ctx.moveTo(bx - 12, by - 4);
+    ctx.lineTo(bx, by + 2);
+    ctx.lineTo(bx + 12, by - 4);
+    ctx.lineTo(bx, by - 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#5a554e';
+    ctx.beginPath();
+    ctx.moveTo(bx, by + 2);
+    ctx.lineTo(bx + 12, by - 4);
+    ctx.lineTo(bx + 12, by - 8);
+    ctx.lineTo(bx, by - 2);
+    ctx.closePath();
+    ctx.fill();
+    // column
+    ctx.fillStyle = '#9a948a';
+    ctx.beginPath();
+    ctx.moveTo(bx - 6, by - 8);
+    ctx.lineTo(bx - 4, by - 56);
+    ctx.lineTo(bx + 4, by - 56);
+    ctx.lineTo(bx + 6, by - 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.moveTo(bx, by - 8);
+    ctx.lineTo(bx, by - 56);
+    ctx.lineTo(bx + 4, by - 56);
+    ctx.lineTo(bx + 6, by - 8);
+    ctx.closePath();
+    ctx.fill();
+    // runes
+    ctx.fillStyle = '#4e4942';
+    for (let i = 0; i < 4; i++) ctx.fillRect(bx - 3, by - 18 - i * 9, 5, 2);
+    // gilded cap
+    ctx.fillStyle = '#e3b657';
+    ctx.beginPath();
+    ctx.moveTo(bx - 6, by - 56);
+    ctx.lineTo(bx, by - 68);
+    ctx.lineTo(bx + 6, by - 56);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#b48a2e';
+    ctx.beginPath();
+    ctx.moveTo(bx, by - 68);
+    ctx.lineTo(bx + 6, by - 56);
+    ctx.lineTo(bx, by - 58);
+    ctx.closePath();
+    ctx.fill();
+  });
+  cache.set(key, spr);
+  return spr;
+}
+
 export interface PlayerPose {
   phase: number;
   moving: boolean;

@@ -23,6 +23,7 @@ const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) =>
   { label: 'Centre', key: 'C', action: (cb) => cb.center() },
   { label: '↻ Turn', key: 'Q', action: (cb) => cb.turn(-1) },
   { label: '↺ Turn', key: 'E', action: (cb) => cb.turn(1) },
+  { label: 'Settings', key: 'O', action: (cb) => cb.toggle('settings') },
   { label: 'Help', key: 'F1', action: (cb) => cb.toggle('help') },
   { label: 'New world', key: '', action: (cb) => cb.newWorld(), id: 'new' },
 ];
@@ -127,7 +128,8 @@ export class Hud {
       bar.value.textContent = `${Math.round(v * 100)}%`;
     }
     const h = this.game.world.heightAt(p.x, p.y);
-    this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}${p.swimming ? '  ·  swimming' : ''}`;
+    const deed = this.game.deed && this.game.onDeed(p.tileX, p.tileY) ? `  ·  ${this.game.deed.name}` : '';
+    this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}${p.swimming ? '  ·  swimming' : ''}${deed}`;
     this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles · ${renderer.camera.zoom.toFixed(2)}×`;
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;

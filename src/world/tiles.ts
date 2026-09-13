@@ -101,6 +101,24 @@ export const BUSH_DEFS: BushDef[] = [
   { name: 'Lavender bush', foliage: ['#8faa7a', '#5f7a52'], flowers: '#9a6fd0' },
 ];
 
+export interface RockVariantDef {
+  name: string;
+  color: RGB;
+  /** Item produced by mining a corner of it. */
+  yields: string;
+}
+
+/** Kinds of rock; stored in the data byte of a Rock tile. */
+export const ROCK_VARIANTS: RockVariantDef[] = [
+  { name: 'Rock', color: [132, 130, 124], yields: 'rock_shards' },
+  { name: 'Slate', color: [98, 106, 120], yields: 'slate_shards' },
+  { name: 'Marble', color: [216, 214, 208], yields: 'marble_shards' },
+  { name: 'Sandstone', color: [198, 172, 124], yields: 'sandstone_shards' },
+  { name: 'Silver vein', color: [156, 158, 166], yields: 'silver_lump' },
+  { name: 'Gold vein', color: [176, 156, 98], yields: 'gold_lump' },
+];
+export const rockVariant = (data: number): number => Math.min(ROCK_VARIANTS.length - 1, data & 7);
+
 export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);
 export const treeVariant = (data: number): number => Math.min(2, (data >> 4) & 3);
 export const bushSpecies = (data: number): number => Math.min(BUSH_DEFS.length - 1, data & 15);

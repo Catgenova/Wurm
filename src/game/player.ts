@@ -45,8 +45,8 @@ export class Player {
   }
 
   /** Path to a tile; returns false when unreachable. */
-  walkTo(world: World, tx: number, ty: number): boolean {
-    const path = findPath(world, this.tileX, this.tileY, tx, ty, pathOptions(world));
+  walkTo(world: World, tx: number, ty: number, blocks: StepBlock = () => false): boolean {
+    const path = findPath(world, this.tileX, this.tileY, tx, ty, pathOptions(world, blocks));
     if (!path) return false;
     this.path = path.length ? path : null;
     if (!this.path) return true;
@@ -60,7 +60,7 @@ export class Player {
   }
 
   /** Returns the distance actually moved this frame (tiles). */
-  update(dt: number, world: World): number {
+  update(dt: number, world: World, blocks: StepBlock = () => false): number {
     let vx = 0;
     let vy = 0;
     let distanceLimit = Infinity;
@@ -107,14 +107,14 @@ export class Player {
     const nx = this.x + vx * step;
     const ny = this.y + vy * step;
     let moved = 0;
-    if (canOccupy(world, this.x, this.y, nx, ny)) {
+    if (canOccupy(world, this.x, this.y, nx, ny, blocks)) {
       this.x = nx;
       this.y = ny;
       moved = step;
-    } else if (canOccupy(world, this.x, this.y, nx, this.y)) {
+    } else if (canOccupy(world, this.x, this.y, nx, this.y, blocks)) {
       this.x = nx;
       moved = Math.abs(vx * step);
-    } else if (canOccupy(world, this.x, this.y, this.x, ny)) {
+    } else if (canOccupy(world, this.x, this.y, this.x, ny, blocks)) {
       this.y = ny;
       moved = Math.abs(vy * step);
     } else {
@@ -131,22 +131,28 @@ export class Player {
   }
 }
 
+/** Something (a wall) that forbids stepping from one tile to another. */
+export type StepBlock = (x0: number, y0: number, x1: number, y1: number) => boolean;
+
 /** Whether a point can be stepped onto from another point. */
-export function canOccupy(world: World, fromX: number, fromY: number, toX: number, toY: number): boolean {
+export function canOccupy(world: World, fromX: number, fromY: number, toX: number, toY: number, blocks: StepBlock = () => false): boolean {
   const tx = Math.floor(toX);
   const ty = Math.floor(toY);
   if (!world.isPassable(tx, ty)) return false;
+  const fx = Math.floor(fromX);
+  const fy = Math.floor(fromY);
+  if ((fx !== tx || fy !== ty) && blocks(fx, fy, tx, ty)) return false;
   const dist = Math.hypot(toX - fromX, toY - fromY);
   if (dist < 1e-6) return true;
   const dh = Math.abs(world.heightAt(toX, toY) - world.heightAt(fromX, fromY));
   return dh / (dist * UNITS_PER_TILE) <= MAX_STEP / UNITS_PER_TILE;
 }
 
-export function pathOptions(world: World) {
+export function pathOptions(world: World, blocks: StepBlock = () => false) {
   return {
     passable: (x: number, y: number) => world.isPassable(x, y),
     stepOk: (x0: number, y0: number, x1: number, y1: number) =>
-      Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= MAX_STEP,
+      Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= MAX_STEP && !blocks(x0, y0, x1, y1),
     cost: (x: number, y: number) => {
       const def = TILE_DEFS[world.getTile(x, y)];
       let c = 1 / def.speed;

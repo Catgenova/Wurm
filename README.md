@@ -60,6 +60,19 @@ rebuilds and commits the result.
 - **Gathering.** Cut down trees for logs, pick and plant sprouts, forage and
   botanize with per-tile cooldowns, drink from any water or from a water skin
   you fill at the shore.
+- **Deeds.** A settlement deed founds an 11×11 settlement around a stone
+  token; you may hold one at a time. Building is only possible on its land,
+  things left outside rot ten times slower there, and a green border can be
+  kept on permanently from Settings.
+- **Building, Wurm style.** Plan on flat packed dirt with a mallet, extend the
+  footprint, plan walls on tile borders (solid, window, bay, door, double door)
+  in twelve materials, feed them materials to build, lay floors with the paving
+  skill, and plan another storey only once every wall below is built. Walls
+  block movement; doors let you through.
+- **Materials.** Planks and timbers from logs with a saw, thatch from cut
+  grass, mortar from clay and sand, bricks chiselled from rock, slate, marble
+  or sandstone shards, clay bricks and adobe by pottery, silver and gold
+  chipped from veins in the mountains.
 - **Items.** Click an item for its actions: eat, drink, fill, drop one or all,
   chisel, examine. Dropped items lie on the tile as a pile and can be picked up
   from that tile's menu. Anything left on the ground decays over real time,
@@ -117,8 +130,7 @@ first, then runs the timer; moving interrupts it.
 ## Roadmap
 
 - Chunked offscreen terrain caching for very zoomed-out views.
-- Deeds: found a settlement around a token, with slower decay and protected
-  terrain on its land (the decay rate already has the hook for it).
+- Roofs, stairs and walking on upper storeys.
 - Containers and item repair.
 - Crafting (carpentry, smithing) and a crafting window.
 - Caves and mine entrances.

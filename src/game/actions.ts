@@ -1,14 +1,17 @@
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
+import { BUILD_ACTIONS } from './buildActions';
+import type { Side, WallType } from './building';
+import { DEED_RADIUS, type Game } from './game';
 import { itemDef, itemName } from './items';
-import type { Game } from './game';
 
 /**
- * What an action acts upon. Tile targets carry the corner nearest to the click;
- * item targets may carry a quantity; ground targets name an item lying on a tile
- * (uid null means everything there).
+ * What an action acts upon. Tile targets carry the corner nearest to the click
+ * and, for building work, the border side plus what to plan there; item targets
+ * may carry a quantity; ground targets name an item lying on a tile (uid null
+ * means everything there).
  */
 export type Target =
-  | { kind: 'tile'; x: number; y: number; cx: number; cy: number }
+  | { kind: 'tile'; x: number; y: number; cx: number; cy: number; side?: Side; wallType?: WallType; material?: string; buildingId?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null };
 
@@ -28,6 +31,8 @@ export interface ActionDef {
   repeat?: boolean;
   /** For item actions: offer "one" and "all" when the stack has more than one. */
   quantity?: boolean;
+  /** Not listed by the generic menu; the UI offers it in its own way. */
+  hidden?: boolean;
   /** Stamina drained per completion (0..1). */
   stamina: number;
   /** Seconds at skill 1. */
@@ -49,6 +54,20 @@ const cornerName = (t: Target & { kind: 'tile' }): string => {
 };
 
 const tile = (t: Target, g: Game): TileType => (t.kind === 'tile' ? g.world.getTile(t.x, t.y) : TileType.Sand);
+
+/** Terraforming is not allowed under a building. */
+const underBuilding = (g: Game, x: number, y: number): string | null => (g.buildings.buildingAt(x, y) ? 'You cannot do that inside a building.' : null);
+const cornerUnderBuilding = (g: Game, cx: number, cy: number): string | null => {
+  for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.buildingAt(x, y)) return 'You cannot dig under a building.';
+  return null;
+};
+
+const SHARD_TO_BRICK: Record<string, string> = {
+  rock_shards: 'stone_brick',
+  slate_shards: 'slate_brick',
+  marble_shards: 'marble_brick',
+  sandstone_shards: 'sandstone_brick',
+};
 
 function maxDigSlope(g: Game): number {
   return Math.max(40, Math.floor(g.skills.get('digging') * 3));
@@ -118,7 +137,12 @@ export const ACTIONS: ActionDef[] = [
         text = `You see a ${BUSH_DEFS[bushSpecies(w.getData(t.x, t.y))].name.toLowerCase()} at (${t.x}, ${t.y}).`;
       }
       const water = w.hasWater(t.x, t.y) ? ' Water laps over it.' : '';
-      g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}`, 'event');
+      let extra = '';
+      if (g.isToken(t.x, t.y) && g.deed) extra += ` The settlement token of ${g.deed.name} stands here.`;
+      else if (g.onDeed(t.x, t.y) && g.deed) extra += ` This is part of ${g.deed.name}.`;
+      const b = g.buildings.buildingAt(t.x, t.y);
+      if (b) extra += ` It belongs to ${b.name}, ${b.levels === 1 ? 'a single-storey building' : `${b.levels} storeys tall`}.`;
+      g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');
     },
   },
   {
@@ -135,6 +159,8 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('shovel')) return 'You need a shovel to dig.';
+      const under = cornerUnderBuilding(g, t.cx, t.cy);
+      if (under) return under;
       if (g.world.getHeight(t.cx, t.cy) <= 0) return 'You cannot dig below the water level.';
       if (slopeAfter(g, t.cx, t.cy, -1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
       return null;
@@ -168,6 +194,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('shovel')) return 'You need a shovel to flatten.';
       if (g.world.hasWater(t.x, t.y)) return 'You cannot flatten below the water level.';
+      const under = underBuilding(g, t.x, t.y);
+      if (under) return under;
       return null;
     },
     perform: (t, g) => {
@@ -216,6 +244,8 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('dirt')) return 'You have no dirt to drop.';
+      const under = cornerUnderBuilding(g, t.cx, t.cy);
+      if (under) return under;
       if (slopeAfter(g, t.cx, t.cy, 1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
       return null;
     },
@@ -254,8 +284,11 @@ export const ACTIONS: ActionDef[] = [
         return;
       }
       w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
-      const item = g.inventory.add('rock_shards', { ql: g.productQl('mining', g.toolQl('pickaxe')) });
-      g.logMsg(`You mine some rock shards. (QL ${item.ql.toFixed(1)})`, 'event');
+      const type = w.getTile(t.x, t.y);
+      const yieldId = type === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.getData(t.x, t.y))].yields : 'rock_shards';
+      const item = g.inventory.add(yieldId, { ql: g.productQl('mining', g.toolQl('pickaxe')) });
+      const what = itemDef(yieldId).name.toLowerCase();
+      g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {
@@ -395,7 +428,7 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.03,
     baseTime: 4,
     applies: (t, g) => tile(t, g) === TileType.Dirt,
-    check: (_t, g) => (g.inventory.has('shovel') ? null : 'You need a shovel to pack the dirt.'),
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('shovel') ? null : 'You need a shovel to pack the dirt.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.world.setTile(t.x, t.y, TileType.PackedDirt);
@@ -411,7 +444,7 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.03,
     baseTime: 4,
     applies: (t, g) => tile(t, g) === TileType.PackedDirt,
-    check: (_t, g) => (g.inventory.has('shovel') ? null : 'You need a shovel to cultivate.'),
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('shovel') ? null : 'You need a shovel to cultivate.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.world.setTile(t.x, t.y, TileType.Dirt);
@@ -426,7 +459,7 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.03,
     baseTime: 4,
     applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].pavable && tile(t, g) !== TileType.Gravel,
-    check: (_t, g) => (g.inventory.has('rock_shards') ? null : 'You need rock shards to pave with gravel.'),
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('rock_shards') ? null : 'You need rock shards to pave with gravel.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       if (!g.inventory.consume('rock_shards')) return;
@@ -442,7 +475,7 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.03,
     baseTime: 5,
     applies: (t, g) => t.kind === 'tile' && (!!TILE_DEFS[tile(t, g)].pavable || tile(t, g) === TileType.Gravel) && tile(t, g) !== TileType.Cobblestone,
-    check: (_t, g) => (g.inventory.has('stone_brick') ? null : 'You need a stone brick to lay cobblestone.'),
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('stone_brick') ? null : 'You need a stone brick to lay cobblestone.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       if (!g.inventory.consume('stone_brick')) return;
@@ -459,7 +492,7 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.04,
     baseTime: 5,
     applies: (t, g) => tile(t, g) === TileType.Gravel || tile(t, g) === TileType.Cobblestone,
-    check: (_t, g) => (g.inventory.has('pickaxe') ? null : 'You need a pickaxe to break up paving.'),
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('pickaxe') ? null : 'You need a pickaxe to break up paving.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.world.setTile(t.x, t.y, TileType.Dirt);
@@ -598,28 +631,214 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     id: 'make_brick',
-    label: 'Chisel stone brick',
+    label: 'Chisel brick',
     verb: 'chiselling',
     skill: 'masonry',
     tool: 'chisel',
     stamina: 0.04,
     baseTime: 6,
     difficulty: 12,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'rock_shards',
+    applies: (t, g) => t.kind === 'item' && !!SHARD_TO_BRICK[g.inventory.get(t.uid)?.id ?? ''],
     check: (_t, g) => (g.inventory.has('chisel') ? null : 'You need a stone chisel to make bricks.'),
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const shards = g.inventory.get(t.uid);
       if (!shards) return;
+      const brick = SHARD_TO_BRICK[shards.id];
       if (!g.skillCheck('masonry', 12, g.toolQl('chisel'))) {
         g.logMsg('The shard splits the wrong way. You fail to make a brick.', 'event');
         return;
       }
       g.inventory.remove(shards.uid, 1);
-      const item = g.inventory.add('stone_brick', { ql: g.productQl('masonry', g.toolQl('chisel')) });
-      g.logMsg(`You chisel a stone brick. (QL ${item.ql.toFixed(1)})`, 'event');
+      const item = g.inventory.add(brick, { ql: g.productQl('masonry', g.toolQl('chisel')) });
+      g.logMsg(`You chisel a ${itemDef(brick).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
+  {
+    id: 'make_planks',
+    label: 'Saw into planks',
+    verb: 'sawing',
+    skill: 'carpentry',
+    tool: 'saw',
+    stamina: 0.04,
+    baseTime: 5,
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'log',
+    check: (_t, g) => (g.inventory.has('saw') ? null : 'You need a saw.'),
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const log = g.inventory.get(t.uid);
+      if (!log) return;
+      g.inventory.remove(log.uid, 1);
+      const item = g.inventory.add('plank', { count: 3, ql: g.productQl('carpentry', g.toolQl('saw')) });
+      g.logMsg(`You saw the log into three planks. (QL ${item.ql.toFixed(1)})`, 'event');
+    },
+  },
+  {
+    id: 'make_timbers',
+    label: 'Saw into timbers',
+    verb: 'sawing',
+    skill: 'carpentry',
+    tool: 'saw',
+    stamina: 0.04,
+    baseTime: 5,
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'log',
+    check: (_t, g) => (g.inventory.has('saw') ? null : 'You need a saw.'),
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const log = g.inventory.get(t.uid);
+      if (!log) return;
+      g.inventory.remove(log.uid, 1);
+      const item = g.inventory.add('timber', { count: 2, ql: g.productQl('carpentry', g.toolQl('saw')) });
+      g.logMsg(`You saw the log into two timbers. (QL ${item.ql.toFixed(1)})`, 'event');
+    },
+  },
+  {
+    id: 'make_thatch',
+    label: 'Bundle into thatch',
+    verb: 'bundling thatch',
+    skill: 'carpentry',
+    stamina: 0.02,
+    baseTime: 3,
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'mixed_grass',
+    check: (_t, g) => (g.inventory.count('mixed_grass') >= 2 ? null : 'You need two bundles of mixed grass.'),
+    perform: (_t, g) => {
+      if (!g.inventory.consume('mixed_grass', 2)) return;
+      g.inventory.add('thatch', { ql: g.productQl('carpentry') });
+      g.logMsg('You bundle the grass into thatch.', 'event');
+    },
+  },
+  {
+    id: 'make_mortar',
+    label: 'Mix mortar',
+    verb: 'mixing mortar',
+    skill: 'masonry',
+    stamina: 0.03,
+    baseTime: 4,
+    applies: (t, g) => t.kind === 'item' && ['clay', 'sand'].includes(g.inventory.get(t.uid)?.id ?? ''),
+    check: (_t, g) => (g.inventory.has('clay') && g.inventory.has('sand') ? null : 'Mortar takes one clay and one sand.'),
+    perform: (_t, g) => {
+      if (!g.inventory.has('clay') || !g.inventory.has('sand')) return;
+      g.inventory.consume('clay');
+      g.inventory.consume('sand');
+      g.inventory.add('mortar', { count: 2, ql: g.productQl('masonry') });
+      g.logMsg('You mix clay and sand into two lots of mortar.', 'event');
+    },
+  },
+  {
+    id: 'make_clay_brick',
+    label: 'Shape clay brick',
+    verb: 'shaping clay',
+    skill: 'pottery',
+    stamina: 0.02,
+    baseTime: 4,
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'clay',
+    perform: (_t, g) => {
+      if (!g.skillCheck('pottery', 6)) {
+        g.logMsg('The clay slumps. You fail to shape a brick.', 'event');
+        return;
+      }
+      if (!g.inventory.consume('clay')) return;
+      g.inventory.add('clay_brick', { ql: g.productQl('pottery') });
+      g.logMsg('You shape a clay brick.', 'event');
+    },
+  },
+  {
+    id: 'make_adobe',
+    label: 'Make adobe',
+    verb: 'making adobe',
+    skill: 'pottery',
+    stamina: 0.02,
+    baseTime: 4,
+    applies: (t, g) => t.kind === 'item' && ['clay', 'mixed_grass'].includes(g.inventory.get(t.uid)?.id ?? ''),
+    check: (_t, g) => (g.inventory.has('clay') && g.inventory.has('mixed_grass') ? null : 'Adobe takes one clay and one bundle of mixed grass.'),
+    perform: (_t, g) => {
+      if (!g.inventory.has('clay') || !g.inventory.has('mixed_grass')) return;
+      g.inventory.consume('clay');
+      g.inventory.consume('mixed_grass');
+      g.inventory.add('adobe', { ql: g.productQl('pottery') });
+      g.logMsg('You press clay and grass into an adobe block.', 'event');
+    },
+  },
+  {
+    id: 'found_settlement',
+    label: 'Found settlement here',
+    verb: 'founding a settlement',
+    stamina: 0.05,
+    baseTime: 4,
+    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'settlement_deed',
+    check: (_t, g) => {
+      if (g.deed) return 'You already hold a settlement. Disband it first.';
+      const x = g.player.tileX;
+      const y = g.player.tileY;
+      const w = g.world;
+      if (x - DEED_RADIUS < 0 || y - DEED_RADIUS < 0 || x + DEED_RADIUS >= w.w || y + DEED_RADIUS >= w.h) return 'Too close to the edge of the world.';
+      if (w.hasWater(x, y)) return 'The token must stand on dry land.';
+      if (!w.isPassable(x, y)) return 'The token needs a clear tile.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const name = g.hooks.prompt('Name your settlement', 'Homestead');
+      if (name === null || !name.trim()) {
+        g.logMsg('You decide not to found a settlement just yet.', 'info');
+        return;
+      }
+      if (!g.inventory.remove(t.uid, 1)) return;
+      g.deed = { name: name.trim().slice(0, 32), x: g.player.tileX, y: g.player.tileY, radius: DEED_RADIUS };
+      g.logMsg(`You found the settlement of ${g.deed.name}. The land ${DEED_RADIUS * 2 + 1} tiles across around the token is yours to build on.`, 'system');
+      g.events.emit('world', g.deed.x, g.deed.y);
+    },
+  },
+  {
+    id: 'rename_deed',
+    label: 'Rename settlement',
+    verb: 'renaming',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => t.kind === 'tile' && g.isToken(t.x, t.y),
+    perform: (_t, g) => {
+      if (!g.deed) return;
+      const name = g.hooks.prompt('Rename the settlement', g.deed.name);
+      if (name === null || !name.trim()) return;
+      g.deed.name = name.trim().slice(0, 32);
+      g.logMsg(`The settlement is now called ${g.deed.name}.`, 'system');
+    },
+  },
+  {
+    id: 'disband_deed',
+    label: 'Disband settlement',
+    verb: 'disbanding',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => t.kind === 'tile' && g.isToken(t.x, t.y),
+    perform: (_t, g) => {
+      if (!g.deed) return;
+      if (!g.hooks.confirm(`Disband ${g.deed.name}? Its buildings stay but nothing new can be built there, and things left outside will rot at full speed.`)) return;
+      const name = g.deed.name;
+      g.deed = null;
+      g.inventory.add('settlement_deed', { ql: 50 });
+      g.logMsg(`You disband ${name}. The deed form returns to your pack.`, 'system');
+    },
+  },
+  {
+    id: 'cut_grass',
+    label: 'Cut grass',
+    verb: 'cutting grass',
+    skill: 'foraging',
+    stamina: 0.02,
+    baseTime: 3,
+    applies: (t, g) => ([TileType.Grass, TileType.Steppe, TileType.Lawn, TileType.Tundra] as TileType[]).includes(tile(t, g)),
+    check: (t, g) => (t.kind === 'tile' && g.isForaged(t.x, t.y, 'grass') ? 'The grass here is still short.' : null),
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      g.markForaged(t.x, t.y, 'grass');
+      g.inventory.add('mixed_grass', { count: 2, ql: g.productQl('foraging') });
+      g.logMsg('You cut two bundles of mixed grass.', 'event');
+    },
+  },
+  ...BUILD_ACTIONS,
   {
     id: 'drop_dirt_here',
     label: 'Drop (raises the ground)',

@@ -1,6 +1,9 @@
 export interface MenuItem {
   label: string;
+  /** Why the entry is unavailable; shown in red. */
   hint?: string;
+  /** Neutral extra text such as a materials list. */
+  note?: string;
   disabled?: boolean;
   onSelect?: () => void;
   /** A submenu; the row expands in place so it works with a mouse or a finger. */
@@ -87,6 +90,11 @@ export class ContextMenu {
       hint.textContent = item.hint;
       row.append(hint);
       row.title = item.hint;
+    } else if (item.note) {
+      const note = document.createElement('span');
+      note.className = 'ctx-note';
+      note.textContent = item.note;
+      row.append(note);
     }
     row.addEventListener('click', (e) => {
       e.stopPropagation();
