@@ -50,6 +50,7 @@ export function buildHelp(win: UIWindow): void {
     <table>
       <tr><td><kbd>I</kbd></td><td>Inventory</td></tr>
       <tr><td><kbd>R</kbd></td><td>Crafting: everything you can make with what you carry</td></tr>
+      <tr><td><kbd>T</kbd></td><td>Tile: everything you can do to the tile you last clicked</td></tr>
       <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Look at the storey above or below</td></tr>
       <tr><td><kbd>X</kbd></td><td>Cut away the walls facing you</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills</td></tr>
@@ -62,6 +63,13 @@ export function buildHelp(win: UIWindow): void {
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
+    <p>Clicking a tile <b>chooses</b> it: it is outlined in the world and the <b>Tile</b> window fills
+    with everything you could do to it &mdash; the same list the right-click menu shows, because it is
+    built from the same list. Anything with a reason it cannot be done yet is greyed out with the reason
+    beside it, and a row with a <b>&#9656;</b> opens in place. It works on whatever you clicked, not just
+    bare ground: a chest, a smelter, a campfire, a wildermon. The game can be played from it with one
+    button, which is what it is for. If you would rather keep to the right-click menu, untick
+    <i>Open the tile window on a click</i> in Settings and it will stay where you put it.</p>
     <p>The <b>inventory</b> and the <b>crafting</b> window each have a <b>search box</b> at the top.
     The inventory searches what you are carrying by name and kind; the recipe book searches on
     everything in a row at once &mdash; what it makes, the trade it takes, where it has to be worked and
@@ -114,8 +122,10 @@ export function buildHelp(win: UIWindow): void {
     the bricks hold their heat evenly. It leaves ashes like any other fire, and they rake out the same
     way.</p>
     <h3>Metal</h3>
-    <p>Mining a seam brings up <b>ore</b>, not finished metal. A <b>stone smelter</b>, built on your deed
-    from 8 stone bricks and 4 mortar with a trowel, fills six spots of a tile and turns ore into lumps.
+    <p>Mining a seam brings up <b>ore</b>, not finished metal. A <b>stone smelter</b> is laid up by a
+    mason from 12 stone bricks and 6 mortar with a trowel &mdash; it is built in the crafting window like
+    anything else, carried, and <b>set down</b> on six spots of a tile on your own deed. Take it up again
+    whole when it is cold, empty and raked out. It turns ore into lumps.
     Feed it the same fuel a campfire takes (coal burns longest), light it, and charge it with ore: each
     piece takes its own time to run, longer for fine ore and stubborn metal, shorter in a better
     smelter. Draw the lumps off when they are done.</p>
@@ -340,7 +350,8 @@ export function buildHelp(win: UIWindow): void {
     <p>Clay is dug from a clay pit with a shovel, and everything made of it is shaped cold and soft.
     <b>Pottery</b> shapes clay into <b>unfired</b> bricks, bowls, pots and jars, and green ware is no use
     to anybody: it will not hold a stew and it will not hold up a wall. Build a <b>kiln</b> from six
-    stone bricks with a trowel, anywhere the ground is dry and flat. Feed it the same wood and coal a
+    stone bricks and two mortar with a trowel, carry it, and set it down anywhere the ground is dry and
+    flat; take it up again when it is cold and empty. Feed it the same wood and coal a
     fire takes, pack the green ware in, and light it: each piece needs its own time at heat, and a
     well-built kiln works faster and keeps more of the potter's quality. Take the fired ware out and the
     bowl will cook, the pot makes pottage, the jar puts up preserves, and the brick will build.</p>
@@ -436,6 +447,11 @@ export function buildHelp(win: UIWindow): void {
     your shovel grates on rock and will go no further. Strip all four corners of a tile bare and the
     rock beneath is exposed, and the tile becomes rock &mdash; whatever kind lies there, which may be a
     seam of silver or gold. Drop dirt on a corner to bury the rock again.</p>
+    <p><b>Packing</b> is what makes a floor of the ground. A shovel treads <b>grass, dirt, lawn, steppe,
+    tundra or moss</b> down into <b>packed dirt</b>: on sod it cuts the turf away first. Packed dirt is
+    what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; gravel,
+    cobblestone and slabs all want a hard, flat bed, and will not be laid on loose earth or on grass.
+    Breaking paving up with a pickaxe leaves bare dirt, so repaving means packing it again.</p>
     <p>Eleven metals lie in the rock, and each seam needs a certain <b>mining</b> skill before it can be
     worked at all: copper and coal from the very start, then tin at 10, zinc at 20, lead at 30, silver
     at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90. The rarer

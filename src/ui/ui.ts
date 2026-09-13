@@ -26,8 +26,8 @@ import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
-import { smelterAnchor, smelterState, SMELTER_COST, type PlacedSmelter } from '../game/smelter';
-import { isGreenware, kilnAnchor, kilnState, KILN_COST, type PlacedKiln } from '../game/kiln';
+import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
+import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
@@ -36,6 +36,7 @@ import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
 import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
+import { TilePanel } from './panels/tile';
 import { WildermonPanel } from './panels/wildermon';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { SettingsPanel } from './panels/settings';
@@ -65,6 +66,7 @@ export class UI {
   private readonly settings: SettingsPanel;
   private readonly cratePanel: CratePanel;
   private readonly wildermon: WildermonPanel;
+  private readonly tilePanel: TilePanel;
 
   constructor(
     private readonly game: Game,
@@ -92,6 +94,8 @@ export class UI {
     new SkillsPanel(skills, game);
     const craft = this.windows.create({ id: 'craft', title: 'Crafting', x: 364, y: 56, width: 360, height: 360, anchor: 'tr', open: false });
     new CraftPanel(craft, game);
+    const tileWin = this.windows.create({ id: 'tile', title: 'Tile', x: 12, y: 200, width: 300, height: 320, open: false });
+    this.tilePanel = new TilePanel(tileWin, game, (pick) => this.menuFor(pick));
     const map = this.windows.create({ id: 'map', title: 'Map', x: 12, y: 370, width: 236, height: 262, anchor: 'tr', open: false });
     this.minimap = new MinimapPanel(map, game, renderer);
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 640, width: 300, height: 190, anchor: 'tr', open: false });
@@ -115,6 +119,16 @@ export class UI {
     this.windows.toggle(id);
   }
 
+  /**
+   * Point the tile window at what was clicked. Opening it on a click is what
+   * makes the game playable with one button; the setting turns that off for
+   * anyone who would rather keep to the right-click menu.
+   */
+  selectTile(pick: Pick | null): void {
+    this.tilePanel.select(pick, this.game.settings.tileWindow);
+    this.renderer.selected = pick ? { x: pick.x, y: pick.y } : null;
+  }
+
   focusChat(): void {
     this.windows.get('events')?.open();
     this.eventLog.focus();
@@ -122,6 +136,7 @@ export class UI {
 
   update(fps: number): void {
     this.hud.update(this.renderer, fps);
+    this.renderer.selected = this.tilePanel.target ? { x: this.tilePanel.target.x, y: this.tilePanel.target.y } : null;
     this.minimap.update();
     this.settings.refresh();
     this.wildermon.update(performance.now());
@@ -143,26 +158,6 @@ export class UI {
       // Only your own wildermon show their condition.
       if (creature.mode !== 'wild') lines.push(`Health ${Math.ceil(creature.health)}/${def.health} · ${creature.hunger < 0.3 ? 'hungry' : creature.hunger < 0.6 ? 'peckish' : 'well fed'}`);
       this.tooltip.show(sx, sy, lines);
-      return;
-    }
-    const smelter = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
-    if (smelter) {
-      this.menu.show(sx, sy, `Smelter (${smelterState(smelter)})`, this.smelterEntries(smelter));
-      return;
-    }
-    const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
-    if (piece) {
-      this.menu.show(sx, sy, `${furnitureName(piece)} (${furnitureState(piece)})`, this.furnitureEntries(piece));
-      return;
-    }
-    const kiln = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
-    if (kiln) {
-      this.menu.show(sx, sy, `Kiln (${kilnState(kiln)})`, this.kilnEntries(kiln));
-      return;
-    }
-    const anvil = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
-    if (anvil) {
-      this.menu.show(sx, sy, `${anvilName(anvil)} (QL ${anvil.ql.toFixed(0)})`, this.anvilEntries(anvil));
       return;
     }
     const sm = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
@@ -263,10 +258,19 @@ export class UI {
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {
+    const { title, entries } = this.menuFor(pick);
+    this.menu.show(sx, sy, title, entries);
+  }
+
+  /**
+   * Everything that can be done where you clicked, and what to call it. The
+   * right-click menu and the tile window are the same list seen two ways, so
+   * neither can fall behind the other.
+   */
+  menuFor(pick: Pick): { title: string; entries: MenuItem[] } {
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {
-      this.menu.show(sx, sy, `${creature.name} (${this.game.creatures.describe(creature)})`, this.creatureEntries(creature.id));
-      return;
+      return { title: `${creature.name} (${this.game.creatures.describe(creature)})`, entries: this.creatureEntries(creature.id) };
     }
     const crate = pick.crate !== undefined ? this.game.crates.get(pick.crate) : undefined;
     if (crate) {
@@ -278,14 +282,18 @@ export class UI {
         const reason = def.check?.(ct, this.game) ?? null;
         entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, ct) });
       }
-      this.menu.show(sx, sy, crateName(crate), entries);
-      return;
+      return { title: crateName(crate), entries };
     }
     const fire = pick.fire !== undefined ? this.game.campfires.get(pick.fire) : undefined;
-    if (fire) {
-      this.menu.show(sx, sy, `Campfire (${fireState(fire)})`, this.campfireEntries(fire));
-      return;
-    }
+    if (fire) return { title: `Campfire (${fireState(fire)})`, entries: this.campfireEntries(fire) };
+    const smelter = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
+    if (smelter) return { title: `Smelter (${smelterState(smelter)})`, entries: this.smelterEntries(smelter) };
+    const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
+    if (piece) return { title: `${furnitureName(piece)} (${furnitureState(piece)})`, entries: this.furnitureEntries(piece) };
+    const kilnHere = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
+    if (kilnHere) return { title: `Kiln (${kilnState(kilnHere)})`, entries: this.kilnEntries(kilnHere) };
+    const anvilHere = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
+    if (anvilHere) return { title: `${anvilName(anvilHere)} (QL ${anvilHere.ql.toFixed(0)})`, entries: this.anvilEntries(anvilHere) };
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
@@ -360,27 +368,29 @@ export class UI {
           : undefined,
       });
     }
-    const smelterDef = ACTION_BY_ID.get('build_smelter');
-    if (smelterDef && SMELTER_COST.every(([id, n]) => this.game.inventory.count(id) >= n)) {
+    const smelterDef = ACTION_BY_ID.get('place_smelter');
+    const smelterItem = this.game.inventory.find('smelter');
+    if (smelterDef && smelterItem) {
       const [ax, ay] = smelterAnchor(...subtileOf(pick.x, pick.y, pick.wx, pick.wy));
-      const st: Target = { ...target, sx: ax, sy: ay };
+      const st: Target = { ...target, sx: ax, sy: ay, itemUid: smelterItem.uid };
       const reason = smelterDef.check?.(st, this.game) ?? null;
       entries.push({
-        label: `Build smelter here (spots ${ax + 1},${ay + 1} to ${ax + 3},${ay + 2})`,
-        note: reason ? undefined : SMELTER_COST.map(([id, n]) => `${n} ${itemDef(id).name.toLowerCase()}`).join(' and '),
+        label: `Set the smelter down here (spots ${ax + 1},${ay + 1} to ${ax + 3},${ay + 2})`,
+        note: reason ? undefined : `QL ${smelterItem.ql.toFixed(0)}`,
         hint: reason ?? undefined,
         disabled: !!reason,
         onSelect: () => this.game.requestAction(smelterDef, st),
       });
     }
-    const kilnDef = ACTION_BY_ID.get('build_kiln');
-    if (kilnDef && KILN_COST.every(([id, n]) => this.game.inventory.count(id) >= n)) {
+    const kilnDef = ACTION_BY_ID.get('place_kiln');
+    const kilnItem = this.game.inventory.find('kiln');
+    if (kilnDef && kilnItem) {
       const [ax, ay] = kilnAnchor(...subtileOf(pick.x, pick.y, pick.wx, pick.wy));
-      const st: Target = { ...target, sx: ax, sy: ay };
+      const st: Target = { ...target, sx: ax, sy: ay, itemUid: kilnItem.uid };
       const reason = kilnDef.check?.(st, this.game) ?? null;
       entries.push({
-        label: `Build kiln here (spots ${ax + 1},${ay + 1} to ${ax + 2},${ay + 2})`,
-        note: reason ? undefined : KILN_COST.map(([id, n]) => `${n} ${itemDef(id).name.toLowerCase()}s`).join(' and '),
+        label: `Set the kiln down here (spots ${ax + 1},${ay + 1} to ${ax + 2},${ay + 2})`,
+        note: reason ? undefined : `QL ${kilnItem.ql.toFixed(0)}`,
         hint: reason ?? undefined,
         disabled: !!reason,
         onSelect: () => this.game.requestAction(kilnDef, st),
@@ -445,7 +455,7 @@ export class UI {
     }
     if (!building) entries.push(...this.buildingEntries(pick));
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;
-    this.menu.show(sx, sy, title, entries);
+    return { title, entries };
   }
 
   /** Feeding, lighting and cooking at a campfire. */
@@ -546,7 +556,7 @@ export class UI {
           : undefined,
       });
     }
-    for (const id of ['light_smelter', 'damp_smelter', 'smelter_take_all', 'take_apart_smelter']) {
+    for (const id of ['light_smelter', 'damp_smelter', 'smelter_take_all', 'take_ashes_smelter', 'pick_up_smelter']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(st, g)) continue;
       const reason = def.check?.(st, g) ?? null;
@@ -629,7 +639,7 @@ export class UI {
         children: green.length ? green.map((it) => quantity(loadDef, it)) : undefined,
       });
     }
-    for (const id of ['light_kiln', 'damp_kiln', 'kiln_take_all', 'take_apart_kiln']) {
+    for (const id of ['light_kiln', 'damp_kiln', 'kiln_take_all', 'take_ashes_kiln', 'pick_up_kiln']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(kt, g)) continue;
       const reason = def.check?.(kt, g) ?? null;

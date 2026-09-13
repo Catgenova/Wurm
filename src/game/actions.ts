@@ -90,6 +90,9 @@ export interface ActionDef {
   perform(t: Target, g: Game): boolean | void;
 }
 
+/** Ground a shovel can tread down into packed dirt: soil, and anything growing on it. */
+const PACKABLE = new Set<number>([TileType.Dirt, TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
+
 const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Moss, TileType.Lawn, TileType.Steppe, TileType.Tundra]);
 
 const cornerName = (t: Target & { kind: 'tile' }): string => {
@@ -99,6 +102,10 @@ const cornerName = (t: Target & { kind: 'tile' }): string => {
 };
 
 const tile = (t: Target, g: Game): TileType => (t.kind === 'tile' ? g.world.getTile(t.x, t.y) : TileType.Sand);
+
+/** Paving goes on a packed floor, never on sod or loose earth. */
+const unpacked = (t: Target, g: Game): string | null =>
+  tile(t, g) === TileType.PackedDirt ? null : 'The ground has to be packed flat before anything is laid on it.';
 
 /** Terraforming is not allowed under a building. */
 const underBuilding = (g: Game, x: number, y: number): string | null => (g.buildings.buildingAt(x, y) ? 'You cannot do that inside a building.' : null);
@@ -431,7 +438,12 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 8,
     difficulty: 10,
     applies: (t, g) => tile(t, g) === TileType.Tree || tile(t, g) === TileType.Bush,
-    check: (_t, g) => (g.inventory.has('hatchet') ? null : 'You need a hatchet to cut that down.'),
+    check: (t, g) => {
+      // The tree may have come down since this was asked for; do not swing at air.
+      const type = tile(t, g);
+      if (type !== TileType.Tree && type !== TileType.Bush) return 'There is nothing standing here to cut down.';
+      return g.inventory.has('hatchet') ? null : 'You need a hatchet to cut that down.';
+    },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const w = g.world;
@@ -557,12 +569,13 @@ export const ACTIONS: ActionDef[] = [
     tool: 'shovel',
     stamina: 0.03,
     baseTime: 4,
-    applies: (t, g) => tile(t, g) === TileType.Dirt,
-    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('shovel') ? null : 'You need a shovel to pack the dirt.'),
+    applies: (t, g) => PACKABLE.has(tile(t, g)),
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('shovel') ? null : 'You need a shovel to pack the ground.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
+      const sod = tile(t, g) !== TileType.Dirt;
       g.world.setTile(t.x, t.y, TileType.PackedDirt);
-      g.logMsg('You pack the dirt down firmly.', 'event');
+      g.logMsg(sod ? 'You cut the turf away and tread the ground down firm.' : 'You pack the dirt down firmly.', 'event');
     },
   },
   {
@@ -588,8 +601,8 @@ export const ACTIONS: ActionDef[] = [
     skill: 'paving',
     stamina: 0.03,
     baseTime: 4,
-    applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].pavable && tile(t, g) !== TileType.Gravel,
-    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('rock_shards') ? null : 'You need rock shards to pave with gravel.'),
+    applies: (t, g) => tile(t, g) === TileType.PackedDirt,
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || unpacked(t, g) || (g.inventory.has('rock_shards') ? null : 'You need rock shards to pave with gravel.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       if (!g.inventory.consume('rock_shards')) return;
@@ -604,8 +617,8 @@ export const ACTIONS: ActionDef[] = [
     skill: 'paving',
     stamina: 0.03,
     baseTime: 5,
-    applies: (t, g) => t.kind === 'tile' && (!!TILE_DEFS[tile(t, g)].pavable || tile(t, g) === TileType.Gravel) && tile(t, g) !== TileType.Cobblestone,
-    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('stone_brick') ? null : 'You need a stone brick to lay cobblestone.'),
+    applies: (t, g) => tile(t, g) === TileType.PackedDirt,
+    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || unpacked(t, g) || (g.inventory.has('stone_brick') ? null : 'You need a stone brick to lay cobblestone.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       if (!g.inventory.consume('stone_brick')) return;
@@ -622,11 +635,13 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.04,
     baseTime: 7,
     difficulty: 10,
-    applies: (t, g) => t.kind === 'tile' && (!!TILE_DEFS[tile(t, g)].pavable || tile(t, g) === TileType.Gravel || tile(t, g) === TileType.Cobblestone) && tile(t, g) !== TileType.Slabs,
+    applies: (t, g) => tile(t, g) === TileType.PackedDirt,
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       const under = underBuilding(g, t.x, t.y);
       if (under) return under;
+      const soft = unpacked(t, g);
+      if (soft) return soft;
       if (!g.inventory.has('trowel')) return 'You need a trowel to bed a slab.';
       const slab = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => SLAB_BY_ITEM.has(it.id));
       if (!slab || !SLAB_BY_ITEM.has(slab.id)) return 'You need a cut slab to pave with.';

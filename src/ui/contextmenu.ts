@@ -10,6 +10,72 @@ export interface MenuItem {
   children?: MenuItem[];
 }
 
+/** What a list of menu rows needs from whatever is showing it. */
+export interface RowHooks {
+  /** A submenu opened or closed, so a floating menu can measure itself again. */
+  changed?: () => void;
+  /** An entry is about to run, so a floating menu can get out of the way. */
+  chose?: () => void;
+}
+
+/**
+ * Build the rows for a list of menu entries. The right-click menu and the tile
+ * window both draw their entries with this, so the two can never drift apart.
+ */
+export function buildMenuRows(items: MenuItem[], depth: number, hooks: RowHooks = {}): HTMLElement[] {
+  return items.flatMap((item) => buildMenuRow(item, depth, hooks));
+}
+
+function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks): HTMLElement[] {
+  const row = document.createElement('div');
+  row.className = 'ctx-item' + (item.disabled ? ' disabled' : '') + (depth ? ' ctx-child' : '');
+  row.style.paddingLeft = `${8 + depth * 14}px`;
+  const label = document.createElement('span');
+  label.textContent = item.label;
+  row.append(label);
+  if (item.children) {
+    const chevron = document.createElement('span');
+    chevron.className = 'ctx-chevron';
+    chevron.textContent = '\u25b8';
+    row.append(chevron);
+    let open: HTMLElement[] | null = null;
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (item.disabled) return;
+      if (open) {
+        for (const el of open) el.remove();
+        open = null;
+        chevron.textContent = '\u25b8';
+      } else {
+        open = buildMenuRows(item.children ?? [], depth + 1, hooks);
+        row.after(...open);
+        chevron.textContent = '\u25be';
+      }
+      hooks.changed?.();
+    });
+    return [row];
+  }
+  if (item.hint) {
+    const hint = document.createElement('span');
+    hint.className = 'ctx-hint';
+    hint.textContent = item.hint;
+    row.append(hint);
+    row.title = item.hint;
+  } else if (item.note) {
+    const note = document.createElement('span');
+    note.className = 'ctx-note';
+    note.textContent = item.note;
+    row.append(note);
+  }
+  row.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (item.disabled) return;
+    hooks.chose?.();
+    item.onSelect?.();
+  });
+  return [row];
+}
+
 /** Wurm-style right-click menu. */
 export class ContextMenu {
   readonly el: HTMLDivElement;
@@ -47,63 +113,13 @@ export class ContextMenu {
       none.textContent = 'Nothing to do here';
       this.el.append(none);
     }
-    for (const item of items) this.el.append(...this.buildRow(item, 0));
+    this.el.append(...buildMenuRows(items, 0, { changed: () => this.fit(), chose: () => this.hide() }));
     this.el.hidden = false;
     this.anchor = { x, y };
     this.fit();
   }
 
   private anchor = { x: 0, y: 0 };
-
-  private buildRow(item: MenuItem, depth: number): HTMLElement[] {
-    const row = document.createElement('div');
-    row.className = 'ctx-item' + (item.disabled ? ' disabled' : '') + (depth ? ' ctx-child' : '');
-    row.style.paddingLeft = `${8 + depth * 14}px`;
-    const label = document.createElement('span');
-    label.textContent = item.label;
-    row.append(label);
-    if (item.children) {
-      const chevron = document.createElement('span');
-      chevron.className = 'ctx-chevron';
-      chevron.textContent = '▸';
-      row.append(chevron);
-      let open: HTMLElement[] | null = null;
-      row.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (item.disabled) return;
-        if (open) {
-          for (const el of open) el.remove();
-          open = null;
-          chevron.textContent = '▸';
-        } else {
-          open = item.children!.flatMap((child) => this.buildRow(child, depth + 1));
-          row.after(...open);
-          chevron.textContent = '▾';
-        }
-        this.fit();
-      });
-      return [row];
-    }
-    if (item.hint) {
-      const hint = document.createElement('span');
-      hint.className = 'ctx-hint';
-      hint.textContent = item.hint;
-      row.append(hint);
-      row.title = item.hint;
-    } else if (item.note) {
-      const note = document.createElement('span');
-      note.className = 'ctx-note';
-      note.textContent = item.note;
-      row.append(note);
-    }
-    row.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (item.disabled) return;
-      this.hide();
-      item.onSelect?.();
-    });
-    return [row];
-  }
 
   /** Place the menu at its anchor, pulled back inside the viewport if it would overflow. */
   private fit(): void {

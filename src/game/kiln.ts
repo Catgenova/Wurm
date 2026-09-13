@@ -40,8 +40,6 @@ export interface PlacedKiln {
 
 /** A kiln covers two subtiles each way: four in all. */
 export const KILN_SUBTILES = 2;
-/** What it takes to build one. */
-export const KILN_COST: Array<[string, number]> = [['stone_brick', 6]];
 export const KILN_CAPACITY = 16;
 
 /** Green ware, and what it becomes once it has been fired. */
@@ -103,26 +101,49 @@ const nearKiln = (g: Game, k: PlacedKiln): boolean => {
 
 export const KILN_ACTIONS: ActionDef[] = [
   {
-    id: 'build_kiln',
-    label: 'Build kiln',
-    verb: 'building a kiln',
-    skill: 'masonry',
-    tool: 'trowel',
+    id: 'place_kiln',
+    label: 'Set the kiln down',
+    verb: 'setting the kiln down',
     hidden: true,
-    stamina: 0.05,
-    baseTime: 9,
+    stamina: 0.04,
+    baseTime: 5,
     applies: (t) => t.kind === 'tile',
     check: (t, g) => {
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return 'Choose a spot.';
-      if (!g.inventory.has('trowel')) return 'You need a trowel to lay the brick.';
-      for (const [id, n] of KILN_COST) if (g.inventory.count(id) < n) return `A kiln takes ${KILN_COST.map(([i, c]) => `${c} ${itemDef(i).name.toLowerCase()}s`).join(' and ')}.`;
+      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('kiln');
+      if (!item || item.id !== 'kiln') return 'You are not carrying a kiln. Build one at the crafting window.';
       return g.kilnPlaceReason(t.x, t.y, t.sx, t.sy);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return;
-      for (const [id, n] of KILN_COST) if (!g.inventory.consume(id, n)) return;
-      const k = g.addKiln(t.x, t.y, t.sx, t.sy, g.productQl('masonry', g.toolQl('trowel')));
-      g.logMsg(`You build a kiln. (QL ${k.ql.toFixed(1)}) Fill it with green ware, feed it and light it.`, 'event');
+      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('kiln');
+      if (!item || item.id !== 'kiln' || !g.inventory.remove(item.uid, 1)) return;
+      const k = g.addKiln(t.x, t.y, t.sx, t.sy, item.ql);
+      g.logMsg(`You set the kiln down on level ground. (QL ${k.ql.toFixed(1)}) Fill it with green ware, feed it and light it.`, 'event');
+      g.events.emit('world', k.x, k.y);
+    },
+  },
+  {
+    id: 'pick_up_kiln',
+    label: 'Take it up',
+    verb: 'taking the kiln up',
+    stamina: 0.04,
+    baseTime: 5,
+    applies: (t, g) => kilnOf(g, t) !== undefined,
+    check: (t, g) => {
+      const k = kilnOf(g, t);
+      if (!k) return 'It is gone.';
+      if (k.lit) return 'Not while it is alight.';
+      if (k.jobs.length || k.output.length) return 'Empty it first.';
+      if (Math.floor(k.ash ?? 0) >= 1) return 'Rake the ashes out first.';
+      return null;
+    },
+    perform: (t, g) => {
+      const k = kilnOf(g, t);
+      if (!k || k.lit || k.jobs.length || k.output.length) return;
+      g.removeKiln(k.id);
+      g.inventory.add('kiln', { ql: k.ql });
+      g.logMsg('You lift the kiln off its base and carry it away whole.', 'event');
       g.events.emit('world', k.x, k.y);
     },
   },
@@ -272,31 +293,6 @@ export const KILN_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const h = kilnOf(g, t);
       if (h) rakeAshes(g, h, 'kiln');
-    },
-  },
-  {
-    id: 'take_apart_kiln',
-    label: 'Pull it down',
-    verb: 'pulling the kiln down',
-    stamina: 0.04,
-    baseTime: 5,
-    applies: (t, g) => kilnOf(g, t) !== undefined,
-    check: (t, g) => {
-      const k = kilnOf(g, t);
-      if (!k) return 'It is gone.';
-      if (k.lit) return 'Let it cool first.';
-      if (k.jobs.length || k.output.length) return 'Empty it first.';
-      return null;
-    },
-    perform: (t, g) => {
-      const k = kilnOf(g, t);
-      if (!k || k.lit) return;
-      g.removeKiln(k.id);
-      // Most of the brick survives being taken down carefully.
-      const bricks = Math.max(1, KILN_COST[0][1] - 2);
-      g.inventory.add('stone_brick', { count: bricks, ql: k.ql });
-      g.logMsg(`You pull the kiln down and recover ${bricks} stone bricks.`, 'event');
-      g.events.emit('world', k.x, k.y);
     },
   },
 ];

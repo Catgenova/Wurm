@@ -136,6 +136,8 @@ export class Renderer {
   readonly camera = new Camera();
   time = 0;
   hover: Pick | null = null;
+  /** The tile the tile window is looking at, outlined so you can see which it is. */
+  selected: { x: number; y: number } | null = null;
   fps = 0;
   private colors: (string | null)[];
   private treeHits: HitRect[] = [];
@@ -1139,6 +1141,18 @@ export class Renderer {
     if (dark > 0.01) {
       ctx.fillStyle = `rgba(12, 20, 44, ${(dark * 0.6).toFixed(3)})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    // The chosen tile, marked whether or not the cursor is anywhere near it.
+    const chosen = this.selected;
+    if (chosen && w.inBounds(chosen.x, chosen.y)) {
+      this.tilePath(ctx, chosen.x, chosen.y);
+      ctx.fillStyle = 'rgba(227,182,87,0.14)';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(240,205,120,0.95)';
+      ctx.stroke();
+      ctx.lineWidth = 1;
     }
 
     const hover = this.hover;

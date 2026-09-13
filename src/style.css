@@ -683,6 +683,18 @@ kbd {
   }
 }
 
+/* Tile window ------------------------------------------------------------- */
+
+.tile-head {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-accent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 /* Search box, shared by the inventory and the recipe book ------------------ */
 
 .panel-search {

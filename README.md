@@ -264,8 +264,9 @@ rebuilds and commits the result.
   stonecutting cuts it.
 - **Pottery and the kiln.** Everything shaped from clay comes out soft.
   Pottery makes unfired bricks, bowls, pots and jars, and green ware is no use
-  until it has been fired. A kiln — six stone bricks and a trowel, on any dry
-  flat ground — burns the fuel a campfire does; pack the green ware in, light
+  until it has been fired. A kiln — six stone bricks and two mortar, crafted,
+  carried and set down on any dry flat ground, and picked up again when cold
+  and empty — burns the fuel a campfire does; pack the green ware in, light
   it, and each piece takes its own time at heat, faster and truer in a
   well-built kiln. Fired, the bowl cooks, the pot makes pottage, the jar puts
   up preserves, and the brick builds.
@@ -317,9 +318,10 @@ rebuilds and commits the result.
   untended field gives 1 crop and 1 seed, a fully tended one gives 4 crops and
   2 seeds. Tilling and tending train Farming, which sets the quality of the
   harvest, and a harvested field stays tilled so it can be sown again.
-- **Metal, from seam to tool.** Mining brings up ore. A stone smelter, built
-  on a deed from bricks and mortar over six subtiles, burns fuel to turn ore
-  into lumps, with each piece timed by its own quality and the smelter's.
+- **Metal, from seam to tool.** Mining brings up ore. A stone smelter is
+  crafted by a mason from 12 bricks and 6 mortar, carried, and set down over
+  six subtiles of a deed tile — and taken up again whole when it is cold,
+  empty and raked out. It burns fuel to turn ore into lumps, with each piece timed by its own quality and the smelter's.
   Lumps of a metal merge into larger lumps whose quality is the size-weighted
   average, and a hot smelter also mixes bronze, brass, pewter and electrum,
   taking their quality from the metal rather than the smith. Sand fired in the
@@ -357,6 +359,11 @@ rebuilds and commits the result.
   including time spent away (capped at a week): food rots in about half an
   hour, stone lasts days, and quality slows it down. When damage hits 100 the
   item rots away.
+- **Packing and paving.** A shovel treads grass, dirt, lawn, steppe, tundra
+  and moss down into packed dirt, cutting the turf away on sod. Packed dirt is
+  what a building needs under it and the only ground paving will go on: gravel,
+  cobblestone and slabs all want a hard flat bed. Breaking paving up leaves
+  bare dirt, so laying it again means packing it again.
 - **Character.** Health, stamina, food and water; swimming drains stamina and
   drowning sends you back to the shore. Actions take time based on skill and
   tool quality, can fail, and raise skills with Wurm-style diminishing gains.
@@ -364,6 +371,13 @@ rebuilds and commits the result.
   nearly the whole screen with one tap (handy on phones), a status HUD,
   action timer, right-click menus with greyed-out reasons, hover tooltips, an
   event log with chat and a live minimap.
+- **The tile window.** Clicking a tile chooses it: it is outlined in the
+  world and the Tile window (T) fills with everything that could be done to
+  it — the same entries the right-click menu shows, built from the same list,
+  so the two cannot drift apart. It follows whatever was clicked, tile or
+  chest or smelter or wildermon, greys out what is not possible with the
+  reason beside it, and lets the whole game be played with one button. A
+  setting turns off the opening-on-click for anyone who prefers right-click.
 - **Search in the inventory and the recipe book.** Both windows have a search
   box at the top. The inventory matches on name and kind; the recipe book
   matches on everything in a row at once — the thing made, the trade, the

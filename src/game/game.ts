@@ -126,6 +126,8 @@ export class Game {
     cutaway: false,
     /** Storey being looked at, 0 for the ground floor; null follows the player. */
     viewLevel: null as number | null,
+    /** Open the tile window when a tile is clicked. */
+    tileWindow: true,
   };
   readonly buildings: Buildings;
   readonly creatures: Creatures;
@@ -743,7 +745,7 @@ export class Game {
   private completeAction(): void {
     const a = this.action;
     if (!a) return;
-    const reason = a.def.check?.(a.target, this);
+    const reason = this.jobReason(a.def, a.target);
     if (reason) {
       this.logMsg(reason, 'error');
       this.action = null;
@@ -840,10 +842,20 @@ export class Game {
   }
 
   /** Take the next job off the queue, if there is one. */
+  /**
+   * Why a job cannot be done now, or null. The world moves between lining a job
+   * up and reaching it: the tree you queued three chops at falls on the first,
+   * and there is no sense swinging at the grass it left behind.
+   */
+  private jobReason(def: ActionDef, target: Target): string | null {
+    if (!def.applies(target, this)) return `There is nothing here to ${def.label.toLowerCase()} now.`;
+    return def.check?.(target, this) ?? null;
+  }
+
   private nextInQueue(): boolean {
     const next = this.queue.shift();
     if (!next) return false;
-    const reason = next.def.check?.(next.target, this);
+    const reason = this.jobReason(next.def, next.target);
     if (reason) {
       this.logMsg(`${next.def.label}: ${reason}`, 'error');
       return this.nextInQueue();

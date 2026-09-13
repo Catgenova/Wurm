@@ -45,11 +45,6 @@ export interface PlacedSmelter {
 /** A smelter is three subtiles one way and two the other: six in all. */
 export const SMELTER_W = 3;
 export const SMELTER_H = 2;
-/** What it takes to build one. */
-export const SMELTER_COST: Array<[string, number]> = [
-  ['stone_brick', 8],
-  ['mortar', 4],
-];
 export const SMELTER_CAPACITY = 20;
 
 export const smelterCentre = (s: PlacedSmelter): [number, number] => [s.x + (s.sx + SMELTER_W / 2) / SUBTILES, s.y + (s.sy + SMELTER_H / 2) / SUBTILES];
@@ -91,27 +86,50 @@ export function smeltableIn(g: Game, item: Item): { makes: string; seconds: numb
 
 export const SMELTER_ACTIONS: ActionDef[] = [
   {
-    id: 'build_smelter',
-    label: 'Build smelter',
-    verb: 'building a smelter',
-    skill: 'masonry',
-    tool: 'trowel',
+    id: 'place_smelter',
+    label: 'Set the smelter down',
+    verb: 'setting the smelter down',
     hidden: true,
-    stamina: 0.06,
-    baseTime: 12,
+    stamina: 0.05,
+    baseTime: 6,
     applies: (t) => t.kind === 'tile',
     check: (t, g) => {
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return 'Choose a spot.';
-      if (!g.inventory.has('trowel')) return 'You need a trowel to lay the stone.';
-      for (const [id, n] of SMELTER_COST) if (g.inventory.count(id) < n) return `A smelter takes ${SMELTER_COST.map(([i, c]) => `${c} ${itemDef(i).name.toLowerCase()}`).join(' and ')}.`;
-      if (!g.deed || !g.onDeed(t.x, t.y)) return 'Smelters are built on your own deed.';
+      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('smelter');
+      if (!item || item.id !== 'smelter') return 'You are not carrying a smelter. Build one at the crafting window.';
+      if (!g.deed || !g.onDeed(t.x, t.y)) return 'Smelters stand on your own deed.';
       return g.smelterPlaceReason(t.x, t.y, t.sx, t.sy);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return;
-      for (const [id, n] of SMELTER_COST) if (!g.inventory.consume(id, n)) return;
-      const s = g.addSmelter(t.x, t.y, t.sx, t.sy, g.productQl('masonry', g.toolQl('trowel')));
-      g.logMsg(`You raise a stone smelter. (QL ${s.ql.toFixed(1)}) Feed it fuel and light it.`, 'event');
+      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('smelter');
+      if (!item || item.id !== 'smelter' || !g.inventory.remove(item.uid, 1)) return;
+      const s = g.addSmelter(t.x, t.y, t.sx, t.sy, item.ql);
+      g.logMsg(`You set the smelter down and bed it in. (QL ${s.ql.toFixed(1)}) Feed it fuel and light it.`, 'event');
+      g.events.emit('world', s.x, s.y);
+    },
+  },
+  {
+    id: 'pick_up_smelter',
+    label: 'Take it up',
+    verb: 'taking the smelter up',
+    stamina: 0.05,
+    baseTime: 6,
+    applies: (t, g) => smelterOf(g, t) !== undefined,
+    check: (t, g) => {
+      const s = smelterOf(g, t);
+      if (!s) return 'It is gone.';
+      if (s.lit) return 'Not while it is alight.';
+      if (s.jobs.length || s.output.length) return 'Empty it first.';
+      if (Math.floor(s.ash ?? 0) >= 1) return 'Rake the ashes out first.';
+      return null;
+    },
+    perform: (t, g) => {
+      const s = smelterOf(g, t);
+      if (!s || s.lit || s.jobs.length || s.output.length) return;
+      g.removeSmelter(s.id);
+      g.inventory.add('smelter', { ql: s.ql });
+      g.logMsg('You take the smelter apart and carry it off in one piece.', 'event');
       g.events.emit('world', s.x, s.y);
     },
   },
@@ -301,31 +319,6 @@ export const SMELTER_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const h = smelterOf(g, t);
       if (h) rakeAshes(g, h, 'smelter');
-    },
-  },
-  {
-    id: 'take_apart_smelter',
-    label: 'Pull it down',
-    verb: 'pulling the smelter down',
-    stamina: 0.05,
-    baseTime: 6,
-    applies: (t, g) => smelterOf(g, t) !== undefined,
-    check: (t, g) => {
-      const s = smelterOf(g, t);
-      if (!s) return 'It is gone.';
-      if (s.lit) return 'Damp it down first.';
-      if (s.jobs.length || s.output.length) return 'Empty it first.';
-      return null;
-    },
-    perform: (t, g) => {
-      const s = smelterOf(g, t);
-      if (!s || s.lit) return;
-      g.removeSmelter(s.id);
-      // Half the stone is worth carrying away; the mortar is gone for good.
-      const bricks = Math.max(1, Math.floor(SMELTER_COST[0][1] / 2));
-      g.inventory.add('stone_brick', { count: bricks, ql: s.ql });
-      g.logMsg(`You pull the smelter down and recover ${bricks} stone bricks.`, 'event');
-      g.events.emit('world', s.x, s.y);
     },
   },
 ];

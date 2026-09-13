@@ -33,6 +33,12 @@ export class SettingsPanel {
       (v) => (game.settings.cutaway = v),
     );
     add(
+      'Open the tile window on a click',
+      'Clicking a tile shows everything you could do to it in the Tile window (T). Untick to keep to the right-click menu.',
+      () => game.settings.tileWindow,
+      (v) => (game.settings.tileWindow = v),
+    );
+    add(
       'Always show deed border',
       'Draw the green boundary of your settlement at all times. Otherwise it only shows while pointing at the token.',
       () => game.settings.deedBorder,

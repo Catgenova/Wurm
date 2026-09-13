@@ -48,10 +48,10 @@ camera.focus(player.x, player.y, game.playerHeight(), null);
 declare global {
   interface Window {
     /** Console handle for poking at the running game. */
-    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; RELICS: typeof RELICS; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld } };
+    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; RELICS: typeof RELICS; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI };
   }
 }
-window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, RELICS, arch: { partsMissing, piecesHeld } };
+window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, RELICS, arch: { partsMissing, piecesHeld }, ui };
 
 input.onClick = (x, y, button) => {
   // A press that closed an open menu is spent, unless it is asking for a new menu.
@@ -59,8 +59,15 @@ input.onClick = (x, y, button) => {
   ui.menu.hide();
   const pick = renderer.pick(x, y);
   if (!pick) return;
-  if (button === 0) game.moveTo(pick.x, pick.y);
-  else if (button === 2) ui.showTileMenu(pick, x, y);
+  if (button === 0) {
+    // A left click both walks you there and chooses the tile, so the tile
+    // window follows wherever you are looking.
+    game.moveTo(pick.x, pick.y);
+    ui.selectTile(pick);
+  } else if (button === 2) {
+    ui.selectTile(pick);
+    ui.showTileMenu(pick, x, y);
+  }
 };
 
 input.onDrag = (dx, dy, button) => {
@@ -85,6 +92,9 @@ input.onKey = (code) => {
       break;
     case 'KeyR':
       ui.toggleWindow('craft');
+      break;
+    case 'KeyT':
+      ui.toggleWindow('tile');
       break;
     case 'PageUp':
       ui.hud.stepStorey(1);
