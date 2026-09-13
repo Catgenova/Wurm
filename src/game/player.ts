@@ -21,8 +21,9 @@ export class Player {
   x: number;
   y: number;
   name = 'Wanderer';
-  /** Facing on screen: 1 right, -1 left. */
-  facing = 1;
+  /** Last movement direction in world space; the renderer turns it into a screen facing. */
+  dirX = 1;
+  dirY = 0;
   moving = false;
   swimming = false;
   walkPhase = 0;
@@ -120,8 +121,10 @@ export class Player {
       this.path = null;
     }
 
-    const screenDx = vx - vy;
-    if (Math.abs(screenDx) > 0.05) this.facing = screenDx > 0 ? 1 : -1;
+    if (moved > 0) {
+      this.dirX = vx;
+      this.dirY = vy;
+    }
     this.moving = moved > 0;
     if (this.moving) this.walkPhase += dt * 11 * (speed / BASE_SPEED);
     return moved;

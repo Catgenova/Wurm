@@ -18,7 +18,7 @@ interface SaveData {
   inventory: Item[];
   skills: Record<string, number>;
   time: number;
-  settings: { grid: boolean };
+  settings: { grid: boolean; rotation?: number };
   savedAt: number;
 }
 
@@ -91,6 +91,7 @@ export function loadGame(): Game | null {
       time: data.time,
     });
     game.settings.grid = data.settings?.grid ?? true;
+    game.settings.rotation = (data.settings?.rotation ?? 0) & 3;
     game.logMsg('Your journey continues where you left off.', 'system');
     return game;
   } catch {

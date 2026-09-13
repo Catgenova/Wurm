@@ -184,11 +184,30 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-.hud-pos {
+.hud-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-top: 6px;
+}
+
+.hud-pos {
   color: var(--ui-dim);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.hud-compass {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ui-accent);
+  font-size: 11px;
+}
+
+.hud-compass svg {
+  display: block;
+  transition: transform 0.25s ease;
 }
 
 .hud-fps {

@@ -10,6 +10,7 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>Drag</kbd></td><td>Look around (detaches the camera)</td></tr>
       <tr><td><kbd>Scroll</kbd> / <kbd>+</kbd> <kbd>-</kbd></td><td>Zoom</td></tr>
       <tr><td><kbd>C</kbd></td><td>Centre the camera on yourself</td></tr>
+      <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Turn the view a quarter turn; the compass shows north</td></tr>
     </table>
     <h3>Doing things</h3>
     <table>

@@ -13,6 +13,8 @@ import { WindowManager } from './windows';
 
 export interface UICallbacks {
   newWorld: () => void;
+  /** Quarter-turn the camera: +1 or -1. */
+  turn: (step: number) => void;
 }
 
 /** Builds and updates every HTML overlay above the canvas. */
@@ -39,6 +41,7 @@ export class UI {
       toggleGrid: () => (game.settings.grid = !game.settings.grid),
       center: () => (renderer.camera.follow = true),
       newWorld: cb.newWorld,
+      turn: cb.turn,
     });
 
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });

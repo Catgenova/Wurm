@@ -36,6 +36,7 @@ rebuilds and commits the result.
 | Drag (left or middle) | Look around; the camera stops following you |
 | Scroll, `+` `-` | Zoom |
 | `C` | Centre the camera on yourself again |
+| `Q` `E` | Turn the view a quarter turn (the HUD compass points north) |
 | Right click | Context menu for the tile, tree or inventory item |
 | `Esc` | Stop the current action / close the menu |
 | `Enter` | Chat in the event window (`/name`, `/where`, `/help`) |
@@ -81,14 +82,16 @@ src/
 ```
 
 **Projection.** A 2:1 diamond: tile width 64, height 32 at zoom 1. A world point
-`(x, y, h)` lands at iso `((x - y) * 32, (x + y) * 16 - h * 1.5)`. The camera
-stores an iso-space centre and a zoom. Because height only moves points
-vertically, screen x pins down `x - y` exactly, which keeps picking cheap: for a
-click we walk the possible depths `x + y` front to back and test the projected
-quads.
+`(x, y, h)` is first rotated into view space `(u, v)` by the camera's quarter
+turn, then lands at iso `((u - v) * 32, (u + v) * 16 - h * 1.5)`. The camera
+stores an iso-space centre, a zoom and the rotation. Because height only moves
+points vertically, screen x pins down `u - v` exactly, which keeps picking
+cheap: for a click we walk the possible depths `u + v` front to back, map each
+view tile back to its world tile and test the projected quad.
 
-**Draw order.** Tiles are drawn one diagonal (`x + y`) at a time from back to
-front. Trees and the player standing on a diagonal are drawn right after its
+**Draw order.** Tiles are drawn one view-space diagonal (`u + v`) at a time
+from back to front, so turning the camera is just a different mapping from view
+tiles to world tiles. Trees and the player standing on a diagonal are drawn right after its
 tiles, so terrain in front occludes them correctly and nothing needs a z-buffer.
 Tile colours (base colour, slope lighting, per-tile variation, depth tint) are
 cached per tile and invalidated when a corner changes.

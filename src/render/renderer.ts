@@ -75,6 +75,8 @@ export class Renderer {
   private ents: Entity[] = [];
   private waterPoly = new Float64Array(16);
   private drawnTiles = 0;
+  private tileBuf = [0, 0];
+  private playerFacing = 1;
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -142,11 +144,14 @@ export class Renderer {
     const b = cam.isoBounds();
     const eMin = Math.floor(b.left / HALF_W) - 1;
     const eMax = Math.ceil(b.right / HALF_W) + 1;
-    const dLo = Math.max(0, Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / HALF_H) - 2);
-    const dHi = Math.min(world.w + world.h - 2, Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / HALF_H) + 1);
+    const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / HALF_H) - 2;
+    const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / HALF_H) + 1;
     const grid = this.game.settings.grid && zoom >= 0.7;
     const player = this.game.player;
-    const playerDepth = player.tileX + player.tileY;
+    const rot = cam.rotation;
+    const tb = this.tileBuf;
+    this.worldToViewTile(rot, player.tileX, player.tileY, tb);
+    const playerDepth = tb[0] + tb[1];
     const hw = HALF_W * zoom;
     const hh = HALF_H * zoom;
     const hs = HEIGHT_SCALE * zoom;
@@ -162,10 +167,13 @@ export class Renderer {
       let e = eMin;
       if (((e + d) & 1) !== 0) e++;
       for (; e <= eMax; e += 2) {
-        const x = (d + e) / 2;
-        const y = (d - e) / 2;
+        const u = (d + e) / 2;
+        const v = (d - e) / 2;
+        this.viewToWorldTile(rot, u, v, tb);
+        const x = tb[0];
+        const y = tb[1];
         if (x < 0 || y < 0 || x >= world.w || y >= world.h) continue;
-        world.corners(x, y, c);
+        this.viewCorners(rot, u, v, c);
         const baseX = (e * HALF_W - cam.cx) * zoom + W / 2;
         pts[0] = baseX;
         pts[1] = baseY - c[0] * hs;
@@ -197,7 +205,7 @@ export class Renderer {
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
-        if (wet) this.drawWater(x, y, c);
+        if (wet) this.drawWater(u, v, x, y, c);
 
         const t = world.getTile(x, y);
         if (t === TileType.Tree || t === TileType.Bush) {
@@ -225,16 +233,91 @@ export class Renderer {
     this.drawOverlays(ctx, zoom);
   }
 
+  /** View-space tile (u, v) to world tile, written into `out`. */
+  private viewToWorldTile(rot: number, u: number, v: number, out: number[]): void {
+    switch (rot) {
+      case 1:
+        out[0] = -v - 1;
+        out[1] = u;
+        break;
+      case 2:
+        out[0] = -u - 1;
+        out[1] = -v - 1;
+        break;
+      case 3:
+        out[0] = v;
+        out[1] = -u - 1;
+        break;
+      default:
+        out[0] = u;
+        out[1] = v;
+    }
+  }
+
+  /** World tile to view-space tile, written into `out`. */
+  private worldToViewTile(rot: number, x: number, y: number, out: number[]): void {
+    switch (rot) {
+      case 1:
+        out[0] = y;
+        out[1] = -x - 1;
+        break;
+      case 2:
+        out[0] = -x - 1;
+        out[1] = -y - 1;
+        break;
+      case 3:
+        out[0] = -y - 1;
+        out[1] = x;
+        break;
+      default:
+        out[0] = x;
+        out[1] = y;
+    }
+  }
+
+  /** Corner heights of view tile (u, v) in screen order: top, right, bottom, left. */
+  private viewCorners(rot: number, u: number, v: number, out: number[]): void {
+    const w = this.game.world;
+    switch (rot) {
+      case 1:
+        out[0] = w.getHeight(-v, u);
+        out[1] = w.getHeight(-v, u + 1);
+        out[2] = w.getHeight(-v - 1, u + 1);
+        out[3] = w.getHeight(-v - 1, u);
+        break;
+      case 2:
+        out[0] = w.getHeight(-u, -v);
+        out[1] = w.getHeight(-u - 1, -v);
+        out[2] = w.getHeight(-u - 1, -v - 1);
+        out[3] = w.getHeight(-u, -v - 1);
+        break;
+      case 3:
+        out[0] = w.getHeight(v, -u);
+        out[1] = w.getHeight(v, -u - 1);
+        out[2] = w.getHeight(v + 1, -u - 1);
+        out[3] = w.getHeight(v + 1, -u);
+        break;
+      default:
+        out[0] = w.getHeight(u, v);
+        out[1] = w.getHeight(u + 1, v);
+        out[2] = w.getHeight(u + 1, v + 1);
+        out[3] = w.getHeight(u, v + 1);
+    }
+  }
+
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
     if (ents.length > 1) ents.sort((a, b) => a.sx - b.sx);
     const player = this.game.player;
+    const cam = this.camera;
+    const screenDx = cam.rotateX(player.dirX, player.dirY) - cam.rotateY(player.dirX, player.dirY);
+    if (Math.abs(screenDx) > 0.05) this.playerFacing = screenDx > 0 ? 1 : -1;
     for (const ent of ents) {
       if (ent.kind === 'player') {
         drawPlayer(ctx, ent.sx, ent.sy, zoom, {
           phase: player.moving ? player.walkPhase : this.time * 6,
           moving: player.moving,
-          facing: player.facing,
+          facing: this.playerFacing,
           swimming: player.swimming,
           working: this.game.action?.state === 'performing',
         });
@@ -253,16 +336,16 @@ export class Renderer {
     }
   }
 
-  /** Water surface at height 0, clipped to the part of the tile that lies below it. */
-  private drawWater(x: number, y: number, c: number[]): void {
+  /** Water surface at height 0, clipped to the part of the tile that lies below it. Built in view space. */
+  private drawWater(u: number, v: number, x: number, y: number, c: number[]): void {
     const poly = this.waterPoly;
     let n = 0;
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) & 3;
-      const ax = i === 1 || i === 2 ? x + 1 : x;
-      const ay = i >= 2 ? y + 1 : y;
-      const bx = j === 1 || j === 2 ? x + 1 : x;
-      const by = j >= 2 ? y + 1 : y;
+      const ax = i === 1 || i === 2 ? u + 1 : u;
+      const ay = i >= 2 ? v + 1 : v;
+      const bx = j === 1 || j === 2 ? u + 1 : u;
+      const by = j >= 2 ? v + 1 : v;
       const ha = c[i];
       const hb = c[j];
       if (ha < 0) {
@@ -285,8 +368,8 @@ export class Renderer {
     ctx.strokeStyle = WATER_PALETTE[level];
     ctx.beginPath();
     for (let k = 0; k < n; k += 2) {
-      const sx = cam.worldToScreenX(poly[k], poly[k + 1]);
-      const sy = cam.worldToScreenY(poly[k], poly[k + 1], 0);
+      const sx = cam.viewToScreenX(poly[k], poly[k + 1]);
+      const sy = cam.viewToScreenY(poly[k], poly[k + 1], 0);
       if (k === 0) ctx.moveTo(sx, sy);
       else ctx.lineTo(sx, sy);
     }
@@ -375,11 +458,14 @@ export class Renderer {
     const down = Math.ceil((-world.minHeight * HEIGHT_SCALE) / HALF_H) + 3;
     const eLo = Math.floor(eF) - 1;
     const eHi = Math.ceil(eF) + 1;
+    const rot = cam.rotation;
+    const tb = this.tileBuf;
     for (let d = Math.floor(dF) + up; d >= Math.floor(dF) - down; d--) {
       for (let e = eLo; e <= eHi; e++) {
         if (((e + d) & 1) !== 0) continue;
-        const x = (d + e) / 2;
-        const y = (d - e) / 2;
+        this.viewToWorldTile(rot, (d + e) / 2, (d - e) / 2, tb);
+        const x = tb[0];
+        const y = tb[1];
         if (!world.inBounds(x, y)) continue;
         if (this.pointInTile(x, y, sx, sy)) return this.makePick(x, y, sx, sy);
       }

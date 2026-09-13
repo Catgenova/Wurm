@@ -37,7 +37,7 @@ export class Game {
   readonly skills: Skills;
   readonly events = new Emitter<GameEvents>();
   readonly log: LogEntry[] = [];
-  readonly settings = { grid: true };
+  readonly settings = { grid: true, rotation: 0 };
   action: ActiveAction | null = null;
   /** Game seconds since the world was created. */
   time = 0;

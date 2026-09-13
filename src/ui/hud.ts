@@ -6,6 +6,7 @@ export interface HudCallbacks {
   toggleGrid: () => void;
   center: () => void;
   newWorld: () => void;
+  turn: (step: number) => void;
 }
 
 interface Bar {
@@ -20,6 +21,8 @@ const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) =>
   { label: 'Map', key: 'M', action: (cb) => cb.toggle('map') },
   { label: 'Grid', key: 'G', action: (cb) => cb.toggleGrid(), id: 'grid' },
   { label: 'Centre', key: 'C', action: (cb) => cb.center() },
+  { label: '↻ Turn', key: 'Q', action: (cb) => cb.turn(-1) },
+  { label: '↺ Turn', key: 'E', action: (cb) => cb.turn(1) },
   { label: 'Help', key: 'F1', action: (cb) => cb.toggle('help') },
   { label: 'New world', key: '', action: (cb) => cb.newWorld(), id: 'new' },
 ];
@@ -34,6 +37,7 @@ export class Hud {
   private actionLabel: HTMLDivElement;
   private actionFill: HTMLDivElement;
   private gridBtn: HTMLButtonElement | null = null;
+  private compass: HTMLSpanElement;
 
   constructor(
     root: HTMLElement,
@@ -67,9 +71,17 @@ export class Hud {
       status.append(row);
       this.bars[id] = { fill, value };
     }
+    const footer = document.createElement('div');
+    footer.className = 'hud-footer';
     this.posEl = document.createElement('div');
     this.posEl.className = 'hud-pos';
-    status.append(this.posEl);
+    this.compass = document.createElement('span');
+    this.compass.className = 'hud-compass';
+    this.compass.title = 'North';
+    this.compass.innerHTML =
+      '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><polygon points="10,1 14,15 10,11.5 6,15" fill="#e3b657"/><polygon points="10,11.5 14,15 10,19 6,15" fill="#6b5836"/></svg><b>N</b>';
+    footer.append(this.posEl, this.compass);
+    status.append(footer);
     root.append(status);
 
     const toolbar = document.createElement('div');
@@ -117,6 +129,8 @@ export class Hud {
     const h = this.game.world.heightAt(p.x, p.y);
     this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}${p.swimming ? '  ·  swimming' : ''}`;
     this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles · ${renderer.camera.zoom.toFixed(2)}×`;
+    const svg = this.compass.firstElementChild as HTMLElement | null;
+    if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
     if (this.gridBtn) this.gridBtn.classList.toggle('active', this.game.settings.grid);
 
     const a = this.game.action;

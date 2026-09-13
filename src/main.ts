@@ -17,15 +17,23 @@ const canvas = new FullscreenCanvas(canvasEl);
 const renderer = new Renderer(canvas, game);
 const camera = renderer.camera;
 const input = new Input(canvasEl);
+/** Quarter-turn the view (+1 or -1) and remember the choice in the save. */
+function turnView(step: number): void {
+  camera.turn(step, (x, y) => game.world.heightAt(x, y));
+  game.settings.rotation = camera.rotation;
+}
+
 const ui = new UI(game, renderer, uiRoot, canvasEl, {
   newWorld: () => {
     if (!confirm('Start a new world? Your current island, items and skills will be lost.')) return;
     clearSave();
     location.href = location.pathname;
   },
+  turn: turnView,
 });
 
 const player = game.player;
+camera.rotation = game.settings.rotation & 3;
 camera.focus(player.x, player.y, game.world.heightAt(player.x, player.y), null);
 
 declare global {
@@ -77,6 +85,12 @@ input.onKey = (code) => {
     case 'KeyC':
       camera.follow = true;
       break;
+    case 'KeyQ':
+      turnView(-1);
+      break;
+    case 'KeyE':
+      turnView(1);
+      break;
     case 'Equal':
     case 'NumpadAdd':
       camera.zoomAt(canvas.width / 2, canvas.height / 2, 1.25);
@@ -116,14 +130,15 @@ const loop = new GameLoop(
       dx += 1;
       dy -= 1;
     }
+    // dx/dy are screen-relative (view space); turn them into world directions.
     if ((dx !== 0 || dy !== 0) && !input.isTyping()) {
       camera.follow = true;
+      player.inputDir.x = camera.unrotateX(dx, dy);
+      player.inputDir.y = camera.unrotateY(dx, dy);
     } else {
-      dx = 0;
-      dy = 0;
+      player.inputDir.x = 0;
+      player.inputDir.y = 0;
     }
-    player.inputDir.x = dx;
-    player.inputDir.y = dy;
 
     game.update(dt);
 
