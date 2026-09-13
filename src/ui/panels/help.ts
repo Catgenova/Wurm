@@ -12,6 +12,13 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>C</kbd></td><td>Centre the camera on yourself</td></tr>
       <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Turn the view a quarter turn; the compass shows north</td></tr>
     </table>
+    <h3>Touch screens</h3>
+    <table>
+      <tr><td>Tap</td><td>Walk to a tile</td></tr>
+      <tr><td>Drag</td><td>Look around</td></tr>
+      <tr><td>Pinch</td><td>Zoom</td></tr>
+      <tr><td>Long press</td><td>Actions for a tile or tree</td></tr>
+    </table>
     <h3>Doing things</h3>
     <table>
       <tr><td><kbd>Right click</kbd></td><td>Actions for a tile, tree or item</td></tr>

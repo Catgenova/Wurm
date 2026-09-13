@@ -45,7 +45,8 @@ declare global {
 window.wurm = { game, renderer, camera };
 
 input.onClick = (x, y, button) => {
-  if (ui.menu.consumeSwallow()) return;
+  // A press that closed an open menu is spent, unless it is asking for a new menu.
+  if (ui.menu.consumeSwallow() && button !== 2) return;
   ui.menu.hide();
   const pick = renderer.pick(x, y);
   if (!pick) return;
@@ -59,6 +60,10 @@ input.onDrag = (dx, dy, button) => {
 
 input.onWheel = (delta, x, y) => {
   camera.zoomAt(x, y, Math.exp(-delta * 0.0012));
+};
+
+input.onPinch = (factor, x, y) => {
+  camera.zoomAt(x, y, factor);
 };
 
 input.onKey = (code) => {

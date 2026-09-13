@@ -15,17 +15,15 @@ export class ContextMenu {
     this.el.className = 'ctx-menu';
     this.el.hidden = true;
     root.append(this.el);
-    window.addEventListener(
-      'mousedown',
-      (e) => {
-        if (this.el.hidden) return;
-        if (!this.el.contains(e.target as Node)) {
-          this.hide();
-          if (e.target === this.canvas) this.swallow = true;
-        }
-      },
-      true,
-    );
+    const outside = (e: Event): void => {
+      if (this.el.hidden) return;
+      if (!this.el.contains(e.target as Node)) {
+        this.hide();
+        if (e.target === this.canvas) this.swallow = true;
+      }
+    };
+    window.addEventListener('mousedown', outside, true);
+    window.addEventListener('touchstart', outside, { capture: true, passive: true });
   }
 
   get isOpen(): boolean {
@@ -79,7 +77,7 @@ export class ContextMenu {
     this.el.hidden = true;
   }
 
-  /** True once when the menu was just closed by a click on the canvas, so that click does nothing else. */
+  /** True once when the menu was just closed by a press on the canvas, so a plain click there does nothing else. */
   consumeSwallow(): boolean {
     const s = this.swallow;
     this.swallow = false;

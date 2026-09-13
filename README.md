@@ -42,6 +42,7 @@ rebuilds and commits the result.
 | `Enter` | Chat in the event window (`/name`, `/where`, `/help`) |
 | `I` `K` `L` `M` `F1` | Inventory, Skills, Event log, Map, Help |
 | `G` | Toggle the tile grid |
+| Touch: tap, drag, pinch, long press | Walk, look around, zoom, open the action menu |
 
 ## What is in the game
 
