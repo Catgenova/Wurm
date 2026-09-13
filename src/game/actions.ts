@@ -329,6 +329,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to mine.';
       if (g.world.rockHeight(t.cx, t.cy) <= 0) return 'You cannot mine below the water level.';
+      const ore = oreAt(g.world, t.x, t.y);
+      if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
       return null;
     },
     perform: (t, g) => {
@@ -385,7 +387,11 @@ export const ACTIONS: ActionDef[] = [
       // Standing on the rock itself tells you what the seam is worth.
       const here = oreAt(w, t.x, t.y);
       if (here) {
-        g.logMsg(`You sample the ${here.name.toLowerCase()}. This seam will give up nothing finer than quality ${here.maxQl}.`, 'event');
+        const can = g.skills.get('mining') >= here.level;
+        g.logMsg(
+          `You sample the ${here.name.toLowerCase()}. It needs mining ${here.level} to work${can ? ', which you have' : ''}, and will give up nothing finer than quality ${here.maxQl}.`,
+          'event',
+        );
       } else if (w.getTile(t.x, t.y) === TileType.Rock) {
         g.logMsg(`Plain ${ROCK_VARIANTS[rockVariant(w.getData(t.x, t.y))].name.toLowerCase()}, with no metal in it.`, 'event');
       }

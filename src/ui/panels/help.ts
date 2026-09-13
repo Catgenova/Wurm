@@ -102,7 +102,8 @@ export function buildHelp(win: UIWindow): void {
     harvest back. It cannot rake a field of its own, so it only works ground you have tilled. The
     <b>Mola</b> is a heavier mole built around its claws, found sitting on metal, living on spices, and
     working the seams for its deed: it takes the nearest ore no other Mola has claimed, and the quality
-    of what it brings back is its own mining skill, up to whatever the seam holds. Its range grows by 5
+    of what it brings back is its own mining skill, up to whatever the seam holds, and it leaves alone
+    any metal beyond its skill. Its range grows by 5
     tiles every 10 levels rather than the usual 10. Both pick that
     spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
@@ -140,11 +141,17 @@ export function buildHelp(win: UIWindow): void {
     your shovel grates on rock and will go no further. Strip all four corners of a tile bare and the
     rock beneath is exposed, and the tile becomes rock &mdash; whatever kind lies there, which may be a
     seam of silver or gold. Drop dirt on a corner to bury the rock again.</p>
+    <p>Eleven metals lie in the rock, and each seam needs a certain <b>mining</b> skill before it can be
+    worked at all: copper and coal from the very start, then tin at 10, zinc at 20, lead at 30, silver
+    at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90. The rarer
+    the metal, the harder it is to find as well as to work. Coal burns longer than a log, so a campfire
+    will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works that bare rock. Every swing that bites gives you shards or
     metal; cutting the face back a whole level is a separate roll, and how often it happens depends on
     your mining skill and the quality of your pick. <b>Prospecting</b> reads the ground: it marks every
-    ore-bearing rock tile within range for a while, and prospecting the seam itself tells you the
-    highest quality it will ever give up, however good the miner. The range starts at 3 tiles and grows
+    ore-bearing rock tile within range for a while, and prospecting the seam itself tells you what metal
+    it holds, the mining skill it takes to work, and the highest quality it will ever give up, however
+    good the miner. The range starts at 3 tiles and grows
     by one for every 10 levels of the skill.</p>
     <p><b>Flatten</b> brings a tile level with the ground you are standing on, corner by corner:
     ground above you is scraped down and pocketed as dirt, ground below you is packed up and spends

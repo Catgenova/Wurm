@@ -631,8 +631,10 @@ export class Creatures {
   /** Whether a tile can be foraged, botanized, felled, farmed or mined right now. */
   private gatherable(game: Game, x: number, y: number, kind: GatherKind, c?: Creature): boolean {
     if (kind === 'mine') {
-      // One seam to a miner: another Mola's claim is left alone.
-      return !!oreAt(game.world, x, y) && game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
+      // One seam to a miner, and only metal its skill can work.
+      const ore = oreAt(game.world, x, y);
+      if (!ore || (c && (c.skills[GATHER_SKILL.mine] ?? 1) < ore.level)) return false;
+      return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
     }
     if (kind === 'farm') return !!c && this.farmJobAt(game, c, x, y) !== null;
     if (kind === 'woodcut') return game.world.getTile(x, y) === TileType.Tree && !!this.beside(game, x, y);

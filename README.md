@@ -57,11 +57,15 @@ rebuilds and commits the result.
   Digging takes soil away and stops dead at bedrock; strip all four corners of
   a tile and it becomes rock of whatever kind lies beneath, which may be a
   metal seam. Dropping dirt buries it again.
-- **Mining and prospecting.** Mining bare rock always yields shards or metal,
-  while cutting the face back a level is a separate roll decided by mining
-  skill and pick quality. Prospecting marks ore-bearing rock within range and,
-  on a seam itself, names the highest quality it will ever yield; the range is
-  3 tiles plus one per 10 levels of Prospecting.
+- **Mining and prospecting.** Eleven metals lie in the rock, each needing its
+  own mining skill to work: copper and coal at 1, tin 10, zinc 20, lead 30,
+  silver 40, gold 50, adamantine 60, glimmersteel 70, mithril 80, seryll 90,
+  and each rarer than the last. Mining bare rock always yields shards or
+  metal, while cutting the face back a level is a separate roll decided by
+  mining skill and pick quality. Prospecting marks ore-bearing rock within
+  range and, on a seam itself, names the metal, the skill it takes and the
+  highest quality it will ever yield; the range is 3 tiles plus one per 10
+  levels of Prospecting. Coal outburns a log as campfire fuel.
 - **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
   pack and cultivate, pave gravel with shards or chisel bricks for
   cobblestone, remove paving. Flatten levels a tile to the

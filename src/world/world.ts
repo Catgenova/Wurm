@@ -76,6 +76,17 @@ export class World {
     for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) this.reconcile(x, y, rockKind);
   }
 
+  /** Re-read every rock tile's kind from the world's own rules, without redrawing. */
+  rederiveRock(kind: (x: number, y: number) => number): void {
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const i = y * this.w + x;
+        if (this.tiles[i] !== TileType.Rock) continue;
+        this.data[i] = kind(x, y);
+      }
+    }
+  }
+
   /** Fill in soil depths for a world that was saved before rock had a depth. */
   deriveDirt(depth = 10): void {
     for (let cy = 0; cy <= this.h; cy++) {

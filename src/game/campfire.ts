@@ -28,14 +28,21 @@ export const FIRE_CAPACITY = 3600;
 export const FIRE_COST = 2;
 const FIRE_LAID_FUEL = 120;
 
-/** Seconds of burning each wooden thing is worth. */
+/** Seconds of burning each thing is worth. */
 export const FUEL_VALUES: Record<string, number> = {
   shaft: 90,
   thatch: 60,
   plank: 120,
   timber: 240,
   log: 600,
+  coal: 900,
 };
+
+/**
+ * What comes back out of a fire that is taken apart. Coal burns but is never
+ * recovered, so a pile of logs cannot be turned into coal by rebuilding it.
+ */
+const RECOVERABLE = ['log', 'timber', 'plank', 'shaft', 'thatch'];
 
 export const isFuel = (id: string): boolean => FUEL_VALUES[id] !== undefined;
 /** World position of a fire's centre. */
@@ -137,7 +144,7 @@ export const CAMPFIRE_ACTIONS: ActionDef[] = [
       if (!f) return 'It is gone.';
       if (!nearFire(g, f)) return 'Stand next to the fire.';
       const item = t.kind === 'campfire' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return 'Fires take wooden things: shafts, planks, timbers, logs or thatch.';
+      if (!item || !isFuel(item.id)) return 'Fires take wood and coal: shafts, thatch, planks, timbers, logs or coal.';
       if (f.fuel >= FIRE_CAPACITY) return 'It is already piled as high as it will take.';
       return null;
     },
@@ -176,7 +183,8 @@ export const CAMPFIRE_ACTIONS: ActionDef[] = [
       // Whole pieces of wood come back out of the pile; kindling does not.
       const back: string[] = [];
       let left = f.fuel;
-      for (const [id, per] of [...Object.entries(FUEL_VALUES)].sort((a, b) => b[1] - a[1])) {
+      for (const id of [...RECOVERABLE].sort((a, b) => FUEL_VALUES[b] - FUEL_VALUES[a])) {
+        const per = FUEL_VALUES[id];
         const n = Math.floor(left / per);
         if (n <= 0) continue;
         left -= n * per;

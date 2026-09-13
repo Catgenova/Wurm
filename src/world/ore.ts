@@ -26,11 +26,28 @@ export function hashTile(x: number, y: number, salt: number): number {
 }
 
 /** Index into ROCK_VARIANTS for the rock under this tile. */
+/**
+ * How common each seam is, rarest first. A tile rolls against these in order,
+ * so the metals that need the most skill are the ones you almost never see.
+ */
+const ORE_CHANCE: Array<[kind: number, upTo: number]> = [
+  [14, 0.0004], // seryll
+  [13, 0.001], // mithril
+  [12, 0.002], // glimmersteel
+  [11, 0.0035], // adamantine
+  [10, 0.006], // gold
+  [9, 0.01], // silver
+  [8, 0.016], // lead
+  [7, 0.024], // zinc
+  [6, 0.034], // tin
+  [5, 0.052], // coal
+  [4, 0.076], // copper
+];
+
 export function rockKindAt(seed: number, x: number, y: number, height: number): number {
-  const n = bandNoise(seed + 50).fbm(x * 0.045 + 50, y * 0.045 + 50, 3);
   const r = hashTile(x, y, seed + 11);
-  if (r < 0.005) return 5;
-  if (r < 0.018) return 4;
+  for (const [kind, upTo] of ORE_CHANCE) if (r < upTo) return kind;
+  const n = bandNoise(seed + 50).fbm(x * 0.045 + 50, y * 0.045 + 50, 3);
   if (n > 0.34) return 1;
   if (n < -0.42) return 2;
   if (n > 0.05 && height < 80) return 3;
@@ -47,6 +64,8 @@ export interface OreInfo {
   yields: string;
   /** The best quality this deposit will ever give up. */
   maxQl: number;
+  /** Mining skill needed to work it at all. */
+  level: number;
 }
 
 /** The best quality a deposit can yield, fixed for that tile. */
@@ -57,8 +76,8 @@ export function oreMaxQl(seed: number, x: number, y: number): number {
 /** The ore in a rock tile, or null when there is none. */
 export function oreAt(world: World, x: number, y: number): OreInfo | null {
   if (world.getTile(x, y) !== TileType.Rock) return null;
-  const kind = world.getData(x, y) & 7;
-  if (!isOreKind(kind)) return null;
-  const def = ROCK_VARIANTS[Math.min(ROCK_VARIANTS.length - 1, kind)];
-  return { kind, name: def.name, yields: def.yields, maxQl: oreMaxQl(world.seed, x, y) };
+  const kind = world.getData(x, y) & 15;
+  if (!isOreKind(kind) || kind >= ROCK_VARIANTS.length) return null;
+  const def = ROCK_VARIANTS[kind];
+  return { kind, name: def.name, yields: def.yields, maxQl: oreMaxQl(world.seed, x, y), level: def.level ?? 1 };
 }
