@@ -2,6 +2,7 @@ import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../wor
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { Game } from './game';
 import { crateCentre } from './crates';
+import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
 
@@ -13,12 +14,12 @@ import { groundStep } from './player';
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
-export type GatherKind = 'forage' | 'botanize' | 'woodcut';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees' };
+export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -62,6 +63,8 @@ export interface SpeciesDef {
   leaves: string;
   /** Only settles within a few tiles of open water. */
   nearWater?: boolean;
+  /** Only settles among trees. */
+  nearTrees?: boolean;
   /** Stance a newly tamed one takes; defensive unless it is a gentle sort. */
   defaultStance?: Stance;
 }
@@ -142,13 +145,40 @@ export const SPECIES: Record<string, SpeciesDef> = {
     nearWater: true,
     defaultStance: 'passive',
   },
+  seavic: {
+    id: 'seavic',
+    name: 'Seavic',
+    description: 'A quick red-brown squirrel with a tail it wears like a cloak and cheeks it stuffs with seed. It lives in the treetops and cannot leave a field alone.',
+    health: 14,
+    attack: 2,
+    speed: 2.6,
+    tameLevel: 1,
+    tameChance: 0.12,
+    diet: ['acorn', 'nuts'],
+    baitHint: 'an acorn or a handful of nuts',
+    timid: true,
+    gathers: 'farm',
+    workRange: 8,
+    variants: [
+      ['#a65a2e', '#e0b189'],
+      ['#8a8f95', '#d6dade'],
+      ['#3a3230', '#8c8078'],
+      ['#c98f4e', '#f0dcc0'],
+    ],
+    butcher: { meat: 1, fur: 2, leather: 1, bone: 1, gland: 1 },
+    tameFail: 'stuffs the {food} into its cheeks and is up the nearest trunk before you can blink',
+    leaves: 'flicks its tail and runs up the nearest tree',
+    nearTrees: true,
+    defaultStance: 'passive',
+  },
 };
 
 /** Which species roam wild, by weight. */
 const WILD_SPECIES: Array<[string, number]> = [
-  ['rabba', 42],
-  ['vola', 38],
-  ['bevere', 20],
+  ['rabba', 34],
+  ['vola', 30],
+  ['bevere', 18],
+  ['seavic', 18],
 ];
 
 /** How close to open water a water-bound species will settle. */
@@ -164,9 +194,19 @@ export function nearWater(game: Game, x: number, y: number, range = WATER_RANGE)
   return false;
 }
 
+/** Whether there are trees to live in within a few tiles of here. */
+export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE): boolean {
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      if (game.world.inBounds(x + dx, y + dy) && game.world.getTile(x + dx, y + dy) === TileType.Tree) return true;
+    }
+  }
+  return false;
+}
+
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
-export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers === 'woodcut' ? 'forage' : species.gathers);
+export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers === 'woodcut' || species.gathers === 'farm' ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
 /** Every ten levels of its task skill let a worker range ten tiles further from the token. */
@@ -224,7 +264,13 @@ export interface Creature {
   /** The tree tile a feller is working on, when it is felling one. */
   fellX: number;
   fellY: number;
+  /** Seeds held in the cheeks, for a farm worker to sow. */
+  pouch: Item | null;
+  /** What a farm worker walked out to do: sow, tend or harvest. */
+  job: FarmJob | null;
 }
+
+export type FarmJob = 'sow' | 'tend' | 'harvest';
 
 export interface CreatureJSON {
   id: number;
@@ -238,6 +284,7 @@ export interface CreatureJSON {
   health: number;
   hunger: number;
   carrying: Item | null;
+  pouch?: Item | null;
   xp?: number;
   skills?: Record<string, number>;
 }
@@ -326,6 +373,8 @@ export class Creatures {
       calledAt: -1e9,
       fellX: -1,
       fellY: -1,
+      pouch: null,
+      job: null,
     };
   }
 
@@ -380,8 +429,9 @@ export class Creatures {
       if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
       const id = species ?? rollTable(WILD_SPECIES, game.rand());
-      // A Bevere lives on land, but only ever within sight of water.
+      // A Bevere lives on land, but only ever within sight of water; a Seavic needs trees.
       if (SPECIES[id]?.nearWater && !nearWater(game, x, y)) continue;
+      if (SPECIES[id]?.nearTrees && !nearTrees(game, x, y)) continue;
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
       placed++;
     }
@@ -480,8 +530,28 @@ export class Creatures {
     c.until = game.time + 2;
   }
 
-  /** Whether a tile can be foraged, botanized or felled right now. */
-  private gatherable(game: Game, x: number, y: number, kind: GatherKind): boolean {
+  /**
+   * What a field wants next, or null. A farm worker only ever works ground
+   * that has already been tilled; it never rakes a field of its own.
+   */
+  farmJobAt(game: Game, c: Creature, x: number, y: number): FarmJob | null {
+    if (game.world.getTile(x, y) !== TileType.Field) return null;
+    const crop = game.cropAt(x, y);
+    if (!crop) return this.seedFor(game, c) ? 'sow' : null;
+    if (cropReady(crop)) return 'harvest';
+    return crop.tendedNow ? null : 'tend';
+  }
+
+  /** A seed from its cheeks, or failing that one out of the deed crate. */
+  private seedFor(game: Game, c: Creature): Item | null {
+    if (c.pouch && CROP_BY_SEED.has(c.pouch.id) && c.pouch.count > 0) return c.pouch;
+    const crate = game.deedCrate();
+    return crate?.items.find((it) => CROP_BY_SEED.has(it.id) && it.count > 0) ?? null;
+  }
+
+  /** Whether a tile can be foraged, botanized, felled or farmed right now. */
+  private gatherable(game: Game, x: number, y: number, kind: GatherKind, c?: Creature): boolean {
+    if (kind === 'farm') return !!c && this.farmJobAt(game, c, x, y) !== null;
     if (kind === 'woodcut') return game.world.getTile(x, y) === TileType.Tree && !!this.beside(game, x, y);
     const def = TILE_DEFS[game.world.getTile(x, y)];
     return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
@@ -522,7 +592,7 @@ export class Creatures {
    * skilled worker allowed to range a hundred tiles still costs a handful of
    * checks while there is anything to pick near the token.
    */
-  private findForageTile(game: Game, cx: number, cy: number, range: number, kind: GatherKind): { x: number; y: number } | null {
+  private findForageTile(game: Game, cx: number, cy: number, range: number, kind: GatherKind, who?: Creature): { x: number; y: number } | null {
     let best: { x: number; y: number } | null = null;
     let bestD = Infinity;
     const x0 = Math.floor(cx);
@@ -530,7 +600,7 @@ export class Creatures {
     const visit = (x: number, y: number): void => {
       // A tree is never walkable, so a feller judges the tile beside it instead.
       if (kind !== 'woodcut' && !this.tileOk(game, x, y)) return;
-      if (!this.gatherable(game, x, y, kind)) return;
+      if (!this.gatherable(game, x, y, kind, who)) return;
       const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) + game.rand() * 1.5;
       if (d < bestD) {
         bestD = d;
@@ -570,6 +640,7 @@ export class Creatures {
     const x = Math.floor(c.x);
     const y = Math.floor(c.y);
     if (kind === 'woodcut') return this.finishFelling(game, c);
+    if (kind === 'farm') return this.finishFarming(game, c, x, y);
     game.markForaged(x, y, kind);
     const table = GATHER_TABLE[kind];
     if (c.mode !== 'deed') {
@@ -604,6 +675,48 @@ export class Creatures {
       game.dropOnGround(tx, ty, { uid: game.inventory.nextUid++, id: 'log', ql, dmg: 0, count: logs - 1, extra: def.name });
     }
     return { uid: game.inventory.nextUid++, id: 'log', ql, dmg: 0, count: 1, extra: def.name };
+  }
+
+  /** Sow, tend or harvest the field the worker is standing on. */
+  private finishFarming(game: Game, c: Creature, x: number, y: number): Item | null {
+    const job = this.farmJobAt(game, c, x, y);
+    if (!job) return null;
+    const skill = c.skills[GATHER_SKILL.farm] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.farm, 0.225);
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
+    if (job === 'sow') {
+      const seed = this.seedFor(game, c);
+      if (!seed) return null;
+      seed.count -= 1;
+      if (seed === c.pouch && seed.count <= 0) c.pouch = null;
+      if (seed !== c.pouch) {
+        const crate = game.deedCrate();
+        if (crate && seed.count <= 0) crate.items.splice(crate.items.indexOf(seed), 1);
+        game.events.emit('crate');
+      }
+      const def = CROP_BY_SEED.get(seed.id);
+      if (def) game.plantCrop(x, y, def.id, seed.ql);
+      return null;
+    }
+    const crop = game.cropAt(x, y);
+    if (!crop) return null;
+    if (job === 'tend') {
+      crop.tendedNow = true;
+      crop.tended += 1;
+      crop.ql = (crop.ql * crop.tended + ql) / (crop.tended + 1);
+      game.events.emit('world', x, y);
+      return null;
+    }
+    // Harvest: the crop is carried to the crate, the seed goes in its cheeks.
+    const def = cropDef(crop.id);
+    const y2 = cropYield(crop.tended);
+    const grade = Math.max(1, Math.min(100, (crop.ql + ql) / 2));
+    game.removeCrop(x, y);
+    const seeds: Item = { uid: game.inventory.nextUid++, id: def.seed, ql: grade, dmg: 0, count: y2.seeds };
+    if (c.pouch && c.pouch.id === seeds.id) c.pouch.count += seeds.count;
+    else if (!c.pouch) c.pouch = seeds;
+    else game.dropOnGround(x, y, seeds);
+    return { uid: game.inventory.nextUid++, id: def.produce, ql: grade, dmg: 0, count: y2.produce };
   }
 
   /** Same diminishing curve as the player's skills. */
@@ -644,14 +757,14 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        if (kind && this.gatherable(game, Math.floor(c.x), Math.floor(c.y), kind)) this.beginForage(game, c, kind);
+        if (kind && this.gatherable(game, Math.floor(c.x), Math.floor(c.y), kind, c)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') c.state = 'idle';
       return;
     }
     if (kind && c.hunger < 0.5 && game.time >= c.searchAt) {
       c.searchAt = game.time + 4;
-      const t = this.findForageTile(game, c.x, c.y, 3, kind);
+      const t = this.findForageTile(game, c.x, c.y, 3, kind, c);
       if (t) {
         c.tx = t.x + 0.5;
         c.ty = t.y + 0.5;
@@ -790,7 +903,7 @@ export class Creatures {
       if (r === 'arrived') {
         const wx = kind === 'woodcut' ? c.fellX : Math.floor(c.x);
         const wy = kind === 'woodcut' ? c.fellY : Math.floor(c.y);
-        if (kind && this.gatherable(game, wx, wy, kind)) this.beginForage(game, c, kind);
+        if (kind && this.gatherable(game, wx, wy, kind, c)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') {
         c.state = 'idle';
@@ -807,11 +920,12 @@ export class Creatures {
     }
     if (game.time < c.until) return;
     if (kind) {
-      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, workRangeOf(c, def), kind);
+      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, workRangeOf(c, def), kind, c);
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
         const spot = kind === 'woodcut' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
         if (spot) {
+          c.job = kind === 'farm' ? this.farmJobAt(game, c, t.x, t.y) : null;
           c.fellX = t.x;
           c.fellY = t.y;
           c.tx = spot.x + 0.5;
@@ -891,7 +1005,9 @@ export class Creatures {
       case 'active':
         return `your companion · ${STANCE_NAMES[c.stance].toLowerCase()}`;
       case 'deed':
-        return c.carrying ? `deed worker · carrying ${itemDef(c.carrying.id).name.toLowerCase()}` : c.state === 'forage' ? `deed worker · ${verb}` : 'deed worker';
+        if (c.carrying) return `deed worker · carrying ${itemDef(c.carrying.id).name.toLowerCase()}`;
+        if (c.state === 'forage') return `deed worker · ${job === 'farm' && c.job ? `${c.job}ing a field` : verb}`;
+        return 'deed worker';
       case 'stored':
         return 'kept at the token';
       default:
@@ -914,6 +1030,7 @@ export class Creatures {
         health: c.health,
         hunger: c.hunger,
         carrying: c.carrying,
+        pouch: c.pouch,
         xp: c.xp,
         skills: c.skills,
       })),
@@ -926,7 +1043,7 @@ export class Creatures {
     cs.nextId = data.nextId ?? 1;
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, xp: j.xp ?? 0, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

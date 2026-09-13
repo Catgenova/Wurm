@@ -219,9 +219,8 @@ export const FARM_ACTIONS: ActionDef[] = [
       const produce = g.inventory.add(def.produce, { count: y.produce, ql });
       g.inventory.add(def.seed, { count: y.seeds, ql });
       g.removeCrop(c.x, c.y);
-      g.world.setTile(c.x, c.y, TileType.Dirt);
       g.logMsg(
-        `You harvest ${y.produce} × ${itemName(produce).toLowerCase()} and ${y.seeds} ${itemDef(def.seed).name.toLowerCase()}. (QL ${ql.toFixed(1)})`,
+        `You harvest ${y.produce} × ${itemName(produce).toLowerCase()} and ${y.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${ql.toFixed(1)})`,
         'event',
       );
     },

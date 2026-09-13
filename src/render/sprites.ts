@@ -650,6 +650,7 @@ export interface CreaturePose {
 export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   if (pose.species === 'vola') drawVolaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'bevere') drawBevereBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'seavic') drawSeavicBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -877,6 +878,93 @@ function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
   ctx.fillStyle = '#3f342c';
   ctx.beginPath();
   ctx.ellipse(5.4 + (pose.moving ? Math.sin(pose.phase) * 1.2 : 0), -0.9, 2.3, 1.4, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * A Seavic: upright on its haunches with a great plume of a tail curled up
+ * behind it, tufted ears and cheeks packed with seed.
+ */
+function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3.4 : 0;
+  const flick = Math.sin(pose.phase * (pose.moving ? 1 : 0.35)) * 0.12;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+  ctx.fill();
+  const [fur, belly] = pose.colors;
+  // The tail: a broad plume sweeping up behind and over the back.
+  ctx.save();
+  ctx.translate(-5, -5 - hop);
+  ctx.rotate(flick);
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.moveTo(1, 3);
+  ctx.quadraticCurveTo(-11, 1, -8.5, -11);
+  ctx.quadraticCurveTo(-7, -18, -1.5, -16.5);
+  ctx.quadraticCurveTo(-4.5, -12.5, -3.5, -7);
+  ctx.quadraticCurveTo(-2.5, -1.5, 1, -1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.globalAlpha = 0.45;
+  ctx.beginPath();
+  ctx.moveTo(-2, -2);
+  ctx.quadraticCurveTo(-6.5, -5, -5.5, -12);
+  ctx.quadraticCurveTo(-4.5, -15, -2.5, -14.5);
+  ctx.quadraticCurveTo(-4, -10, -2, -3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  // Haunches and upright body.
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(-1.5, -4 - hop, 5, 4.2, 0, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(1, -9.5 - hop, 4.2, 5.2, -0.12, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(2.4, -8.5 - hop, 2.4, 3.6, -0.12, 0, TAU);
+  ctx.fill();
+  // Head with tufted ears.
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.arc(3.2, -15.5 - hop, 3.8, 0, TAU);
+  ctx.fill();
+  for (const [ex, ey] of [
+    [1.4, -19.2],
+    [4.6, -19],
+  ] as Array<[number, number]>) {
+    ctx.beginPath();
+    ctx.moveTo(ex - 1.5, ey + 2.4);
+    ctx.quadraticCurveTo(ex - 0.3, ey - 3.4, ex + 1.5, ey + 2.2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Cheek stuffed with seed, eye and nose.
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(5.4, -14 - hop, 2.2, 1.9, 0.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#241a12';
+  ctx.beginPath();
+  ctx.arc(4.4, -16.6 - hop, 0.9, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7, -14.6 - hop, 0.6, 0, TAU);
+  ctx.fill();
+  // Forepaws held up at the chest, the way a squirrel holds a nut.
+  ctx.fillStyle = belly;
+  const paw = pose.moving ? Math.sin(pose.phase) * 0.8 : 0;
+  ctx.beginPath();
+  ctx.ellipse(4, -9.5 - hop + paw, 1.5, 1.1, 0.3, 0, TAU);
   ctx.fill();
   ctx.restore();
 }

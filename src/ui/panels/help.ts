@@ -56,7 +56,8 @@ export function buildHelp(win: UIWindow): void {
     <p>Each stage can be <b>Tended</b> once, and tending is what makes a field pay: an untended crop
     gives 1 crop and 1 seed, while one tended at every stage gives <b>4 crops and 2 seeds</b>. Tending
     and tilling both train <b>Farming</b>, and your farming skill sets the quality of what you harvest.
-    Harvesting takes the field back to dirt, ready to be raked again.</p>
+    Harvesting leaves the ground still tilled, so a field can be sown again without raking it afresh
+    &mdash; which is what lets a Seavic keep one running on its own.</p>
     <h3>Campfires and cooking</h3>
     <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from two shafts; it
     fills a two by two block of the tile's spots. Feed it wooden things &mdash; shafts, thatch, planks,
@@ -95,7 +96,10 @@ export function buildHelp(win: UIWindow): void {
     <p>Wild creatures roam the island. The <b>Rabba</b> is a rabbit-like grazer that forages berries when
     hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead; the
     <b>Bevere</b> is a flat-tailed gnawer that never settles far from water, eats vegetables and
-    starchy things, is placid by nature, and fells trees for its deed, carrying the logs to the crate. Both pick that
+    starchy things, is placid by nature, and fells trees for its deed, carrying the logs to the crate;
+    the <b>Seavic</b> is a squirrel that lives among the trees, eats acorns and nuts, is placid too, and
+    runs a farm for its deed &mdash; sowing seed from the crate, tending every stage and carrying the
+    harvest back. It cannot rake a field of its own, so it only works ground you have tilled. Both pick that
     spot clean for a while, exactly as you would. Carry what the creature eats (a berry or vegetable for
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and neither species holds a failed attempt

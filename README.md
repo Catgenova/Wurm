@@ -95,7 +95,11 @@ rebuilds and commits the result.
   vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is
   tamed with a spice or vegetable; the Bevere, a flat-tailed gnawer that only
   lives within sight of water, is placid by nature, eats vegetables and
-  starches, and fells trees for its deed, carrying the logs to the crate. Both put the tile on the same cooldown a
+  starches, and fells trees for its deed, carrying the logs to the crate; and
+  the Seavic, a squirrel that lives among trees, eats acorns and nuts, is
+  placid too, and runs a deed's farm — sowing seed from the crate, tending
+  every stage and carrying the harvest back, though it cannot till a field of
+  its own and works only ground the player has raked. Both put the tile on the same cooldown a
   player would, and neither retaliates for a failed attempt. A companion
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
@@ -110,7 +114,7 @@ rebuilds and commits the result.
   timing and its own model per stage, and each stage can be tended once: an
   untended field gives 1 crop and 1 seed, a fully tended one gives 4 crops and
   2 seeds. Tilling and tending train Farming, which sets the quality of the
-  harvest.
+  harvest, and a harvested field stays tilled so it can be sown again.
 - **Campfires and cooking.** Lay a campfire from two shafts on a two by two
   block of subtiles, feed it shafts, thatch, planks, timbers or logs for burn
   time, and light it. A burning fire is the station every cooking recipe
