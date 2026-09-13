@@ -514,7 +514,7 @@ export class Renderer {
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
-        drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind);
+        drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind, !!ent.piece.lit);
         const [W, D] = furnitureSpan(ent.piece.kind);
         const h = FURNITURE_HEIGHT[ent.piece.kind] ?? 14;
         this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: ent.piece.id });
@@ -1132,6 +1132,13 @@ export class Renderer {
         ctx.stroke();
       }
       ctx.lineWidth = 1;
+    }
+
+    // Night: a cold wash over the whole world. Markers and the hud sit on top of it.
+    const dark = game.darkness();
+    if (dark > 0.01) {
+      ctx.fillStyle = `rgba(12, 20, 44, ${(dark * 0.6).toFixed(3)})`;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
     const hover = this.hover;

@@ -99,6 +99,14 @@ export function buildHelp(win: UIWindow): void {
     bucket comes back empty &mdash; and a round of dough baked on a hot stone at a lit fire is
     <b>bread</b>, which is the first food that keeps and travels. Cornmeal boiled in a clay bowl makes
     two bowls of <b>porridge</b>. Both are cooking rather than milling: the mill only makes the meal.</p>
+    <h3>The oven</h3>
+    <p>A campfire will cook, but it burns as much as it bakes. An <b>oven</b> is laid by a
+    <b>mason</b> from ten stone bricks and four lots of mortar with a trowel, set down on a block of
+    four spots like a smelter. Feed it the same wood and coal a fire takes &mdash; it holds two hours of
+    it &mdash; and light it. A lit oven is a cooking fire for every purpose: everything on the Cook menu
+    is there, and anything that would have burnt over an open flame comes out right, and better, because
+    the bricks hold their heat evenly. It leaves ashes like any other fire, and they rake out the same
+    way.</p>
     <h3>Metal</h3>
     <p>Mining a seam brings up <b>ore</b>, not finished metal. A <b>stone smelter</b>, built on your deed
     from 8 stone bricks and 4 mortar with a trowel, fills six spots of a tile and turns ore into lumps.
@@ -171,6 +179,38 @@ export function buildHelp(win: UIWindow): void {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <h3>Bulk, rubbish, and something to pull it in</h3>
+    <p>Three more things to put things in, each for a job a chest does badly.</p>
+    <p>A <b>bulk storage bin</b> holds <b>400</b> of anything that stacks &mdash; bricks, ore, planks,
+    grain, shards &mdash; and refuses everything that does not. It is where a quarry's output goes.</p>
+    <p>A <b>trash crate</b> is built with a rotten bottom on purpose: anything put in it rots <b>thirty
+    times faster</b> than it would out in the rain, and is gone in minutes. <b>Put away</b> never picks
+    it, whatever you are standing beside; you have to choose <b>Throw it in the trash</b> on the thing
+    itself, so nothing goes in by accident.</p>
+    <p>A <b>small cart</b> holds 100 things and, once you <b>take hold of it</b>, follows you wherever
+    you go until you <b>let go</b>. Load it at the mine and walk home. Only one cart at a time, and it
+    will not follow you into water or up anything it cannot roll over.</p>
+    <h3>Water: the well and the barrels</h3>
+    <p>Until now water meant walking to the shore. A <b>well</b> is a mason's job &mdash; twelve stone
+    bricks, mortar, shafts and nails &mdash; and once it is sunk it <b>draws its own water</b>, a little
+    at a time, up to <b>50 litres</b>. How fast depends entirely on how well it was built: a poor shaft
+    trickles, a fine one keeps up with a settlement. Fill a bucket or a waterskin at it exactly as you
+    would at a shore, or <b>drink from it</b> where you stand.</p>
+    <p><b>Barrels</b> hold liquid and nothing else, in three sizes: <b>small</b> (30 litres),
+    <b>barrel</b> (80) and <b>large</b> (250). One barrel holds one liquid &mdash; water or lye, not
+    both. <b>Pour</b> a full bucket in and you get the empty bucket back; point at a stack of them and
+    the whole lot goes in one after another. Filling a bucket beside a barrel draws out of the barrel,
+    so a large barrel of lye is a tannery's worth of work waiting to be done.</p>
+    <h3>Night, and a bed to wake in</h3>
+    <p>The island keeps a clock now, shown beside your position: a full day and night passes in
+    <b>twenty-four minutes</b>, an hour to the minute. The sun goes down at eight and comes up at six,
+    and the world darkens between the two.</p>
+    <p>A <b>bed</b> or a <b>cot</b> is worth more than the corner it stands in. Choose <b>Make this your
+    home</b> and it becomes the place you wake up &mdash; whatever happens to you, wherever it happens.
+    Choose <b>Sleep until morning</b> after dark and you wake at half past six with your wind back and
+    some of your hurt mended; a well-made bed is a better night than a thin cot. The world does not wait
+    for you: fires burn down, crops come on, kilns finish and everything left outside ages by however
+    long you were under. You wake up hungry and thirsty, too.</p>
     <h3>Eating, and keeping your things</h3>
     <p>The <b>Eat</b> button beside the food bar eats the best thing you are carrying, and the
     <b>Feed</b> button on your companion's line gives it the <i>poorest</i> thing it will take, so the

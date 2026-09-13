@@ -3,12 +3,12 @@ import { TileType } from '../world/tiles';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
-import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
+import { CRATE_DEFS, crateCentre, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureUnits, type PlacedFurniture } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
@@ -90,6 +90,11 @@ const CHAR_START = 20;
 const ASH_RATE = 1 / 120;
 /** Damage at which a tool starts warning you, and every five points after. */
 const DAMAGE_WARN = 75;
+/** A day and a night, in seconds: one game hour to the real minute. */
+export const DAY_SECONDS = 1440;
+/** When the sun comes up and goes down, in game hours. */
+export const DAWN = 6;
+export const DUSK = 20;
 const FORAGE_COOLDOWN = 180;
 /**
  * The things a single tile can be worked over for, each with its own
@@ -106,7 +111,8 @@ const DECAY_STEP = 5;
 export class Game {
   readonly seed: number;
   readonly world: World;
-  readonly spawn: { x: number; y: number };
+  /** Where you wake up: the shore you came in on until a bed says otherwise. */
+  spawn: { x: number; y: number };
   readonly player: Player;
   readonly inventory: Inventory;
   readonly skills: Skills;
@@ -494,6 +500,60 @@ export class Game {
     this.logMsg(`${what}${where}.`, 'error');
   }
 
+  /** Hours since midnight, 0 up to 24. */
+  hourOfDay(): number {
+    return ((this.time % DAY_SECONDS) / DAY_SECONDS) * 24;
+  }
+
+  /** The clock as it reads on the hud: "06:30". */
+  clock(): string {
+    const h = this.hourOfDay();
+    const m = Math.floor((h % 1) * 60);
+    return `${Math.floor(h).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * How dark it is out, 0 in broad day and 1 at the dead of night, with an
+   * hour of dusk and an hour of dawn between the two.
+   */
+  darkness(): number {
+    const h = this.hourOfDay();
+    if (h >= DAWN + 1 && h <= DUSK - 1) return 0;
+    if (h >= DUSK + 1 || h <= DAWN - 1) return 1;
+    return h > 12 ? Math.min(1, Math.max(0, (h - (DUSK - 1)) / 2)) : Math.min(1, Math.max(0, (DAWN + 1 - h) / 2));
+  }
+
+  isNight(): boolean {
+    return this.darkness() > 0.45;
+  }
+
+  /**
+   * Sleep until morning. The world does not stop for it: fires burn down,
+   * crops come on and everything left outside ages by however long you slept.
+   */
+  sleepUntilMorning(rest: number, what: string): void {
+    const h = this.hourOfDay();
+    const hours = h < DAWN + 0.5 ? DAWN + 0.5 - h : 24 - h + DAWN + 0.5;
+    const seconds = (hours / 24) * DAY_SECONDS;
+    this.time += seconds;
+    // Everything that works by itself carries on working while you are under.
+    if (this.campfires.size) this.burnFires(seconds);
+    if (this.smelters.size) this.runSmelters(seconds);
+    if (this.kilns.size) this.runKilns(seconds);
+    if (this.furniture.size) this.runPlaceables(seconds);
+    if (this.crops.size) this.growCrops();
+    if (this.ground.size) this.applyDecay(seconds);
+    const s = this.player.stats;
+    s.stamina = 1;
+    s.health = Math.min(1, s.health + 0.25 * rest);
+    // Sleeping is hungry work, and a night is a long time to go without water.
+    s.hunger = Math.max(0, s.hunger - 0.2);
+    s.thirst = Math.max(0, s.thirst - 0.25);
+    this.gainSkill('body_stamina', 0.3 * rest);
+    this.logMsg(`You sleep in the ${what} and wake at ${this.clock()}, rested.`, 'event');
+    this.events.emit('world', this.player.tileX, this.player.tileY);
+  }
+
   /** Soul strength is what a wild animal reads in you when you hold out food. */
   soulBonus(): number {
     return Math.max(0, (this.skills.get('soul_strength') - CHAR_START) * 0.002);
@@ -578,6 +638,7 @@ export class Game {
     if (this.campfires.size) this.burnFires(dt);
     if (this.smelters.size) this.runSmelters(dt);
     if (this.kilns.size) this.runKilns(dt);
+    if (this.furniture.size) this.runPlaceables(dt);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
@@ -1108,7 +1169,7 @@ export class Game {
 
   /** Whether the player is standing somewhere a recipe's station requires. */
   atStation(station: Station): boolean {
-    if (station === 'campfire') return this.litFireNear() !== undefined;
+    if (station === 'campfire') return this.litFireNear() !== undefined || this.hotOvenNear() !== undefined;
     if (station === 'smelter') return this.hotSmelterNear() !== undefined;
     return this.furnitureNear(station) !== undefined;
   }
@@ -1131,6 +1192,83 @@ export class Game {
       if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return s;
     }
     return undefined;
+  }
+
+  /** The nearest oven that is alight and within reach of the work. */
+  hotOvenNear(range = 2.6): PlacedFurniture | undefined {
+    for (const f of this.furniture.values()) {
+      if (!f.lit || !furnitureDef(f.kind).hearth) continue;
+      const [cx, cy] = furnitureCentre(f);
+      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return f;
+    }
+    return undefined;
+  }
+
+  /** Litres a well draws in a second: a deep, true-lined shaft finds more water. */
+  wellRate(f: PlacedFurniture): number {
+    return 0.012 + (f.ql / 100) * 0.055;
+  }
+
+  /**
+   * Everything placed that works by itself: ovens burning down, wells filling,
+   * rubbish rotting where it was thrown, and a cart following you about.
+   */
+  private runPlaceables(dt: number): void {
+    for (const f of this.furniture.values()) {
+      const def = furnitureDef(f.kind);
+      if (def.hearth && f.lit) {
+        f.ash = (f.ash ?? 0) + Math.min(f.fuel ?? 0, dt) * ASH_RATE;
+        f.fuel = (f.fuel ?? 0) - dt;
+        if ((f.fuel ?? 0) <= 0) {
+          f.fuel = 0;
+          f.lit = false;
+          this.logMsg('The oven burns down and goes cold.', 'event');
+          this.events.emit('world', f.x, f.y);
+        }
+      }
+      if (def.well) {
+        const before = f.litres ?? 0;
+        if (before < def.well) {
+          f.litres = Math.min(def.well, before + this.wellRate(f) * dt);
+          f.liquid = 'water';
+          if (Math.floor(f.litres) !== Math.floor(before)) this.events.emit('crate');
+        }
+      }
+      if (def.trash && f.items.length) {
+        // A trash crate is built to rot: what goes in it ages many times over.
+        const hours = (dt / 3600) * def.trash;
+        for (let i = f.items.length - 1; i >= 0; i--) {
+          const item = f.items[i];
+          item.dmg = Math.min(100, item.dmg + groundDecayRate(item) * hours);
+          if (item.dmg < 100) continue;
+          f.items.splice(i, 1);
+          this.events.emit('crate');
+        }
+      }
+      if (f.hitched) this.dragCart(f);
+    }
+  }
+
+  /** Keep a hitched cart at the player's heels, a step behind wherever they are. */
+  private dragCart(f: PlacedFurniture): void {
+    const def = furnitureDef(f.kind);
+    const [cx, cy] = furnitureCentre(f);
+    const dx = this.player.x - cx;
+    const dy = this.player.y - cy;
+    if (Math.hypot(dx, dy) < 0.9) return;
+    const x = Math.floor(this.player.x);
+    const y = Math.floor(this.player.y);
+    if (!this.world.inBounds(x, y) || !this.world.isPassable(x, y) || this.world.hasWater(x, y)) return;
+    const [sx, sy] = subtileOf(x, y, this.player.x, this.player.y);
+    const [ax, ay] = furnitureAnchor(f.kind, sx - Math.floor(def.w / 2), sy - Math.floor(def.h / 2));
+    if (f.x === x && f.y === y && f.sx === ax && f.sy === ay) return;
+    const from = { x: f.x, y: f.y };
+    f.x = x;
+    f.y = y;
+    f.sx = ax;
+    f.sy = ay;
+    this.events.emit('world', from.x, from.y);
+    this.events.emit('world', f.x, f.y);
   }
 
   /** Burn down every lit fire; one that runs out goes cold. */
@@ -1263,11 +1401,15 @@ export class Game {
   }
 
   /** The piece of storage furniture closest to the player. */
-  nearestStore(): PlacedFurniture | undefined {
+  nearestStore(item?: Item): PlacedFurniture | undefined {
     let best: PlacedFurniture | undefined;
     let bestD = Infinity;
     for (const f of this.furniture.values()) {
       if (!furnitureCapacity(f)) continue;
+      // A bulk bin that will not take a tool is not the nearest store for a tool.
+      if (item && furnitureRefuses(f, item)) continue;
+      // Nothing goes in the trash by accident: that one has to be asked for.
+      if (furnitureDef(f.kind).trash) continue;
       const [cx, cy] = furnitureCentre(f);
       const d = Math.hypot(cx - this.player.x, cy - this.player.y);
       if (d < bestD) {

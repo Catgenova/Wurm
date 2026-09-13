@@ -20,6 +20,8 @@ const WOODS: Record<string, Wood> = {
   grey: { top: '#9a9184', left: '#7f776b', right: '#645d53' },
 };
 
+const STONE = { top: '#b3aca1', left: '#948d83', right: '#767068' };
+const IRON = { top: '#6f6a63', left: '#57534d', right: '#413e39' };
 const LINEN = { top: '#e8e2d2', left: '#d3ccba', right: '#b9b2a0' };
 const GREEN = { top: '#6f9a4e', left: '#5c823f', right: '#476631' };
 const SOIL = { top: '#5b4530', left: '#4a3726', right: '#3a2b1d' };
@@ -48,11 +50,20 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   shelves: 28,
   bookshelf: 26,
   larder: 32,
-  barrel: 17,
+  barrel: 22,
   lectern: 24,
   coat_rack: 30,
   planter: 10,
   firewood_rack: 17,
+  spindle: 18,
+  loom: 26,
+  oven: 24,
+  well: 22,
+  bulk_bin: 24,
+  trash_crate: 12,
+  cart: 15,
+  small_barrel: 16,
+  large_barrel: 38,
 };
 
 /**
@@ -131,7 +142,31 @@ function doors(ctx: CanvasRenderingContext2D, W: number, D: number, top: number,
   }
 }
 
-type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number) => void;
+/** Staves, hoops and a lid: one shape for all three sizes of barrel. */
+function barrelShape(ctx: CanvasRenderingContext2D, W: number, D: number, h: number): void {
+  const rx = W * 0.74;
+  ctx.fillStyle = WOODS.dark.left;
+  ctx.beginPath();
+  ctx.moveTo(-rx, -h + D);
+  ctx.bezierCurveTo(-rx * 1.22, -h * 0.6, -rx * 1.22, -h * 0.4, -rx, 0);
+  ctx.ellipse(0, 0, rx, D * 0.8, 0, Math.PI, 0, true);
+  ctx.bezierCurveTo(rx * 1.22, -h * 0.4, rx * 1.22, -h * 0.6, rx, -h + D);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = WOODS.pale.top;
+  ctx.beginPath();
+  ctx.ellipse(0, -h + D, rx, D * 0.8, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = '#46433e';
+  ctx.lineWidth = 1.4;
+  for (const k of [0.28, 0.72]) {
+    ctx.beginPath();
+    ctx.ellipse(0, -h * k + D * 0.4, rx * 1.1, D * 0.9, 0, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+  }
+}
+
+type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean) => void;
 
 const DRAW: Record<string, Draw> = {
   stool: (ctx, W, D, h) => {
@@ -273,25 +308,129 @@ const DRAW: Record<string, Draw> = {
       ctx.stroke();
     }
   },
-  barrel: (ctx, W, D, h) => {
-    const rx = W * 0.74;
-    ctx.fillStyle = WOODS.dark.left;
+  barrel: (ctx, W, D, h) => barrelShape(ctx, W, D, h),
+  small_barrel: (ctx, W, D, h) => barrelShape(ctx, W, D, h),
+  large_barrel: (ctx, W, D, h) => barrelShape(ctx, W, D, h),
+  oven: (ctx, W, D, h, lit) => {
+    // A brick box with an arched mouth, and a short chimney off the back.
+    box(ctx, 0, 0, W * 0.94, D * 0.94, h * 0.78, STONE);
+    box(ctx, 0, -D * 0.3, W * 0.5, D * 0.4, h * 0.22, STONE, h * 0.78);
+    post(ctx, W * 0.34, -D * 0.52, h * 0.4, STONE, 2.4, h);
+    // Courses, so it reads as brick rather than one lump.
+    ctx.strokeStyle = 'rgba(40,34,28,0.22)';
+    ctx.lineWidth = 0.8;
+    for (let i = 1; i < 4; i++) {
+      const y = -h * 0.78 * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.94, y);
+      ctx.lineTo(0, y + D * 0.94);
+      ctx.lineTo(W * 0.94, y);
+      ctx.stroke();
+    }
+    // The mouth, facing the viewer, alight or cold.
+    ctx.fillStyle = lit ? '#ffb347' : '#2a1d12';
     ctx.beginPath();
-    ctx.moveTo(-rx, -h + D);
-    ctx.bezierCurveTo(-rx * 1.22, -h * 0.6, -rx * 1.22, -h * 0.4, -rx, 0);
-    ctx.ellipse(0, 0, rx, D * 0.8, 0, Math.PI, 0, true);
-    ctx.bezierCurveTo(rx * 1.22, -h * 0.4, rx * 1.22, -h * 0.6, rx, -h + D);
+    ctx.moveTo(-W * 0.36, -h * 0.12 + D * 0.62);
+    ctx.lineTo(-W * 0.36, -h * 0.42 + D * 0.62);
+    ctx.quadraticCurveTo(0, -h * 0.62 + D * 0.62, W * 0.36, -h * 0.42 + D * 0.62);
+    ctx.lineTo(W * 0.36, -h * 0.12 + D * 0.62);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = WOODS.pale.top;
+  },
+  well: (ctx, W, D, h) => {
+    // A stone kerb with a dark shaft in it, and a windlass over the top.
+    box(ctx, 0, 0, W * 0.9, D * 0.9, h * 0.34, STONE);
+    ctx.fillStyle = '#161f26';
     ctx.beginPath();
-    ctx.ellipse(0, -h + D, rx, D * 0.8, 0, 0, TAU);
+    ctx.ellipse(0, -h * 0.34, W * 0.58, D * 0.58, 0, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = '#46433e';
-    ctx.lineWidth = 1.4;
-    for (const k of [0.28, 0.72]) {
+    ctx.fillStyle = 'rgba(96,150,170,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.34 + 1, W * 0.42, D * 0.42, 0, 0, TAU);
+    ctx.fill();
+    const w = WOODS.dark;
+    post(ctx, -W * 0.74, 0, h * 0.6, w, 1.8, h * 0.34);
+    post(ctx, W * 0.74, 0, h * 0.6, w, 1.8, h * 0.34);
+    box(ctx, 0, 0, W * 0.86, D * 0.16, 2.2, w, h * 0.94);
+    // The bucket, hung off the crossbar.
+    box(ctx, 0, 0, W * 0.2, D * 0.2, 4, WOODS.pale, h * 0.62);
+  },
+  bulk_bin: (ctx, W, D, h) => {
+    const w = WOODS.grey;
+    box(ctx, 0, 0, W * 0.96, D * 0.96, h - 2, w);
+    box(ctx, 0, 0, W * 0.99, D * 0.99, 2, WOODS.dark, h - 2);
+    // Board lines down the faces, and a lid split across the top.
+    ctx.strokeStyle = 'rgba(30,24,16,0.28)';
+    ctx.lineWidth = 0.8;
+    for (const t of [-0.5, 0, 0.5]) {
       ctx.beginPath();
-      ctx.ellipse(0, -h * k + D * 0.4, rx * 1.1, D * 0.9, 0, 0.2, Math.PI - 0.2);
+      ctx.moveTo(W * t * 0.96, -h + 2 + Math.abs(t) * 0 + D * 0.96 * (1 - Math.abs(t)) - D * 0.96 + D * 0.96);
+      ctx.lineTo(W * t * 0.96, -2 + D * 0.96 * (1 - Math.abs(t)));
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.99, -h);
+    ctx.lineTo(W * 0.99, -h);
+    ctx.stroke();
+  },
+  trash_crate: (ctx, W, D, h) => {
+    const w = WOODS.grey;
+    // Four corner posts and slats: an open crate with nothing to keep the rain off.
+    for (const [lx, ly] of [[-W * 0.86, 0], [W * 0.86, 0], [0, D * 0.86], [0, -D * 0.86]] as Array<[number, number]>) post(ctx, lx, ly, h, w, 1.5);
+    for (const k of [0.18, 0.62]) box(ctx, 0, 0, W * 0.9, D * 0.9, 1.6, w, h * k);
+    ctx.fillStyle = 'rgba(40,48,30,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.5, W * 0.6, D * 0.5, 0, 0, TAU);
+    ctx.fill();
+  },
+  cart: (ctx, W, D, h) => {
+    const w = WOODS.oak;
+    const deck = h * 0.52;
+    // The shafts first, running out to where a hand would take hold.
+    box(ctx, -W * 0.98, D * 0.24, W * 0.4, D * 0.06, 1.3, WOODS.pale, deck * 0.85);
+    // The body, sitting on the axle.
+    box(ctx, 0, 0, W * 0.78, D * 0.78, h - deck, w, deck);
+    box(ctx, 0, 0, W * 0.82, D * 0.82, 1.6, WOODS.dark, h - 1.6);
+    // Wheels last, so they stand out from the body rather than behind it.
+    for (const wx of [-W * 0.8, W * 0.8]) {
+      const wy = (wx / W) * D * 0.5;
+      ctx.fillStyle = WOODS.dark.left;
+      ctx.beginPath();
+      ctx.ellipse(wx, -deck * 0.62 + wy, 2.4, deck * 0.72, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = IRON.top;
+      ctx.lineWidth = 0.9;
+      ctx.stroke();
+      ctx.fillStyle = IRON.top;
+      ctx.beginPath();
+      ctx.ellipse(wx, -deck * 0.62 + wy, 0.9, 1.4, 0, 0, TAU);
+      ctx.fill();
+    }
+  },
+  spindle: (ctx, W, D, h) => {
+    const w = WOODS.pale;
+    legs(ctx, W, D, h * 0.5, w, 0.6);
+    box(ctx, 0, 0, W * 0.7, D * 0.7, 2, w, h * 0.5);
+    post(ctx, 0, 0, h * 0.42, WOODS.dark, 1.2, h * 0.52);
+    ctx.fillStyle = LINEN.top;
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.78, 3.2, 2.4, 0, 0, TAU);
+    ctx.fill();
+  },
+  loom: (ctx, W, D, h) => {
+    const w = WOODS.dark;
+    post(ctx, -W * 0.8, 0, h, w, 2);
+    post(ctx, W * 0.8, 0, h, w, 2);
+    box(ctx, 0, 0, W * 0.9, D * 0.14, 2.4, w, h - 2.4);
+    box(ctx, 0, 0, W * 0.9, D * 0.14, 2.4, w, h * 0.24);
+    // The warp, strung between the beams.
+    ctx.strokeStyle = LINEN.left;
+    ctx.lineWidth = 0.7;
+    for (let i = -4; i <= 4; i++) {
+      const x = (i / 4) * W * 0.72;
+      ctx.beginPath();
+      ctx.moveTo(x, -h + 2.4);
+      ctx.lineTo(x, -h * 0.28);
       ctx.stroke();
     }
   },
@@ -366,7 +505,7 @@ const DRAW: Record<string, Draw> = {
 };
 
 /** Draw one piece with its floor contact at (sx, sy). */
-export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string): void {
+export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false): void {
   const [W, D] = furnitureSpan(kind);
   const h = FURNITURE_HEIGHT[kind] ?? 14;
   ctx.save();
@@ -376,6 +515,6 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
   ctx.beginPath();
   ctx.ellipse(0, 0, W * 0.95, D * 0.95, 0, 0, TAU);
   ctx.fill();
-  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h);
+  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit);
   ctx.restore();
 }

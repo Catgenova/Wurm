@@ -12,6 +12,7 @@ import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
 import { FIRST_AID_ACTIONS } from './firstaid';
+import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, waterNear } from './placeables';
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
@@ -785,14 +786,16 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       if (g.inventory.get(t.uid)?.id !== 'bucket') return 'That is not an empty bucket.';
-      return g.nearWater() ? null : 'You need to stand next to water.';
+      return sourceFor(g) ? null : 'You need water: a shore, a well, or a barrel with something in it.';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const item = g.inventory.get(t.uid);
-      if (!item || item.id !== 'bucket' || !g.inventory.remove(item.uid, 1)) return;
-      g.inventory.add('water_bucket', { ql: item.ql });
-      g.logMsg('You dip the bucket full of water.', 'event');
+      if (!item || item.id !== 'bucket') return;
+      const source = sourceFor(g);
+      const got = fillFromSource(g, item);
+      if (!got) return;
+      g.logMsg(source?.from ? `You draw a bucket of ${got} out of the ${itemDef(source.from.kind).name.toLowerCase()}.` : 'You dip the bucket full of water.', 'event');
     },
   },
   {
@@ -830,7 +833,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
       if (item && (item.charges ?? 0) >= (itemDef(item.id).charges ?? 0)) return 'It is already full.';
-      return g.nearWater() ? null : 'You need to stand next to water.';
+      return waterNear(g) ? null : 'You need water: a shore, a well, or a barrel of it.';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
@@ -1001,6 +1004,7 @@ export const ACTIONS: ActionDef[] = [
   ...CREATURE_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...FIRST_AID_ACTIONS,
+  ...PLACEABLE_ACTIONS,
   ...CRATE_ACTIONS,
   ...RECIPE_ACTIONS,
   ...BUTCHER_ACTIONS,

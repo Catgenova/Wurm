@@ -185,15 +185,15 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
   category: 'Furniture' as RecipeCategory,
   result: f.id,
   inputs: f.bill.map(([item, count]) => ({ item, count })),
-  tool: 'mallet',
-  skill: 'fine_carpentry',
+  tool: f.tool ?? 'mallet',
+  skill: f.skill ?? 'fine_carpentry',
   label: `Build ${f.name.toLowerCase()}`,
   verb: `building a ${f.name.toLowerCase()}`,
   baseTime: f.time,
   stamina: 0.05,
   difficulty: f.difficulty,
   done: `${f.done} Set it down on any spot of a tile.`,
-  fail: `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
+  fail: f.skill === 'masonry' ? `The courses will not run true and you knock the ${f.name.toLowerCase()} down again.` : `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
 }));
 
 RECIPES.push(...FURNITURE_RECIPES);
@@ -293,14 +293,17 @@ export function recipeAction(r: Recipe): ActionDef {
     maxRepeat: (_t, g) => recipeStatus(r, g).max,
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g), g.mindEase())) {
+      // An oven holds its heat evenly: what would burn over a fire comes out right.
+      const oven = r.station === 'campfire' ? g.hotOvenNear() : undefined;
+      const ease = g.mindEase() + (oven ? 10 : 0);
+      if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g), ease)) {
         if (r.consumeOnFail) for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid);
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         return more(t, g);
       }
       const fromInputs = r.qlFromInputs ? inputQl(g, r) : 0;
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid)) return;
-      const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g));
+      const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
       const item = g.inventory.add(r.result, { count: r.count ?? 1, ql });
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.

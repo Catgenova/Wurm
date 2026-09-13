@@ -169,6 +169,30 @@ rebuilds and commits the result.
   carved from bone, so most improving starts long before a forge; a file is
   cast from its own mould, which is what gates metal. The judging skill is
   whichever one would have made the thing, and nothing improves past it.
+- **The oven.** A mason's job — ten stone bricks and four mortar with a trowel
+  — set down on four spots like a smelter. It takes the same fuel a fire does
+  and holds two hours of it. A lit oven is a cooking fire for every recipe,
+  and a better one: the brickwork holds its heat, so what would have burnt
+  over a flame comes out right and comes out finer. It leaves ashes like any
+  other fire.
+- **Bulk, rubbish and a cart.** A bulk storage bin holds 400 of anything that
+  stacks and refuses everything that does not. A trash crate rots what is put
+  in it thirty times faster than open ground, and Put away never chooses it —
+  throwing something out has to be asked for. A small cart holds 100 things
+  and follows you about once you take hold of the shafts, until you let go.
+- **Water away from the shore.** A well is laid in brick and mortar and then
+  draws its own water, up to 50 litres, at a speed its quality decides — a
+  poor shaft trickles, a fine one keeps up with a settlement. Buckets and
+  waterskins fill at it as they would at a shore, and you can drink from it
+  where you stand. Barrels hold liquid and nothing else in three sizes (30,
+  80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
+  empty bucket back, and filling beside a barrel draws out of it.
+- **Night, and a bed to wake in.** A day and a night pass in twenty-four
+  minutes, an hour to the minute, with the clock beside your position and the
+  world darkening between dusk at eight and dawn at six. A bed or cot can be
+  made your home, which is where you wake whatever happens to you, and slept
+  in after dark to wake at half past six rested. The world carries on while
+  you sleep: fires burn down, crops come on, and anything left outside ages.
 - **Grain, the quern and bread.** Wheat and corn are useless until they have
   been milled. A quern — two stones dressed flat and grooved, chiselled from
   three rock shards — grinds two wheat into flour or two corn into cornmeal

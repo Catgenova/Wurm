@@ -477,9 +477,14 @@ export class UI {
       const reason = def.check?.(ft, g) ?? null;
       entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
     }
-    // Cooking recipes are ordinary recipes that need a lit fire; offer the ones you could do here.
-    const cookable = RECIPES.filter((r) => r.station === 'campfire');
-    const children: MenuItem[] = cookable.map((r) => {
+    entries.push({ label: 'Cook', children: this.cookEntries() });
+    return entries;
+  }
+
+  /** Everything a lit fire or a hot oven could turn into dinner. */
+  private cookEntries(): MenuItem[] {
+    const g = this.game;
+    return RECIPES.filter((r) => r.station === 'campfire').map((r) => {
       const def = ACTION_BY_ID.get(r.id);
       const st = recipeStatus(r, g);
       const material = g.inventory.find(r.inputs[0].item);
@@ -494,8 +499,6 @@ export class UI {
         },
       };
     });
-    entries.push({ label: 'Cook', children });
-    return entries;
   }
 
   /** Fuelling, charging and drawing off a smelter. */
@@ -561,11 +564,34 @@ export class UI {
   private furnitureEntries(f: PlacedFurniture): MenuItem[] {
     const g = this.game;
     const ft: Target = { kind: 'furniture', id: f.id };
+    const def = furnitureDef(f.kind);
     const entries: MenuItem[] = [];
     if (furnitureCapacity(f)) {
       entries.push({ label: 'Open', note: `${furnitureUnits(f)} / ${furnitureCapacity(f)} things`, onSelect: () => this.cratePanel.openFurniture(f.id) });
     }
-    for (const id of ['furniture_take_all', 'pick_up_furniture']) {
+    // An oven is fed and lit like a fire, and cooks like one.
+    if (def.hearth) {
+      const fuelDef = ACTION_BY_ID.get('fuel_oven');
+      const wood = g.inventory.items.filter((it) => isFuel(it.id));
+      if (fuelDef && wood.length) {
+        entries.push({
+          label: 'Fuel',
+          children: wood.map((it) => ({
+            label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+            children:
+              it.count > 1
+                ? [
+                    { label: 'One', onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 } as Target) },
+                    { label: `All (${it.count})`, onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: it.count } as Target) },
+                  ]
+                : undefined,
+            onSelect: it.count > 1 ? undefined : () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 } as Target),
+          })),
+        });
+      }
+      if (f.lit) entries.push({ label: 'Cook', children: this.cookEntries() });
+    }
+    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
       const reason = def.check?.(ft, g) ?? null;
