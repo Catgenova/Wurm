@@ -9,14 +9,14 @@ const skillName = (id: string): string => SKILL_DEFS.find((s) => s.id === id)?.n
 const lower = (id: string): string => itemDef(id).name.toLowerCase();
 
 /**
- * Everything that can be made from what the player carries, grouped by
- * craft. Recipes missing a tool or material stay hidden unless "show every
- * recipe" is on, in which case the missing parts are marked.
+ * The recipe book, grouped by craft. Every recipe is listed with its tool and
+ * materials marked green when carried and red when missing, and the ones that
+ * can be made right now come first. A switch narrows it to just those.
  */
 export class CraftPanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
-  private showAll = false;
+  private readyOnly = false;
 
   constructor(win: UIWindow, private readonly game: Game) {
     win.body.classList.add('inv-body');
@@ -28,10 +28,10 @@ export class CraftPanel {
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.addEventListener('change', () => {
-      this.showAll = box.checked;
+      this.readyOnly = box.checked;
       this.render();
     });
-    toggle.append(box, document.createTextNode('Show every recipe'));
+    toggle.append(box, document.createTextNode('Only what I can make'));
     head.append(hint, toggle);
     this.list = document.createElement('div');
     this.list.className = 'inv-list';
@@ -49,7 +49,9 @@ export class CraftPanel {
     let shown = 0;
     let ready = 0;
     for (const cat of RECIPE_CATEGORIES) {
-      const rows = RECIPES.filter((r) => r.category === cat && (this.showAll || statuses.get(r)?.ready));
+      const rows = RECIPES.filter((r) => r.category === cat && (!this.readyOnly || statuses.get(r)?.ready));
+      // What can be made now sits above what still needs gathering.
+      rows.sort((a, b) => Number(statuses.get(b)?.ready ?? false) - Number(statuses.get(a)?.ready ?? false));
       if (!rows.length) continue;
       const header = document.createElement('div');
       header.className = 'inv-group';
@@ -65,7 +67,7 @@ export class CraftPanel {
     if (!shown) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = 'Nothing can be made with what you carry. Tick "Show every recipe" to see what each thing needs.';
+      empty.textContent = 'Nothing can be made with what you carry. Untick "Only what I can make" to see what each thing needs.';
       this.list.append(empty);
     }
     this.footer.textContent = `${ready} of ${RECIPES.length} recipes possible with what you carry`;

@@ -41,11 +41,12 @@ export function buildHelp(win: UIWindow): void {
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
     <h3>Crafting</h3>
-    <p>The crafting window (<kbd>R</kbd>) lists every recipe you can make right now from the tools and
-    materials in your inventory, grouped by craft: a carving knife and a log give shafts or a mallet, a
-    saw gives planks and timbers, a chisel turns shards into bricks, and so on. Tick <i>Show every
-    recipe</i> to see the rest with the missing parts marked. The same recipes are on each material's
-    own menu, where <i>All</i> keeps going until the materials run out.</p>
+    <p>The crafting window (<kbd>R</kbd>) is your recipe book, grouped by craft: a carving knife and a
+    log give shafts or a mallet, a shaft becomes a deed stake, a saw gives planks and timbers, a chisel
+    turns shards into bricks, and so on. Each recipe lists its tool and materials, green when you carry
+    them and red when you do not, and whatever you can make right now sits at the top of its group. Tick
+    <i>Only what I can make</i> to hide the rest. The same recipes are on each material's own menu,
+    where <i>All</i> keeps going until the materials run out.</p>
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a

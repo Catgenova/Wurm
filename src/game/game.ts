@@ -4,7 +4,7 @@ import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
 import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
-import { Creatures, type CreatureJSON } from './creatures';
+import { CALL_WINDOW, Creatures, type CreatureJSON } from './creatures';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { groundStep, Player } from './player';
@@ -16,6 +16,8 @@ export interface ActiveAction {
   state: 'walking' | 'performing';
   elapsed: number;
   duration: number;
+  /** Standing still until this time, waiting for a called wildermon to arrive. */
+  waitUntil?: number;
 }
 
 /** A settlement: a square of land around a token that the player may build on. */
@@ -305,8 +307,11 @@ export class Game {
       }
       if (!p.path) {
         if (this.inRange(a.def, a.target)) this.beginPerform();
-        else {
-          this.logMsg('You are too far away from that.', 'error');
+        else if (a.waitUntil !== undefined && this.time < a.waitUntil) {
+          // A called wildermon is still on its way over.
+        } else {
+          const pet = a.target.kind === 'creature' ? this.creatures.get(a.target.id) : undefined;
+          this.logMsg(a.waitUntil !== undefined && pet ? `${pet.name} cannot get to you.` : 'You are too far away from that.', 'error');
           this.action = null;
           this.events.emit('action');
         }
@@ -403,7 +408,14 @@ export class Game {
       this.beginPerform();
       return;
     }
-    if (!this.walkToward(def, target)) {
+    // A tamed wildermon comes to you, rather than being chased around the field.
+    const pet = target.kind === 'creature' ? this.creatures.get(target.id) : undefined;
+    if (pet && pet.mode !== 'wild' && pet.mode !== 'stored') {
+      this.creatures.callToPlayer(this, pet);
+      this.action.waitUntil = this.time + CALL_WINDOW;
+      this.player.stop();
+      this.logMsg(`You call ${pet.name} over.`, 'info');
+    } else if (!this.walkToward(def, target)) {
       this.logMsg("You can't find a way to get there.", 'error');
       this.action = null;
     }

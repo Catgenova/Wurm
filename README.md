@@ -77,9 +77,10 @@ rebuilds and commits the result.
   clay and sand, bricks chiselled from rock, slate, marble or sandstone
   shards, clay bricks and adobe by pottery, silver and gold chipped from
   veins in the mountains. Every recipe is a tool plus materials; the crafting
-  window (R) lists what you can make right now from your inventory, with a
-  switch to show every recipe and what it lacks, and each material's own menu
-  offers the same recipes. A deed stake, the thing you plant to found a
+  window (R) is a recipe book grouped by craft: every recipe shows its tool
+  and materials, green when carried and red when missing, with whatever you
+  can make right now at the top and a switch to hide the rest. Each
+  material's own menu offers the same recipes. A deed stake, the thing you plant to found a
   settlement, is carved from a shaft with a carving knife.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, forages berries when hungry and is tamed with a berry or

@@ -157,6 +157,8 @@ export interface Creature {
   cooldown: number;
   busyUntil: number;
   searchAt: number;
+  /** When the player last called it over for an action; it drops everything and comes. */
+  calledAt: number;
 }
 
 export interface CreatureJSON {
@@ -185,6 +187,11 @@ const HUNGER_RATE: Record<Exclude<CreatureMode, 'stored'>, number> = {
   active: 0.00025,
   deed: 0.0004,
 };
+
+/** How long a called creature keeps making its way over. */
+export const CALL_WINDOW = 12;
+/** How close it comes before standing still, well inside arm's reach. */
+const CALL_DISTANCE = 0.9;
 
 export const WILD_TARGET = 32;
 const RESPAWN_EVERY = 45;
@@ -251,6 +258,7 @@ export class Creatures {
       cooldown: 0,
       busyUntil: 0,
       searchAt: 0,
+      calledAt: -1e9,
     };
   }
 
@@ -526,6 +534,7 @@ export class Creatures {
       c.enemy = null;
       return;
     }
+    if (this.comeWhenCalled(c, dt, game)) return;
     if (c.stance === 'passive') c.enemy = null;
     else if (c.enemy === null) {
       if (c.stance === 'aggressive') {
@@ -582,6 +591,7 @@ export class Creatures {
       c.mode = 'wild';
       return;
     }
+    if (this.comeWhenCalled(c, dt, game)) return;
     const def = this.species(c);
     const kind = def.gathers;
     const crate = game.deedCrate();
@@ -660,6 +670,27 @@ export class Creatures {
     // Nothing to do right now: potter about near the token.
     this.wanderTarget(game, c, 3, deed.x + 0.5, deed.y + 0.5);
     c.until = game.time + 4;
+  }
+
+  /** Ask a tamed creature to come over, so an action on it can start where the player stands. */
+  callToPlayer(game: Game, c: Creature): void {
+    if (c.mode === 'wild' || c.mode === 'stored') return;
+    c.calledAt = game.time;
+    c.enemy = null;
+    c.state = 'idle';
+    c.until = game.time;
+  }
+
+  /** True while a called creature is making its way to the player, or waiting there. */
+  private comeWhenCalled(c: Creature, dt: number, game: Game): boolean {
+    if (game.time - c.calledAt >= CALL_WINDOW) return false;
+    const p = game.player;
+    c.enemy = null;
+    if (Math.hypot(p.x - c.x, p.y - c.y) > CALL_DISTANCE && this.stepToward(game, c, p.x, p.y, dt, 1.35) === 'moving') return true;
+    // Arrived, or cannot get closer: stand still so the action can run.
+    c.state = 'idle';
+    c.until = game.time + 1;
+    return true;
   }
 
   attack(game: Game, a: Creature, t: Creature): void {
