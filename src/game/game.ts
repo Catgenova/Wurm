@@ -747,7 +747,7 @@ export class Game {
    * the last dirt from all four corners of a tile and its bedrock shows.
    */
   exposeRock(cx: number, cy: number): void {
-    this.world.reconcileAround(cx, cy, (x, y) => rockKindAt(this.world.seed, x, y, this.world.centerHeight(x, y)));
+    this.world.reconcileAround(cx, cy, (x, y) => rockKindAt(this.world.seed, x, y));
   }
 
   /** Light up the ore a prospector just read, for a while. */

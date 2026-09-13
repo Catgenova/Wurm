@@ -111,7 +111,7 @@ export function loadGame(): Game | null {
     // Worlds saved before rock had a depth get soil worked out from their tiles.
     if (!dirtBytes || dirtBytes.length !== (size + 1) * (size + 1)) world.deriveDirt();
     // Rock kinds come from the seed, so a world saved under an older table is brought up to date.
-    world.rederiveRock((x, y) => rockKindAt(world.seed, x, y, world.centerHeight(x, y)));
+    world.rederiveRock((x, y) => rockKindAt(world.seed, x, y));
     const game = new Game({
       seed: data.seed,
       world,

@@ -156,7 +156,7 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (world.getTile(x, y) !== TileType.Rock) continue;
-      const v = rockKindAt(seed, x, y, world.centerHeight(x, y));
+      const v = rockKindAt(seed, x, y);
       if (v) world.setTile(x, y, TileType.Rock, v);
     }
   }

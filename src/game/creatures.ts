@@ -4,7 +4,7 @@ import type { Game } from './game';
 import { crateCentre, crateName, type PlacedCrate } from './crates';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { mineChance } from './actions';
-import { oreAt } from '../world/ore';
+import { bedrockAt, oreAt } from '../world/ore';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
 
@@ -362,20 +362,6 @@ export class Creatures {
   nextId = 1;
   private byTile = new Map<string, Creature[]>();
   private respawnClock = 0;
-  /** Where the ore is, so creatures that live on it can be placed at all. */
-  private oreTiles: Array<[number, number]> | null = null;
-  private oreTilesAt = -1e9;
-
-  /** Every ore tile in the world, rebuilt now and then as rock is uncovered. */
-  private allOre(game: Game): Array<[number, number]> {
-    if (this.oreTiles && game.time - this.oreTilesAt < 120) return this.oreTiles;
-    const w = game.world;
-    const out: Array<[number, number]> = [];
-    for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (oreAt(w, x, y)) out.push([x, y]);
-    this.oreTiles = out;
-    this.oreTilesAt = game.time;
-    return out;
-  }
 
   get(id: number): Creature | undefined {
     return this.list.get(id);
@@ -472,32 +458,18 @@ export class Creatures {
   /** As spawnWild, but for one species; pass null to roll the wild mix. */
   spawnSpecies(game: Game, species: string | null, count: number, minDistance = 12): number {
     const w = game.world;
-    // Ore is far too rare to stumble onto by sampling the map at random.
-    const seams = species && SPECIES[species]?.onOre ? this.allOre(game) : null;
-    if (seams && !seams.length) return 0;
     let placed = 0;
     for (let tries = 0; tries < count * 40 && placed < count; tries++) {
-      const pick = seams ? seams[Math.floor(game.rand() * seams.length)] : null;
-      const x = pick ? pick[0] : Math.floor(game.rand() * w.w);
-      const y = pick ? pick[1] : Math.floor(game.rand() * w.h);
+      const x = Math.floor(game.rand() * w.w);
+      const y = Math.floor(game.rand() * w.h);
       if (!this.tileOk(game, x, y)) continue;
       if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
       const id = species ?? rollTable(WILD_SPECIES, game.rand());
       const def = SPECIES[id];
-      // A Mola is only ever found sitting on metal; everything else wants grazing.
+      // A Mola settles over metal, bare or buried; everything else wants grazing.
       if (def?.onOre) {
-        if (!pick && !oreAt(w, x, y)) {
-          // Rolled an ore-dweller on plain ground: put it on a seam instead.
-          const all = this.allOre(game);
-          if (!all.length) continue;
-          const [ox, oy] = all[Math.floor(game.rand() * all.length)];
-          if (!this.tileOk(game, ox, oy) || game.onDeed(ox, oy)) continue;
-          if (Math.hypot(ox + 0.5 - game.player.x, oy + 0.5 - game.player.y) < minDistance) continue;
-          this.spawn(id, ox + 0.5, oy + 0.5, 'wild', game.rand);
-          placed++;
-          continue;
-        }
+        if (!bedrockAt(w, x, y).ore) continue;
       } else if (!TILE_DEFS[w.getTile(x, y)].forage) continue;
       // A Bevere lives on land, but only ever within sight of water; a Seavic needs trees.
       if (def?.nearWater && !nearWater(game, x, y)) continue;

@@ -146,13 +146,16 @@ export function buildHelp(win: UIWindow): void {
     at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90. The rarer
     the metal, the harder it is to find as well as to work. Coal burns longer than a log, so a campfire
     will take it gladly.</p>
-    <p><b>Mining</b> with a pickaxe works that bare rock. Every swing that bites gives you shards or
-    metal; cutting the face back a whole level is a separate roll, and how often it happens depends on
-    your mining skill and the quality of your pick. <b>Prospecting</b> reads the ground: it marks every
-    ore-bearing rock tile within range for a while, and prospecting the seam itself tells you what metal
-    it holds, the mining skill it takes to work, and the highest quality it will ever give up, however
-    good the miner. The range starts at 3 tiles and grows
-    by one for every 10 levels of the skill.</p>
+    <p><b>Mining</b> with a pickaxe works bare rock. Every swing that bites gives you shards or metal;
+    cutting the face back a whole level is a separate roll, and how often it happens depends on your
+    mining skill and the quality of your pick.</p>
+    <p>Every tile in the world sits on a particular rock of a particular quality &mdash; under grass,
+    under a forest, under the sea, everywhere &mdash; settled when the world was made and unchanged by
+    anything you do to the ground above it. <b>Prospecting</b> is how you read it. It marks every
+    ore-bearing tile within range, buried or bare, and sampling where you stand names the rock, the
+    mining skill any metal takes to work, the highest quality it will ever give up, and how deep it
+    lies. The range starts at 3 tiles and grows by one for every 10 levels of the skill. Metal found
+    under a meadow has to be dug down to before a pickaxe is any use.</p>
     <p><b>Flatten</b> brings a tile level with the ground you are standing on, corner by corner:
     ground above you is scraped down and pocketed as dirt, ground below you is packed up and spends
     dirt from your pack. Stand where you want the finished height and work outwards to terrace a

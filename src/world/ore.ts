@@ -25,7 +25,7 @@ export function hashTile(x: number, y: number, salt: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-/** Index into ROCK_VARIANTS for the rock under this tile. */
+/** Index into ROCK_VARIANTS for the rock under this tile, wherever it lies. */
 /**
  * How common each seam is, rarest first. A tile rolls against these in order,
  * so the metals that need the most skill are the ones you almost never see.
@@ -44,13 +44,16 @@ const ORE_CHANCE: Array<[kind: number, upTo: number]> = [
   [4, 0.076], // copper
 ];
 
-export function rockKindAt(seed: number, x: number, y: number, height: number): number {
+export function rockKindAt(seed: number, x: number, y: number): number {
   const r = hashTile(x, y, seed + 11);
   for (const [kind, upTo] of ORE_CHANCE) if (r < upTo) return kind;
   const n = bandNoise(seed + 50).fbm(x * 0.045 + 50, y * 0.045 + 50, 3);
   if (n > 0.34) return 1;
   if (n < -0.42) return 2;
-  if (n > 0.05 && height < 80) return 3;
+  // A broad band of sandstone through the low country, read from the seed
+  // rather than the ground's present height, which the player can change.
+  const deep = bandNoise(seed + 51).fbm(x * 0.012 + 9, y * 0.012 + 9, 2);
+  if (n > 0.05 && deep < 0.2) return 3;
   return 0;
 }
 
@@ -62,10 +65,12 @@ export interface OreInfo {
   kind: number;
   name: string;
   yields: string;
-  /** The best quality this deposit will ever give up. */
+  /** The best quality this rock will ever give up. */
   maxQl: number;
   /** Mining skill needed to work it at all. */
   level: number;
+  /** Whether it is metal rather than plain stone. */
+  ore: boolean;
 }
 
 /** The best quality a deposit can yield, fixed for that tile. */
@@ -73,11 +78,21 @@ export function oreMaxQl(seed: number, x: number, y: number): number {
   return Math.round(25 + hashTile(x, y, seed + 991) * 74);
 }
 
-/** The ore in a rock tile, or null when there is none. */
+/**
+ * The rock beneath any tile at all, bare or buried or drowned. This is what
+ * prospecting reads; mining still needs the rock uncovered first.
+ */
+export function bedrockAt(world: World, x: number, y: number): OreInfo {
+  // A tile already showing rock keeps the kind written into it; everything
+  // else is read straight from the seed.
+  const kind = world.getTile(x, y) === TileType.Rock ? Math.min(ROCK_VARIANTS.length - 1, world.getData(x, y) & 15) : rockKindAt(world.seed, x, y);
+  const def = ROCK_VARIANTS[kind];
+  return { kind, name: def.name, yields: def.yields, maxQl: oreMaxQl(world.seed, x, y), level: def.level ?? 1, ore: isOreKind(kind) };
+}
+
+/** The ore in a tile whose rock is already bare, or null. */
 export function oreAt(world: World, x: number, y: number): OreInfo | null {
   if (world.getTile(x, y) !== TileType.Rock) return null;
-  const kind = world.getData(x, y) & 15;
-  if (!isOreKind(kind) || kind >= ROCK_VARIANTS.length) return null;
-  const def = ROCK_VARIANTS[kind];
-  return { kind, name: def.name, yields: def.yields, maxQl: oreMaxQl(world.seed, x, y), level: def.level ?? 1 };
+  const rock = bedrockAt(world, x, y);
+  return rock.ore ? rock : null;
 }

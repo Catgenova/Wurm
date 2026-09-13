@@ -1,5 +1,5 @@
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, treeSpecies, treeVariant, bushSpecies, packTreeData, rockVariant } from '../world/tiles';
-import { isOreKind, oreAt, oreMaxQl } from '../world/ore';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData } from '../world/tiles';
+import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { FARM_ACTIONS } from './farming';
@@ -342,11 +342,10 @@ export const ACTIONS: ActionDef[] = [
         return;
       }
       const type = w.getTile(t.x, t.y);
-      const kind = type === TileType.Rock ? rockVariant(w.getData(t.x, t.y)) : 0;
-      const yieldId = type === TileType.Rock ? ROCK_VARIANTS[kind].yields : 'rock_shards';
-      // An ore body only ever gives up so much quality, however good the miner.
-      const cap = isOreKind(kind) ? oreMaxQl(w.seed, t.x, t.y) : 100;
-      const item = g.inventory.add(yieldId, { ql: Math.min(cap, g.productQl('mining', pickQl)) });
+      const rock = bedrockAt(w, t.x, t.y);
+      const yieldId = type === TileType.Rock ? rock.yields : 'rock_shards';
+      // No seam gives up more quality than it holds, however good the miner.
+      const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', pickQl)) });
       const what = itemDef(yieldId).name.toLowerCase();
       g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
       // Cutting the face back is a separate matter, and mostly a question of skill.
@@ -377,32 +376,34 @@ export const ACTIONS: ActionDef[] = [
       for (let y = t.y - radius; y <= t.y + radius; y++) {
         for (let x = t.x - radius; x <= t.x + radius; x++) {
           if (!w.inBounds(x, y)) continue;
-          const ore = oreAt(w, x, y);
-          if (!ore) continue;
+          // Metal counts wherever it lies: bare, under soil, or below water.
+          const rock = bedrockAt(w, x, y);
+          if (!rock.ore) continue;
           tiles.push(y * w.w + x);
-          found.push(ore.name.toLowerCase());
+          found.push(rock.name.toLowerCase());
         }
       }
       g.markProspected(tiles);
-      // Standing on the rock itself tells you what the seam is worth.
-      const here = oreAt(w, t.x, t.y);
-      if (here) {
+      // Sampling where you stand tells you what that particular rock holds.
+      const here = bedrockAt(w, t.x, t.y);
+      const buried = w.getTile(t.x, t.y) === TileType.Rock ? '' : ` It lies under ${Math.max(1, w.getDirt(t.x, t.y))} of ground.`;
+      if (here.ore) {
         const can = g.skills.get('mining') >= here.level;
         g.logMsg(
-          `You sample the ${here.name.toLowerCase()}. It needs mining ${here.level} to work${can ? ', which you have' : ''}, and will give up nothing finer than quality ${here.maxQl}.`,
+          `You sample the ${here.name.toLowerCase()}. It needs mining ${here.level} to work${can ? ', which you have' : ''}, and will give up nothing finer than quality ${here.maxQl}.${buried}`,
           'event',
         );
-      } else if (w.getTile(t.x, t.y) === TileType.Rock) {
-        g.logMsg(`Plain ${ROCK_VARIANTS[rockVariant(w.getData(t.x, t.y))].name.toLowerCase()}, with no metal in it.`, 'event');
+      } else {
+        g.logMsg(`Plain ${here.name.toLowerCase()} beneath you, with no metal in it, and nothing finer than quality ${here.maxQl} in the stone.${buried}`, 'event');
       }
       if (!found.length) {
-        g.logMsg(`You read the rock ${radius} tiles about you and find no sign of metal.`, 'event');
+        g.logMsg(`You read the ground ${radius} tiles about you and find no sign of metal.`, 'event');
         return;
       }
       const tally = new Map<string, number>();
       for (const n of found) tally.set(n, (tally.get(n) ?? 0) + 1);
       const parts = [...tally].map(([n, c]) => (c > 1 ? `${c} tiles of ${n}` : `a tile of ${n}`));
-      g.logMsg(`Within ${radius} tiles you read ${parts.join(' and ')}. They are marked for a while.`, 'event');
+      g.logMsg(`Within ${radius} tiles you read ${parts.join(' and ')}, buried or bare. They are marked for a while.`, 'event');
     },
   },
   {
