@@ -85,6 +85,12 @@ rebuilds and commits the result.
   and skills (wild ones stay hidden); workers gain skill at half a player's
   pace, work at half a player's speed, and improve the quality and pace of
   their work as they level.
+- **Placeable crates on a subtile grid.** Tiles are divided into 4×4 spots;
+  a log or plank crate (crafted from logs or planks with a mallet) takes one
+  spot, snaps to the grid, holds 30 or 60 things, and can be emptied and
+  picked up. The deed crate is one of them. The player and creatures are
+  drawn to a one-spot footprint on 96 px tiles so the land reads as the
+  4 m squares it represents.
 - **Living grass.** Grass tiles carry tufts in four states with ten variants
   each: berries when the tile can be foraged, flowers when it can be
   botanized, both, or grazed bare after being picked over.
@@ -118,9 +124,9 @@ src/
   ui/                windows, HUD, context menu, tooltip and the panels
 ```
 
-**Projection.** A 2:1 diamond: tile width 64, height 32 at zoom 1. A world point
+**Projection.** A 2:1 diamond: tile width 96, height 48 at zoom 1. A world point
 `(x, y, h)` is first rotated into view space `(u, v)` by the camera's quarter
-turn, then lands at iso `((u - v) * 32, (u + v) * 16 - h * 1.5)`. The camera
+turn, then lands at iso `((u - v) * 48, (u + v) * 24 - h * 2.25)`. The camera
 stores an iso-space centre, a zoom and the rotation. Because height only moves
 points vertically, screen x pins down `u - v` exactly, which keeps picking
 cheap: for a click we walk the possible depths `u + v` front to back, map each

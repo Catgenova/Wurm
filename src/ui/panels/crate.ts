@@ -1,11 +1,13 @@
+import { crateCentre, crateName, CRATE_DEFS, crateUnits } from '../../game/crates';
 import type { Game } from '../../game/game';
 import { itemDef, itemName } from '../../game/items';
 import type { UIWindow } from '../windows';
 
-/** Contents of the settlement crate, with a Take button per item. */
+/** Contents of one placed crate, with a Take button per item. */
 export class CratePanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
+  private crateId: number | null = null;
 
   constructor(
     private readonly win: UIWindow,
@@ -25,15 +27,23 @@ export class CratePanel {
   }
 
   render(): void {
-    const crate = this.game.crate;
+    const crate = this.crateId !== null ? this.game.crates.get(this.crateId) : undefined;
     this.list.replaceChildren();
-    if (!crate || !crate.items.length) {
+    if (!crate) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = crate ? 'The crate is empty.' : 'There is no crate: found a settlement first.';
+      empty.textContent = 'Open a crate to see what is inside.';
       this.list.append(empty);
       this.footer.textContent = '';
+      this.win.titleText.textContent = 'Crate';
       return;
+    }
+    this.win.titleText.textContent = crateName(crate);
+    if (!crate.items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'inv-empty';
+      empty.textContent = 'The crate is empty.';
+      this.list.append(empty);
     }
     for (const item of [...crate.items].sort((a, b) => itemName(a).localeCompare(itemName(b)))) {
       const row = document.createElement('div');
@@ -51,21 +61,23 @@ export class CratePanel {
       take.textContent = 'Take';
       take.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (Math.hypot(crate.x + 0.5 - this.game.player.x, crate.y + 0.5 - this.game.player.y) > 2.2) {
+        const [cx, cy] = crateCentre(crate);
+        if (Math.hypot(cx - this.game.player.x, cy - this.game.player.y) > 2.4) {
           this.game.logMsg('Stand next to the crate to take things out.', 'error');
           return;
         }
-        const it = this.game.crateTake(item.uid);
+        const it = this.game.crateTake(crate, item.uid);
         if (it) this.game.inventory.addItem(it);
       });
       row.append(name, ql, dmg, take);
       this.list.append(row);
     }
     const weight = crate.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);
-    this.footer.textContent = `${crate.items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} kg`;
+    this.footer.textContent = `${crateUnits(crate)} / ${CRATE_DEFS[crate.kind].capacity} things · ${weight.toFixed(1)} kg`;
   }
 
-  open(): void {
+  open(id: number): void {
+    this.crateId = id;
     this.render();
     this.win.open();
   }

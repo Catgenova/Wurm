@@ -8,13 +8,13 @@
  *
  * Iso space: a 2:1 diamond projection. Height lifts a point straight up on screen.
  */
-export const TILE_W = 64;
-export const TILE_H = 32;
+export const TILE_W = 96;
+export const TILE_H = 48;
 export const HALF_W = TILE_W / 2;
 export const HALF_H = TILE_H / 2;
 
 /** Screen pixels (at zoom 1) per height unit. */
-export const HEIGHT_SCALE = 1.5;
+export const HEIGHT_SCALE = 2.25;
 /** Height units per tile width: a 4 m tile, 0.1 m per unit. */
 export const UNITS_PER_TILE = 40;
 

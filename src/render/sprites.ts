@@ -12,18 +12,20 @@ export interface Sprite {
 }
 
 const SPRITE_SCALE = 2;
+/** World objects were designed for a 64 px tile; tiles are 96 px now. */
+export const WORLD_SCALE = 1.5;
 const TAU = Math.PI * 2;
 const cache = new Map<string, Sprite>();
 
-function makeSprite(w: number, h: number, ax: number, ay: number, draw: (ctx: CanvasRenderingContext2D) => void): Sprite {
+function makeSprite(w: number, h: number, ax: number, ay: number, draw: (ctx: CanvasRenderingContext2D) => void, k = WORLD_SCALE): Sprite {
   const canvas = document.createElement('canvas');
-  canvas.width = w * SPRITE_SCALE;
-  canvas.height = h * SPRITE_SCALE;
+  canvas.width = Math.ceil(w * k * SPRITE_SCALE);
+  canvas.height = Math.ceil(h * k * SPRITE_SCALE);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('no 2d context');
-  ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
+  ctx.scale(SPRITE_SCALE * k, SPRITE_SCALE * k);
   draw(ctx);
-  return { canvas, w, h, ax, ay };
+  return { canvas, w: w * k, h: h * k, ax: ax * k, ay: ay * k };
 }
 
 function circle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
@@ -355,54 +357,60 @@ export function grassSprite(state: number, variant: number): Sprite {
   return spr;
 }
 
-/** The settlement crate. */
-export function crateSprite(): Sprite {
-  const key = 'crate';
+/** A crate sized to one subtile (a quarter of a tile each way). */
+export function crateSprite(kind: 'log' | 'plank' = 'plank'): Sprite {
+  const key = `crate:${kind}`;
   let spr = cache.get(key);
   if (spr) return spr;
-  spr = makeSprite(44, 40, 22, 36, (ctx) => {
-    const bx = 22;
-    const by = 36;
-    shadow(ctx, bx, by, 15, 6);
+  const left = kind === 'log' ? '#7d5c38' : '#8a6a42';
+  const right = kind === 'log' ? '#5c4228' : '#6a4f30';
+  const top = kind === 'log' ? '#a17a4a' : '#b08850';
+  spr = makeSprite(30, 32, 15, 29, (ctx) => {
+    const bx = 15;
+    const by = 29;
+    shadow(ctx, bx, by, 11, 5);
+    const w = 11;
+    const h = 11;
     // left face, right face, top
-    ctx.fillStyle = '#8a6a42';
+    ctx.fillStyle = left;
     ctx.beginPath();
-    ctx.moveTo(bx - 14, by - 7);
+    ctx.moveTo(bx - w, by - w / 2);
     ctx.lineTo(bx, by);
-    ctx.lineTo(bx, by - 14);
-    ctx.lineTo(bx - 14, by - 21);
+    ctx.lineTo(bx, by - h);
+    ctx.lineTo(bx - w, by - w / 2 - h);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#6a4f30';
+    ctx.fillStyle = right;
     ctx.beginPath();
     ctx.moveTo(bx, by);
-    ctx.lineTo(bx + 14, by - 7);
-    ctx.lineTo(bx + 14, by - 21);
-    ctx.lineTo(bx, by - 14);
+    ctx.lineTo(bx + w, by - w / 2);
+    ctx.lineTo(bx + w, by - w / 2 - h);
+    ctx.lineTo(bx, by - h);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#b08850';
+    ctx.fillStyle = top;
     ctx.beginPath();
-    ctx.moveTo(bx - 14, by - 21);
-    ctx.lineTo(bx, by - 14);
-    ctx.lineTo(bx + 14, by - 21);
-    ctx.lineTo(bx, by - 28);
+    ctx.moveTo(bx - w, by - w / 2 - h);
+    ctx.lineTo(bx, by - h);
+    ctx.lineTo(bx + w, by - w / 2 - h);
+    ctx.lineTo(bx, by - w - h);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = '#4a3520';
-    ctx.lineWidth = 1.2;
-    for (const k of [0.33, 0.66]) {
+    ctx.lineWidth = 1;
+    const bands = kind === 'log' ? [0.25, 0.5, 0.75] : [0.35, 0.7];
+    for (const k of bands) {
       ctx.beginPath();
-      ctx.moveTo(bx - 14, by - 7 - 14 * k);
-      ctx.lineTo(bx, by - 14 * k);
-      ctx.lineTo(bx + 14, by - 7 - 14 * k);
+      ctx.moveTo(bx - w, by - w / 2 - h * k);
+      ctx.lineTo(bx, by - h * k);
+      ctx.lineTo(bx + w, by - w / 2 - h * k);
       ctx.stroke();
     }
     ctx.beginPath();
     ctx.moveTo(bx, by);
-    ctx.lineTo(bx, by - 14);
+    ctx.lineTo(bx, by - h);
     ctx.stroke();
-  });
+  }, 1);
   cache.set(key, spr);
   return spr;
 }
@@ -425,7 +433,7 @@ export function drawRabba(ctx: CanvasRenderingContext2D, sx: number, sy: number,
   const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3 : 0;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.ellipse(0, 1, 7, 3, 0, 0, TAU);
+  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
   ctx.fill();
   const [fur, belly] = pose.colors;
   // ears
@@ -522,40 +530,41 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     return;
   }
   const swing = pose.moving ? Math.sin(pose.phase) : 0;
-  const bob = pose.moving ? Math.abs(Math.cos(pose.phase)) * 1.4 : 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  const bob = pose.moving ? Math.abs(Math.cos(pose.phase)) * 1.2 : 0;
+  // The shadow marks the one subtile the character stands on.
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.ellipse(0, 1, 8, 3.5, 0, 0, TAU);
+  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
   ctx.fill();
   // legs
   ctx.fillStyle = TROUSERS;
-  ctx.fillRect(-4.5, -13 + swing * 2, 4, 13 - swing * 2);
-  ctx.fillRect(0.5, -13 - swing * 2, 4, 13 + swing * 2);
+  ctx.fillRect(-3.5, -12 + swing * 2, 3, 12 - swing * 2);
+  ctx.fillRect(0.5, -12 - swing * 2, 3, 12 + swing * 2);
   // body
   ctx.fillStyle = TUNIC;
-  ctx.fillRect(-6, -27 - bob, 12, 15);
+  ctx.fillRect(-4.5, -26 - bob, 9, 14);
   ctx.fillStyle = BELT;
-  ctx.fillRect(-6, -15 - bob, 12, 2);
+  ctx.fillRect(-4.5, -14.5 - bob, 9, 1.6);
   // arms
   const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
   ctx.fillStyle = TUNIC;
-  ctx.fillRect(-9, -26 - bob + armSwing, 3, 8);
-  ctx.fillRect(6, -26 - bob - armSwing, 3, 8);
+  ctx.fillRect(-7, -25 - bob + armSwing, 2.5, 8);
+  ctx.fillRect(4.5, -25 - bob - armSwing, 2.5, 8);
   ctx.fillStyle = SKIN;
-  ctx.fillRect(-9, -18 - bob + armSwing, 3, 3);
-  ctx.fillRect(6, -18 - bob - armSwing, 3, 3);
+  ctx.fillRect(-7, -17 - bob + armSwing, 2.5, 2.5);
+  ctx.fillRect(4.5, -17 - bob - armSwing, 2.5, 2.5);
   // head
   ctx.fillStyle = SKIN;
   ctx.beginPath();
-  ctx.arc(0, -32 - bob, 5.5, 0, TAU);
+  ctx.arc(0, -31 - bob, 4.6, 0, TAU);
   ctx.fill();
   ctx.fillStyle = HAIR;
   ctx.beginPath();
-  ctx.arc(0, -33 - bob, 5.6, Math.PI * 1.05, Math.PI * 1.95);
-  ctx.lineTo(4.5, -32 - bob);
+  ctx.arc(0, -32 - bob, 4.7, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.lineTo(3.8, -31 - bob);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = '#2a1a10';
-  ctx.fillRect(2, -33 - bob, 1.4, 1.4);
+  ctx.fillRect(1.6, -32 - bob, 1.2, 1.2);
   ctx.restore();
 }

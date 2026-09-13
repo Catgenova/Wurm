@@ -21,6 +21,7 @@ import { CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
 import { itemName } from '../game/items';
 import { nearestSide } from '../render/renderer';
+import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '../game/crates';
 import { CratePanel } from './panels/crate';
 import { WildermonPanel } from './panels/wildermon';
 import { ContextMenu, type MenuItem } from './contextmenu';
@@ -128,6 +129,13 @@ export class UI {
       this.tooltip.show(sx, sy, lines);
       return;
     }
+    const crate = pick.crate !== undefined ? this.game.crates.get(pick.crate) : undefined;
+    if (crate) {
+      lines.push(crateName(crate));
+      lines.push(`${crateUnits(crate)} / ${CRATE_DEFS[crate.kind].capacity} things · spot ${crate.sx + 1},${crate.sy + 1} of tile ${crate.x}, ${crate.y}`);
+      this.tooltip.show(sx, sy, lines);
+      return;
+    }
     const t = w.getTile(pick.x, pick.y);
     if (t === TileType.Tree) {
       const data = w.getData(pick.x, pick.y);
@@ -177,6 +185,19 @@ export class UI {
       this.menu.show(sx, sy, `${creature.name} (${this.game.creatures.describe(creature)})`, this.creatureEntries(creature.id));
       return;
     }
+    const crate = pick.crate !== undefined ? this.game.crates.get(pick.crate) : undefined;
+    if (crate) {
+      const ct: Target = { kind: 'crate', id: crate.id };
+      const entries: MenuItem[] = [{ label: 'Open', onSelect: () => this.cratePanel.open(crate.id) }];
+      for (const id of ['crate_take_all', 'pick_up_crate']) {
+        const def = ACTION_BY_ID.get(id);
+        if (!def) continue;
+        const reason = def.check?.(ct, this.game) ?? null;
+        entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, ct) });
+      }
+      this.menu.show(sx, sy, crateName(crate), entries);
+      return;
+    }
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     if (this.game.isToken(pick.x, pick.y)) {
@@ -188,8 +209,16 @@ export class UI {
         });
       }
     }
-    if (this.game.crate && this.game.crate.x === pick.x && this.game.crate.y === pick.y) {
-      entries.push({ label: 'Open crate', onSelect: () => this.cratePanel.open() });
+    // Placing a carried crate on the subtile under the cursor.
+    const crateItems = this.game.inventory.items.filter((it) => crateKindOfItem(it.id));
+    const placeDef = ACTION_BY_ID.get('place_crate');
+    if (crateItems.length && placeDef) {
+      const [sx0, sy0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+      for (const it of crateItems) {
+        const pt: Target = { ...target, sx: sx0, sy: sy0, itemUid: it.uid };
+        const reason = placeDef.check?.(pt, this.game) ?? null;
+        entries.push({ label: `Place ${itemName(it).toLowerCase()} here (spot ${sx0 + 1},${sy0 + 1})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(placeDef, pt) });
+      }
     }
     const pile = this.game.groundAt(pick.x, pick.y);
     const pickUp = ACTION_BY_ID.get('pick_up');

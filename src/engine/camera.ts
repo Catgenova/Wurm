@@ -16,8 +16,8 @@ export class Camera {
   zoom = 1;
   /** Quarter turns, 0..3. */
   rotation = 0;
-  minZoom = 0.5;
-  maxZoom = 3;
+  minZoom = 0.35;
+  maxZoom = 2.5;
   /** When true the camera glides towards the focus target every frame. */
   follow = true;
   width = 1;

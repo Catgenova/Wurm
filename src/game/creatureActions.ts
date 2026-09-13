@@ -1,7 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import { creatureLevel, isBaitFor, SPECIES, STANCE_NAMES, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
-import { itemDef, itemName } from './items';
+import { itemDef } from './items';
 
 type CreatureTarget = Extract<Target, { kind: 'creature' }>;
 const isCreature = (t: Target): t is CreatureTarget => t.kind === 'creature';
@@ -217,7 +217,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c || !g.deed) return;
-      if (c.carrying) g.crateAdd(c.carrying);
+      const crate = g.deedCrate();
+      if (c.carrying && !(crate && g.crateAdd(crate, c.carrying))) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
       c.carrying = null;
       c.mode = 'stored';
       c.enemy = null;
@@ -270,42 +271,6 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.enemy = null;
       c.name = SPECIES[c.species].name;
       g.logMsg(`The ${c.name.toLowerCase()} bounds off into the wild.`, 'system');
-    },
-  },
-  {
-    id: 'crate_take_all',
-    label: 'Take everything from the crate',
-    verb: 'emptying the crate',
-    stamina: 0.01,
-    baseTime: 1,
-    applies: (t, g) => t.kind === 'tile' && !!g.crate && g.crate.x === t.x && g.crate.y === t.y,
-    check: (_t, g) => (g.crate && g.crate.items.length ? null : 'The crate is empty.'),
-    perform: (_t, g) => {
-      const crate = g.crate;
-      if (!crate || !crate.items.length) return;
-      const items = crate.items.splice(0, crate.items.length);
-      for (const it of items) g.inventory.addItem(it);
-      g.events.emit('crate');
-      const names = items.map((it) => (it.count > 1 ? `${it.count} × ${itemName(it).toLowerCase()}` : itemName(it).toLowerCase()));
-      g.logMsg(`You take ${names.join(', ')} from the crate.`, 'event');
-    },
-  },
-  {
-    id: 'store_in_crate',
-    label: 'Put in deed crate',
-    verb: 'stowing',
-    instant: true,
-    quantity: true,
-    stamina: 0,
-    baseTime: 0,
-    applies: (t, g) => t.kind === 'item' && !!g.crate,
-    check: (_t, g) => (g.crate && Math.hypot(g.crate.x + 0.5 - g.player.x, g.crate.y + 0.5 - g.player.y) <= 2.2 ? null : 'Stand next to the deed crate.'),
-    perform: (t, g) => {
-      if (t.kind !== 'item') return;
-      const item = g.inventory.take(t.uid, t.count ?? 1);
-      if (!item) return;
-      g.crateAdd(item);
-      g.logMsg(`You put ${item.count > 1 ? `${item.count} × ` : 'the '}${itemName(item).toLowerCase()} in the crate.`, 'event');
     },
   },
 ];

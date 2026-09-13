@@ -69,6 +69,10 @@ export function buildHelp(win: UIWindow): void {
     you own; wild ones keep theirs to themselves. Deed workers learn from their work, gaining skill at
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
+    <p>Every tile is a 4 by 4 grid of spots for placing things. Build a <b>log crate</b> from three
+    logs or a <b>plank crate</b> from six planks (with a mallet), then right-click the spot on a tile
+    where you want it; it snaps to the grid. Crates hold 30 or 60 things, can be opened, emptied and
+    picked up again when empty. The deed crate beside the token is one of them.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
     <h3>Terraforming</h3>

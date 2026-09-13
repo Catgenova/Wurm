@@ -3,7 +3,8 @@ import { TileType } from '../world/tiles';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
-import { Creatures, type Crate, type CreatureJSON } from './creatures';
+import { CRATE_DEFS, crateCentre, crateUnits, type CrateKind, type PlacedCrate } from './crates';
+import { Creatures, type CreatureJSON } from './creatures';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { groundStep, Player } from './player';
@@ -40,7 +41,9 @@ export interface GameInit {
   deed?: Deed | null;
   buildings?: BuildingsJSON;
   creatures?: { nextId: number; list: CreatureJSON[] };
-  crate?: Crate | null;
+  crates?: PlacedCrate[];
+  /** Pre-crate-grid saves kept a single deed crate. */
+  crate?: { x: number; y: number; items: Item[] } | null;
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number };
   inventory?: Item[];
   nextUid?: number;
@@ -68,8 +71,9 @@ export class Game {
   readonly buildings: Buildings;
   readonly creatures: Creatures;
   deed: Deed | null = null;
-  /** The settlement's crate: deed workers deliver here. */
-  crate: Crate | null = null;
+  /** Placed crates by id; each sits on one subtile. */
+  readonly crates = new Map<number, PlacedCrate>();
+  nextCrateId = 1;
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Items lying on tiles, keyed by "x,y". */
@@ -115,7 +119,11 @@ export class Game {
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
     this.creatures = Creatures.fromJSON(init.creatures);
-    this.crate = init.crate ?? null;
+    for (const c of init.crates ?? []) {
+      this.crates.set(c.id, c);
+      if (c.id >= this.nextCrateId) this.nextCrateId = c.id + 1;
+    }
+    if (init.crate && !this.crates.size) this.addCrate('plank', init.crate.x, init.crate.y, 1, 1, init.crate.items, true);
     this.world.onChange((x, y) => this.events.emit('world', x, y));
   }
 
@@ -420,6 +428,10 @@ export class Game {
       const c = this.creatures.get(target.id);
       return c ? { x: Math.floor(c.x), y: Math.floor(c.y) } : null;
     }
+    if (target.kind === 'crate') {
+      const c = this.crates.get(target.id);
+      return c ? { x: c.x, y: c.y } : null;
+    }
     return { x: target.x, y: target.y };
   }
 
@@ -509,8 +521,51 @@ export class Game {
     return false;
   }
 
-  /** Put the settlement crate on a free tile beside the token. */
-  placeCrate(): void {
+  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false): PlacedCrate {
+    const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed };
+    this.crates.set(crate.id, crate);
+    return crate;
+  }
+
+  removeCrate(id: number): void {
+    this.crates.delete(id);
+    this.events.emit('crate');
+  }
+
+  crateAt(x: number, y: number, sx: number, sy: number): PlacedCrate | undefined {
+    for (const c of this.crates.values()) if (c.x === x && c.y === y && c.sx === sx && c.sy === sy) return c;
+    return undefined;
+  }
+
+  cratesOnTile(x: number, y: number): PlacedCrate[] {
+    const out: PlacedCrate[] = [];
+    for (const c of this.crates.values()) if (c.x === x && c.y === y) out.push(c);
+    return out;
+  }
+
+  /** The settlement's crate, where deed workers deliver. */
+  deedCrate(): PlacedCrate | undefined {
+    for (const c of this.crates.values()) if (c.deed) return c;
+    return undefined;
+  }
+
+  /** The crate closest to the player. */
+  nearestCrate(): PlacedCrate | undefined {
+    let best: PlacedCrate | undefined;
+    let bestD = Infinity;
+    for (const c of this.crates.values()) {
+      const [cx, cy] = crateCentre(c);
+      const d = Math.hypot(cx - this.player.x, cy - this.player.y);
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /** Put the settlement's plank crate on a free spot beside the token. */
+  placeDeedCrate(): void {
     const d = this.deed;
     if (!d) return;
     for (const [dx, dy] of [
@@ -522,30 +577,31 @@ export class Game {
     ]) {
       const x = d.x + dx;
       const y = d.y + dy;
-      if (this.world.inBounds(x, y) && this.world.isPassable(x, y) && !this.world.hasWater(x, y) && !this.buildings.buildingAt(x, y)) {
-        this.crate = { x, y, items: [] };
+      if (this.world.inBounds(x, y) && this.world.isPassable(x, y) && !this.world.hasWater(x, y) && !this.buildings.buildingAt(x, y) && !this.crateAt(x, y, 1, 1)) {
+        this.addCrate('plank', x, y, 1, 1, [], true);
         return;
       }
     }
-    this.crate = { x: d.x, y: d.y, items: [] };
+    this.addCrate('plank', d.x, d.y, 3, 3, [], true);
   }
 
-  crateAdd(item: Item): void {
-    if (!this.crate) return;
+  /** Add an item to a crate; false when it would not fit. */
+  crateAdd(crate: PlacedCrate, item: Item): boolean {
+    if (crateUnits(crate) + item.count > CRATE_DEFS[crate.kind].capacity) return false;
     const def = ITEM_DEFS[item.id];
-    const stack = def?.stackable ? this.crate.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    const stack = def?.stackable ? crate.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
     if (stack) {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
-    } else this.crate.items.push(item);
+    } else crate.items.push(item);
     this.events.emit('crate');
+    return true;
   }
 
-  crateTake(uid: number): Item | null {
-    if (!this.crate) return null;
-    const idx = this.crate.items.findIndex((it) => it.uid === uid);
+  crateTake(crate: PlacedCrate, uid: number): Item | null {
+    const idx = crate.items.findIndex((it) => it.uid === uid);
     if (idx < 0) return null;
-    const [item] = this.crate.items.splice(idx, 1);
+    const [item] = crate.items.splice(idx, 1);
     this.events.emit('crate');
     return item;
   }

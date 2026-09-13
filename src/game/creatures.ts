@@ -1,6 +1,7 @@
 import { TILE_DEFS } from '../world/tiles';
 import { FORAGE_TABLE, rollTable } from './forage';
 import type { Game } from './game';
+import { crateCentre } from './crates';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
 
@@ -115,12 +116,6 @@ export interface CreatureJSON {
   carrying: Item | null;
   xp?: number;
   skills?: Record<string, number>;
-}
-
-export interface Crate {
-  x: number;
-  y: number;
-  items: Item[];
 }
 
 export const WILD_TARGET = 32;
@@ -506,7 +501,8 @@ export class Creatures {
       return;
     }
     const def = this.species(c);
-    const crate = game.crate;
+    const crate = game.deedCrate();
+    const crateAt = crate ? crateCentre(crate) : null;
     if (c.state === 'forage') {
       if (game.time >= c.until) {
         c.carrying = this.finishForage(game, c);
@@ -521,24 +517,24 @@ export class Creatures {
         c.carrying = null;
         return;
       }
-      if (!crate) {
+      if (!crate || !crateAt) {
         game.dropOnGround(deed.x, deed.y, c.carrying);
         c.carrying = null;
         return;
       }
-      if (Math.hypot(crate.x + 0.5 - c.x, crate.y + 0.5 - c.y) <= 1.3) {
-        game.crateAdd(c.carrying);
+      if (Math.hypot(crateAt[0] - c.x, crateAt[1] - c.y) <= 1.3) {
+        if (!game.crateAdd(crate, c.carrying)) game.dropOnGround(crate.x, crate.y, c.carrying);
         c.carrying = null;
         c.state = 'idle';
         c.until = game.time + 1;
-      } else if (this.stepToward(game, c, crate.x + 0.5, crate.y + 0.5, dt) === 'blocked') {
+      } else if (this.stepToward(game, c, crateAt[0], crateAt[1], dt) === 'blocked') {
         c.state = 'idle';
         c.until = game.time + 2;
       }
       return;
     }
-    if (c.hunger < 0.4 && crate && crate.items.some((it) => isBaitFor(def, it.id))) {
-      if (Math.hypot(crate.x + 0.5 - c.x, crate.y + 0.5 - c.y) <= 1.3) {
+    if (c.hunger < 0.4 && crate && crateAt && crate.items.some((it) => isBaitFor(def, it.id))) {
+      if (Math.hypot(crateAt[0] - c.x, crateAt[1] - c.y) <= 1.3) {
         const idx = crate.items.findIndex((it) => isBaitFor(def, it.id));
         if (idx >= 0) {
           const it = crate.items[idx];
@@ -547,7 +543,7 @@ export class Creatures {
           game.events.emit('crate');
           c.hunger = Math.min(1, c.hunger + 0.5);
         }
-      } else this.stepToward(game, c, crate.x + 0.5, crate.y + 0.5, dt);
+      } else this.stepToward(game, c, crateAt[0], crateAt[1], dt);
       return;
     }
     if (c.state === 'toForage') {

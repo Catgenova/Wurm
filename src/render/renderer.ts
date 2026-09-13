@@ -19,6 +19,7 @@ import {
 import { hash2 } from '../world/noise';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { SPECIES, type Creature } from '../game/creatures';
 import { bushSprite, crateSprite, drawPlayer, drawRabba, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite } from './sprites';
 
@@ -32,6 +33,8 @@ export interface Pick {
   cy: number;
   /** A creature under the cursor, when one is. */
   creature?: number;
+  /** A crate under the cursor, when one is. */
+  crate?: number;
 }
 
 interface Entity {
@@ -42,6 +45,7 @@ interface Entity {
   sy: number;
   spr: Sprite | null;
   creature?: Creature;
+  crateId?: number;
 }
 
 interface HitRect {
@@ -52,6 +56,7 @@ interface HitRect {
   w: number;
   h: number;
   creature?: number;
+  crate?: number;
 }
 
 const VOID_COLOR = '#12395f';
@@ -115,6 +120,7 @@ export class Renderer {
   private tileBuf = [0, 0];
   private playerFacing = 1;
   private creatureHits: HitRect[] = [];
+  private crateHits: HitRect[] = [];
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -196,11 +202,12 @@ export class Renderer {
     const hw = HALF_W * zoom;
     const hh = HALF_H * zoom;
     const hs = HEIGHT_SCALE * zoom;
-    const bottomMargin = 140 * zoom;
+    const bottomMargin = 220 * zoom;
     const pts = this.pts;
     const c = this.cornerBuf;
     this.treeHits.length = 0;
     this.creatureHits.length = 0;
+    this.crateHits.length = 0;
     this.drawnTiles = 0;
 
     for (let d = dLo; d <= dHi; d++) {
@@ -272,10 +279,11 @@ export class Renderer {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.ents.push({ kind: 'token', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: tokenSprite() });
         }
-        const crate = this.game.crate;
-        if (crate && crate.x === x && crate.y === y) {
-          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          this.ents.push({ kind: 'crate', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: crateSprite() });
+        if (this.game.crates.size) {
+          for (const crate of this.game.cratesOnTile(x, y)) {
+            const [wx, wy] = crateCentre(crate);
+            this.ents.push({ kind: 'crate', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: crateSprite(crate.kind), crateId: crate.id });
+          }
         }
         if (this.game.creatures.list.size) {
           for (const cr of this.game.creatures.atTile(x, y)) {
@@ -384,7 +392,8 @@ export class Renderer {
 
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
-    if (ents.length > 1) ents.sort((a, b) => a.sx - b.sx);
+    // Within a diagonal, whatever stands lower on screen is nearer the viewer.
+    if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx);
     const player = this.game.player;
     const cam = this.camera;
     const screenDx = cam.rotateX(player.dirX, player.dirY) - cam.rotateY(player.dirX, player.dirY);
@@ -424,6 +433,8 @@ export class Renderer {
       ctx.drawImage(spr.canvas, left, top, dw, dh);
       if (ent.kind === 'tree') {
         this.treeHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.22, top: top + dh * 0.12, w: dw * 0.56, h: dh * 0.86 });
+      } else if (ent.kind === 'crate' && ent.crateId !== undefined) {
+        this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
     }
   }
@@ -977,6 +988,33 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.stroke();
       ctx.lineWidth = 1;
+      const carryingCrate = game.inventory.items.some((it) => crateKindOfItem(it.id));
+      if (carryingCrate && hover.crate === undefined) {
+        // The 4 by 4 snap grid, with the spot a crate would take.
+        const h = (wx: number, wy: number): number => w.heightAt(wx, wy) + 0.3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        for (let i = 1; i < SUBTILES; i++) {
+          const f = i / SUBTILES;
+          ctx.beginPath();
+          ctx.moveTo(cam.worldToScreenX(hover.x + f, hover.y), cam.worldToScreenY(hover.x + f, hover.y, h(hover.x + f, hover.y)));
+          ctx.lineTo(cam.worldToScreenX(hover.x + f, hover.y + 1), cam.worldToScreenY(hover.x + f, hover.y + 1, h(hover.x + f, hover.y + 1)));
+          ctx.moveTo(cam.worldToScreenX(hover.x, hover.y + f), cam.worldToScreenY(hover.x, hover.y + f, h(hover.x, hover.y + f)));
+          ctx.lineTo(cam.worldToScreenX(hover.x + 1, hover.y + f), cam.worldToScreenY(hover.x + 1, hover.y + f, h(hover.x + 1, hover.y + f)));
+          ctx.stroke();
+        }
+        const [sx0, sy0] = subtileOf(hover.x, hover.y, hover.wx, hover.wy);
+        const x0 = hover.x + sx0 / SUBTILES;
+        const y0 = hover.y + sy0 / SUBTILES;
+        const s = 1 / SUBTILES;
+        ctx.beginPath();
+        ctx.moveTo(cam.worldToScreenX(x0, y0), cam.worldToScreenY(x0, y0, h(x0, y0)));
+        ctx.lineTo(cam.worldToScreenX(x0 + s, y0), cam.worldToScreenY(x0 + s, y0, h(x0 + s, y0)));
+        ctx.lineTo(cam.worldToScreenX(x0 + s, y0 + s), cam.worldToScreenY(x0 + s, y0 + s, h(x0 + s, y0 + s)));
+        ctx.lineTo(cam.worldToScreenX(x0, y0 + s), cam.worldToScreenY(x0, y0 + s, h(x0, y0 + s)));
+        ctx.closePath();
+        ctx.fillStyle = game.crateAt(hover.x, hover.y, sx0, sy0) ? 'rgba(255,90,70,0.35)' : 'rgba(120,255,140,0.35)';
+        ctx.fill();
+      }
       const building = game.buildings.buildingAt(hover.x, hover.y);
       if (building) {
         // Show which border a wall would go on, at the storey being worked on.
@@ -1004,6 +1042,10 @@ export class Renderer {
     for (let i = this.creatureHits.length - 1; i >= 0; i--) {
       const h = this.creatureHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), creature: h.creature };
+    }
+    for (let i = this.crateHits.length - 1; i >= 0; i--) {
+      const h = this.crateHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), crate: h.crate };
     }
     for (let i = this.treeHits.length - 1; i >= 0; i--) {
       const h = this.treeHits[i];
