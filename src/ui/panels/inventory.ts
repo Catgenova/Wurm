@@ -1,5 +1,5 @@
 import type { Game } from '../../game/game';
-import { itemDef, itemName, type Item, type ItemCategory, itemWeight } from '../../game/items';
+import { itemDef, itemName, type Item, type ItemCategory, itemWeight, rarityOf } from '../../game/items';
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
@@ -97,6 +97,9 @@ export class InventoryPanel {
     name.className = 'inv-name';
     const worn = this.game.isEquipped(item.uid);
     name.textContent = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (worn ? ' · worn' : '');
+    // A rare thing is written in its own colour, so it is not lost in a list.
+    const rare = rarityOf(item);
+    if (rare.colour) name.style.color = rare.colour;
     if (worn) name.classList.add('inv-worn');
     const ql = document.createElement('span');
     ql.textContent = item.ql.toFixed(1);

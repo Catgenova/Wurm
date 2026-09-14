@@ -2,7 +2,7 @@ import type { ActionDef } from './actions';
 import { ARMOUR_BY_ID, isShield, WEAPON_BY_ID } from './gear';
 import { FURNITURE_BY_ID } from './furniture';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import { itemDef, itemName, rarityOf, type Item } from './items';
 import { isMould } from './metal';
 import { materialOfItem, matOf } from './materials';
 
@@ -78,8 +78,13 @@ export function improvable(id: string): { material: MaterialDef; skill: string }
 
 export const canImprove = (id: string): boolean => !isMould(id) && improvable(id) !== null;
 
-/** A thing cannot be bettered past the hands doing the work. */
-export const improveCeiling = (g: Game, skill: string): number => Math.max(10, g.skills.get(skill));
+/**
+ * A thing cannot be bettered past the hands doing the work — except that a
+ * rare thing has something in it the hands did not put there, and goes a
+ * little further than they could take an ordinary one.
+ */
+export const improveCeiling = (g: Game, skill: string, item?: Item): number =>
+  Math.max(10, g.skills.get(skill)) + (item ? rarityOf(item).ceiling : 0);
 
 /** How much a successful pass adds: a great deal at first, very little near the end. */
 export function improveStep(g: Game, item: Item, skill: string): number {
@@ -138,7 +143,7 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       if (missing) return `You need ${what.material.tools.map((id) => itemDef(id).name.toLowerCase()).join(' and ')} to work ${what.material.name}.`;
       const made = madeOf(item);
       if (!stockFor(g, what.material, made)) return `You have no ${made ? made.toLowerCase() : what.material.name} to work into it, and nothing else will do.`;
-      const ceiling = improveCeiling(g, what.skill);
+      const ceiling = improveCeiling(g, what.skill, item);
       if (item.ql >= ceiling) return `Your ${what.skill.replace(/_/g, ' ')} is not good enough to better it further.`;
       if (item.ql >= 99.9) return 'It cannot be bettered.';
       return null;
@@ -160,7 +165,7 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
         g.logMsg(`You work at the ${itemName(item).toLowerCase()} and mark it. (damage ${item.dmg.toFixed(1)})`, 'event');
         return item.dmg <= 10;
       }
-      const ceiling = Math.min(99.9, improveCeiling(g, what.skill));
+      const ceiling = Math.min(99.9, improveCeiling(g, what.skill, item));
       item.ql = Math.max(item.ql, Math.min(ceiling, item.ql + improveStep(g, item, what.skill)));
       g.events.emit('inventory');
       g.logMsg(`The ${itemName(item).toLowerCase()} is better than it was. (QL ${item.ql.toFixed(1)})`, 'event');

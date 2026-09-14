@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemDef, type Item } from './items';
+import { itemDef, rarityOf, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -168,7 +168,7 @@ export function pieceSoak(def: ArmourDef, item: Item, skill: number): number {
   const cls = ARMOUR_CLASSES[def.cls];
   const wear = Math.max(0.25, 1 - item.dmg / 130);
   const quality = 0.55 + item.ql / 220;
-  return Math.min(0.92, cls.soak * matOf(item.extra).soak * quality * wear * (1 + skill / 400));
+  return Math.min(0.92, cls.soak * matOf(item.extra).soak * rarityOf(item).boost * quality * wear * (1 + skill / 400));
 }
 
 /** What a full set of this stuff costs to carry: heavy metal is heavy. */
@@ -185,7 +185,7 @@ export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number
   const ql = item?.ql ?? 20;
   const wear = item ? Math.max(0.4, 1 - item.dmg / 150) : 1;
   const body = 0.7 + g.skills.get('body_strength') / 90;
-  const edge = item ? matOf(item.extra).edge : 1;
+  const edge = item ? matOf(item.extra).edge * rarityOf(item).boost : 1;
   return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260);
 }
 

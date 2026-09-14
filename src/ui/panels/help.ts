@@ -394,6 +394,16 @@ export function buildHelp(win: UIWindow): void {
     beginner's hands still only makes beginner's work &mdash; it just stops wasting the material.</p>
     <p>Work done with no tool at all &mdash; picking berries, tending a field &mdash; has nothing to
     roll against and comes out around what your skill can do, as it always did.</p>
+    <h3>Rare things</h3>
+    <p>Now and again a thing comes off the bench better than the hands that made it had any right to
+    produce. About <b>one thing in a hundred</b> is <b>rare</b>, one in a thousand <b>supreme</b> and one
+    in ten thousand <b>fantastic</b>. Nothing brings it on &mdash; not skill, not tools, not the metal
+    &mdash; and nothing you do can make it more likely; you make ten thousand ordinary things and find
+    that you have one.</p>
+    <p>A rare thing is <b>better at whatever it was for</b> by a tenth, a quarter or a half &mdash; an
+    edge that bites, armour that turns aside more, a tool that works truer, a box that holds more
+    &mdash; <b>wears and rots more slowly</b> in the same proportion, and can be <b>improved past the
+    ceiling of your own skill</b> by 5, 12 or 25. They are written in their own colour in your pack.</p>
     <h3>Improving</h3>
     <p>A finished thing can be made better than it was made. Right-click it and choose <b>Improve</b>:
     each pass eats a little stock, and a success raises the quality &mdash; a great deal at first and

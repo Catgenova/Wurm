@@ -210,6 +210,13 @@ rebuilds and commits the result.
   a beginner's hands makes beginner's work and simply stops wasting the
   material. Work with no tool at all — foraging, farming — has nothing to roll
   against and comes out around what the skill can do.
+- **Rare things.** About one thing in a hundred comes off the bench **rare**,
+  one in a thousand **supreme**, one in ten thousand **fantastic**. Nothing
+  brings it on — not skill, not tools, not the metal — and nothing makes it
+  more likely. A rare thing is better at whatever it was for by a tenth, a
+  quarter or a half, wears and rots more slowly in the same proportion, and
+  can be improved 5, 12 or 25 past the ceiling of your own skill. They carry
+  the word in their name and their own colour in the pack.
 - **Improving.** Anything finished can be bettered — except the kit you washed
   ashore with, which is issued gear: it mends but it does not improve, so the
   first real job on the island is making your own tools. Each pass spends stock

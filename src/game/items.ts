@@ -307,6 +307,62 @@ export interface Item {
    * and no more: it can be mended, but there is nothing in it to better.
    */
   issued?: boolean;
+  /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
+  rare?: number;
+}
+
+/**
+ * Rarity. Now and again a thing comes off the bench better than the hands
+ * that made it had any right to produce — the grain runs true, the temper
+ * takes, the joint pulls up square the first time. Nothing about the maker
+ * decides it and nothing can be done to bring it on; it simply happens, and
+ * what it leaves behind is better at whatever it was for, slower to wear and
+ * slower to rot, and can be bettered past the ceiling of the skill that made
+ * it.
+ */
+export interface RarityDef {
+  name: string;
+  /** Multiplier on what the thing is for: its edge, its soak, its bite, its room. */
+  boost: number;
+  /** Multiplier on how fast it wears and rots. */
+  keep: number;
+  /** Quality it may be improved past your own skill by. */
+  ceiling: number;
+  /** Colour it is written in. */
+  colour: string;
+}
+
+export const RARITIES: RarityDef[] = [
+  { name: '', boost: 1, keep: 1, ceiling: 0, colour: '' },
+  { name: 'rare', boost: 1.1, keep: 0.8, ceiling: 5, colour: '#8fc8f0' },
+  { name: 'supreme', boost: 1.25, keep: 0.6, ceiling: 12, colour: '#c79bf0' },
+  { name: 'fantastic', boost: 1.5, keep: 0.35, ceiling: 25, colour: '#f0c060' },
+];
+
+/**
+ * Chance of each step, rolled in turn: one thing in a hundred is rare, one in
+ * a thousand supreme, one in ten thousand fantastic. Nobody sets out to make
+ * a fantastic anything; you make ten thousand ordinary ones and find you have.
+ */
+export const RARITY_ODDS = [1 / 100, 1 / 10, 1 / 10];
+/** What is said when one comes off the bench. */
+export const RARITY_WORD = [
+  '',
+  'Something in the grain runs true and it comes out better than it had any right to be.',
+  'Your hands know what to do before you do, and what they leave is not far off perfect.',
+  'For a moment the whole of it is obvious, and what you set down is the finest thing you will ever make.',
+];
+
+export const rarityOf = (item: { rare?: number }): RarityDef => RARITIES[Math.max(0, Math.min(3, item.rare ?? 0))];
+
+/** Roll for rarity on a newly made thing: nothing helps and nothing hurts. */
+export function rollRarity(rand: () => number): number {
+  let step = 0;
+  for (const odds of RARITY_ODDS) {
+    if (rand() >= odds) break;
+    step++;
+  }
+  return step;
 }
 
 export function itemDef(id: string): ItemDef {
@@ -321,7 +377,7 @@ export function itemDef(id: string): ItemDef {
 export function groundDecayRate(item: Item): number {
   const def = itemDef(item.id);
   const base = def.decay ?? CATEGORY_DECAY[def.category];
-  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay;
+  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay * rarityOf(item).keep;
 }
 
 /** What one of a thing weighs, which is its make and what it is made of. */
@@ -331,7 +387,9 @@ export const itemWeight = (item: { id: string; extra?: string; count: number }):
 
 export function itemName(item: Item): string {
   const def = itemDef(item.id);
-  let name = item.extra ? `${def.name} (${item.extra.toLowerCase()})` : def.name;
+  const rare = rarityOf(item).name;
+  const base = rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} ${def.name.toLowerCase()}` : def.name;
+  let name = item.extra ? `${base} (${item.extra.toLowerCase()})` : base;
   if (def.charges) name += ` (${item.charges ?? 0}/${def.charges})`;
   return name;
 }

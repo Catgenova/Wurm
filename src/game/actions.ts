@@ -24,7 +24,7 @@ import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
 import { affinityOf } from './boons';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight } from './items';
+import { itemDef, itemName, itemWeight, rarityOf } from './items';
 import { RECIPE_ACTIONS } from './recipes';
 
 /**
@@ -796,9 +796,11 @@ export const ACTIONS: ActionDef[] = [
       // What it is made of is half of what it is, so it is said here.
       const made = materialOfItem(item);
       const stuff = made ? ` ${made.name}: ${made.note}` : '';
+      const r = rarityOf(item);
+      const rare = r.name ? ` It is ${r.name}: better at what it is for by a ${r.boost > 1.3 ? 'half' : r.boost > 1.15 ? 'quarter' : 'tenth'}, slower to wear and to rot, and can be bettered ${r.ceiling} past your own skill.` : '';
       const skill = affinityOf(g.seed, item.id);
       const favours = skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '';
-      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${desc}${favours}${stuff}`, 'event');
+      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${desc}${rare}${favours}${stuff}`, 'event');
     },
   },
   {

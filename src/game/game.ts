@@ -14,7 +14,7 @@ import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
-import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
+import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { affinityOf, affinityTime, AFFINITY_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
@@ -1195,7 +1195,7 @@ export class Game {
   toolQl(id: string): number {
     const tool = this.inventory.tool(id);
     // A battered tool works like a poorer one than it was.
-    return tool ? workingQl(tool.ql, tool.extra) * Math.max(0.3, 1 - tool.dmg / 160) : 0;
+    return tool ? Math.min(100, workingQl(tool.ql, tool.extra) * rarityOf(tool).boost) * Math.max(0.3, 1 - tool.dmg / 160) : 0;
   }
 
   /**
@@ -1218,7 +1218,7 @@ export class Game {
     if (amount <= 0) return;
     const before = item.dmg;
     // Oak takes a third of what pine takes; seryll barely marks at all.
-    item.dmg = Math.min(100, item.dmg + amount * matOf(item.extra).wear);
+    item.dmg = Math.min(100, item.dmg + amount * matOf(item.extra).wear * rarityOf(item).keep);
     const step = (v: number): number => Math.floor((v - DAMAGE_WARN) / 5);
     if (item.dmg >= 100) {
       this.inventory.remove(item.uid, 1);

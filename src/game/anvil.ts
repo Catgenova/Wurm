@@ -1,7 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, type Item } from './items';
+import { itemDef, rollRarity, RARITY_WORD, type Item } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
 import { METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
 
@@ -147,6 +147,11 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       g.gainSkill(def.skill, 0.5);
       const per = def.per ?? 1;
       const made = g.inventory.add(def.makes, { ql, extra: metal.name, count: per });
+      const rare = rollRarity(g.rand);
+      if (rare) {
+        made.rare = rare;
+        g.logMsg(RARITY_WORD[rare], 'skill');
+      }
       g.logMsg(
         `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${plural(itemDef(def.makes).name.toLowerCase(), per)} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
           broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through and is done.` : ` The mould has ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left.`

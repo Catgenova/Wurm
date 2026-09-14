@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemDef } from './items';
+import { itemDef, rollRarity, RARITY_WORD } from './items';
 import { FURNITURE } from './furniture';
 import { MOULDS } from './metal';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
@@ -420,6 +420,13 @@ export function recipeAction(r: Recipe): ActionDef {
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item))) return;
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
       const item = g.inventory.add(r.result, { count: r.count ?? 1, ql, extra: mat });
+      // Now and again a thing comes off the bench better than the hands that
+      // made it had any right to produce. Nothing brings it on.
+      const rare = rollRarity(g.rand);
+      if (rare) {
+        item.rare = rare;
+        g.logMsg(RARITY_WORD[rare], 'skill');
+      }
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', 0.25);
