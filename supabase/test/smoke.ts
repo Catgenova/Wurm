@@ -13,6 +13,7 @@
  */
 import { Island } from '../../src/net/island';
 import { generateWorld } from '../../src/world/generate';
+import { TILE_DEFS } from '../../src/world/tiles';
 import { supabase, signIn, PROJECT } from '../../src/net/supabase';
 
 const SIZE = Number(process.env.ISLAND_SIZE ?? 64);
@@ -80,10 +81,34 @@ async function main(): Promise<void> {
         at === -2 ? `all ${mine.length}` : at === -1 ? 'lengths differ' : `differs at ${at}`);
     }
 
-    // Stand next to a corner worth digging, and ask.
+    /*
+     * Find a corner actually worth digging, rather than assuming the one we
+     * washed up on is.
+     *
+     * It is not, one island in several: a spawn can sit on bare rock or at the
+     * water line, and the rules then refuse quite correctly — which failed a
+     * run and looked for a moment like a regression. Islands are rolled fresh
+     * every time here, so a test that leans on where a random one puts you is
+     * a test that cries wolf on a schedule of its own choosing.
+     */
     const me = island.me!;
-    const cx = Math.floor(me.x);
-    const cy = Math.floor(me.y);
+    let cx = Math.floor(me.x);
+    let cy = Math.floor(me.y);
+    let found = false;
+    for (let r = 0; r <= 12 && !found; r++) {
+      for (let dy = -r; dy <= r && !found; dy++) {
+        for (let dx = -r; dx <= r && !found; dx++) {
+          const x = Math.floor(me.x) + dx;
+          const y = Math.floor(me.y) + dy;
+          if (x < 1 || y < 1 || x >= back.w || y >= back.h) continue;
+          if (back.getDirt(x, y) <= 0 || back.getHeight(x, y) <= 0) continue;
+          if (!TILE_DEFS[back.getTile(x, y)]?.digYield) continue;
+          cx = x; cy = y; found = true;
+        }
+      }
+    }
+    check('there is somewhere on this island worth digging', found,
+      found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
     await supabase().rpc('rpc_move', { p_world: id, p_x: cx + 0.5, p_y: cy + 0.5, p_level: 0 });
     const before = back.getHeight(cx, cy);
     /*
@@ -129,6 +154,21 @@ async function main(): Promise<void> {
       check('we can read the people on the island', !peopleErr && (people ?? []).length > 0,
         peopleErr ? peopleErr.message : `${(people ?? []).length} body`);
     }
+
+    /*
+     * The other three hundred and sixty-eight, as far as they can be reached
+     * with nothing in hand but the starting kit. Both of these are refusals,
+     * and refusals are the half of the dispatcher worth checking live: one
+     * says a recipe is known and wants materials, the other says an action is
+     * known and has no performer yet. Between them they prove that every
+     * action in the game reached the island.
+     */
+    const noLogs = await island.act('make_planks', { kind: 'item' }, 1);
+    check('a recipe we lack the materials for is refused in its own words',
+      !noLogs.started && /plank/i.test(noLogs.why ?? ''), noLogs.why ?? 'IT STARTED');
+    const notYet = await island.act('cut_down', { kind: 'tile', x: cx, y: cy }, 1);
+    check('an action with no performer yet says so honestly',
+      !notYet.started && /yet/i.test(notYet.why ?? ''), notYet.why ?? 'IT STARTED');
 
     const { data: pack } = await supabase().from('item').select('*').eq('world_id', id).eq('holder_uid', uid);
     check('we are carrying the starting kit', (pack ?? []).length >= 9, `${(pack ?? []).length} things`);
