@@ -146,6 +146,20 @@ export function buildHelp(win: UIWindow): void {
     scarcely takes a mark at all. A tool's metal decides how fast and how true it works, so a bronze
     hatchet at forty beats a copper one at fifty; a weapon's metal decides what it does; armour's metal
     decides both what it stops and what it costs you to carry.</p>
+    <h3>Fruit trees</h3>
+    <p>Three of the nine trees bear: <b>apple</b>, <b>cherry</b> and <b>olive</b>. They grow wild here
+    and there in the warm low country &mdash; about one tree in a hundred &mdash; and you can tell them
+    across a field by what is hanging in them. Take a <b>sprout</b> off one with forestry and plant it,
+    and you have the beginnings of an orchard.</p>
+    <p>A sapling bears nothing; leave it to grow. A mature tree gives three or four of its fruit to a
+    picking and an old one five or six, more as your forestry rises, and a picked tree needs a few
+    minutes before there is anything on it again. Four apples and a dough bake into two <b>apple
+    pies</b>, the best food on the island; a dozen cherries boil down into two jars of <b>preserves</b>;
+    and ten olives crushed under a <b>quern</b> give two measures of <b>olive oil</b>, which keeps almost
+    for ever.</p>
+    <p>All three are also <b>woods</b>, and good ones: apple is as hard-wearing as oak and takes a finer
+    edge, cherry is the best handle wood on the island, and olive is murder to work and outlasts
+    everything. You get one log a tree, so an orchard felled is an orchard gone.</p>
     <h3>Farming</h3>
     <p>With a <b>rake</b> in your pack, <b>Till</b> any grass or dirt to rake it into a field. Seeds turn
     up while foraging and botanizing &mdash; vegetables and starches in the one, spices and fibres in the

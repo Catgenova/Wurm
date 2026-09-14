@@ -14,6 +14,9 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 function pickSpecies(avgHeight: number, moisture: number, r: number): number {
   if (avgHeight > 95) return r < 0.6 ? 1 : 5;
   if (avgHeight < 7 && moisture > 0.1) return r < 0.7 ? 4 : 0;
+  // The three that bear turn up wild here and there in the warm low country,
+  // one tree in fifty or so. An orchard is something you plant.
+  if (r > 0.978 && avgHeight < 60) return moisture > 0.2 ? 6 : r > 0.992 ? 8 : 7;
   if (r < 0.32) return 0; // birch
   if (r < 0.6) return 2; // oak
   if (r < 0.78) return 3; // maple

@@ -579,6 +579,47 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'pick_fruit',
+    label: 'Pick fruit',
+    labelFor: (t, g) => {
+      const def = t.kind === 'tile' ? TREE_DEFS[treeSpecies(g.world.getData(t.x, t.y))] : undefined;
+      return def?.fruit ? `Pick ${itemDef(def.fruit).name.toLowerCase()}s` : 'Pick fruit';
+    },
+    verb: 'picking fruit',
+    skill: 'forestry',
+    repeat: true,
+    stamina: 0.02,
+    baseTime: 4,
+    applies: (t, g) => {
+      if (t.kind !== 'tile' || g.world.getTile(t.x, t.y) !== TileType.Tree) return false;
+      return !!TREE_DEFS[treeSpecies(g.world.getData(t.x, t.y))].fruit;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      const data = g.world.getData(t.x, t.y);
+      const def = TREE_DEFS[treeSpecies(data)];
+      if (!def.fruit) return 'Nothing grows on this that you would eat.';
+      // A sapling bears nothing; it has to have some years in it first.
+      if (treeVariant(data) === 0) return `The ${def.name.toLowerCase()} is too young to bear. Leave it to grow.`;
+      if (g.isForaged(t.x, t.y, 'forage')) return `You have had what this ${def.name.toLowerCase()} has on it. Come back later.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const data = g.world.getData(t.x, t.y);
+      const def = TREE_DEFS[treeSpecies(data)];
+      if (!def.fruit) return;
+      // An old tree carries more than one only just come into bearing.
+      const old = treeVariant(data) === 2;
+      const skill = g.skills.get('forestry');
+      const count = Math.max(1, Math.round((old ? 5 : 3) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
+      const made = g.inventory.add(def.fruit, { count, ql: g.productQl('forestry'), });
+      g.markForaged(t.x, t.y, 'forage');
+      g.gainSkill('forestry', 0.35);
+      g.logMsg(`You pick ${count} ${itemDef(def.fruit).name.toLowerCase()}${count === 1 ? '' : 's'} off the ${def.name.toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
+    },
+  },
+  {
     id: 'plant',
     label: 'Plant sprout',
     verb: 'planting',

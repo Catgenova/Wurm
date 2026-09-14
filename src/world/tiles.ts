@@ -98,6 +98,8 @@ export interface TreeDef {
   /** Relative size of the full grown tree. */
   size: number;
   logs: number;
+  /** Fruit it bears once it is grown, for the three that bear any. */
+  fruit?: string;
 }
 
 /** Tree species; stored in the low nibble of a tree tile's data byte. */
@@ -108,6 +110,11 @@ export const TREE_DEFS: TreeDef[] = [
   { name: 'Maple', shape: 'round', trunk: '#6b4a34', canopy: ['#f0b053', '#d6782e', '#9c4a1c'], size: 0.95, logs: 1 },
   { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#c4dc8c', '#93b864', '#6a8c48'], size: 1, logs: 1 },
   { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#8fb87c', '#5a8a5c', '#3c6440'], size: 1.05, logs: 2 },
+  // The three that bear. They grow wild only here and there; an orchard is
+  // something you plant.
+  { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#8fc060', '#5f9440', '#41682c'], size: 0.8, logs: 1, fruit: 'apple' },
+  { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#a8cc70', '#74a047', '#4d7030'], size: 0.78, logs: 1, fruit: 'cherry' },
+  { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#9aae84', '#6f8a64', '#4f6448'], size: 0.75, logs: 1, fruit: 'olive' },
 ];
 
 export interface BushDef {

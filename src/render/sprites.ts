@@ -65,6 +65,9 @@ const AX = SPRITE_W / 2;
 const AY = SPRITE_H - 8;
 const VARIANT_SIZE = [0.7, 0.92, 1.12];
 
+/** What hangs in each of the bearing trees. */
+const FRUIT_COLOUR: Record<string, string> = { apple: '#d8443c', cherry: '#b41f3e', olive: '#4a5a2c' };
+
 export function treeSprite(species: number, variant: number): Sprite {
   const key = `tree:${species}:${variant}`;
   let spr = cache.get(key);
@@ -84,6 +87,18 @@ export function treeSprite(species: number, variant: number): Sprite {
       blob(ctx, bx, cy, r, def.canopy[2]);
       blob(ctx, bx - r * 0.14, cy - r * 0.16, r * 0.8, def.canopy[1]);
       blob(ctx, bx - r * 0.3, cy - r * 0.34, r * 0.46, def.canopy[0]);
+      // The three that bear are told apart across a field by what is hanging
+      // in them, once they are old enough to hang anything.
+      if (def.fruit && variant > 0) {
+        ctx.fillStyle = FRUIT_COLOUR[def.fruit] ?? '#d05040';
+        for (let i = 0; i < 9; i++) {
+          const a = (i / 9) * Math.PI * 2 + species;
+          const d = r * (0.42 + ((i * 7) % 5) / 9);
+          ctx.beginPath();
+          ctx.arc(bx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.8, Math.max(1, r * 0.075), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     } else if (def.shape === 'conifer') {
       const th = 18 * size;
       const r = 19 * size;

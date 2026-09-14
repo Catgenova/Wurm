@@ -471,6 +471,18 @@ rebuilds and commits the result.
   deed with honey and beeswax, and two wax and a length of yarn draw a pair of
   candles; and the **Lume**, found only after dark, carries its own daylight
   about with it.
+- **Fruit trees and orchards.** Three of the nine trees bear — **apple**,
+  **cherry** and **olive** — growing wild about one tree in a hundred in the
+  warm low country, and told apart across a field by what is hanging in them.
+  Take a sprout with forestry and plant an orchard of your own. A sapling
+  bears nothing; a mature tree gives three or four to a picking and an old one
+  five or six, rising with forestry, and a picked tree wants a few minutes
+  before there is anything on it again. Four apples and a dough bake into two
+  **apple pies**, a dozen cherries boil into **preserves**, and ten olives
+  under a **quern** press into **olive oil**. All three are also woods, and
+  good ones: apple wears like oak and takes a finer edge, cherry is the best
+  handle wood on the island, and olive is murder to work and outlasts
+  everything — at one log a tree, so an orchard felled is an orchard gone.
 - **Farming.** Till grass or dirt into a field with a rake, sow seeds gathered
   while foraging and botanizing, and grow thirteen crops across vegetables,
   starches, spices and fibre. Each crop runs through four stages with its own

@@ -55,6 +55,11 @@ const WOOD_PROPS: Record<string, Props> = {
   Maple: { difficulty: 1, weight: 1.05, wear: 0.9, decay: 1, edge: 1.05, soak: 1.02, bite: 1, hold: 1.05, note: 'Even-tempered. Nothing it is best at and nothing it is bad at.' },
   Willow: { difficulty: -3, weight: 0.78, wear: 1.12, decay: 1.12, edge: 0.94, soak: 0.9, bite: 1.08, hold: 0.95, note: 'Springy and very light. The bowyer\'s wood for a short bow.' },
   Cedar: { difficulty: 4, weight: 0.9, wear: 0.86, decay: 0.35, edge: 1, soak: 1, bite: 0.98, hold: 1, note: 'Barely rots at all. Whatever you leave out in the rain, make it of this.' },
+  // Orchard woods: little of them off any one tree, and all three are close
+  // grained and hard for it.
+  Apple: { difficulty: 3, weight: 1.18, wear: 0.74, decay: 0.95, edge: 1.08, soak: 1.1, hold: 1.06, bite: 1.02, note: 'Close, hard and heavy for a small tree. Wears like oak and takes a finer edge.' },
+  Cherry: { difficulty: 2, weight: 1.02, wear: 0.82, decay: 0.9, edge: 1.06, soak: 1.06, bite: 1.1, hold: 1.04, note: 'Fine in the grain and stable with it. The best wood on the island for a tool handle.' },
+  Olive: { difficulty: 6, weight: 1.3, wear: 0.6, decay: 0.55, edge: 1.14, soak: 1.2, bite: 0.9, hold: 1.08, note: 'Wild grained, oily and nearly unsplittable. Murder to work and it outlasts everything.' },
 };
 
 /**
