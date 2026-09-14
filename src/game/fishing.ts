@@ -128,6 +128,7 @@ export const FISHING_ACTIONS: ActionDef[] = [
         return true;
       }
       const item = g.inventory.add(got.id, { ql: g.productQl('fishing', rodQl) });
+      g.note(`fish:${got.id}`);
       g.logMsg(`You land ${/^[aeiou]/i.test(got.name) ? 'an' : 'a'} ${got.name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
       return true;
     },

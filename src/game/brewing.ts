@@ -99,6 +99,8 @@ export const BREWING_ACTIONS: ActionDef[] = [
       f.ferment = brew.time;
       f.ql = Math.max(1, Math.min(100, (stockQl + g.skills.get('brewing')) / 2));
       g.gainSkill('brewing', 0.6);
+      g.note('brew');
+      g.note(`brew:${brew.id}`);
       g.logMsg(`${brew.done} (about ${Math.round(brew.time / 60)} minutes)`, 'event');
       g.events.emit('crate');
     },

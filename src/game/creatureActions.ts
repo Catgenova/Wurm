@@ -121,6 +121,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
           c.stance = 'defensive';
           g.logMsg(`The ${def.name.toLowerCase()} takes the ${foodName} from your hand and trusts you. ${c.name} now follows you.`, 'system');
         }
+        g.note('tamed');
         g.gainSkill('taming', 0.7);
         g.gainSkill('soul_strength', 0.4);
       } else {
@@ -548,6 +549,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c || !g.mount(c)) return;
+      g.note('mounted');
       g.logMsg(`You take a fistful of mane and swing up onto ${c.name}.`, 'event');
     },
   },
@@ -597,6 +599,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const v = vehicleOf(f);
       const filled = (f.team ?? []).length;
       const short = v && filled < v.needs ? ` It needs ${v.needs - filled} more before it will move.` : '';
+      g.note('hitched');
       g.logMsg(`You back ${c.name} into a yoke of the ${furnitureName(f).toLowerCase()}. ${filled} of ${v?.yokes ?? 0} filled.${short}`, 'event');
     },
   },

@@ -421,6 +421,7 @@ export const ACTIONS: ActionDef[] = [
       const type = w.getTile(t.x, t.y);
       const rock = bedrockAt(w, t.x, t.y);
       const yieldId = type === TileType.Rock ? rock.yields : 'rock_shards';
+      if (yieldId.endsWith('_ore')) g.note('ore');
       // No seam gives up more quality than it holds, however good the miner.
       const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', pickQl)) });
       const what = itemDef(yieldId).name.toLowerCase();
@@ -470,6 +471,7 @@ export const ACTIONS: ActionDef[] = [
       // What broke away is yours, which is the only thing this shares with mining.
       const rock = bedrockAt(w, t.x, t.y);
       const yieldId = w.getTile(t.x, t.y) === TileType.Rock ? rock.yields : 'rock_shards';
+      if (yieldId.endsWith('_ore')) g.note('ore');
       const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', g.toolQl('pickaxe'))) });
       g.logMsg(`The ${cornerName(t)} corner breaks away and drops a step. You gather the ${itemDef(yieldId).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
@@ -557,6 +559,7 @@ export const ACTIONS: ActionDef[] = [
       const logs = def.logs + (treeVariant(data) === 2 ? 1 : 0);
       w.setTile(t.x, t.y, TileType.Grass);
       const item = g.inventory.add('log', { count: logs, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
+      g.note('tree');
       g.logMsg(`The ${def.name.toLowerCase()} tree falls. You get ${logs} ${logs === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
@@ -640,6 +643,8 @@ export const ACTIONS: ActionDef[] = [
       );
       g.inventory.remove(sprout.uid, 1);
       g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(species, 0));
+      g.note('planted');
+      if (TREE_DEFS[species].fruit) g.note('orchard');
       g.logMsg(`You plant the ${TREE_DEFS[species].name.toLowerCase()} sprout.`, 'event');
     },
   },

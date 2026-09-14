@@ -83,6 +83,7 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
       <tr><td><kbd>P</kbd></td><td>Wildermon: your tamed creatures' stats and actions</td></tr>
+      <tr><td><kbd>J</kbd></td><td>Journal: everything worth doing, ticking itself off</td></tr>
       <tr><td><kbd>O</kbd></td><td>Settings (tile grid, deed border)</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
@@ -108,6 +109,12 @@ export function buildHelp(win: UIWindow): void {
     what goes into it &mdash; so <i>leather</i> finds every leather thing, <i>mason</i> finds the oven
     and the well, and <i>nail</i> finds all forty-odd recipes that want nails. The count at the foot
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
+    <h3>The journal</h3>
+    <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
+    (<kbd>J</kbd>) is that list: forty-seven goals in seven chapters, from felling your first tree to
+    taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
+    somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
+    events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
     <h3>Crafting</h3>
     <p>The crafting window (<kbd>R</kbd>) is your recipe book, grouped by craft: a carving knife and a
     log give shafts or a mallet, a shaft becomes a deed stake, a saw gives planks and timbers, a chisel

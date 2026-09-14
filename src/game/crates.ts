@@ -89,6 +89,7 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const kind = item && crateKindOfItem(item.id);
       if (!item || !kind || !g.inventory.remove(item.uid, 1)) return;
       const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra);
+      g.note('crate');
       g.logMsg(`You set the ${crateName(crate).toLowerCase()} down.`, 'event');
       g.events.emit('world', crate.x, crate.y);
     },

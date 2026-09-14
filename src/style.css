@@ -291,6 +291,26 @@ kbd {
   flex-wrap: wrap;
 }
 
+/* The journal: a tick, the goal, and a quiet hint after it. */
+.goal-row {
+  align-items: baseline;
+  gap: 7px;
+}
+
+.goal-tick {
+  width: 12px;
+  color: #6b6255;
+  text-align: center;
+}
+
+.goal-done {
+  color: var(--ui-accent);
+}
+
+.goal-done .goal-tick {
+  color: #9ec27a;
+}
+
 .hud-companion {
   display: flex;
   align-items: center;

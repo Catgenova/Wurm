@@ -510,6 +510,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const def = furnitureDef(f.kind);
       // A well-made bed is a better night than a cot with a thin mattress.
       const rest = (def.bed ?? 1) * (0.6 + f.ql / 250);
+      g.note('slept');
       g.sleepUntilMorning(rest, furnitureName(f).toLowerCase());
     },
   },

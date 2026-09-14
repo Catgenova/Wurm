@@ -42,6 +42,7 @@ import { CratePanel } from './panels/crate';
 import { TilePanel } from './panels/tile';
 import type { DragPayload } from './dragdrop';
 import { WildermonPanel } from './panels/wildermon';
+import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { SettingsPanel } from './panels/settings';
 import { Hud } from './hud';
@@ -106,6 +107,8 @@ export class UI {
     this.settings = new SettingsPanel(settings, game);
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
     this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'));
+    const journal = this.windows.create({ id: 'journal', title: 'Journal', x: 12, y: 56, width: 330, height: 420, anchor: 'tr', open: false });
+    new JournalPanel(journal, game);
     const pals = this.windows.create({ id: 'wildermon', title: 'Wildermon', x: 364, y: 330, width: 330, height: 320, anchor: 'tr', open: false });
     this.wildermon = new WildermonPanel(
       pals,

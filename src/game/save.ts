@@ -204,6 +204,8 @@ interface SaveData {
   kilns?: PlacedKiln[];
   furniture?: PlacedFurniture[];
   posts?: PlacedPost[];
+  tally?: Record<string, number>;
+  ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   crate?: { x: number; y: number; items: Item[] } | null;
@@ -252,6 +254,8 @@ function meta(game: Game): SaveMeta {
     kilns: [...game.kilns.values()],
     furniture: [...game.furniture.values()],
     posts: [...game.posts.values()],
+    tally: { ...game.tally },
+    ticked: [...game.ticked],
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
   };
@@ -475,6 +479,8 @@ function finish(world: World, m: SaveMeta): Game {
     kilns: m.kilns,
     furniture: m.furniture,
     posts: m.posts,
+    tally: m.tally,
+    ticked: m.ticked,
     anvils: m.anvils,
     crops: m.crops,
     crate: m.crate ?? null,

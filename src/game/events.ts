@@ -10,6 +10,8 @@ export type GameEvents = {
   log: [entry: LogEntry];
   inventory: [];
   skill: [id: string, gain: number];
+  /** A journal goal has just been ticked off. */
+  journal: [];
   action: [];
   stats: [];
   world: [x: number, y: number];

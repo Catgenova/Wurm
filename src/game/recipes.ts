@@ -455,8 +455,11 @@ export function recipeAction(r: Recipe): ActionDef {
       const rare = rollRarity(g.rand);
       if (rare) {
         item.rare = rare;
+        g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
+      g.note('made');
+      g.note(`made:${r.result}`);
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', 0.25);

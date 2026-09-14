@@ -150,8 +150,11 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const rare = rollRarity(g.rand);
       if (rare) {
         made.rare = rare;
+        g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
+      g.note('smithed');
+      if (['adamantine', 'glimmersteel', 'mithril', 'seryll'].includes(metal.id)) g.note('moonmetal');
       g.logMsg(
         `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${plural(itemDef(def.makes).name.toLowerCase(), per)} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
           broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through and is done.` : ` The mould has ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left.`

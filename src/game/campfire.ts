@@ -137,6 +137,7 @@ export const CAMPFIRE_ACTIONS: ActionDef[] = [
       if (!f || f.lit || f.fuel <= 0) return;
       f.lit = true;
       g.events.emit('world', f.x, f.y);
+      g.note('fire');
       g.logMsg(`The kindling catches and the campfire burns. It has ${fireBurnsFor(f)} of fuel.`, 'event');
     },
   },

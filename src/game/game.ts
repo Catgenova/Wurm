@@ -18,6 +18,7 @@ import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, i
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { affinityOf, affinityTime, AFFINITY_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
+import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { Skills, SKILL_DEFS } from './skills';
@@ -93,6 +94,8 @@ export interface GameInit {
   kilns?: PlacedKiln[];
   furniture?: PlacedFurniture[];
   posts?: PlacedPost[];
+  tally?: Record<string, number>;
+  ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[] };
@@ -197,6 +200,43 @@ export class Game {
   /** Work posts by id; each stands on one subtile off the deed. */
   readonly posts = new Map<number, PlacedPost>();
   private nextPostId = 1;
+  /**
+   * A running count of things done: felled trees, landed fish, brews set
+   * going. Nothing in the game reads these but the journal, which is the
+   * only place that knows there is anything worth doing.
+   */
+  readonly tally: Record<string, number> = {};
+  /** Goals already ticked off, which stay ticked whatever happens after. */
+  readonly ticked = new Set<string>();
+  private journalAt = -1e9;
+
+  /** Note that something was done, once. */
+  note(key: string, n = 1): void {
+    this.tally[key] = (this.tally[key] ?? 0) + n;
+  }
+
+  /**
+   * Look over the journal for anything newly done. Only the goals still open
+   * are tested, and only now and again, so a list of fifty costs nothing.
+   */
+  private checkJournal(): void {
+    if (this.time - this.journalAt < 2) return;
+    this.journalAt = this.time;
+    for (const goal of ALL_GOALS) {
+      if (this.ticked.has(goal.id)) continue;
+      let met = false;
+      try {
+        met = goal.met(this);
+      } catch {
+        met = false;
+      }
+      if (!met) continue;
+      this.ticked.add(goal.id);
+      this.logMsg(`Journal: ${goal.text.toLowerCase()}. (${this.ticked.size} of ${ALL_GOALS.length})`, 'skill');
+      this.events.emit('journal');
+    }
+  }
+
   /** Placed crates by id; each sits on one subtile. */
   readonly crates = new Map<number, PlacedCrate>();
   nextCrateId = 1;
@@ -291,6 +331,8 @@ export class Game {
       this.furniture.set(f.id, f);
       if (f.id >= this.nextFurnitureId) this.nextFurnitureId = f.id + 1;
     }
+    Object.assign(this.tally, init.tally ?? {});
+    for (const id of init.ticked ?? []) this.ticked.add(id);
     for (const p of init.posts ?? []) {
       this.posts.set(p.id, p);
       this.placed.posts.add(p);
@@ -846,6 +888,7 @@ export class Game {
       if (p.lastClimb > MAX_STEP / 3) this.gainSkill('climbing', 0.04 + (p.lastClimb / MAX_STEP) * 0.12);
       p.lastClimb = 0;
     }
+    this.checkJournal();
     const performing = this.action?.state === 'performing';
     // Rest only goes while you are working; standing about does not spend it.
     if (performing && this.player.rested > 0) {
