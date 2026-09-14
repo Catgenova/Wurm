@@ -36,6 +36,11 @@ export class Player {
   rested = 0;
   /** Affinities running just now, from what you have eaten and drunk. */
   boons: Boon[] = [];
+  /** Knacks earned on the way up, by skill: each is worth a tenth more gain in it. */
+  affinities: Record<string, number> = {};
+  /** Titles earned, and the one being worn. */
+  titles: string[] = [];
+  title: string | null = null;
   /** Last creature that hurt the player, for defensive companions. */
   attackedBy: number | null = null;
   attackedAt = -1e9;

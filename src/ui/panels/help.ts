@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: fifty-three goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: fifty-seven goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -527,6 +527,17 @@ export function buildHelp(win: UIWindow): void {
     what decides how many jobs you can keep in your head at once, and wears the pages a little as you
     go. Held in one hand it is hard going; on a <b>lectern</b>, which until now had nothing to hold, you
     get twice as much out of the same hour.</p>
+    <h3>Titles and knacks</h3>
+    <p>Two things come out of a long climb, and neither is asked for. Every trade hands out a
+    <b>title</b> at 50, 70, 90 and 99 &mdash; Joiner, Carpenter, Master Carpenter, Legendary Carpenter
+    &mdash; and you wear <b>one at a time</b>, chosen in the Skills window (<kbd>K</kbd>) and shown
+    beside your position. Click the one you are wearing to take it off again.</p>
+    <p>Every <b>ten points</b> of any skill also leaves a <b>knack</b> behind. It usually lands on the
+    trade you were working and sometimes on one beside it &mdash; ten points of carpentry may leave you
+    better at bowyery, because it is the same hands and the same wood. A knack is worth a tenth more on
+    everything that trade teaches you from then on, it never wears off, and a trade holds <b>five</b> of
+    them: half again on every gain, for good. They stack with a night's rest and with what you have
+    eaten, and the Skills window shows how many each trade has.</p>
     <h3>Rope</h3>
     <p>Wemp is grown in a field, cut for <b>fibre</b>, and the fibre goes two ways. Spun on a spindle it
     is coarse yarn; laid up on a <b>rope tool</b> (a plank and a shaft, carved) it is <b>rope</b> &mdash;

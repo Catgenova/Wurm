@@ -22,6 +22,7 @@ import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { Skills, SKILL_DEFS } from './skills';
+import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
 
@@ -98,7 +99,7 @@ export interface GameInit {
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[] };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -298,6 +299,9 @@ export class Game {
       if (init.player.equipped) this.player.equipped = { ...this.player.equipped, ...init.player.equipped };
       this.player.rested = init.player.rested ?? 0;
       this.player.boons = init.player.boons ?? [];
+      this.player.affinities = init.player.affinities ?? {};
+      this.player.titles = init.player.titles ?? [];
+      this.player.title = init.player.title ?? null;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -798,8 +802,53 @@ export class Game {
    */
   skillMult(id: string): number {
     let mult = this.player.rested > 0 ? REST_MULT : 1;
+    // A knack earned on the way up never wears off, unlike a meal or a night's sleep.
+    mult += knackBonus(this.player.affinities[id]);
     for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
     return mult;
+  }
+
+  /**
+   * Every ten points of a trade leaves a knack behind: usually in that trade,
+   * sometimes in one beside it. They are permanent and they stack, up to five
+   * to a trade, which is half again on everything that trade teaches you.
+   */
+  private earnKnacks(skill: string, before: number, after: number): void {
+    for (let i = 0; i < stepsCrossed(before, after); i++) {
+      const id = knackLands(skill, this.rand);
+      const had = this.player.affinities[id] ?? 0;
+      if (had >= KNACK_CAP) continue;
+      this.player.affinities[id] = had + 1;
+      const def = SKILL_DEFS.find((d) => d.id === id);
+      this.logMsg(
+        `You have a knack for ${def?.name.toLowerCase() ?? id} now. It goes in ${Math.round(knackBonus(had + 1) * 100)}% faster.`,
+        'skill',
+      );
+      this.note('knack');
+    }
+  }
+
+  /** Titles this level has earned that were not earned before, worn if you have none. */
+  private earnTitles(skill: string, before: number, after: number): void {
+    for (const t of earnedBy(skill, after)) {
+      if (before >= t.at || this.player.titles.includes(t.id)) continue;
+      this.player.titles.push(t.id);
+      if (!this.player.title) this.player.title = t.id;
+      this.logMsg(`They will call you ${t.name} for that. (Skills, to wear it)`, 'skill');
+      this.note('title');
+    }
+  }
+
+  /** Wear one of the titles you have earned, or none at all. */
+  wearTitle(id: string | null): void {
+    if (id !== null && !this.player.titles.includes(id)) return;
+    this.player.title = id;
+    this.events.emit('skill', '', 0);
+  }
+
+  /** The title being worn, written out. */
+  titleName(): string | null {
+    return this.player.title ? TITLE_BY_ID.get(this.player.title)?.name ?? null : null;
   }
 
   /** Everything running on you just now, for the hud to put up. */
@@ -851,6 +900,8 @@ export class Game {
       const places = gain < 0.0001 ? 6 : 4;
       this.logMsg(`${def.name} increased by ${gain.toFixed(places)} to ${now.toFixed(4)}.`, 'skill');
     }
+    this.earnKnacks(id, before, now);
+    this.earnTitles(id, before, now);
     this.events.emit('skill', id, gain);
     return gain;
   }

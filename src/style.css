@@ -1049,3 +1049,20 @@ kbd {
   white-space: nowrap;
 }
 .trait-chip.trait-unread { color: #6d7a72; border-style: dashed; font-style: italic; }
+
+/* Titles earned from the trades, worn one at a time. */
+.title-box { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px 6px; }
+.title-none { color: #7c8a80; font-size: 11px; font-style: italic; padding: 2px 0; }
+.title-chip {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
+  border: 1px solid #4a5550;
+  border-radius: 3px;
+  color: #b9c6bc;
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+.title-chip:hover { border-color: #7d8d84; color: #e2e9e2; }
+.title-chip.title-worn { color: #f0c060; border-color: #f0c060; background: rgba(240, 192, 96, 0.1); }

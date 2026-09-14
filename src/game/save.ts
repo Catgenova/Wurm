@@ -187,7 +187,7 @@ interface SaveData {
   mem?: string;
   memData?: string;
   spawn: { x: number; y: number };
-  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[] };
+  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -237,7 +237,7 @@ function meta(game: Game): SaveMeta {
     seed: game.seed,
     size: w.w,
     spawn: game.spawn,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, affinities: game.player.affinities, titles: game.player.titles, title: game.player.title },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),

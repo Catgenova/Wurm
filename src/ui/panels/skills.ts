@@ -1,5 +1,6 @@
 import type { Game } from '../../game/game';
 import { SKILL_DEFS } from '../../game/skills';
+import { knackBonus, KNACK_CAP, TITLE_BY_ID } from '../../game/titles';
 import type { UIWindow } from '../windows';
 
 export class SkillsPanel {
@@ -7,8 +8,17 @@ export class SkillsPanel {
   private notes = new Map<string, HTMLSpanElement>();
   private rows = new Map<string, HTMLDivElement>();
 
+  private titleBox: HTMLDivElement;
+
   constructor(win: UIWindow, private readonly game: Game) {
     win.body.classList.add('skills-body');
+    // What the trades have earned you the right to be called.
+    const head = document.createElement('div');
+    head.className = 'skill-group';
+    head.textContent = 'Titles';
+    this.titleBox = document.createElement('div');
+    this.titleBox.className = 'title-box';
+    win.body.append(head, this.titleBox);
     for (const group of ['Characteristics', 'Fighting', 'Skills'] as const) {
       const header = document.createElement('div');
       header.className = 'skill-group';
@@ -46,10 +56,48 @@ export class SkillsPanel {
   refresh(): void {
     for (const [id, el] of this.values) el.textContent = this.game.skills.get(id).toFixed(2);
     for (const [id, el] of this.notes) el.textContent = this.note(id);
+    this.drawTitles();
+  }
+
+  /** The titles earned, the one worn, and a way to change your mind. */
+  private drawTitles(): void {
+    const worn = this.game.player.title;
+    const earned = this.game.player.titles;
+    this.titleBox.replaceChildren();
+    if (!earned.length) {
+      const none = document.createElement('div');
+      none.className = 'title-none';
+      none.textContent = 'Take any trade to 50 and they will start calling you something.';
+      this.titleBox.append(none);
+      return;
+    }
+    for (const id of earned) {
+      const t = TITLE_BY_ID.get(id);
+      if (!t) continue;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `title-chip${id === worn ? ' title-worn' : ''}`;
+      chip.textContent = t.name;
+      chip.title = id === worn ? 'Worn. Click to take it off.' : `Earned at ${t.at} ${SKILL_DEFS.find((d) => d.id === t.skill)?.name.toLowerCase() ?? t.skill}. Click to wear it.`;
+      chip.addEventListener('click', () => {
+        this.game.wearTitle(id === worn ? null : id);
+        this.refresh();
+      });
+      this.titleBox.append(chip);
+    }
+  }
+
+  /** The note beside a skill: its knacks, and what it is worth right now. */
+  private note(id: string): string {
+    const g = this.game;
+    // A knack is worth saying before anything else: it never wears off.
+    const knacks = Math.min(KNACK_CAP, g.player.affinities[id] ?? 0);
+    if (knacks) return `knack ×${knacks} · +${Math.round(knackBonus(knacks) * 100)}%${this.plain(id) ? ` · ${this.plain(id)}` : ''}`;
+    return this.plain(id);
   }
 
   /** What a characteristic is worth right now, in the plainest terms. */
-  private note(id: string): string {
+  private plain(id: string): string {
     const g = this.game;
     const v = g.skills.get(id);
     switch (id) {

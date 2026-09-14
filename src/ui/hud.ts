@@ -268,7 +268,8 @@ export class Hud {
     }
     const h = this.game.world.heightAt(p.x, p.y);
     const deed = this.game.deed && this.game.onDeed(p.tileX, p.tileY) ? `  ·  ${this.game.deed.name}` : '';
-    this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}`;
+    const title = this.game.titleName();
+    this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}${title ? `  ·  ${title}` : ''}`;
     // Rest and affinities, when there are any.
     const rested = this.game.player.rested;
     const boons = this.game.activeBoons();

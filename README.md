@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Fifty-three goals in seven chapters — Ashore, The
+- **A journal of goals.** Fifty-seven goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -458,6 +458,15 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Titles and knacks.** Every trade hands out a **title** at 50, 70, 90 and
+  99 — Joiner, Carpenter, Master Carpenter, Legendary Carpenter — and you
+  wear one at a time, picked in the Skills window and shown beside your
+  position. Every **ten points** of any skill also leaves a permanent
+  **knack**, usually in that trade and sometimes in one beside it (ten
+  points of carpentry may leave you better at bowyery — same hands, same
+  wood). A knack is a tenth more on everything that trade teaches you, it
+  never wears off, and a trade holds five of them: half again on every
+  gain, for good, stacking with rest and with what you have eaten.
 - **Rope.** Wemp fibre goes two ways: spun on a spindle it is coarse yarn,
   laid up on a **rope tool** it is **rope** — four fibres to a rope, on the
   new **ropemaking** skill — and three ropes laid up again make a **thick
