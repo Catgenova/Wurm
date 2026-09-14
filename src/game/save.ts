@@ -7,6 +7,7 @@ import type { PlacedSmelter } from './smelter';
 import type { PlacedKiln } from './kiln';
 import type { PlacedFurniture } from './furniture';
 import type { PlacedPost } from './posts';
+import type { Boon } from './boons';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -186,7 +187,7 @@ interface SaveData {
   mem?: string;
   memData?: string;
   spawn: { x: number; y: number };
-  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null> };
+  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[] };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -234,7 +235,7 @@ function meta(game: Game): SaveMeta {
     seed: game.seed,
     size: w.w,
     spawn: game.spawn,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),

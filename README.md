@@ -272,6 +272,16 @@ rebuilds and commits the result.
   where you stand. Barrels hold liquid and nothing else in three sizes (30,
   80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
   empty bucket back, and filling beside a barrel draws out of it.
+- **Rest and affinities.** Sleeping in a bed banks **rest** — about half the
+  night, more from a better bed, up to an hour held at a time. It burns only
+  while you are actually working, and everything done while it burns teaches
+  you twice as much. Separately, every cooked dish **favours one trade**:
+  eating it makes that trade go half again as fast for anything from four
+  minutes to half an hour, by how filling the dish was and how well it was
+  made. Which dish favours which trade is settled when the island is raised
+  and never changes on it, and no two islands agree — examine a dish to see.
+  Between them they are what elaborate cooking and a good bed are actually
+  for.
 - **Night, and a bed to wake in.** A day and a night pass in twenty-four
   minutes, an hour to the minute, with the clock beside your position and the
   world darkening between dusk at eight and dawn at six. A bed or cot can be

@@ -339,6 +339,17 @@ export function buildHelp(win: UIWindow): void {
     both. <b>Pour</b> a full bucket in and you get the empty bucket back; point at a stack of them and
     the whole lot goes in one after another. Filling a bucket beside a barrel draws out of the barrel,
     so a large barrel of lye is a tannery's worth of work waiting to be done.</p>
+    <h3>Rest, and what the cooking is for</h3>
+    <p>Sleeping in a bed banks <b>rest</b> &mdash; about half the night, and more from a better bed, up
+    to an hour of it held at a time. Rest burns only while you are actually working, and everything you
+    do while it burns <b>teaches you twice as much</b>. The hud shows how much you have left.</p>
+    <p>Every cooked dish <b>favours one trade</b>, and eating it leaves you better at that trade for a
+    while &mdash; half as much again, for anything from four minutes to half an hour by how filling the
+    dish was and how well it was made. Which dish favours which trade is settled when the island is
+    raised and never changes on it, and no two islands agree, so <b>examine</b> a dish to see what it is
+    good for. A second helping of the same thing puts the clock back rather than stacking. That is what
+    the stews and the bread and the cheese are for: not the food bar, which a raw potato would fill, but
+    an afternoon of carpentry that goes half again as fast.</p>
     <h3>Night, and a bed to wake in</h3>
     <p>The island keeps a clock now, shown beside your position: a full day and night passes in
     <b>twenty-four minutes</b>, an hour to the minute. The sun goes down at eight and comes up at six,

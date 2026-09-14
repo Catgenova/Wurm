@@ -17,6 +17,7 @@ import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events'
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
+import { affinityOf, affinityTime, AFFINITY_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { Skills, SKILL_DEFS } from './skills';
@@ -94,7 +95,7 @@ export interface GameInit {
   posts?: PlacedPost[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null> };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[] };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -255,6 +256,8 @@ export class Game {
       this.player.level = init.player.level ?? 0;
       this.player.visualLevel = this.player.level;
       if (init.player.equipped) this.player.equipped = { ...this.player.equipped, ...init.player.equipped };
+      this.player.rested = init.player.rested ?? 0;
+      this.player.boons = init.player.boons ?? [];
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -689,7 +692,12 @@ export class Game {
     s.hunger = Math.max(0, s.hunger - 0.2);
     s.thirst = Math.max(0, s.thirst - 0.25);
     this.gainSkill('body_stamina', 0.3 * rest);
-    this.logMsg(`You sleep in the ${what} and wake at ${this.clock()}, rested.`, 'event');
+    // A good bed banks more of the night than a poor one.
+    const banked = this.bankRest(seconds, rest);
+    this.logMsg(
+      `You sleep in the ${what} and wake at ${this.clock()}, rested.${banked > 1 ? ` You have ${clockLeft(this.player.rested)} of rest in you; while it burns, everything teaches you twice as much.` : ''}`,
+      'event',
+    );
     this.events.emit('world', this.player.tileX, this.player.tileY);
   }
 
@@ -704,10 +712,52 @@ export class Game {
   }
 
   /** Raise a skill and announce it. Returns the gain. */
+  /**
+   * How much faster a trade goes into you than it otherwise would: doubled
+   * while there is rest left to burn, and lifted again by whatever you have
+   * eaten that favours it.
+   */
+  skillMult(id: string): number {
+    let mult = this.player.rested > 0 ? REST_MULT : 1;
+    for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
+    return mult;
+  }
+
+  /** Everything running on you just now, for the hud to put up. */
+  activeBoons(): Boon[] {
+    return this.player.boons.filter((b) => b.until > this.time);
+  }
+
+  /**
+   * Eat or drink something that favours a trade, and be better at it for a
+   * while. A second helping of the same thing puts the clock back rather
+   * than stacking on itself.
+   */
+  grantAffinity(itemId: string, ql: number): string | null {
+    const skill = affinityOf(this.seed, itemId);
+    if (!skill) return null;
+    const seconds = affinityTime(itemId, ql);
+    const def = SKILL_DEFS.find((d) => d.id === skill);
+    const already = this.player.boons.find((b) => b.skill === skill && b.until > this.time);
+    if (already) already.until = Math.max(already.until, this.time + seconds);
+    else this.player.boons.push({ skill, bonus: AFFINITY_BONUS, until: this.time + seconds, from: itemName({ id: itemId, uid: 0, ql, dmg: 0, count: 1 }) });
+    // Keep the list from growing without end as things run out.
+    this.player.boons = this.player.boons.filter((b) => b.until > this.time);
+    this.events.emit('inventory');
+    return def ? `${def.name} comes easier for the next ${clockLeft(seconds)}.` : null;
+  }
+
+  /** Bank a night's sleep as rest, up to the hour that will stay banked. */
+  bankRest(seconds: number, quality: number): number {
+    const before = this.player.rested;
+    this.player.rested = Math.min(REST_CAP, before + seconds * REST_PER_SECOND * quality);
+    return this.player.rested - before;
+  }
+
   gainSkill(id: string, base = 0.45): number {
     const def = SKILL_DEFS.find((d) => d.id === id);
     const before = this.skills.get(id);
-    const gain = this.skills.gain(id, base, this.rand);
+    const gain = this.skills.gain(id, base * this.skillMult(id), this.rand);
     // The last stretch of a skill moves in ten-thousandths, and a player at
     // ninety-nine deserves to see that it is moving at all.
     if (gain <= 0.000005 || !def) return gain;
@@ -759,6 +809,12 @@ export class Game {
       p.lastClimb = 0;
     }
     const performing = this.action?.state === 'performing';
+    // Rest only goes while you are working; standing about does not spend it.
+    if (performing && this.player.rested > 0) {
+      const was = this.player.rested;
+      this.player.rested = Math.max(0, was - dt);
+      if (was > 0 && this.player.rested === 0) this.logMsg('The rest goes out of you. Skills go in at their ordinary pace again.', 'system');
+    }
     if (p.swimming) {
       // Deep water is its own teacher, and a strong swimmer tires more slowly.
       this.swimClock += dt;

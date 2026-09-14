@@ -285,6 +285,12 @@ kbd {
   transition: transform 0.25s ease;
 }
 
+/* Rest and affinities: the same row as a companion, in a quieter colour. */
+.hud-boons {
+  color: #9ec27a;
+  flex-wrap: wrap;
+}
+
 .hud-companion {
   display: flex;
   align-items: center;

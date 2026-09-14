@@ -1,3 +1,4 @@
+import type { Boon } from './boons';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
 import { TILE_DEFS } from '../world/tiles';
@@ -28,6 +29,13 @@ export class Player {
   dirY = 0;
   /** Storey the player stands on; 0 is the ground. */
   level = 0;
+  /**
+   * Rest banked from a night in a bed, in seconds. It burns while you work,
+   * and everything you do while it burns teaches you twice as much.
+   */
+  rested = 0;
+  /** Affinities running just now, from what you have eaten and drunk. */
+  boons: Boon[] = [];
   /** Last creature that hurt the player, for defensive companions. */
   attackedBy: number | null = null;
   attackedAt = -1e9;

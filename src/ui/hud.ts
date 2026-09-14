@@ -1,3 +1,5 @@
+import { clockLeft } from '../game/boons';
+import { SKILL_DEFS } from '../game/skills';
 import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
@@ -58,6 +60,7 @@ export class Hud {
   private eatBtn!: HTMLButtonElement;
   private feedBtn!: HTMLButtonElement;
   private companionText = document.createElement('span');
+  private boonEl: HTMLDivElement;
   private storeyEl: HTMLDivElement;
   private storeyLabel: HTMLButtonElement;
   private storeyUp: HTMLButtonElement;
@@ -116,6 +119,11 @@ export class Hud {
       '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><polygon points="10,1 14,15 10,11.5 6,15" fill="#e3b657"/><polygon points="10,11.5 14,15 10,19 6,15" fill="#6b5836"/></svg><b>N</b>';
     footer.append(this.posEl, this.compass);
     status.append(footer);
+    // Rest banked and whatever the last meal favours.
+    this.boonEl = document.createElement('div');
+    this.boonEl.className = 'hud-companion hud-boons';
+    this.boonEl.hidden = true;
+    status.append(this.boonEl);
     this.gearEl = document.createElement('div');
     this.gearEl.className = 'hud-companion hud-gear';
     this.gearEl.hidden = true;
@@ -260,6 +268,17 @@ export class Hud {
     const h = this.game.world.heightAt(p.x, p.y);
     const deed = this.game.deed && this.game.onDeed(p.tileX, p.tileY) ? `  ·  ${this.game.deed.name}` : '';
     this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}`;
+    // Rest and affinities, when there are any.
+    const rested = this.game.player.rested;
+    const boons = this.game.activeBoons();
+    const parts: string[] = [];
+    if (rested > 0) parts.push(`Rested ${clockLeft(rested)} · everything ×2`);
+    for (const b of boons) {
+      const name = SKILL_DEFS.find((d) => d.id === b.skill)?.name ?? b.skill;
+      parts.push(`${name} +${Math.round(b.bonus * 100)}% · ${clockLeft(b.until - this.game.time)}`);
+    }
+    this.boonEl.hidden = !parts.length;
+    if (parts.length) this.boonEl.textContent = parts.join('  ·  ');
     const mobs = this.game.creatures.ticked;
     const watched = this.game.settings.fog ? ` · ${mobs.thought}/${mobs.near + mobs.far + mobs.asleep} mobs` : '';
     this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`;

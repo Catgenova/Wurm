@@ -22,6 +22,8 @@ import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
+import { affinityOf } from './boons';
+import { SKILL_DEFS } from './skills';
 import { itemDef, itemName, itemWeight } from './items';
 import { RECIPE_ACTIONS } from './recipes';
 
@@ -794,7 +796,9 @@ export const ACTIONS: ActionDef[] = [
       // What it is made of is half of what it is, so it is said here.
       const made = materialOfItem(item);
       const stuff = made ? ` ${made.name}: ${made.note}` : '';
-      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${desc}${stuff}`, 'event');
+      const skill = affinityOf(g.seed, item.id);
+      const favours = skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '';
+      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${desc}${favours}${stuff}`, 'event');
     },
   },
   {
@@ -815,7 +819,10 @@ export const ACTIONS: ActionDef[] = [
       const def = itemDef(item.id);
       g.inventory.remove(item.uid, 1);
       g.player.stats.hunger = Math.min(1, g.player.stats.hunger + (def.food ?? 0) * (0.7 + item.ql / 200));
-      g.logMsg(`You eat the ${def.name.toLowerCase()}.`, 'event');
+      // A dish favours a trade, and having eaten it you are better at that
+      // trade for a while.
+      const favour = g.grantAffinity(item.id, item.ql);
+      g.logMsg(`You eat the ${def.name.toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
     },
   },
   {
