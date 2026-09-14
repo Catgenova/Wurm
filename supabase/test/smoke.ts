@@ -18,6 +18,22 @@ import { supabase, signIn, PROJECT } from '../../src/net/supabase';
 
 const SIZE = Number(process.env.ISLAND_SIZE ?? 64);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Wait a timed action out.
+ *
+ * Nothing runs on this island but the looking, so a job started through the
+ * front door sits in the player's head until somebody sweeps. Three of those
+ * and the next `act` is refused for want of room — which is how one
+ * un-settled `prospect` took four unrelated checks down with it. Anything with
+ * a clock on it goes through here.
+ */
+async function settle(ms = 12000): Promise<void> {
+  for (let i = 0; i < ms / 1000; i++) {
+    await sleep(1000);
+    await supabase().rpc('rpc_sweep');
+  }
+}
 const say = (s: string): void => console.log(s);
 
 let failures = 0;
@@ -176,6 +192,8 @@ async function main(): Promise<void> {
       look.why ?? 'it answered at once');
     const read = await island.act('prospect', spot, 1);
     check('and read it for metal', read.started, read.why ?? 'started');
+    // Five seconds of somebody's time. Left in the head it fills the queue.
+    if (read.started) await settle(8000);
     const { data: slabs, error: slabErr } = await supabase().from('slab_def').select('id,item');
     check('the four stones a slab is cut from are on the project',
       !slabErr && (slabs ?? []).length === 4,
@@ -320,6 +338,18 @@ async function main(): Promise<void> {
         }
       }
     }
+    /*
+     * Nothing queued before the digging starts.
+     *
+     * Three jobs in the head and the next `act` is refused for want of room,
+     * which reads as four unrelated checks failing at once and says nothing
+     * about why. Asked here, a full head is one honest failure that names
+     * what is in it.
+     */
+    const { data: busy } = await supabase().from('player').select('act_queue').eq('world_id', id).eq('uid', uid).single();
+    const queued = ((busy?.act_queue ?? []) as unknown[]).length;
+    check('nothing is left queued in our head', queued === 0,
+      queued ? `${queued} job(s) still waiting — something timed was started and not settled` : 'empty');
     check('there is somewhere on this island worth digging', found,
       found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
     await supabase().rpc('rpc_move', { p_world: id, p_x: cx + 0.5, p_y: cy + 0.5, p_level: 0 });
@@ -411,6 +441,7 @@ async function main(): Promise<void> {
             .eq('world_id', id).eq('holder', 'ground').eq('id', lying.id);
           left = count ?? 0;
         }
+        await settle(2000);
         check('and pick it up again', got.started && left === 0,
           got.why ?? (left === 0 ? 'it is back in the pack' : 'it is still on the grass'));
       }

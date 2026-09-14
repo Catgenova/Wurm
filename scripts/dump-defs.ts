@@ -38,7 +38,7 @@ import { RARITIES } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { WORMY, RICH_WORMS } from '../src/game/actions';
-import { VESSELS, LIQUID_NAME, BUCKET_LITRES, type LiquidKind } from '../src/game/furniture';
+import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 
 const q = (v: unknown): string => {

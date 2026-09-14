@@ -2111,3 +2111,124 @@ select '364. a quarter of an hour of it: ' || :'carried' || ' goes — a fill an
 select '365. the six the liquids brought: '
      || (select string_agg(id, ', ' order by id) from action_def where liquid_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- an oven, which is a fire with a roof on it'
+update player set x = 7.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select give(:'world2', :'ivar', 'oven', 1, 55) \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'oven' order by id desc limit 1) || ',"x":7,"y":8,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as oven from placed where world_id = :'world2' and sub = 'oven' order by id desc limit 1 \gset
+select '366. an oven set down at 7,8, firebox ' || oven_capacity() || ' seconds against a campfire''s '
+     || fire_capacity() || ' — and lighting it with nothing in it: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'light_oven', ('{"kind":"furniture","id":' || :'oven' || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'log', 6, 40, 'Pine') \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'fuel_oven', ('{"kind":"furniture","id":' || :'oven' || ',"count":6}')::jsonb) \g /dev/null
+select '367. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'light_oven', ('{"kind":"furniture","id":' || :'oven' || '}')::jsonb) \g /dev/null
+select '368. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+-- An hour of it with nobody watching, which is the whole of the point.
+update placed set since = now() - interval '1 hour' where id = :'oven';
+select '369. an hour later, before anybody looks: the row still says '
+     || round((select fuel from placed where id = :'oven')::numeric) || ' seconds — and once anybody does: '
+     || oven_burns_for(placed_fuel((select p from placed p where p.id = :'oven')))
+     || ' left, with ' || round(placed_ash((select p from placed p where p.id = :'oven'))::numeric, 1) || ' of ashes in it';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'take_ashes_oven', ('{"kind":"furniture","id":' || :'oven' || '}')::jsonb) \g /dev/null
+select '370. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'put_out_oven', ('{"kind":"furniture","id":' || :'oven' || '}')::jsonb) \g /dev/null
+select '371. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+
+\echo ''
+\echo '--- a lantern, and the candle that burns only while it is lit'
+select give(:'world2', :'ivar', 'lantern', 1, 60) \g /dev/null
+select id as lamp from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'lantern' limit 1 \gset
+select '372. a lantern at QL 60 throws ' || lantern_reach(60) || ' tiles and takes '
+     || round(candle_burn(60) / 60) || ' minutes of candle — as it stands: '
+     || lantern_state((select i from item i where i.id = :'lamp'))
+     || ', and striking it: ' || coalesce(act_refusal(:'world2', :'ivar', 'light_lantern',
+        ('{"kind":"item","uid":' || :'lamp' || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'candle', 2, 50) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'candle_lantern', ('{"kind":"item","uid":' || :'lamp' || '}')::jsonb) \g /dev/null
+select '373. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — ' || lantern_state((select i from item i where i.id = :'lamp'));
+/*
+ * The browser asks for a tinderbox to strike a light, and there is no
+ * tinderbox anywhere in the game — not in the item list, not in a recipe,
+ * nowhere but that one check and a help page promising it. So a lantern
+ * cannot be lit there either. Ported as written and measured, rather than
+ * quietly given an item the game has never had.
+ */
+select '374. striking it with a candle in: ' || coalesce(act_refusal(:'world2', :'ivar', 'light_lantern',
+       ('{"kind":"item","uid":' || :'lamp' || '}')::jsonb), 'allowed')
+     || ' — and there is no such thing as a tinderbox in this game: '
+     || (select count(*) from item_def where id = 'tinderbox') || ' of them';
+-- So the burn is measured by striking it on the row, which is what the action
+-- would have done had the item it asks for ever existed.
+update item set lit = true, lit_at = now() - interval '5 minutes' where id = :'lamp';
+select '375. five minutes lit: ' || lantern_state((select i from item i where i.id = :'lamp'));
+update item set lit = false, lit_at = null where id = :'lamp';
+select '376. and five minutes dark: ' || lantern_state((select i from item i where i.id = :'lamp'))
+     || ' — a lantern in your pack costs you nothing but the weight of it';
+update item set lit = true, lit_at = now() - interval '5 minutes' where id = :'lamp';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'douse_lantern', ('{"kind":"item","uid":' || :'lamp' || '}')::jsonb) \g /dev/null
+select '377. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — ' || lantern_state((select i from item i where i.id = :'lamp'));
+
+\echo ''
+\echo '--- an anvil, and what is beaten out on it'
+select give(:'world2', :'ivar', 'anvil', 1, 70, 'Iron') \g /dev/null
+select id as anvil_item from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1 \gset
+update player set x = 8.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'place_anvil',
+  ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'anvil_item' || '}')::jsonb) \g /dev/null
+select id as anvil from placed where world_id = :'world2' and kind = 'anvil' order by id desc limit 1 \gset
+select '378. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — it is worth ' || round(anvil_ql((select p from placed p where p.id = :'anvil'))::numeric, 1)
+     || ' to beat on, from a quality of 70, because what a thing is made of decides how kindly it works';
+select '379. and another on the same four subtiles: ' || coalesce(anvil_place_reason(:'world2', 8, 8, 0, 0), 'allowed');
+
+select give(:'world2', :'ivar', 'shovel_head_mould', 1, 60) \g /dev/null
+select give(:'world2', :'ivar', 'iron_lump', 8, 55, 'Iron') \g /dev/null
+select id as mould from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'shovel_head_mould' limit 1 \gset
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'blacksmithing', 55)
+  on conflict (world_id, uid, id) do update set value = 55;
+select '380. a shovel head mould at QL 60 has ' || mould_uses_left(60, 0) || ' fillings in it'
+     || ', and a rough one at QL 10 has ' || mould_uses_left(10, 0)
+     || ' — smithing with no mould chosen: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
+        ('{"kind":"anvil","id":' || :'anvil' || '}')::jsonb), 'allowed')
+     || ' | with an anvil mould: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
+        ('{"kind":"anvil","id":' || :'anvil' || ',"mould":' || (select give(:'world2', :'ivar', 'anvil_mould', 1, 50)) || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+        a bigint := (select id from placed where kind = 'anvil' order by id desc limit 1);
+        m bigint := (select id from item where holder_uid = '11111111-1111-1111-1111-111111111111'
+                       and def = 'shovel_head_mould' limit 1);
+begin
+  for i in 1..6 loop
+    exit when act_refusal(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mould', m)) is not null;
+    perform act_perform(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mould', m));
+  end loop;
+end $$;
+select '381. six goes at it: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+select '382. shovel heads in the pack: ' || pack_count(:'world2', :'ivar', 'shovel_head')
+     || ', lumps left ' || pack_count(:'world2', :'ivar', 'iron_lump')
+     || ', and the mould is at ' || coalesce((select round(dmg::numeric, 1)::text from item where id = :'mould'), 'cracked through')
+     || ' damage with ' || coalesce((select mould_uses_left(ql, dmg)::text from item where id = :'mould'), '0')
+     || ' fillings left — no mould can be mended';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_up_anvil', ('{"kind":"anvil","id":' || :'anvil' || '}')::jsonb) \g /dev/null
+select '383. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — anvils standing about: ' || (select count(*) from placed where world_id = :'world2' and kind = 'anvil')
+     || ', and in the pack: ' || pack_count(:'world2', :'ivar', 'anvil');
+select '384. the ten the forge brought: '
+     || (select string_agg(id, ', ' order by id) from action_def where forge_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));

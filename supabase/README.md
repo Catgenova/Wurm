@@ -45,11 +45,12 @@ simplification rather than a problem:
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **11** | and shaping it: flatten a tile, drop dirt on a named corner, lay and lift cut slabs, cut grass and reeds, pick fruit and sprouts, plant a tree, turn the ground over for worms, read it for metal |
 | **6** | liquids: fill a bucket at a shore, a well or a barrel, tip it out, pour it in, drink from it, fill a skin |
+| **10** | the forge: an oven fed, lit, raked and emptied of ashes; a lantern candled, struck and pinched out; an anvil set down, beaten on and heaved up again |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **57** | known, listed, and honestly refused |
+| **47** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -70,8 +71,51 @@ Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the one deed trade that
 wants something this island has not got — `seek` wants archaeology — sowing a
 field from a worker's own cheeks, breeding and pairing, riding and the traces,
-trapping, brewing, the ledger, the journal, bags, ovens and lanterns, deed
-upgrades and disbanding, and the ease a hot oven lends to cooking.
+trapping, brewing, the ledger, the journal, bags, deed upgrades and
+disbanding, and the ease a hot oven lends to cooking.
+
+### A candle is the sixth thing that will not sit still, and the fussiest
+
+A fire burns whether anybody is there or not. A crop grows, a well fills, a
+creature walks, a wound drains. A candle is the first of them that burns
+*conditionally* — only while the lantern is lit, and a dark lantern in your
+pack costs you nothing but the weight of it. So one timestamp is not enough: it
+needs `lit` and `lit_at`, and the arithmetic is "what was left, less the seconds
+since it was struck, but only if it is still burning".
+
+Five minutes lit reads `lit, 19m of candle left`; five minutes dark reads `24m
+of candle in it, unlit`.
+
+### The tinderbox that was never in the game
+
+`light_lantern` asks for a tinderbox. There is no tinderbox in the game — not
+in the item list, not in a recipe, nowhere but that one check and a help page
+promising it. So a lantern cannot be struck in the browser either, and it
+cannot be struck here.
+
+Ported as written, and measured out loud rather than quietly given an item the
+game has never had: measurement 374 prints the refusal and then counts the
+tinderboxes in `item_def`, which is nought. Somebody should decide whether the
+item or the check is the mistake. A port is not the place to decide it.
+
+### One un-settled action takes four unrelated checks down with it
+
+Nothing runs on this island but the looking, so an action with a clock on it
+sits in the player's head until somebody sweeps — and three of those and the
+next one is refused for want of room. The live smoke test started a `prospect`
+(five seconds) and never settled it, and the four checks after it failed
+saying things like "You can only keep 3 jobs in your head at once", which
+explains nothing about the cause.
+
+Two fixes, because the first alone would only postpone it: anything timed now
+goes through a `settle()` helper, and the smoke test asks outright whether the
+head is empty before the digging starts. A full head is now one honest failure
+that names what is in it.
+
+Worth noting what did *not* catch this: `npm run typecheck` covers `src` only,
+so `supabase/test/*.ts` is checked by nothing but the esbuild bundle, which
+erases types. A second tsconfig for the node-side files would be the real
+guard, and it wants `@types/node` that this repo does not have yet.
 
 ### A well is the fifth thing that will not sit still
 
