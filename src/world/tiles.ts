@@ -27,11 +27,28 @@ export type TileType = (typeof TileType)[keyof typeof TileType];
 
 export type RGB = readonly [number, number, number];
 
+/**
+ * What a loaded wheel makes of a piece of ground. An empty vehicle rolls over
+ * anything at its own pace; a full one is held to what the ground will take.
+ * Between the two it is a straight blend, so a half-loaded cart pays half.
+ */
+export const groundRoll = (roll: number | undefined, load: number): number => {
+  const r = roll ?? 0.7;
+  return r + (1 - r) * (1 - Math.max(0, Math.min(1, load)));
+};
+
 export interface TileDef {
   name: string;
   color: RGB;
   /** Movement speed multiplier. */
   speed: number;
+  /**
+   * How well a loaded wheel runs over it, 0..1. Feet hardly care what is under
+   * them; a laden wagon cares about very little else. An empty vehicle notices
+   * none of this and a full one notices all of it, which is the whole argument
+   * for paving a road: see `groundRoll`.
+   */
+  roll?: number;
   /** Blocks walking entirely. */
   blocks?: boolean;
   /** Can be dug with a shovel; `digYield` names the item produced. */
@@ -53,28 +70,28 @@ export interface TileDef {
 }
 
 export const TILE_DEFS: Record<TileType, TileDef> = {
-  [TileType.Grass]: { name: 'Grass', color: [92, 146, 62], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true },
-  [TileType.Dirt]: { name: 'Dirt', color: [121, 92, 60], speed: 1, digYield: 'dirt', pavable: true },
-  [TileType.PackedDirt]: { name: 'Packed dirt', color: [140, 116, 86], speed: 1.05, pavable: true },
-  [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true },
-  [TileType.Rock]: { name: 'Rock', color: [132, 130, 124], speed: 0.9, mineable: true },
-  [TileType.Steppe]: { name: 'Steppe', color: [156, 150, 84], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true },
-  [TileType.Tundra]: { name: 'Tundra', color: [144, 154, 124], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true },
-  [TileType.Marsh]: { name: 'Marsh', color: [74, 112, 74], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true },
-  [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true },
-  [TileType.Peat]: { name: 'Peat', color: [74, 60, 46], speed: 0.8, digYield: 'peat', collect: true },
-  [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true },
-  [TileType.Moss]: { name: 'Moss', color: [82, 126, 66], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true },
-  [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true },
-  [TileType.Gravel]: { name: 'Gravel', color: [156, 152, 144], speed: 1.15, pavable: true },
-  [TileType.Cobblestone]: { name: 'Cobblestone', color: [126, 122, 116], speed: 1.25 },
-  [TileType.Field]: { name: 'Field', color: [130, 102, 62], speed: 0.9, digYield: 'dirt', turnsToDirt: true },
-  [TileType.Tree]: { name: 'Tree', color: [76, 124, 56], speed: 1, blocks: true },
-  [TileType.Bush]: { name: 'Bush', color: [86, 138, 60], speed: 0.5 },
-  [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1 },
-  [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8 },
-  [TileType.Lawn]: { name: 'Lawn', color: [104, 164, 74], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true },
-  [TileType.Slabs]: { name: 'Stone slabs', color: [172, 170, 164], speed: 1.3 },
+  [TileType.Grass]: { name: 'Grass', color: [92, 146, 62], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  [TileType.Dirt]: { name: 'Dirt', color: [121, 92, 60], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
+  [TileType.PackedDirt]: { name: 'Packed dirt', color: [140, 116, 86], speed: 1.05, pavable: true, roll: 0.9 },
+  [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
+  [TileType.Rock]: { name: 'Rock', color: [132, 130, 124], speed: 0.9, mineable: true, roll: 0.85 },
+  [TileType.Steppe]: { name: 'Steppe', color: [156, 150, 84], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  [TileType.Tundra]: { name: 'Tundra', color: [144, 154, 124], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
+  [TileType.Marsh]: { name: 'Marsh', color: [74, 112, 74], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
+  [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
+  [TileType.Peat]: { name: 'Peat', color: [74, 60, 46], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
+  [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
+  [TileType.Moss]: { name: 'Moss', color: [82, 126, 66], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
+  [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
+  [TileType.Gravel]: { name: 'Gravel', color: [156, 152, 144], speed: 1.15, pavable: true, roll: 1 },
+  [TileType.Cobblestone]: { name: 'Cobblestone', color: [126, 122, 116], speed: 1.25, roll: 1 },
+  [TileType.Field]: { name: 'Field', color: [130, 102, 62], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
+  [TileType.Tree]: { name: 'Tree', color: [76, 124, 56], speed: 1, blocks: true, roll: 0.6 },
+  [TileType.Bush]: { name: 'Bush', color: [86, 138, 60], speed: 0.5, roll: 0.4 },
+  [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1, roll: 0.5 },
+  [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8, roll: 0.4 },
+  [TileType.Lawn]: { name: 'Lawn', color: [104, 164, 74], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
+  [TileType.Slabs]: { name: 'Stone slabs', color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
 
 /**

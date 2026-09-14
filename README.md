@@ -310,6 +310,15 @@ rebuilds and commits the result.
   where you stand. Barrels hold liquid and nothing else in three sizes (30,
   80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
   empty bucket back, and filling beside a barrel draws out of it.
+- **Roads worth their stone.** Feet hardly care what is under them; a laden
+  wheel cares about little else. An empty cart rolls over anything at its own
+  pace, a full one is held to what the ground will take, and a half-loaded one
+  pays half. Slabs, cobble and gravel cost a full wagon nothing; packed dirt a
+  tenth, grass three tenths, sand and a field half, a bog seven tenths. Forty
+  tiles with a full wagon is 13 seconds on a paved road, 24 over grass and 92
+  through marsh. Walking with a load is routed the way a carter would take it —
+  a full cart took 24 of its 25 steps on stone to get round a bog an empty one
+  cut straight through — and the hud says what the ground is costing.
 - **A ledger of everything made.** Every kind of thing that has come off a
   bench, an anvil or an oven is written down: how many, how many came off rare
   or better, and the best one ever managed, ordered by any of those or by name

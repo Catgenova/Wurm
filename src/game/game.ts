@@ -1386,6 +1386,8 @@ export class Game {
     const up = this.mounted();
     const boat = this.afloat();
     p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
+    // Only wheels feel the ground: a boat is on water and feet are feet.
+    p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     const { rule } = this.movement();
     const moved = p.update(dt, this.world, rule);
     if (boat && furnitureDef(boat.kind).boat?.sail && moved > 0) {
@@ -2616,6 +2618,12 @@ export class Game {
     // A body of light wood rolls a shade easier than one of oak, which is the
     // price oak charges for holding more and lasting longer.
     return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material));
+  }
+
+  /** How full a vehicle is, 0..1. An empty one rolls over anything. */
+  vehicleLoad(f: PlacedFurniture): number {
+    const cap = furnitureCapacity(f);
+    return cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
   }
 
   /** What a team knows about hills between them, which is what a slope asks. */

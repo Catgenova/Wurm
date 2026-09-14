@@ -6,6 +6,7 @@ import { sailWord, windFrom, windWord } from '../game/wind';
 import { FAITH, favourCap } from '../game/faith';
 import { FURNITURE_BY_ID } from '../game/furniture';
 import { MAX_LEVELS } from '../game/building';
+import { groundRoll, TILE_DEFS } from '../world/tiles';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
 import { ACTION_BY_ID } from '../game/actions';
@@ -415,6 +416,13 @@ export class Hud {
     if (favour >= 1) parts.push(`Favour ${Math.floor(favour)} of ${Math.floor(favourCap(this.game.skills.get(FAITH)))}`);
     const over = this.game.overloaded();
     if (over > 0) parts.push(`Overloaded by ${over.toFixed(0)} kg`);
+    // What the ground under a loaded wheel is costing, when it is costing anything.
+    const cart = this.game.driving();
+    if (cart) {
+      const def = TILE_DEFS[this.game.world.getTile(p.tileX, p.tileY)];
+      const roll = groundRoll(def.roll, this.game.vehicleLoad(cart));
+      if (roll < 0.985) parts.push(`${def.name} underfoot · ${Math.round(roll * 100)}% of your pace`);
+    }
     for (const b of boons) {
       const name = SKILL_DEFS.find((d) => d.id === b.skill)?.name ?? b.skill;
       parts.push(`${name} +${Math.round(b.bonus * 100)}% · ${clockLeft(b.until - this.game.time)}`);

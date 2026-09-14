@@ -499,6 +499,19 @@ function helpText(): string {
     side the wind is and empties when you point into it.</p>
     <p>A sailing boat <b>holds fifteen hundred things</b>, crates included, and that is what she is for
     &mdash; but a hull loaded to her marks is a third slower than one running empty.</p>
+    <h3>Why a road is worth its stone</h3>
+    <p>Feet hardly care what is under them: grass, sand and stone are within a third of each other, and
+    only a bog really tells. A <b>laden wheel</b> cares about very little else. An empty cart rolls over
+    anything at its own pace; a full one is held to what the ground will take, and between the two it
+    is a straight blend, so a half-loaded cart pays half.</p>
+    <p>Stone slabs, cobble and gravel cost a full wagon <b>nothing</b>. Packed dirt costs a tenth, bare
+    grass three tenths, sand and a tilled field half, and a <b>bog seven tenths</b>. Forty tiles with a
+    full wagon behind you is <b>thirteen seconds on a paved road, twenty-four over grass and a minute
+    and a half through marsh</b> &mdash; which is the whole argument for paving, and why the stone is
+    worth cutting.</p>
+    <p>Walking somewhere with a load routes you the way a carter would take it: round the bog and along
+    the stone, even when the stone is the longer way about. An empty cart still cuts straight through.
+    The hud says what the ground under you is costing whenever it costs anything.</p>
     <h3>Large carts and wagons</h3>
     <p>A small cart is a barrow you pull yourself. The two that follow are <b>driven</b>: a wildermon
     goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the

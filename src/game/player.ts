@@ -6,7 +6,7 @@ import { emptyNutrition, type Nutrient } from './nutrition';
 import { BELT_MAX } from './belt';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
-import { TILE_DEFS } from '../world/tiles';
+import { groundRoll, TILE_DEFS } from '../world/tiles';
 import type { World } from '../world/world';
 
 export interface Stats {
@@ -88,6 +88,11 @@ export class Player {
    * of stone still gets home before dark.
    */
   speedMul = 1;
+  /**
+   * How full whatever is under you is, 0..1, and 0 when you are on your own
+   * feet. It decides how much the ground tells on you.
+   */
+  wheelLoad = 0;
 
   constructor(x: number, y: number) {
     this.x = x;
@@ -104,7 +109,7 @@ export class Player {
 
   /** Path to a tile; returns false when unreachable. */
   walkTo(world: World, tx: number, ty: number, rule?: StepRule, levels = 1): boolean {
-    const path = findPath(world, this.tileX, this.tileY, this.level, tx, ty, pathOptions(world, rule, levels));
+    const path = findPath(world, this.tileX, this.tileY, this.level, tx, ty, pathOptions(world, rule, levels, this.wheelLoad));
     if (!path) return false;
     this.path = path.length ? path : null;
     return true;
@@ -156,7 +161,9 @@ export class Player {
     }
 
     const tileDef = TILE_DEFS[world.getTile(this.tileX, this.tileY)];
-    let speed = BASE_SPEED * tileDef.speed * this.speedMul;
+    // Feet hardly care what is under them. A laden wheel cares about little
+    // else, and that is what makes a paved road worth the stone in it.
+    let speed = BASE_SPEED * tileDef.speed * this.speedMul * groundRoll(tileDef.roll, this.wheelLoad);
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;
@@ -216,7 +223,7 @@ export type StepBlock = (x0: number, y0: number, x1: number, y1: number) => bool
 /** Decides a step between tiles: the storey you land on, or null when it is not allowed. */
 export type StepRule = (x0: number, y0: number, level: number, x1: number, y1: number) => number | null;
 
-export function pathOptions(world: World, rule?: StepRule, levels = 1) {
+export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad = 0) {
   return {
     passable: (x: number, y: number) => world.isPassable(x, y),
     step: (x0: number, y0: number, level: number, x1: number, y1: number): number | null =>
@@ -224,7 +231,9 @@ export function pathOptions(world: World, rule?: StepRule, levels = 1) {
     levels,
     cost: (x: number, y: number) => {
       const def = TILE_DEFS[world.getTile(x, y)];
-      let c = 1 / def.speed;
+      // A laden wagon is routed the way a carter would take it: round the bog
+      // and along the stone, even when the stone is the longer way about.
+      let c = 1 / (def.speed * groundRoll(def.roll, wheelLoad));
       if (world.centerHeight(x, y) < -SWIM_DEPTH) c *= 3.5;
       return c;
     },
