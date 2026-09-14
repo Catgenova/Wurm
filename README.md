@@ -16,8 +16,8 @@ npm run preview    # serve the last build from dist/
 ```
 
 Add `?seed=12345` to the URL to generate a specific island. Progress autosaves
-to `localStorage` every 20 seconds and on unload. **New world** in the toolbar
-wipes the save.
+every 20 seconds and as the page goes away. **New world** in the toolbar wipes
+the save.
 
 ### Deploying
 
@@ -46,8 +46,9 @@ rebuilds and commits the result.
 
 ## What is in the game
 
-- **Terrain like Wurm's.** A 256×256 tile island whose height map lives on tile
-  corners, so tiles are sloped quads rather than flat stamps. Heights are in
+- **Terrain like Wurm's.** A 1024×1024 tile island — a million tiles, about
+  four kilometres a side at Wurm's four metres to the tile — whose height map
+  lives on tile corners, so tiles are sloped quads rather than flat stamps. Heights are in
   "dirt" units (one dig = one unit = 10 cm on a 4 m tile). Water sits at height
   zero and floods anything below it.
 - **Tile types.** Grass, dirt, packed dirt, sand, rock, steppe, tundra, marsh,
@@ -58,7 +59,7 @@ rebuilds and commits the result.
   to the ground above it — under grass, forest or open sea alike. Metal is laid
   far more thickly into dry land than into ground under water, so roughly four
   fifths of a world's ore can actually be reached: about one land tile in seven
-  carries a seam, some 3,600 of them per 256×256 world.
+  carries a seam, some 60,000 of them on a 1024×1024 island.
 - **Soil over bedrock.** Every corner carries a depth of soil on top of rock.
   Digging takes soil away and stops dead at bedrock; strip all four corners of
   a tile and it becomes rock of whatever kind lies beneath, which may be a
@@ -391,7 +392,10 @@ rebuilds and commits the result.
   of it gone at night, a ridge hiding the hollow behind it and a wood about
   three trees deep. Lit fires, your own wildermon and your settlement all see
   for themselves. The minimap shows the same three states, it all survives a
-  save, and a setting turns it off.
+  save, and a setting turns it off. The map draws a window on what you know
+  rather than the whole island — a thousand tiles a side drawn whole is a dark
+  square with a speck of coast in it — widening by doublings as you explore and
+  never narrowing, out to the whole island once you have been round it.
 - **Streamed wildlife.** An island holds a fixed head of wildlife, but only
   the stretch of country being walked holds it in the flesh. A wild creature
   left more than 85 tiles behind and unwatched is put back on the books for
@@ -417,6 +421,28 @@ rebuilds and commits the result.
   are never left to themselves. Measured with 3,000 creatures on the island,
   a frame of creature work drops from 1.17 ms to 0.50 ms with 225 of the 3,000
   thinking; the HUD shows the count as "thought/alive".
+- **An island of a million tiles.** The world is 1024 tiles a side, sixteen
+  times the ground it used to be, and the things that were made to follow the
+  player rather than the map are what pay for it. Measured in a 1400×860
+  window: 64 fps standing and 51 fps walking (the same island at 256 draws no
+  faster, because the renderer only ever touches what is on screen), a look
+  around costing 0.7 ms, a frame of creature work 0.006 ms with 3,000 of them
+  on the island, and 30 MB of heap. Raising a new island takes about a second
+  and a half, so the page says what it is doing while it does it.
+- **Saving what changed.** The land of a big island is ten megabytes of typed
+  array, which is more than local storage will take as text — the save simply
+  failed on every big world — so it goes into IndexedDB as arrays. It is kept
+  in three parts that change at three different rates: the ground, which only
+  moves when something is dug or built; what is known of the island, which
+  moves as you explore; and everything else, which is small and always
+  changing. A save while standing still costs 0.4 ms of the frame it happens
+  on, one while walking 8 ms, and one after digging 27 ms. Because a write to
+  IndexedDB is asked for rather than done, and a closing page is torn down
+  before the browser gets to it, leaving the page also writes the small part
+  to local storage there and then, and it is laid over the last full save when
+  the world is read back: shutting the tab costs no more than the last twenty
+  seconds of digging. Saves made the old way are still read, and move
+  themselves into the new store the first time they are put away.
 - **The tile window.** Clicking a tile chooses it: it is outlined in the
   world and the Tile window (T) fills with everything that could be done to
   it — the same entries the right-click menu shows, built from the same list,

@@ -11,6 +11,10 @@
   <body>
     <!-- Edit src/index.html, not the generated index.html at the repository root. -->
     <canvas id="game"></canvas>
+    <!-- An island of a thousand tiles takes a moment to raise, and a blank
+         screen while it does looks like a page that has failed. Painted before
+         the script runs, and taken away by it once the world is up. -->
+    <div id="boot"><span>Raising an island&hellip;</span></div>
     <div id="ui"></div>
     <script type="module" src="./main.ts"></script>
   </body>

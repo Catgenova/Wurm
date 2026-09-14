@@ -89,7 +89,9 @@ export function buildHelp(win: UIWindow): void {
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
     <p>The <b>map</b> (<kbd>M</kbd>) shows the same three states: dark where you have not been, dim
-    where you have, and bright where somebody is looking now.</p>
+    where you have, and bright where somebody is looking now. The island is a thousand tiles a side, so
+    the map does not try to show all of it at once: it looks at the ground you have walked and widens as
+    you explore, out to the whole island once you have been round it. Click it to send the view there.</p>
     <p>Clicking a tile <b>chooses</b> it: it is outlined in the world and the <b>Tile</b> window fills
     with everything you could do to it &mdash; the same list the right-click menu shows, because it is
     built from the same list. Anything with a reason it cannot be done yet is greyed out with the reason

@@ -108,6 +108,8 @@ const CHAR_START = 20;
 const ASH_RATE = 1 / 120;
 /** Damage at which a tool starts warning you, and every five points after. */
 const DAMAGE_WARN = 75;
+/** Tiles to a side of a new island. */
+export const WORLD_SIZE = 1024;
 /** A day and a night, in seconds: one game hour to the real minute. */
 export const DAY_SECONDS = 1440;
 /** When the sun comes up and goes down, in game hours. */
@@ -203,7 +205,7 @@ export class Game {
   private swimClock = 0;
   private decayClock = 0;
 
-  static create(seed: number, size = 256): Game {
+  static create(seed: number, size = WORLD_SIZE): Game {
     const gen = generateWorld(seed, size);
     const game = new Game({ seed, world: gen.world, spawn: gen.spawn });
     game.giveStarterKit();

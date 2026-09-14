@@ -51,6 +51,12 @@ export interface Recipe {
   qlFromInputs?: boolean;
   /** Things handed back when it succeeds, such as the bucket the lye was in. */
   returns?: Array<[string, number]>;
+  /**
+   * What you are left holding when it fails, if that is not simply what a
+   * success hands back. A spoiled batch wastes what went into it; it does not
+   * eat the bucket it was mixed in.
+   */
+  salvage?: Array<[string, number]>;
   done: string;
   fail?: string;
 }
@@ -129,7 +135,7 @@ export const RECIPES: Recipe[] = [
   { id: 'make_long_bow', category: 'Woodwork', result: 'long_bow', inputs: [{ item: 'shaft', count: 4 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', label: 'Tiller a long bow', verb: 'tillering a bow', baseTime: 18, stamina: 0.06, difficulty: 30, done: 'You tiller a long bow and string it. It takes an age to draw and ends most things at the end of it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
   { id: 'make_arrows', category: 'Woodwork', result: 'arrow', count: 3, inputs: [{ item: 'shaft' }, { item: 'arrow_head', count: 3 }, { item: 'feather', count: 3 }], tool: 'carving_knife', skill: 'fletching', label: 'Fletch arrows', verb: 'fletching', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You split the shaft, set the heads and fletch three arrows.', fail: 'The fletching will not sit straight and the arrows are spoiled.', consumeOnFail: true },
   // Alchemy: ashes leached in water, and what lye is for.
-  { id: 'make_lye', category: 'Alchemy', result: 'lye_bucket', inputs: [{ item: 'water_bucket' }, { item: 'ash', count: 2 }], skill: 'alchemy', label: 'Leach into lye', verb: 'making lye', baseTime: 12, stamina: 0.03, difficulty: 14, done: 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', fail: 'The ashes settle out again and you are left with dirty water.', consumeOnFail: true },
+  { id: 'make_lye', category: 'Alchemy', result: 'lye_bucket', inputs: [{ item: 'water_bucket' }, { item: 'ash', count: 2 }], skill: 'alchemy', label: 'Leach into lye', verb: 'making lye', baseTime: 12, stamina: 0.03, difficulty: 14, done: 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', fail: 'The ashes settle out again and you are left with dirty water.', consumeOnFail: true, salvage: [['bucket', 1]] },
   { id: 'tan_hide', category: 'Alchemy', result: 'leather', inputs: [{ item: 'hide' }, { item: 'lye_bucket' }], tool: 'carving_knife', skill: 'leatherworking', returns: [['bucket', 1]], label: 'Tan in lye', verb: 'tanning a hide', baseTime: 14, stamina: 0.05, difficulty: 16, done: 'The lye takes the hair off the hide and you work it soft. It is leather now, and the bucket is empty.', fail: 'The hide is left too long in the lye and comes out brittle and useless.', consumeOnFail: true },
   // Writing: reed beds into paper, and what is written on it.
   { id: 'make_papyrus', category: 'Writing', result: 'papyrus', count: 3, inputs: [{ item: 'reed', count: 4 }, { item: 'water_bucket' }], skill: 'papyrusmaking', returns: [['bucket', 1]], label: 'Press into papyrus', verb: 'pressing papyrus', baseTime: 13, stamina: 0.04, difficulty: 16, done: 'You split the reeds, lay them crosswise and press them until they take to each other. Three sheets.', fail: 'The sheet dries in ridges and tears as you lift it.', consumeOnFail: true },
@@ -300,7 +306,12 @@ export function recipeAction(r: Recipe): ActionDef {
       const oven = r.station === 'campfire' ? g.hotOvenNear() : undefined;
       const ease = g.mindEase() + (oven ? 10 : 0);
       if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g), ease)) {
-        if (r.consumeOnFail) for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid);
+        if (r.consumeOnFail) {
+          for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid);
+          // The batch is wasted, not the vessel: you tip the ruin out and keep
+          // the bucket.
+          for (const [id, n] of r.salvage ?? r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
+        }
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         return more(t, g);
       }

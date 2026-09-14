@@ -6,7 +6,7 @@ import { ACTIONS } from './game/actions';
 import { FURNITURE } from './game/furniture';
 import { RECIPES } from './game/recipes';
 import { Game } from './game/game';
-import { clearSave, loadGame, saveGame } from './game/save';
+import { clearSave, loadGame, saveGame, saveOnExit, warmSave } from './game/save';
 import { Renderer } from './render/renderer';
 import { UI } from './ui/ui';
 
@@ -15,7 +15,14 @@ const uiRoot = document.getElementById('ui') as HTMLElement;
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get('seed');
-const game = (seedParam ? null : loadGame()) ?? Game.create(seedParam ? Number(seedParam) >>> 0 : (Math.random() * 0x7fffffff) >>> 0);
+// Raising a thousand-tile island holds the thread for a second or more, and
+// nothing painted after that point is seen until it is done. Two frames of
+// waiting is what it takes for the notice in the page to actually reach the
+// screen first.
+await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+// Reading a saved world means reading it out of IndexedDB, which is a thing
+// that takes a turn of the loop. Nothing else can start until it is here.
+const game = (seedParam ? null : await loadGame()) ?? Game.create(seedParam ? Number(seedParam) >>> 0 : (Math.random() * 0x7fffffff) >>> 0);
 
 const canvas = new FullscreenCanvas(canvasEl);
 const renderer = new Renderer(canvas, game);
@@ -30,7 +37,7 @@ function turnView(step: number): void {
 const ui = new UI(game, renderer, uiRoot, canvasEl, {
   newWorld: () => {
     if (!confirm('Start a new world? Your current island, items and skills will be lost.')) return;
-    clearSave();
+    void clearSave();
     location.href = location.pathname;
   },
   turn: turnView,
@@ -48,10 +55,10 @@ camera.focus(player.x, player.y, game.playerHeight(), null);
 declare global {
   interface Window {
     /** Console handle for poking at the running game. */
-    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; RELICS: typeof RELICS; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI };
+    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; RELICS: typeof RELICS; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
   }
 }
-window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, RELICS, arch: { partsMissing, piecesHeld }, ui };
+window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, RELICS, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {
   // A press that closed an open menu is spent, unless it is asking for a new menu.
@@ -202,9 +209,21 @@ const loop = new GameLoop(
   },
 );
 loop.start();
+// The island is up and the first frame is drawn; the notice can go.
+document.getElementById('boot')?.remove();
 
-setInterval(() => saveGame(game), 20000);
-window.addEventListener('beforeunload', () => saveGame(game));
+// Have the store open before anything asks it to write, so that the save on
+// the way out of the page is a write rather than a request to open a database.
+warmSave();
+// A new island is put away early: the land only reaches the store on a full
+// save, and until one has happened there is nothing for an exit patch to be
+// laid over.
+setTimeout(() => void saveGame(game), 3000);
+setInterval(() => void saveGame(game), 20000);
+// Three ways out of a page, and the last of them is the only one a phone
+// reliably gives you.
+window.addEventListener('beforeunload', () => saveOnExit(game));
+window.addEventListener('pagehide', () => saveOnExit(game));
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) saveGame(game);
+  if (document.hidden) saveOnExit(game);
 });

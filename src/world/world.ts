@@ -23,6 +23,22 @@ export class World {
   /** The tile as it was when last seen, which is what a remembered map shows. */
   readonly mem: Uint8Array;
   readonly memData: Uint8Array;
+  /**
+   * The box everything ever seen falls inside. A map of a thousand tiles a
+   * side drawn whole is mostly unexplored dark with a speck in it; this is
+   * what lets the map show what there is to see. Empty until the first tile
+   * is looked at, which is what x1 below zero means.
+   */
+  readonly knownBox = { x0: 0, y0: 0, x1: -1, y1: -1 };
+  /**
+   * Whether the ground, or what is known of it, has changed since it was last
+   * put away. The land of a big island is ten megabytes; copying all of it
+   * out every twenty seconds costs a visible hitch, and most of the time none
+   * of it has moved. Digging touches the ground; walking somewhere new touches
+   * the fog; standing still touches neither.
+   */
+  groundTouched = true;
+  fogTouched = true;
   /** The seed this world was made from, so rock kinds stay consistent. */
   seed = 0;
   minHeight = 0;
@@ -53,6 +69,27 @@ export class World {
     this.mem = mem ?? new Uint8Array(w * h);
     this.memData = memData ?? new Uint8Array(w * h);
     this.recomputeRange();
+    if (seen) this.measureKnown();
+  }
+
+
+  /** Work the box out from scratch, for a world that has just been read in. */
+  private measureKnown(): void {
+    const b = this.knownBox;
+    b.x0 = this.w;
+    b.y0 = this.h;
+    b.x1 = -1;
+    b.y1 = -1;
+    for (let y = 0; y < this.h; y++) {
+      const row = y * this.w;
+      for (let x = 0; x < this.w; x++) {
+        if (!this.seen[row + x]) continue;
+        if (x < b.x0) b.x0 = x;
+        if (x > b.x1) b.x1 = x;
+        if (y < b.y0) b.y0 = y;
+        if (y > b.y1) b.y1 = y;
+      }
+    }
   }
 
   /** The kind of rock under a tile, bare or buried. */
@@ -110,6 +147,7 @@ export class World {
 
   /** Fill in the rock under every tile, and keep bare rock tiles showing it. */
   fillRock(kind: (x: number, y: number) => number): void {
+    this.groundTouched = true;
     for (let y = 0; y < this.h; y++) {
       for (let x = 0; x < this.w; x++) {
         const i = y * this.w + x;
@@ -122,6 +160,7 @@ export class World {
 
   /** Fill in soil depths for a world that was saved before rock had a depth. */
   deriveDirt(depth = 10): void {
+    this.groundTouched = true;
     for (let cy = 0; cy <= this.h; cy++) {
       for (let cx = 0; cx <= this.w; cx++) {
         let d = depth;
@@ -136,6 +175,7 @@ export class World {
       }
     }
   }
+
 
   onChange(fn: WorldListener): void {
     this.listeners.push(fn);
@@ -182,14 +222,34 @@ export class World {
     const t = this.tiles[i];
     const d = this.data[i];
     if (this.seen[i] === 1 && this.mem[i] === t && this.memData[i] === d) return false;
+    if (this.seen[i] === 0) {
+      const b = this.knownBox;
+      if (b.x1 < 0) {
+        b.x0 = x;
+        b.x1 = x;
+        b.y0 = y;
+        b.y1 = y;
+      } else {
+        if (x < b.x0) b.x0 = x;
+        if (x > b.x1) b.x1 = x;
+        if (y < b.y0) b.y0 = y;
+        if (y > b.y1) b.y1 = y;
+      }
+    }
     this.seen[i] = 1;
     this.mem[i] = t;
     this.memData[i] = d;
+    this.fogTouched = true;
     return true;
   }
 
   /** Mark the whole map as looked at, for a world that predates any fog. */
   rememberAll(): void {
+    this.fogTouched = true;
+    this.knownBox.x0 = 0;
+    this.knownBox.y0 = 0;
+    this.knownBox.x1 = this.w - 1;
+    this.knownBox.y1 = this.h - 1;
     this.seen.fill(1);
     this.mem.set(this.tiles);
     this.memData.set(this.data);
@@ -304,6 +364,7 @@ export class World {
   }
 
   private notify(x: number, y: number): void {
+    this.groundTouched = true;
     for (const fn of this.listeners) fn(x, y);
   }
 }
