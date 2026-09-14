@@ -205,6 +205,11 @@ out.push(`create table if not exists slab_def (
 /* What a barrel holds and what a well finds for itself, in litres. */
 out.push(`alter table furniture_def add column if not exists liquid real;`);
 out.push(`alter table furniture_def add column if not exists well real;`);
+/* A bin that takes bulk and nothing else, a hive that is the swarm's, and a
+ * crate whose bottom is rotten through. */
+out.push(`alter table furniture_def add column if not exists bulk boolean not null default false;`);
+out.push(`alter table furniture_def add column if not exists hive real;`);
+out.push(`alter table furniture_def add column if not exists trash real;`);
 /* Which full bucket carries which liquid, and which empty one it leaves. */
 out.push(`create table if not exists vessel_def (
   item text primary key, liquid text not null, empty text not null
@@ -589,6 +594,9 @@ for (const f of FURNITURE as unknown as A[]) {
   out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);
   if (f.liquid !== undefined) out.push(`update furniture_def set liquid = ${q(f.liquid)} where id = ${q(f.id)};`);
   if (f.well !== undefined) out.push(`update furniture_def set well = ${q(f.well)} where id = ${q(f.id)};`);
+  if (f.bulk) out.push(`update furniture_def set bulk = true where id = ${q(f.id)};`);
+  if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);
+  if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);
 }
 for (const r of RECIPES) {
   out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +

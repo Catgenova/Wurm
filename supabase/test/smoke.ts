@@ -34,6 +34,26 @@ async function settle(ms = 12000): Promise<void> {
     await supabase().rpc('rpc_sweep');
   }
 }
+
+/**
+ * Sweep until the head is actually empty.
+ *
+ * Six goes at a shovel is six jobs, and the dig above stops waiting at the
+ * first tile change — so five of them are still queued when it moves on, and
+ * the next `act` is *queued behind them* rather than run. That reads as an
+ * instant action that did not answer at once, which is a true sentence about
+ * a false cause.
+ */
+async function drain(id: string, uid: string, tries = 30): Promise<number> {
+  for (let i = 0; i < tries; i++) {
+    const { data } = await supabase().from('player').select('act,act_queue').eq('world_id', id).eq('uid', uid).single();
+    const left = ((data?.act_queue ?? []) as unknown[]).length + (data?.act ? 1 : 0);
+    if (left === 0) return 0;
+    await sleep(1000);
+    await supabase().rpc('rpc_sweep');
+  }
+  return -1;
+}
 const say = (s: string): void => console.log(s);
 
 let failures = 0;
@@ -193,7 +213,7 @@ async function main(): Promise<void> {
     const read = await island.act('prospect', spot, 1);
     check('and read it for metal', read.started, read.why ?? 'started');
     // Five seconds of somebody's time. Left in the head it fills the queue.
-    if (read.started) await settle(8000);
+    if (read.started) await drain(id, uid);
     const { data: slabs, error: slabErr } = await supabase().from('slab_def').select('id,item');
     check('the four stones a slab is cut from are on the project',
       !slabErr && (slabs ?? []).length === 4,
@@ -416,7 +436,11 @@ async function main(): Promise<void> {
      * After the digging rather than before it: dropping a thing moves a tile,
      * and a tile that moves arrives on the same channel the dig is waiting on.
      */
-    const mine = await supabase().from('item').select('id,def,count').eq('world_id', id).eq('holder_uid', uid).limit(1);
+    // Nothing left running, and nothing that the island refuses to put down:
+    // digging leaves dirt in the pack, and dirt goes back in a hole.
+    await drain(id, uid);
+    const mine = await supabase().from('item').select('id,def,count')
+      .eq('world_id', id).eq('holder_uid', uid).eq('holder', 'player').neq('def', 'dirt').limit(1);
     const one = (mine.data ?? [])[0] as { id: number; def: string; count: number } | undefined;
     if (one) {
       const look = await island.act('examine_item', { kind: 'item', uid: one.id }, 1);

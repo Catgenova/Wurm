@@ -2232,3 +2232,94 @@ select '383. ' || (select text from event where uid = :'ivar' and kind = 'event'
 select '384. the ten the forge brought: '
      || (select string_agg(id, ', ' order by id) from action_def where forge_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- a satchel, and the whole reason bags waited three commits'
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' and def = 'plank';
+select give(:'world2', :'ivar', 'plank', 9, 45, 'Oak'), give(:'world2', :'ivar', 'nail', 20, 40) \g /dev/null
+select give(:'world2', :'ivar', 'satchel', 1, 50) \g /dev/null
+select id as bag from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'satchel' limit 1 \gset
+select id as planks from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'plank' limit 1 \gset
+select '385. a satchel takes ' || bag_room('satchel') || ', a sack ' || bag_room('sack')
+     || ', a backpack ' || bag_room('backpack')
+     || ' — and putting one bag inside another: ' || coalesce(act_refusal(:'world2', :'ivar', 'stow_item',
+        ('{"kind":"item","uid":' || :'bag' || '}')::jsonb), 'allowed');
+select '386. nine planks in the pack: ' || pack_count(:'world2', :'ivar', 'plank')
+     || ', and a shield, which takes four of them: ' || coalesce(act_refusal(:'world2', :'ivar',
+        'make_wooden_shield', '{"kind":"tile","x":5,"y":7}'::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'stow_item', ('{"kind":"item","uid":' || :'planks' || ',"count":7}')::jsonb) \g /dev/null
+select '387. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — to hand now: ' || pack_count(:'world2', :'ivar', 'plank')
+     || ', in the satchel: ' || bag_units(:'bag') || ' of ' || bag_room('satchel');
+select '388. and the same shield now: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'make_wooden_shield', '{"kind":"tile","x":5,"y":7}'::jsonb), 'allowed')
+     || ' — which is the whole of what a bag means: it is yours, it is not to hand';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'empty_bag', ('{"kind":"item","uid":' || :'bag' || '}')::jsonb) \g /dev/null
+select '389. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — to hand again: ' || pack_count(:'world2', :'ivar', 'plank')
+     || ', in one stack: ' || (select count(*) from item where world_id = :'world2'
+          and holder_uid = :'ivar' and holder = 'player' and def = 'plank');
+
+\echo ''
+\echo '--- a chest, a bulk bin, and a crate with a rotten bottom'
+delete from placed where world_id = :'world2' and kind = 'furniture'
+  and sub in ('chest', 'bulk_bin', 'trash_crate');
+select give(:'world2', :'ivar', 'chest', 1, 50), give(:'world2', :'ivar', 'bulk_bin', 1, 50),
+       give(:'world2', :'ivar', 'trash_crate', 1, 40) \g /dev/null
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; r record; n int := 0;
+begin
+  for r in select id, def from item where world_id = w and holder_uid = me
+    and def in ('chest', 'bulk_bin', 'trash_crate') order by def
+  loop
+    perform act_perform(w, me, 'place_furniture',
+      jsonb_build_object('kind', 'item', 'uid', r.id, 'x', 5, 'y', 6, 'sx', n * 2, 'sy', 0));
+    n := n + 1;
+  end loop;
+end $$;
+update player set x = 5.5, y = 6.5 where world_id = :'world2' and uid = :'ivar';
+select id as chest from placed where world_id = :'world2' and sub = 'chest' order by id desc limit 1 \gset
+select id as bin from placed where world_id = :'world2' and sub = 'bulk_bin' order by id desc limit 1 \gset
+select id as bin_trash from placed where world_id = :'world2' and sub = 'trash_crate' order by id desc limit 1 \gset
+select '390. standing at a chest of ' || furniture_capacity((select p from placed p where p.id = :'chest'))
+     || ', a bulk bin of ' || furniture_capacity((select p from placed p where p.id = :'bin'))
+     || ' and a trash crate of ' || furniture_capacity((select p from placed p where p.id = :'bin_trash'));
+select '391. what each of them says to a hatchet: chest — '
+     || coalesce(furniture_refuses((select p from placed p where p.id = :'chest'), 'hatchet'), 'it will take it')
+     || ' | bulk bin — '
+     || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'hatchet'), 'it will take it')
+     || ' | a barrel — '
+     || coalesce(furniture_refuses((select p from placed p where p.id = :'barrel'), 'hatchet'), 'it will take it');
+select id as hatchet2 from item where world_id = :'world2' and holder_uid = :'ivar' and holder = 'player'
+  and def = 'hatchet' order by id desc limit 1 \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'store_in_furniture', ('{"kind":"item","uid":' || :'hatchet2' || '}')::jsonb) \g /dev/null
+select '392. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — the chest holds ' || furniture_units((select p from placed p where p.id = :'chest'));
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'furniture_take_all', ('{"kind":"furniture","id":' || :'chest' || '}')::jsonb) \g /dev/null
+select '393. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and it is now ' || furniture_units((select p from placed p where p.id = :'chest')) || ' deep';
+select id as rot from item where world_id = :'world2' and holder_uid = :'ivar' and holder = 'player'
+  and def = 'plank' order by id limit 1 \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'throw_away', ('{"kind":"item","uid":' || :'rot' || ',"count":2}')::jsonb) \g /dev/null
+select '394. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — the trash crate holds ' || furniture_units((select p from placed p where p.id = :'bin_trash'));
+
+\echo ''
+\echo '--- and who may read what is in them'
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '395. Hild reads the island''s stores: ' || (select count(*) from item where holder = 'furniture')
+     || ' things put away, and Ivar''s satchel: ' || (select count(*) from item where holder = 'bag')
+     || ' — a thing in somebody else''s bag is still somebody else''s';
+reset role;
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '396. the five that hold things: '
+     || (select string_agg(id, ', ' order by id) from action_def where holding_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
