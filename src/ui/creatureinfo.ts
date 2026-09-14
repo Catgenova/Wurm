@@ -13,6 +13,7 @@ import {
   STANCE_NAMES,
   taskSkill,
   workRangeOf,
+  workSkill,
   type Creature,
 } from '../game/creatures';
 import { baitHint, tameChance } from '../game/creatureActions';
@@ -20,6 +21,7 @@ import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
 import { traitOf } from '../game/traits';
 import { TIER_LEVEL } from '../game/husbandry';
+import { SKILL_BY_ID } from '../game/skills';
 
 const pct = (v: number): number => Math.round(v * 100);
 
@@ -91,5 +93,37 @@ export function creatureLines(g: Game, c: Creature): string[] {
   }).filter(Boolean);
   if (traits.length) lines.push(`Traits: ${traits.join(', ')}`);
   if (c.due > 0) lines.push(`In calf · due in ${clockLeft(c.due - g.time)}`);
+  return lines;
+}
+
+/**
+ * What a creature can actually do, as opposed to what it is.
+ *
+ * A wildermon learns its trade the way you learn yours — by doing it — and
+ * everything it knows sits in the same 1..100 scale your own skills do. None
+ * of it showed anywhere: a worker's trade was one figure buried in a line
+ * about its reach, and the hauling a draught beast picks up in the traces,
+ * which decides the pace of every cart it is put in front of, was invisible.
+ */
+export function creatureSkills(g: Game, c: Creature): string[] {
+  const def = SPECIES[c.species] ?? SPECIES.rabba;
+  const lines: string[] = [`${c.mode === 'wild' ? `Wild ${def.name}` : c.name} — what it can do`];
+  const known = Object.entries(c.skills).sort((a, b) => b[1] - a[1]);
+  const trade = workSkill(def);
+  if (!known.length) {
+    if (def.monster) lines.push('It has no trade. It has teeth.');
+    else if (trade) lines.push('It has learned nothing yet.');
+    else lines.push('It has no trade and never will: it is kept for its blood, its fleece or its company.');
+    return lines;
+  }
+  for (const [id, value] of known) {
+    const name = SKILL_BY_ID.get(id)?.name ?? id;
+    // A skill is worth the same to a beast as to you: what it can attempt and
+    // how well it does it.
+    const note = id === trade ? 'its trade' : id === 'climbing' ? 'in the traces, and so the pace of any cart' : id === 'fighting' ? 'what it hits for' : '';
+    lines.push(`${name} ${value.toFixed(1)} ${bar(value / 100)}${note ? ` · ${note}` : ''}`);
+  }
+  if (trade && c.mode === 'deed') lines.push(`Working, it reaches ${workRangeOf(c, def)} tiles from where it takes its orders.`);
+  else if (trade) lines.push('Set it to work for the settlement and it will use its trade.');
   return lines;
 }

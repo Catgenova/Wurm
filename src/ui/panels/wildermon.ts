@@ -27,6 +27,14 @@ const SORTS: Array<[SortKey, string]> = [
   ['traits', 'Best trait'],
 ];
 
+/**
+ * What counts as wanting attention. The footer has always counted these and
+ * the cards never said which ones they were, so the count sent you looking
+ * through the herd by eye. One definition, read by both, so they cannot drift.
+ */
+const HURT_AT = 0.6;
+const HUNGRY_AT = 0.3;
+
 /** Your tamed wildermon with their condition, progress and actions. Wild ones are not listed. */
 export class WildermonPanel {
   private list: HTMLDivElement;
@@ -34,6 +42,8 @@ export class WildermonPanel {
   private search: HTMLInputElement;
   private query = '';
   private sort: SortKey = 'name';
+  private sortSel!: HTMLSelectElement;
+  private groupBtn!: HTMLButtonElement;
   private grouped = true;
   private lastRender = 0;
 
@@ -71,11 +81,13 @@ export class WildermonPanel {
       opt.textContent = label;
       sortSel.append(opt);
     }
+    this.sortSel = sortSel;
     sortSel.addEventListener('change', () => {
       this.sort = sortSel.value as SortKey;
       this.render();
     });
     const groupBtn = document.createElement('button');
+    this.groupBtn = groupBtn;
     groupBtn.type = 'button';
     groupBtn.className = 'tb-btn tb-small tb-on';
     groupBtn.textContent = 'Grouped';
@@ -167,13 +179,51 @@ export class WildermonPanel {
       none.textContent = `None of your wildermon answer to “${this.search.value.trim()}”.`;
       this.list.append(none);
     }
-    const hungry = owned.filter((c) => c.hunger < 0.3).length;
-    const hurt = owned.filter((c) => c.health < maxHealth(c, this.game.creatures.species(c)) * 0.6).length;
-    const bits = [`${shown.length === owned.length ? owned.length : `${shown.length} of ${owned.length}`} wildermon`];
-    if (hungry) bits.push(`${hungry} hungry`);
-    if (hurt) bits.push(`${hurt} hurt`);
-    this.footer.textContent = bits.join(' · ');
+    const hungry = owned.filter((c) => this.isHungry(c)).length;
+    const hurt = owned.filter((c) => this.isHurt(c)).length;
+    this.footer.replaceChildren();
+    const count = document.createElement('span');
+    count.textContent = `${shown.length === owned.length ? owned.length : `${shown.length} of ${owned.length}`} wildermon`;
+    this.footer.append(count);
+    // A count of things wrong is only useful if it takes you to them.
+    const jump = (n: number, what: string, sort: SortKey): void => {
+      if (!n) return;
+      this.footer.append(document.createTextNode(' · '));
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `pal-jump pal-flag-${what}`;
+      b.textContent = `${n} ${what}`;
+      b.title = `Show them: worst first, every group together, nothing filtered out`;
+      b.addEventListener('click', () => this.findThose(sort));
+      this.footer.append(b);
+    };
+    jump(hungry, 'hungry', 'hunger');
+    jump(hurt, 'hurt', 'health');
     this.footer.classList.toggle('inv-over', hungry > 0 || hurt > 0);
+  }
+
+  /** Hurt enough to be worth doing something about. */
+  private isHurt(c: Creature): boolean {
+    return c.health < maxHealth(c, this.game.creatures.species(c)) * HURT_AT;
+  }
+
+  private isHungry(c: Creature): boolean {
+    return c.hunger < HUNGRY_AT;
+  }
+
+  /**
+   * Bring whatever wants attention to the top, and stop hiding any of it
+   * behind a search. What the footer counts, this finds.
+   */
+  private findThose(sort: SortKey): void {
+    this.sort = sort;
+    this.sortSel.value = sort;
+    this.search.value = '';
+    this.query = '';
+    this.grouped = false;
+    this.groupBtn.textContent = 'Flat';
+    this.groupBtn.classList.remove('tb-on');
+    this.render();
   }
 
   private card(c: Creature): HTMLDivElement {
@@ -203,7 +253,22 @@ export class WildermonPanel {
       const r = menu.getBoundingClientRect();
       this.showMenu(r.left, r.bottom + 2, c.name, this.entriesFor(c.id));
     });
-    head.append(name, level, menu);
+    // Which one it is, not just that one of them is: the card is marked and
+    // the reason is written beside the name.
+    const wants: string[] = [];
+    if (this.isHurt(c)) wants.push('hurt');
+    if (this.isHungry(c)) wants.push('hungry');
+    const flags = document.createElement('span');
+    flags.className = 'pal-flags';
+    for (const what of wants) {
+      const tag = document.createElement('span');
+      tag.className = `pal-flag pal-flag-${what}`;
+      tag.textContent = what;
+      tag.title = what === 'hurt' ? `Under ${Math.round(HURT_AT * 100)}% of the health it can carry. Herbs and a cover, or leave it somewhere quiet.` : `Under ${Math.round(HUNGRY_AT * 100)}% fed. A hungry wildermon works slowly and learns nothing.`;
+      flags.append(tag);
+    }
+    card.classList.toggle('pal-card-wants', wants.length > 0);
+    head.append(name, flags, level, menu);
     card.append(head);
 
     const bar = (label: string, value: number, cls: string, text: string): HTMLDivElement => {

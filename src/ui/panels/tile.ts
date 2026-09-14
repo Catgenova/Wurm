@@ -1,7 +1,10 @@
 import type { Game } from '../../game/game';
 import type { Pick } from '../../render/renderer';
 import { buildMenuRows, type MenuItem } from '../contextmenu';
+import { creatureSkills } from '../creatureinfo';
 import { Repaint } from '../repaint';
+import { tileUses } from '../tileinfo';
+import type { Tooltip } from '../tooltip';
 import type { UIWindow } from '../windows';
 
 /** What the window is looking at, and everything that could be done to it. */
@@ -22,6 +25,12 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 
 export class TilePanel {
   private head: HTMLDivElement;
+  private titleEl: HTMLSpanElement;
+  private info: HTMLButtonElement;
+  /** Whether the note is up at all, by hover or by click. */
+  private noteOpen = false;
+  /** Whether it was pinned by a click, so it stays up when the pointer leaves. */
+  private pinned = false;
   private list: HTMLDivElement;
   private pick: Pick | null = null;
   /** What each number key does right now, in the order the list shows them. */
@@ -32,12 +41,40 @@ export class TilePanel {
 
   constructor(
     private readonly win: UIWindow,
-    game: Game,
+    private readonly game: Game,
     private readonly source: TileMenuSource,
+    private readonly tooltip: Tooltip,
   ) {
     win.body.classList.add('inv-body');
     this.head = document.createElement('div');
     this.head.className = 'tile-head';
+    this.titleEl = document.createElement('span');
+    this.titleEl.className = 'tile-head-name';
+    // What the thing is *for*, which is a different question from what can be
+    // done to it this moment — and the list below already answers that one.
+    this.info = document.createElement('button');
+    this.info.className = 'tile-info';
+    this.info.type = 'button';
+    this.info.textContent = 'i';
+    this.info.title = 'What this is good for';
+    this.info.addEventListener('mouseenter', () => {
+      this.noteOpen = true;
+      this.showNote();
+    });
+    this.info.addEventListener('mouseleave', () => {
+      if (this.pinned) return;
+      this.noteOpen = false;
+      this.tooltip.hide(this);
+    });
+    // A click pins it, so it can be read with a finger as well as a pointer.
+    this.info.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.pinned = !this.pinned;
+      this.noteOpen = this.pinned;
+      if (this.pinned) this.showNote();
+      else this.tooltip.hide(this);
+    });
+    this.head.append(this.titleEl, this.info);
     this.list = document.createElement('div');
     this.list.className = 'inv-list';
     win.body.append(this.head, this.list);
@@ -55,9 +92,33 @@ export class TilePanel {
     return this.pick;
   }
 
+  /**
+   * The note behind the little `i`: what the ground is good for, or what the
+   * creature can actually do. Anchored to the button rather than to the
+   * pointer, so it stays put while it is being read.
+   */
+  private showNote(): void {
+    if (!this.pick) return;
+    const r = this.info.getBoundingClientRect();
+    this.tooltip.show(r.left, r.bottom - 12, this.noteLines(this.pick), this, true);
+  }
+
+  private noteLines(pick: Pick): string[] {
+    const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
+    if (creature) return creatureSkills(this.game, creature);
+    return tileUses(this.game, pick.x, pick.y);
+  }
+
   /** Point the window at a tile, opening it if it is closed. */
   select(pick: Pick | null, open = true): void {
     this.pick = pick;
+    // A note always describes what is selected now, not what was selected when
+    // the pointer arrived at the button.
+    if (this.noteOpen && !pick) {
+      this.noteOpen = false;
+      this.pinned = false;
+      this.tooltip.hide(this);
+    }
     // A new thing selected is a different list; nothing is kept open from the
     // last one, and it is drawn at once rather than on the next beat.
     this.folds.clear();
@@ -68,6 +129,12 @@ export class TilePanel {
 
   /** Look again, on a beat, and redraw only if the list has changed. */
   update(now: number): void {
+    // A note cannot outlive the window it was opened from.
+    if (!this.win.isOpen && this.noteOpen) {
+      this.noteOpen = false;
+      this.pinned = false;
+      this.tooltip.hide(this);
+    }
     if (!this.win.isOpen || !this.repaint.due(now)) return;
     this.render(now);
   }
@@ -76,7 +143,8 @@ export class TilePanel {
     if (!this.pick) {
       if (!this.repaint.changed(now, 'nothing')) return;
       this.list.replaceChildren();
-      this.head.textContent = 'Nothing selected';
+      this.titleEl.textContent = 'Nothing selected';
+      this.info.hidden = true;
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
       empty.textContent = 'Click any tile and everything you can do to it is listed here.';
@@ -88,7 +156,8 @@ export class TilePanel {
     // matches what is already on screen, nothing is touched.
     if (!this.repaint.changed(now, title + '\u0000' + entries.map(sign).join('\u0000'))) return;
     this.list.replaceChildren();
-    this.head.textContent = title;
+    this.titleEl.textContent = title;
+    this.info.hidden = false;
     if (!entries.length) {
       const none = document.createElement('div');
       none.className = 'inv-empty';
@@ -102,6 +171,9 @@ export class TilePanel {
     this.keyed = entries.filter((e) => !e.disabled && e.onSelect).slice(0, KEYS.length);
     const keyFor = new Map(this.keyed.map((e, i) => [e, KEYS[i]]));
     this.list.append(...buildMenuRows(entries, 0, { keyOf: (item) => keyFor.get(item), folds: this.folds }));
+    // Its figures move while you watch — a beast's trade climbs as it works,
+    // and ground is picked clean and grows back.
+    if (this.noteOpen) this.showNote();
   }
 
   /**

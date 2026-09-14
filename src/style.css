@@ -1524,3 +1524,87 @@ kbd {
 .ledger-row {
   grid-template-columns: 1fr 46px 46px 52px;
 }
+
+/* The little i, and the note behind it ------------------------------------ */
+
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tile-head-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-info {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-dim);
+  font: 600 10px/1 var(--ui-font);
+  font-family: inherit;
+  cursor: help;
+}
+
+.tile-info:hover,
+.tile-info:focus-visible {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.tooltip-wide {
+  white-space: normal;
+  max-width: 340px;
+}
+
+/* Wildermon that want something ------------------------------------------- */
+
+.pal-card-wants {
+  border-color: #8a4a3c;
+  background: rgba(190, 90, 70, 0.07);
+}
+
+.pal-flags {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
+.pal-flag {
+  padding: 0 5px;
+  border-radius: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pal-flag-hurt {
+  background: rgba(198, 78, 62, 0.22);
+  color: #f0907e;
+}
+
+.pal-flag-hungry {
+  background: rgba(214, 160, 60, 0.2);
+  color: #e8bc6a;
+}
+
+.pal-jump {
+  padding: 0 5px;
+  border: 0;
+  border-radius: 2px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pal-jump:hover {
+  text-decoration: underline;
+}

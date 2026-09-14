@@ -54,6 +54,11 @@ function helpText(): string {
     a job, an age, an orders setting or any trait, so "supreme" finds everything worth breeding from
     and "hungry" is answered by the footer, which counts the herd and says how many are hungry or
     hurt. Grouped lists them by where they are; Flat runs the whole herd together.</p>
+    <p>Any one of them that wants something says so on its own card: a <b>hurt</b> tag on anything
+    under 60% of the health it can carry, a <b>hungry</b> one on anything under 30% fed, and the card
+    itself outlined so it is found by scrolling rather than by reading. The counts in the footer are
+    buttons &mdash; click one and the herd is laid out flat, worst first, with nothing filtered out,
+    so a count of what is wrong takes you to it.</p>
     <h3>The settlement window</h3>
     <p><kbd>N</kbd> opens the settlement at a glance: its level and how far the border runs, how many
     wildermon are working of how many it can take, what the next upgrade still wants and the button
@@ -173,6 +178,11 @@ function helpText(): string {
     bare ground: a chest, a smelter, a campfire, a wildermon. The game can be played from it with one
     button, which is what it is for. If you would rather keep to the right-click menu, untick
     <i>Open the tile window on a click</i> in Settings and it will stay where you put it.</p>
+    <p>The little <b>i</b> beside the title answers the other question: not what you can do to a thing
+    this moment but what it is <i>for</i>. On ground it gives the pace it is walked at, what a loaded
+    cart makes of it, what a shovel or a pickaxe gets out of it, whether anything grows on it and
+    whether it will take paving. On a wildermon it lists every skill the animal has and what each one
+    decides. Hover it to read it, click it to pin it open.</p>
     <p><b>Trees are picked by their ground, not their canopy.</b> A mature tree is drawn leaning over
     the tiles behind it; the tile it stands on is the one that answers to a click or a hover, so the
     cursor never latches onto a tree it is nowhere near.</p>

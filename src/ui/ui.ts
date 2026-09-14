@@ -118,7 +118,7 @@ export class UI {
     const craft = this.windows.create({ id: 'craft', title: 'Crafting', x: 364, y: 56, width: 360, height: 360, anchor: 'tr', open: false });
     this.craftPanel = new CraftPanel(craft, game);
     const tileWin = this.windows.create({ id: 'tile', title: 'Tile', x: 12, y: 200, width: 300, height: 320, open: false });
-    this.tilePanel = new TilePanel(tileWin, game, (pick) => this.menuFor(pick));
+    this.tilePanel = new TilePanel(tileWin, game, (pick) => this.menuFor(pick), this.tooltip);
     const map = this.windows.create({ id: 'map', title: 'Map', x: 12, y: 370, width: 236, height: 262, anchor: 'tr', open: false });
     this.minimap = new MinimapPanel(map, game, renderer);
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 640, width: 300, height: 190, anchor: 'tr', open: false });
