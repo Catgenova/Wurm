@@ -1913,7 +1913,22 @@ export class Game {
    * of its own accord after that many rather than running until your wind
    * gives out, which is most of what a count is for.
    */
+  /**
+   * Somewhere else to send the asking.
+   *
+   * On an island kept in Postgres nothing below decides anything: the checks,
+   * the roll, the time it takes and the hole at the end all happen there, and
+   * this machine's job is to ask and then listen. Setting this is what turns
+   * the game from a thing that does into a thing that asks — one seam rather
+   * than a second copy of every action.
+   */
+  ask: ((def: ActionDef, target: Target, goes?: number) => void) | null = null;
+
   requestAction(def: ActionDef, target: Target, goes?: number): void {
+    if (this.ask) {
+      this.ask(def, target, goes);
+      return;
+    }
     const reason = def.check?.(target, this);
     if (reason) {
       this.logMsg(reason, 'error');

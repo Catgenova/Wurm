@@ -127,3 +127,47 @@ do $$ begin
 end $$;
 reset role;
 \echo ''
+
+\echo ''
+\echo '--- founding an island and handing the land over'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select rpc_found('Rockhaven', 99, 8, 4, 4) as made \gset
+select '22. founded: ' || (select name from world where id = :'made') || ', open to visitors: '
+     || (select ready from world where id = :'made')::text;
+do $$
+declare w uuid := (select id from world where name = 'Rockhaven');
+        rows jsonb := '[]'::jsonb; j int;
+begin
+  -- Nine rows of corners and eight of tiles, with a recognisable pattern in
+  -- them so that what comes back can be checked against what went out.
+  for j in 0..8 loop
+    rows := rows || jsonb_build_object(
+      'y', j,
+      'heights', encode(decode(repeat(lpad(to_hex(j), 2, '0') || '01', 9), 'hex'), 'base64'),
+      'dirt', encode(decode(repeat(lpad(to_hex(j + 20), 2, '0'), 9), 'hex'), 'base64'),
+      'tiles', case when j < 8 then encode(decode(repeat(lpad(to_hex(j), 2, '0'), 8), 'hex'), 'base64') end,
+      'data',  case when j < 8 then encode(decode(repeat('00', 8), 'hex'), 'base64') end,
+      'rock',  case when j < 8 then encode(decode(repeat('0f', 8), 'hex'), 'base64') end);
+  end loop;
+  perform rpc_put_land(w, rows);
+end $$;
+select '23. land handed over, then opened: ' || rpc_ready(:'made')::text;
+select '24. read back row 3: heights say ' || (r->>'y') || ' at corner 0 = ' || land_height(:'made', 0, 3)
+     || ' (0x0100 + 3 = 259), soil ' || land_dirt(:'made', 0, 3) || ', tile ' || land_tile(:'made', 0, 3)
+     || ', rock ' || land_rock(:'made', 0, 3)
+from jsonb_array_elements(rpc_land(:'made', 3, 3)) r;
+do $$
+declare w uuid := (select id from world where name = 'Rockhaven');
+begin
+  begin perform rpc_put_land(w, '[{"y":0,"heights":"AAAA","dirt":"AA"}]'::jsonb);
+        raise notice '25. writing land to an open island: ALLOWED';
+  exception when others then raise notice '25. writing land to an open island: refused — %', sqlerrm; end;
+end $$;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+do $$
+declare w uuid := (select id from world where name = 'Rockhaven');
+begin
+  begin perform rpc_ready(w); raise notice '26. Hild opening Ivar''s island:      ALLOWED';
+  exception when others then raise notice '26. Hild opening Ivar''s island:      refused — %', sqlerrm; end;
+end $$;
+\echo ''

@@ -55,6 +55,7 @@ import { packLand, packWorld, unpack } from './game/save';
 import { smeltSeconds } from './game/metal';
 import { needsIron } from './world/ore';
 import { tileUses } from './ui/tileinfo';
+import { startIsland } from './net/play';
 
 const canvasEl = document.getElementById('game') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLElement;
@@ -66,9 +67,31 @@ const seedParam = params.get('seed');
 // waiting is what it takes for the notice in the page to actually reach the
 // screen first.
 await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+
+/**
+ * An island kept somewhere else, if the address bar asks for one.
+ *
+ * `?island=<id>` comes ashore on one that exists; `?found=<name>` rolls a new
+ * one here and hands it over. With neither, everything below is exactly the
+ * single-player game it has always been, kept in this browser — an island is
+ * an addition, and a page that cannot reach the keeper still has a game.
+ */
+const tellBoot = (text: string): void => {
+  const notice = document.querySelector('#boot span');
+  if (notice) notice.textContent = text;
+};
+let started = null;
+try {
+  started = await startIsland(params, tellBoot);
+} catch (e) {
+  tellBoot(`${e instanceof Error ? e.message : 'The island keeper did not answer'} — playing on your own instead.`);
+  await new Promise<void>((done) => setTimeout(done, 2500));
+}
+const island = started?.island ?? null;
+
 // Reading a saved world means reading it out of IndexedDB, which is a thing
 // that takes a turn of the loop. Nothing else can start until it is here.
-const game = (seedParam ? null : await loadGame()) ?? Game.create(seedParam ? Number(seedParam) >>> 0 : (Math.random() * 0x7fffffff) >>> 0);
+const game = started?.game ?? (seedParam ? null : await loadGame()) ?? Game.create(seedParam ? Number(seedParam) >>> 0 : (Math.random() * 0x7fffffff) >>> 0);
 
 const canvas = new FullscreenCanvas(canvasEl);
 const renderer = new Renderer(canvas, game);
@@ -255,6 +278,10 @@ const loop = new GameLoop(
 
     game.update(dt);
 
+    // Where we have walked to, told rarely and never twice for standing still.
+    // The island believes it only as far as its own clock allows.
+    if (island) void island.move(player.x, player.y, player.level, performance.now() / 1000);
+
     /*
      * The view at the screen edge. Resting the cursor in the outer band slides
      * the camera that way, harder the closer to the edge, and stops the camera
@@ -296,16 +323,22 @@ document.getElementById('boot')?.remove();
 
 // Have the store open before anything asks it to write, so that the save on
 // the way out of the page is a write rather than a request to open a database.
-warmSave();
+if (!island) warmSave();
 // A new island is put away early: the land only reaches the store on a full
 // save, and until one has happened there is nothing for an exit patch to be
 // laid over.
-setTimeout(() => void saveGame(game), 3000);
-setInterval(() => void saveGame(game), 20000);
+if (!island) {
+  setTimeout(() => void saveGame(game), 3000);
+  setInterval(() => void saveGame(game), 20000);
+}
 // Three ways out of a page, and the last of them is the only one a phone
 // reliably gives you.
-window.addEventListener('beforeunload', () => saveOnExit(game));
-window.addEventListener('pagehide', () => saveOnExit(game));
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) saveOnExit(game);
-});
+// An island in Postgres is already written down; there is nothing here to
+// lose and nothing to put away on the way out.
+if (!island) {
+  window.addEventListener('beforeunload', () => saveOnExit(game));
+  window.addEventListener('pagehide', () => saveOnExit(game));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) saveOnExit(game);
+  });
+}

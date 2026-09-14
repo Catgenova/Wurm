@@ -67,6 +67,26 @@ project already has — the `auth` schema, `auth.uid()`, the three roles — so 
 same migrations can be run against a bare Postgres for testing. Applying it to
 the project would do nothing good.
 
+## Playing on one
+
+The address bar decides:
+
+| | |
+|---|---|
+| *(nothing)* | the single-player game, kept in this browser, exactly as before |
+| `?found=<name>` | roll an island here, hand it over, be its first inhabitant |
+| `?island=<id>` | come ashore on one that exists |
+| `?me=<name>` | what to be called |
+
+Generating an island stays in the browser — it is a large deterministic
+function of a seed that already exists and is tested, and a second
+implementation in SQL would be two islands that have to agree forever. So it is
+rolled here, handed over once, and after that it is not ours: `rpc_put_land`
+refuses the moment the island opens.
+
+A page that cannot reach the keeper says so and plays on its own. An island is
+an addition, not a replacement.
+
 ## Testing
 
 `npm run db:test` drops the schema, rebuilds it from the migrations and runs
@@ -74,3 +94,11 @@ the project would do nothing good.
 tested is as much the migrations as the rules, and a migration that only works
 against a database that already had the last version of it will not run on the
 project.
+
+`test/landtrip.ts` is the other half, and the one that could not be checked by
+reading: a real generated island goes out through `src/net/landpack.ts`, into a
+real Postgres, back out through the reader a joining client uses, and is
+compared corner by corner against the one that left. The TypeScript packs
+little-endian pairs by taking a view of an `Int16Array`; `b_i16` in the
+migrations takes the two bytes apart by hand. Both look right. Only running an
+island through both finds out.
