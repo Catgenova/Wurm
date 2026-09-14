@@ -40,6 +40,7 @@ import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
+import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 import { FLOAT_COLOURS, Floaters } from './floaters';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
@@ -121,7 +122,7 @@ interface HitRect {
   bridge?: number;
 }
 
-const VOID_COLOR = '#12395f';
+
 /** The cold laid over ground that is remembered rather than watched. */
 const FOG_COLOR = 'rgba(16, 24, 46, 0.58)';
 const GRID_COLOR = 'rgba(0,0,0,0.16)';
@@ -148,7 +149,7 @@ const BLEND_ALPHA = 0.46;
 /** How far in from the edge the neighbour's colour reaches, as a share of the way to the middle. */
 const BLEND_REACH = 0.55;
 /** Specks of grain laid on each tile once you are close enough to see them. */
-const GRAIN_SPECKS = 22;
+const GRAIN_SPECKS = 14;
 /** The colour an outline is drawn in round whatever the cursor is on. */
 const HOVER_INK = 'rgb(255, 226, 120)';
 const WATER_SHALLOW = [86, 168, 190];
@@ -267,6 +268,8 @@ export class Renderer {
   private lean = { x: 0, y: 0, force: 0 };
   /** The light this frame, kept so anything needing a ground colour can ask for one. */
   private sunNow: [number, number, number] = [0, 0, 1];
+  /** The sky this frame, which the haze over the distance is drawn in. */
+  private sky: Sky = skyAt(0, 0);
   /** The wind as the surface sees it, worked out once a frame rather than per tile. */
   private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
@@ -488,7 +491,7 @@ export class Renderer {
    * suits it.
    */
   private addGrain(x: number, y: number, pts: Float64Array, zoom: number): void {
-    const size = Math.max(1, 2.2 * zoom);
+    const size = Math.max(1, 2.6 * zoom);
     for (let i = 0; i < GRAIN_SPECKS; i++) {
       const a = hash2(x, y, 40 + i * 3);
       const b = hash2(x, y, 41 + i * 3);
@@ -513,7 +516,17 @@ export class Renderer {
     const zoom = cam.zoom;
     cam.setViewport(W, H);
     canvas.begin();
-    ctx.fillStyle = VOID_COLOR;
+    // Past the edge of the island is sky and distance rather than a hole. It
+    // takes the hour's colour, so the horizon at dusk is the dusk's.
+    const hour0 = this.game.hourOfDay();
+    const sky = skyAt(this.game.darkness(), Math.max(0, 1 - Math.min(Math.abs(hour0 - DAWN), Math.abs(hour0 - DUSK)) / 2.6));
+    this.sky = sky;
+    const voidInk = css(unknownInk(sky));
+    const back = ctx.createLinearGradient(0, 0, 0, H);
+    back.addColorStop(0, css(sky.top));
+    back.addColorStop(0.62, css(sky.far));
+    back.addColorStop(1, css(sky.far));
+    ctx.fillStyle = back;
     ctx.fillRect(0, 0, W, H);
     ctx.lineWidth = 1;
     ctx.lineJoin = 'round';
@@ -587,8 +600,9 @@ export class Renderer {
     const grassDetail = zoom >= 0.75;
     // Blended seams are a close-up nicety; from high up the tiles are too small to tell.
     const blend = zoom >= 0.5;
-    // Grain is only worth drawing once a tile is big enough to hold it.
-    const grain = zoom >= 1.1;
+    // Grain is only worth drawing once a tile is big enough to hold it, and
+    // once few enough tiles are on screen for it to be cheap.
+    const grain = zoom >= 1.25;
     const player = this.game.player;
     const rot = cam.rotation;
     const tb = this.tileBuf;
@@ -656,7 +670,7 @@ export class Renderer {
           ctx.lineTo(pts[4], pts[5]);
           ctx.lineTo(pts[6], pts[7]);
           ctx.closePath();
-          ctx.fillStyle = VOID_COLOR;
+          ctx.fillStyle = voidInk;
           ctx.fill();
           continue;
         }
@@ -862,6 +876,7 @@ export class Renderer {
     this.drawSwell(ctx, zoom);
     this.drawWakes(ctx, zoom);
     this.drawAir(ctx, zoom);
+    this.drawHaze(ctx, zoom);
     this.drawFloaters(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
@@ -1821,6 +1836,29 @@ export class Renderer {
    * pen with four rabba standing on the same tile, a box round the tile tells
    * you nothing.
    */
+  /**
+   * Haze over the distance. In this view whatever is furthest away is highest
+   * on the screen, so the distance is a band across the top, thickening toward
+   * it. It is laid in the same colour as the far sky, which is what makes a
+   * coastline eight hundred tiles off dissolve into the horizon instead of
+   * sitting there as hard as the ground under your feet.
+   *
+   * Zoomed out there is more distance in view and so more of it; up close it
+   * is almost nothing, which is right — you can see a wall in front of you
+   * perfectly clearly on the haziest day there is.
+   */
+  private drawHaze(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const H = this.canvas.height;
+    const strength = this.sky.haze * Math.max(0, Math.min(1, (1.35 - zoom) / 1.1));
+    if (strength < 0.01) return;
+    const g = ctx.createLinearGradient(0, 0, 0, H * HAZE_REACH);
+    g.addColorStop(0, rgba(this.sky.far, strength));
+    g.addColorStop(0.45, rgba(this.sky.far, strength * 0.42));
+    g.addColorStop(1, rgba(this.sky.far, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.canvas.width, H * HAZE_REACH);
+  }
+
   /**
    * The numbers and words standing over the world. They are drawn after
    * everything else on the ground and before the fog, so a number over a
