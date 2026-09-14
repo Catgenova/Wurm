@@ -15,6 +15,7 @@ import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, f
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
+import { Roster } from './roster';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
@@ -222,6 +223,12 @@ export class Game {
     posts: new TileIndex<PlacedPost>(),
     traps: new TileIndex<PlacedTrap>(),
   };
+  /**
+   * The other people on the island, when there are any. Empty on a world
+   * nobody else is in, which is every world until somebody opens one up, so
+   * everything that reads it can ask once and skip.
+   */
+  readonly roster = new Roster();
   /** Names pinned to spots on the island, and the next id to give one. */
   readonly marks: Marker[] = [];
   private nextMarkId = 1;

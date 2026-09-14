@@ -1,4 +1,5 @@
 import { needsIron, oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
+import type { LandBlob } from '../net/protocol';
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
 import type { PlacedAnvil } from './anvil';
@@ -568,6 +569,80 @@ function finish(world: World, m: SaveMeta): Game {
     if (lost) game.logMsg(`While you were away, ${lost === 1 ? 'an item' : `${lost} items`} left on the ground rotted away.`, 'event');
   }
   return game;
+}
+
+/**
+ * The island packed up for somebody else's machine.
+ *
+ * A join is a save that travels. The two halves are exactly the save's own:
+ * the **land**, which is big and identical for everyone, and the **world**,
+ * which is everything else the save writes down. The fog does not go — what
+ * one person has walked is theirs, and a newcomer should arrive to a dark map
+ * and light it themselves.
+ *
+ * Whose player and whose pack are in the world half is a question this does
+ * not answer yet. Today they are the host's, and a guest arrives wearing them;
+ * the day a session keeps a body for each person, this is the one place that
+ * has to change.
+ */
+export async function packLand(game: Game): Promise<LandBlob> {
+  const g = ground(game);
+  const heights = new Uint8Array(g.heights.buffer, g.heights.byteOffset, g.heights.byteLength);
+  const [h, t, d, dirt, rock] = await Promise.all([squash(heights), squash(g.tiles), squash(g.data), squash(g.dirt), squash(g.rock)]);
+  return { size: game.world.w, zip: canZip(), heights: h, tiles: t, data: d, dirt, rock };
+}
+
+/** Whether this browser will gzip for us. Every current one will; none is required to. */
+const canZip = (): boolean => typeof CompressionStream === 'function' && typeof DecompressionStream === 'function';
+
+/** Bytes to a string, squeezed on the way if the browser can squeeze. */
+async function squash(bytes: Uint8Array): Promise<string> {
+  if (!canZip()) return toBase64(bytes);
+  const stream = new Blob([bytes.slice()]).stream().pipeThrough(new CompressionStream('gzip'));
+  return toBase64(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+
+/** And back again. */
+async function swell(s: string, zipped: boolean): Promise<Uint8Array> {
+  const raw = fromBase64(s);
+  if (!zipped) return raw;
+  const stream = new Blob([raw.slice()]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/** Everything about the island except the land itself and who has seen what. */
+export function packWorld(game: Game): unknown {
+  return meta(game);
+}
+
+/**
+ * Unpack an island somebody else sent, into a game that can be played and
+ * drawn. It goes through exactly the same door a load from the store goes
+ * through, so a world that arrives over a wire is a world of the same kind as
+ * one that comes off a disk — there is no second, thinner sort of game.
+ */
+export async function unpack(land: LandBlob, packed: unknown): Promise<Game | null> {
+  const m = packed as SaveMeta | null;
+  if (!m || typeof m !== 'object' || typeof m.seed !== 'number') return null;
+  const size = land.size;
+  if (!Number.isInteger(size) || size < 8 || size > 4096) return null;
+  try {
+    const zipped = land.zip !== false;
+    const [heightBytes, tiles, data, dirt, rock] = await Promise.all([
+      swell(land.heights, zipped),
+      swell(land.tiles, zipped),
+      swell(land.data, zipped),
+      swell(land.dirt, zipped),
+      swell(land.rock, zipped),
+    ]);
+    const heights = new Int16Array(heightBytes.buffer, heightBytes.byteOffset, (size + 1) * (size + 1));
+    const world = new World(size, size, heights, tiles, data, dirt, rock);
+    world.seed = m.seed;
+    // A guest arrives to a dark island and lights it by walking it.
+    return finish(world, patched(m));
+  } catch {
+    return null;
+  }
 }
 
 export async function clearSave(): Promise<void> {

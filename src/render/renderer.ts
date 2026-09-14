@@ -40,6 +40,7 @@ import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
+import type { Peer } from '../game/roster';
 import { FORAGE_TINT, TINT_SPAN } from './forage';
 import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 import { FLOAT_COLOURS, Floaters } from './floaters';
@@ -79,13 +80,14 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap' | 'deck';
+  kind: 'tree' | 'bush' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap' | 'deck';
   x: number;
   y: number;
   sx: number;
   sy: number;
   spr: Sprite | null;
   creature?: Creature;
+  peer?: Peer;
   crateId?: number;
   fire?: PlacedCampfire;
   smelter?: PlacedSmelter;
@@ -257,6 +259,8 @@ export class Renderer {
    */
   private colorBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
+  /** Scratch for asking the roster who is on a tile, so the question costs no garbage. */
+  private peerBuf: Peer[] = [];
   private waterPoly = new Float64Array(16);
   /** Every water polygon drawn this frame, so a wake can be kept on the water. */
   private waterEdge = new Float64Array(4);
@@ -528,6 +532,10 @@ export class Renderer {
 
   render(dt: number): void {
     this.time += dt;
+    // Other people are walked along between one word about them and the next,
+    // on the drawing clock rather than the world's: it is smoothing, not
+    // simulation, and should stay smooth even when nothing is being simulated.
+    if (this.game.roster.size) this.game.roster.ease(dt);
     const canvas = this.canvas;
     const ctx = canvas.ctx;
     const W = canvas.width;
@@ -851,6 +859,21 @@ export class Renderer {
             this.ents.push({ kind: 'crate', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: crateSprite(crate.kind), crateId: crate.id });
           }
         }
+        // Other people on the island stand on tiles like anything else does.
+        if (this.game.roster.size) {
+          for (const peer of this.game.roster.atTile(x, y, this.peerBuf)) {
+            const [px, py] = this.game.roster.drawnAt(peer);
+            this.ents.push({
+              kind: 'peer',
+              x,
+              y,
+              sx: cam.worldToScreenX(px, py),
+              sy: cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), -4) + peer.level * WALL_HEIGHT),
+              spr: null,
+              peer,
+            });
+          }
+        }
         if (this.game.creatures.list.size) {
           // Anything standing on a tile with finished deck over it stands on the deck.
           const deckHere = this.game.bridges.size ? this.game.deckAt(x, y) : null;
@@ -1117,6 +1140,37 @@ export class Renderer {
             trousers: dyeOf(this.game.worn('legs'))?.colour,
           }),
         );
+        continue;
+      }
+      if (ent.kind === 'peer' && ent.peer) {
+        const peer = ent.peer;
+        const dx = cam.rotateX(peer.dirX, peer.dirY) - cam.rotateY(peer.dirX, peer.dirY);
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) =>
+          drawPlayer(g, px, py, zoom, {
+            phase: peer.moving ? peer.walkPhase : this.time * 6,
+            moving: peer.moving,
+            facing: dx >= 0 ? 1 : -1,
+            swimming: peer.swimming,
+            working: peer.working,
+            driving: false,
+            tunic: peer.tunic,
+            trousers: peer.trousers,
+          }),
+        );
+        // Somebody else is only somebody else if you can tell which one.
+        if (zoom >= 0.5) {
+          ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'alphabetic';
+          const ty = ent.sy - 30 * zoom;
+          ctx.strokeStyle = 'rgba(10,10,12,0.85)';
+          ctx.lineWidth = 3;
+          ctx.strokeText(peer.name, ent.sx, ty);
+          ctx.fillStyle = '#cfe6ff';
+          ctx.fillText(peer.name, ent.sx, ty);
+          ctx.lineWidth = 1;
+          ctx.textAlign = 'left';
+        }
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {
