@@ -142,6 +142,34 @@ async function main(): Promise<void> {
     }
 
     /*
+     * Material, which for the whole of this port has quietly been nothing.
+     *
+     * `material_def` was keyed by the index of a list rather than by the name
+     * an item carries, so every lookup missed and fell through a `coalesce`
+     * that meant "made of nothing in particular". Reading the table from out
+     * here is the cheapest possible proof the fix is on the project itself
+     * rather than only in the suite.
+     */
+    const { data: mats } = await supabase().from('material_def').select('id,edge,bane').in('id', ['steel', 'silver', 'pine']);
+    const byId = new Map(((mats ?? []) as Array<{ id: string; edge: number; bane: boolean }>).map((m) => [m.id, m]));
+    check('materials are keyed by their own names', byId.size === 3 && byId.get('steel')!.edge > 1 && byId.get('silver')!.bane,
+      [...byId.values()].map((m) => `${m.id} edge ${m.edge}`).join(', ') || 'nothing came back');
+
+    /*
+     * Fighting, as far as it goes with a starting kit: the hatchet is a real
+     * weapon, and what it can be swung at is a question the island answers.
+     */
+    const { data: kit } = await supabase().from('item').select('id,def').eq('world_id', id).eq('holder_uid', uid).eq('def', 'hatchet');
+    const axe = (kit ?? [])[0] as { id: number } | undefined;
+    if (axe) {
+      const took = await island.act('equip', { kind: 'item', uid: axe.id }, 1);
+      check('the hatchet goes in our hand', took.started || took.done === true, took.why ?? 'in hand');
+    }
+    const nothingWrong = await island.act('bind_wound', { kind: 'item' }, 1);
+    check('dressing a wound we have not got is refused in its own words',
+      !nothingWrong.started && /nothing/i.test(nothingWrong.why ?? ''), nothingWrong.why ?? 'IT STARTED');
+
+    /*
      * The building rules, which start by saying no.
      *
      * A fresh island has no settlement on it, so both of these are refused for

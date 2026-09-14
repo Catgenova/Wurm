@@ -24,6 +24,9 @@ import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
 import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
+import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/game/gear';
+import { WOUND_KINDS } from '../src/game/wounds';
+import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -102,6 +105,40 @@ out.push(`create table if not exists species_diet (
 out.push(`create table if not exists wild_table (
   species text primary key, weight real not null, monster boolean not null default false, cap int
 );`);
+/*
+ * What you swing, what you wear, where a blow lands and what it leaves.
+ */
+out.push(`create table if not exists weapon_def (
+  id text primary key, kind text not null, damage real not null, swing real not null,
+  range real, ammo text, two_handed boolean not null default false
+);`);
+out.push(`create table if not exists armour_class_def (
+  id text primary key, name text not null, skill text not null, soak real not null, burden real not null
+);`);
+out.push(`create table if not exists armour_def (
+  id text primary key, slot text not null, cls text not null
+);`);
+out.push(`create table if not exists shield_def (
+  id text primary key, block real not null, burden real not null
+);`);
+out.push(`create table if not exists hit_location (
+  slot text primary key, ord int not null, share real not null
+);`);
+out.push(`create table if not exists wound_kind_def (
+  id text primary key, name text not null, bleed real not null, fester real not null,
+  herb text not null, note text not null
+);`);
+out.push(`create table if not exists butcher_part (
+  part text primary key, item text not null, ord int not null
+);`);
+out.push(`create table if not exists species_butcher (
+  species text not null, part text not null, n real not null, primary key (species, part)
+);`);
+out.push(`create table if not exists hoard_metal (item text primary key, ord int not null);`);
+/* Two columns that arrived after their tables did. A generated table is made
+ * with `if not exists`, so the only way to widen one is to say so. */
+out.push(`alter table material_def add column if not exists bane boolean not null default false;`);
+out.push(`alter table species_def add column if not exists glow real;`);
 out.push(`create table if not exists gather_def (
   id text primary key, skill text not null, verb text not null, plain text not null
 );`);
@@ -251,8 +288,17 @@ for (const [id, d] of Object.entries(TILE_DEFS)) {
 for (const d of SKILL_DEFS) {
   out.push(`insert into skill_def values (${q(d.id)}, ${q(d.name)}, ${q(d.start)}, ${q((d as { parent?: string }).parent)});`);
 }
-for (const [id, m] of Object.entries(MATERIALS)) {
-  out.push(`insert into material_def values (${q(id)}, ${q(m.difficulty)}, ${q(m.weight)}, ${q(m.wear)}, ${q(m.decay)}, ${q(m.edge)}, ${q(m.soak)}, ${q(m.bite)}, ${q(m.hold)});`);
+/*
+ * `Object.entries` of an *array* hands you indices.
+ *
+ * This loop read `[id, m]` out of `MATERIALS`, which is a list, so every
+ * material went into the database keyed '0', '1', '2' — and every lookup
+ * against an item's `Oak` or `steel` missed, fell through a `coalesce(..., 1)`
+ * and behaved as if the thing were made of nothing in particular. Silent for
+ * the whole port: a seryll hatchet wore out exactly as fast as a pine one.
+ */
+for (const m of MATERIALS) {
+  out.push(`insert into material_def (id, difficulty, weight, wear, decay, edge, soak, bite, hold, bane) values (` + [q(m.id), q(m.difficulty), q(m.weight), q(m.wear), q(m.decay), q(m.edge), q(m.soak), q(m.bite), q(m.hold), q(!!(m as { bane?: boolean }).bane)].join(', ') + `);`);
 }
 
 /*
@@ -307,7 +353,8 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -319,7 +366,27 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
     q(!!d.defensive), q(!!d.milk), q(d.fleece ?? null), q(d.unruly ?? null),
     q(d.defaultStance ?? null), q(d.shearYield ?? null), q(d.wound ?? null),
     q(d.notice ?? null), q(d.sight ?? null)].join(', ') + `);`);
+  if (d.glow !== undefined) out.push(`update species_def set glow = ${q(d.glow)} where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
+}
+for (const w of WEAPONS) {
+  out.push(`insert into weapon_def values (${q(w.id)}, ${q(w.kind)}, ${q(w.damage)}, ${q(w.swing)}, ${q(w.range ?? null)}, ${q(w.ammo ?? null)}, ${q(!!w.twoHanded)});`);
+}
+for (const c of Object.values(ARMOUR_CLASSES)) {
+  out.push(`insert into armour_class_def values (${q(c.id)}, ${q(c.name)}, ${q(c.skill)}, ${q(c.soak)}, ${q(c.burden)});`);
+}
+for (const a of ARMOUR) out.push(`insert into armour_def values (${q(a.id)}, ${q(a.slot)}, ${q(a.cls)});`);
+for (const sh of Object.values(SHIELDS)) out.push(`insert into shield_def values (${q(sh.id)}, ${q(sh.block)}, ${q(sh.burden)});`);
+HIT_LOCATIONS.forEach(([slot, share], ord) => out.push(`insert into hit_location values (${q(slot)}, ${q(ord)}, ${q(share)});`));
+for (const k of Object.values(WOUND_KINDS)) {
+  out.push(`insert into wound_kind_def values (${q(k.id)}, ${q(k.name)}, ${q(k.bleed)}, ${q(k.fester)}, ${q(k.herb)}, ${q(k.note)});`);
+}
+BUTCHER_PARTS.forEach(([part, item], ord) => out.push(`insert into butcher_part values (${q(part)}, ${q(item)}, ${q(ord)});`));
+HOARD_METALS.forEach((item, ord) => out.push(`insert into hoard_metal values (${q(item)}, ${q(ord)});`));
+for (const d of Object.values(SPECIES) as unknown as S[]) {
+  for (const [part, n] of Object.entries(d.butcher as Record<string, number>)) {
+    out.push(`insert into species_butcher values (${q(d.id)}, ${q(part)}, ${q(n)});`);
+  }
 }
 for (const [id, skill] of Object.entries(GATHER_SKILL)) {
   out.push(`insert into gather_def values (${q(id)}, ${q(skill)}, ${q(GATHER_VERB[id as 'forage'])}, ${q(GATHER_DO[id as 'forage'])});`);

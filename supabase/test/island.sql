@@ -876,3 +876,172 @@ reset role;
 select '160. and it is all still Ivar''s: ' || (select count(*) from creature where keeper = :'ivar')
      || ' of them, and nothing is hurt: ' || (select count(*) from creature where health < 1);
 \echo ''
+\echo '--- what it is made of, which until now it was not'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set x = 8.5, y = 8.5, level = 0, wounds = '[]',
+    stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb, equipped = '{}'::jsonb,
+    act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]'
+  where uid = :'ivar';
+select '161. the materials, keyed by their own names at last: '
+     || (select string_agg(id || ' edge ' || edge, ', ' order by id) from material_def where id in ('pine','oak','steel','silver'))
+     || ' | a silver edge bites the unnatural: ' || mat_bane('Silver') || ', a steel one: ' || mat_bane('Steel');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'sword', 60, 1, 'Steel')
+  returning id as sword \gset
+select '162. a steel sword in these hands: ' || round(weapon_damage(:'world2', :'ivar', (select w from weapon_def w where id = 'sword'), (select i from item i where i.id = :'sword'))::numeric, 2);
+update item set extra = 'Copper' where id = :'sword';
+select '163. the same sword in copper:     ' || round(weapon_damage(:'world2', :'ivar', (select w from weapon_def w where id = 'sword'), (select i from item i where i.id = :'sword'))::numeric, 2)
+     || ' — edge 1.28 against 0.85, and both of them were silently 1 before today';
+update item set extra = 'Steel' where id = :'sword';
+
+\echo ''
+\echo '--- a sword, a rabba, and what they do to each other'
+select '164. empty hands reach ' || melee_reach(:'world2', :'ivar') || ' tiles; taking the sword up: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'sword' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'sword' || '}')::jsonb) \g /dev/null
+select '165. in hand: ' || (worn(:'world2', :'ivar', 'weapon')).def || ' of ' || (worn(:'world2', :'ivar', 'weapon')).extra
+     || ', and taking it up again: ' || coalesce(act_refusal(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'sword' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'wooden_shield', 40, 1, 'Oak')
+  returning id as shield \gset
+select act_perform(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'shield' || '}')::jsonb) \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'long_sword', 55, 1, 'Steel')
+  returning id as twohand \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'twohand' || '}')::jsonb) \g /dev/null
+select '166. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'info')
+     || ' — off hand now holds ' || coalesce((select def from item where id = (select (equipped->>'offhand')::bigint from player where uid = :'ivar')), 'nothing');
+select '167. and a shield back on top of it: ' || coalesce(act_refusal(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'shield' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'sword' || '}')::jsonb) \g /dev/null
+
+select creature_spawn(:'world2', 'rabba', 8.8, 8.4, 'wild', now() - interval '2 hours') as prey \gset
+select '168. a rabba at arm''s length: ' || coalesce(act_refusal(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'prey' || '}')::jsonb), 'allowed')
+     || ' | one across the island: ' || coalesce(act_refusal(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || (select id from creature where world_id = :'world2' and mode = 'wild' and greatest(abs(to_x - 8.5), abs(to_y - 8.5)) > 6 order by id limit 1) || '}')::jsonb), 'allowed');
+select '169. and one of ours: ' || coalesce(act_refusal(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        c int := (select max(id) from creature where species = 'rabba'); i int;
+begin
+  for i in 1..12 loop
+    exit when act_refusal(w, me, 'attack_creature', jsonb_build_object('kind', 'creature', 'id', c)) is not null;
+    perform act_perform(w, me, 'attack_creature', jsonb_build_object('kind', 'creature', 'id', c));
+  end loop;
+end $$;
+select '170. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+select '171. it is gone: ' || (select count(*) from creature where id = :'prey')
+     || ', and there is a corpse at 8,8: ' || (select count(*) from item where def = 'corpse' and gx = 8 and gy = 8)
+     || ' — the sword has taken ' || (select round(dmg::numeric, 2) from item where id = :'sword') || ' damage';
+-- Some things always get their swipe in, rather than one swing in three.
+select creature_spawn(:'world2', 'crawler', 8.7, 8.6, 'wild', now() - interval '2 hours') as biter \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'biter' || '}')::jsonb) \g /dev/null
+select '172. a crawler is a defensive sort: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+
+\echo ''
+\echo '--- and what it left on you'
+select '173. carrying: ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'nothing')
+     || ' — health ' || (select round(((stats->>'health')::numeric), 3) from player where uid = :'ivar');
+-- Two minutes on the floor with nobody looking at you.
+update player set wounds = '[{"kind":"cut","part":"arms","severity":0.12,"bleeding":true,"infected":false,"dressing":null}]'::jsonb,
+    stats = jsonb_set(jsonb_set(stats, '{health}', '0.8'), '{hurtSettled}', to_jsonb(now() - interval '120 seconds'))
+  where uid = :'ivar';
+select '174. a bleeding cut loses ' || round((select sum(wound_drain(x.value)) from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar')::numeric, 5) || ' of a life a second';
+select wounds_settle(:'world2', :'ivar') \g /dev/null
+select '175. two minutes of it, settled in one go: health ' || (select round(((stats->>'health')::numeric), 3) from player where uid = :'ivar')
+     || ', and it is ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'closed over');
+/*
+ * The browser rolls the chance a wound turns once a second. There is no second
+ * here, so the odds over the whole stretch are rolled once: 1 - (1 - p)^secs.
+ * Ten minutes of a bare cut is a third of a chance, which is why this asks for
+ * it a dozen times rather than once.
+ */
+update player set wounds = '[{"kind":"cut","part":"arms","severity":0.05,"bleeding":true,"infected":false,"dressing":null}]'::jsonb
+  where uid = :'ivar';
+select '176. the chance a bare cut goes bad, per second: '
+     || round((select fester_chance(x.value) from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar' limit 1)::numeric, 6)
+     || ' — over ten minutes that is '
+     || round((select (1 - power(1 - fester_chance(x.value), 600)) * 100 from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar' limit 1)::numeric, 1) || '%';
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..14 loop
+    exit when exists (select 1 from player p, jsonb_array_elements(p.wounds) x
+                      where p.uid = me and (x.value->>'infected')::boolean);
+    update player set wounds = '[{"kind":"cut","part":"arms","severity":0.05,"bleeding":true,"infected":false,"dressing":null}]'::jsonb,
+        stats = jsonb_set(jsonb_set(stats, '{health}', '1'), '{hurtSettled}', to_jsonb(now() - interval '600 seconds'))
+      where uid = me;
+    perform wounds_settle(w, me);
+  end loop;
+end $$;
+delete from event where uid = :'ivar';
+select '177. ten minutes untended: ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'closed over');
+select '178. dressing it now: ' || coalesce(act_refusal(:'world2', :'ivar', 'bind_wound', '{"kind":"item"}'), 'allowed');
+select '179. scouring it out with nothing: ' || coalesce(act_refusal(:'world2', :'ivar', 'clean_wound', '{"kind":"item"}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'lye_bucket', 80, 3);
+update skill set value = 70 where uid = :'ivar' and id = 'first_aid';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'first_aid', 70 where not exists (select 1 from skill where uid = :'ivar' and id = 'first_aid');
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..3 loop
+    exit when act_refusal(w, me, 'clean_wound', '{"kind":"item"}') is not null;
+    perform act_perform(w, me, 'clean_wound', '{"kind":"item"}');
+  end loop;
+end $$;
+select '180. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar'), 'nothing said')
+     || ' — and a bucket came back: ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'bucket');
+delete from event where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'cover', 70, 2, 'thyme');
+select '181. with the right herb for a cut: ' || coalesce(act_refusal(:'world2', :'ivar', 'bind_wound', '{"kind":"item"}'), 'allowed');
+select act_perform(:'world2', :'ivar', 'bind_wound', '{"kind":"item"}') \g /dev/null
+select '182. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar'), 'nothing said')
+     || ' — ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'closed over');
+-- Bled out, with nobody watching.
+update player set wounds = '[{"kind":"cut","part":"chest","severity":0.4,"bleeding":true,"infected":true,"dressing":null}]'::jsonb,
+    stats = jsonb_set(jsonb_set(stats, '{health}', '0.3'), '{hurtSettled}', to_jsonb(now() - interval '600 seconds')),
+    x = 3.5, y = 3.5 where uid = :'ivar';
+delete from event where uid = :'ivar';
+select wounds_settle(:'world2', :'ivar') \g /dev/null
+select '183. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'error')
+     || ' — health ' || (select round(((stats->>'health')::numeric), 2) from player where uid = :'ivar')
+     || ', wounds ' || (select jsonb_array_length(wounds) from player where uid = :'ivar')
+     || ', standing at ' || (select round(x::numeric, 1) || ',' || round(y::numeric, 1) from player where uid = :'ivar')
+     || ' which is where the island put him ashore';
+
+\echo ''
+\echo '--- a bow, and a carcass'
+update player set x = 8.5, y = 8.5, wounds = '[]', stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb where uid = :'ivar';
+select creature_spawn(:'world2', 'rabba', 13.5, 8.5, 'wild', now() - interval '2 hours') as far \gset
+select '184. shooting with a sword in hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'shoot_creature', ('{"kind":"creature","id":' || :'far' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'long_bow', 60, 1, 'Willow')
+  returning id as bow \gset
+select act_perform(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'bow' || '}')::jsonb) \g /dev/null
+select '185. bow in hand and no arrows: ' || coalesce(act_refusal(:'world2', :'ivar', 'shoot_creature', ('{"kind":"creature","id":' || :'far' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'arrow', 50, 30, 'Iron');
+select '186. with a quiver: ' || coalesce(act_refusal(:'world2', :'ivar', 'shoot_creature', ('{"kind":"creature","id":' || :'far' || '}')::jsonb), 'allowed')
+     || ' | at something in your face: ' || coalesce(act_refusal(:'world2', :'ivar', 'shoot_creature', ('{"kind":"creature","id":' || :'biter' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        c int := (select max(id) from creature where species = 'rabba' and to_x > 12); i int;
+begin
+  for i in 1..14 loop
+    exit when act_refusal(w, me, 'shoot_creature', jsonb_build_object('kind', 'creature', 'id', c)) is not null;
+    perform act_perform(w, me, 'shoot_creature', jsonb_build_object('kind', 'creature', 'id', c));
+  end loop;
+end $$;
+select '187. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar')
+     || ' — arrows left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'arrow');
+delete from event where uid = :'ivar';
+select '188. butchering it: ' || coalesce(act_refusal(:'world2', :'ivar', 'butcher', '{"kind":"ground","x":13,"y":8}'), 'allowed');
+select act_perform(:'world2', :'ivar', 'butcher', '{"kind":"ground","x":13,"y":8}') \g /dev/null
+select '189. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar'), 'nothing said')
+     || ' — and the carcass is gone: ' || (select count(*) from item where def = 'corpse' and gx = 13);
+select '190. a knife against bare hands, at butchering 70: ' || round(butcher_yield(70, 80)::numeric, 2) || ' of a carcass against ' || round(butcher_yield(70, null)::numeric, 2);
+delete from event where uid = :'ivar';
+update creature set health = 1 where id = :'woola';
+select '191. mending one of ours with nothing: ' || coalesce(act_refusal(:'world2', :'ivar', 'treat_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'bandage', 60, 3);
+select act_perform(:'world2', :'ivar', 'treat_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb) \g /dev/null
+select '192. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+\echo ''

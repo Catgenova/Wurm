@@ -36,12 +36,13 @@ simplification rather than a problem:
 | **14** | things set down on the ground: campfires, smelters, furniture |
 | **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
 | **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
+| **8** | fighting: wearing and wielding, sword and bow, butchering, and the first aid that follows |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **111** | known, listed, and honestly refused |
+| **103** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -59,12 +60,46 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), fighting and butchering,
+not the recovery, would make the island unplayable), creatures coming at you
+unprompted (a hunter closing on sight is creature AI rather than fighting),
 the deed jobs a tamed beast can be set to, breeding and pairing, riding and
 the traces, trapping, the ledger, the journal, kilns and what they fire,
 smelting jobs themselves, flattening and levelling, paving with cut slabs,
 planting trees, prospecting, the rest of the deed (disband, upgrade, the
 token's crate), and the ease a hot oven lends to cooking.
+
+### A wound is the second thing that will not sit still
+
+A creature moves, so it is stored as a walk. A wound *drains*, which is the
+same problem wearing different clothes: health is not a number that sits where
+you left it, it is a number that has been going down the whole time nobody was
+looking.
+
+So wounds settle from a timestamp exactly as the legs of a walk do. Blood out
+of anything still bleeding, a little closing on anything dressed, and — the
+part worth spelling out — the chance a wound goes bad. The browser rolls that
+once a second. There is no second here, so the odds over the whole stretch are
+`1 - (1 - p)^seconds` and the roll happens once: a cut left alone for ten
+minutes has had ten minutes to turn, whether or not anybody was there to watch
+it. `settle()` calls it, and every way into this island already calls
+`settle()`, so touching a player is enough.
+
+### Material had never had any effect
+
+`material_def` was filled by `Object.entries(MATERIALS)`, and `MATERIALS` is a
+list — so every material went into the database keyed `'0'`, `'1'`, `'2'`.
+Every lookup against an item's `Oak` or `Steel` missed, fell through a
+`coalesce(..., 1)`, and behaved as though the thing were made of nothing in
+particular. Silent for the whole port: a seryll hatchet wore out exactly as
+fast as a pine one, and nothing anywhere said so, because "no effect" is a
+perfectly plausible number.
+
+It surfaced only because fighting needs `edge`, `soak` and `bane`, and a
+weapon with no material behind it is obviously wrong in a way a tool with no
+material behind it is not. Keys are the material's own id now, the lookup goes
+through `mat_of()` — which lower-cases, because the label on an item says
+`Oak` and the table says `oak` — and a steel sword hits half again as hard as
+a copper one, which is what the book always said it did.
 
 ### A creature is a walk, not a place
 

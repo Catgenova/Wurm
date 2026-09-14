@@ -79,6 +79,21 @@ export interface IslandHooks {
   progress?: (done: number, total: number, what: string) => void;
 }
 
+/**
+ * What `rpc_act` says back. `done` comes back true for the instant sort, which
+ * the island settles on the way out rather than leaving for the next touch.
+ */
+export interface ActResult {
+  started: boolean;
+  queued?: boolean;
+  done?: boolean;
+  why?: string;
+  seconds?: number;
+  ends?: string;
+  inHand?: number;
+  capacity?: number;
+}
+
 export class Island {
   world: World | null = null;
   info: WorldRow | null = null;
@@ -297,13 +312,13 @@ export class Island {
   }
 
   /** Ask to do something. What comes back is a refusal or a promise, never a result. */
-  async act(action: string, target: Record<string, unknown>, times = 1): Promise<{ started: boolean; why?: string }> {
+  async act(action: string, target: Record<string, unknown>, times = 1): Promise<ActResult> {
     if (!this.info) return { started: false, why: 'You are not on an island.' };
     const { data, error } = await supabase().rpc('rpc_act', {
       p_world: this.info.id, p_action: action, p_target: target, p_times: times,
     });
     if (error) return { started: false, why: error.message };
-    return data as { started: boolean; why?: string };
+    return data as ActResult;
   }
 
   /** What time it is on the island, worked out rather than asked for. */
