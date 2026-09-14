@@ -92,7 +92,8 @@ async function main(): Promise<void> {
     const noLogs = await island.act('make_planks', { kind: 'item' }, 1);
     check('a recipe we lack the materials for is refused in its own words',
       !noLogs.started && /plank/i.test(noLogs.why ?? ''), noLogs.why ?? 'IT STARTED');
-    const notYet = await island.act('cut_down', { kind: 'tile', x: cx, y: cy }, 1);
+    const notYet = await island.act('cut_down',
+      { kind: 'tile', x: Math.floor(island.me!.x), y: Math.floor(island.me!.y) }, 1);
     check('an action with no performer yet says so honestly',
       !notYet.started && /yet/i.test(notYet.why ?? ''), notYet.why ?? 'IT STARTED');
 
