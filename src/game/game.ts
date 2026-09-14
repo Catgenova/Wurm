@@ -680,7 +680,9 @@ export class Game {
     const def = SKILL_DEFS.find((d) => d.id === id);
     const before = this.skills.get(id);
     const gain = this.skills.gain(id, base, this.rand);
-    if (gain <= 0.00005 || !def) return gain;
+    // The last stretch of a skill moves in ten-thousandths, and a player at
+    // ninety-nine deserves to see that it is moving at all.
+    if (gain <= 0.000005 || !def) return gain;
     const now = this.skills.get(id);
     // What you pick up in the background says less about itself than what you set out to do.
     if (def.group === 'Characteristics' || QUIET_SKILLS.has(id)) {
@@ -689,7 +691,8 @@ export class Game {
         this.logMsg(`${def.name} is now ${Math.floor(now)}.${room ? ` You can keep ${this.queueCapacity()} jobs in your head.` : ''}`, 'skill');
       }
     } else {
-      this.logMsg(`${def.name} increased by ${gain.toFixed(4)} to ${now.toFixed(4)}.`, 'skill');
+      const places = gain < 0.0001 ? 6 : 4;
+      this.logMsg(`${def.name} increased by ${gain.toFixed(places)} to ${now.toFixed(4)}.`, 'skill');
     }
     this.events.emit('skill', id, gain);
     return gain;

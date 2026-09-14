@@ -61,6 +61,31 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'swimming', name: 'Swimming', group: 'Skills', start: 1 },
 ];
 
+/**
+ * How steeply gains fall away as a skill fills up.
+ *
+ * The share of a gain that survives is the room left, raised to this. The
+ * first point of a skill comes in two or three swings of a pick; the ninetieth
+ * takes a hundred and fifty; the hundredth takes ten thousand, which is the
+ * point — nobody finishes a skill by accident, and the last stretch of one is
+ * a standing target rather than a thing you tick off.
+ */
+export const SKILL_CURVE = 1.8;
+
+/** What is left of a gain at a given level, 1 at nothing and 0 at mastery. */
+export const skillRoom = (v: number): number => Math.pow(Math.max(0, 1 - v / 100), SKILL_CURVE);
+
+/**
+ * The least an honest go at something is worth. Without it the curve never
+ * quite arrives: gains would shrink towards nothing and a hundred would be a
+ * number nobody could reach. With it, the last point of a skill is ten
+ * thousand goes away and no further, which is punishing rather than pointless.
+ */
+export const MIN_GAIN = 0.0001;
+
+/** One gain: the curve, floored, and then luck of a fifth either way. */
+export const skillGain = (v: number, base: number, roll: number): number => Math.max(MIN_GAIN, base * skillRoom(v)) * roll;
+
 export class Skills {
   values = new Map<string, number>();
 
@@ -73,13 +98,13 @@ export class Skills {
   }
 
   /**
-   * Raise a skill. Gains shrink as the skill approaches 100, so the early
-   * levels come quickly and the late ones slowly, as in Wurm.
+   * Raise a skill. What a gain is worth shrinks with the level it is being
+   * added to, sharply: the early levels come in a handful of goes and the last
+   * one hardly comes at all, as in Wurm.
    */
   gain(id: string, base: number, rand: () => number = Math.random): number {
     const v = this.get(id);
-    const room = Math.max(0, 1 - v / 100);
-    const gain = base * Math.pow(room, 1.4) * (0.6 + 0.8 * rand());
+    const gain = skillGain(v, base, 0.6 + 0.8 * rand());
     const next = Math.min(100, v + gain);
     this.values.set(id, next);
     return next - v;

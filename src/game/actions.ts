@@ -144,7 +144,14 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
 }
 
 /** The chance a swing cuts the rock face back, from skill and the pick. */
-export const mineChance = (skill: number, pickQl: number): number => Math.max(0.08, Math.min(0.85, 0.1 + skill * 0.005 + pickQl * 0.002));
+/**
+ * How often working a face for its metal happens to bring a slab of it down.
+ * Hardly ever: mining a seam is for what is in it, and a shaft that sinks
+ * itself every third swing is a shaft nobody planned.
+ */
+export const MINE_COLLAPSE = 0.01;
+/** How often a deliberate chip at a corner actually takes it down: one in four. */
+export const CHIP_CHANCE = 0.25;
 
 /** How far a prospector reads the ground: one tile further every ten levels. */
 export const prospectRadius = (skill: number): number => 3 + Math.floor(skill / 10);
@@ -411,13 +418,53 @@ export const ACTIONS: ActionDef[] = [
       const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', pickQl)) });
       const what = itemDef(yieldId).name.toLowerCase();
       g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
-      // Cutting the face back is a separate matter, and mostly a question of skill.
-      if (g.rand() < mineChance(g.skills.get('mining'), pickQl)) {
+      // Cutting the face back is its own job, with its own entry in the menu.
+      // Now and again one comes down anyway.
+      if (g.rand() < MINE_COLLAPSE) {
         w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
         w.setDirt(t.cx, t.cy, 0);
         g.exposeRock(t.cx, t.cy);
-        g.logMsg('A slab breaks away and the face drops.', 'event');
+        g.logMsg('A slab breaks away of its own accord and the face drops.', 'event');
       }
+    },
+  },
+  {
+    // Mining takes what is in the rock; this takes the rock itself. Three
+    // swings in four find no line in it and the corner stands where it was.
+    id: 'chip_corner',
+    label: 'Chip corner',
+    verb: 'chipping at the face',
+    skill: 'mining',
+    tool: 'pickaxe',
+    corner: true,
+    stamina: 0.07,
+    baseTime: 9,
+    applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].mineable,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to cut rock.';
+      const under = cornerUnderBuilding(g, t.cx, t.cy);
+      if (under) return under;
+      if (g.world.rockHeight(t.cx, t.cy) <= 0) return 'You cannot cut the rock below the water level.';
+      const ore = oreAt(g.world, t.x, t.y);
+      if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const w = g.world;
+      if (g.rand() >= CHIP_CHANCE) {
+        g.logMsg(`You work at the ${cornerName(t)} corner and find no line in it. The face holds.`, 'event');
+        return;
+      }
+      w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
+      w.setDirt(t.cx, t.cy, 0);
+      g.exposeRock(t.cx, t.cy);
+      // What broke away is yours, which is the only thing this shares with mining.
+      const rock = bedrockAt(w, t.x, t.y);
+      const yieldId = w.getTile(t.x, t.y) === TileType.Rock ? rock.yields : 'rock_shards';
+      const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', g.toolQl('pickaxe'))) });
+      g.logMsg(`The ${cornerName(t)} corner breaks away and drops a step. You gather the ${itemDef(yieldId).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {

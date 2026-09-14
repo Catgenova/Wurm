@@ -67,9 +67,11 @@ rebuilds and commits the result.
 - **Mining and prospecting.** Eleven metals lie in the rock, each needing its
   own mining skill to work: copper and coal at 1, tin 10, zinc 20, lead 30,
   silver 40, gold 50, adamantine 60, glimmersteel 70, mithril 80, seryll 90,
-  and each rarer than the last. Mining bare rock yields ore or shards, while
-  cutting the face back a level is a separate roll decided by mining skill and
-  pick quality. Prospecting marks every ore-bearing tile within range, buried
+  and each rarer than the last. Mining bare rock is for what is in it: it
+  yields ore or shards and leaves the face where it stands, bringing a slab
+  down only one swing in a hundred, by luck. Cutting the face back is its own
+  entry — **Chip corner** — which takes the corner down a step one attempt in
+  four and gives you what broke away. Prospecting marks every ore-bearing tile within range, buried
   or bare, and where you stand it names the rock, the skill any metal takes,
   the quality ceiling and how deep it lies; the range is 3 tiles plus one per
   10 levels of Prospecting. Coal outburns a log as campfire fuel.
@@ -409,7 +411,12 @@ rebuilds and commits the result.
   bare dirt, so laying it again means packing it again.
 - **Character.** Health, stamina, food and water; swimming drains stamina and
   drowning sends you back to the shore. Actions take time based on skill and
-  tool quality, can fail, and raise skills with Wurm-style diminishing gains.
+  tool quality, can fail, and raise skills on a curve that bites: what a gain
+  is worth is the room left in the skill raised to 1.8, so an ordinary action
+  gives 0.44 at level 1, 0.13 at 50, 0.007 at 90 and 0.0001 at 99 — two goes
+  for the first point of a skill, 140 for the ninetieth and about ten thousand
+  for the hundredth. A floor under the gain keeps the last point a long grind
+  rather than an unreachable one.
 - **UI.** Draggable, resizable windows that remember their layout and expand to
   nearly the whole screen with one tap (handy on phones), a status HUD,
   action timer, right-click menus with greyed-out reasons, hover tooltips, an

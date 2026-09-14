@@ -2,10 +2,11 @@ import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../wor
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { DeedStore, Game } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
-import { mineChance } from './actions';
+import { MINE_COLLAPSE } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
+import { skillGain } from './skills';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 
 /**
@@ -1417,8 +1418,8 @@ export class Creatures {
     this.gainSkill(game, c, GATHER_SKILL.mine, 0.225);
     // Its own skill decides the metal, though no seam gives up more than it holds.
     const ql = Math.min(ore.maxQl, Math.max(1, Math.min(100, skill * (0.6 + game.rand() * 0.8) + 1)));
-    // As with a miner's pick, cutting the face back is its own matter.
-    if (game.rand() < mineChance(skill, 30) && game.world.rockHeight(c.workX, c.workY) > 1) {
+    // As with a miner's pick, the face only comes down by luck.
+    if (game.rand() < MINE_COLLAPSE && game.world.rockHeight(c.workX, c.workY) > 1) {
       game.world.setHeight(c.workX, c.workY, game.world.getHeight(c.workX, c.workY) - 1);
       game.world.setDirt(c.workX, c.workY, 0);
       game.exposeRock(c.workX, c.workY);
@@ -1452,8 +1453,8 @@ export class Creatures {
     const skill = c.skills[GATHER_SKILL.quarry] ?? 1;
     this.gainSkill(game, c, GATHER_SKILL.quarry, 0.225);
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
-    // Cutting the face back is its own matter, as it is for a miner.
-    if (game.rand() < mineChance(skill, 30) && w.rockHeight(c.workX, c.workY) > 1) {
+    // Cutting the face back is a matter of luck, as it is for a miner.
+    if (game.rand() < MINE_COLLAPSE && w.rockHeight(c.workX, c.workY) > 1) {
       w.setHeight(c.workX, c.workY, w.getHeight(c.workX, c.workY) - 1);
       w.setDirt(c.workX, c.workY, 0);
       game.exposeRock(c.workX, c.workY);
@@ -1802,8 +1803,9 @@ export class Creatures {
   /** Same diminishing curve as the player's skills. */
   gainSkill(game: Game, c: Creature, id: string, base: number): number {
     const v = c.skills[id] ?? 1;
-    const room = Math.max(0, 1 - v / 100);
-    const gain = base * Math.pow(room, 1.4) * (0.6 + 0.8 * game.rand());
+    // A beast learns on the same curve a player does, and crawls the same last
+    // stretch of it.
+    const gain = skillGain(v, base, 0.6 + 0.8 * game.rand());
     const before = creatureLevel(c);
     const beforeSteps = rangeSteps(v);
     c.skills[id] = Math.min(100, v + gain);

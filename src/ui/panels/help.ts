@@ -550,9 +550,12 @@ export function buildHelp(win: UIWindow): void {
     at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90. The rarer
     the metal, the harder it is to find as well as to work. Coal burns longer than a log, so a campfire
     will take it gladly.</p>
-    <p><b>Mining</b> with a pickaxe works bare rock. Every swing that bites gives you shards or metal;
-    cutting the face back a whole level is a separate roll, and how often it happens depends on your
-    mining skill and the quality of your pick.</p>
+    <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
+    shards or metal and leaves the face standing where it was; about one swing in a hundred a slab
+    comes away of its own accord and the corner drops a step. If you want the rock <i>moved</i>, that
+    is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
+    than working it, and it gives way about one attempt in four. What breaks away is yours either
+    way.</p>
     <p>Every tile in the world sits on a particular rock of a particular quality &mdash; under grass,
     under a forest, under the sea, everywhere &mdash; settled when the world was made and unchanged by
     anything you do to the ground above it. Metal is laid far more thickly under dry land than under
@@ -573,5 +576,10 @@ export function buildHelp(win: UIWindow): void {
     the road.</p>
     <p>Your skills rise with everything you do. Better skill means faster, more successful actions and
     the freedom to shape steeper slopes.</p>
+    <p><b>What a gain is worth falls away as the skill fills.</b> An ordinary action gives about
+    <b>0.44</b> at level 1, <b>0.13</b> at 50, <b>0.007</b> at 90 and <b>0.0001</b> at 99 &mdash; two
+    goes for the first point of a skill, a hundred and forty for the ninetieth, and something like
+    <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
+    a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
   `;
 }
