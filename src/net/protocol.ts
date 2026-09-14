@@ -147,7 +147,18 @@ export type FromHost =
  * that is where two people reach for the same ore.
  */
 export type FromClient =
-  | { t: 'hello'; protocol: number; name: string }
+  | {
+      t: 'hello';
+      protocol: number;
+      name: string;
+      /**
+       * Who I am across visits: a name my own machine keeps. The number I am
+       * given when I connect is handed out fresh every time, so an island that
+       * filed its visitors by it would greet everybody as a stranger every
+       * evening. This is what a returning guest is recognised by.
+       */
+      who: string;
+    }
   /** Where I am now, and what I look like being there. */
   | { t: 'at'; body: Omit<PeerState, 'id' | 'name'> }
   /** Ask to do something. The host decides whether it happens. */
@@ -189,6 +200,29 @@ const STRIP = new RegExp('[\\u0000-\\u001f\\u007f]', 'g');
 
 /** A name somebody typed, made safe to show to everyone else. */
 export const cleanName = (raw: string): string => raw.replace(STRIP, '').trim().slice(0, 20) || 'Wanderer';
+
+/** A durable name for a machine, made safe to use as a key. */
+export const cleanWho = (raw: string): string => raw.replace(STRIP, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+
+/**
+ * The name this machine goes by on other people's islands. Made once and kept,
+ * so that coming back to an island you have visited is coming back rather than
+ * arriving.
+ */
+export function myWho(): string {
+  const KEY = 'wurm.who';
+  try {
+    const had = localStorage.getItem(KEY);
+    if (had) return cleanWho(had);
+    const made = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(KEY, made);
+    return made;
+  } catch {
+    // A browser that will not remember anything gets a new name every time,
+    // which means every visit is a first visit. Better than not connecting.
+    return `w${Math.random().toString(36).slice(2, 14)}`;
+  }
+}
 
 /** Something somebody typed, made safe to show to everyone else. */
 export const cleanText = (raw: string): string => raw.replace(STRIP, ' ').trim().slice(0, 240);

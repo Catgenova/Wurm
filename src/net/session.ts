@@ -3,7 +3,7 @@ import { packLand, packWorld, unpack } from '../game/save';
 import { ACTION_BY_ID, type Target } from '../game/actions';
 import type { Actor } from '../game/actor';
 import type { TileType } from '../world/tiles';
-import { cleanName, cleanText, encode, HOST_ID, MOVE_HZ, PROTOCOL, TIMEOUT, type FromClient, type FromHost, type Message, type PeerId, type PeerState, type Welcome } from './protocol';
+import { cleanName, cleanText, cleanWho, encode, myWho, HOST_ID, MOVE_HZ, PROTOCOL, TIMEOUT, type FromClient, type FromHost, type Message, type PeerId, type PeerState, type Welcome } from './protocol';
 import { Links, type Transport } from './transport';
 
 /**
@@ -53,14 +53,16 @@ interface Guest {
   id: PeerId;
   name: string;
   link: Transport;
-  /** Their body and their pack, on the host's machine, where the island is. */
-  actor: Actor;
+  /** Their body and their pack, on the host's machine, where the island is. Null until they say who they are. */
+  actor: Actor | null;
   /** Their body as they last reported it. */
   body: Omit<PeerState, 'id' | 'name'>;
   /** When we last heard anything at all from them. */
   heard: number;
   /** Whether they have said hello and been let in. */
   in: boolean;
+  /** Whether the island had met them before, for the sake of what is said out loud. */
+  known: boolean;
 }
 
 export class HostSession {
@@ -92,12 +94,9 @@ export class HostSession {
   /** Somebody has got as far as being connected. They are not in yet. */
   accept(link: Transport): PeerId {
     const id = this.nextId++;
-    // A body and a pack of their own from the moment they knock, so that
-    // anything the island does to them has somebody to do it to.
-    const actor = this.game.welcome(id, `Guest ${id}`, (text, kind) => link.send({ t: 'said', from: HOST_ID, name: this.island, text, kind }));
-    // Whatever the island puts in their hands, they are told about.
-    actor.packed = () => this.sendPack(id);
-    const guest: Guest = { id, name: `Guest ${id}`, link, actor, body: { ...bodyOf(this.game) }, heard: now(), in: false };
+    // No body yet: which body they get depends on who they turn out to be,
+    // and they have not said yet.
+    const guest: Guest = { id, name: `Guest ${id}`, link, actor: null, body: { ...bodyOf(this.game) }, heard: now(), in: false, known: false };
     this.guests.set(id, guest);
     this.links.add(id, link);
     link.onMessage((m) => this.heard(guest, m));
@@ -117,13 +116,26 @@ export class HostSession {
           return;
         }
         guest.name = cleanName(msg.name);
-        guest.actor.player.name = guest.name;
-        guest.body = { ...bodyOf(this.game), x: this.game.spawn.x + 0.5, y: this.game.spawn.y + 0.5 };
+        const who = cleanWho(msg.who ?? '');
+        if (!who) {
+          guest.link.send({ t: 'refused', why: 'Your build did not say who it is. It is too old for this island.', protocol: PROTOCOL });
+          this.links.drop(guest.id, 'no name of its own');
+          this.guests.delete(guest.id);
+          return;
+        }
+        guest.known = !!this.game.remembers(who);
+        guest.actor = this.game.welcome(guest.id, who, guest.name, (text, kind) => guest.link.send({ t: 'said', from: HOST_ID, name: this.island, text, kind }));
+        // Whatever the island puts in their hands, they are told about.
+        guest.actor.packed = () => this.sendPack(guest.id);
+        // Somebody the island knows starts where they left off; a stranger
+        // starts on the shore.
+        const p = guest.actor.player;
+        guest.body = { ...bodyOf(this.game), x: p.x, y: p.y, level: p.level };
         void this.welcome(guest);
         return;
       }
       case 'at': {
-        if (!guest.in || !sane(msg.body)) return;
+        if (!guest.in || !guest.actor || !sane(msg.body)) return;
         guest.body = msg.body;
         // Onto their real body, so that when the island reaches for them —
         // to see whether they are near enough to a tile to work it — it finds
@@ -149,18 +161,19 @@ export class HostSession {
         return;
       }
       case 'do': {
-        if (!guest.in) return;
+        if (!guest.in || !guest.actor) return;
+        const actor = guest.actor;
         const def = ACTION_BY_ID.get(msg.action);
         if (!def) {
-          guest.actor.hear(`There is no such thing as ${msg.action}.`, 'error');
+          actor.hear(`There is no such thing as ${msg.action}.`, 'error');
           return;
         }
         // Their work, with their arms. The very same `perform` the host's own
         // dig goes through — the only difference is who `g.player` is for the
         // length of it, which is the whole of what an actor is for.
-        this.game.as(guest.actor, () => {
+        this.game.as(actor, () => {
           if (!def.applies(msg.target, this.game)) {
-            guest.actor.hear(`You cannot ${def.label.toLowerCase()} that.`, 'error');
+            actor.hear(`You cannot ${def.label.toLowerCase()} that.`, 'error');
             return;
           }
           this.game.requestAction(def, msg.target, msg.times);
@@ -196,8 +209,9 @@ export class HostSession {
       peers: this.everyone(),
     });
     guest.in = true;
+    this.sendPack(guest.id);
     this.game.roster.saw({ id: guest.id, name: guest.name, ...guest.body });
-    this.announce(`${guest.name} comes ashore.`);
+    this.announce(guest.known ? `${guest.name} is back.` : `${guest.name} comes ashore.`);
     this.links.all({ t: 'peers', peers: this.everyone() });
     this.hooks.changed?.();
   }
@@ -207,6 +221,7 @@ export class HostSession {
     const guest = this.guests.get(id);
     if (!guest || guest.link.state !== 'open') return;
     const a = guest.actor;
+    if (!a) return;
     guest.link.send({
       t: 'pack',
       items: a.inventory.items,
@@ -243,14 +258,12 @@ export class HostSession {
     this.guests.delete(id);
     this.links.drop(id, why);
     this.game.roster.gone(id);
-    // What they were carrying is left where they stood rather than leaving the
-    // island with them: a guest who quits mid-haul should not take the ore.
-    const dropped = this.game.farewell(id);
+    // Their body and their pack go into the island's guest book, to be handed
+    // back the next time they knock.
+    const kept = this.game.farewell(id);
     if (guest.in) {
-      // Counted as a person would count them, so four dirt is four things and
-      // not one stack.
-      const things = dropped.reduce((n, it) => n + (it.count ?? 1), 0);
-      if (things) this.hooks.say(`${guest.name} left ${things} thing${things === 1 ? '' : 's'} on the ground.`, 'system');
+      const things = kept ? kept.items.reduce((n, it) => n + (it.count ?? 1), 0) : 0;
+      if (things) this.hooks.say(`${guest.name} takes ${things} thing${things === 1 ? '' : 's'} with them; the island keeps it for their return.`, 'system');
       this.announce(`${guest.name} has gone (${why}).`);
       this.links.all({ t: 'peers', peers: this.everyone() });
       this.hooks.changed?.();
@@ -318,13 +331,20 @@ export class ClientSession {
     private readonly hooks: SessionHooks,
     /** Called once, with the island, when the door opens — or with null when it does not. */
     private readonly arrived: (visit: Visit | null, why?: string) => void,
+    /**
+     * Who to knock as. Normally the one durable name this machine keeps, which
+     * is what makes an island recognise you tomorrow; given explicitly when
+     * one machine wants to be more than one person, which is how two visitors
+     * are stood up in a single tab and run against each other.
+     */
+    private readonly who: string = myWho(),
   ) {
     link.onMessage((m) => this.heard(m));
     link.onClose((why) => {
       this.hooks.say(`The link to the island is gone (${why}).`, 'error');
       this.visiting?.game.roster.clear();
     });
-    link.send({ t: 'hello', protocol: PROTOCOL, name: cleanName(name) });
+    link.send({ t: 'hello', protocol: PROTOCOL, name: cleanName(name), who: this.who });
   }
 
   get game(): Game | null {

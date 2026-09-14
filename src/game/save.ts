@@ -22,6 +22,7 @@ import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
 import type { Item } from './items';
 import { Game, type Deed } from './game';
+import type { GuestSave } from './actor';
 import type { Stats } from './player';
 
 const KEY = 'wurm-iso-save';
@@ -226,6 +227,15 @@ interface SaveData {
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   crate?: { x: number; y: number; items: Item[] } | null;
+  /**
+   * Everybody who has ever visited, and what they had when they left.
+   *
+   * A host's save is the island's memory, and its guests are part of the
+   * island. Without this, somebody who spent an evening here came back the
+   * next night to empty hands and no skills, because the only place their
+   * evening was written down was a map in the tab that had since been closed.
+   */
+  guests?: GuestSave[];
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -281,6 +291,7 @@ function meta(game: Game): SaveMeta {
     ticked: [...game.ticked],
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
+    guests: game.guestRecords(),
   };
 }
 
@@ -524,6 +535,7 @@ function finish(world: World, m: SaveMeta): Game {
     crops: m.crops,
     marks: m.marks,
     crate: m.crate ?? null,
+    guests: m.guests,
   });
   // Whatever the save had, the island is brought up to the wildlife it should
   // hold. Species no longer need seeding one at a time: what is let out of the
@@ -580,10 +592,11 @@ function finish(world: World, m: SaveMeta): Game {
  * one person has walked is theirs, and a newcomer should arrive to a dark map
  * and light it themselves.
  *
- * Whose player and whose pack are in the world half is a question this does
- * not answer yet. Today they are the host's, and a guest arrives wearing them;
- * the day a session keeps a body for each person, this is the one place that
- * has to change.
+ * The world half still carries the host's own body and pack, since it is the
+ * save's own metadata and that is what a save writes down. A guest does not
+ * keep them: the moment they say who they are, their real pack is sent after
+ * the welcome and lands on top. What does not go at all is the guest book —
+ * everybody else's belongings are nobody's business but the island's.
  */
 export async function packLand(game: Game): Promise<LandBlob> {
   const g = ground(game);
@@ -610,9 +623,18 @@ async function swell(s: string, zipped: boolean): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Everything about the island except the land itself and who has seen what. */
+/**
+ * Everything about the island except the land itself and who has seen what.
+ *
+ * The guest book stays behind. It is the host's record of other people's
+ * packs, it grows with every visitor the island ever has, and nobody arriving
+ * needs to turn up holding everyone else's belongings. What a guest is owed of
+ * it comes back to them alone, in their own pack, once they have said who they
+ * are.
+ */
 export function packWorld(game: Game): unknown {
-  return meta(game);
+  const { guests: _guests, ...rest } = meta(game);
+  return rest;
 }
 
 /**
@@ -638,8 +660,13 @@ export async function unpack(land: LandBlob, packed: unknown): Promise<Game | nu
     const heights = new Int16Array(heightBytes.buffer, heightBytes.byteOffset, (size + 1) * (size + 1));
     const world = new World(size, size, heights, tiles, data, dirt, rock);
     world.seed = m.seed;
+    // The papers as sent, with nothing of this machine's own laid over them:
+    // `patched` is the last-moment note a closing tab leaves about **its**
+    // world, and an island that arrived over a wire is not that world however
+    // well the two happen to match.
+    //
     // A guest arrives to a dark island and lights it by walking it.
-    return finish(world, patched(m));
+    return finish(world, m);
   } catch {
     return null;
   }

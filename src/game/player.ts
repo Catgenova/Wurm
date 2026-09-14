@@ -239,3 +239,91 @@ export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad
     },
   };
 }
+
+/**
+ * A body, written down.
+ *
+ * There was one of these and it lived in two halves: a long line in the save
+ * that read every field off the player, and a longer block in the game's
+ * constructor that put them all back. That was fine while there was one body
+ * on the island. There is more than one now — the person at the screen and
+ * everybody visiting — and two copies of a list of twenty fields is two places
+ * for a field to go missing from.
+ *
+ * So it is one shape and two functions, and the host's body and a guest's go
+ * through exactly the same pair. Whatever a body is, it is this, for everyone.
+ */
+export interface PlayerSave {
+  x: number;
+  y: number;
+  name: string;
+  stats: Stats;
+  level?: number;
+  equipped?: Record<string, number | null>;
+  rested?: number;
+  boons?: Boon[];
+  knacks?: Record<string, number>;
+  nutrition?: Record<Nutrient, number>;
+  /** What knacks were called before they were called knacks. */
+  affinities?: Record<string, number>;
+  titles?: string[];
+  title?: string | null;
+  wounds?: Wound[];
+  nextWound?: number;
+  favour?: number;
+  prayedAt?: number;
+  way?: PathId | null;
+  satAt?: number;
+  usedAt?: Record<string, number>;
+  belt?: Array<BeltPin | null>;
+}
+
+export function writePlayer(p: Player): PlayerSave {
+  return {
+    x: p.x,
+    y: p.y,
+    name: p.name,
+    stats: p.stats,
+    level: p.level,
+    equipped: p.equipped,
+    rested: p.rested,
+    boons: p.boons,
+    knacks: p.knacks,
+    nutrition: p.nutrition,
+    titles: p.titles,
+    title: p.title,
+    wounds: p.wounds,
+    nextWound: p.nextWound,
+    favour: p.favour,
+    prayedAt: p.prayedAt,
+    way: p.way,
+    satAt: p.satAt,
+    usedAt: p.usedAt,
+    belt: p.belt,
+  };
+}
+
+export function readPlayer(p: Player, saved: PlayerSave): void {
+  p.x = saved.x;
+  p.y = saved.y;
+  p.name = saved.name;
+  p.stats = { ...saved.stats };
+  p.level = saved.level ?? 0;
+  p.visualLevel = p.level;
+  if (saved.equipped) p.equipped = { ...p.equipped, ...saved.equipped };
+  p.rested = saved.rested ?? 0;
+  p.boons = saved.boons ?? [];
+  p.nutrition = { ...emptyNutrition(), ...(saved.nutrition ?? {}) };
+  // A save written before knacks were called knacks still says affinities.
+  p.knacks = saved.knacks ?? saved.affinities ?? {};
+  p.titles = saved.titles ?? [];
+  p.title = saved.title ?? null;
+  p.wounds = saved.wounds ?? [];
+  p.nextWound = saved.nextWound ?? 1;
+  p.favour = saved.favour ?? 0;
+  p.prayedAt = saved.prayedAt ?? -1e9;
+  p.way = saved.way ?? null;
+  p.satAt = saved.satAt ?? -1e9;
+  p.usedAt = saved.usedAt ?? {};
+  if (saved.belt) for (let i = 0; i < BELT_MAX; i += 1) p.belt[i] = saved.belt[i] ?? null;
+}

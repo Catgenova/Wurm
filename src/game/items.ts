@@ -523,17 +523,43 @@ export function itemName(item: Item): string {
   return name;
 }
 
+/**
+ * Where item numbers come from: one well per island, not one per pack.
+ *
+ * Every item ever made here gets a number, and two items wearing the same
+ * number are the same item as far as anything that looks one up is concerned
+ * — a crate, a trade, a save. While each pack minted its own numbers, the
+ * second guest through the door began counting from wherever the first had
+ * begun, and their shovel and his spoon were the same item.
+ *
+ * So the counter is a thing that can be held rather than a number that can be
+ * copied, and everybody on the island holds the same one.
+ */
+export class UidWell {
+  constructor(public next = 1) {}
+}
+
 export class Inventory {
   items: Item[] = [];
   onChange?: () => void;
-  /** Next item uid; shared with items lying on the ground so uids never collide. */
-  nextUid = 1;
+  /** The island's item numbers, shared with every other pack and with the ground. */
+  readonly well: UidWell;
 
-  constructor(items?: Item[], nextUid?: number) {
+  constructor(items?: Item[], nextUid?: number | UidWell) {
+    this.well = nextUid instanceof UidWell ? nextUid : new UidWell(nextUid ?? 1);
     if (items) {
       this.items = items;
-      this.nextUid = Math.max(nextUid ?? 1, items.reduce((m, it) => Math.max(m, it.uid), 0) + 1);
+      this.nextUid = Math.max(this.nextUid, items.reduce((m, it) => Math.max(m, it.uid), 0) + 1);
     }
+  }
+
+  /** Next item uid; shared with items lying on the ground so uids never collide. */
+  get nextUid(): number {
+    return this.well.next;
+  }
+
+  set nextUid(v: number) {
+    this.well.next = v;
   }
 
   add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean } = {}): Item {

@@ -15,12 +15,12 @@ import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, f
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
-import { Actor, type ActiveAction } from './actor';
+import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
-import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { BASE_SPEED, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { ALL_GOALS } from './journal';
@@ -37,7 +37,7 @@ import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { FIRE_REACH, lanternReach, OVEN_REACH, type LightSource } from './light';
-import { emptyNutrition, helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
+import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
@@ -120,6 +120,8 @@ export interface GameInit {
   ground?: Record<string, Item[]>;
   skills?: Record<string, number>;
   time?: number;
+  /** The island's guest book: everybody who has visited, and what they had. */
+  guests?: GuestSave[];
 }
 
 /** Skills picked up by doing something else, which do not narrate themselves. */
@@ -190,6 +192,17 @@ export class Game {
   skills: Skills;
   /** Everyone with a body on this island, by who they are on the wire. */
   readonly actors = new Map<PeerId, Actor>();
+  /**
+   * The guest book: everyone who has ever set foot here, and what they had
+   * when they left.
+   *
+   * Filed by a durable name the visitor keeps on their own machine, not by
+   * the number they are given when they connect — that is handed out fresh
+   * every session and would make everyone a stranger every time. Somebody who
+   * comes back finds their pack where they left it, their skills where they
+   * earned them, and themselves standing where they logged out.
+   */
+  readonly guestbook = new Map<string, GuestSave>();
   /** Whoever is playing on this machine. Never changes for the life of a game. */
   readonly local: Actor;
   /** Whoever `player`, `inventory` and `skills` are pointing at this instant. */
@@ -362,6 +375,33 @@ export class Game {
 
   private decayClock = 0;
 
+  /**
+   * The guest book as it stands, with everybody currently on the island
+   * written into it as they are this instant.
+   *
+   * A record is normally filed when somebody leaves, which is the moment their
+   * pack stops changing. But a host who saves and then closes the tab never
+   * sees anybody leave, and the evening four guests just spent filling their
+   * packs would go with the tab. So a save asks, and everybody still standing
+   * here is written down mid-sentence.
+   */
+  guestRecords(): GuestSave[] {
+    const out = new Map(this.guestbook);
+    for (const actor of this.actors.values()) if (actor !== this.local) out.set(actor.who, this.guestSave(actor));
+    return [...out.values()];
+  }
+
+  /** Everything of a visitor's that outlives their visit. */
+  private guestSave(actor: Actor): GuestSave {
+    return {
+      who: actor.who,
+      body: writePlayer(actor.player),
+      items: actor.inventory.items,
+      skills: actor.skills.toJSON(),
+      seen: Date.now(),
+    };
+  }
+
   static create(seed: number, size = WORLD_SIZE): Game {
     const gen = generateWorld(seed, size);
     const game = new Game({ seed, world: gen.world, spawn: gen.spawn });
@@ -379,28 +419,7 @@ export class Game {
     this.world = init.world;
     this.spawn = init.spawn;
     this.player = new Player(init.player?.x ?? init.spawn.x + 0.5, init.player?.y ?? init.spawn.y + 0.5);
-    if (init.player) {
-      this.player.name = init.player.name;
-      this.player.stats = { ...init.player.stats };
-      this.player.level = init.player.level ?? 0;
-      this.player.visualLevel = this.player.level;
-      if (init.player.equipped) this.player.equipped = { ...this.player.equipped, ...init.player.equipped };
-      this.player.rested = init.player.rested ?? 0;
-      this.player.boons = init.player.boons ?? [];
-      this.player.nutrition = { ...emptyNutrition(), ...(init.player.nutrition ?? {}) };
-      // A save written before knacks were called knacks still says affinities.
-      this.player.knacks = init.player.knacks ?? init.player.affinities ?? {};
-      this.player.titles = init.player.titles ?? [];
-      this.player.title = init.player.title ?? null;
-      this.player.wounds = init.player.wounds ?? [];
-      this.player.nextWound = init.player.nextWound ?? 1;
-      this.player.favour = init.player.favour ?? 0;
-      this.player.prayedAt = init.player.prayedAt ?? -1e9;
-      this.player.way = init.player.way ?? null;
-      this.player.satAt = init.player.satAt ?? -1e9;
-      this.player.usedAt = init.player.usedAt ?? {};
-      if (init.player.belt) for (let i = 0; i < BELT_MAX; i += 1) this.player.belt[i] = init.player.belt[i] ?? null;
-    }
+    if (init.player) readPlayer(this.player, init.player);
     for (const m of init.marks ?? []) {
       this.marks.push(m);
       if (m.id >= this.nextMarkId) this.nextMarkId = m.id + 1;
@@ -414,9 +433,17 @@ export class Game {
       }
     }
     this.skills = new Skills(init.skills);
+    for (const g of init.guests ?? []) {
+      if (!g || typeof g.who !== 'string') continue;
+      this.guestbook.set(g.who, g);
+      // A visitor's numbers are the island's numbers. Nothing made while they
+      // are away may be given a number one of their things is already wearing,
+      // or the two become one the evening they walk back in.
+      for (const it of g.items ?? []) if (it.uid >= this.inventory.nextUid) this.inventory.nextUid = it.uid + 1;
+    }
     // The one person a single-player island has. On a shared one they are the
     // host, which is the same thing said differently.
-    this.local = new Actor(HOST_ID, this.player, this.inventory, this.skills);
+    this.local = new Actor(HOST_ID, 'local', this.player, this.inventory, this.skills);
     this.local.hear = (text, kind) => this.write(text, kind);
     this.local.packed = () => this.events.emit('inventory');
     this.acting = this.local;
@@ -1531,27 +1558,54 @@ export class Game {
    * Somebody has arrived and wants a body. They get an empty one: a guest
    * wearing a copy of the host's pack would be a guest handed the host's tools.
    */
-  welcome(id: PeerId, name: string, hear: Actor['hear']): Actor {
+  welcome(id: PeerId, who: string, name: string, hear: Actor['hear']): Actor {
     const had = this.actors.get(id);
     if (had) return had;
-    const actor = Actor.arriving(id, name, this.spawn.x + 0.5, this.spawn.y + 0.5, this.inventory.nextUid);
+    const actor = Actor.arriving(id, who, name, this.spawn.x + 0.5, this.spawn.y + 0.5, this.inventory.well);
+    const kept = this.guestbook.get(who);
+    if (kept) {
+      // Somebody who has been here before picks up exactly where they left
+      // off: the same pack, the same skills, the same spot on the ground.
+      readPlayer(actor.player, kept.body);
+      actor.player.name = name;
+      actor.inventory.items = kept.items.map((it) => ({ ...it }));
+      for (const [skill, v] of Object.entries(kept.skills)) actor.skills.values.set(skill, v);
+      // Their things came back from the book with the numbers they left
+      // wearing; the island counts on from above them.
+      for (const it of actor.inventory.items) if (it.uid >= actor.inventory.nextUid) actor.inventory.nextUid = it.uid + 1;
+    }
     actor.hear = hear;
-    // One run of uids across the whole island, so nobody's spoon is somebody
-    // else's shovel when the two packs meet in a crate.
     actor.inventory.onChange = () => actor.packed();
     this.actors.set(id, actor);
     return actor;
   }
 
-  /** Somebody has gone. Whatever they were carrying goes on the ground where they stood. */
-  farewell(id: PeerId): Item[] {
+  /** Whether this island has seen somebody before, and what it remembers of them. */
+  remembers(who: string): GuestSave | undefined {
+    return this.guestbook.get(who);
+  }
+
+  /**
+   * Somebody has gone. Their body and their pack go into the guest book
+   * rather than onto the ground.
+   *
+   * They used to be tipped out where they stood, on the reasoning that a guest
+   * who quits mid-haul should not take the island's ore with them. That was
+   * the right call for a visitor the island would never see again; it is the
+   * wrong one now that it will. A pack somebody spent an evening filling is
+   * theirs, and it waits for them.
+   */
+  farewell(id: PeerId): GuestSave | null {
     const actor = this.actors.get(id);
-    if (!actor || actor === this.local) return [];
+    if (!actor || actor === this.local) return null;
     this.actors.delete(id);
-    const dropped = [...actor.inventory.items];
-    for (const it of dropped) this.dropOnGround(Math.floor(actor.player.x), Math.floor(actor.player.y), it);
-    actor.inventory.items.length = 0;
-    return dropped;
+    // Whatever they were in the middle of is not: an action is a moment, and
+    // this one is over.
+    actor.action = null;
+    actor.queue.length = 0;
+    const kept = this.guestSave(actor);
+    this.guestbook.set(actor.who, kept);
+    return kept;
   }
 
   update(dt: number): void {

@@ -1,7 +1,7 @@
 import type { ActionDef, Target } from './actions';
-import { Inventory, type Item } from './items';
+import { Inventory, type Item, type UidWell } from './items';
 import type { LogKind } from './events';
-import { Player } from './player';
+import { Player, type PlayerSave } from './player';
 import { Skills } from './skills';
 import type { PeerId } from '../net/protocol';
 
@@ -75,6 +75,13 @@ export class Actor {
   constructor(
     /** Who they are on the wire. The host is 0; single player is 0 as well. */
     readonly id: PeerId,
+    /**
+     * Who they are across sessions: a name their own machine keeps and hands
+     * over on arrival. The wire id is handed out fresh every time somebody
+     * connects, so an island that filed its visitors by it would greet
+     * everybody as a stranger every evening.
+     */
+    readonly who: string,
     readonly player: Player,
     readonly inventory: Inventory,
     readonly skills: Skills,
@@ -92,22 +99,23 @@ export class Actor {
    * arriving wearing a copy of the host's pack — hands out the host's tools to
    * everyone who knocks.
    */
-  static arriving(id: PeerId, name: string, x: number, y: number, uidFrom: number): Actor {
+  static arriving(id: PeerId, who: string, name: string, x: number, y: number, uids: UidWell): Actor {
     const player = new Player(x, y);
     player.name = name;
-    const inventory = new Inventory([], uidFrom);
-    return new Actor(id, player, inventory, new Skills());
+    // The island's well of item numbers, not a copy of where it had got to:
+    // two guests counting from the same number hand out the same item twice.
+    const inventory = new Inventory([], uids);
+    return new Actor(id, who, player, inventory, new Skills());
   }
+}
 
-  /** Everything of theirs that is worth keeping, for a host that wants to remember guests. */
-  pack(): { id: PeerId; name: string; x: number; y: number; items: Item[]; skills: Record<string, number> } {
-    return {
-      id: this.id,
-      name: this.player.name,
-      x: this.player.x,
-      y: this.player.y,
-      items: this.inventory.items,
-      skills: Object.fromEntries(this.skills.values),
-    };
-  }
+/** Everything of a visitor's that outlives their visit, as the island writes it down. */
+export interface GuestSave {
+  /** The durable name they keep on their own machine. */
+  who: string;
+  body: PlayerSave;
+  items: Item[];
+  skills: Record<string, number>;
+  /** When they were last here, so a host can tell an old hand from a stranger. */
+  seen: number;
 }
