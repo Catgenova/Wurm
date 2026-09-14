@@ -260,7 +260,9 @@ export class Hud {
     const h = this.game.world.heightAt(p.x, p.y);
     const deed = this.game.deed && this.game.onDeed(p.tileX, p.tileY) ? `  ·  ${this.game.deed.name}` : '';
     this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}`;
-    this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles · ${renderer.camera.zoom.toFixed(2)}×`;
+    const mobs = this.game.creatures.ticked;
+    const watched = this.game.settings.fog ? ` · ${mobs.thought}/${mobs.near + mobs.far + mobs.asleep} mobs` : '';
+    this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`;
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
     // What is in your hands and how much armour is on you.

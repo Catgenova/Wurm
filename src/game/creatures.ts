@@ -531,6 +531,8 @@ export interface Creature {
   searchAt: number;
   /** When it last said it had nowhere to put a load down. */
   noRoomAt: number;
+  /** Time banked up while nobody was watching, spent on the next think. */
+  owed: number;
   /** When the player last called it over for an action; it drops everything and comes. */
   calledAt: number;
   /** Next time an unruly one gets a chance to turn on its keeper. */
@@ -584,6 +586,17 @@ const CALL_DISTANCE = 0.9;
 
 export const WILD_TARGET = 32;
 const RESPAWN_EVERY = 45;
+/**
+ * How closely creatures are followed, by tiles from the player. Anything being
+ * looked at is followed whatever the distance; these are for the rest.
+ */
+const NEAR_RANGE = 26;
+const FAR_RANGE = 70;
+/** How often something out of sight thinks, in seconds. */
+const FAR_STEP = 0.25;
+const ASLEEP_STEP = 2;
+/** The most time one think may cover, so nothing strides through a wall. */
+const MAX_STEP_TIME = 0.34;
 /** Seconds a wild creature spends grazing. */
 const FORAGE_TIME = 2.5;
 /** Seconds between chances for an unruly companion to turn on its keeper. */
@@ -603,6 +616,13 @@ export class Creatures {
   readonly list = new Map<number, Creature>();
   nextId = 1;
   private byTile = new Map<string, Creature[]>();
+  /**
+   * How the creatures stand: how many are being followed closely, how many are
+   * out of sight, how many are left to themselves, and how many of the lot
+   * actually thought on the last frame. The last number is the one that says
+   * whether any of this is earning its keep.
+   */
+  ticked = { near: 0, far: 0, asleep: 0, thought: 0 };
   private respawnClock = 0;
 
   get(id: number): Creature | undefined {
@@ -651,6 +671,7 @@ export class Creatures {
       busyUntil: 0,
       searchAt: 0,
       noRoomAt: 0,
+      owed: 0,
       calledAt: -1e9,
       nipAt: 0,
       workX: -1,
@@ -732,6 +753,16 @@ export class Creatures {
     return placed;
   }
 
+  /**
+   * Everything alive, once a frame — but not everything at the same rate.
+   *
+   * What is being watched moves every frame, because you would see it stutter.
+   * What is out of sight but close enough to matter thinks a few times a
+   * second. What is far away and unwatched keeps its body going — it heals, it
+   * grows its fleece, it gets hungry — and thinks once in a while, which is
+   * all anybody could tell from where they are standing. That is what lets a
+   * map grow: the cost follows what is being looked at rather than what exists.
+   */
   update(dt: number, game: Game): void {
     this.byTile.clear();
     this.respawnClock += dt;
@@ -739,33 +770,89 @@ export class Creatures {
       this.respawnClock = 0;
       if (this.wildCount() < WILD_TARGET) this.spawnWild(game, 1, 25);
     }
+    this.ticked = { near: 0, far: 0, asleep: 0, thought: 0 };
+    const px = game.player.x;
+    const py = game.player.y;
     for (const c of this.list.values()) {
       if (c.mode === 'stored') continue;
-      c.cooldown = Math.max(0, c.cooldown - dt);
-      c.moving = false;
-      const def = this.species(c);
-      if (c.health < def.health && game.time - c.attackedAt > 6) c.health = Math.min(def.health, c.health + dt * (c.mode === 'wild' ? 0.25 : 0.6));
-      if (def.fleece && c.fleece < 1) c.fleece = Math.min(1, c.fleece + dt * def.fleece);
+      const tier = this.tierOf(game, c, px, py);
+      this.ticked[tier]++;
+      let step = dt;
+      let elapsed = dt;
+      if (tier !== 'near') {
+        // Out of sight: bank the time and think in longer, rarer steps. Until
+        // its turn comes round nothing at all is done to it, which is what
+        // keeps the cost of a crowded map off every frame.
+        c.owed += dt;
+        const every = tier === 'far' ? FAR_STEP : ASLEEP_STEP;
+        if (c.owed < every) {
+          // Something left to itself is not worth filing under a tile either:
+          // nothing is going to look it up out there.
+          if (tier === 'far') this.place(c);
+          continue;
+        }
+        elapsed = c.owed;
+        // Never hand a creature so much time that it walks through a wall.
+        step = Math.min(c.owed, MAX_STEP_TIME);
+        c.owed = 0;
+      }
+      this.ticked.thought++;
+      const def = this.body(game, c, elapsed);
+
       if (def.unruly && c.mode !== 'wild') this.maybeNip(game, c, def);
       if (game.time >= c.busyUntil) {
         switch (c.mode) {
           case 'wild':
-            this.updateWild(c, dt, game);
+            this.updateWild(c, step, game);
             break;
           case 'active':
-            this.updateActive(c, dt, game);
+            this.updateActive(c, step, game);
             break;
           case 'deed':
-            this.updateWorker(c, dt, game);
+            this.updateWorker(c, step, game);
             break;
         }
       }
-      if (c.moving) c.walkPhase += dt * 12;
-      const key = `${Math.floor(c.x)},${Math.floor(c.y)}`;
-      const arr = this.byTile.get(key);
-      if (arr) arr.push(c);
-      else this.byTile.set(key, [c]);
+      if (c.moving) c.walkPhase += step * 12;
+      if (tier !== 'asleep') this.place(c);
     }
+  }
+
+  /**
+   * The part of a creature that goes on whether it is thinking or not: wounds
+   * closing, fleece growing, a cooldown running out. It is handed all the time
+   * banked since its last turn, so a creature left alone for a minute comes
+   * back as rested as one that was watched the whole while.
+   */
+  private body(game: Game, c: Creature, elapsed: number): SpeciesDef {
+    const def = this.species(c);
+    c.cooldown = Math.max(0, c.cooldown - elapsed);
+    c.moving = false;
+    if (c.health < def.health && game.time - c.attackedAt > 6) c.health = Math.min(def.health, c.health + elapsed * (c.mode === 'wild' ? 0.25 : 0.6));
+    if (def.fleece && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece);
+    return def;
+  }
+
+  /** How closely a creature is being followed, and so how often it thinks. */
+  private tierOf(game: Game, c: Creature, px: number, py: number): 'near' | 'far' | 'asleep' {
+    const d = Math.max(Math.abs(c.x - px), Math.abs(c.y - py));
+    if (d <= NEAR_RANGE) return 'near';
+    // Outside the box that anything can see into, there is no need to ask.
+    const b = game.vision.bounds;
+    const maybe = !game.settings.fog || (!!b && c.x >= b.x0 && c.x <= b.x1 + 1 && c.y >= b.y0 && c.y <= b.y1 + 1);
+    if (maybe && game.vision.isWatched(c.x, c.y)) return 'near';
+    // Your own creatures are never left entirely to themselves: a deed worker
+    // out of sight is still meant to be working.
+    if (c.mode !== 'wild') return 'far';
+    return d <= FAR_RANGE ? 'far' : 'asleep';
+  }
+
+  /** File a creature under the tile it is standing on, for quick lookups. */
+  private place(c: Creature): void {
+    const key = `${Math.floor(c.x)},${Math.floor(c.y)}`;
+    const arr = this.byTile.get(key);
+    if (arr) arr.push(c);
+    else this.byTile.set(key, [c]);
   }
 
   /**

@@ -17,6 +17,7 @@ import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './it
 import { groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { Skills, SKILL_DEFS } from './skills';
+import { Vision } from './vision';
 
 export interface ActiveAction {
   def: ActionDef;
@@ -144,8 +145,12 @@ export class Game {
     viewLevel: null as number | null,
     /** Open the tile window when a tile is clicked. */
     tileWindow: true,
+    /** Hide the land nobody has looked at, and cool what is out of sight. */
+    fog: true,
   };
   readonly buildings: Buildings;
+  /** What can be seen from where you are, and what is only remembered. */
+  readonly vision: Vision;
   readonly creatures: Creatures;
   deed: Deed | null = null;
   /** Placed crates by id; each sits on one subtile. */
@@ -246,7 +251,12 @@ export class Game {
       this.anvils.set(a.id, a);
       if (a.id >= this.nextAnvilId) this.nextAnvilId = a.id + 1;
     }
-    this.world.onChange((x, y) => this.events.emit('world', x, y));
+    this.vision = new Vision(this);
+    this.world.onChange((x, y) => {
+      // Felling a tree or raising a wall changes what can be seen past it.
+      this.vision.invalidate();
+      this.events.emit('world', x, y);
+    });
   }
 
   giveStarterKit(): void {
@@ -612,6 +622,7 @@ export class Game {
 
   update(dt: number): void {
     this.time += dt;
+    this.vision.update();
     const p = this.player;
     const moved = p.update(dt, this.world, this.stepRule);
     const s = p.stats;

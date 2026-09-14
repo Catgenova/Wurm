@@ -382,6 +382,25 @@ rebuilds and commits the result.
   use: you must be within reach of the container, and it must accept what you
   are giving it — a bulk bin refuses tools, a barrel refuses solids, a full
   crate is full — and it says which when it will not go.
+- **Fog of war, in three states.** Land nobody has looked at is not drawn at
+  all and cannot be clicked; land somebody is looking at is drawn in full;
+  land that has been walked but is not being watched is drawn cold and
+  without detail, showing what was last seen rather than what is there — fell
+  a wood, walk away, and the map keeps the trees until you return. Sight is a
+  viewshed: fifteen tiles on the flat, further from a hill, better than half
+  of it gone at night, a ridge hiding the hollow behind it and a wood about
+  three trees deep. Lit fires, your own wildermon and your settlement all see
+  for themselves. The minimap shows the same three states, it all survives a
+  save, and a setting turns it off.
+- **Simulation follows what is watched.** The fog is also the engine's answer
+  to "who is being looked at", which is what lets the creature count grow.
+  Anything in sight or close by is simulated every frame; anything out of
+  sight but nearby thinks four times a second; anything far away and unwatched
+  keeps its body going — wounds close, fleece grows — and thinks once every
+  couple of seconds, banking the time so nothing is lost. Your own creatures
+  are never left to themselves. Measured with 3,000 creatures on the island,
+  a frame of creature work drops from 1.17 ms to 0.50 ms with 225 of the 3,000
+  thinking; the HUD shows the count as "thought/alive".
 - **The tile window.** Clicking a tile chooses it: it is outlined in the
   world and the Tile window (T) fills with everything that could be done to
   it — the same entries the right-click menu shows, built from the same list,

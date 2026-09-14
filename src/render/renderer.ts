@@ -24,6 +24,7 @@ import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, type PlacedFurniture } from '../game/furniture';
+import { UNSEEN, VISIBLE } from '../game/vision';
 import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
@@ -87,6 +88,8 @@ interface HitRect {
 }
 
 const VOID_COLOR = '#12395f';
+/** The cold laid over ground that is remembered rather than watched. */
+const FOG_COLOR = 'rgba(16, 24, 46, 0.58)';
 const GRID_COLOR = 'rgba(0,0,0,0.16)';
 const DEED_COLOR = 'rgba(96, 230, 110, 0.9)';
 const DEED_SHADOW = 'rgba(0, 40, 0, 0.6)';
@@ -140,6 +143,9 @@ export class Renderer {
   selected: { x: number; y: number } | null = null;
   fps = 0;
   private colors: (string | null)[];
+  /** Tile colours as the map remembers them, for ground nobody is watching. */
+  private memColors: (string | null)[];
+  private lastVision = -1;
   private pts = new Float64Array(8);
   private cornerBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
@@ -160,6 +166,7 @@ export class Renderer {
     private readonly game: Game,
   ) {
     this.colors = new Array<string | null>(game.world.w * game.world.h).fill(null);
+    this.memColors = new Array<string | null>(game.world.w * game.world.h).fill(null);
     game.world.onChange((x, y) => this.invalidate(x, y));
     canvas.onResize(() => this.camera.setViewport(canvas.width, canvas.height));
     this.camera.setViewport(canvas.width, canvas.height);
@@ -173,15 +180,17 @@ export class Renderer {
     const w = this.game.world;
     for (let yy = y - 1; yy <= y + 1; yy++) {
       for (let xx = x - 1; xx <= x + 1; xx++) {
-        if (w.inBounds(xx, yy)) this.colors[yy * w.w + xx] = null;
+        if (w.inBounds(xx, yy)) {
+          this.colors[yy * w.w + xx] = null;
+          this.memColors[yy * w.w + xx] = null;
+        }
       }
     }
   }
 
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
-  private computeColor(x: number, y: number): string {
+  private computeColor(x: number, y: number, type: TileType, data: number): string {
     const w = this.game.world;
-    const type = w.getTile(x, y);
     const def = TILE_DEFS[type];
     const c = w.corners(x, y, this.cornerBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
@@ -191,9 +200,9 @@ export class Renderer {
     let shade = 0.48 + 0.6 * Math.max(0, dot);
     const base =
       type === TileType.Rock
-        ? ROCK_VARIANTS[rockVariant(w.getData(x, y))].color
+        ? ROCK_VARIANTS[rockVariant(data)].color
         : type === TileType.Slabs
-          ? SLAB_VARIANTS[slabVariant(w.getData(x, y))].color
+          ? SLAB_VARIANTS[slabVariant(data)].color
           : def.color;
     let r = base[0];
     let g = base[1];
@@ -231,6 +240,20 @@ export class Renderer {
     const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / HALF_H) - 2;
     const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / HALF_H) + 1;
     const grid = this.game.settings.grid && zoom >= 0.7;
+    const vision = this.game.vision;
+    const fogged = this.game.settings.fog;
+    const fogPath = new Path2D();
+    // A tile last seen a moment ago has a new memory; throw away the colour
+    // that was worked out from the old one.
+    if (vision.revision !== this.lastVision) {
+      this.lastVision = vision.revision;
+      const box = vision.dirty;
+      if (box) {
+        for (let y = Math.max(0, box.y0); y <= Math.min(world.h - 1, box.y1); y++) {
+          for (let x = Math.max(0, box.x0); x <= Math.min(world.w - 1, box.x1); x++) this.memColors[y * world.w + x] = null;
+        }
+      } else this.memColors.fill(null);
+    }
     const grassDetail = zoom >= 0.75;
     const player = this.game.player;
     const rot = cam.rotation;
@@ -280,10 +303,28 @@ export class Renderer {
         this.drawnTiles++;
 
         const idx = y * world.w + x;
-        let color = this.colors[idx];
+        // Three states: land nobody has seen is not drawn at all, land in sight
+        // is drawn as it is, and land only remembered is drawn as it was.
+        const fog = vision.state(x, y);
+        if (fog === UNSEEN) {
+          // Still lay the shape down, flat and empty. A hill drawn behind a
+          // hole in the map would otherwise hang its face out over the dark.
+          ctx.beginPath();
+          ctx.moveTo(pts[0], pts[1]);
+          ctx.lineTo(pts[2], pts[3]);
+          ctx.lineTo(pts[4], pts[5]);
+          ctx.lineTo(pts[6], pts[7]);
+          ctx.closePath();
+          ctx.fillStyle = VOID_COLOR;
+          ctx.fill();
+          continue;
+        }
+        const lit = fog === VISIBLE;
+        let color = lit ? this.colors[idx] : this.memColors[idx];
         if (!color) {
-          color = this.computeColor(x, y);
-          this.colors[idx] = color;
+          color = this.computeColor(x, y, world.viewTile(x, y, lit), world.viewData(x, y, lit));
+          if (lit) this.colors[idx] = color;
+          else this.memColors[idx] = color;
         }
         ctx.beginPath();
         ctx.moveTo(pts[0], pts[1]);
@@ -298,7 +339,24 @@ export class Renderer {
         ctx.stroke();
         if (wet) this.drawWater(u, v, x, y, c);
 
-        const t = world.getTile(x, y);
+        const t = world.viewTile(x, y, lit);
+        if (!lit) {
+          // Remembered ground keeps its shape and its trees and nothing else:
+          // no creatures, no piles, no detail, and a cold wash over the lot.
+          if (t === TileType.Tree || t === TileType.Bush) {
+            const data = world.viewData(x, y, false);
+            const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : bushSprite(bushSpecies(data));
+            const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+            this.ents.push({ kind: t === TileType.Tree ? 'tree' : 'bush', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
+          }
+          if (this.game.buildings.list.size) this.drawStructures(x, y, rot, d > playerDepth);
+          fogPath.moveTo(pts[0], pts[1]);
+          fogPath.lineTo(pts[2], pts[3]);
+          fogPath.lineTo(pts[4], pts[5]);
+          fogPath.lineTo(pts[6], pts[7]);
+          fogPath.closePath();
+          continue;
+        }
         if (t === TileType.Grass && grassDetail && !wet) {
           // Tufts show what the tile still has to give: berries to forage, flowers to botanize.
           const state = (this.game.isForaged(x, y, 'forage') ? 0 : 1) | (this.game.isForaged(x, y, 'botanize') ? 0 : 2);
@@ -400,6 +458,12 @@ export class Renderer {
         });
       }
       if (this.ents.length) this.drawEntities(ctx, zoom);
+    }
+
+    // One pass for all of it, so a remembered wood goes cold with its ground.
+    if (fogged) {
+      ctx.fillStyle = FOG_COLOR;
+      ctx.fill(fogPath);
     }
 
     this.drawOverlays(ctx, zoom);
@@ -1265,7 +1329,8 @@ export class Renderer {
         const x = tb[0];
         const y = tb[1];
         if (!world.inBounds(x, y)) continue;
-        if (this.pointInTile(x, y, sx, sy)) return this.makePick(x, y, sx, sy);
+        // Ground nobody has seen is not there to be clicked on.
+        if (this.pointInTile(x, y, sx, sy)) return this.game.vision.state(x, y) === UNSEEN ? null : this.makePick(x, y, sx, sy);
       }
     }
     return null;

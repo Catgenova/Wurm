@@ -25,6 +25,10 @@ interface SaveData {
   data: string;
   dirt?: string;
   rock?: string;
+  /** The fog of war: what has been seen, and what it looked like. */
+  seen?: string;
+  mem?: string;
+  memData?: string;
   spawn: { x: number; y: number };
   player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null> };
   inventory: Item[];
@@ -32,7 +36,7 @@ interface SaveData {
   ground?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
-  settings: { grid: boolean; rotation?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean };
+  settings: { grid: boolean; rotation?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean; fog?: boolean };
   savedAt: number;
   deed?: Deed | null;
   buildings?: BuildingsJSON;
@@ -74,6 +78,9 @@ export function saveGame(game: Game): boolean {
     data: toBase64(w.data),
     dirt: toBase64(w.dirt),
     rock: toBase64(w.rock),
+    seen: toBase64(w.seen),
+    mem: toBase64(w.mem),
+    memData: toBase64(w.memData),
     spawn: game.spawn,
     player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped },
     inventory: game.inventory.items,
@@ -121,6 +128,12 @@ export function loadGame(): Game | null {
     if (tiles.length !== size * size || extra.length !== size * size) return null;
     const dirtBytes = data.dirt ? fromBase64(data.dirt) : null;
     const rockBytes = data.rock ? fromBase64(data.rock) : null;
+    const sized = (b64: string | undefined): Uint8Array | undefined => {
+      if (!b64) return undefined;
+      const bytes = fromBase64(b64);
+      return bytes.length === size * size ? bytes : undefined;
+    };
+    const seenBytes = sized(data.seen);
     const world = new World(
       size,
       size,
@@ -129,7 +142,12 @@ export function loadGame(): Game | null {
       extra,
       dirtBytes && dirtBytes.length === (size + 1) * (size + 1) ? dirtBytes : undefined,
       rockBytes && rockBytes.length === size * size ? rockBytes : undefined,
+      seenBytes,
+      sized(data.mem),
+      sized(data.memData),
     );
+    // An island explored before there was any fog stays explored.
+    if (!seenBytes) world.rememberAll();
     world.seed = data.seed;
     // Worlds saved before rock had a depth get soil worked out from their tiles.
     if (!dirtBytes || dirtBytes.length !== (size + 1) * (size + 1)) world.deriveDirt();
@@ -183,6 +201,7 @@ export function loadGame(): Game | null {
     game.settings.deedBorder = data.settings?.deedBorder ?? true;
     game.settings.cutaway = data.settings?.cutaway ?? false;
     game.settings.tileWindow = data.settings?.tileWindow ?? true;
+    game.settings.fog = data.settings?.fog ?? true;
     game.logMsg('Your journey continues where you left off.', 'system');
     // Older saves predate building: hand out the tools they never got.
     const granted: string[] = [];

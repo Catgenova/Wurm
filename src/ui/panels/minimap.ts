@@ -1,6 +1,7 @@
 import type { Game } from '../../game/game';
 import type { Renderer } from '../../render/renderer';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, rockVariant } from '../../world/tiles';
+import { UNSEEN, VISIBLE } from '../../game/vision';
 import type { UIWindow } from '../windows';
 
 /** A small overview map, re-painted per tile as the world changes. */
@@ -11,6 +12,7 @@ export class MinimapPanel {
   private view: HTMLCanvasElement;
   private viewCtx: CanvasRenderingContext2D;
   private dirty = true;
+  private lastVision = -1;
 
   constructor(
     win: UIWindow,
@@ -47,10 +49,23 @@ export class MinimapPanel {
 
   private paint(x: number, y: number): void {
     const w = this.game.world;
-    const t = w.getTile(x, y);
+    const i = (y * w.w + x) * 4;
+    const d = this.image.data;
+    // Three states here as in the world: nothing for land nobody has seen, the
+    // land as it is where somebody is looking, and what it was where not.
+    const fog = this.game.vision.state(x, y);
+    if (fog === UNSEEN) {
+      d[i] = 16;
+      d[i + 1] = 20;
+      d[i + 2] = 30;
+      d[i + 3] = 255;
+      return;
+    }
+    const lit = fog === VISIBLE;
+    const t = w.viewTile(x, y, lit);
     const def = TILE_DEFS[t];
     const h = w.centerHeight(x, y);
-    const base = t === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.getData(x, y))].color : def.color;
+    const base = t === TileType.Rock ? ROCK_VARIANTS[rockVariant(w.viewData(x, y, lit))].color : def.color;
     let r = base[0];
     let g = base[1];
     let b = base[2];
@@ -75,16 +90,34 @@ export class MinimapPanel {
         b *= 0.8;
       }
     }
-    const i = (y * w.w + x) * 4;
-    const d = this.image.data;
+    // Ground out of sight keeps its shape but loses its light.
+    if (!lit) {
+      r = r * 0.42 + 14;
+      g = g * 0.42 + 18;
+      b = b * 0.46 + 30;
+    }
     d[i] = Math.min(255, r);
     d[i + 1] = Math.min(255, g);
     d[i + 2] = Math.min(255, b);
     d[i + 3] = 255;
   }
 
+  /** Repaint the box the last look around changed, rather than the island. */
+  private followVision(): void {
+    const v = this.game.vision;
+    if (v.revision === this.lastVision) return;
+    const w = this.game.world;
+    const box = this.lastVision < 0 || !v.dirty ? { x0: 0, y0: 0, x1: w.w - 1, y1: w.h - 1 } : v.dirty;
+    this.lastVision = v.revision;
+    for (let y = Math.max(0, box.y0); y <= Math.min(w.h - 1, box.y1); y++) {
+      for (let x = Math.max(0, box.x0); x <= Math.min(w.w - 1, box.x1); x++) this.paint(x, y);
+    }
+    this.dirty = true;
+  }
+
   update(): void {
     if (this.view.closest('.win')?.hasAttribute('hidden')) return;
+    this.followVision();
     if (this.dirty) {
       this.baseCtx.putImageData(this.image, 0, 0);
       this.dirty = false;

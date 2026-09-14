@@ -33,6 +33,15 @@ export class SettingsPanel {
       (v) => (game.settings.cutaway = v),
     );
     add(
+      'Fog of war',
+      'Hide the land nobody has laid eyes on, and show ground that is out of sight as it was when you last saw it. Turning it off shows the whole island and simulates every creature at once.',
+      () => game.settings.fog,
+      (v) => {
+        game.settings.fog = v;
+        game.vision.invalidate();
+      },
+    );
+    add(
       'Open the tile window on a click',
       'Clicking a tile shows everything you could do to it in the Tile window (T). Untick to keep to the right-click menu.',
       () => game.settings.tileWindow,

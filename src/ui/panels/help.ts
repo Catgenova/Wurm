@@ -46,6 +46,26 @@ export function buildHelp(win: UIWindow): void {
     <b>Swimming</b> makes deep water less of a wade and costs less wind, and is earned by being out of
     your depth. Neither announces every scrap it picks up; both say so as they pass each whole point,
     and the Skills window (<kbd>K</kbd>) shows what each one is worth right now.</p>
+    <h3>What you can see</h3>
+    <p>The island starts unknown and is uncovered by walking it. Ground comes in three states, and the
+    map shows all three differently.</p>
+    <table>
+      <tr><td><b>Unknown</b></td><td>Never laid eyes on. Nothing is drawn: no ground, no trees, and it
+      cannot be clicked or acted on.</td></tr>
+      <tr><td><b>In sight</b></td><td>Somebody is looking at it now. Drawn as it is, in full, with
+      everything standing on it.</td></tr>
+      <tr><td><b>Remembered</b></td><td>Walked, but not watched. Drawn cold and without detail, and
+      <b>as it was when you last saw it</b> &mdash; fell a wood, walk away, and the map keeps the trees
+      until you go back and look.</td></tr>
+    </table>
+    <p>How far you can see depends on where you stand and what hour it is. Fifteen tiles on the flat,
+    further from a hill &mdash; height is worth real distance &mdash; and the dark takes better than half
+    of it, which is what a <b>lit fire</b> is for: anything alight shows its own ground however black the
+    night. A ridge hides the hollow behind it, and a wood is about three trees deep to the eye. Your
+    settlement is watched while you hold it, and your own wildermon are eyes of their own wherever they
+    are working.</p>
+    <p>All of that is in Settings under <b>Fog of war</b>, if you would rather see the whole island at
+    once.</p>
     <h3>Windows</h3>
     <table>
       <tr><td><kbd>I</kbd></td><td>Inventory</td></tr>
@@ -63,6 +83,8 @@ export function buildHelp(win: UIWindow): void {
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
+    <p>The <b>map</b> (<kbd>M</kbd>) shows the same three states: dark where you have not been, dim
+    where you have, and bright where somebody is looking now.</p>
     <p>Clicking a tile <b>chooses</b> it: it is outlined in the world and the <b>Tile</b> window fills
     with everything you could do to it &mdash; the same list the right-click menu shows, because it is
     built from the same list. Anything with a reason it cannot be done yet is greyed out with the reason

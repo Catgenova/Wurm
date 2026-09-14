@@ -18,13 +18,29 @@ export class World {
   readonly data: Uint8Array;
   /** The rock under every tile, settled when the world was made. */
   readonly rock: Uint8Array;
+  /** 1 where the land has been laid eyes on at least once. */
+  readonly seen: Uint8Array;
+  /** The tile as it was when last seen, which is what a remembered map shows. */
+  readonly mem: Uint8Array;
+  readonly memData: Uint8Array;
   /** The seed this world was made from, so rock kinds stay consistent. */
   seed = 0;
   minHeight = 0;
   maxHeight = 0;
   private listeners: WorldListener[] = [];
 
-  constructor(w: number, h: number, heights?: Int16Array, tiles?: Uint8Array, data?: Uint8Array, dirt?: Uint8Array, rock?: Uint8Array) {
+  constructor(
+    w: number,
+    h: number,
+    heights?: Int16Array,
+    tiles?: Uint8Array,
+    data?: Uint8Array,
+    dirt?: Uint8Array,
+    rock?: Uint8Array,
+    seen?: Uint8Array,
+    mem?: Uint8Array,
+    memData?: Uint8Array,
+  ) {
     this.w = w;
     this.h = h;
     this.cw = w + 1;
@@ -33,6 +49,9 @@ export class World {
     this.data = data ?? new Uint8Array(w * h);
     this.dirt = dirt ?? new Uint8Array((w + 1) * (h + 1));
     this.rock = rock ?? new Uint8Array(w * h);
+    this.seen = seen ?? new Uint8Array(w * h);
+    this.mem = mem ?? new Uint8Array(w * h);
+    this.memData = memData ?? new Uint8Array(w * h);
     this.recomputeRange();
   }
 
@@ -146,6 +165,43 @@ export class World {
         if (this.inBounds(x, y)) this.notify(x, y);
       }
     }
+  }
+
+  /** Whether this ground has ever been looked at. */
+  isKnown(x: number, y: number): boolean {
+    return this.seen[y * this.w + x] === 1;
+  }
+
+  /**
+   * Write down what a tile looks like now, because somebody is looking at it.
+   * What is remembered is what was last seen, not what is there: fell a wood
+   * and walk away and the map keeps the trees until you go back.
+   */
+  remember(x: number, y: number): boolean {
+    const i = y * this.w + x;
+    const t = this.tiles[i];
+    const d = this.data[i];
+    if (this.seen[i] === 1 && this.mem[i] === t && this.memData[i] === d) return false;
+    this.seen[i] = 1;
+    this.mem[i] = t;
+    this.memData[i] = d;
+    return true;
+  }
+
+  /** Mark the whole map as looked at, for a world that predates any fog. */
+  rememberAll(): void {
+    this.seen.fill(1);
+    this.mem.set(this.tiles);
+    this.memData.set(this.data);
+  }
+
+  /** The tile as a given viewer has it: what is there, or what was last seen. */
+  viewTile(x: number, y: number, live: boolean): TileType {
+    return (live ? this.tiles[y * this.w + x] : this.mem[y * this.w + x]) as TileType;
+  }
+
+  viewData(x: number, y: number, live: boolean): number {
+    return live ? this.data[y * this.w + x] : this.memData[y * this.w + x];
   }
 
   getTile(x: number, y: number): TileType {
