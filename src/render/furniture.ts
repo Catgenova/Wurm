@@ -62,6 +62,8 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   bulk_bin: 24,
   trash_crate: 12,
   cart: 15,
+  large_cart: 26,
+  wagon: 34,
   small_barrel: 16,
   large_barrel: 38,
 };
@@ -407,6 +409,37 @@ const DRAW: Record<string, Draw> = {
       ctx.fill();
     }
   },
+  large_cart: (ctx, W, D, h) => {
+    const w = WOODS.oak;
+    const deck = h * 0.44;
+    // Far wheel first, then the body over it, then the near one in front.
+    wheel(ctx, W * 0.66, -deck * 0.5 + D * 0.33, 3.6, deck * 0.95);
+    // Shafts running forward off the near corner, where the yokes buckle on.
+    box(ctx, -W * 0.72, D * 0.36, W * 0.5, D * 0.05, 1.4, WOODS.pale, deck * 0.8);
+    box(ctx, -W * 0.72, D * 0.2, W * 0.5, D * 0.05, 1.4, WOODS.pale, deck * 0.8);
+    // Bed, sideboards and the seat over the axle.
+    box(ctx, 0, 0, W * 0.7, D * 0.7, 2.2, w, deck);
+    box(ctx, 0, 0, W * 0.66, D * 0.66, h - deck - 6, WOODS.dark, deck + 2.2);
+    box(ctx, 0, 0, W * 0.7, D * 0.7, 1.6, WOODS.pale, h - 6);
+    box(ctx, W * 0.16, D * 0.08, W * 0.26, D * 0.26, 4, w, h - 4);
+    wheel(ctx, -W * 0.66, -deck * 0.5 - D * 0.33, 3.6, deck * 0.95);
+  },
+  wagon: (ctx, W, D, h) => {
+    const deck = h * 0.36;
+    // Two wheels on the far side go under the bed; two on the near side sit
+    // proud of it, which is what makes it read as four rather than two.
+    wheel(ctx, W * 0.62, -deck * 0.5, 3.8, deck);
+    wheel(ctx, 0, -deck * 0.5 - D * 0.62, 3.8, deck);
+    // A long low bed, banded, with boards up the sides.
+    box(ctx, 0, 0, W * 0.8, D * 0.8, 2.6, WOODS.oak, deck);
+    box(ctx, 0, 0, W * 0.76, D * 0.76, h - deck - 8, WOODS.dark, deck + 2.6);
+    box(ctx, 0, 0, W * 0.8, D * 0.8, 1.8, WOODS.pale, h - 8);
+    // Driver's box at the head of it, and the pole the four yokes hang off.
+    box(ctx, -W * 0.2, D * 0.3, W * 0.26, D * 0.2, 6, WOODS.oak, h - 6);
+    box(ctx, -W * 0.9, D * 0.3, W * 0.5, D * 0.04, 1.6, WOODS.pale, deck * 0.75);
+    wheel(ctx, -W * 0.62, -deck * 0.5, 3.8, deck);
+    wheel(ctx, 0, -deck * 0.5 + D * 0.62, 3.8, deck);
+  },
   spindle: (ctx, W, D, h) => {
     const w = WOODS.pale;
     legs(ctx, W, D, h * 0.5, w, 0.6);
@@ -503,6 +536,30 @@ const DRAW: Record<string, Draw> = {
     }
   },
 };
+
+/** A spoked wheel on its edge, seen from the side. */
+function wheel(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number): void {
+  ctx.fillStyle = WOODS.dark.left;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = IRON.top;
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+  ctx.strokeStyle = WOODS.pale.top;
+  ctx.lineWidth = 0.6;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(x - Math.cos(a) * rx * 0.9, y - Math.sin(a) * ry * 0.9);
+    ctx.lineTo(x + Math.cos(a) * rx * 0.9, y + Math.sin(a) * ry * 0.9);
+    ctx.stroke();
+  }
+  ctx.fillStyle = IRON.top;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx * 0.35, ry * 0.22, 0, 0, TAU);
+  ctx.fill();
+}
 
 /** Draw one piece with its floor contact at (sx, sy). */
 export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false): void {

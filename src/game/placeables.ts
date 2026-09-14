@@ -7,10 +7,13 @@ import {
   furnitureDef,
   furnitureName,
   holdsLiquid,
+  isVehicle,
   isWell,
   liquidCapacity,
   litresIn,
   LIQUID_NAME,
+  teamOf,
+  vehicleOf,
   VESSELS,
   type LiquidKind,
   type PlacedFurniture,
@@ -236,6 +239,77 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       f.hitched = false;
       g.logMsg(`You set the ${furnitureName(f).toLowerCase()} down and let go of the shafts.`, 'event');
       g.events.emit('world', f.x, f.y);
+    },
+  },
+  // ---- Vehicles: a team in front and a seat on top. ----
+  {
+    id: 'board_vehicle',
+    label: 'Take the reins',
+    verb: 'climbing aboard',
+    stamina: 0.01,
+    baseTime: 1.5,
+    applies: (t, g) => {
+      const f = pieceOf(g, t);
+      return !!f && isVehicle(f) && !f.driven;
+    },
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      if (!nearPiece(g, f)) return 'Stand beside it first.';
+      const v = vehicleOf(f);
+      const team = teamOf(f).length;
+      if (v && team < v.needs) {
+        return team === 0
+          ? `Nothing is in the yokes. ${furnitureName(f)} needs ${v.needs} to move.`
+          : `Only ${team} of ${v.yokes} yokes are filled. It needs ${v.needs}.`;
+      }
+      if (g.driving()) return 'You are already driving something.';
+      return null;
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return;
+      f.driven = true;
+      const team = g.team(f).map((c) => c.name);
+      g.logMsg(`You climb onto the ${furnitureName(f).toLowerCase()} and take the reins. ${team.join(' and ')} lean into the traces.`, 'event');
+      g.events.emit('world', f.x, f.y);
+    },
+  },
+  {
+    id: 'leave_vehicle',
+    label: 'Get down',
+    verb: 'getting down',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => !!pieceOf(g, t)?.driven,
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return;
+      g.leaveVehicle(f);
+      g.logMsg(`You climb down off the ${furnitureName(f).toLowerCase()}.`, 'event');
+    },
+  },
+  {
+    id: 'unhitch_team',
+    label: 'Unhitch the team',
+    verb: 'unhitching the team',
+    stamina: 0.01,
+    baseTime: 2,
+    applies: (t, g) => {
+      const f = pieceOf(g, t);
+      return !!f && teamOf(f).length > 0;
+    },
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      return nearPiece(g, f) ? null : 'Stand beside it first.';
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return;
+      const n = g.unhitchAll(f);
+      g.logMsg(`You let ${n === 1 ? 'it' : 'them'} out of the traces of the ${furnitureName(f).toLowerCase()}.`, 'event');
     },
   },
   // ---- Wells and barrels. ----

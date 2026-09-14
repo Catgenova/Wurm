@@ -182,6 +182,21 @@ rebuilds and commits the result.
   in it thirty times faster than open ground, and Put away never chooses it —
   throwing something out has to be asked for. A small cart holds 100 things
   and follows you about once you take hold of the shafts, until you let go.
+- **Large carts and wagons, and something in the traces.** Two vehicles that
+  are driven rather than pulled by hand, built to a wheelwright's bill: large
+  wheels (planks, shafts, a metal ribbon and nails), big axles cast in a mould
+  on an anvil, ribbons run four to a lump out of a gang mould, and a stitched
+  yoke to every hitch. A **large cart** — 20 planks, 6 timbers, 2 wheels, an
+  axle, 8 ribbons, 2 yokes, 40 nails — holds **1000 things of any weight** and
+  moves behind one wildermon, faster behind two. A **wagon** — 40 planks, 12
+  timbers, 4 wheels, 2 axles, 16 ribbons, 4 yokes, 80 nails — holds **10000**
+  and will not stir until all four yokes are filled. Hitch a tamed wildermon
+  from its own menu, climb on and take the reins: the team decides the pace and
+  the load does not come into it, so a fine pair outruns you at a walk while
+  four slow ones shift ten thousand bricks at their own speed. A hungry animal
+  drags its feet. Wheels keep to open ground — no fords, no stairs, nothing
+  steeper than a horse would take — and nothing in the traces can be sent to
+  the token, reassigned or released until it is unbuckled.
 - **Water away from the shore.** A well is laid in brick and mortar and then
   draws its own water, up to 50 litres, at a speed its quality decides — a
   poor shaft trickles, a fine one keeps up with a settlement. Buckets and

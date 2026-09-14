@@ -33,6 +33,8 @@ export interface FurnitureDef {
   trash?: number;
   /** Can be taken hold of and pulled along behind you. */
   cart?: boolean;
+  /** A wheeled thing a team is hitched to and a driver sits on. */
+  vehicle?: VehicleDef;
   /** Litres of one liquid it holds, and nothing else. */
   liquid?: number;
   /** Draws its own water, up to this many litres. */
@@ -41,6 +43,24 @@ export interface FurnitureDef {
   hearth?: boolean;
   /** Can be slept in; the number is how much of a rest it is. */
   bed?: number;
+}
+
+/**
+ * What it takes to put a vehicle on the road.
+ *
+ * A large cart rolls behind one wildermon and rolls better behind two; a wagon
+ * has four yokes and will not stir until every one of them is filled. Nothing
+ * about the load decides it — a full wagon is no slower than an empty one —
+ * but the team does: a fast animal gets there sooner, and more of them pull
+ * better than fewer.
+ */
+export interface VehicleDef {
+  /** Places a wildermon can be hitched. */
+  yokes: number;
+  /** Yokes that have to be filled before it will move at all. */
+  needs: number;
+  /** How high off the ground the seat is in pixels, for drawing the driver. */
+  seat: number;
 }
 
 const piece = (
@@ -91,6 +111,11 @@ export const FURNITURE: FurnitureDef[] = [
   piece('bulk_bin', 'Bulk storage bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a hundred bricks go into.', 400, { bulk: true }),
   piece('trash_crate', 'Trash crate', 1, 1, [['plank', 3], ['nail', 6]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
   piece('cart', 'Small cart', 2, 1, [['plank', 8], ['shaft', 4], ['nail', 16]], 18, 14, 'You build a small cart on two wheels, light enough for one person to pull.', 100, { cart: true }),
+  // The two that are driven rather than carried. A wheelwright's bill: wheels
+  // on cast axles, a body banded with metal ribbon, and a yoke a wildermon is
+  // hitched into.
+  piece('large_cart', 'Large cart', 3, 2, [['plank', 20], ['timber', 6], ['large_wheel', 2], ['big_axle', 1], ['ribbon', 8], ['yoke', 2], ['nail', 40]], 30, 40, 'You build a large cart: box body, seat over the axle and a yoke to each side.', 1000, { skill: 'carpentry', vehicle: { yokes: 2, needs: 1, seat: 15 } }),
+  piece('wagon', 'Wagon', 4, 3, [['plank', 40], ['timber', 12], ['large_wheel', 4], ['big_axle', 2], ['ribbon', 16], ['yoke', 4], ['nail', 80]], 45, 75, 'You build a wagon: four wheels under a long bed, a driver\'s box at the front and four yokes ahead of it.', 10000, { skill: 'carpentry', vehicle: { yokes: 4, needs: 4, seat: 19 } }),
   // Barrels hold liquid and nothing else, in three sizes.
   piece('small_barrel', 'Small barrel', 1, 1, [['plank', 3], ['shaft', 1], ['nail', 6]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
   piece('large_barrel', 'Large barrel', 2, 2, [['plank', 14], ['shaft', 4], ['nail', 26]], 26, 20, 'You raise a great barrel, as tall as you are and twice as wide.', undefined, { liquid: 250 }),
@@ -123,6 +148,10 @@ export interface PlacedFurniture {
   liquid?: LiquidKind;
   /** Set while the cart is being pulled along behind you. */
   hitched?: boolean;
+  /** Wildermon hitched to it, in yoke order; only vehicles have any. */
+  team?: number[];
+  /** Set while the player is up on the seat with the reins in hand. */
+  driven?: boolean;
 }
 
 /** The two liquids worth keeping a barrel for. */
@@ -157,6 +186,12 @@ export function furnitureAnchor(kind: string, sx: number, sy: number): [number, 
   return [Math.max(0, Math.min(SUBTILES - def.w, sx)), Math.max(0, Math.min(SUBTILES - def.h, sy))];
 }
 
+/** The vehicle a piece is, if it is one. */
+export const vehicleOf = (f: { kind: string }): VehicleDef | undefined => furnitureDef(f.kind).vehicle;
+export const isVehicle = (f: { kind: string }): boolean => !!furnitureDef(f.kind).vehicle;
+/** Wildermon hitched to it, which is an empty list for everything else. */
+export const teamOf = (f: PlacedFurniture): number[] => f.team ?? [];
+
 /** Litres a vessel holds: a barrel by its build, a well by how deep it was sunk. */
 export const liquidCapacity = (f: PlacedFurniture): number => {
   const def = furnitureDef(f.kind);
@@ -190,7 +225,10 @@ export function furnitureState(f: PlacedFurniture): string {
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
   const cap = furnitureCapacity(f);
-  return cap ? `${ql} · ${furnitureUnits(f)} / ${cap} things` : ql;
+  const held = cap ? `${ql} · ${furnitureUnits(f)} / ${cap} things` : ql;
+  const v = def.vehicle;
+  if (!v) return held;
+  return `${held} · ${teamOf(f).length} of ${v.yokes} yoked${f.driven ? ' · you have the reins' : ''}`;
 }
 
 type FurnitureTarget = Extract<Target, { kind: 'furniture' }>;
@@ -238,11 +276,13 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (f.lit) return 'Not while it is alight.';
       if (litresIn(f) > 0) return 'Empty it out first.';
       if (f.hitched) return 'Let go of it first.';
+      if (teamOf(f).length) return 'Unhitch the team first.';
+      if (f.driven) return 'Get down off it first.';
       return null;
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
-      if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched) return;
+      if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length) return;
       g.removeFurniture(f.id);
       g.inventory.add(f.kind, { ql: f.ql });
       g.logMsg(`You pick the ${furnitureName(f).toLowerCase()} up.`, 'event');

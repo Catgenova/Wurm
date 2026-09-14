@@ -544,6 +544,11 @@ export interface Creature {
   pouch: Item | null;
   /** What the worker walked out to do: a farm job, or the hearth a stoker is feeding. */
   job: FarmJob | Hearth | null;
+  /**
+   * The vehicle whose traces it is in, if any. Worked out from the vehicles
+   * themselves when a world is read back, so it is never saved twice.
+   */
+  hitchedTo: number | null;
 }
 
 export type FarmJob = 'sow' | 'tend' | 'harvest';
@@ -704,6 +709,7 @@ export class Creatures {
       workY: -1,
       pouch: null,
       job: null,
+      hitchedTo: null,
     };
   }
 
@@ -830,6 +836,12 @@ export class Creatures {
       }
       this.ticked.thought++;
       const def = this.body(game, c, elapsed);
+      // A beast in the traces goes where the vehicle takes it. It heals and
+      // grows its fleece like any other; it just does no thinking of its own.
+      if (c.hitchedTo !== null) {
+        this.place(c);
+        continue;
+      }
 
       if (def.unruly && c.mode !== 'wild') this.maybeNip(game, c, def);
       if (game.time >= c.busyUntil) {
@@ -1943,6 +1955,8 @@ export class Creatures {
 
   /** Remove a creature and leave its corpse lying on the tile, ready for butchering. */
   kill(game: Game, t: Creature, killer: Creature | 'player' | null): void {
+    // A beast that dies in the traces leaves an empty yoke behind it.
+    if (t.hitchedTo !== null) game.unhitch(t);
     this.list.delete(t.id);
     for (const o of this.list.values()) if (o.enemy === t.id) o.enemy = null;
     const def = this.species(t);
@@ -1957,6 +1971,7 @@ export class Creatures {
   describe(c: Creature): string {
     const job = this.species(c).gathers;
     const verb = job ? GATHER_VERB[job] : 'busy';
+    if (c.hitchedTo !== null) return 'in the traces';
     switch (c.mode) {
       case 'active':
         return `your companion · ${STANCE_NAMES[c.stance].toLowerCase()}`;

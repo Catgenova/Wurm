@@ -23,7 +23,7 @@ import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
-import { furnitureCentre, type PlacedFurniture } from '../game/furniture';
+import { furnitureCentre, furnitureDef, type PlacedFurniture } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { cropDef } from '../game/farming';
@@ -69,6 +69,13 @@ interface Entity {
   kiln?: PlacedKiln;
   piece?: PlacedFurniture;
   anvil?: PlacedAnvil;
+  /**
+   * Pixels to draw above where it sorts. A driver sits on the cart, so the
+   * figure belongs above it on screen while still sorting as though it stood
+   * on the same ground — lift the sort key instead and the cart is drawn last,
+   * over the top of its own driver.
+   */
+  lift?: number;
 }
 
 interface HitRect {
@@ -448,13 +455,24 @@ export class Renderer {
 
       if (d === playerDepth) {
         const ph = Math.max(world.heightAt(player.x, player.y), -4) + player.visualLevel * WALL_HEIGHT;
+        // A driver is drawn on the seat, which is a lift in screen pixels
+        // rather than in world height: the cart is under them, not the ground.
+        const drivenBy = this.game.driving();
+        // A driver sorts with the vehicle rather than with their own feet, a
+        // hair behind it, so the figure is drawn onto the seat and not under
+        // the box it is sitting on.
+        // Sat on the box, the driver goes where the box goes rather than where
+        // their own feet are, and sorts a hair behind it so it is drawn first.
+        const [vx, vy] = drivenBy ? furnitureCentre(drivenBy) : [player.x, player.y];
+        const sy = drivenBy ? cam.worldToScreenY(vx, vy, world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
         this.ents.push({
           kind: 'player',
           x: player.tileX,
           y: player.tileY,
-          sx: cam.worldToScreenX(player.x, player.y),
-          sy: cam.worldToScreenY(player.x, player.y, ph),
+          sx: cam.worldToScreenX(vx, vy),
+          sy,
           spr: null,
+          lift: this.driverSeat() * zoom,
         });
       }
       if (this.ents.length) this.drawEntities(ctx, zoom);
@@ -541,22 +559,32 @@ export class Renderer {
     }
   }
 
+  /**
+   * How high off the ground the player is sitting: the deck of whatever they
+   * are driving, or nothing at all when they are on their own two feet.
+   */
+  private driverSeat(): number {
+    const f = this.game.driving();
+    return f ? furnitureDef(f.kind).vehicle?.seat ?? 0 : 0;
+  }
+
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
-    if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx);
+    if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx || (a.lift ?? 0) - (b.lift ?? 0));
     const player = this.game.player;
     const cam = this.camera;
     const screenDx = cam.rotateX(player.dirX, player.dirY) - cam.rotateY(player.dirX, player.dirY);
     if (Math.abs(screenDx) > 0.05) this.playerFacing = screenDx > 0 ? 1 : -1;
     for (const ent of ents) {
       if (ent.kind === 'player') {
-        drawPlayer(ctx, ent.sx, ent.sy, zoom, {
+        drawPlayer(ctx, ent.sx, ent.sy - (ent.lift ?? 0), zoom, {
           phase: player.moving ? player.walkPhase : this.time * 6,
           moving: player.moving,
           facing: this.playerFacing,
           swimming: player.swimming,
           working: this.game.action?.state === 'performing',
+          driving: (ent.lift ?? 0) > 0,
         });
         continue;
       }

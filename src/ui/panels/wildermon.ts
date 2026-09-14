@@ -106,6 +106,7 @@ export class WildermonPanel {
     const info = document.createElement('div');
     info.className = 'pal-info';
     const parts: string[] = [];
+    if (c.hitchedTo !== null) parts.push('In the traces');
     if (c.mode === 'active') parts.push(`Stance: ${STANCE_NAMES[c.stance]}`);
     if (c.mode === 'deed') {
       const verb = def.gathers ? GATHER_VERB[def.gathers] : 'working';

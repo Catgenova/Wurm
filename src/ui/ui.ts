@@ -652,7 +652,7 @@ export class UI {
       }
       if (f.lit) entries.push({ label: 'Cook', children: this.cookEntries() });
     }
-    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'pick_up_furniture']) {
+    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'leave_vehicle', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
       const reason = def.check?.(ft, g) ?? null;
@@ -833,6 +833,8 @@ export class UI {
         });
       } else push(item('feed'));
     }
+    push(item('hitch_creature'));
+    push(item('unhitch_creature'));
     push(item('assign_deed'));
     push(item('take_creature'));
     push(item('store_creature'));

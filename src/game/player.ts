@@ -16,7 +16,7 @@ export const MAX_STEP = 32;
 export const SWIM_DEPTH = 4;
 /** Share of walking speed kept in deep water before any swimming skill. */
 export const SWIM_SPEED = 0.42;
-const BASE_SPEED = 2.4; // tiles per second
+export const BASE_SPEED = 2.4; // tiles per second
 const ARRIVE = 0.06;
 
 export class Player {
@@ -49,6 +49,12 @@ export class Player {
   swimSpeed = SWIM_SPEED;
   /** Steepness of the last step taken between tiles, for the climbing skill. */
   lastClimb = 0;
+  /**
+   * What the legs are worth against the usual walking pace. One on foot; a
+   * team's pace when there is a vehicle under you, which is how a wagon full
+   * of stone still gets home before dark.
+   */
+  speedMul = 1;
 
   constructor(x: number, y: number) {
     this.x = x;
@@ -117,7 +123,7 @@ export class Player {
     }
 
     const tileDef = TILE_DEFS[world.getTile(this.tileX, this.tileY)];
-    let speed = BASE_SPEED * tileDef.speed;
+    let speed = BASE_SPEED * tileDef.speed * this.speedMul;
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;

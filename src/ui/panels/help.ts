@@ -238,6 +238,32 @@ export function buildHelp(win: UIWindow): void {
     <p>A <b>small cart</b> holds 100 things and, once you <b>take hold of it</b>, follows you wherever
     you go until you <b>let go</b>. Load it at the mine and walk home. Only one cart at a time, and it
     will not follow you into water or up anything it cannot roll over.</p>
+    <h3>Large carts and wagons</h3>
+    <p>A small cart is a barrow you pull yourself. The two that follow are <b>driven</b>: a wildermon
+    goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the
+    wheels are concerned.</p>
+    <p>Both are <b>rough carpentry</b> rather than fine, and both are built out of parts:</p>
+    <ul>
+      <li><b>Large wheel</b> &mdash; 4 planks, 6 shafts, a metal ribbon and 12 nails, with a mallet.</li>
+      <li><b>Big axle</b> &mdash; cast in an <b>axle mould</b> on an anvil, three lumps to one.</li>
+      <li><b>Metal ribbon</b> &mdash; a <b>ribbon mould</b> runs one lump out as four.</li>
+      <li><b>Yoke</b> &mdash; a shaft, two leathers and four nails, stitched with an awl. One per hitch.</li>
+    </ul>
+    <p>A <b>large cart</b> takes 20 planks, 6 timbers, 2 large wheels, a big axle, 8 ribbons, 2 yokes
+    and 40 nails. It holds <b>1000 things of any weight</b> and has two yokes: one wildermon will move
+    it, two move it faster.</p>
+    <p>A <b>wagon</b> takes 40 planks, 12 timbers, 4 large wheels, 2 big axles, 16 ribbons, 4 yokes and
+    80 nails. It holds <b>10000 things</b> and will not stir until <b>all four yokes</b> have a
+    wildermon in them.</p>
+    <p>Set one down, stand beside it and <b>hitch</b> a tamed wildermon from its menu &mdash; one you
+    have with you, a deed worker, or one fetched straight out of the token if you are standing on your
+    own deed. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
+    else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
+    drags its feet, so feed the team. A Seavic pair will outrun you at a walk; four Quarra will not,
+    but they will shift ten thousand bricks.</p>
+    <p>Wheels keep to open ground: no fords, no stairs and nothing steeper than a horse would take. You
+    cannot pick a vehicle up with anything on it or anything in the yokes, and a beast in the traces
+    cannot be sent to the token or released until you unbuckle it.</p>
     <h3>Water: the well and the barrels</h3>
     <p>Until now water meant walking to the shore. A <b>well</b> is a mason's job &mdash; twelve stone
     bricks, mortar, shafts and nails &mdash; and once it is sunk it <b>draws its own water</b>, a little

@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import { creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
+import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { itemDef, itemName } from './items';
 import { hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 
@@ -28,6 +29,15 @@ export const baitHint = (c: Creature): string => SPECIES[c.species].baitHint;
 
 function nearPlayer(g: Game, c: Creature): boolean {
   return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 1.9;
+}
+
+/**
+ * The vehicle this one would be hitched to: the nearest with a yoke free,
+ * looked for where it stands, or where the player stands when it is being
+ * fetched out of the token.
+ */
+function vehicleFor(g: Game, c: Creature) {
+  return c.mode === 'stored' ? g.vehicleNear(g.player.x, g.player.y, 3) : g.vehicleNear(c.x, c.y, 5);
 }
 
 /** Bare hands: what you fight with when there is nothing in them. */
@@ -206,7 +216,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && (c.mode === 'active' || c.mode === 'stored');
+      return !!c && c.hitchedTo === null && (c.mode === 'active' || c.mode === 'stored');
     },
     check: (t, g) => {
       if (!g.deed) return 'You have no settlement to assign it to.';
@@ -243,7 +253,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && (c.mode === 'deed' || c.mode === 'stored');
+      return !!c && c.hitchedTo === null && (c.mode === 'deed' || c.mode === 'stored');
     },
     check: (_t, g) => (g.creatures.active() && !g.deed ? 'Nowhere to keep your current companion.' : null),
     perform: (t, g) => {
@@ -274,7 +284,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && (c.mode === 'active' || c.mode === 'deed');
+      return !!c && c.hitchedTo === null && (c.mode === 'active' || c.mode === 'deed');
     },
     check: (_t, g) => (g.deed ? null : 'You have no settlement token to keep it at.'),
     perform: (t, g) => {
@@ -415,6 +425,55 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.logMsg(`It answers to ${c.name} now.`, 'info');
     },
   },
+  // ---- The traces: a wildermon put to a cart or a wagon. ----
+  {
+    id: 'hitch_creature',
+    label: 'Hitch to the traces',
+    verb: 'hitching it up',
+    stamina: 0.02,
+    baseTime: 2.5,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && c.mode !== 'wild' && c.hitchedTo === null && !!vehicleFor(g, c);
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      const f = vehicleFor(g, c);
+      if (!f) return 'There is no cart or wagon here with an empty yoke.';
+      const [cx, cy] = furnitureCentre(f);
+      if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return `Stand by the ${furnitureName(f).toLowerCase()}.`;
+      if (c.mode !== 'stored' && Math.hypot(c.x - g.player.x, c.y - g.player.y) > 4) return `${c.name} is too far off. Call it over first.`;
+      if (c.hunger < 0.15) return `${c.name} is too hungry to pull anything. Feed it first.`;
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      const f = vehicleFor(g, c);
+      if (!f || !g.hitch(c, f)) return;
+      const v = vehicleOf(f);
+      const filled = (f.team ?? []).length;
+      const short = v && filled < v.needs ? ` It needs ${v.needs - filled} more before it will move.` : '';
+      g.logMsg(`You back ${c.name} into a yoke of the ${furnitureName(f).toLowerCase()}. ${filled} of ${v?.yokes ?? 0} filled.${short}`, 'event');
+    },
+  },
+  {
+    id: 'unhitch_creature',
+    label: 'Take out of the traces',
+    verb: 'unhitching it',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => creatureOf(g, t)?.hitchedTo !== null && creatureOf(g, t) !== undefined,
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      const f = g.vehicleOfCreature(c);
+      g.unhitch(c);
+      g.logMsg(`You unbuckle ${c.name} from the ${f ? furnitureName(f).toLowerCase() : 'traces'}.`, 'event');
+    },
+  },
   {
     id: 'release_creature',
     label: 'Release',
@@ -424,7 +483,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.mode !== 'wild';
+      return !!c && c.mode !== 'wild' && c.hitchedTo === null;
     },
     perform: (t, g) => {
       const c = creatureOf(g, t);

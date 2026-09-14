@@ -36,6 +36,9 @@ export const anvilName = (a: PlacedAnvil): string => `${METAL_BY_ID.get(a.metal)
 type AnvilTarget = Extract<Target, { kind: 'anvil' }>;
 const anvilOf = (g: Game, t: Target): PlacedAnvil | undefined => (t.kind === 'anvil' ? g.anvils.get((t as AnvilTarget).id) : undefined);
 
+/** A name said of more than one, without doubling an s that is already there. */
+const plural = (name: string, n: number): string => (n > 1 && !name.endsWith('s') ? `${name}s` : name);
+
 /** The metal a mould would be filled with: whichever lump the player chose. */
 function lumpFor(g: Game, uid?: number): Item | undefined {
   if (uid !== undefined) {
@@ -138,7 +141,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const per = def.per ?? 1;
       const made = g.inventory.add(def.makes, { ql, extra: metal.name, count: per });
       g.logMsg(
-        `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${itemDef(def.makes).name.toLowerCase()}${per > 1 ? 's' : ''} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
+        `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${plural(itemDef(def.makes).name.toLowerCase(), per)} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
           broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through and is done.` : ` The mould has ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left.`
         }`,
         'event',

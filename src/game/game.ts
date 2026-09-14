@@ -8,13 +8,13 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, type PlacedFurniture } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, teamOf, vehicleOf, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
-import { groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
+import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { Skills, SKILL_DEFS } from './skills';
 import { TileIndex } from './tileindex';
@@ -108,6 +108,14 @@ const CHAR_START = 20;
 const ASH_RATE = 1 / 120;
 /** Damage at which a tool starts warning you, and every five points after. */
 const DAMAGE_WARN = 75;
+/** No team takes a vehicle faster than this, whatever is in the traces. */
+const MAX_VEHICLE_SPEED = 4;
+/** How far ahead of the shafts a hitched team walks. */
+const TRACE_LENGTH = 1.6;
+/** How fast a wildermon in the traces works its dinner off while hauling. */
+const HAUL_HUNGER = 0.0006;
+/** Steepest ground a wheel will go up, against a walker's own limit. */
+const VEHICLE_STEP = MAX_STEP / 2;
 /** Tiles to a side of a new island. */
 export const WORLD_SIZE = 1024;
 /** A day and a night, in seconds: one game hour to the real minute. */
@@ -276,6 +284,17 @@ export class Game {
     this.placed.kilns.reset(this.kilns.values());
     this.placed.furniture.reset(this.furniture.values());
     this.placed.anvils.reset(this.anvils.values());
+    // Which beast is in which traces is the vehicle's business, so it is read
+    // back off the vehicles rather than saved twice and left to disagree.
+    for (const f of this.furniture.values()) {
+      if (!f.team?.length) continue;
+      f.team = f.team.filter((id) => this.creatures.get(id));
+      for (const id of f.team) {
+        const c = this.creatures.get(id);
+        if (c) c.hitchedTo = f.id;
+      }
+      if (!f.team.length) f.driven = false;
+    }
     this.vision = new Vision(this);
     this.world.onChange((x, y) => {
       // Felling a tree or raising a wall changes what can be seen past it.
@@ -331,6 +350,22 @@ export class Game {
     }
     return null;
   };
+
+  /**
+   * The rule for driving rather than walking. Wheels keep to the open ground:
+   * no fords, no stairs, no climbing anything a horse would baulk at.
+   */
+  readonly driveRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
+    if (level !== 0) return null;
+    if (!this.vehicleGround(x1, y1)) return null;
+    if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
+    return groundStep(this.world, x0, y0, x1, y1, VEHICLE_STEP) ? 0 : null;
+  };
+
+  /** How the player may move right now, and how many storeys they may cross. */
+  movement(): { rule: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null; levels: number } {
+    return this.driving() ? { rule: this.driveRule, levels: 1 } : { rule: this.stepRule, levels: MAX_LEVELS };
+  }
 
   /** Height of the player's feet, storeys included. */
   playerHeight(): number {
@@ -649,7 +684,10 @@ export class Game {
     this.time += dt;
     this.vision.update();
     const p = this.player;
-    const moved = p.update(dt, this.world, this.stepRule);
+    // On a seat you go at your team's pace; on your feet, at your own.
+    const driven = this.driving();
+    p.speedMul = driven ? this.vehicleSpeed(driven) / BASE_SPEED : 1;
+    const moved = p.update(dt, this.world, driven ? this.driveRule : this.stepRule);
     const s = p.stats;
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
     s.thirst = Math.max(0, s.thirst - dt * 0.0006);
@@ -930,10 +968,11 @@ export class Game {
     this.cancelAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return;
-    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, this.stepRule, MAX_LEVELS)) return;
+    const { rule, levels } = this.movement();
+    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, rule, levels)) return;
     const candidates = this.neighbours(x, y).filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
-    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, this.stepRule, MAX_LEVELS)) return;
+    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, rule, levels)) return;
     this.logMsg("You can't find a way there.", 'error');
   }
 
@@ -998,8 +1037,9 @@ export class Game {
     }
     candidates = candidates.filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
+    const { rule, levels } = this.movement();
     for (const c of candidates) {
-      if (this.player.walkTo(this.world, c.x, c.y, this.stepRule, MAX_LEVELS)) return true;
+      if (this.player.walkTo(this.world, c.x, c.y, rule, levels)) return true;
     }
     return false;
   }
@@ -1316,6 +1356,190 @@ export class Game {
         }
       }
       if (f.hitched) this.dragCart(f);
+      if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt);
+    }
+  }
+
+  /**
+   * The one vehicle the player is driving, if any. Nothing else in the world
+   * can be driven at the same time, which is what keeps this a lookup.
+   */
+  driving(): PlacedFurniture | undefined {
+    for (const f of this.furniture.values()) if (f.driven) return f;
+    return undefined;
+  }
+
+  /** The wildermon in the traces of a vehicle, dead ones dropped. */
+  team(f: PlacedFurniture): Creature[] {
+    const out: Creature[] = [];
+    for (const id of teamOf(f)) {
+      const c = this.creatures.get(id);
+      if (c) out.push(c);
+    }
+    return out;
+  }
+
+  /**
+   * How fast a team takes a vehicle along, in tiles a second. The animals
+   * decide it and nothing else: a quick one gets there sooner, more of them
+   * pull better than fewer, and a hungry one drags its feet. What is loaded on
+   * the back has no say at all, which is the whole point of putting it there.
+   */
+  vehicleSpeed(f: PlacedFurniture): number {
+    const v = vehicleOf(f);
+    const team = this.team(f);
+    if (!v || team.length < v.needs) return 0;
+    let sum = 0;
+    let worst = 1;
+    for (const c of team) {
+      sum += this.creatures.species(c).speed;
+      worst = Math.min(worst, 0.6 + 0.4 * c.hunger);
+    }
+    const mean = sum / team.length;
+    return Math.min(MAX_VEHICLE_SPEED, mean * (0.75 + 0.25 * team.length) * worst);
+  }
+
+  /**
+   * The nearest vehicle to a point with a yoke still free, within reach of
+   * somebody standing there.
+   */
+  vehicleNear(x: number, y: number, range = 5): PlacedFurniture | undefined {
+    let best: PlacedFurniture | undefined;
+    let bestD = Infinity;
+    this.placed.furniture.around(x, y, range, (f) => {
+      const v = vehicleOf(f);
+      if (!v || teamOf(f).length >= v.yokes) return;
+      const [cx, cy] = furnitureCentre(f);
+      const d = Math.hypot(cx - x, cy - y);
+      if (d <= range && d < bestD) {
+        bestD = d;
+        best = f;
+      }
+    });
+    return best;
+  }
+
+  /** The vehicle a wildermon is in the traces of. */
+  vehicleOfCreature(c: Creature): PlacedFurniture | undefined {
+    return c.hitchedTo === null ? undefined : this.furniture.get(c.hitchedTo);
+  }
+
+  /** Put a wildermon in a vehicle's traces. */
+  hitch(c: Creature, f: PlacedFurniture): boolean {
+    const v = vehicleOf(f);
+    if (!v || c.hitchedTo !== null || teamOf(f).length >= v.yokes) return false;
+    if (c.mode === 'stored') {
+      // Fetched out of the token and walked round to the front.
+      const [cx, cy] = furnitureCentre(f);
+      c.x = cx;
+      c.y = cy;
+      c.mode = this.deed ? 'deed' : 'active';
+    }
+    f.team = [...teamOf(f), c.id];
+    c.hitchedTo = f.id;
+    c.carrying = null;
+    c.enemy = null;
+    c.state = 'idle';
+    this.events.emit('world', f.x, f.y);
+    this.events.emit('creature');
+    return true;
+  }
+
+  /** Take a wildermon out of the traces, wherever it is standing. */
+  unhitch(c: Creature): void {
+    const f = this.vehicleOfCreature(c);
+    c.hitchedTo = null;
+    if (!f) return;
+    f.team = teamOf(f).filter((id) => id !== c.id);
+    if (!f.team.length && f.driven) this.leaveVehicle(f);
+    this.events.emit('world', f.x, f.y);
+    this.events.emit('creature');
+  }
+
+  /** Everything out of the traces at once, when the driver is done with it. */
+  unhitchAll(f: PlacedFurniture): number {
+    const team = this.team(f);
+    for (const c of team) c.hitchedTo = null;
+    f.team = [];
+    if (f.driven) this.leaveVehicle(f);
+    this.events.emit('world', f.x, f.y);
+    this.events.emit('creature');
+    return team.length;
+  }
+
+  /** Get down off a vehicle, leaving it where it stands. */
+  leaveVehicle(f: PlacedFurniture): void {
+    f.driven = false;
+    this.player.speedMul = 1;
+    this.player.stop();
+    this.events.emit('world', f.x, f.y);
+  }
+
+  /** Whether a vehicle could stand on a tile: solid, dry, level enough ground. */
+  vehicleGround(x: number, y: number): boolean {
+    const w = this.world;
+    if (!w.inBounds(x, y) || !w.isPassable(x, y) || w.hasWater(x, y)) return false;
+    return !this.buildings.buildingAt(x, y);
+  }
+
+  /**
+   * Move a hitched team, and the vehicle under the driver with it. A vehicle
+   * being driven sits wherever the player does — they are on the seat — and
+   * the team walks a length ahead of it, spread across the yokes.
+   */
+  private haulVehicle(f: PlacedFurniture, dt: number): void {
+    const team = this.team(f);
+    // Anything that died or was let go in the meantime leaves its yoke empty.
+    if (team.length !== teamOf(f).length) f.team = team.map((c) => c.id);
+    // A parked team stands where it was left; nothing moves without a driver.
+    if (!f.driven) return;
+    const def = furnitureDef(f.kind);
+    const x = Math.floor(this.player.x);
+    const y = Math.floor(this.player.y);
+    if (this.vehicleGround(x, y)) {
+      const [sx, sy] = subtileOf(x, y, this.player.x, this.player.y);
+      const [ax, ay] = furnitureAnchor(f.kind, sx - Math.floor(def.w / 2), sy - Math.floor(def.h / 2));
+      if (f.x !== x || f.y !== y || f.sx !== ax || f.sy !== ay) {
+        const from = { x: f.x, y: f.y };
+        f.x = x;
+        f.y = y;
+        f.sx = ax;
+        f.sy = ay;
+        this.placed.furniture.moved(f, from.x, from.y);
+        this.events.emit('world', from.x, from.y);
+        this.events.emit('world', f.x, f.y);
+      }
+    }
+    // The team keeps its line whether the wheels are turning or not, so a
+    // halted cart still has its animals stood in front of it rather than under.
+    const [cx, cy] = furnitureCentre(f);
+    const moving = this.player.moving;
+    const len = Math.hypot(this.player.dirX, this.player.dirY) || 1;
+    const fx = this.player.dirX / len;
+    const fy = this.player.dirY / len;
+    for (let i = 0; i < team.length; i++) {
+      const c = team[i];
+      // Abreast of one another, a pace and a half ahead of the shafts.
+      const off = team.length === 1 ? 0 : (i / (team.length - 1) - 0.5) * 1.6;
+      const tx = cx + fx * TRACE_LENGTH - fy * off;
+      const ty = cy + fy * TRACE_LENGTH + fx * off;
+      if (this.world.inBounds(Math.floor(tx), Math.floor(ty)) && this.world.isPassable(Math.floor(tx), Math.floor(ty))) {
+        c.x = tx;
+        c.y = ty;
+      } else {
+        c.x = cx;
+        c.y = cy;
+      }
+      c.moving = moving;
+      if (moving) {
+        c.dirX = fx;
+        c.dirY = fy;
+        c.walkPhase += dt * 12;
+        // Hauling is work, and work is hungry.
+        c.hunger = Math.max(0, c.hunger - dt * HAUL_HUNGER);
+      }
+      c.enemy = null;
+      c.state = 'idle';
     }
   }
 

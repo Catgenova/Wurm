@@ -1903,6 +1903,8 @@ export interface PlayerPose {
   facing: number;
   swimming: boolean;
   working: boolean;
+  /** Sitting on a seat with the reins in both hands rather than walking. */
+  driving?: boolean;
 }
 
 const SKIN = '#e6c29a';
@@ -1912,6 +1914,48 @@ const TROUSERS = '#4b3b2c';
 const BELT = '#33241a';
 
 /** Draws the character with its feet at (sx, sy). */
+/**
+ * The same figure, sat down: knees forward over the footboard, both hands out
+ * on the reins, and no shadow, because what is under it is the cart.
+ */
+function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose): void {
+  const jolt = pose.moving ? Math.sin(pose.phase * 0.9) * 0.6 : 0;
+  // thighs forward, shins down
+  ctx.fillStyle = TROUSERS;
+  ctx.fillRect(-1, -8 + jolt, 8, 3);
+  ctx.fillRect(5.5, -8 + jolt, 3, 7);
+  // body
+  ctx.fillStyle = TUNIC;
+  ctx.fillRect(-4.5, -20 + jolt, 9, 13);
+  ctx.fillStyle = BELT;
+  ctx.fillRect(-4.5, -9.5 + jolt, 9, 1.6);
+  // arms out to the reins
+  ctx.fillStyle = TUNIC;
+  ctx.fillRect(2, -18 + jolt, 6, 2.4);
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(7.5, -18.2 + jolt, 2.4, 2.4);
+  // reins, running off to the team
+  ctx.strokeStyle = '#4a3524';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(9, -17 + jolt);
+  ctx.lineTo(15, -12 + jolt);
+  ctx.stroke();
+  // head
+  ctx.fillStyle = SKIN;
+  ctx.beginPath();
+  ctx.arc(0, -24.5 + jolt, 4.6, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = HAIR;
+  ctx.beginPath();
+  ctx.arc(0, -25.5 + jolt, 4.7, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.lineTo(3.8, -24.5 + jolt);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#2a1a10';
+  ctx.fillRect(1.6, -25.5 + jolt, 1.2, 1.2);
+}
+
 export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
   ctx.save();
   ctx.translate(sx, sy);
@@ -1931,6 +1975,11 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     ctx.beginPath();
     ctx.arc(0, -13, 5.5, Math.PI, TAU);
     ctx.fill();
+    ctx.restore();
+    return;
+  }
+  if (pose.driving) {
+    drawDriver(ctx, pose);
     ctx.restore();
     return;
   }

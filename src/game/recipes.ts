@@ -118,6 +118,9 @@ export const RECIPES: Recipe[] = [
   { id: 'make_leather_sleeves', category: 'Cloth', result: 'leather_sleeves', inputs: [{ item: 'leather', count: 3 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather sleeves', verb: 'working leather', baseTime: 12, stamina: 0.04, difficulty: 19, done: 'You cut and stitch a pair of leather sleeves.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
   { id: 'make_leather_trousers', category: 'Cloth', result: 'leather_trousers', inputs: [{ item: 'leather', count: 4 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather trousers', verb: 'working leather', baseTime: 14, stamina: 0.05, difficulty: 20, done: 'You cut and stitch a pair of leather trousers.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
   { id: 'make_leather_boots', category: 'Cloth', result: 'leather_boots', inputs: [{ item: 'leather', count: 3 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather boots', verb: 'working leather', baseTime: 13, stamina: 0.04, difficulty: 18, done: 'You cut and stitch a pair of leather boots.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
+  // Vehicle parts. A wheel is a carpenter's piece; the metal in it is banded on.
+  { id: 'make_large_wheel', category: 'Woodwork', result: 'large_wheel', inputs: [{ item: 'plank', count: 4 }, { item: 'shaft', count: 6 }, { item: 'ribbon', count: 1 }, { item: 'nail', count: 12 }], tool: 'mallet', skill: 'carpentry', label: 'Build a large wheel', verb: 'building a wheel', baseTime: 16, stamina: 0.05, difficulty: 28, done: 'You set the spokes into the hub, lay the felloes round them and shrink the tyre on hot.', fail: 'The wheel will not run true and you knock it apart again.', consumeOnFail: true },
+  { id: 'make_yoke', category: 'Cloth', result: 'yoke', inputs: [{ item: 'shaft', count: 1 }, { item: 'leather', count: 2 }, { item: 'nail', count: 4 }], tool: 'awl', skill: 'leatherworking', label: 'Stitch a yoke', verb: 'stitching a yoke', baseTime: 12, stamina: 0.04, difficulty: 18, done: 'You shape the bar and stitch a harness to it. Something can be hitched to that.', fail: 'The harness tears along the stitch line.', consumeOnFail: true },
   { id: 'make_bucket', category: 'Woodwork', result: 'bucket', inputs: [{ item: 'plank', count: 3 }, { item: 'nail', count: 6 }], tool: 'mallet', skill: 'carpentry', label: 'Build a bucket', verb: 'building a bucket', baseTime: 7, stamina: 0.03, difficulty: 12, done: 'You raise the staves and hoop a bucket.', fail: 'The staves will not pull together and the bucket leaks.' },
   // Weapons: a head from the anvil and a length of wood to put it on.
   { id: 'fit_short_sword_blade', category: 'Woodwork', result: 'short_sword', inputs: [{ item: 'short_sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 6, stamina: 0.03, done: 'You bind a grip to the blade and the short sword is finished.' },
@@ -169,7 +172,7 @@ const MOULD_RECIPES: Recipe[] = MOULDS.map((m) => ({
   inputs: [{ item: 'sand', count: m.sand }],
   station: 'smelter' as Station,
   skill: m.skill,
-  label: `Fire a ${m.name.toLowerCase()}`,
+  label: `Fire ${/^[aeiou]/i.test(m.name) ? 'an' : 'a'} ${m.name.toLowerCase()}`,
   verb: 'firing a mould',
   baseTime: 8 + m.sand,
   stamina: 0.03,
