@@ -1448,3 +1448,118 @@ do $$ begin
 end $$;
 reset role;
 \echo ''
+\echo '--- the errands: work done where it is found'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set x = 5.5, y = 7.5 where uid = :'ivar';
+update deed set level = 5, radius = deed_radius(5) where world_id = :'world2';
+select '281. of the seven errands this island now knows ' ||
+       (select count(*) from (values ('hod'), ('mend'), ('stoke'), ('plant'), ('compost'), ('water'), ('prospect'), ('seek')) v(k)
+        where worker_job_ported(v.k)) || ' of eight — and of the rest: '
+     || (select string_agg(v.k, ', ' order by v.k) from (values ('water'), ('prospect'), ('seek')) v(k)
+         where not worker_job_ported(v.k));
+select '282. setting a holla to carry water: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed',
+       ('{"kind":"creature","id":' || (select creature_spawn(:'world2', 'holla', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar')) || '}')::jsonb), 'allowed');
+
+-- Everything the errands draw on comes out of the settlement's own crate.
+delete from item where world_id = :'world2' and holder = 'crate';
+insert into item (world_id, holder, crate, gx, gy, def, ql, count, extra)
+select :'world2', 'crate', c.id, c.x, c.y, v.def, v.ql, v.n, v.extra
+from crate c, (values ('log', 40, 20, 'Pine'), ('plank', 45, 12, 'Oak'), ('sprout', 50, 4, 'Oak')) v(def, ql, n, extra)
+where c.world_id = :'world2' and c.deed;
+insert into item (world_id, holder, crate, gx, gy, def, ql, count, dmg)
+select :'world2', 'crate', c.id, c.x, c.y, 'shovel', 60, 1, 55 from crate c where c.world_id = :'world2' and c.deed;
+select '283. in the stores: ' || (select string_agg(def || ' ×' || count, ', ' order by def) from item where world_id = :'world2' and holder = 'crate');
+
+\echo ''
+\echo '--- a stoker, which is why the furnaces are never cold'
+-- Every hearth cold and its clock stamped now, so what follows is measuring
+-- the stoker rather than whatever the earlier sections left burning.
+update placed set fuel = 0, ash = 0, lit = false, since = now()
+  where world_id = :'world2' and kind in ('campfire', 'kiln', 'smelter');
+select '284. hearths burning low: ' || (select count(*) from placed where world_id = :'world2'
+       and kind in ('campfire', 'smelter', 'kiln') and placed_fuel(placed) < hearth_full());
+select creature_spawn(:'world2', 'embra', 5.5, 8.5, 'deed', now() - interval '3 hours', :'ivar') as stoker \gset
+update creature set job = 'stoke', phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where id = :'stoker';
+select worker_settle(:'world2', :'stoker') as stoked \gset
+select '285. ten minutes of it: ' || :'stoked' || ' loads carried, the kiln is '
+     || (select case when placed_lit(p) then 'lit with ' || round(placed_fuel(p)::numeric) || ' seconds in it'
+                     else 'still cold' end from placed p where world_id = :'world2' and kind = 'kiln')
+     || ', and the stores are down to ' || (select string_agg(def || ' ×' || count, ', ' order by def)
+          from item where world_id = :'world2' and holder = 'crate' and fuel_value(def) is not null)
+     || ' — it takes the first thing in the crate that will catch, and the logs went in first';
+
+\echo ''
+\echo '--- a hod carrier, which builds the wall you planned and walked away from'
+-- A wall planned and left owing, the way they always are.
+insert into wall (world_id, level, dir, x, y, building, type, material, needed, total)
+values (:'world2', 0, 'h', 7, 6, 0, 'solid', 'log', '{"log": 4}'::jsonb, '{"log": 4}'::jsonb)
+on conflict (world_id, level, dir, x, y) do update set needed = '{"log": 4}'::jsonb;
+select '286. a wall on the deed owing ' || (select bill_text('log', needed) from wall where world_id = :'world2' and dir = 'h' and x = 7 and y = 6);
+select creature_spawn(:'world2', 'cobbe', 5.5, 8.5, 'deed', now() - interval '3 hours', :'ivar') as hodder \gset
+update creature set job = 'hod', phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where id = :'hodder';
+select worker_settle(:'world2', :'hodder') as hodded \gset
+select '287. ten minutes of the hod: ' || :'hodded' || ' pieces fitted, and the wall now owes '
+     || coalesce((select bill_text('log', needed) from wall where world_id = :'world2' and dir = 'h' and x = 7 and y = 6), 'nothing')
+     || ' — it is ' || (select case when bill_done(needed) then 'up' else 'still going up' end
+                        from wall where world_id = :'world2' and dir = 'h' and x = 7 and y = 6);
+
+\echo ''
+\echo '--- a mender, a planter, and something to do with a carcass'
+select '288. the worst thing in the stores: a shovel at ' ||
+       (select round(dmg::numeric, 1) from item where world_id = :'world2' and holder = 'crate' and def = 'shovel')
+     || ' damage, QL ' || (select round(ql::numeric, 1) from item where world_id = :'world2' and holder = 'crate' and def = 'shovel');
+select creature_spawn(:'world2', 'tinka', 5.5, 8.5, 'deed', now() - interval '3 hours', :'ivar') as mender \gset
+update creature set job = 'mend', phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where id = :'mender';
+select worker_settle(:'world2', :'mender') as mended \gset
+select '289. ten minutes of mending: ' || :'mended' || ' goes at it, and the shovel is at '
+     || (select round(dmg::numeric, 1) from item where world_id = :'world2' and holder = 'crate' and def = 'shovel')
+     || ' damage, QL ' || (select round(ql::numeric, 1) from item where world_id = :'world2' and holder = 'crate' and def = 'shovel')
+     || ' — damage out, and a little quality with it';
+
+select '290. trees standing on the deed: ' || (select count(*) from generate_series(0,15) gx, generate_series(0,15) gy
+       where land_tile(:'world2', gx, gy) = tile_id('Tree') and on_deed(:'world2', gx, gy));
+select creature_spawn(:'world2', 'sappa', 5.5, 8.5, 'deed', now() - interval '3 hours', :'ivar') as planter \gset
+update creature set job = 'plant', phase = 'idle', until = now() - interval '900 seconds',
+    leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
+    settled_at = now() - interval '900 seconds' where id = :'planter';
+select worker_settle(:'world2', :'planter') as planted \gset
+select '291. fifteen minutes of planting: ' || :'planted' || ' sprouts in the ground, '
+     || (select count(*) from generate_series(0,15) gx, generate_series(0,15) gy
+         where land_tile(:'world2', gx, gy) = tile_id('Tree') and on_deed(:'world2', gx, gy))
+     || ' trees standing, and ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'sprout'), '0')
+     || ' sprouts left of four';
+
+-- Two clear tiles on the deed, found rather than assumed: the planter has
+-- just been round putting trees on some of them.
+do $$
+declare w uuid := (select id from world limit 1); r record; n int := 0;
+begin
+  delete from item where world_id = w and holder = 'ground' and def = 'corpse';
+  for r in select gx, gy from generate_series(0, 15) gx, generate_series(0, 15) gy
+    where creature_tile_ok(w, gx, gy) and on_deed(w, gx, gy)
+    order by gx, gy
+  loop
+    exit when n >= 2;
+    perform drop_on_ground(w, r.gx, r.gy, 'corpse', 40, 'Rabba');
+    n := n + 1;
+  end loop;
+end $$;
+select '292. carcasses lying about the deed: ' || (select count(*) from item where world_id = :'world2' and holder = 'ground' and def = 'corpse')
+     || ', at ' || (select string_agg(gx || ',' || gy, ' and ') from item where world_id = :'world2' and holder = 'ground' and def = 'corpse');
+select creature_spawn(:'world2', 'middun', 5.5, 8.5, 'deed', now() - interval '3 hours', :'ivar') as tidy \gset
+update creature set job = 'compost', phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where id = :'tidy';
+select worker_settle(:'world2', :'tidy') as composted \gset
+select '293. ten minutes of a middun: ' || :'composted' || ' rounds, '
+     || (select count(*) from item where world_id = :'world2' and holder = 'ground' and def = 'corpse')
+     || ' carcasses left, and ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'compost'), '0')
+     || ' of compost in the crate — the best thing that ever happened to a field';
+\echo ''

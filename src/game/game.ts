@@ -170,7 +170,7 @@ const DECAY_STEP = 5;
 /** How far a prospector moves on before reading the ground again. */
 const PROSPECT_STRIDE = 4;
 
-const PLANTABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
+export const PLANTABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
 
 /** Central simulation state: the world, the player and everything they do. */
 export class Game {

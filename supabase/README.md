@@ -40,7 +40,7 @@ simplification rather than a problem:
 | **11** | firing: a kiln built, packed, lit and unpacked, and the smelter's own queue — ore in, lumps and anvils out |
 | **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
-| **1** | setting a wildermon to work the deed, which is twelve trades and a crate to fill |
+| **1** | setting a wildermon to work the deed, which is seventeen trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
@@ -66,10 +66,11 @@ being refused because your hands are full.
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), creatures coming at you
 unprompted (a hunter closing on sight is creature AI rather than fighting),
-the ten deed trades that want something this island has not got yet —
-guarding and hunting want the aggression loop, stoking wants hearths, and the
-errands (water, hod, mend, compost, prospect, plant, seek) want posts and a
-barrel apiece — sowing a field from a worker's own cheeks,
+the five deed trades that want something this island has not got yet —
+guarding and hunting want the aggression loop, and of the errands `water`
+wants barrels that hold liquid, `prospect` wants the marks a prospector writes
+on a map and `seek` wants archaeology — sowing a field from a worker's own
+cheeks,
 breeding and pairing, riding and the traces, trapping,
 the ledger, the journal, flattening and levelling, paving with cut slabs, planting
 trees, prospecting, deed upgrades and disbanding, and the ease a hot oven
@@ -97,6 +98,28 @@ called — which every migration already does on its last line — so a definiti
 table generated tomorrow is readable the moment it exists. The suite asks the
 same question as a client: 48 tables in the rulebook, 48 readable, none
 writable.
+
+### An errand runs the round trip backwards
+
+A gatherer walks out to a tile, works it, and carries a load home. An errand
+runner as often as not goes the other way: it takes a piece *out* of the
+stores and carries it to wherever it is wanted — a log to a furnace burning
+low, a plank to a wall you planned and walked away from, a sprout to where a
+tree used to be. So the round trip grew one more part, `fetch`, and for those
+the delivery *is* the work rather than the thing that follows it.
+
+Five of the seven arrived: hod, mend, stoke, plant and compost. Stoking is the
+one that pays for the rest — a deed with an embra on it has no cold furnace on
+it when you come back, which is the whole point of a queue that burns while
+nobody is watching.
+
+One thing the suite caught by printing sentences rather than booleans. The
+stoker's fuel was ordered by what burns longest, which is cleverer than the
+game: a stoker takes the *first* thing in the crate that will catch. With
+planks at the front of the crate it fed planks to the furnace thirteen times
+where the browser would have done the same thing — and reading "13 loads
+carried, 19 logs left of twenty" is what made it obvious that the number was
+describing something other than what the label claimed.
 
 ### A queue is a fuel budget spent in order
 

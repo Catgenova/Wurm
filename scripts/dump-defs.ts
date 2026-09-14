@@ -33,6 +33,7 @@ import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
+import { PLANTABLE } from '../src/game/game';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -161,6 +162,8 @@ out.push(`alter table species_def add column if not exists glow real;`);
  * never changes. A constant is a constant: it is generated rather than ported,
  * which is the rule the rest of this file already follows.
  */
+/** Ground a sprout takes, for the planter that puts the wood back. */
+out.push(`create table if not exists plantable (tile int primary key);`);
 out.push(`create table if not exists improve_material_def (
   id text primary key, name text not null, skill text not null
 );`);
@@ -409,7 +412,7 @@ for (const a of ACTIONS as unknown as A[]) {
 out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
-  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill;`);
+  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -424,6 +427,7 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.glow !== undefined) out.push(`update species_def set glow = ${q(d.glow)} where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
 }
+for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plantable values (${q(t)});`);
 for (const m of Object.values(IMPROVE_MATERIALS)) {
   out.push(`insert into improve_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.skill)});`);
   m.tools.forEach((t, ord) => out.push(`insert into improve_tool values (${q(m.id)}, ${q(ord)}, ${q(t)});`));
