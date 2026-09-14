@@ -1463,6 +1463,9 @@ export interface Creature {
   calledAt: number;
   /** Next time an unruly one gets a chance to turn on its keeper. */
   nipAt: number;
+  /** Offerings made to a wild one in a row, and when the last was made. */
+  coaxed: number;
+  coaxedAt: number;
   /** The tile this worker walked out to work on: a tree, a seam, a field. */
   workX: number;
   workY: number;
@@ -1543,7 +1546,7 @@ export const CALL_WINDOW = 12;
 const CALL_DISTANCE = 0.9;
 
 export const WILD_TARGET = 32;
-const RESPAWN_EVERY = 45;
+const RESPAWN_EVERY = 22;
 /**
  * How closely creatures are followed, by tiles from the player. Anything being
  * looked at is followed whatever the distance; these are for the rest.
@@ -1572,7 +1575,29 @@ const STREAM_EVERY = 2;
 /** Most creatures let out in one pass, so a walk never stalls on it. */
 const STREAM_BATCH = 6;
 /** Wildlife a stretch of country holds, which is what the island adds up to. */
-const PER_REGION = 0.5;
+const PER_REGION = 1;
+/**
+ * Coaxing. A wild thing offered food again and again grows used to the hand
+ * holding it, so every attempt in a row makes the next a little likelier. It
+ * is a slight thing per go and it goes nowhere near making a hard tame easy;
+ * what it does is stop a long run of refusals feeling like no progress at all.
+ * A run lapses if you leave it alone, and raising a hand to it ends the run
+ * outright: nothing that has been hit takes food from you.
+ */
+export const COAX_STEP = 0.03;
+export const COAX_CAP = 0.12;
+export const COAX_LAPSE = 90;
+
+/** What a run of offerings is worth to the next one, 0 when the run has lapsed. */
+export const coaxBonus = (c: Creature, time: number): number =>
+  c.coaxed <= 0 || time - c.coaxedAt > COAX_LAPSE ? 0 : Math.min(COAX_CAP, c.coaxed * COAX_STEP);
+
+/** Forget a run of offerings: it was tamed, or hurt, or simply left alone. */
+export const forgetCoaxing = (c: Creature): void => {
+  c.coaxed = 0;
+  c.coaxedAt = -1e9;
+};
+
 /** Seconds a wild creature spends grazing. */
 const FORAGE_TIME = 2.5;
 /** Seconds between chances for an unruly companion to turn on its keeper. */
@@ -1665,6 +1690,8 @@ export class Creatures {
       owed: 0,
       calledAt: -1e9,
       nipAt: 0,
+      coaxed: 0,
+      coaxedAt: -1e9,
       workX: -1,
       workY: -1,
       pouch: null,
@@ -3448,6 +3475,8 @@ export class Creatures {
     t.health -= dmg;
     t.attackedBy = by === 'player' ? PLAYER_ATTACKER : by.id;
     t.attackedAt = game.time;
+    // Nothing that has been hit takes food from the hand that hit it.
+    if (by === 'player') forgetCoaxing(t);
     if (t.mode === 'wild' && this.species(t).timid) {
       const dx = t.x - from.x;
       const dy = t.y - from.y;

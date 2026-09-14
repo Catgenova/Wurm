@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { ageDef, attackOf, careWord, creatureLevel, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { ageDef, attackOf, careWord, coaxBonus, COAX_CAP, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
@@ -72,7 +72,9 @@ export const CREATURE_ACTIONS: ActionDef[] = [
           g.logMsg(`A ${def.name.toLowerCase()}: ${def.description} It has ${Math.ceil(c.health)} of ${maxHealth(c, def)} in it and hits for ${attackOf(c, def).toFixed(0)}. It cannot be tamed. Kill it and butcher it, or keep well clear.`, 'error');
           return;
         }
-        g.logMsg(`A wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}. You would have to tame it to learn more.`, 'event');
+        const warm = coaxBonus(c, g.time);
+        const used = warm > 0 ? ` It has taken ${c.coaxed === 1 ? 'an offering' : `${c.coaxed} offerings`} from your hand and is ${(warm * 100).toFixed(0)}% readier for the next.` : '';
+        g.logMsg(`A wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}.${used} You would have to tame it to learn more.`, 'event');
         return;
       }
       const mood = c.hunger < 0.3 ? 'It looks hungry.' : c.hunger < 0.6 ? 'It could eat.' : 'It looks well fed.';
@@ -115,8 +117,10 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const foodName = itemDef(food.id).name.toLowerCase();
       g.inventory.remove(food.uid, 1);
       const skill = g.skills.get('taming');
-      // Something that has not yet learned to mistrust you is far easier won.
-      const chance = Math.min(0.95, (def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + g.soulBonus()) * ageDef(c, g.time).tame * (g.walks('love', 3) ? 1.25 : 1));
+      // Something that has not yet learned to mistrust you is far easier won,
+      // and so is something that has taken food from this hand all afternoon.
+      const coax = coaxBonus(c, g.time);
+      const chance = Math.min(0.95, (def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coax + g.soulBonus()) * ageDef(c, g.time).tame * (g.walks('love', 3) ? 1.25 : 1));
       c.hunger = Math.min(1, c.hunger + 0.25);
       if (g.rand() < chance) {
         c.name = def.name;
@@ -130,11 +134,18 @@ export const CREATURE_ACTIONS: ActionDef[] = [
           c.stance = 'defensive';
           g.logMsg(`The ${def.name.toLowerCase()} takes the ${foodName} from your hand and trusts you. ${c.name} now follows you.`, 'system');
         }
+        forgetCoaxing(c);
         g.note('tamed');
         g.gainSkill('taming', 0.7);
         g.gainSkill('soul_strength', 0.4);
       } else {
-        g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.`, 'event');
+        // It refused, but it stayed for the offering, and that is worth
+        // something to the next one.
+        c.coaxed += 1;
+        c.coaxedAt = g.time;
+        const won = coaxBonus(c, g.time);
+        const warming = won > 0 ? ` It is ${won >= COAX_CAP ? 'as used to you as it will get' : 'growing used to you'}: ${(won * 100).toFixed(0)}% readier than the first time.` : '';
+        g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.${warming}`, 'event');
         g.gainSkill('taming', 0.35);
         g.gainSkill('soul_strength', 0.2);
         c.state = 'idle';

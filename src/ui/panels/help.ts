@@ -828,6 +828,12 @@ function helpText(): string {
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>
+    <p><b>Keep at it.</b> A wild thing that has taken food from your hand and refused you is a little
+    readier for the next offering: <b>three points in a hundred</b> for every attempt in a row, up to
+    <b>twelve</b> after four of them. It is slight per go and it will not make a hard tame easy, but it
+    means a long run of refusals is going somewhere. The run lapses if you leave it alone for a minute
+    and a half, and <b>raising a hand to it ends the run outright</b> &mdash; nothing that has been hit
+    takes food from the hand that hit it. Examining a wild one says how far you have got with it.</p>
     <p><b>Age.</b> Everything alive was born at some hour and gets older from there. A <b>young</b> one is
     two thirds the size, moves a little slower, grows no fleece and gives no milk, and is no use in the
     traces or under a saddle &mdash; but it has not learned to mistrust you, so it is half again as easy

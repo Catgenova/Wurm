@@ -452,7 +452,12 @@ rebuilds and commits the result.
   hundred. The Crawler is defensive by nature: it hits back every time
   it is struck, and even a tamed one turns on whoever stands beside it now and
   then, though a helm blunts it. Each puts the tile on the same cooldown a
-  player would, and none retaliates for a failed taming attempt. A companion
+  player would, and none retaliates for a failed taming attempt. A wild thing
+  that has taken food from your hand and still refused you is a little readier
+  for the next offering — three points in a hundred for every attempt in a row,
+  up to twelve after four of them — which means a long run of refusals is going
+  somewhere rather than nowhere. The run lapses if you leave it ninety seconds,
+  and raising a hand to it ends the run outright. A companion
   follows you with a Passive, Defensive or Aggressive stance; a deed worker
   forages or botanizes around the settlement and delivers to the deed crate;
   spare tamed ones are kept at the token. A deed worker feeds itself from any
@@ -791,7 +796,8 @@ rebuilds and commits the result.
   rather than the whole island — a thousand tiles a side drawn whole is a dark
   square with a speck of coast in it — widening by doublings as you explore and
   never narrowing, out to the whole island once you have been round it.
-- **Streamed wildlife.** An island holds a fixed head of wildlife, but only
+- **Streamed wildlife.** An island holds a fixed head of wildlife — one for
+  every thousand tiles, so a 1024-tile island carries 1,024 — but only
   the stretch of country being walked holds it in the flesh. A wild creature
   left more than 85 tiles behind and unwatched is put back on the books for
   its region; walk within 60 tiles of a region again and what it owes is let
