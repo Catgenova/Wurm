@@ -1,6 +1,7 @@
 import type { Game } from '../game/game';
 import { packLand, packWorld, unpack } from '../game/save';
-import type { Target } from '../game/actions';
+import { ACTION_BY_ID, type Target } from '../game/actions';
+import type { Actor } from '../game/actor';
 import type { TileType } from '../world/tiles';
 import { cleanName, cleanText, encode, HOST_ID, MOVE_HZ, PROTOCOL, TIMEOUT, type FromClient, type FromHost, type Message, type PeerId, type PeerState, type Welcome } from './protocol';
 import { Links, type Transport } from './transport';
@@ -52,6 +53,8 @@ interface Guest {
   id: PeerId;
   name: string;
   link: Transport;
+  /** Their body and their pack, on the host's machine, where the island is. */
+  actor: Actor;
   /** Their body as they last reported it. */
   body: Omit<PeerState, 'id' | 'name'>;
   /** When we last heard anything at all from them. */
@@ -89,7 +92,12 @@ export class HostSession {
   /** Somebody has got as far as being connected. They are not in yet. */
   accept(link: Transport): PeerId {
     const id = this.nextId++;
-    const guest: Guest = { id, name: `Guest ${id}`, link, body: { ...bodyOf(this.game) }, heard: now(), in: false };
+    // A body and a pack of their own from the moment they knock, so that
+    // anything the island does to them has somebody to do it to.
+    const actor = this.game.welcome(id, `Guest ${id}`, (text, kind) => link.send({ t: 'said', from: HOST_ID, name: this.island, text, kind }));
+    // Whatever the island puts in their hands, they are told about.
+    actor.packed = () => this.sendPack(id);
+    const guest: Guest = { id, name: `Guest ${id}`, link, actor, body: { ...bodyOf(this.game) }, heard: now(), in: false };
     this.guests.set(id, guest);
     this.links.add(id, link);
     link.onMessage((m) => this.heard(guest, m));
@@ -109,6 +117,7 @@ export class HostSession {
           return;
         }
         guest.name = cleanName(msg.name);
+        guest.actor.player.name = guest.name;
         guest.body = { ...bodyOf(this.game), x: this.game.spawn.x + 0.5, y: this.game.spawn.y + 0.5 };
         void this.welcome(guest);
         return;
@@ -116,6 +125,17 @@ export class HostSession {
       case 'at': {
         if (!guest.in || !sane(msg.body)) return;
         guest.body = msg.body;
+        // Onto their real body, so that when the island reaches for them —
+        // to see whether they are near enough to a tile to work it — it finds
+        // them where they say they are.
+        const p = guest.actor.player;
+        p.x = msg.body.x;
+        p.y = msg.body.y;
+        p.dirX = msg.body.dirX;
+        p.dirY = msg.body.dirY;
+        p.level = msg.body.level;
+        p.moving = msg.body.moving;
+        p.swimming = msg.body.swimming;
         this.game.roster.saw({ id: guest.id, name: guest.name, ...guest.body });
         return;
       }
@@ -130,10 +150,21 @@ export class HostSession {
       }
       case 'do': {
         if (!guest.in) return;
-        // Honest refusal. Running somebody else's action means running it with
-        // somebody else's tools, skills and stamina, and there is one of each
-        // on this machine. Until there is one per person, a guest watches.
-        guest.link.send({ t: 'said', from: HOST_ID, name: this.island, text: 'Guests cannot work the island yet — that is the next piece of building.', kind: 'error' });
+        const def = ACTION_BY_ID.get(msg.action);
+        if (!def) {
+          guest.actor.hear(`There is no such thing as ${msg.action}.`, 'error');
+          return;
+        }
+        // Their work, with their arms. The very same `perform` the host's own
+        // dig goes through — the only difference is who `g.player` is for the
+        // length of it, which is the whole of what an actor is for.
+        this.game.as(guest.actor, () => {
+          if (!def.applies(msg.target, this.game)) {
+            guest.actor.hear(`You cannot ${def.label.toLowerCase()} that.`, 'error');
+            return;
+          }
+          this.game.requestAction(def, msg.target, msg.times);
+        });
         return;
       }
       case 'ping':
@@ -171,6 +202,20 @@ export class HostSession {
     this.hooks.changed?.();
   }
 
+  /** Somebody's own pack, back to them. Their hands are here; their eyes are not. */
+  private sendPack(id: PeerId): void {
+    const guest = this.guests.get(id);
+    if (!guest || guest.link.state !== 'open') return;
+    const a = guest.actor;
+    guest.link.send({
+      t: 'pack',
+      items: a.inventory.items,
+      skills: Object.fromEntries(a.skills.values),
+      stats: a.player.stats,
+      nextUid: a.inventory.nextUid,
+    });
+  }
+
   private tileChanged(x: number, y: number): void {
     if (!this.links.size) return;
     const w = this.game.world;
@@ -198,7 +243,14 @@ export class HostSession {
     this.guests.delete(id);
     this.links.drop(id, why);
     this.game.roster.gone(id);
+    // What they were carrying is left where they stood rather than leaving the
+    // island with them: a guest who quits mid-haul should not take the ore.
+    const dropped = this.game.farewell(id);
     if (guest.in) {
+      // Counted as a person would count them, so four dirt is four things and
+      // not one stack.
+      const things = dropped.reduce((n, it) => n + (it.count ?? 1), 0);
+      if (things) this.hooks.say(`${guest.name} left ${things} thing${things === 1 ? '' : 's'} on the ground.`, 'system');
       this.announce(`${guest.name} has gone (${why}).`);
       this.links.all({ t: 'peers', peers: this.everyone() });
       this.hooks.changed?.();
@@ -221,6 +273,9 @@ export class HostSession {
     if (t - this.lastClock >= 2) {
       this.lastClock = t;
       this.links.all({ t: 'clock', time: this.game.time });
+      // Skill climbs a hair at a time and stamina drains without anything
+      // being picked up, so a pack goes out on the slow beat as well.
+      for (const id of this.guests.keys()) this.sendPack(id);
     }
   }
 
@@ -308,6 +363,21 @@ export class ClientSession {
       case 'said':
         this.hooks.say(msg.from === this.me ? `${msg.name}: ${msg.text}` : msg.kind === 'chat' ? `${msg.name}: ${msg.text}` : msg.text, msg.kind);
         return;
+      case 'pack': {
+        const game = this.visiting?.game;
+        if (!game || !Array.isArray(msg.items)) return;
+        // Wholesale rather than a diff: a pack is a dozen things, and a client
+        // that tried to keep its own tally would be a second truth about it.
+        game.inventory.items = msg.items as typeof game.inventory.items;
+        game.inventory.nextUid = Math.max(game.inventory.nextUid, msg.nextUid ?? 1);
+        for (const [id, v] of Object.entries(msg.skills ?? {})) if (typeof v === 'number') game.skills.values.set(id, v);
+        const stats = msg.stats as typeof game.player.stats | undefined;
+        if (stats && typeof stats.health === 'number') game.player.stats = { ...stats };
+        game.events.emit('inventory');
+        game.events.emit('skill', '', 0);
+        game.events.emit('stats');
+        return;
+      }
       case 'clock': {
         const game = this.visiting?.game;
         // Nudged rather than set: a clock that jumps backwards would take the

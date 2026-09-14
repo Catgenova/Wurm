@@ -57,3 +57,31 @@ export class Emitter<E extends Record<string, unknown[]>> {
     for (const fn of set) fn(...args);
   }
 }
+
+/**
+ * The events that are about a *person* rather than about the island.
+ *
+ * Everything listening to these — the inventory window, the skill list, the
+ * action bar, the floating numbers — is showing the person sitting at this
+ * screen. When the game is acting as somebody else, on a host running a
+ * guest's work, these must not fire: the host's inventory window has no
+ * business flashing because a visitor picked up a stone.
+ *
+ * The island's own news — a tile changed, a crate changed, a creature moved —
+ * is everybody's and goes out whoever is acting.
+ */
+const PERSONAL = new Set(['log', 'inventory', 'skill', 'action', 'stats', 'journal']);
+
+/**
+ * An emitter that knows the difference. One gate here rather than a condition
+ * at forty call sites, half of which live in other files and would be missed.
+ */
+export class GameEmitter extends Emitter<GameEvents> {
+  /** Whether the game is acting as the person at this screen. Set by the game. */
+  mine: () => boolean = () => true;
+
+  override emit<K extends keyof GameEvents>(name: K, ...args: GameEvents[K]): void {
+    if (PERSONAL.has(name as string) && !this.mine()) return;
+    super.emit(name, ...args);
+  }
+}

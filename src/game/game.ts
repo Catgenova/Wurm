@@ -15,8 +15,10 @@ import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, f
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
+import { Actor, type ActiveAction } from './actor';
+import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
-import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
+import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
@@ -39,19 +41,7 @@ import { emptyNutrition, helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, t
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
-export interface ActiveAction {
-  def: ActionDef;
-  target: Target;
-  state: 'walking' | 'performing';
-  elapsed: number;
-  duration: number;
-  /** Standing still until this time, waiting for a called wildermon to arrive. */
-  waitUntil?: number;
-  /** Goes left, when a number was asked for; undefined runs until the wind goes. */
-  left?: number;
-  /** How many were asked for, for saying so when it is done. */
-  goes?: number;
-}
+export type { ActiveAction } from './actor';
 
 /** A settlement: a square of land around a token that the player may build on. */
 /** One place on the deed that holds things, whatever it is underneath. */
@@ -186,10 +176,25 @@ export class Game {
   readonly world: World;
   /** Where you wake up: the shore you came in on until a bed says otherwise. */
   spawn: { x: number; y: number };
-  readonly player: Player;
-  readonly inventory: Inventory;
-  readonly skills: Skills;
-  readonly events = new Emitter<GameEvents>();
+  /**
+   * Whoever is acting at this instant: their body, their pack, their skills.
+   *
+   * These were `readonly` and pointed at the one person on the island. They
+   * still point at one person — they are simply no longer always the same
+   * person. Everything that reads them reads them exactly as it always did;
+   * `as()` decides who that is, and puts it back afterwards. See `actor.ts`
+   * for why it was done this way round and not the other.
+   */
+  player: Player;
+  inventory: Inventory;
+  skills: Skills;
+  /** Everyone with a body on this island, by who they are on the wire. */
+  readonly actors = new Map<PeerId, Actor>();
+  /** Whoever is playing on this machine. Never changes for the life of a game. */
+  readonly local: Actor;
+  /** Whoever `player`, `inventory` and `skills` are pointing at this instant. */
+  private acting: Actor;
+  readonly events = new GameEmitter();
   readonly log: LogEntry[] = [];
   readonly settings = {
     grid: true,
@@ -291,6 +296,10 @@ export class Game {
    * are tested, and only now and again, so a list of fifty costs nothing.
    */
   private checkJournal(): void {
+    // The journal belongs to the person at this screen, and is written down in
+    // their save. A guest's mining skill is not the host's progress, and a
+    // guest has no journal of their own yet — so theirs ticks nothing.
+    if (this.acting !== this.local) return;
     if (this.time - this.journalAt < 2) return;
     this.journalAt = this.time;
     for (const goal of ALL_GOALS) {
@@ -331,17 +340,26 @@ export class Game {
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
-  action: ActiveAction | null = null;
+  /** What the acting person is in the middle of, and what is behind it. */
+  get action(): ActiveAction | null {
+    return this.acting.action;
+  }
+
+  set action(a: ActiveAction | null) {
+    this.acting.action = a;
+  }
+
   /** Actions lined up behind the one in hand, oldest first. */
-  readonly queue: Array<{ def: ActionDef; target: Target; goes?: number }> = [];
+  get queue(): Array<{ def: ActionDef; target: Target; goes?: number }> {
+    return this.acting.queue;
+  }
   /** Items lying on tiles, keyed by "x,y". */
   readonly ground = new Map<string, Item[]>();
   /** Game seconds since the world was created. */
   time = 0;
   rand: () => number = Math.random;
   private foraged = new Map<number, number>();
-  private drownWarning = 0;
-  private swimClock = 0;
+
   private decayClock = 0;
 
   static create(seed: number, size = WORLD_SIZE): Game {
@@ -396,6 +414,16 @@ export class Game {
       }
     }
     this.skills = new Skills(init.skills);
+    // The one person a single-player island has. On a shared one they are the
+    // host, which is the same thing said differently.
+    this.local = new Actor(HOST_ID, this.player, this.inventory, this.skills);
+    this.local.hear = (text, kind) => this.write(text, kind);
+    this.local.packed = () => this.events.emit('inventory');
+    this.acting = this.local;
+    // News about a person only reaches this screen when it is about the person
+    // at it.
+    this.events.mine = () => this.acting === this.local;
+    this.actors.set(this.local.id, this.local);
     // A new castaway washes ashore at eight in the morning, not at midnight.
     this.time = init.time ?? (8 / 24) * DAY_SECONDS;
     this.deed = init.deed ?? null;
@@ -1274,7 +1302,7 @@ export class Game {
     if (this.campfires.size) this.burnFires(seconds);
     if (this.smelters.size) this.runSmelters(seconds);
     if (this.kilns.size) this.runKilns(seconds);
-    if (this.furniture.size) this.runPlaceables(seconds, 0);
+    if (this.furniture.size) this.runPlaceables(seconds);
     if (this.posts.size) this.runPosts(seconds);
     if (this.traps.size) this.runTraps(seconds);
     if (this.crops.size) this.growCrops();
@@ -1447,16 +1475,100 @@ export class Game {
     return gain;
   }
 
+  /**
+   * Tell whoever is acting what just happened to them.
+   *
+   * Every one of these lines is in the second person — *you dig a hole*, *your
+   * pick is blunt* — and every one of them was written on the assumption that
+   * there is one *you*. There still is, per line: it is whoever the game is
+   * acting as when the line is written, which is exactly who the line is
+   * about. A guest's news goes home to their machine and never appears in the
+   * host's log, which is right: the host did not dig that hole.
+   */
   logMsg(text: string, kind: LogKind = 'info'): void {
+    this.acting.hear(text, kind);
+  }
+
+  /** Put a line on this machine's own screen. Where the local player's news ends up. */
+  write(text: string, kind: LogKind = 'info'): void {
     const entry: LogEntry = { time: Date.now(), text, kind };
     this.log.push(entry);
     if (this.log.length > MAX_LOG) this.log.splice(0, this.log.length - MAX_LOG);
     this.events.emit('log', entry);
   }
 
+  /**
+   * Do something as somebody else: their body, their pack, their skills, for
+   * the length of one call and no longer.
+   *
+   * Nested swaps are fine and are what happens when one person's action stirs
+   * another's — the previous actor is put back, not the local one. The
+   * `finally` is the whole safety of the thing: an action that throws must not
+   * leave the island wearing a guest's arms.
+   */
+  as<T>(actor: Actor, fn: () => T): T {
+    const was = this.acting;
+    this.acting = actor;
+    this.player = actor.player;
+    this.inventory = actor.inventory;
+    this.skills = actor.skills;
+    try {
+      return fn();
+    } finally {
+      this.acting = was;
+      this.player = was.player;
+      this.inventory = was.inventory;
+      this.skills = was.skills;
+    }
+  }
+
+  /** Whoever the game is acting as this instant. */
+  get actor(): Actor {
+    return this.acting;
+  }
+
+  /**
+   * Somebody has arrived and wants a body. They get an empty one: a guest
+   * wearing a copy of the host's pack would be a guest handed the host's tools.
+   */
+  welcome(id: PeerId, name: string, hear: Actor['hear']): Actor {
+    const had = this.actors.get(id);
+    if (had) return had;
+    const actor = Actor.arriving(id, name, this.spawn.x + 0.5, this.spawn.y + 0.5, this.inventory.nextUid);
+    actor.hear = hear;
+    // One run of uids across the whole island, so nobody's spoon is somebody
+    // else's shovel when the two packs meet in a crate.
+    actor.inventory.onChange = () => actor.packed();
+    this.actors.set(id, actor);
+    return actor;
+  }
+
+  /** Somebody has gone. Whatever they were carrying goes on the ground where they stood. */
+  farewell(id: PeerId): Item[] {
+    const actor = this.actors.get(id);
+    if (!actor || actor === this.local) return [];
+    this.actors.delete(id);
+    const dropped = [...actor.inventory.items];
+    for (const it of dropped) this.dropOnGround(Math.floor(actor.player.x), Math.floor(actor.player.y), it);
+    actor.inventory.items.length = 0;
+    return dropped;
+  }
+
   update(dt: number): void {
     this.time += dt;
+    // The fog is the one thing that stays on the machine it belongs to, so it
+    // is advanced for the person sitting here and for nobody else.
     this.vision.update();
+    // Every body on the island walks, tires, heals and gets on with whatever
+    // it is doing — each wearing its own arms for the length of its own turn.
+    if (this.actors.size > 1) {
+      for (const actor of this.actors.values()) this.as(actor, () => this.updateBody(dt));
+    } else this.updateBody(dt);
+    this.updateWorld(dt);
+  }
+
+  /** One person's turn: their body, their wind, their wounds, their work. */
+  private updateBody(dt: number): void {
     const p = this.player;
     // On a seat you go at your team's pace, in the saddle at your mount's, and
     // on your own feet at your own.
@@ -1468,6 +1580,7 @@ export class Game {
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     const { rule } = this.movement();
     const moved = p.update(dt, this.world, rule);
+    this.acting.stepped = moved;
     if (boat && furnitureDef(boat.kind).boat?.sail && moved > 0) {
       const w = this.wind();
       if (w.force >= 0.5 && sailWord(this.heading(), w) === 'reaching') this.note('reach');
@@ -1503,16 +1616,16 @@ export class Game {
     }
     if (p.swimming) {
       // Deep water is its own teacher, and a strong swimmer tires more slowly.
-      this.swimClock += dt;
-      if (this.swimClock >= 1) {
-        this.swimClock = 0;
+      this.acting.swimClock += dt;
+      if (this.acting.swimClock >= 1) {
+        this.acting.swimClock = 0;
         this.gainSkill('swimming', 0.09);
       }
       s.stamina = Math.max(0, s.stamina - dt * 0.03 * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
       if (s.stamina <= 0) {
         s.health = Math.max(0, s.health - dt * 0.05);
-        if (this.time - this.drownWarning > 4) {
-          this.drownWarning = this.time;
+        if (this.time - this.acting.drownWarning > 4) {
+          this.acting.drownWarning = this.time;
           this.logMsg('You are exhausted and swallowing water. Get to shore!', 'error');
         }
       }
@@ -1542,10 +1655,14 @@ export class Game {
     if (s.health <= 0) this.die();
 
     if (this.action) this.updateAction(dt);
+  }
+
+  /** The island's own turn: everything there is one of. */
+  private updateWorld(dt: number): void {
     if (this.campfires.size) this.burnFires(dt);
     if (this.smelters.size) this.runSmelters(dt);
     if (this.kilns.size) this.runKilns(dt);
-    if (this.furniture.size) this.runPlaceables(dt, moved);
+    if (this.furniture.size) this.runPlaceables(dt);
     if (this.posts.size) this.runPosts(dt);
     if (this.traps.size) this.runTraps(dt);
     if (this.crops.size) this.growCrops();
@@ -2619,7 +2736,7 @@ export class Game {
    * Everything placed that works by itself: ovens burning down, wells filling,
    * rubbish rotting where it was thrown, and a cart following you about.
    */
-  private runPlaceables(dt: number, moved: number): void {
+  private runPlaceables(dt: number): void {
     // Counted the first time a hive with room in it asks, and not at all
     // when there is no hive on the deed.
     let swarms = -1;
@@ -2666,7 +2783,9 @@ export class Game {
         }
       }
       if (f.hitched) this.dragCart(f);
-      if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt, moved);
+      // A cart goes at the pace of whoever has its reins, which on a shared
+      // island is not always the person sitting at this screen.
+      if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt, this.actors.get(f.driverId ?? this.local.id)?.stepped ?? 0);
       if (def.boat && f.driven) this.floatBoat(f);
     }
   }
@@ -2676,7 +2795,8 @@ export class Game {
    * can be driven at the same time, which is what keeps this a lookup.
    */
   driving(): PlacedFurniture | undefined {
-    for (const f of this.furniture.values()) if (f.driven) return f;
+    const me = this.acting.id;
+    for (const f of this.furniture.values()) if (f.driven && (f.driverId ?? me) === me) return f;
     return undefined;
   }
 

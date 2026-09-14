@@ -115,6 +115,15 @@ export type FromHost =
   | { t: 'tile'; x: number; y: number; tile: number; data: number; corners: number[] }
   /** Something happened that belongs in the log. */
   | { t: 'said'; from: PeerId; name: string; text: string; kind: string }
+  /**
+   * Your own pack, as the island has it.
+   *
+   * A guest's hands are on the host's machine, because that is where the
+   * island is: their dig runs there, their ore goes into their pack there.
+   * This is how they find out. It is the one message that is about one person
+   * and goes to that person only.
+   */
+  | { t: 'pack'; items: unknown[]; skills: Record<string, number>; stats: unknown; nextUid: number }
   /** The clock, so a client's day is the host's day. */
   | { t: 'clock'; time: number }
   | { t: 'pong'; at: number };
@@ -148,7 +157,7 @@ export type FromClient =
 
 export type Message = FromHost | FromClient;
 
-const KNOWN = new Set(['welcome', 'refused', 'peers', 'moved', 'tile', 'said', 'clock', 'pong', 'hello', 'at', 'do', 'say', 'ping']);
+const KNOWN = new Set(['welcome', 'refused', 'peers', 'moved', 'tile', 'said', 'pack', 'clock', 'pong', 'hello', 'at', 'do', 'say', 'ping']);
 
 /**
  * On the wire. JSON, because everything the game already saves is JSON and a

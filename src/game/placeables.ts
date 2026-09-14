@@ -275,6 +275,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f) return;
       f.driven = true;
+      f.driverId = g.actor.id;
       if (isBoat(f)) {
         const boat = furnitureDef(f.kind).boat;
         g.logMsg(

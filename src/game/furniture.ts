@@ -196,6 +196,8 @@ export interface PlacedFurniture {
   team?: number[];
   /** Set while the player is up on the seat with the reins in hand. */
   driven?: boolean;
+  /** Who has the reins, by who they are on the wire. Absent means whoever is local. */
+  driverId?: number;
   /** Comb drawn but not yet capped, for a hive. */
   comb?: number;
   /** Seconds a brew still has to work before it can be drawn off. */
