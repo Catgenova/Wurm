@@ -306,6 +306,17 @@ export class Renderer {
       const p = game.player;
       this.floaters.add(p.x, p.y, 'skill', `skill:${id}`, gain, this.time, (total) => `${name} +${total.toFixed(2)}`);
     });
+    // A turn of work throws something up where the work is going: chips off
+    // the rock, earth off the spade, in the colour of whatever is there.
+    game.events.on('strike', (x, y) => {
+      if (this.camera.zoom < 0.6) return;
+      const tx = Math.floor(x);
+      const ty = Math.floor(y);
+      const w = game.world;
+      if (!w.inBounds(tx, ty) || w.heightAt(x, y) < 0) return;
+      const tone = dustTone(this.groundColor(tx, ty, ty * w.w + tx, true, this.sunNow));
+      this.dust.burst(x, y, this.time, tone, Math.max(0.45, dustiness(w.viewTile(tx, ty, true))));
+    });
     game.events.on('reset', () => {
       this.floaters.clear();
       this.dust.clear();

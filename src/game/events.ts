@@ -24,6 +24,12 @@ export type GameEvents = {
    * happened in words, this says where to write it.
    */
   hit: [x: number, y: number, amount: number, kind: 'dealt' | 'taken'];
+  /**
+   * A turn of work landed somewhere: a swing of the pickaxe, a pass of the
+   * file, one of a hundred repetitions. Carried so the renderer can show the
+   * effort where the effort is going.
+   */
+  strike: [x: number, y: number];
   reset: [];
 };
 

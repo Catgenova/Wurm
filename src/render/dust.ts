@@ -47,6 +47,21 @@ export class Dust {
     if (this.puffs.length > DUST_MAX) this.puffs.shift();
   }
 
+  /**
+   * A handful at once, thrown up from one spot: what a swing of a pickaxe or
+   * a pass of a file puts in the air. It skips the pace filter, since the
+   * whole point of it is that it all comes off the same place at once.
+   */
+  burst(x: number, y: number, now: number, colour: string, weight: number, n = 5): void {
+    if (weight <= 0.02) return;
+    for (let i = 0; i < n; i += 1) {
+      const a = (i / n) * Math.PI * 2 + now;
+      const r = 0.12 + (i % 3) * 0.07;
+      this.puffs.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.6, at: now, colour, weight });
+    }
+    while (this.puffs.length > DUST_MAX) this.puffs.shift();
+  }
+
   /** Everything still in the air, with what has settled dropped as we go. */
   live(now: number): Puff[] {
     while (this.puffs.length && now - this.puffs[0].at > DUST_LIFE) this.puffs.shift();

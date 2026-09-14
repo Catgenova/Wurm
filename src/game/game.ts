@@ -1661,6 +1661,14 @@ export class Game {
       this.events.emit('action');
       return;
     }
+    // Where the work is going, so the renderer can put the effort there. Only
+    // work done on the ground or on a beast has a place in the world; filing
+    // a nail in your own hands does not.
+    if (a.target.kind === 'tile') this.events.emit('strike', a.target.x + 0.5, a.target.y + 0.5);
+    else if (a.target.kind === 'creature') {
+      const c = this.creatures.get(a.target.id);
+      if (c) this.events.emit('strike', c.x, c.y);
+    }
     const again = a.def.perform(a.target, this) === true;
     if (a.def.tool) this.wearTool(a.def.tool);
     const cost = this.staminaCost(a.def.stamina);
