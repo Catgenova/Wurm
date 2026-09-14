@@ -334,23 +334,37 @@ const COVER_RECIPES: Recipe[] = Object.values(WOUND_KINDS).map((k) => ({
 
 RECIPES.push(...COVER_RECIPES);
 
-/** The two traps, built out of the same book the game reads them from. */
-const TRAP_RECIPES: Recipe[] = Object.values(TRAPS).map((d) => ({
-  id: `make_${d.id}`,
-  category: 'Woodwork' as RecipeCategory,
-  result: d.id,
-  inputs: d.bill.map(([item, count]) => ({ item, count })),
-  tool: d.id === 'deadfall' ? 'mallet' : undefined,
-  skill: 'carpentry',
-  material: 'wood' as MaterialKind,
-  label: `Build a ${d.name.toLowerCase()}`,
-  verb: `building a ${d.name.toLowerCase()}`,
-  baseTime: d.time,
-  stamina: 0.03,
-  difficulty: d.difficulty,
-  done: d.note,
-  fail: `The trigger will not sit and the whole thing falls in on itself.`,
-}));
+/**
+ * The traps that are *built*, out of the same book the game reads them from.
+ *
+ * Not all of them are. A creel is reed and rope rather than plank and nail,
+ * and it has its own recipe further up under ropemaking. It was generated here
+ * as well, which gave two recipes one id — and since the map that looks them
+ * up keeps whichever it saw last, the hand-written one was dead from the day
+ * it was written, and weaving a reed basket trained carpentry and came out
+ * made of wood.
+ *
+ * So anything that already has a recipe of its own keeps it, and the
+ * duplicate check below makes sure this cannot happen again quietly.
+ */
+const TRAP_RECIPES: Recipe[] = Object.values(TRAPS)
+  .filter((d) => !RECIPES.some((r) => r.id === `make_${d.id}`))
+  .map((d) => ({
+    id: `make_${d.id}`,
+    category: 'Woodwork' as RecipeCategory,
+    result: d.id,
+    inputs: d.bill.map(([item, count]) => ({ item, count })),
+    tool: d.id === 'deadfall' ? 'mallet' : undefined,
+    skill: 'carpentry',
+    material: 'wood' as MaterialKind,
+    label: `Build a ${d.name.toLowerCase()}`,
+    verb: `building a ${d.name.toLowerCase()}`,
+    baseTime: d.time,
+    stamina: 0.03,
+    difficulty: d.difficulty,
+    done: d.note,
+    fail: `The trigger will not sit and the whole thing falls in on itself.`,
+  }));
 
 RECIPES.push(...TRAP_RECIPES);
 

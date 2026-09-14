@@ -28,7 +28,31 @@ simplification rather than a problem:
   who walked away mid-dig, and is the one thing that wants a schedule
   (`select cron.schedule('wurm-sweep', '10 seconds', 'select rpc_sweep()')`).
 
-## The only four doors
+## How much of the game is here
+
+| | |
+|---|---|
+| **205** | recipes — every one of them, through one performer |
+| **1** | digging |
+| **167** | known, listed, and honestly refused |
+
+An action the rules do not implement is not the same thing as an action that
+does not exist, and the difference matters to whoever is looking at the menu:
+"there is no such thing as cut_down" invites a bug report, "you cannot chop
+down on this island yet" invites patience. So every action in the game is in
+`action_def` — generated from the same TypeScript the browser reads — and
+`act_ported()` says which have a performer behind them.
+
+The hundred-odd recipes that want a lit fire, a smelter, a spindle or a loom
+are refused in the recipe's own words until there is something to stand at:
+placeables are the next piece of work, and they unlock a large part of that
+167 at a stroke.
+
+Not yet ported at all: stamina (deliberately — half of it, with the cost but
+not the recovery, would make the island unplayable), the ledger, the journal,
+and the ease a hot oven lends to cooking.
+
+## The front doors
 
 PostgREST publishes every function in the schema, so `0007_rls.sql` takes
 execute away from everybody and hands it back to four:
@@ -39,6 +63,9 @@ execute away from everybody and hands it back to four:
 | `rpc_move(world, x, y, level)` | say where you have walked to, believed only as far as the clock allows |
 | `rpc_act(world, action, target, times)` | ask to do something |
 | `rpc_sweep()` | finish what people walked away from |
+| `rpc_found` / `rpc_put_land` / `rpc_ready` | lay an island down, once |
+| `rpc_land` | read it back |
+| `rpc_abandon` | give one up |
 
 Every table has row level security on and **not one write policy**. A client
 holding the publishable key can read the island, its own pack and its own

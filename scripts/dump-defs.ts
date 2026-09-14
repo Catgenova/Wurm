@@ -14,6 +14,8 @@ import { ITEM_DEFS } from '../src/game/items';
 import { TILE_DEFS } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
+import { ACTIONS } from '../src/game/actions';
+import { RECIPES } from '../src/game/recipes';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -43,6 +45,53 @@ out.push(`create table if not exists material_def (
   id text primary key, difficulty real not null, weight real not null, wear real not null,
   decay real not null, edge real not null, soak real not null, bite real not null, hold real not null
 );`);
+out.push(`create table if not exists action_def (
+  id text primary key, label text not null, verb text not null, skill text, tool text,
+  corner boolean not null default false, range real, stamina real not null default 0,
+  base_time real not null, difficulty real
+);`);
+/* The first cut of this table was written by hand for one action and had the
+ * shape one action needs: a difficulty that is always set, a range in whole
+ * tiles. Most actions have no difficulty at all, and a fishing rod reaches
+ * three and a half tiles. */
+out.push(`alter table action_def alter column difficulty drop not null;`);
+out.push(`alter table action_def alter column range type real;`);
+out.push(`alter table action_def add column if not exists instant boolean not null default false;`);
+out.push(`alter table action_def add column if not exists repeatable boolean not null default false;`);
+out.push(`create table if not exists recipe (
+  id text primary key, result text not null, count int not null default 1,
+  tool text, station text, skill text not null, label text not null, verb text not null,
+  base_time real not null, stamina real not null default 0, difficulty real,
+  consume_on_fail boolean not null default false, ql_from_inputs boolean not null default false,
+  material text, wood text, extra text, done text not null, fail text
+);`);
+out.push(`create table if not exists recipe_input (
+  recipe text not null references recipe on delete cascade,
+  ord int not null, item text not null, count int not null default 1,
+  primary key (recipe, ord)
+);`);
+/* What a craft hands back besides the thing itself: the bucket the lye was
+ * mixed in on success, and what is left of a spoiled batch on failure. */
+out.push(`create table if not exists recipe_gives (
+  recipe text not null references recipe on delete cascade,
+  item text not null, count int not null default 1,
+  kind text not null check (kind in ('return', 'salvage')),
+  primary key (recipe, item, kind)
+);`);
+out.push('');
+out.push(`do $rls$
+begin
+  execute 'alter table action_def enable row level security';
+  execute 'alter table recipe enable row level security';
+  execute 'alter table recipe_input enable row level security';
+  execute 'alter table recipe_gives enable row level security';
+end $rls$;`);
+for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives']) {
+  out.push(`drop policy if exists ${t}_read on ${t};`);
+  out.push(`create policy ${t}_read on ${t} for select to anon, authenticated using (true);`);
+  out.push(`grant select on ${t} to anon, authenticated;`);
+  out.push(`revoke insert, update, delete on ${t} from anon, authenticated;`);
+}
 out.push('');
 out.push('truncate item_def, tile_def, skill_def, material_def;');
 out.push('');
@@ -58,5 +107,74 @@ for (const d of SKILL_DEFS) {
 }
 for (const [id, m] of Object.entries(MATERIALS)) {
   out.push(`insert into material_def values (${q(id)}, ${q(m.difficulty)}, ${q(m.weight)}, ${q(m.wear)}, ${q(m.decay)}, ${q(m.edge)}, ${q(m.soak)}, ${q(m.bite)}, ${q(m.hold)});`);
+}
+
+/*
+ * Every action there is, as rows.
+ *
+ * The *data* half of an action — what it is called, what it needs in hand,
+ * how far away you may stand, how long it takes and how hard it is — is the
+ * same in both places and so is generated. Only the doing of it is ported by
+ * hand, which is what `act_perform` is.
+ *
+ * Writing them all down even before they can all be done is deliberate: an
+ * island that knows `chop_down` exists can say "that cannot be done here yet"
+ * rather than "there is no such thing", which is the difference between a
+ * feature that is coming and a client that looks broken.
+ */
+type A = Record<string, unknown>;
+
+/**
+ * Two things with one name is one thing, silently.
+ *
+ * `ACTION_BY_ID` and `RECIPE_BY_ID` are both `new Map(...)`, which keeps the
+ * last of any repeated key without a word — so a duplicate id is not an error
+ * in the browser, it is simply one of the two quietly never happening. The
+ * database has a primary key and says so, which is how the creel was found;
+ * this says so earlier and in a more useful place.
+ */
+const clash = (what: string, ids: string[]): void => {
+  const seen = new Set<string>();
+  const twice = ids.filter((id) => (seen.has(id) ? true : (seen.add(id), false)));
+  if (twice.length) {
+    throw new Error(`${what} defined more than once: ${[...new Set(twice)].join(', ')}`);
+  }
+};
+clash('actions', (ACTIONS as unknown as A[]).map((a) => String(a.id)));
+clash('recipes', RECIPES.map((r) => r.id));
+
+out.push('');
+out.push(`truncate action_def;`);
+for (const a of ACTIONS as unknown as A[]) {
+  out.push(`insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values (` +
+    [q(a.id), q(a.label), q(a.verb), q(a.skill), q(a.tool), q(!!a.corner), q(a.range === undefined ? null : a.range),
+     q(a.stamina ?? 0), q(a.baseTime ?? 1), q(a.difficulty === undefined ? null : a.difficulty),
+     q(!!a.instant), q(!!a.repeat)].join(', ') + `);`);
+}
+
+/*
+ * And every recipe, which is where the count stops being frightening.
+ *
+ * Two hundred and five of the actions above are a recipe with a label on it:
+ * take these things, hold that tool, stand near that fire, roll against this
+ * difficulty, and be left with that. None of them needs a line of its own in
+ * the doing — one `craft` knows how to read a row.
+ */
+out.push('');
+out.push(`truncate recipe, recipe_input, recipe_gives;`);
+for (const r of RECIPES) {
+  out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +
+    [q(r.id), q(r.result), q(r.count ?? 1), q(r.tool), q(r.station), q(r.skill), q(r.label), q(r.verb),
+     q(r.baseTime), q(r.stamina), q(r.difficulty === undefined ? null : r.difficulty),
+     q(!!r.consumeOnFail), q(!!r.qlFromInputs), q(r.material), q(r.wood), q(r.extra), q(r.done), q(r.fail)].join(', ') + `);`);
+  r.inputs.forEach((i, n) => {
+    out.push(`insert into recipe_input values (${q(r.id)}, ${n}, ${q(i.item)}, ${q(i.count ?? 1)});`);
+  });
+  for (const [item, count] of r.returns ?? []) {
+    out.push(`insert into recipe_gives values (${q(r.id)}, ${q(item)}, ${q(count)}, 'return');`);
+  }
+  for (const [item, count] of r.salvage ?? []) {
+    out.push(`insert into recipe_gives values (${q(r.id)}, ${q(item)}, ${q(count)}, 'salvage');`);
+  }
 }
 console.log(out.join('\n'));

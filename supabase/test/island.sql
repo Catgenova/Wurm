@@ -207,3 +207,44 @@ begin
   exception when others then raise notice '29. Hild giving up an island that is not hers: refused — %', sqlerrm; end;
 end $$;
 \echo ''
+\echo '--- making things: two hundred and five actions, one performer'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select id as world2 from world limit 1 \gset
+delete from event where uid = :'ivar';
+
+-- An oak log and a pine one, so the material has something to choose between.
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'world2', 'player', :'ivar', 'log', 40, 3, 'Oak'), (:'world2', 'player', :'ivar', 'log', 12, 5, 'Pine');
+select '30. a recipe that wants a loom:     ' || coalesce(act_refusal(:'world2', :'ivar', 'make_rug', '{"kind":"item"}'), 'ALLOWED');
+select '31. a recipe with nothing to make it from: ' || coalesce(act_refusal(:'world2', :'ivar', 'make_clay_bowl', '{"kind":"item"}'), 'ALLOWED');
+select '32. an action nobody has ported yet: ' || coalesce(act_refusal(:'world2', :'ivar', 'cut_down', '{"kind":"tile","x":8,"y":8}'), 'ALLOWED');
+select '33. sawing a log into planks:       ' || coalesce(act_refusal(:'world2', :'ivar', 'make_planks', '{"kind":"item"}'), 'allowed');
+
+select id as oaklog from item where holder_uid = :'ivar' and def = 'log' and extra = 'Oak' \gset
+select rpc_act(:'world2', 'make_planks', ('{"kind":"item","uid":' || :'oaklog' || '}')::jsonb, 2) \g /dev/null
+update player set act_started = act_started - interval '300 seconds', act_ends = act_ends - interval '300 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') as made \gset
+select '34. ' || :'made' || ' goes settled; planks in the pack: '
+     || coalesce((select count || ' at QL ' || round(ql::numeric,1) || ', made of ' || coalesce(extra,'nothing')
+                  from item where holder_uid = :'ivar' and def = 'plank' limit 1), 'none')
+     || ', oak logs left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log' and extra = 'Oak')
+     || ' of 3, pine untouched at ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log' and extra = 'Pine');
+select '    the island said: ' || string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('event','skill');
+
+-- Something that hands a thing back, and eats its inputs when it fails.
+delete from event where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count)
+select :'world2', 'player', :'ivar', i.item, 50, i.count * 2 from recipe_input i where i.recipe = 'make_lye';
+select '35. lye needs ' || string_agg(i.count || ' ' || i.item, ' + ' order by i.ord)
+     || ', and a spoiled batch leaves ' || (select kind || ' ' || count || ' ' || item from recipe_gives where recipe = 'make_lye')
+from recipe_input i where i.recipe = 'make_lye';
+select rpc_act(:'world2', 'make_lye', '{"kind":"item"}', 1) \g /dev/null
+update player set act_started = act_started - interval '300 seconds', act_ends = act_ends - interval '300 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '36. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said')
+     || ' — buckets in hand: ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'bucket');
+
+select '37. of ' || (select count(*) from action_def) || ' actions the island knows, '
+     || (select count(*) from action_def where act_ported(id)) || ' can be done and '
+     || (select count(*) from action_def where not act_ported(id)) || ' are honestly refused';
+\echo ''
