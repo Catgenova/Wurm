@@ -371,3 +371,46 @@ select '55. with shards in hand it becomes ' || (select name from tile_def where
      || ', shards left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'rock_shards')
      || ' — and cultivating gravel: ' || coalesce(act_refusal(:'world2', :'ivar', 'cultivate', '{"kind":"tile","x":9,"y":9}'), 'ALLOWED');
 \echo ''
+\echo '--- taking what the island grows'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 11.5, y = 11.5 where uid = :'ivar';
+
+-- An old oak standing at 11,11. Species in the low four bits, age in the next two.
+do $$
+declare w uuid := (select id from world order by name limit 1); oak int;
+begin
+  select id into oak from tree_def where name = 'Oak';
+  perform land_set_tile(w, 11, 11, tile_id('Tree'));
+  perform land_set_data(w, 11, 11, oak | (2 << 4));
+end $$;
+select '56. standing at 11,11: a ' || (select name from tree_def where id = tree_species(land_data(:'world2',11,11)))
+     || ', age ' || tree_age(land_data(:'world2',11,11)) || ' of 2, worth '
+     || ((select logs from tree_def where id = tree_species(land_data(:'world2',11,11))) + 1) || ' logs standing';
+select '57. felling it: ' || coalesce(act_refusal(:'world2', :'ivar', 'cut_down', '{"kind":"tile","x":11,"y":11}'), 'allowed');
+update skill set value = 40 where uid = :'ivar' and id = 'woodcutting';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'woodcutting', 40 where not exists (select 1 from skill where uid = :'ivar' and id = 'woodcutting');
+select rpc_act(:'world2', 'cut_down', '{"kind":"tile","x":11,"y":11}', 3) \g /dev/null
+update player set act_started = act_started - interval '300 seconds', act_ends = act_ends - interval '300 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '58. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said');
+select '    the tile is now ' || (select name from tile_def where id = land_tile(:'world2',11,11))
+     || ', and the logs are ' || coalesce((select 'made of ' || extra || ', ' || sum(count) || ' of them' from item where holder_uid = :'ivar' and def = 'log' group by extra limit 1), 'not there')
+     || ' — and swinging again: ' || coalesce(act_refusal(:'world2', :'ivar', 'cut_down', '{"kind":"tile","x":11,"y":11}'), 'ALLOWED');
+
+delete from event where uid = :'ivar';
+do $$ declare w uuid := (select id from world order by name limit 1);
+begin perform land_set_tile(w, 12, 12, tile_id('Grass')); end $$;
+update player set x = 12.5, y = 12.5 where uid = :'ivar';
+update skill set value = 45 where uid = :'ivar' and id = 'foraging';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'foraging', 45 where not exists (select 1 from skill where uid = :'ivar' and id = 'foraging');
+select '59. foraging at 45 goes over the ground ' || rolls_at(45) || ' times; the spot is '
+     || case when is_foraged(:'world2', 12, 12, 'forage') then 'picked over' else 'untouched' end;
+select rpc_act(:'world2', 'forage', '{"kind":"tile","x":12,"y":12}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '60. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said');
+select '61. going back to the same spot: ' || coalesce(act_refusal(:'world2', :'ivar', 'forage', '{"kind":"tile","x":12,"y":12}'), 'ALLOWED');
+update foraged set at = at - interval '200 seconds' where x = 12 and y = 12;
+select '62. and three minutes later: ' || coalesce(act_refusal(:'world2', :'ivar', 'forage', '{"kind":"tile","x":12,"y":12}'), 'allowed again');
+\echo ''

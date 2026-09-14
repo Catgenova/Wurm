@@ -1,4 +1,4 @@
--- The dispatcher, with the ground in it.
+-- The dispatcher: the ground, and what grows on it.
 
 create or replace function act_refusal(p_world uuid, p_uid uuid, p_action text, p_target jsonb)
   returns text language plpgsql stable as $$
@@ -26,6 +26,9 @@ begin
   end if;
   if p_action in ('mine', 'chip_corner', 'pack', 'cultivate', 'pave_gravel', 'pave_cobble', 'drop_dirt_here') then
     return terrain_refusal(p_world, p_uid, p_action, p_target);
+  end if;
+  if p_action in ('cut_down', 'forage', 'botanize', 'collect') then
+    return gather_refusal(p_world, p_uid, p_action, p_target);
   end if;
 
   if exists (select 1 from recipe where id = p_action) then
@@ -58,6 +61,10 @@ begin
   end if;
   if p_action in ('mine', 'chip_corner', 'pack', 'cultivate', 'pave_gravel', 'pave_cobble', 'drop_dirt_here') then
     perform perform_terrain(p_world, p_uid, p_action, p_target);
+    return;
+  end if;
+  if p_action in ('cut_down', 'forage', 'botanize', 'collect') then
+    perform perform_gather(p_world, p_uid, p_action, p_target);
     return;
   end if;
   if exists (select 1 from recipe where id = p_action) then

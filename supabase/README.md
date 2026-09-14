@@ -35,7 +35,8 @@ simplification rather than a problem:
 | **205** | recipes — every one of them, through one performer |
 | **14** | things set down on the ground: campfires, smelters, furniture |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
-| **146** | known, listed, and honestly refused |
+| **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
+| **142** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -55,7 +56,15 @@ being refused because your hands are full.
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the ledger, the journal,
 kilns and what they fire, smelting jobs themselves, flattening and levelling,
-paving with cut slabs, and the ease a hot oven lends to cooking.
+paving with cut slabs, farming, fishing, planting trees, prospecting, and the
+ease a hot oven lends to cooking.
+
+### Tile numbers are looked up, not typed
+
+A tile is written down as a number, so the list may only be appended to — but
+the numbers are a poor thing to hand-write. `Tree` was typed as 3 in the first
+draft of the felling code, which is Sand, so cutting down a tree became cutting
+down a beach. `tile_id('Tree')` cannot be got wrong.
 
 ### The ore hash is the ore hash
 
