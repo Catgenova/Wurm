@@ -1,7 +1,7 @@
 import { crateCentre, crateName, crateCapacity, crateUnits } from '../../game/crates';
 import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
 import type { Game } from '../../game/game';
-import { itemDef, type Item, itemName } from '../../game/items';
+import { bagAdd, bagRefuses, bagRoom, bagTake, itemDef, type Item, itemName } from '../../game/items';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 
@@ -25,6 +25,7 @@ export class CratePanel {
   private crateId: number | null = null;
   private furnitureId: number | null = null;
   private creatureId: number | null = null;
+  private bagUid: number | null = null;
 
   constructor(
     private readonly win: UIWindow,
@@ -89,6 +90,29 @@ export class CratePanel {
         take: (uid) => this.game.pannierTake(beast, uid),
         refuses: (item) => (units() + item.count > cap ? `${beast.name} is loaded as it is.` : null),
         add: (item) => this.game.pannierAdd(beast, item),
+      };
+    }
+    // A bag carried in the pack, seen through the same window as a crate.
+    const bag = this.bagUid !== null ? this.game.inventory.get(this.bagUid) : undefined;
+    if (bag && bagRoom(bag)) {
+      return {
+        title: `${itemName(bag)} (QL ${bag.ql.toFixed(0)})`,
+        items: bag.inside ?? [],
+        capacity: bagRoom(bag),
+        centre: [this.game.player.x, this.game.player.y],
+        what: itemDef(bag.id).name.toLowerCase(),
+        take: (uid) => {
+          const it = bagTake(bag, uid);
+          if (it) this.game.inventory.addItem(it);
+          this.game.events.emit('inventory');
+          return it;
+        },
+        refuses: (item) => bagRefuses(bag, item),
+        add: (item) => {
+          const ok = bagAdd(bag, item);
+          this.game.events.emit('inventory');
+          return ok;
+        },
       };
     }
     const piece = this.furnitureId !== null ? this.game.furniture.get(this.furnitureId) : undefined;
@@ -163,6 +187,7 @@ export class CratePanel {
     this.crateId = id;
     this.furnitureId = null;
     this.creatureId = null;
+    this.bagUid = null;
     this.render();
     this.win.open();
   }
@@ -171,15 +196,27 @@ export class CratePanel {
     this.furnitureId = id;
     this.crateId = null;
     this.creatureId = null;
+    this.bagUid = null;
     this.render();
     this.win.open();
   }
 
   /** The panniers on a pack beast's back, seen through the same window. */
+  /** Open a bag carried in the pack. */
+  openBag(uid: number): void {
+    this.bagUid = uid;
+    this.crateId = null;
+    this.furnitureId = null;
+    this.creatureId = null;
+    this.render();
+    this.win.open();
+  }
+
   openPannier(id: number): void {
     this.creatureId = id;
     this.crateId = null;
     this.furnitureId = null;
+    this.bagUid = null;
     this.render();
     this.win.open();
   }

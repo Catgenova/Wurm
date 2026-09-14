@@ -24,7 +24,7 @@ import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
 import { affinityOf } from './boons';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight, rarityOf } from './items';
+import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, isBag } from './items';
 import { RECIPE_ACTIONS } from './recipes';
 
 /**
@@ -825,6 +825,67 @@ export const ACTIONS: ActionDef[] = [
       // trade for a while.
       const favour = g.grantAffinity(item.id, item.ql);
       g.logMsg(`You eat the ${def.name.toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
+    },
+  },
+  {
+    id: 'stow_item',
+    label: 'Put it in a bag',
+    verb: 'stowing it',
+    instant: true,
+    quantity: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      if (!item || isBag(item) || g.isEquipped(item.uid)) return false;
+      return g.inventory.items.some((b) => isBag(b) && !bagRefuses(b, { ...item, count: 1 }));
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (isBag(item)) return 'One bag will not go inside another.';
+      const bag = g.inventory.items.find((b) => isBag(b) && !bagRefuses(b, { ...item, count: t.count ?? 1 }));
+      return bag ? null : 'There is no bag with room for it.';
+    },
+    maxRepeat: (t, g) => (t.kind === 'item' ? (g.inventory.get(t.uid)?.count ?? 1) : 1),
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const held = g.inventory.get(t.uid);
+      if (!held) return;
+      const want = Math.min(t.count ?? 1, held.count);
+      const bag = g.inventory.items.find((b) => isBag(b) && !bagRefuses(b, { ...held, count: want }));
+      if (!bag) return;
+      const taken = g.inventory.take(held.uid, want);
+      if (!taken || !bagAdd(bag, taken)) {
+        if (taken) g.inventory.addItem(taken);
+        return;
+      }
+      g.events.emit('inventory');
+      g.logMsg(`You put ${want > 1 ? `${want} × ` : ''}${itemName(taken).toLowerCase()} in the ${itemDef(bag.id).name.toLowerCase()}.`, 'event');
+    },
+  },
+  {
+    id: 'empty_bag',
+    label: 'Empty it out',
+    verb: 'emptying it',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && isBag(item) && !!item.inside?.length;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const bag = g.inventory.get(t.uid);
+      if (!bag?.inside?.length) return;
+      const n = bag.inside.length;
+      for (const it of bag.inside.splice(0)) g.inventory.addItem(it);
+      g.events.emit('inventory');
+      g.logMsg(`You turn the ${itemDef(bag.id).name.toLowerCase()} out: ${n} ${n === 1 ? 'thing' : 'things'} back in your pack.`, 'event');
     },
   },
   {

@@ -266,6 +266,16 @@ export function buildHelp(win: UIWindow): void {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <h3>Bags</h3>
+    <p>Three things hold other things and are carried in your pack: a <b>sack</b> of 2 cloth (40 things),
+    a <b>satchel</b> of 3 leather and a ribbon (25), and a <b>backpack</b> of 6 leather and 2 ribbons
+    (60). Open one from its entry in your pack, or use <i>Put it in a bag</i> on anything you are
+    carrying; <i>Empty it out</i> turns the whole thing back into your pack.</p>
+    <p>What is in a bag is <b>out of reach</b> until it comes out again &mdash; no recipe will draw on it
+    &mdash; and one bag will not go inside another. What a bag is for is that it <b>sheds the
+    weather</b>: drop a full one on the ground and what is inside rots at four fifths the rate in a
+    sack, half in a satchel and two fifths in a backpack. A backpack of food and tools left at a work
+    post keeps far better than the same things thrown down beside it.</p>
     <h3>Work posts</h3>
     <p>A <b>work post</b> is a settlement's worth of orders on a stake. Build one from <b>2 planks, 2
     shafts, 4 nails and a metal ribbon</b> with a mallet, then right-click a spot on any tile

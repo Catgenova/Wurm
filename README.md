@@ -235,6 +235,15 @@ rebuilds and commits the result.
   and a better one: the brickwork holds its heat, so what would have burnt
   over a flame comes out right and comes out finer. It leaves ashes like any
   other fire.
+- **Bags.** A **sack** of 2 cloth (40 things), a **satchel** of 3 leather and a
+  ribbon (25) and a **backpack** of 6 leather and 2 ribbons (60), all carried
+  in the pack and opened through the same window as a crate. What is in a bag
+  is out of reach until it comes out — no recipe draws on it — and one bag
+  will not go inside another. What a bag is for is that it sheds the weather:
+  dropped on the ground, what is inside rots at four fifths the rate in a
+  sack, half in a satchel and two fifths in a backpack, so a pack of food and
+  tools left at a work post keeps far better than the same things thrown down
+  beside it.
 - **Work posts.** A settlement's worth of orders on a stake: 2 planks, 2
   shafts, 4 nails and a metal ribbon with a mallet, driven into any spot on
   open ground **outside** your own borders. One wildermon may be set to it and

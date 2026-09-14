@@ -1,5 +1,5 @@
 import type { Game } from '../../game/game';
-import { itemDef, itemName, type Item, type ItemCategory, itemWeight, rarityOf } from '../../game/items';
+import { itemDef, itemName, type Item, type ItemCategory, itemWeight, rarityOf, bagRoom, bagUnits, isBag } from '../../game/items';
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
@@ -24,6 +24,8 @@ export class InventoryPanel {
     private readonly game: Game,
     private readonly menu: ContextMenu,
     private readonly dropped?: (p: DragPayload) => void,
+    /** Opens a carried bag in the store window. */
+    private readonly openBag?: (uid: number) => void,
   ) {
     this.search = document.createElement('input');
     this.search.type = 'search';
@@ -124,7 +126,10 @@ export class InventoryPanel {
   /** Action menu for an item; stack actions get a one / all submenu. */
   private openMenu(item: Item, x: number, y: number): void {
     const target = { kind: 'item' as const, uid: item.uid };
-    const entries: MenuItem[] = this.game.actionsFor(target).map(({ def, reason }) => {
+    const entries: MenuItem[] = [];
+    // A bag is opened rather than used, so that entry comes first.
+    if (isBag(item)) entries.push({ label: 'Open', note: `${bagUnits(item)} / ${bagRoom(item)} things`, onSelect: () => this.openBag?.(item.uid) });
+    entries.push(...this.game.actionsFor(target).map(({ def, reason }) => {
       const all = def.maxRepeat ? def.maxRepeat(target, this.game) : item.count;
       if (def.quantity && all > 1 && !reason) {
         return {
@@ -136,7 +141,7 @@ export class InventoryPanel {
         };
       }
       return { label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) };
-    });
+    }));
     this.win.focus();
     this.menu.show(x, y, itemName(item), entries);
   }

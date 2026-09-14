@@ -14,7 +14,7 @@ import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
-import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf } from './items';
+import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { affinityOf, affinityTime, AFFINITY_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
@@ -873,6 +873,15 @@ export class Game {
       for (let i = pile.length - 1; i >= 0; i--) {
         const item = pile[i];
         item.dmg = Math.min(100, item.dmg + groundDecayRate(item) * hours * mult);
+        // A bag sheds the weather: what is in it ages slower than what is not.
+        const shelter = itemDef(item.id).shelter;
+        if (shelter !== undefined && item.inside?.length) {
+          for (let k = item.inside.length - 1; k >= 0; k--) {
+            const held = item.inside[k];
+            held.dmg = Math.min(100, held.dmg + groundDecayRate(held) * hours * mult * shelter);
+            if (held.dmg >= 100) item.inside.splice(k, 1);
+          }
+        }
         if (item.dmg >= 100) {
           pile.splice(i, 1);
           lost += item.count;

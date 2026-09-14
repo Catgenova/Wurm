@@ -16,6 +16,16 @@ export interface ItemDef {
   /** Damage taken per real hour while lying on the ground; defaults by category. */
   decay?: number;
   description?: string;
+  /**
+   * A thing that holds other things: how many it takes. What is in a bag is
+   * out of reach until it comes out again, which is the point of a bag.
+   */
+  holds?: number;
+  /**
+   * How much of the weather it keeps off what is inside, for a bag left on
+   * the ground. Half means what is in it rots at half the rate.
+   */
+  shelter?: number;
 }
 
 /** Ground decay per hour by category: food rots in about half an hour, tools last most of a day. */
@@ -274,6 +284,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   coat_rack: { name: 'Coat rack', category: 'misc', weight: 6, decay: 4, description: 'Pegs on a post, by the door.' },
   planter: { name: 'Planter', category: 'misc', weight: 12, decay: 4, description: 'A box of earth with something green in it.' },
   firewood_rack: { name: 'Firewood rack', category: 'misc', weight: 14, decay: 4, description: 'Keeps the wood off the wet ground. Holds 40 things.' },
+  sack: { name: 'Sack', category: 'misc', weight: 0.4, decay: 8, holds: 40, shelter: 0.8, description: 'A cloth sack. Holds 40 things, and keeps a little of the weather off them if it is left out.' },
+  satchel: { name: 'Satchel', category: 'misc', weight: 1.2, decay: 4, holds: 25, shelter: 0.5, description: 'A stitched leather satchel with a flap. Holds 25 things, and what is in it rots at half the rate if you leave it lying about.' },
+  backpack: { name: 'Backpack', category: 'misc', weight: 2.4, decay: 4, holds: 60, shelter: 0.4, description: 'A deep leather pack on ribbon straps. Holds 60 things and sheds most of the weather. Drop a full one at a work post and it keeps.' },
   work_post: { name: 'Work post', category: 'misc', weight: 5, decay: 4, description: 'A stake, a crossbar and a strip of metal for a marker. Driven into open ground off your deed, it stands half an hour to three hours by its quality, and one wildermon will work out of it as it would out of a settlement. When it goes over, the creature comes back to you.' },
   hive: { name: 'Hive', category: 'misc', weight: 10, decay: 4, description: 'A stack of shallow boxes for a swarm to live in. Set it down on your deed and keep a Vesp there, and it fills itself with honey and beeswax. Holds 40 of them.' },
   spindle: { name: 'Spindle', category: 'misc', weight: 5, decay: 4, description: 'Spins wool, cotton and wemp into yarn. Stand at it to work.' },
@@ -309,6 +322,8 @@ export interface Item {
   issued?: boolean;
   /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
   rare?: number;
+  /** What is in it, for the things that hold things. */
+  inside?: Item[];
 }
 
 /**
@@ -382,8 +397,49 @@ export function groundDecayRate(item: Item): number {
 
 /** What one of a thing weighs, which is its make and what it is made of. */
 export const unitWeight = (item: { id: string; extra?: string }): number => itemDef(item.id).weight * matOfItem(item).weight;
-/** What a whole stack of it weighs. */
-export const itemWeight = (item: { id: string; extra?: string; count: number }): number => unitWeight(item) * item.count;
+/** What a whole stack of it weighs, and everything it has inside it. */
+export const itemWeight = (item: { id: string; extra?: string; count: number; inside?: Item[] }): number =>
+  unitWeight(item) * item.count + (item.inside ?? []).reduce((n, it) => n + itemWeight(it), 0);
+
+// ---- Bags: the things that hold other things. ----
+
+/** How many a bag takes, or nothing at all for the things that are not bags. */
+export const bagRoom = (item: Item): number => itemDef(item.id).holds ?? 0;
+export const isBag = (item: Item): boolean => bagRoom(item) > 0;
+export const bagUnits = (item: Item): number => (item.inside ?? []).reduce((n, it) => n + it.count, 0);
+
+/**
+ * Why a bag will not take something, or null. Nothing that holds things may
+ * go inside something else that holds things: that way lies a bag inside a
+ * bag inside a bag, and a weight nobody can work out.
+ */
+export function bagRefuses(bag: Item, item: Item): string | null {
+  if (!isBag(bag)) return `A ${itemDef(bag.id).name.toLowerCase()} does not hold things.`;
+  if (isBag(item)) return 'One bag will not go inside another.';
+  if (bagUnits(bag) + item.count > bagRoom(bag)) return `The ${itemDef(bag.id).name.toLowerCase()} is full.`;
+  return null;
+}
+
+/** Put something in a bag, stacking with what is already in it where it will. */
+export function bagAdd(bag: Item, item: Item): boolean {
+  if (bagRefuses(bag, item)) return false;
+  if (!bag.inside) bag.inside = [];
+  const def = ITEM_DEFS[item.id];
+  const stack = def?.stackable ? bag.inside.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare) : undefined;
+  if (stack) {
+    stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
+    stack.count += item.count;
+  } else bag.inside.push(item);
+  return true;
+}
+
+/** Take something out of a bag, whole. */
+export function bagTake(bag: Item, uid: number): Item | null {
+  const idx = (bag.inside ?? []).findIndex((it) => it.uid === uid);
+  if (idx < 0) return null;
+  const [item] = (bag.inside as Item[]).splice(idx, 1);
+  return item;
+}
 
 export function itemName(item: Item): string {
   const def = itemDef(item.id);
