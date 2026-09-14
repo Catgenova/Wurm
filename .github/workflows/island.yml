@@ -60,6 +60,9 @@ jobs:
           npm run defs
           git diff --exit-code supabase/migrations/*_defs.sql \
             || { echo "::error::The generated definitions are out of date. Run 'npm run defs' and commit."; exit 1; }
+          npm run db:bundle
+          git diff --exit-code supabase/all.sql \
+            || { echo "::error::supabase/all.sql is out of date. Run 'npm run db:bundle' and commit."; exit 1; }
       - name: Joining, refusing, digging, settling and who may write what
         run: supabase/test/run.sh
       - name: An island out through the wire format and back, corner by corner

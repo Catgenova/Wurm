@@ -48,6 +48,20 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     const seed = (Math.random() * 0x7fffffff) >>> 0;
     const gen = generateWorld(seed, size);
     id = await island.found(gen.world, founding || 'An island', gen.spawn);
+    /**
+     * Put the island's name in the address bar.
+     *
+     * Without this an island is founded and then immediately lost: the only
+     * copy of the one thing anybody needs in order to visit it — its id — was
+     * a string in a variable. Now the page you are looking at *is* the
+     * invitation, and reloading comes back to the same island rather than
+     * founding another one.
+     */
+    const here = new URLSearchParams(params);
+    here.delete('found');
+    here.delete('size');
+    here.set('island', id);
+    history.replaceState({}, '', `?${here.toString()}`);
   }
 
   tell('Coming ashore…');
@@ -88,6 +102,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     }
   };
   for (const [text, kind] of log) game.write(text, kind as Parameters<Game['write']>[1]);
+  game.write(`You are on ${info.name}. Send somebody this page's address and they can join you.`, 'system');
   await island.refreshPack();
   await island.refreshPeople();
   return { game, island, id };

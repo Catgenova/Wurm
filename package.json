@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "defs": "esbuild scripts/dump-defs.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/dump-defs.mjs --log-level=error && node node_modules/.cache/dump-defs.mjs > supabase/migrations/20260914180300_defs.sql",
-    "db:test": "supabase/test/run.sh"
+    "db:test": "supabase/test/run.sh",
+    "db:bundle": "node scripts/bundle-sql.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
