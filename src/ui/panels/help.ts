@@ -597,6 +597,21 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>Light after dark</h3>
+    <p>Night falls properly now, and something has to push back against it. Build a <b>lantern</b> (4
+    ribbons, 2 cloth and a shaft, hammered together &mdash; blacksmithing 24), <b>draw candles</b> from
+    beeswax and yarn, put one in and strike a light with a tinderbox. It burns <b>only while it is
+    lit</b>, so carrying a dark lantern costs nothing but its weight, and when the candle is done it
+    gutters out and says so.</p>
+    <p>A better lantern keeps the draught off the flame and throws further: <b>five tiles and about
+    seventeen minutes</b> to a candle at the roughest, <b>nine tiles and twenty-nine minutes</b> at the
+    best. Carrying one lit gives back most of what the dark takes from your sight &mdash; at the dead of
+    night you see <b>eight tiles</b> without one and <b>sixteen</b> with &mdash; and its reach is a
+    floor under your sight however black it gets.</p>
+    <p>Everything else that burns casts a circle too: a <b>lit campfire</b> five tiles, an <b>oven,
+    kiln or smelter</b> in blast four, and the two creatures that carry a light of their own whatever
+    their own reach is. Each one burns a soft-edged hole in the night with a little firelight in it.
+    None of this is worked out at all while the sun is up.</p>
     <h3>Night, and a bed to wake in</h3>
     <p>The island keeps a clock now, shown beside your position: a full day and night passes in
     <b>twenty-four minutes</b>, an hour to the minute. The sun goes down at eight and comes up at six,

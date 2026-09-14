@@ -33,6 +33,7 @@ import { Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
+import { FIRE_REACH, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { emptyNutrition, helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
@@ -1156,6 +1157,45 @@ export class Game {
     return this.player.wounds.some((w) => w.bleeding || w.infected);
   }
 
+  /** The lit lantern you are carrying, if you are carrying one. */
+  litLantern(): Item | undefined {
+    return this.inventory.items.find((it) => it.id === 'lantern' && it.lit && (it.charges ?? 0) > 0);
+  }
+
+  /**
+   * Everything burning near enough to matter, as circles of light. The
+   * renderer cuts these out of the night and the eye reaches further inside
+   * them. Only what is close is looked at: a fire forty tiles off lights
+   * nothing you can see.
+   */
+  lights(): LightSource[] {
+    if (this.darkness() <= 0.01) return [];
+    const out: LightSource[] = [];
+    const px = this.player.x;
+    const py = this.player.y;
+    const near = (x: number, y: number): boolean => Math.abs(x - px) < 60 && Math.abs(y - py) < 60;
+    const lamp = this.litLantern();
+    if (lamp) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92 });
+    for (const f of this.campfires.values()) {
+      if (!f.lit || !near(f.x, f.y)) continue;
+      const [cx, cy] = fireCentre(f);
+      out.push({ x: cx, y: cy, radius: FIRE_REACH, strength: 0.85 });
+    }
+    for (const f of this.furniture.values()) {
+      if (!f.lit || !near(f.x, f.y)) continue;
+      const [cx, cy] = furnitureCentre(f);
+      out.push({ x: cx, y: cy, radius: OVEN_REACH, strength: 0.8 });
+    }
+    for (const k of this.kilns.values()) if (k.lit && near(k.x, k.y)) out.push({ x: k.x + 0.5, y: k.y + 0.5, radius: OVEN_REACH, strength: 0.8 });
+    for (const sm of this.smelters.values()) if (sm.lit && near(sm.x, sm.y)) out.push({ x: sm.x + 1, y: sm.y + 0.5, radius: OVEN_REACH, strength: 0.85 });
+    // The two that carry a light of their own.
+    for (const c of this.creatures.list.values()) {
+      const glow = this.creatures.species(c).glow;
+      if (glow && near(c.x, c.y)) out.push({ x: c.x, y: c.y, radius: glow, strength: 0.7 });
+    }
+    return out;
+  }
+
   /** Hours since midnight, 0 up to 24. */
   hourOfDay(): number {
     return ((this.time % DAY_SECONDS) / DAY_SECONDS) * 24;
@@ -1446,6 +1486,16 @@ export class Game {
       s.stamina = Math.min(1, s.stamina + dt * regen * starving);
       // Nothing knits while it is still open: see to the wound first.
       if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1 && !this.bleeding()) s.health = Math.min(1, s.health + dt * 0.004);
+    }
+    // A candle burns only while the wick is lit; a dark lantern costs nothing.
+    const lamp = this.litLantern();
+    if (lamp) {
+      lamp.charges = Math.max(0, (lamp.charges ?? 0) - dt);
+      if (lamp.charges <= 0) {
+        lamp.lit = false;
+        this.logMsg('The candle gutters out and the lantern goes dark.', 'event');
+        this.events.emit('inventory');
+      }
     }
     this.tendWounds(dt);
     // Favour comes back on its own, at a trickle, up to what faith carries.

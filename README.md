@@ -310,6 +310,15 @@ rebuilds and commits the result.
   where you stand. Barrels hold liquid and nothing else in three sizes (30,
   80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
   empty bucket back, and filling beside a barrel draws out of it.
+- **Light after dark.** A candle was makeable from the start and its own
+  description promised a lantern that did not exist; here it is. A **lantern**
+  (4 ribbons, 2 cloth, a shaft, on a hammer) takes a candle and burns it only
+  while lit — five tiles and 17 minutes to a candle at the roughest, nine tiles
+  and 29 at the best. Carried lit it gives back most of what the dark takes:
+  8 tiles of sight at the dead of night without one, 16 with. Lit campfires,
+  ovens, kilns, smelters and the two glowing creatures each cast their own
+  circle, burnt out of the night wash with a soft edge and a little firelight
+  in it. Nothing is computed while the sun is up.
 - **Calling things by name.** Any crate, bin, chest, cart, piece of furniture,
   work post or trap takes a name of its own, and that name is what it is called
   everywhere after — the Stores window, the settlement window, its own menu,

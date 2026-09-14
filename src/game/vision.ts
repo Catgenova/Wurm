@@ -1,6 +1,7 @@
 import { TileType } from '../world/tiles';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
+import { lanternReach } from './light';
 
 /**
  * What can be seen from where you are standing.
@@ -129,10 +130,15 @@ export class Vision {
   sightRange(): number {
     const g = this.game;
     const up = Math.max(0, g.world.heightAt(g.player.x, g.player.y));
-    const day = 1 - NIGHT_LOSS * g.darkness();
+    // A lit lantern gives back most of what the dark takes, and its reach is
+    // a floor under your sight however black the night: you can always see as
+    // far as the light carries.
+    const lamp = g.litLantern();
+    const day = 1 - NIGHT_LOSS * g.darkness() * (lamp ? 0.25 : 1);
     // The reader's path sees a quarter further than anybody else.
     const keen = g.walks('knowledge', 5) ? 1.25 : 1;
-    return Math.max(4, Math.min(MAX_SIGHT * keen, (BASE_SIGHT + up / HEIGHT_PER_TILE) * day * keen));
+    const seen = Math.max(4, Math.min(MAX_SIGHT * keen, (BASE_SIGHT + up / HEIGHT_PER_TILE) * day * keen));
+    return lamp ? Math.max(seen, lanternReach(lamp.ql)) : seen;
   }
 
   private recompute(): void {

@@ -209,6 +209,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   cheese: { name: 'Cheese', category: 'food', weight: 0.4, stackable: true, food: 0.3, decay: 4, description: 'Milk pressed and left to itself for a while. It keeps far better than what it was made of.', feeds: { fat: 0.12, flesh: 0.1 } },
   honey: { name: 'Honey', category: 'food', weight: 0.3, stackable: true, food: 0.22, decay: 0.4, description: 'Comb honey out of a hive. It keeps almost forever and everything on the island wants it.', feeds: { starch: 0.1, fat: 0.03 } },
   wax: { name: 'Beeswax', category: 'material', weight: 0.2, stackable: true, decay: 1, description: 'Comb rendered down. It is what a candle is, and what a waxed thread is drawn through.' },
+  lantern: { name: 'Lantern', category: 'tool', weight: 1.4, decay: 3, description: 'Four ribbons of iron, two panes of oiled cloth and a handle. Put a candle in it, strike it, and the night stops being a wall.' },
   candle: { name: 'Candle', category: 'misc', weight: 0.2, stackable: true, decay: 2, description: 'Wax drawn round a wick. Set one in a lantern and it will show you the ground on the blackest night.' },
   compost: { name: 'Compost', category: 'material', weight: 1.2, stackable: true, decay: 2, description: 'What a Middun leaves behind, which is the best thing that ever happened to a field. Spread it on tilled ground.' },
   saddle: { name: 'Saddle', category: 'material', weight: 7, stackable: true, decay: 8, description: 'A tree of wood under stitched leather, girthed and stirruped. Fit one to an Orse and you can ride it.' },
@@ -366,8 +367,10 @@ export interface Item {
   count: number;
   /** Free text qualifier such as a wood or tree species. */
   extra?: string;
-  /** Remaining drinks in a container. */
+  /** Remaining drinks in a container, or seconds of candle left in a lantern. */
   charges?: number;
+  /** Alight, for the things that burn. */
+  lit?: boolean;
   /**
    * Handed out rather than made. What you washed ashore with is serviceable
    * and no more: it can be mended, but there is nothing in it to better.

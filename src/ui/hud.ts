@@ -416,6 +416,9 @@ export class Hud {
     if (favour >= 1) parts.push(`Favour ${Math.floor(favour)} of ${Math.floor(favourCap(this.game.skills.get(FAITH)))}`);
     const over = this.game.overloaded();
     if (over > 0) parts.push(`Overloaded by ${over.toFixed(0)} kg`);
+    // A lit lantern is a thing with a clock on it, so the clock is shown.
+    const lamp = this.game.litLantern();
+    if (lamp) parts.push(`Lantern lit · ${clockLeft(lamp.charges ?? 0)} of candle`);
     // What the ground under a loaded wheel is costing, when it is costing anything.
     const cart = this.game.driving();
     if (cart) {

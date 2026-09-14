@@ -217,6 +217,24 @@ export class Renderer {
     }
   }
 
+  /**
+   * The scratch canvas the night is mixed on. It is kept between frames and
+   * only resized when the window is, since making one every frame at screen
+   * size is the sort of thing that costs a night's frame rate.
+   */
+  private night: HTMLCanvasElement | null = null;
+
+  private nightLayer(): HTMLCanvasElement {
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    if (!this.night || this.night.width !== w || this.night.height !== h) {
+      this.night = document.createElement('canvas');
+      this.night.width = w;
+      this.night.height = h;
+    }
+    return this.night;
+  }
+
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
   private computeColor(x: number, y: number, type: TileType, data: number): string {
     const w = this.game.world;
@@ -1364,11 +1382,62 @@ export class Renderer {
       ctx.lineWidth = 1;
     }
 
-    // Night: a cold wash over the whole world. Markers and the hud sit on top of it.
+    /*
+     * Night: a cold wash over the whole world, with a hole burnt in it by
+     * everything alight. The wash is laid down on its own layer so each light
+     * can be taken back out of it with a soft-edged gradient; that is what
+     * makes a lantern feel like a lantern rather than a brighter circle.
+     * Markers and the hud sit on top of the lot.
+     */
     const dark = game.darkness();
     if (dark > 0.01) {
-      ctx.fillStyle = `rgba(12, 20, 44, ${(dark * 0.6).toFixed(3)})`;
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      const lights = game.lights();
+      if (!lights.length) {
+        ctx.fillStyle = `rgba(12, 20, 44, ${(dark * 0.68).toFixed(3)})`;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      } else {
+        const night = this.nightLayer();
+        const nc = night.getContext('2d') as CanvasRenderingContext2D;
+        nc.setTransform(1, 0, 0, 1, 0, 0);
+        nc.globalCompositeOperation = 'source-over';
+        nc.fillStyle = `rgba(12, 20, 44, ${(dark * 0.68).toFixed(3)})`;
+        nc.fillRect(0, 0, night.width, night.height);
+        nc.globalCompositeOperation = 'destination-out';
+        for (const l of lights) {
+          const h = w.heightAt(l.x, l.y);
+          const sx = cam.worldToScreenX(l.x, l.y);
+          const sy = cam.worldToScreenY(l.x, l.y, h);
+          const r = Math.max(8, l.radius * HALF_W * zoom);
+          if (sx < -r || sy < -r || sx > night.width + r || sy > night.height + r) continue;
+          const grad = nc.createRadialGradient(sx, sy, 0, sx, sy, r);
+          grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
+          grad.addColorStop(0.55, `rgba(0,0,0,${(l.strength * 0.55).toFixed(2)})`);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          nc.fillStyle = grad;
+          nc.beginPath();
+          nc.arc(sx, sy, r, 0, Math.PI * 2);
+          nc.fill();
+        }
+        nc.globalCompositeOperation = 'source-over';
+        ctx.drawImage(night, 0, 0);
+        // A warm cast where the firelight actually falls, over the cold.
+        ctx.globalCompositeOperation = 'lighter';
+        for (const l of lights) {
+          const h = w.heightAt(l.x, l.y);
+          const sx = cam.worldToScreenX(l.x, l.y);
+          const sy = cam.worldToScreenY(l.x, l.y, h);
+          const r = Math.max(8, l.radius * HALF_W * zoom);
+          if (sx < -r || sy < -r || sx > this.canvas.width + r || sy > this.canvas.height + r) continue;
+          const warm = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+          warm.addColorStop(0, `rgba(255, 186, 92, ${(0.16 * dark * l.strength).toFixed(3)})`);
+          warm.addColorStop(1, 'rgba(255, 186, 92, 0)');
+          ctx.fillStyle = warm;
+          ctx.beginPath();
+          ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
     }
 
     // The chosen tile, marked whether or not the cursor is anywhere near it.
