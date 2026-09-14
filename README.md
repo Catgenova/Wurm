@@ -471,6 +471,17 @@ rebuilds and commits the result.
   deed with honey and beeswax, and two wax and a length of yarn draw a pair of
   candles; and the **Lume**, found only after dark, carries its own daylight
   about with it.
+- **Fishing.** A **fishing rod** spliced from 2 shafts, a bowstring and a
+  ribbon bent into a hook. Stand at water and fish: the line reaches about
+  three tiles and goes into whatever water within a cast is deepest, so where
+  you stand is the whole trade. Five fish run at five depths and each wants a
+  hand to match — **minnow** anywhere, **perch** from three deep, **trout**
+  from eight at fishing 15, **pike** from sixteen at 35, **sturgeon** from
+  twenty-eight at 60 — so a shelving beach never gives more than perch however
+  good you get, and a sheer bank gives everything. Each cooks over a fire into
+  helpings that follow its size, a pike being four and a sturgeon ten. The
+  **Wadd**, the one thing on the island that swims, now has fishing as its
+  deed job.
 - **Fruit trees and orchards.** Three of the nine trees bear — **apple**,
   **cherry** and **olive** — growing wild about one tree in a hundred in the
   warm low country, and told apart across a field by what is hanging in them.

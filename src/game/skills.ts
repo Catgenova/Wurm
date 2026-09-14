@@ -18,6 +18,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'forestry', name: 'Forestry', group: 'Skills', start: 1 },
   { id: 'foraging', name: 'Foraging', group: 'Skills', start: 1 },
   { id: 'botanizing', name: 'Botanizing', group: 'Skills', start: 1 },
+  { id: 'fishing', name: 'Fishing', group: 'Skills', start: 1 },
   { id: 'paving', name: 'Paving', group: 'Skills', start: 1 },
   { id: 'masonry', name: 'Masonry', group: 'Skills', start: 1 },
   { id: 'stonecutting', name: 'Stonecutting', group: 'Skills', start: 1 },

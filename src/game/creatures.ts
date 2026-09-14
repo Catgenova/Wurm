@@ -5,6 +5,7 @@ import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { MINE_COLLAPSE } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
+import { fishable, fishHere, waterDepth } from './fishing';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
 import { skillGain } from './skills';
@@ -40,12 +41,13 @@ export type GatherKind =
   | 'hod'
   | 'mend'
   | 'compost'
-  | 'seek';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about' };
+  | 'seek'
+  | 'fish';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig', fish: 'fish the water round the deed and carry the catch home' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [], fish: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -804,8 +806,6 @@ export const SPECIES: Record<string, SpeciesDef> = {
     diet: ['meat', 'reed', 'nuts'],
     baitHint: 'meat or reeds',
     timid: false,
-    gathers: null,
-    workRange: 6,
     variants: [
       ['#4a5a52', '#a8bcae'],
       ['#3c4a58', '#9cb0c0'],
@@ -820,6 +820,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
     draught: true,
     mount: 14,
     swims: true,
+    gathers: 'fish',
+    workRange: 10,
   },
   shaggan: {
     id: 'shaggan',
@@ -1894,6 +1896,11 @@ export class Creatures {
       if (game.world.getTile(x, y) !== TileType.Reed) return false;
       return !game.isForaged(x, y, 'reed') && !!this.beside(game, x, y) && !this.claimed(x, y, c);
     }
+    if (kind === 'fish') {
+      // Water with depth in it, and a bank beside it to stand a rod on.
+      if (!fishable(game, x, y)) return false;
+      return !game.isForaged(x, y, 'reed') && !!this.beside(game, x, y) && !this.claimed(x, y, c);
+    }
     if (kind === 'seek') {
       // Ground nobody has been over yet, which is the only ground worth a nose.
       if (game.world.hasWater(x, y) || !DIGGABLE.has(game.world.getTile(x, y))) return false;
@@ -2025,6 +2032,7 @@ export class Creatures {
     if (kind === 'quarry') return this.finishQuarry(game, c);
     if (kind === 'peat') return this.finishPeat(game, c);
     if (kind === 'reed') return this.finishReed(game, c);
+    if (kind === 'fish') return this.finishFish(game, c);
     if (kind === 'seek') return this.finishSeek(game, c);
     if (kind === 'fetch') return this.finishFetch(game, c);
     game.markForaged(x, y, kind);
@@ -2127,6 +2135,31 @@ export class Creatures {
     this.gainSkill(game, c, GATHER_SKILL.peat, 0.225);
     game.markForaged(c.workX, c.workY, 'dig');
     return { uid: game.inventory.nextUid++, id, ql: Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1)), dmg: 0, count: 1 };
+  }
+
+  /**
+   * A cast off the bank. What comes up follows the same table the player's
+   * rod does, only the depth is whatever the worker walked to.
+   */
+  private finishFish(game: Game, c: Creature): Item | null {
+    const skill = c.skills[GATHER_SKILL.fish] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.fish, 0.225);
+    game.markForaged(c.workX, c.workY, 'reed');
+    const depth = waterDepth(game, c.workX, c.workY);
+    const pool = fishHere(depth, skill);
+    if (!pool.length || game.rand() > Math.min(0.9, 0.3 + skill / 190)) return null;
+    let total = 0;
+    for (const f of pool) total += f.weight;
+    let roll = game.rand() * total;
+    let got = pool[0];
+    for (const f of pool) {
+      roll -= f.weight;
+      if (roll <= 0) {
+        got = f;
+        break;
+      }
+    }
+    return { uid: game.inventory.nextUid++, id: got.id, ql: Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1)), dmg: 0, count: 1 };
   }
 
   /** Shear a stand of reeds back to the water, as the player's knife would. */
@@ -2941,8 +2974,9 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        const wx = kind === 'woodcut' ? c.workX : Math.floor(c.x);
-        const wy = kind === 'woodcut' ? c.workY : Math.floor(c.y);
+        const stands = kind === 'woodcut' || kind === 'fish';
+        const wx = stands ? c.workX : Math.floor(c.x);
+        const wy = stands ? c.workY : Math.floor(c.y);
         if (kind && this.gatherable(game, wx, wy, kind, c)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') {
@@ -2965,7 +2999,8 @@ export class Creatures {
       const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, siteRange(c, def, deed), kind, c);
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
-        const spot = kind === 'woodcut' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
+        // A tree cannot be stood on and neither can the water: both are worked from beside.
+        const spot = kind === 'woodcut' || kind === 'fish' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
         if (kind === 'mine') c.job = null;
         if (spot) {
           c.job = kind === 'farm' ? this.farmJobAt(game, c, t.x, t.y) : null;

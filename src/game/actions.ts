@@ -3,6 +3,7 @@ import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
 import { POST_ACTIONS } from './posts';
+import { FISHING_ACTIONS } from './fishing';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
@@ -1237,6 +1238,7 @@ export const ACTIONS: ActionDef[] = [
   ...IMPROVE_ACTIONS,
   ...ANVIL_ACTIONS,
   ...POST_ACTIONS,
+  ...FISHING_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,
   {

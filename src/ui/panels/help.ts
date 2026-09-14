@@ -146,6 +146,18 @@ export function buildHelp(win: UIWindow): void {
     scarcely takes a mark at all. A tool's metal decides how fast and how true it works, so a bronze
     hatchet at forty beats a copper one at fifty; a weapon's metal decides what it does; armour's metal
     decides both what it stops and what it costs you to carry.</p>
+    <h3>Fishing</h3>
+    <p>Splice a <b>fishing rod</b> from 2 shafts, a bowstring and a ribbon bent into a hook, stand at
+    water and fish. The line reaches about three tiles, and it goes into whatever water within a cast is
+    deepest &mdash; so where you stand is the whole trade. Standing inland catches nothing at all.</p>
+    <p>Five fish run at five depths, and each wants a hand to match: <b>minnow</b> anywhere there is
+    water, <b>perch</b> from three deep, <b>trout</b> from eight with fishing 15, <b>pike</b> from
+    sixteen with fishing 35, and <b>sturgeon</b> from twenty-eight with fishing 60. A gently shelving
+    beach will never give you more than perch however good you get; a sheer bank with deep water right
+    off the edge will give you everything. Each goes over a fire, and what comes off it follows the size
+    of the fish &mdash; a pike is four helpings and a sturgeon ten.</p>
+    <p>The <b>Wadd</b>, being the one thing on the island that swims, now fishes: set one to a deed or a
+    work post and it works the banks in its range and carries the catch home.</p>
     <h3>Fruit trees</h3>
     <p>Three of the nine trees bear: <b>apple</b>, <b>cherry</b> and <b>olive</b>. They grow wild here
     and there in the warm low country &mdash; about one tree in a hundred &mdash; and you can tell them

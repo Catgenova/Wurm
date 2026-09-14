@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { itemDef, rollRarity, RARITY_WORD } from './items';
 import { FURNITURE } from './furniture';
 import { MOULDS } from './metal';
+import { FISH } from './fishing';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
 
 /**
@@ -178,6 +179,7 @@ export const RECIPES: Recipe[] = [
   { id: 'make_dough', category: 'Cooking', result: 'dough', count: 2, inputs: [{ item: 'flour', count: 2 }, { item: 'water_bucket' }], skill: 'cooking', returns: [['bucket', 1]], label: 'Work into dough', verb: 'working dough', baseTime: 8, stamina: 0.04, difficulty: 6, done: 'You work flour and water into two rounds of dough.', fail: 'It comes out sticky and slack and will not hold together.', consumeOnFail: true },
   { id: 'bake_bread', category: 'Cooking', result: 'bread', inputs: [{ item: 'dough' }], station: 'campfire', skill: 'cooking', label: 'Bake on the stone', verb: 'baking bread', baseTime: 12, stamina: 0.03, difficulty: 10, done: 'You bake the loaf on a hot stone until it sounds hollow.', fail: 'The loaf burns black on one side and raw on the other.', consumeOnFail: true },
   { id: 'make_porridge', category: 'Cooking', result: 'porridge', count: 2, inputs: [{ item: 'cornmeal' }, { item: 'water_bucket' }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', returns: [['bucket', 1]], label: 'Boil into porridge', verb: 'boiling porridge', baseTime: 10, stamina: 0.03, difficulty: 8, done: 'You boil the meal down into two bowls of porridge.', fail: 'It catches on the bottom of the bowl and turns bitter.', consumeOnFail: true },
+  { id: 'make_fishing_rod', category: 'Woodwork', result: 'fishing_rod', inputs: [{ item: 'shaft', count: 2 }, { item: 'bow_string' }, { item: 'ribbon' }], tool: 'carving_knife', skill: 'carpentry', material: 'wood', label: 'Splice a fishing rod', verb: 'splicing a rod', baseTime: 10, stamina: 0.03, difficulty: 14, done: 'You splice the shafts, whip the line on and bend the ribbon into a hook.', fail: 'The splice will not hold and the whole thing comes apart in your hands.' },
   { id: 'make_apple_pie', category: 'Cooking', result: 'apple_pie', count: 2, inputs: [{ item: 'dough' }, { item: 'apple', count: 4 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Bake an apple pie', verb: 'baking a pie', baseTime: 18, stamina: 0.03, difficulty: 20, done: 'You stew the apples down, lay the pastry over and bake two pies.', fail: 'The bottom goes to pieces and the whole thing runs out into the fire.', consumeOnFail: true },
   { id: 'make_cherry_preserves', category: 'Cooking', result: 'preserves', count: 2, inputs: [{ item: 'cherry', count: 12 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Preserve cherries', verb: 'preserving cherries', baseTime: 14, stamina: 0.03, difficulty: 14, done: 'You boil the cherries down with their own sugar and jar two lots.', fail: 'It catches on the bottom and the whole batch tastes of burning.', consumeOnFail: true },
   { id: 'press_olives', category: 'Cooking', result: 'olive_oil', count: 2, inputs: [{ item: 'olive', count: 10 }], tool: 'quern', skill: 'milling', label: 'Press into oil', verb: 'pressing olives', baseTime: 16, stamina: 0.05, difficulty: 18, done: 'You crush the olives under the stone and draw off two measures of oil.', fail: 'You crush them to a paste that will not part with its oil.', consumeOnFail: true },
@@ -232,6 +234,28 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
 }));
 
 RECIPES.push(...FURNITURE_RECIPES);
+
+/**
+ * Every fish goes over the fire the same way; how much comes off it is the
+ * only difference, and a sturgeon is ten times a perch.
+ */
+const FISH_PORTIONS: Record<string, number> = { minnow: 1, perch: 1, trout: 2, pike: 4, sturgeon: 10 };
+const FISH_RECIPES: Recipe[] = FISH.map((f) => ({
+  id: `cook_${f.id}`,
+  category: 'Cooking' as RecipeCategory,
+  result: 'cooked_fish',
+  count: FISH_PORTIONS[f.id] ?? 1,
+  inputs: [{ item: f.id }],
+  station: 'campfire' as Station,
+  skill: 'cooking',
+  label: `Cook the ${f.name.toLowerCase()}`,
+  verb: 'cooking fish',
+  baseTime: 5 + (FISH_PORTIONS[f.id] ?? 1),
+  stamina: 0.02,
+  done: `You cook the ${f.name.toLowerCase()} through over the fire.`,
+}));
+
+RECIPES.push(...FISH_RECIPES);
 
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
