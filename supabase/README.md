@@ -32,13 +32,15 @@ simplification rather than a problem:
 
 | | |
 |---|---|
-| **205** | recipes — every one of them, through one performer |
+| **204** | recipes — every one of them, through one performer |
 | **14** | things set down on the ground: campfires, smelters, furniture |
+| **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
-| **135** | known, listed, and honestly refused |
+| **1** | planting a deed stake and claiming the island around it |
+| **122** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -47,7 +49,7 @@ down on this island yet" invites patience. So every action in the game is in
 `action_def` — generated from the same TypeScript the browser reads — and
 `act_ported()` says which have a performer behind them.
 
-Of the 205 recipes, 147 need no station and were playable from the start; the
+Of the 204 recipes, 147 need no station and were playable from the start; the
 other 58 want a lit campfire (18), a hot smelter (34), a spindle (3) or a loom
 (2), and all four of those can now be built, set down and lit.
 
@@ -56,10 +58,11 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), the ledger, the journal,
-kilns and what they fire, smelting jobs themselves, flattening and levelling,
-paving with cut slabs, planting trees, prospecting, and the ease a hot oven
-lends to cooking.
+not the recovery, would make the island unplayable), creatures, the ledger,
+the journal, kilns and what they fire, smelting jobs themselves, flattening
+and levelling, paving with cut slabs, planting trees, prospecting, the rest of
+the deed (disband, upgrade, the token's crate), and the ease a hot oven lends
+to cooking.
 
 ### Nothing a player owns may point at generated data
 

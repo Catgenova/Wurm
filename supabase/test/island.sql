@@ -504,3 +504,187 @@ select '81. a thousand draws over the drop-off, bare hook vs a live minnow:';
 select '    bare:  ' || string_agg(f || ' ' || n, ', ' order by n desc) from (select pick_fish(20, 60, null, random()) f, count(*) n from generate_series(1,1000) group by 1) q;
 select '    minnow on it: ' || string_agg(f || ' ' || n, ', ' order by n desc) from (select pick_fish(20, 60, 'minnow', random()) f, count(*) n from generate_series(1,1000) group by 1) q;
 \echo ''
+\echo '--- a settlement, and a house on it'
+delete from event where uid = :'ivar';
+delete from item where holder_uid = :'ivar' and def in ('log', 'plank');
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 5.5, y = 7.5 where uid = :'ivar';
+-- A flat, dry shelf to build on: the digging and mining above left this corner
+-- of the island anything but level.
+do $$
+declare w uuid := (select id from world limit 1); i int; j int;
+begin
+  for j in 6..9 loop for i in 5..9 loop perform land_set_height(w, i, j, 100); end loop; end loop;
+end $$;
+select '82. before anybody has claimed anything: ' || coalesce(plan_reason(:'world2', 6, 7), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'deed_stake', 50, 1)
+  returning id as stake \gset
+select '83. planting the stake: ' || coalesce(act_refusal(:'world2', :'ivar', 'found_settlement',
+        ('{"kind":"item","uid":' || :'stake' || ',"name":"Stonehaven"}')::jsonb), 'allowed');
+select rpc_act(:'world2', 'found_settlement', ('{"kind":"item","uid":' || :'stake' || ',"name":"Stonehaven"}')::jsonb) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '84. ' || (select name || ' stands at ' || x || ',' || y || ', ' || (radius * 2 + 1) || ' tiles across' from deed where world_id = :'world2')
+     || ' — and the stake is gone: ' || (select count(*) from item where holder_uid = :'ivar' and def = 'deed_stake')
+     || ' | a second stake: ' || coalesce(act_refusal(:'world2', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');
+select '85. on the token itself: ' || coalesce(plan_reason(:'world2', 5, 7), 'allowed')
+     || ' | outside the border: ' || coalesce(plan_reason(:'world2', 14, 14), 'allowed')
+     || ' | on grass inside it: ' || coalesce(plan_reason(:'world2', 6, 7), 'allowed');
+
+update player set x = 6.5, y = 7.5 where uid = :'ivar';
+select land_set_tile(:'world2', 6, 7, tile_id('Packed dirt')), land_set_tile(:'world2', 7, 7, tile_id('Packed dirt')) \g /dev/null
+delete from item where holder_uid = :'ivar' and def = 'mallet';
+select '86. packed, but the mallet is at home: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_building', '{"kind":"tile","x":6,"y":7}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'mallet', 40, 1);
+select rpc_act(:'world2', 'plan_building', '{"kind":"tile","x":6,"y":7,"name":"The Long Hall"}') \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '87. ' || (select name || ' is planned, ' || levels || ' storey, ' ||
+        (select count(*) from building_tile t where t.building = b.id) || ' tile' from building b where world_id = :'world2');
+select '88. the next tile over: ' || coalesce(act_refusal(:'world2', :'ivar', 'add_to_building', '{"kind":"tile","x":7,"y":7}'), 'allowed')
+     || ' | a tile that touches nothing: ' || coalesce(act_refusal(:'world2', :'ivar', 'add_to_building', '{"kind":"tile","x":5,"y":8}'), 'allowed');
+select act_perform(:'world2', :'ivar', 'add_to_building', '{"kind":"tile","x":7,"y":7}') \g /dev/null
+select '89. the footprint is now ' || (select count(*) from building_tile where world_id = :'world2') || ' tiles, with '
+     || (select count(*) from exterior_borders(:'world2', (select id from building where world_id = :'world2'))) || ' borders to wall';
+
+delete from event where uid = :'ivar';
+select '90. a wall with nothing chosen: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_wall', '{"kind":"tile","x":6,"y":7}'), 'allowed');
+select rpc_act(:'world2', 'plan_wall', '{"kind":"tile","x":6,"y":7,"side":"n","wallType":"solid","material":"log"}') \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '91. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+select '92. planning over it again: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_wall', '{"kind":"tile","x":6,"y":7,"side":"n","wallType":"solid","material":"log"}'), 'allowed')
+     || ' | and with nothing to build it from: ' || coalesce(act_refusal(:'world2', :'ivar', 'build_wall', '{"kind":"tile","x":6,"y":7,"side":"n"}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 1, 'Oak');
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'build_wall', '{"kind":"tile","x":6,"y":7,"side":"n"}', 4) \g /dev/null
+update player set act_started = act_started - interval '600 seconds', act_ends = act_ends - interval '600 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '93. one log and four goes at it: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('event','info'));
+-- The one log went into the wall, row and all; a fresh stack, not a top-up.
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 100, 'Oak');
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'build_wall', '{"kind":"tile","x":6,"y":7,"side":"n"}', 4) \g /dev/null
+update player set act_started = act_started - interval '600 seconds', act_ends = act_ends - interval '600 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '94. with a stack of oak: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — logs left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log');
+
+select '95. raising a storey with one wall up: ' || coalesce(act_refusal(:'world2', :'ivar', 'add_floor', '{"kind":"tile","x":6,"y":7}'), 'allowed');
+-- The other five borders, each checked before it is built rather than forced.
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        job record; why text; i int;
+begin
+  for job in select * from (values (6,7,'s'), (6,7,'w'), (7,7,'n'), (7,7,'s'), (7,7,'e')) as v(x, y, side) loop
+    why := act_refusal(w, me, 'plan_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,
+      'side',job.side,'wallType','solid','material','log'));
+    if why is not null then raise exception 'plan % % %: %', job.x, job.y, job.side, why; end if;
+    perform act_perform(w, me, 'plan_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,
+      'side',job.side,'wallType','solid','material','log'));
+    for i in 1..4 loop
+      why := act_refusal(w, me, 'build_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,'side',job.side));
+      if why is not null then raise exception 'build % % % (%): %', job.x, job.y, job.side, i, why; end if;
+      perform act_perform(w, me, 'build_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,'side',job.side));
+    end loop;
+  end loop;
+end $$;
+select '96. six walls up, twenty-four logs in them: the ground floor is '
+     || case when level_complete(:'world2', (select id from building where world_id = :'world2'), 0) then 'complete' else 'unfinished' end
+     || ', logs left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log')
+     || ', carpentry ' || to_char(skill_of(:'world2', :'ivar', 'carpentry'), 'FM990.00');
+select '97. and now: ' || coalesce(act_refusal(:'world2', :'ivar', 'add_floor', '{"kind":"tile","x":6,"y":7}'), 'allowed')
+     || ' | pulling a tile out from under it: ' || coalesce(act_refusal(:'world2', :'ivar', 'remove_from_plan', '{"kind":"tile","x":6,"y":7}'), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'add_floor', '{"kind":"tile","x":6,"y":7}') \g /dev/null
+select '98. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — and the footprint is now fixed: ' || coalesce(act_refusal(:'world2', :'ivar', 'add_to_building', '{"kind":"tile","x":5,"y":7}'), 'allowed');
+select '99. a wall on the new storey before its floor: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_wall', '{"kind":"tile","x":6,"y":7,"side":"n","wallType":"solid","material":"log"}'), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'plan_floor', '{"kind":"tile","x":6,"y":7,"material":"log"}') \g /dev/null
+select '100. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — a floor is half a wall';
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        why text; i int;
+begin
+  for i in 1..2 loop
+    why := act_refusal(w, me, 'build_floor', '{"kind":"tile","x":6,"y":7}');
+    if why is not null then raise exception 'build floor %: %', i, why; end if;
+    perform act_perform(w, me, 'build_floor', '{"kind":"tile","x":6,"y":7}');
+  end loop;
+end $$;
+select '101. the upper floor at 6,7 is ' || case when bill_done((select needed from floor_tile where level = 1 and x = 6 and y = 7)) then 'laid' else 'still owing' end
+     || ', paving is ' || to_char(skill_of(:'world2', :'ivar', 'paving'), 'FM990.00')
+     || ' — a wall may go on it now: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_wall', '{"kind":"tile","x":6,"y":7,"side":"n","wallType":"solid","material":"log"}'), 'allowed');
+select '102. roofing before the top storey is walled: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_floor', '{"kind":"tile","x":6,"y":7,"material":"log","floorKind":"roof"}'), 'allowed');
+select '103. a ladder with no side to climb from: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_floor', '{"kind":"tile","x":7,"y":7,"material":"log","floorKind":"ladder"}'), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'plan_floor', '{"kind":"tile","x":7,"y":7,"material":"log","floorKind":"ladder","side":"w"}') \g /dev/null
+select '104. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — a ladder is two planks whatever it is nailed to, and there are '
+     || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'plank') || ' in the pack: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'build_floor', '{"kind":"tile","x":7,"y":7,"floorKind":"ladder"}'), 'allowed');
+select act_perform(:'world2', :'ivar', 'plan_wall', '{"kind":"tile","x":6,"y":7,"side":"n","wallType":"solid","material":"log"}') \g /dev/null
+select '105. tearing up a floor with a wall standing on it: ' || coalesce(act_refusal(:'world2', :'ivar', 'remove_floor', '{"kind":"tile","x":6,"y":7}'), 'allowed')
+     || ' | and taking the storey off: ' || coalesce(act_refusal(:'world2', :'ivar', 'remove_storey', '{"kind":"tile","x":6,"y":7}'), 'allowed');
+-- Down again, in the order the island insists on: wall, floors, storey.
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'remove_wall', '{"kind":"tile","x":6,"y":7,"side":"n"}') \g /dev/null
+select act_perform(:'world2', :'ivar', 'remove_floor', '{"kind":"tile","x":6,"y":7}') \g /dev/null
+select act_perform(:'world2', :'ivar', 'remove_floor', '{"kind":"tile","x":7,"y":7}') \g /dev/null
+select act_perform(:'world2', :'ivar', 'remove_storey', '{"kind":"tile","x":6,"y":7}') \g /dev/null
+select '106. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+select '107. what is left standing: ' || (select levels || ' storey, ' || (select count(*) from wall w where w.building = b.id)
+        || ' walls, ' || (select count(*) from floor_tile f where f.building = b.id) || ' floors' from building b where world_id = :'world2');
+
+\echo ''
+\echo '--- a fence, which is a wall with nothing around it'
+delete from event where uid = :'ivar';
+update player set x = 3.5, y = 7.5 where uid = :'ivar';
+select '108. a solid wall out in the open: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_fence', '{"kind":"tile","x":3,"y":7,"side":"n","wallType":"solid","material":"log"}'), 'allowed');
+select rpc_act(:'world2', 'plan_fence', '{"kind":"tile","x":3,"y":7,"side":"n","wallType":"fence","material":"log"}') \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '109. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — it belongs to building ' || (select building from wall where world_id = :'world2' and dir = 'h' and x = 3 and y = 7);
+select '110. the same border from the other side: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_fence', '{"kind":"tile","x":3,"y":6,"side":"s","wallType":"fence","material":"log"}'), 'allowed');
+update player set x = 3.5, y = 4.5 where uid = :'ivar';
+select '111. down at the shore: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_fence', '{"kind":"tile","x":3,"y":3,"side":"n","wallType":"fence","material":"log"}'), 'allowed');
+update player set x = 3.5, y = 7.5 where uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'build_wall', '{"kind":"tile","x":3,"y":7,"side":"n"}') \g /dev/null
+select act_perform(:'world2', :'ivar', 'build_wall', '{"kind":"tile","x":3,"y":7,"side":"n"}') \g /dev/null
+select '112. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'rename_building', '{"kind":"tile","x":3,"y":7,"name":"Nowhere"}') \g /dev/null
+select '113. renaming a fence: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar'), 'nothing said');
+update player set x = 6.5, y = 7.5 where uid = :'ivar';
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'rename_building', '{"kind":"tile","x":6,"y":7,"name":"Mead Hall"}') as instant \gset
+select '114. renaming the hall, which takes no time at all: done=' || coalesce((:'instant'::jsonb->>'done'), 'no')
+     || ' — ' || (select name from building where world_id = :'world2')
+     || ', said at once: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing');
+\echo ''
+\echo '--- and what a client may do to a house that is not theirs'
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '115. Hild reads the island: ' || (select count(*) from building) || ' building, '
+     || (select count(*) from wall) || ' walls, ' || (select count(*) from deed) || ' deed';
+do $$ begin
+  begin update building set name = 'Hild''s'; raise notice '116. rename it out from under him: ALLOWED';
+  exception when others then raise notice '116. rename it out from under him: refused — %', sqlerrm; end;
+  begin insert into wall (world_id, level, dir, x, y, building, type, material, needed, total)
+        values ((select id from world limit 1), 0, 'h', 1, 1, 0, 'solid', 'log', '{}', '{}');
+        raise notice '117. a wall for free:              ALLOWED';
+  exception when others then raise notice '117. a wall for free:              refused — %', sqlerrm; end;
+  begin update wall set needed = '{}'; raise notice '118. wish the bills away:          ALLOWED';
+  exception when others then raise notice '118. wish the bills away:          refused — %', sqlerrm; end;
+  begin insert into deed (world_id, name, x, y) values ((select id from world limit 1), 'Hildstead', 1, 1);
+        raise notice '119. claim the island as well:     ALLOWED';
+  exception when others then raise notice '119. claim the island as well:     refused — %', sqlerrm; end;
+end $$;
+reset role;
+select '120. and it is all still his: ' || (select name from building where world_id = :'world2')
+     || ', ' || (select count(*) from wall where world_id = :'world2') || ' walls, deed of '
+     || (select name from deed where world_id = :'world2');
+\echo ''

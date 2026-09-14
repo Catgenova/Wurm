@@ -114,6 +114,25 @@ async function main(): Promise<void> {
       notYet ? `${tried}: ${notYet.why}` : 'every one of them is ported now, which is the point of the exercise');
 
     /*
+     * The building rules, which start by saying no.
+     *
+     * A fresh island has no settlement on it, so both of these are refused for
+     * reasons that are the *rules* rather than the plumbing — which is exactly
+     * what wants checking from out here: that the dispatcher reaches them at
+     * all, and that `build_wall` is not quietly handed to the code that lights
+     * campfires because they share a first word.
+     */
+    const noDeed = await island.act('plan_building', { kind: 'tile', ...here, name: 'Hall' }, 1);
+    check('building anywhere at all wants a deed first', !noDeed.started && /deed/i.test(noDeed.why ?? ''),
+      noDeed.why ?? 'IT WENT THROUGH');
+    const noStake = await island.act('found_settlement', { kind: 'item', name: 'Smoke' }, 1);
+    check('and founding one wants a stake in hand', !noStake.started && /stake/i.test(noStake.why ?? ''),
+      noStake.why ?? 'IT WENT THROUGH');
+    const noWall = await island.act('build_wall', { kind: 'tile', ...here, side: 'n' }, 1);
+    check('a wall with nothing planned is a wall, not a campfire',
+      !noWall.started && /wall/i.test(noWall.why ?? ''), noWall.why ?? 'IT WENT THROUGH');
+
+    /*
      * Find a corner actually worth digging, rather than assuming the one we
      * washed up on is.
      *

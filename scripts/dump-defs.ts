@@ -20,6 +20,7 @@ import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
+import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -48,6 +49,27 @@ out.push(`create table if not exists skill_def (
 out.push(`create table if not exists material_def (
   id text primary key, difficulty real not null, weight real not null, wear real not null,
   decay real not null, edge real not null, soak real not null, bite real not null, hold real not null
+);`);
+/*
+ * What a wall is made of, and what shape it takes.
+ *
+ * Two tables rather than one because a bill is a list: a timbercraft wall
+ * wants planks and thatch and timber, and the order they are listed in is the
+ * order they go into the wall. `ord` keeps that order, which a jsonb object
+ * would not.
+ */
+out.push(`create table if not exists wall_type_def (
+  id text primary key, name text not null, factor real not null,
+  passable boolean not null default false, height real,
+  low boolean not null default false, railed boolean not null default false,
+  standalone boolean not null default false
+);`);
+out.push(`create table if not exists build_material_def (
+  id text primary key, name text not null, kind text not null, tool text not null, skill text not null
+);`);
+out.push(`create table if not exists build_material_bill (
+  material text not null, ord int not null, item text not null, n int not null,
+  primary key (material, item)
 );`);
 out.push(`create table if not exists action_def (
   id text primary key, label text not null, verb text not null, skill text, tool text,
@@ -237,7 +259,14 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill;`);
+for (const w of WALL_TYPES) {
+  out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
+}
+for (const m of BUILD_MATERIALS) {
+  out.push(`insert into build_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.kind)}, ${q(m.tool)}, ${q(m.skill)});`);
+  m.bill.forEach(([item, n], ord) => out.push(`insert into build_material_bill values (${q(m.id)}, ${q(ord)}, ${q(item)}, ${q(n)});`));
+}
 for (const f of FISH) out.push(`insert into fish_def values (${q(f.id)}, ${q(f.name)}, ${q(f.depth)}, ${q(f.level)}, ${q(f.weight)});`);
 for (const b of BAITS) {
   out.push(`insert into bait_def values (${q(b.id)}, ${q(b.note)});`);
