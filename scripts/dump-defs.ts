@@ -34,6 +34,8 @@ import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/g
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
 import { PLANTABLE } from '../src/game/game';
+import { RARITIES } from '../src/game/items';
+import { DYES } from '../src/game/dyestuffs';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -149,6 +151,8 @@ out.push(`alter table material_def add column if not exists bane boolean not nul
  * it is keyed by. Anything that has to *say* what a thing is made of wants
  * this one. */
 out.push(`alter table material_def add column if not exists name text;`);
+/* And the sentence about it that an examine reads out. */
+out.push(`alter table material_def add column if not exists note text;`);
 out.push(`alter table species_def add column if not exists glow real;`);
 /*
  * The firing chain: what ore becomes, what green ware becomes, and what a
@@ -182,6 +186,18 @@ out.push(`create table if not exists item_feeds (
 out.push(`create table if not exists boon_skill (ord int primary key, skill text not null);`);
 out.push(`alter table item_def add column if not exists food real;`);
 out.push(`alter table item_def add column if not exists drink real;`);
+/* What a thing says about itself when you look at it, and how many other
+ * things it will hold. Both were only ever read by the browser until a pair
+ * of hands down here wanted to examine a shovel and put it in a satchel. */
+out.push(`alter table item_def add column if not exists description text;`);
+out.push(`alter table item_def add column if not exists holds real;`);
+/* Rarity and colour, which are half of what a thing is called. */
+out.push(`create table if not exists rarity_def (
+  id text primary key, ord int not null, boost real not null, keep real not null, ceiling real not null
+);`);
+out.push(`create table if not exists dye_def (
+  id text primary key, name text not null, word text not null
+);`);
 out.push(`create table if not exists metal_def (
   id text primary key, name text not null, ore text, lump text not null,
   level real not null, work real not null
@@ -333,7 +349,7 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def;');
 out.push('');
 
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
@@ -355,7 +371,7 @@ for (const d of SKILL_DEFS) {
  * the whole port: a seryll hatchet wore out exactly as fast as a pine one.
  */
 for (const m of MATERIALS) {
-  out.push(`insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane) values (` + [q(m.id), q(m.name), q(m.difficulty), q(m.weight), q(m.wear), q(m.decay), q(m.edge), q(m.soak), q(m.bite), q(m.hold), q(!!(m as { bane?: boolean }).bane)].join(', ') + `);`);
+  out.push(`insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane, note) values (` + [q(m.id), q(m.name), q(m.difficulty), q(m.weight), q(m.wear), q(m.decay), q(m.edge), q(m.soak), q(m.bite), q(m.hold), q(!!(m as { bane?: boolean }).bane), q(m.note)].join(', ') + `);`);
 }
 
 /*
@@ -428,6 +444,17 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
 }
 for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plantable values (${q(t)});`);
+/*
+ * Only the three that have a name. The browser keys rarity by an index into a
+ * list whose first entry is the ordinary one with an empty name, and a row
+ * called '' would be a row every lookup had to remember to skip. Down here an
+ * ordinary thing has a null rarity and nothing to say about itself.
+ */
+RARITIES.forEach((r, ord) => {
+  if (!r.name) return;
+  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)});`);
+});
+for (const d of DYES) out.push(`insert into dye_def values (${q(d.id)}, ${q(d.name)}, ${q(d.word)});`);
 for (const m of Object.values(IMPROVE_MATERIALS)) {
   out.push(`insert into improve_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.skill)});`);
   m.tools.forEach((t, ord) => out.push(`insert into improve_tool values (${q(m.id)}, ${q(ord)}, ${q(t)});`));
@@ -440,6 +467,8 @@ for (const id of Object.keys(ITEM_DEFS)) {
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
   if (d.food !== undefined) out.push(`update item_def set food = ${q(d.food)} where id = ${q(id)};`);
   if (d.drink !== undefined) out.push(`update item_def set drink = ${q(d.drink)} where id = ${q(id)};`);
+  if (d.description !== undefined) out.push(`update item_def set description = ${q(d.description)} where id = ${q(id)};`);
+  if (d.holds !== undefined) out.push(`update item_def set holds = ${q(d.holds)} where id = ${q(id)};`);
   for (const n of NUTRIENTS) {
     const v = d.feeds?.[n];
     if (v) out.push(`insert into item_feeds values (${q(id)}, ${q(n)}, ${q(v)});`);

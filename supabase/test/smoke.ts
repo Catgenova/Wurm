@@ -165,6 +165,33 @@ async function main(): Promise<void> {
       legErr?.message ?? 'the person it is hunting, the beast it is fighting, and what hurt it last');
 
     /*
+     * The ground. Everything the island puts down has been out of reach of
+     * the person standing on it until now, so this drops one of the starting
+     * kit and picks it back up through the front door.
+     */
+    const mine = await supabase().from('item').select('id,def,count').eq('world_id', id).eq('holder_uid', uid).limit(1);
+    const one = (mine.data ?? [])[0] as { id: number; def: string; count: number } | undefined;
+    if (one) {
+      const put = await island.act('drop', { kind: 'item', uid: one.id, count: 1 }, 1);
+      const { data: onGround } = await supabase().from('item').select('id,def').eq('world_id', id).eq('holder', 'ground');
+      const lying = ((onGround ?? []) as Array<{ id: number; def: string }>).find((it) => it.def === one.def);
+      check('we can put something down', put.started && !!lying,
+        put.why ?? (lying ? `a ${one.def} is lying on the ground` : 'nothing reached the ground'));
+      if (lying) {
+        const here = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
+        const got = await island.act('pick_up',
+          { kind: 'ground', x: Math.floor(here.data?.x ?? 0), y: Math.floor(here.data?.y ?? 0), uid: lying.id }, 1);
+        const { count: left } = await supabase().from('item').select('*', { count: 'exact', head: true })
+          .eq('world_id', id).eq('holder', 'ground').eq('id', lying.id);
+        check('and pick it up again', got.started && left === 0,
+          got.why ?? (left === 0 ? 'it is back in the pack' : 'it is still on the grass'));
+      }
+      const look = await island.act('examine_item', { kind: 'item', uid: one.id }, 1);
+      check('and a thing says what it is when we look at it', look.started && !!look.done,
+        look.why ?? 'it answered at once, as an instant action should');
+    }
+
+    /*
      * The furnaces. Neither can be built with a starting kit, so what reaches
      * this far is the arithmetic behind them and the refusal in front.
      */

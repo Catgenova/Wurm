@@ -39,6 +39,7 @@ simplification rather than a problem:
 | **8** | fighting: wearing and wielding, sword and bow, butchering, and the first aid that follows |
 | **11** | firing: a kiln built, packed, lit and unpacked, and the smelter's own queue — ore in, lumps and anvils out |
 | **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
+| **8** | and to what is lying about: pick one up, sweep the lot, put one down, look at a thing or a tile, set a thing aside and take it back, call something by a name |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
 | **1** | setting a wildermon to work the deed, which is nineteen trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
@@ -46,7 +47,7 @@ simplification rather than a problem:
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **82** | known, listed, and honestly refused |
+| **74** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -72,6 +73,47 @@ breeding and pairing, riding and the traces, trapping,
 the ledger, the journal, flattening and levelling, paving with cut slabs,
 prospecting, deed upgrades and disbanding, and the ease a hot oven
 lends to cooking.
+
+### The island could put things down and nobody could pick them up
+
+A felling leaves two logs at the stump. A butcher leaves what it could not
+carry. Anything that dies leaves a carcass, a crate taken up tips its contents
+out where it stood, and a settlement that disbands tips out everything in it.
+All of that had been landing on the ground for eight commits, and the only two
+things on the island that could pick any of it up again were a hunter and a
+middun. A player walked over it.
+
+Nothing was wrong; the ground had simply never been given a door. What it
+needed was the eight actions nobody thinks of as features until they are
+missing — pick one up, sweep the lot, put one down, look at a thing, look at a
+tile, set a thing aside, take it back, call something by a name.
+
+### Locking is only a word until the things that spend things read it
+
+`lock_item` writes `true` into a column. That is the easy half, and on its own
+it is a lie: the island went on eating a hatchet somebody had set aside,
+because `consume` and `pack_count` never looked. The browser states the rule in
+a line worth keeping exactly — `find`, `consume` and `count` look past a locked
+thing while `has`, `get` and `tool` do not — so you can still *work* with a
+locked hatchet and nothing will quietly spend it.
+
+`give` was left alone, and that is a decision rather than an oversight: the
+browser merges a new stack into a matching one without looking at the lock, so
+three planks made beside twenty set aside become twenty-three set aside. It is
+a quirk. A port that quietly improves on the thing it is porting is a port you
+can no longer check against it.
+
+### What bags are still waiting for
+
+`stow_item` and `empty_bag` are the two that did not come with the rest of the
+pack, and the reason is worth writing down rather than discovering twice. A
+thing in a bag is *not to hand*: the browser keeps a bag's contents out of the
+inventory list entirely, so a recipe that wants two planks cannot see the two
+in your satchel. Making that true down here means every question the island
+asks of a pack has to learn to skip what is inside something — fifty-odd
+places, of which `consume`, `pack_count` and `tool_ql` are only the three
+obvious ones. Half of that is worse than none of it: a bag you can put things
+into and then cannot craft with, with no message saying why.
 
 ### Time only passes for a hunter while you are there to be hunted
 

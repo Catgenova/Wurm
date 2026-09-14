@@ -1730,3 +1730,84 @@ select '311. setting an ulva to keep watch: ' || coalesce(act_refusal(:'world2',
      || ' | and a rowl to hunt: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed',
        ('{"kind":"creature","id":' || :'tracker' || '}')::jsonb), 'allowed')
      || ' — which up to this commit were both "Nobody has taught this island what that looks like yet."';
+
+\echo ''
+\echo '--- the ground, which until now nobody could pick anything up off'
+-- The deed swept, so what is lying about is what this section put there.
+delete from item where world_id = :'world2' and holder = 'ground';
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select drop_on_ground(:'world2', 5, 7, 'log', 42, 'Oak', 2) as lying \gset
+select drop_on_ground(:'world2', 6, 7, 'rock_shards', 30, null, 5) \g /dev/null
+select drop_on_ground(:'world2', 4, 8, 'corpse', 25, 'Rabba') \g /dev/null
+select drop_on_ground(:'world2', 12, 2, 'log', 20, 'Pine') \g /dev/null
+select '312. lying within reach of the token: ' || sweepable(:'world2', 5, 7)
+     || ' heaps, and one out at 12,2 that is not';
+
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'examine', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
+select '313. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select x as treex, y as treey from generate_series(0, 15) x cross join generate_series(0, 15) y
+  where land_tile(:'world2', x, y) = (select id from tile_def where name = 'Tree') order by x, y limit 1 \gset
+select '314. and a tree, which says what sort and how old: ' || examine_tile_text(:'world2', :'treex', :'treey');
+
+select pack_count(:'world2', :'ivar', 'log') as logs_before \gset
+select '315. picking the logs up: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up',
+       ('{"kind":"ground","x":5,"y":7,"uid":' || :'lying' || '}')::jsonb), 'allowed')
+     || ' | the heap out at 12,2: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up',
+       '{"kind":"ground","x":12,"y":2}'::jsonb), 'allowed')
+     || ' | bare grass: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up',
+       '{"kind":"ground","x":5,"y":8}'::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_up', ('{"kind":"ground","x":5,"y":7,"uid":' || :'lying' || '}')::jsonb) \g /dev/null
+select '316. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — logs in the pack ' || pack_count(:'world2', :'ivar', 'log') || ', from ' || :'logs_before';
+
+-- And down again, which is the half of it that did work: a worker could put
+-- things down all along.
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'drop',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder = 'player'
+      and holder_uid = :'ivar' and def = 'log' and extra = 'Oak' order by id limit 1) || ',"count":3}')::jsonb) \g /dev/null
+select '317. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and there are now ' || (select coalesce(sum(count), 0) from item where world_id = :'world2'
+          and holder = 'ground' and gx = 5 and gy = 7) || ' of it at his feet';
+
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_up_all', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
+select '318. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '319. left lying about the deed: ' || (select count(*) from item where world_id = :'world2'
+       and holder = 'ground') || ' — the one out at 12,2, which is further than an arm';
+
+\echo ''
+\echo '--- and what a thing says about itself'
+insert into item (world_id, holder, holder_uid, def, ql, dmg, count, extra, rare)
+values (:'world2', 'player', :'ivar', 'hatchet', 63.5, 12, 1, 'Steel', 'supreme') returning id as prize \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'examine_item', ('{"kind":"item","uid":' || :'prize' || '}')::jsonb) \g /dev/null
+select '320. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+
+-- Setting a thing aside, which is only a word until the things that spend
+-- things read it.
+select '321. a supreme steel hatchet is called: ' || (select item_name(i) from item i where i.id = :'prize');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'lock_item', ('{"kind":"item","uid":' || :'prize' || '}')::jsonb) \g /dev/null
+select '322. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '323. and now: the pack counts ' || pack_count(:'world2', :'ivar', 'hatchet') || ' hatchets'
+     || ', a tool in hand is still worth ' || to_char(tool_ql(:'world2', :'ivar', 'hatchet'), 'FM990.0')
+     || ', and dropping it: ' || coalesce(act_refusal(:'world2', :'ivar', 'drop',
+        ('{"kind":"item","uid":' || :'prize' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'unlock_item', ('{"kind":"item","uid":' || :'prize' || '}')::jsonb) \g /dev/null
+select '324. put back in the pack: the pack counts ' || pack_count(:'world2', :'ivar', 'hatchet')
+     || ', and dropping it: ' || coalesce(act_refusal(:'world2', :'ivar', 'drop',
+        ('{"kind":"item","uid":' || :'prize' || '}')::jsonb), 'allowed');
+
+-- And calling a thing by a name, which is the difference between six bins and
+-- the one marked Planks.
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'name_thing',
+  ('{"kind":"crate","id":' || (select id from crate where world_id = :'world2' and deed) || ',"name":"Planks"}')::jsonb) \g /dev/null
+select '325. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and it now answers to ' || (select coalesce(name, crate_name(c)) from crate c where c.world_id = :'world2' and c.deed);
+select '326. the eight that arrived with this commit: '
+     || (select string_agg(id, ', ' order by id) from action_def where hands_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
