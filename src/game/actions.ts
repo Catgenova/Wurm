@@ -24,6 +24,7 @@ import { DYE_ACTIONS } from './dyes';
 import { TRAP_ACTIONS } from './traps';
 import { BRIDGE_ACTIONS } from './bridges';
 import { FAITH_ACTIONS } from './faith';
+import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
@@ -1284,6 +1285,7 @@ export const ACTIONS: ActionDef[] = [
   ...TRAP_ACTIONS,
   ...BRIDGE_ACTIONS,
   ...FAITH_ACTIONS,
+  ...MEDITATION_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...FIRST_AID_ACTIONS,
   ...PLACEABLE_ACTIONS,

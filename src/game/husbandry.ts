@@ -200,7 +200,7 @@ export const HUSBANDRY_ACTIONS: ActionDef[] = [
       const skill = g.skills.get(HUSBANDRY);
       // Blood does not read itself. Without the skill you can see that there is
       // something in it; with the skill you can see what.
-      const seen = c.traits.filter((id) => skill >= 1 + TIER_LEVEL[traitTier(id)]);
+      const seen = c.traits.filter((id) => g.walks('knowledge', 3) || skill >= 1 + TIER_LEVEL[traitTier(id)]);
       const hidden = c.traits.length - seen.length;
       const carrying = c.due > 0 ? ` She is in young, due in about ${clockLeft(c.due - g.time)}.` : '';
       g.logMsg(

@@ -116,7 +116,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.inventory.remove(food.uid, 1);
       const skill = g.skills.get('taming');
       // Something that has not yet learned to mistrust you is far easier won.
-      const chance = Math.min(0.95, (def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + g.soulBonus()) * ageDef(c, g.time).tame);
+      const chance = Math.min(0.95, (def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + g.soulBonus()) * ageDef(c, g.time).tame * (g.walks('love', 3) ? 1.25 : 1));
       c.hunger = Math.min(1, c.hunger + 0.25);
       if (g.rand() < chance) {
         c.name = def.name;

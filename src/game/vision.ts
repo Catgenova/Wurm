@@ -130,7 +130,9 @@ export class Vision {
     const g = this.game;
     const up = Math.max(0, g.world.heightAt(g.player.x, g.player.y));
     const day = 1 - NIGHT_LOSS * g.darkness();
-    return Math.max(4, Math.min(MAX_SIGHT, (BASE_SIGHT + up / HEIGHT_PER_TILE) * day));
+    // The reader's path sees a quarter further than anybody else.
+    const keen = g.walks('knowledge', 5) ? 1.25 : 1;
+    return Math.max(4, Math.min(MAX_SIGHT * keen, (BASE_SIGHT + up / HEIGHT_PER_TILE) * day * keen));
   }
 
   private recompute(): void {

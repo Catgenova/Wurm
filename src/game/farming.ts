@@ -216,11 +216,14 @@ export const FARM_ACTIONS: ActionDef[] = [
       const y = cropYield(c.tended);
       // The field's own quality, lifted by the farmer's skill at harvest.
       const ql = Math.max(1, Math.min(100, (c.ql + g.productQl('farming')) / 2));
-      const produce = g.inventory.add(def.produce, { count: y.produce, ql });
+      // The gardener's path takes a third more out of the same ground.
+      const more = g.walks('love', 5) ? 1.34 : 1;
+      const got = Math.max(1, Math.round(y.produce * more));
+      const produce = g.inventory.add(def.produce, { count: got, ql });
       g.inventory.add(def.seed, { count: y.seeds, ql });
       g.removeCrop(c.x, c.y);
       g.logMsg(
-        `You harvest ${y.produce} × ${itemName(produce).toLowerCase()} and ${y.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${ql.toFixed(1)})`,
+        `You harvest ${got} × ${itemName(produce).toLowerCase()} and ${y.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${ql.toFixed(1)})`,
         'event',
       );
     },

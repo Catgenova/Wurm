@@ -198,7 +198,9 @@ export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number
   const wear = item ? Math.max(0.4, 1 - item.dmg / 150) : 1;
   const body = 0.7 + g.skills.get('body_strength') / 90;
   const edge = item ? matOf(item.extra).edge * rarityOf(item).boost : 1;
-  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260);
+  // The plain path hits a sixth harder, and a fury twice as hard again.
+  const might = (g.walks('power', 3) ? 1.16 : 1) * g.furyMult();
+  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might;
 }
 
 /**

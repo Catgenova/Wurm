@@ -30,6 +30,7 @@ import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, t
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { CASTS, FAITH, favourCap } from '../game/faith';
+import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sittingWorth } from '../game/meditation';
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
@@ -405,6 +406,55 @@ export class UI {
           disabled: !!reason,
           onSelect: () => this.game.requestAction(postDef, pt),
         });
+      }
+    }
+    // Sitting down on the rug, choosing a way, and calling on what it gave.
+    const sit = ACTION_BY_ID.get('meditate');
+    if (sit && this.game.inventory.has('rug') && pick.x === this.game.player.tileX && pick.y === this.game.player.tileY) {
+      const g = this.game;
+      const med = g.skills.get(MEDITATION);
+      const why = sit.check?.(target, g) ?? null;
+      const worth = sittingWorth(g);
+      entries.push({
+        label: 'Sit and think about nothing',
+        note: why ? undefined : `meditation ${med.toFixed(1)} · this spot is worth ${(worth.gain / 1.5).toFixed(2)}×`,
+        hint: why ?? undefined,
+        disabled: !!why,
+        onSelect: () => g.requestAction(sit, target),
+      });
+      const choose = ACTION_BY_ID.get('choose_path');
+      if (choose && !g.player.way) {
+        const ready = med >= CHOOSE_AT;
+        entries.push({
+          label: 'Choose a path',
+          hint: ready ? 'Chosen once, and never again.' : `Sit until you have ${CHOOSE_AT} meditation behind you.`,
+          disabled: !ready,
+          children: ready
+            ? PATH_LIST.map((path) => ({
+                label: path.name,
+                note: path.steps.map((st) => `${st.at}: ${st.name}`).join(' · '),
+                hint: path.note,
+                onSelect: () => g.requestAction(choose, { ...target, material: path.id }),
+              }))
+            : undefined,
+        });
+      }
+      if (g.player.way) {
+        const way = PATHS[g.player.way];
+        const next = nextStep(g.player.way, med);
+        entries.push({ label: `The path of ${way.name}`, note: next ? `next: ${next.name} at ${next.at}` : 'walked to the end', disabled: true });
+        const use = ACTION_BY_ID.get('use_ability');
+        const able = abilitiesOf(g.player.way, med);
+        if (use && able.length) {
+          entries.push({
+            label: 'Call on what you know',
+            children: able.map((st) => {
+              const t: Target = { ...target, material: st.ability?.id };
+              const reason = use.check?.(t, g) ?? null;
+              return { label: st.name, note: st.note, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(use, t) };
+            }),
+          });
+        }
       }
     }
     // Throwing a bridge from where you are standing to the tile under the cursor.

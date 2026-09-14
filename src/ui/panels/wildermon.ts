@@ -155,7 +155,7 @@ export class WildermonPanel {
       if (!t) continue;
       const chip = document.createElement('span');
       chip.className = 'trait-chip';
-      const known = skill >= 1 + TIER_LEVEL[t.tier];
+      const known = this.game.walks('knowledge', 3) || skill >= 1 + TIER_LEVEL[t.tier];
       if (known) {
         chip.textContent = t.aura ? `\u25c9 ${t.name}` : t.name;
         chip.style.color = TIER_COLOUR[t.tier];

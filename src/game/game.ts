@@ -29,6 +29,7 @@ import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID 
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
+import { hasStep, MEDITATION, type PathId } from './meditation';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
@@ -109,7 +110,7 @@ export interface GameInit {
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number> };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -325,6 +326,9 @@ export class Game {
       this.player.nextWound = init.player.nextWound ?? 1;
       this.player.favour = init.player.favour ?? 0;
       this.player.prayedAt = init.player.prayedAt ?? -1e9;
+      this.player.way = init.player.way ?? null;
+      this.player.satAt = init.player.satAt ?? -1e9;
+      this.player.usedAt = init.player.usedAt ?? {};
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -555,6 +559,74 @@ export class Game {
     return def.speed * body * hull * weather * (1 - load * 0.33);
   }
 
+  /**
+   * Whether a step of the chosen path is behind you. Everything the paths give
+   * is asked for here, so nothing else has to know how they are counted.
+   */
+  walks(way: 'love' | 'knowledge' | 'power', step: number): boolean {
+    return this.player.way === way && hasStep(this.player.way, this.skills.get(MEDITATION), step);
+  }
+
+  /** Work one of the abilities a path opens. Returns what it did, for the log. */
+  workAbility(id: string): string {
+    const p = this.player;
+    switch (id) {
+      case 'refresh':
+        p.stats.hunger = 1;
+        p.stats.thirst = 1;
+        return 'You are neither hungry nor thirsty, and cannot say when that happened.';
+      case 'mendflesh': {
+        const n = p.wounds.length;
+        p.wounds = [];
+        p.stats.health = Math.min(1, p.stats.health + 0.4);
+        return n === 1 ? 'The wound closes and the ache goes with it.' : n ? `All ${n} of them close and the ache goes with them.` : 'There was nothing to mend, and you feel better anyway.';
+      }
+      case 'sense': {
+        const found = this.senseRock(15);
+        return found ? `The ground gives up what is in it: ${found} seams within fifteen tiles, marked.` : 'There is nothing under this ground but rock.';
+      }
+      case 'recall': {
+        if (!this.deed) return 'You have nowhere to be recalled to.';
+        this.player.stop();
+        this.player.x = this.deed.x + 0.5;
+        this.player.y = this.deed.y + 1.5;
+        this.events.emit('world', this.deed.x, this.deed.y);
+        return `You are standing at the token of ${this.deed.name}, and the walk is simply not in your legs.`;
+      }
+      case 'secondwind':
+        p.stats.stamina = 1;
+        return 'Your wind comes back all at once.';
+      case 'fury':
+        this.furyUntil = this.time + 30;
+        return 'For half a minute nothing you swing at is going to enjoy it.';
+      default:
+        return 'Nothing happens.';
+    }
+  }
+
+  /** Game time the fury runs out at. */
+  furyUntil = -1e9;
+  /** What everything you hit takes, over what it would take. */
+  furyMult(): number {
+    return this.time < this.furyUntil ? 2 : 1;
+  }
+
+  /** Mark every seam within a radius as read, as a prospector would. */
+  private senseRock(radius: number): number {
+    const px = this.player.tileX;
+    const py = this.player.tileY;
+    const tiles: number[] = [];
+    for (let y = py - radius; y <= py + radius; y++) {
+      for (let x = px - radius; x <= px + radius; x++) {
+        if (!this.world.inBounds(x, y) || Math.hypot(x - px, y - py) > radius) continue;
+        if (oreAt(this.world, x, y)) tiles.push(y * this.world.w + x);
+      }
+    }
+    this.markProspected(tiles);
+    if (tiles.length) this.events.emit('world', px, py);
+    return tiles.length;
+  }
+
   /** Bring every crop on the settlement on one stage, and say how many. */
   hastenCrops(): number {
     let n = 0;
@@ -755,7 +827,8 @@ export class Game {
     const shield = this.worn('offhand');
     const sh = shield && SHIELDS[shield.id];
     if (sh) sum += sh.burden;
-    return sum;
+    // A strong back carries the same steel for a fifth less of it.
+    return this.walks('power', 1) ? sum * 0.8 : sum;
   }
 
   /**
@@ -801,7 +874,8 @@ export class Game {
       this.logMsg(`Your ${itemName(item).toLowerCase()} is beaten to pieces and falls away.`, 'error');
     }
     this.events.emit('inventory');
-    return { taken: raw * (1 - soak), part, worn: item, blocked: false };
+    const hide = this.walks('power', 5) ? 1.1 : 1;
+    return { taken: raw * (1 - Math.min(0.92, soak * hide)), part, worn: item, blocked: false };
   }
 
   /**
@@ -961,6 +1035,8 @@ export class Game {
     let mult = this.player.rested > 0 ? REST_MULT : 1;
     // A knack earned on the way up never wears off, unlike a meal or a night's sleep.
     mult += knackBonus(this.player.affinities[id]);
+    // And the reader's path is a tenth on everything, for good.
+    if (this.walks('knowledge', 1)) mult += 0.1;
     for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
     return mult;
   }
@@ -3142,7 +3218,9 @@ export class Game {
   private growCrops(): void {
     for (const c of this.crops.values()) {
       if (c.stage >= RIPE) continue;
-      const per = cropDef(c.id).stageSeconds;
+      // The gardener's path hurries everything that is in your own ground.
+      const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? 0.8 : 1;
+      const per = cropDef(c.id).stageSeconds * green;
       let moved = false;
       while (c.stage < RIPE && this.time - c.stageAt >= per) {
         c.stage += 1;

@@ -1,5 +1,6 @@
 import type { Boon } from './boons';
 import type { Wound } from './wounds';
+import type { PathId } from './meditation';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
 import { TILE_DEFS } from '../world/tiles';
@@ -37,6 +38,11 @@ export class Player {
   rested = 0;
   /** Affinities running just now, from what you have eaten and drunk. */
   boons: Boon[] = [];
+  /** The path chosen at the rug, once and for good, and when you last sat. */
+  way: PathId | null = null;
+  satAt = -1e9;
+  /** Game time each path ability was last called on. */
+  usedAt: Record<string, number> = {};
   /** Banked favour, and the hour you last had anything to say. */
   favour = 0;
   prayedAt = -1e9;

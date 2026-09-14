@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Eighty-two goals in seven chapters — Ashore, The
+- **A journal of goals.** Eighty-five goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -534,6 +534,20 @@ rebuilds and commits the result.
   walk away, and it fishes on its own — holds eight, gives four or five to
   a baiting, and kept baited is worth about twenty-five fish an hour for no
   work at all.
+- **Meditation, and the three paths.** Weave a **rug**, sit on it once every
+  twelve minutes, and where you sit decides what it is worth — your own yard
+  is the worst place, high thin air is worth half again. At five meditation
+  you choose one of three ways, once and for good. **Love** is the
+  gardener's: crops on your deed come on a fifth faster, wild things are a
+  quarter readier to trust you, harvests give a third more, plus **Refresh**
+  and **Mend the flesh**. **Knowledge** is the reader's: everything teaches
+  you a tenth faster for good, you read any wildermon's blood at a glance,
+  you see a quarter further, plus **Sense the rock** and **Recall the way**.
+  **Power** is the plain one: armour burdens you a fifth less, you hit a
+  sixth harder, and what you wear turns a tenth more — a full plate suit
+  goes from turning 70% of a blow to 78% — plus **Second wind** and
+  **Fury**, half a minute of double damage. Each path opens five things:
+  two called on with a long rest between, three simply true from then on.
 - **An altar, and favour.** No god with a name; a stone table, the hour
   before the sun is properly up, and the plain fact that a thing knelt over
   at dawn comes out better. An **altar** is sixteen bricks, eight mortar,

@@ -40,6 +40,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'butchering', name: 'Butchering', group: 'Skills', start: 1 },
   { id: 'alchemy', name: 'Alchemy', group: 'Skills', start: 1 },
   { id: 'prayer', name: 'Prayer', group: 'Skills', start: 1 },
+  { id: 'meditation', name: 'Meditation', group: 'Skills', start: 1 },
   { id: 'repair', name: 'Repair', group: 'Skills', start: 1 },
   { id: 'first_aid', name: 'First aid', group: 'Skills', start: 1 },
   { id: 'papyrusmaking', name: 'Papyrusmaking', group: 'Skills', start: 1 },

@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: eighty-two goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: eighty-five goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -825,6 +825,20 @@ export function buildHelp(win: UIWindow): void {
     it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <h3>Meditation, and the three paths</h3>
+    <p>Sitting still on a rug thinking about nothing is not obviously work, and it is the slowest thing
+    anybody does here. Weave a <b>rug</b> (four cloth and six yarn, on a loom), stand where you mean to
+    sit, and choose <b>Sit and think about nothing</b>. You may sit once every twelve minutes and
+    <b>where</b> you sit decides what it is worth: your own yard is the worst place for it, the high
+    ground is better, and where the ground runs out and the air is thin is worth <b>half again</b>.</p>
+    <p>At five meditation three ways of looking at the island become clear and you may walk exactly
+    <b>one</b>, chosen at the rug and never changed. Each opens five things as the sitting goes on: two
+    of them are abilities you call on with a long rest between, and three are simply true from then on.</p>
+    <table>
+      <tr><td><b>Love</b></td><td>The gardener's way. <i>Green thumb</i> (3): everything sown on your settlement comes on a fifth faster. <b>Refresh</b> (12): hunger and thirst full. <i>Gentle hand</i> (25): a wild thing is a quarter readier to trust you. <b>Mend the flesh</b> (45): every wound closed and a good deal of the hurt with it. <i>Abundance</i> (70): a harvest gives a third more.</td></tr>
+      <tr><td><b>Knowledge</b></td><td>The reader's way. <i>Attentive</i> (3): everything teaches you a tenth faster, for good. <b>Sense the rock</b> (12): every seam within fifteen tiles, marked. <i>Reader</i> (25): you read any wildermon's blood at a glance whatever your husbandry. <b>Recall the way</b> (45): you are standing at your own token. <i>Keen sight</i> (70): you see a quarter further than anybody.</td></tr>
+      <tr><td><b>Power</b></td><td>The plain way. <i>Strong back</i> (3): armour burdens you a fifth less. <b>Second wind</b> (12): your wind back all at once. <i>Hard hands</i> (25): you hit a sixth harder. <b>Fury</b> (45): half a minute of double damage. <i>Ironhide</i> (70): what you wear turns a tenth more &mdash; a full plate suit goes from turning 70% of a blow to 78%.</td></tr>
+    </table>
     <h3>An altar, and what kneeling at one buys</h3>
     <p>There is no god on this island with a name and nobody here would claim to know one. There is a
     stone table, there is the hour before the sun is properly up, and there is the plain fact that a
