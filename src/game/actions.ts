@@ -26,7 +26,7 @@ import { BRIDGE_ACTIONS } from './bridges';
 import { FAITH_ACTIONS } from './faith';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
-import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
+import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
@@ -705,16 +705,27 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 5,
     applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].forage,
     check: (t, g) => (t.kind === 'tile' && g.isForaged(t.x, t.y, 'forage') ? 'This spot has been picked clean for now.' : null),
+    labelFor: (_t, g) => {
+      const rolls = rollsAt(g.skills.get('foraging'));
+      return rolls > 1 ? `Forage (${rolls} passes)` : 'Forage';
+    },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'forage');
-      if (g.rand() < 0.2 || !g.skillCheck('foraging', 5)) {
-        g.logMsg('You find nothing edible.', 'event');
+      // A practised eye goes over the same ground more than once.
+      const rolls = rollsAt(g.skills.get('foraging'));
+      const found: string[] = [];
+      for (let i = 0; i < rolls; i++) {
+        if (g.rand() < 0.2 || !g.skillCheck('foraging', 5)) continue;
+        const id = rollTable(FORAGE_TABLE, g.rand());
+        const item = g.inventory.add(id, { ql: g.productQl('foraging') });
+        found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
+      }
+      if (!found.length) {
+        g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing edible.` : 'You find nothing edible.', 'event');
         return;
       }
-      const id = rollTable(FORAGE_TABLE, g.rand());
-      const item = g.inventory.add(id, { ql: g.productQl('foraging') });
-      g.logMsg(`You find some ${itemDef(id).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
+      g.logMsg(`You find some ${listOf(found)}.`, 'event');
     },
   },
   {
@@ -726,16 +737,26 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 5,
     applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].botanize,
     check: (t, g) => (t.kind === 'tile' && g.isForaged(t.x, t.y, 'botanize') ? 'This spot has been picked clean for now.' : null),
+    labelFor: (_t, g) => {
+      const rolls = rollsAt(g.skills.get('botanizing'));
+      return rolls > 1 ? `Botanize (${rolls} passes)` : 'Botanize';
+    },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'botanize');
-      if (g.rand() < 0.2 || !g.skillCheck('botanizing', 5)) {
-        g.logMsg('You find nothing of interest.', 'event');
+      const rolls = rollsAt(g.skills.get('botanizing'));
+      const found: string[] = [];
+      for (let i = 0; i < rolls; i++) {
+        if (g.rand() < 0.2 || !g.skillCheck('botanizing', 5)) continue;
+        const id = rollTable(BOTANIZE_TABLE, g.rand());
+        const item = g.inventory.add(id, { ql: g.productQl('botanizing') });
+        found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
+      }
+      if (!found.length) {
+        g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing of interest.` : 'You find nothing of interest.', 'event');
         return;
       }
-      const id = rollTable(BOTANIZE_TABLE, g.rand());
-      const item = g.inventory.add(id, { ql: g.productQl('botanizing') });
-      g.logMsg(`You find some ${itemDef(id).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
+      g.logMsg(`You find some ${listOf(found)}.`, 'event');
     },
   },
   {

@@ -912,6 +912,13 @@ function helpText(): string {
     it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <p><b>A practised eye goes over the same ground more than once.</b> Foraging and botanizing take
+    <b>one more pass over the tile for every twenty points</b> of the skill: one pass below twenty, two
+    at twenty, three at <b>forty</b>, and six at a hundred. Each pass is its own chance of a find and
+    its own roll on the table, so a good forager comes off one tile with an armful where a beginner
+    comes off it with a berry &mdash; and the menu says how many passes you are good for before you
+    start. The tile is still picked clean for the same while afterwards, so this is worth more than
+    walking twice as far.</p>
     <h3>Meditation, and the three paths</h3>
     <p>Sitting still on a rug thinking about nothing is not obviously work, and it is the slowest thing
     anybody does here. Weave a <b>rug</b> (four cloth and six yarn, on a loom), stand where you mean to

@@ -407,6 +407,12 @@ rebuilds and commits the result.
   holds on to what it is carrying and waits near the token instead of tipping
   it on the ground, saying so once. Seed for sowing and wood for stoking are
   drawn from any store on the deed, not only the deed crate.
+- **Foraging by the handful.** Foraging and botanizing take one more pass over
+  the tile for every twenty points of the skill — one below twenty, three at
+  forty, six at a hundred — each pass its own chance of a find and its own roll
+  on the table. The tile is picked clean for the same while afterwards, so
+  skill is worth more than walking twice as far, and the menu says how many
+  passes you are good for before you start.
 - **Wildermon.** Tameable creatures with a taming skill. The Rabba, a
   rabbit-like grazer, forages berries when hungry and is tamed with a berry or
   vegetable; the Vola, a mole-like digger, botanizes herbs and roots and is

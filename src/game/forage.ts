@@ -33,6 +33,21 @@ export const BOTANIZE_TABLE: Array<[string, number]> = [
   ['rosemary_seed', 5],
 ];
 
+/** Points of skill between one look over the ground and the next. */
+export const PER_ROLL = 20;
+
+/**
+ * How many times a tile is searched in one go. Skill does not only make a find
+ * likelier, it makes a second and a third look worth taking: one more pass for
+ * every twenty points, so a forager of forty goes over the same ground three
+ * times and a master of a hundred six.
+ */
+export const rollsAt = (skill: number): number => 1 + Math.floor(Math.max(0, skill) / PER_ROLL);
+
+/** "a, b and c", for saying what a handful of passes turned up. */
+export const listOf = (parts: string[]): string =>
+  parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+
 export function rollTable(table: Array<[string, number]>, r: number): string {
   const total = table.reduce((s, e) => s + e[1], 0);
   let acc = r * total;
