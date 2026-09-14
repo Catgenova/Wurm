@@ -8,10 +8,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/copy-site.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "defs": "esbuild scripts/dump-defs.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/dump-defs.mjs --log-level=error && node node_modules/.cache/dump-defs.mjs > supabase/migrations/0003_defs.sql",
+    "db:test": "supabase/test/run.sh"
   },
   "devDependencies": {
     "typescript": "^6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "esbuild": "^0.28.2"
   }
 }
