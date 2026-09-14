@@ -262,6 +262,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   corn: { name: 'Corn', category: 'food', weight: 0.2, stackable: true, food: 0.11 },
   cotton: { name: 'Cotton', category: 'material', weight: 0.1, stackable: true, decay: 30 },
   wemp: { name: 'Wemp fibre', category: 'material', weight: 0.1, stackable: true, decay: 30 },
+  rope: { name: 'Rope', category: 'material', weight: 0.6, stackable: true, decay: 6, description: 'Wemp laid up into three strands on a rope tool. Everything that has to hold, hold fast or haul is roped.' },
+  thick_rope: { name: 'Thick rope', category: 'material', weight: 2.4, stackable: true, decay: 4, description: 'Three ropes laid up again into a hawser. It moors a hull, hangs a bucket down a shaft and carries a span of bridge.' },
   onion: { name: 'Onion', category: 'food', weight: 0.15, stackable: true, food: 0.06 },
   corpse: { name: 'Corpse', category: 'misc', weight: 12, decay: 90, description: 'A dead wildermon. Butcher it for meat, fur, leather, bones and glands before it rots.' },
   // Furniture, carried flat-packed and set down on the subtile grid.
@@ -306,6 +308,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   backpack: { name: 'Backpack', category: 'misc', weight: 2.4, decay: 4, holds: 60, shelter: 0.4, description: 'A deep leather pack on ribbon straps. Holds 60 things and sheds most of the weather. Drop a full one at a work post and it keeps.' },
   work_post: { name: 'Work post', category: 'misc', weight: 5, decay: 4, description: 'A stake, a crossbar and a strip of metal for a marker. Driven into open ground off your deed, it stands half an hour to three hours by its quality, and one wildermon will work out of it as it would out of a settlement. When it goes over, the creature comes back to you.' },
   hive: { name: 'Hive', category: 'misc', weight: 10, decay: 4, description: 'A stack of shallow boxes for a swarm to live in. Set it down on your deed and keep a Vesp there, and it fills itself with honey and beeswax. Holds 40 of them.' },
+  rope_tool: { name: 'Rope tool', category: 'tool', weight: 1.2, description: 'A grooved block the strands are laid round and twisted against. Nothing is roped without one.' },
   spindle: { name: 'Spindle', category: 'misc', weight: 5, decay: 4, description: 'Spins wool, cotton and wemp into yarn. Stand at it to work.' },
   loom: { name: 'Loom', category: 'misc', weight: 30, decay: 4, description: 'Weaves yarn into cloth. Stand at it to work.' },
   // Brick and mortar, carried flat-packed like everything else until it is set down.

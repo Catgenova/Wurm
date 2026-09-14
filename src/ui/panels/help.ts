@@ -527,6 +527,14 @@ export function buildHelp(win: UIWindow): void {
     what decides how many jobs you can keep in your head at once, and wears the pages a little as you
     go. Held in one hand it is hard going; on a <b>lectern</b>, which until now had nothing to hold, you
     get twice as much out of the same hour.</p>
+    <h3>Rope</h3>
+    <p>Wemp is grown in a field, cut for <b>fibre</b>, and the fibre goes two ways. Spun on a spindle it
+    is coarse yarn; laid up on a <b>rope tool</b> (a plank and a shaft, carved) it is <b>rope</b> &mdash;
+    four fibres to a rope, on the <b>ropemaking</b> skill. Three ropes laid up again make a <b>thick
+    rope</b>, which is the hawser everything heavy hangs on.</p>
+    <p>Rope is not decoration. A <b>bridle</b> takes one for the reins, a <b>rowing boat</b> two, a
+    <b>sailing boat</b> eight and two hawsers for her standing rigging, and a <b>well</b> a hawser to
+    hang the bucket down the shaft. Keep a field of wemp if you mean to build anything that floats.</p>
     <h3>Wool, cloth and the loom</h3>
     <p>Fibre becomes cloth in two steps, and each wants its own furniture. Build a <b>spindle</b> and a
     <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into

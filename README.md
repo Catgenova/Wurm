@@ -458,6 +458,12 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Rope.** Wemp fibre goes two ways: spun on a spindle it is coarse yarn,
+  laid up on a **rope tool** it is **rope** — four fibres to a rope, on the
+  new **ropemaking** skill — and three ropes laid up again make a **thick
+  rope**. Rope is a real input rather than a curiosity: a bridle takes one
+  for the reins, a rowing boat two, a sailing boat eight and two hawsers of
+  standing rigging, and a well a hawser to hang its bucket on.
 - **Traits, genders and animal husbandry.** Every wildermon is born **male**
   or **female** and carries **three traits**, drawn from four tiers —
   **common**, **rare**, **supreme**, **fantastic** — whose worth climbs steeply

@@ -133,7 +133,7 @@ export const FURNITURE: FurnitureDef[] = [
   piece('loom', 'Loom', 2, 2, [['plank', 8], ['timber', 4], ['shaft', 6], ['nail', 24]], 22, 18, 'You build a loom and thread the warp.'),
   // Masonry, not carpentry: these two are laid in brick and mortar.
   piece('oven', 'Oven', 2, 2, [['stone_brick', 10], ['mortar', 4]], 24, 18, 'You lay the courses, turn an arch over the mouth and leave it to set. An oven.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
-  piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
+  piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: bulk, rubbish, and something to pull it in.
   piece('bulk_bin', 'Bulk storage bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a hundred bricks go into.', 400, { bulk: true }),
   piece('trash_crate', 'Trash crate', 1, 1, [['plank', 3], ['nail', 6]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
@@ -146,8 +146,8 @@ export const FURNITURE: FurnitureDef[] = [
   // The two that float. Built on the bank and launched into water with a
   // couple of feet under it; they carry their load and their crew and will
   // not be dragged up a beach.
-  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 20], ['timber', 6], ['shaft', 2], ['nail', 30]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
-  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 40], ['timber', 14], ['shaft', 3], ['cloth', 6], ['ribbon', 4], ['nail', 70]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
+  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 20], ['timber', 6], ['shaft', 2], ['rope', 2], ['nail', 30]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
+  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 40], ['timber', 14], ['shaft', 3], ['cloth', 6], ['rope', 8], ['thick_rope', 2], ['ribbon', 4], ['nail', 70]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
   // Barrels hold liquid and nothing else, in three sizes.
   piece('small_barrel', 'Small barrel', 1, 1, [['plank', 3], ['shaft', 1], ['nail', 6]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
   piece('large_barrel', 'Large barrel', 2, 2, [['plank', 14], ['shaft', 4], ['nail', 26]], 26, 20, 'You raise a great barrel, as tall as you are and twice as wide.', undefined, { liquid: 250 }),
