@@ -76,7 +76,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.live
     needs: rules
     runs-on: ubuntu-latest
-    environment: supabase
+    environment: AI
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -104,7 +104,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.live
     needs: migrate
     runs-on: ubuntu-latest
-    environment: supabase
+    environment: AI
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

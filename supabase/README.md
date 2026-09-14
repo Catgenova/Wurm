@@ -65,7 +65,7 @@ they agree.
 - **smoke** — founds a real island on the real project, plays on it, checks
   what came back against what went out, and gives it up again.
 
-The last two need two secrets in a repository environment called `supabase`:
+The last two need two secrets in a repository environment called `AI`:
 
 | | |
 |---|---|
