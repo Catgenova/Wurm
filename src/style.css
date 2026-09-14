@@ -1066,3 +1066,9 @@ kbd {
 }
 .title-chip:hover { border-color: #7d8d84; color: #e2e9e2; }
 .title-chip.title-worn { color: #f0c060; border-color: #f0c060; background: rgba(240, 192, 96, 0.1); }
+
+/* What is open on you, under the bars. */
+.hud-wounds { display: flex; flex-direction: column; gap: 1px; }
+.wound-row { font-size: 11px; color: #b9a99c; line-height: 1.35; }
+.wound-row.wound-open { color: #e08a72; }
+.wound-row.wound-bad { color: #d05a4a; font-weight: 600; }

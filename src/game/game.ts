@@ -25,6 +25,7 @@ import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
+import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
 export interface ActiveAction {
   def: ActionDef;
@@ -99,7 +100,7 @@ export interface GameInit {
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -302,6 +303,8 @@ export class Game {
       this.player.affinities = init.player.affinities ?? {};
       this.player.titles = init.player.titles ?? [];
       this.player.title = init.player.title ?? null;
+      this.player.wounds = init.player.wounds ?? [];
+      this.player.nextWound = init.player.nextWound ?? 1;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -712,16 +715,80 @@ export class Game {
     return { taken: raw * (1 - soak), part, worn: item, blocked: false };
   }
 
-  /** Hurt the player through their armour, and say what happened. */
-  hurtPlayer(raw: number, what: string): void {
+  /**
+   * Hurt the player through their armour, and say what happened. What gets
+   * through is not only a number off the bar: it leaves a wound, of a kind,
+   * in whichever place the blow landed, and that wound has its own life.
+   */
+  hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
     const hit = this.absorb(raw);
     if (hit.blocked) {
       this.logMsg(`You take ${what} on your ${itemName(hit.worn as Item).toLowerCase()}.`, 'error');
       return;
     }
     this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
+    const wound = this.wound(kind, hit.part, hit.taken);
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
-    this.logMsg(`${what}${where}.`, 'error');
+    this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'error');
+  }
+
+  /** Open a wound, or deepen one of the same kind already in that place. */
+  wound(kind: WoundKind, part: Slot, severity: number): Wound {
+    const had = this.player.wounds.find((w) => w.kind === kind && w.part === part && !w.infected);
+    if (had) {
+      had.severity += severity;
+      if (WOUND_KINDS[kind].bleed > 0.001) had.bleeding = true;
+      return had;
+    }
+    const w: Wound = {
+      id: this.player.nextWound++,
+      kind,
+      part,
+      severity,
+      // A bruise does not bleed; everything else does until it is seen to.
+      bleeding: kind !== 'crush',
+      infected: false,
+      dressing: null,
+      at: this.time,
+    };
+    this.player.wounds.push(w);
+    this.note('wounded');
+    return w;
+  }
+
+  /**
+   * What is open on you, once a second: blood out of anything still bleeding,
+   * a little closing on anything dressed, and the chance that something left
+   * alone goes bad.
+   */
+  private tendWounds(dt: number): void {
+    const p = this.player;
+    if (!p.wounds.length) return;
+    const aid = this.skills.get('first_aid');
+    let bad = false;
+    for (const w of p.wounds) {
+      const drain = woundDrain(w);
+      if (drain > 0) {
+        p.stats.health = Math.max(0, p.stats.health - drain * dt);
+        bad = true;
+      }
+      w.severity = Math.max(0, w.severity - woundClose(w, aid) * dt);
+      if (this.rand() < festerChance(w) * dt) {
+        w.infected = true;
+        w.dressing = null;
+        this.logMsg(`The ${WOUND_KINDS[w.kind].name} on your ${PART_NAMES[w.part] ?? w.part} has gone bad. It wants cleaning out before anything will hold on it.`, 'error');
+      }
+    }
+    const closed = p.wounds.filter((w) => w.severity <= 0.004 && !w.infected);
+    for (const w of closed) this.logMsg(`The ${WOUND_KINDS[w.kind].name} on your ${PART_NAMES[w.part] ?? w.part} has closed.`, 'event');
+    if (closed.length) p.wounds = p.wounds.filter((w) => !closed.includes(w));
+    // Losing blood also means losing the wind to do anything about it.
+    if (bad) p.stats.stamina = Math.max(0, p.stats.stamina - dt * 0.01);
+  }
+
+  /** Whether anything open is still working against you. */
+  bleeding(): boolean {
+    return this.player.wounds.some((w) => w.bleeding || w.infected);
   }
 
   /** Hours since midnight, 0 up to 24. */
@@ -968,8 +1035,10 @@ export class Game {
       const regen = (moved > 0 ? 0.012 : 0.05) * wind;
       const starving = s.hunger <= 0 || s.thirst <= 0 ? 0.3 : 1;
       s.stamina = Math.min(1, s.stamina + dt * regen * starving);
-      if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1) s.health = Math.min(1, s.health + dt * 0.004);
+      // Nothing knits while it is still open: see to the wound first.
+      if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1 && !this.bleeding()) s.health = Math.min(1, s.health + dt * 0.004);
     }
+    this.tendWounds(dt);
     if (s.health <= 0) this.die();
 
     if (this.action) this.updateAction(dt);

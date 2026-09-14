@@ -361,7 +361,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (def.defensive || g.rand() < 0.35) {
         g.player.attackedBy = c.id;
         g.player.attackedAt = g.time;
-        g.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`);
+        g.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`, def.wound ?? 'bite');
       }
       // Keep swinging while it is still within reach.
       return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= meleeReach(g);

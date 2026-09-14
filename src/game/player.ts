@@ -1,4 +1,5 @@
 import type { Boon } from './boons';
+import type { Wound } from './wounds';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
 import { TILE_DEFS } from '../world/tiles';
@@ -36,6 +37,9 @@ export class Player {
   rested = 0;
   /** Affinities running just now, from what you have eaten and drunk. */
   boons: Boon[] = [];
+  /** What is open on you, and what is on it. */
+  wounds: Wound[] = [];
+  nextWound = 1;
   /** Knacks earned on the way up, by skill: each is worth a tenth more gain in it. */
   affinities: Record<string, number> = {};
   /** Titles earned, and the one being worn. */

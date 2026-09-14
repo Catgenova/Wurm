@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Fifty-nine goals in seven chapters — Ashore, The
+- **A journal of goals.** Sixty-two goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -458,6 +458,20 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Wounds, herbs and covers.** A blow leaves a **wound** — of a kind, in
+  the place it landed — rather than only a number off the bar. It bleeds
+  until dressed, goes bad if it never is, and nothing knits while something
+  is still open. Five kinds, each with a herb that suits it: a **cut** wants
+  **thyme**, a **puncture** basil, a **bruise** mint, a **burn** sage, a
+  **bite** rosemary — and what you get is what hit you, since a hoof
+  bruises, a claw opens, a sting goes deep and narrow, and the two
+  creatures that carry their own light burn. A **bandage** stops the
+  bleeding and holds (a cut closes in about three quarters of an hour); a
+  **healing cover**, the herb bruised into cotton, closes the right wound in
+  twenty minutes and it never turns. Left open, seven cuts in ten go bad
+  within twenty minutes, against one in eleven under cloth. A wound that has
+  gone bad drains instead of closing and takes nothing until it is scoured
+  out with lye.
 - **Dye.** Eight dyestuffs boiled out of things that grow, each with a
   bucket of lye to bite the colour in and hold it: **woad** (blue, from
   blueberries), **madder** (red, raspberries), **scarlet** (strawberries),

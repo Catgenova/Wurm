@@ -11,6 +11,7 @@ import { groundStep } from './player';
 import { skillGain } from './skills';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
+import type { WoundKind } from './wounds';
 import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel } from './traits';
 
 /**
@@ -147,6 +148,12 @@ export interface SpeciesDef {
   hives?: boolean;
   /** Only ever found out of doors after dark. */
   nocturnal?: boolean;
+  /**
+   * The kind of wound it leaves. A hoof bruises, a claw opens, a sting goes
+   * deep and narrow, and something that carries its own fire burns. Most
+   * things bite.
+   */
+  wound?: WoundKind;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -227,6 +234,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   crawler: {
     id: 'crawler',
+    wound: 'cut',
     name: 'Crawler',
     description: 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws faster than a man with a spade, and it has never once been sorry for pinching anybody.',
     health: 24,
@@ -255,6 +263,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   noot: {
     id: 'noot',
+    wound: 'pierce',
     name: 'Noot',
     description: 'A plump, upright waddler in a slate coat, with a broad bill it uses as a spade and a flat tail it uses as a stool. It spends its whole day up to the knees in a clay pit and appears to think this is the good life.',
     health: 26,
@@ -280,6 +289,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   embra: {
     id: 'embra',
+    wound: 'burn',
     name: 'Embra',
     description: 'A soot-dark, slow-blinking creature that sleeps in the peat and tar of the marshes and wakes up wherever there is a fire. It carries wood the way other creatures carry food, and it will not eat anything raw.',
     health: 24,
@@ -305,6 +315,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   quarra: {
     id: 'quarra',
+    wound: 'crush',
     name: 'Quarra',
     description: 'A low, broad creature with a jaw like a chisel and a hide the colour of the rock it sits on. It eats clay by the mouthful and spends the rest of the day taking the mountain apart a piece at a time.',
     health: 34,
@@ -356,6 +367,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   ulva: {
     id: 'ulva',
+    wound: 'cut',
     name: 'Ulva',
     description: 'Grey, lean and long in the leg, and the first thing on this island that will come at you without being struck first. Tame one and it will do the same for everything that comes near your border.',
     health: 34,
@@ -383,6 +395,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   magga: {
     id: 'magga',
+    wound: 'cut',
     name: 'Magga',
     description: 'A sharp-eyed black and white bird that lives in the treetops and cannot leave anything shiny where it lies. Tamed, it clears a settlement of everything dropped and forgotten; wild, it is the reason your things are not where you left them.',
     health: 16,
@@ -409,6 +422,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   mola: {
     id: 'mola',
+    wound: 'cut',
     name: 'Mola',
     description: 'A heavy-shouldered mole with claws like trowels and grit worked into its coat. It can smell metal through a foot of stone and would rather be underground than not.',
     health: 22,
@@ -461,6 +475,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   roxxen: {
     id: 'roxxen',
+    wound: 'crush',
     name: 'Roxxen',
     description: 'A great slab-shouldered ox with horns that sweep forward and a head it holds low. It will not start anything, and it will finish most things that start with it. Nothing but a Shaggan pulls a loaded wagon like a pair of them.',
     health: 80,
@@ -488,6 +503,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   orse: {
     id: 'orse',
+    wound: 'crush',
     name: 'Orse',
     description: 'Long in the leg and deep in the chest, with a mane that falls to one side. It will carry a rider once it is saddled and bridled, and the further it has been worked the surer its footing on a bad slope.',
     health: 50,
@@ -515,6 +531,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   rowl: {
     id: 'rowl',
+    wound: 'cut',
     name: 'Rowl',
     description: 'A deep-chested hunter that runs the treeline in the half-light. It hunts the moment it sees you, and tamed it will hunt for you instead: give it a settlement and it works a circuit of it, and the more it fights the wider that circuit gets.',
     health: 46,
@@ -746,6 +763,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   // ---- Backs and saddles. ----
   bura: {
     id: 'bura',
+    wound: 'crush',
     name: 'Bura',
     description: 'A broad, slow, endlessly patient creature that was clearly made to have things strapped to it. Two hundred things ride on its back, and it neither hurries nor complains.',
     health: 55,
@@ -772,6 +790,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   gorral: {
     id: 'gorral',
+    wound: 'crush',
     name: 'Gorral',
     description: 'A horned cliff-goat that stands on ground you would not put a ladder against. Under a saddle it goes up what an Orse turns away from, and the more it is worked the worse the ground it will take.',
     health: 44,
@@ -801,6 +820,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   wadd: {
     id: 'wadd',
+    wound: 'crush',
     name: 'Wadd',
     description: 'A slick-furred swimmer with webbed feet and a rudder of a tail. It is the one thing on the island that will take a rider across deep water instead of drowning them.',
     health: 40,
@@ -830,6 +850,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   shaggan: {
     id: 'shaggan',
+    wound: 'crush',
     name: 'Shaggan',
     description: 'A mountain of hair on four legs, slower than anything else that pulls and stronger than all of them. One in the traces is a waste of a Shaggan; four of them will move a loaded wagon as though it were empty.',
     health: 90,
@@ -858,6 +879,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   // ---- Eyes, produce and the rare sort. ----
   warda: {
     id: 'warda',
+    wound: 'cut',
     name: 'Warda',
     description: 'A tall, still, long-sighted thing that picks the highest ground it can find and watches from it. Nothing comes near a settlement with one of these on the hill without you knowing.',
     health: 30,
@@ -884,6 +906,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   quill: {
     id: 'quill',
+    wound: 'pierce',
     name: 'Quill',
     description: 'A heavy ground-bird that would rather run than fly and would rather eat than run. Its long wing feathers grow back as fast as you can take them, which is what keeps an archer in arrows.',
     health: 26,
@@ -910,6 +933,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   cudda: {
     id: 'cudda',
+    wound: 'crush',
     name: 'Cudda',
     description: 'A placid, deep-bellied grazer that chews whatever it is given and gives milk back for it. Bring a bucket.',
     health: 48,
@@ -936,6 +960,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   vesp: {
     id: 'vesp',
+    wound: 'pierce',
     name: 'Vesp',
     description: 'Not one creature so much as a small furious cloud of them, which settles where there are flowers. Give the swarm a hive on your deed and it will fill it with honey and wax and defend it from anything foolish.',
     health: 12,
@@ -987,6 +1012,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   lume: {
     id: 'lume',
+    wound: 'burn',
     name: 'Lume',
     description: 'A pale slow drifter that is only ever out after dark, and glows with a light that has nothing to do with fire. Keep one and the night stops being half blind.',
     health: 10,
@@ -1876,7 +1902,7 @@ export class Creatures {
     if (Math.hypot(p.x - c.x, p.y - c.y) > 2 || game.rand() >= (def.unruly ?? 0)) return;
     p.attackedBy = c.id;
     p.attackedAt = game.time;
-    game.hurtPlayer(attackOf(c, def) * 0.012, `${c.name} rounds on you and gets a claw in`);
+    game.hurtPlayer(attackOf(c, def) * 0.012, `${c.name} rounds on you and gets a claw in`, def.wound ?? 'bite');
   }
 
   private stepToward(game: Game, c: Creature, tx: number, ty: number, dt: number, speedMul = 1): MoveResult {
@@ -2959,7 +2985,7 @@ export class Creatures {
         c.cooldown = 1.4;
         p.attackedBy = c.id;
         p.attackedAt = game.time;
-        game.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} is on you`);
+        game.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} is on you`, def.wound ?? 'bite');
       }
       return true;
     }

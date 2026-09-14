@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: fifty-nine goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: sixty-two goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -445,12 +445,25 @@ export function buildHelp(win: UIWindow): void {
     couple of points of quality; a skilled one does the same in a few seconds for half a point. Nothing
     repairs past quality 1, so a thing mended often enough is finished in the end &mdash; but that is a
     long way off, and a good tool kept mended will outlast most of what you build with it.</p>
-    <h3>Binding wounds</h3>
-    <p>A wound closes on its own eventually. A dressing is faster. Cut a length of cloth into three
-    <b>bandages</b> with a knife &mdash; that is the <b>First aid</b> skill &mdash; and right-click one
-    to <b>bind your wounds</b>. Each strip goes on one wound and is used up; the work keeps on while
-    you are still hurt and still carrying cloth. A clean dressing puts back the whole of what your
-    skill and the cloth are worth, and a slipped one about a third of it.</p>
+    <h3>Wounds, herbs and covers</h3>
+    <p>A blow is not only a number off the bar. What gets through your armour leaves a <b>wound</b>, of
+    a kind, in whichever place it landed, and that wound has its own life: it <b>bleeds</b> until it is
+    dressed, it goes <b>bad</b> if it never is, and nothing on you knits at all while something is still
+    open. The bars panel lists what you are carrying, worst first, and says what each one wants.</p>
+    <p>Five kinds, and each has a herb that suits it: a <b>cut</b> wants <b>thyme</b>, a
+    <b>puncture</b> <b>basil</b>, a <b>bruise</b> <b>mint</b>, a <b>burn</b> <b>sage</b> and a
+    <b>bite</b> <b>rosemary</b>. What leaves which is what hit you &mdash; a hoof bruises, a claw opens,
+    a sting goes deep and narrow, and the two creatures that carry their own light burn.</p>
+    <p>Two things go on a wound. A <b>bandage</b> is cloth cut three to a length with a knife: it stops
+    the bleeding and holds, and a cut under cloth closes in about three quarters of an hour. A
+    <b>healing cover</b> is the herb itself, bruised into cotton, three to a batch on the <b>first aid</b>
+    skill. The right herb on the right wound closes it in twenty minutes and it will never turn; the
+    wrong herb still holds and closes it in about thirty-five. Right-click either and it goes on the
+    worst thing open. Nothing at all and it barely closes: over twenty minutes, seven cuts in ten left
+    open go bad, against one in eleven under cloth and none at all under the right herb.</p>
+    <p>A wound that has <b>gone bad</b> is a different problem: it drains rather than closes and no
+    dressing will hold on it. Scour it out with a bucket of <b>lye</b> first &mdash; a hard piece of
+    first aid, and it leaves the wound open and bleeding again, so dress it straight after.</p>
     <p>The same hands do as much for a hurt <b>wildermon</b>. Stand beside a tame one that has been in
     a fight and choose <b>Treat its wounds</b>: it takes a bandage and puts back a share of its whole
     health, which is far more forgiving than waiting for it to mend itself. A wild creature will not

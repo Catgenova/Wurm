@@ -5,6 +5,7 @@ import { FURNITURE } from './furniture';
 import { MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
+import { WOUND_KINDS } from './wounds';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
 
 /**
@@ -294,6 +295,31 @@ const DYE_RECIPES: Recipe[] = DYES.map((d) => ({
 }));
 
 RECIPES.push(...DYE_RECIPES);
+
+/**
+ * A healing cover is the herb that suits a wound, bruised into cotton so it
+ * will sit on one. The herb is written on the cover, which is what tells five
+ * of them apart when they are all one item.
+ */
+const COVER_RECIPES: Recipe[] = Object.values(WOUND_KINDS).map((k) => ({
+  id: `make_cover_${k.herb}`,
+  category: 'Alchemy' as RecipeCategory,
+  result: 'cover',
+  count: 3,
+  inputs: [{ item: k.herb, count: 2 }, { item: 'cotton', count: 1 }],
+  skill: 'first_aid',
+  label: `Work ${k.herb} into a cover`,
+  verb: `working a ${k.herb} cover`,
+  baseTime: 9,
+  stamina: 0.02,
+  difficulty: 12,
+  extra: k.herb.charAt(0).toUpperCase() + k.herb.slice(1),
+  done: `You bruise the ${k.herb} and work it into the cotton. Three covers. ${k.note}`,
+  fail: `The ${k.herb} goes to a green paste that will sit on nothing.`,
+  consumeOnFail: true,
+}));
+
+RECIPES.push(...COVER_RECIPES);
 
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];

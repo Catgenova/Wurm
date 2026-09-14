@@ -1,5 +1,6 @@
 import { clockLeft } from '../game/boons';
 import { SKILL_DEFS } from '../game/skills';
+import { WOUND_KINDS, woundText } from '../game/wounds';
 import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
@@ -62,6 +63,7 @@ export class Hud {
   private feedBtn!: HTMLButtonElement;
   private companionText = document.createElement('span');
   private boonEl: HTMLDivElement;
+  private woundEl: HTMLDivElement;
   private storeyEl: HTMLDivElement;
   private storeyLabel: HTMLButtonElement;
   private storeyUp: HTMLButtonElement;
@@ -125,6 +127,11 @@ export class Hud {
     this.boonEl.className = 'hud-companion hud-boons';
     this.boonEl.hidden = true;
     status.append(this.boonEl);
+    // Anything open on you, which is the first thing you want to know.
+    this.woundEl = document.createElement('div');
+    this.woundEl.className = 'hud-companion hud-wounds';
+    this.woundEl.hidden = true;
+    status.append(this.woundEl);
     this.gearEl = document.createElement('div');
     this.gearEl.className = 'hud-companion hud-gear';
     this.gearEl.hidden = true;
@@ -281,6 +288,28 @@ export class Hud {
     }
     this.boonEl.hidden = !parts.length;
     if (parts.length) this.boonEl.textContent = parts.join('  ·  ');
+    // What is open on you, worst first, with the herb each one wants.
+    const wounds = this.game.player.wounds;
+    this.woundEl.hidden = !wounds.length;
+    if (wounds.length) {
+      const sorted = [...wounds].sort((a, b) => (b.infected ? 1 : 0) - (a.infected ? 1 : 0) || b.severity - a.severity);
+      this.woundEl.replaceChildren();
+      for (const w of sorted.slice(0, 4)) {
+        const row = document.createElement('div');
+        row.className = `wound-row${w.infected ? ' wound-bad' : w.bleeding ? ' wound-open' : ''}`;
+        row.textContent = `${woundText(w).replace(/^a /, '')}`;
+        row.title = w.infected
+          ? `Gone bad. Clean it out with lye before anything will hold on it.`
+          : `${WOUND_KINDS[w.kind].note} It wants a ${WOUND_KINDS[w.kind].herb} cover.`;
+        this.woundEl.append(row);
+      }
+      if (sorted.length > 4) {
+        const more = document.createElement('div');
+        more.className = 'wound-row';
+        more.textContent = `and ${sorted.length - 4} more`;
+        this.woundEl.append(more);
+      }
+    }
     const mobs = this.game.creatures.ticked;
     const watched = this.game.settings.fog ? ` · ${mobs.thought}/${mobs.near + mobs.far + mobs.asleep} mobs` : '';
     this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`;
