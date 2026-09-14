@@ -157,7 +157,11 @@ input.onKey = (code) => {
       game.settings.grid = !game.settings.grid;
       break;
     case 'KeyC':
+      game.settings.follow = true;
       camera.follow = true;
+      break;
+    case 'Home':
+      game.walkHome();
       break;
     case 'KeyQ':
       turnView(-1);
@@ -216,7 +220,25 @@ const loop = new GameLoop(
 
     game.update(dt);
 
-    if (camera.follow) {
+    /*
+     * The view at the screen edge. Resting the cursor in the outer band slides
+     * the camera that way, harder the closer to the edge, and stops the camera
+     * following you while it does: it is a way of looking about without having
+     * to hold the mouse down.
+     */
+    if (game.settings.edgePan && input.pointer.overCanvas && !input.dragging && !ui.menu.isOpen) {
+      const band = Math.max(24, Math.min(64, Math.min(canvas.width, canvas.height) * 0.06));
+      const push = (v: number, size: number): number => (v < band ? (v - band) / band : v > size - band ? (v - (size - band)) / band : 0);
+      const px = push(input.pointer.x, canvas.width);
+      const py = push(input.pointer.y, canvas.height);
+      if (px !== 0 || py !== 0) {
+        const speed = 900 * dt;
+        camera.panBy(-px * speed, -py * speed);
+      }
+    }
+
+    // The camera keeps to you unless it has been dragged off, or told not to.
+    if (game.settings.follow && camera.follow) {
       camera.focus(player.x, player.y, Math.max(-4, game.playerHeight()), dt);
     }
 

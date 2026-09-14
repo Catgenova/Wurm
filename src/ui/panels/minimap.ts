@@ -1,4 +1,5 @@
 import type { Game } from '../../game/game';
+import { MARK_COLOURS, MARK_CSS } from '../../game/marks';
 import type { Renderer } from '../../render/renderer';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, rockVariant } from '../../world/tiles';
 import { UNSEEN, VISIBLE } from '../../game/vision';
@@ -28,6 +29,9 @@ export class MinimapPanel {
   private lastFog = true;
   /** The window drawn last, in tiles: where it sits and how wide it is. */
   private win = { x: 0, y: 0, span: MIN_SPAN };
+  /** The list of marks under the map, and whether names are drawn on it. */
+  private marksEl: HTMLDivElement;
+  private names = true;
 
   constructor(
     win: UIWindow,
@@ -48,7 +52,36 @@ export class MinimapPanel {
     this.view.height = VIEW_SIZE;
     this.viewCtx = this.view.getContext('2d') as CanvasRenderingContext2D;
     win.body.classList.add('map-body');
-    win.body.append(this.view);
+    // A row of controls over the map, and the marks listed under it.
+    const bar = document.createElement('div');
+    bar.className = 'panel-bar map-bar';
+    const dropBtn = document.createElement('button');
+    dropBtn.type = 'button';
+    dropBtn.className = 'tb-btn tb-small';
+    dropBtn.textContent = 'Mark here';
+    dropBtn.title = 'Pin a name to the tile you are standing on';
+    dropBtn.addEventListener('click', () => this.drop(game.player.tileX, game.player.tileY));
+    const homeBtn = document.createElement('button');
+    homeBtn.type = 'button';
+    homeBtn.className = 'tb-btn tb-small';
+    homeBtn.textContent = 'Walk home';
+    homeBtn.title = 'Set off for the settlement token, or the bed you last woke in (Home)';
+    homeBtn.addEventListener('click', () => game.walkHome());
+    const nameBtn = document.createElement('button');
+    nameBtn.type = 'button';
+    nameBtn.className = 'tb-btn tb-small tb-on';
+    nameBtn.textContent = 'Names';
+    nameBtn.title = 'Write the names beside the pins, or leave the pins bare';
+    nameBtn.addEventListener('click', () => {
+      this.names = !this.names;
+      nameBtn.classList.toggle('tb-on', this.names);
+    });
+    bar.append(dropBtn, homeBtn, nameBtn);
+    this.marksEl = document.createElement('div');
+    this.marksEl.className = 'map-marks';
+    win.body.append(bar, this.view, this.marksEl);
+    game.events.on('world', () => this.listMarks());
+    this.listMarks();
     // Unexplored to start with, which is a fill rather than a million lookups.
     // What is known is painted the first time the map is opened.
     const px = new Uint32Array(this.image.data.buffer);
@@ -58,14 +91,93 @@ export class MinimapPanel {
       for (let yy = y - 1; yy <= y + 1; yy++) for (let xx = x - 1; xx <= x + 1; xx++) if (w.inBounds(xx, yy)) this.paint(xx, yy);
       this.dirty = true;
     });
+    this.view.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const [x, y] = this.tileAt(e.clientX, e.clientY);
+      this.drop(Math.floor(x), Math.floor(y));
+    });
     this.view.addEventListener('click', (e) => {
-      const rect = this.view.getBoundingClientRect();
-      const x = this.win.x + ((e.clientX - rect.left) / rect.width) * this.win.span;
-      const y = this.win.y + ((e.clientY - rect.top) / rect.height) * this.win.span;
+      const [x, y] = this.tileAt(e.clientX, e.clientY);
       const cam = this.renderer.camera;
       cam.follow = false;
       cam.focus(x, y, w.heightAt(x, y), null);
     });
+  }
+
+  /** Where on the island a point on the drawn map is. */
+  private tileAt(sx: number, sy: number): [number, number] {
+    const rect = this.view.getBoundingClientRect();
+    return [this.win.x + ((sx - rect.left) / rect.width) * this.win.span, this.win.y + ((sy - rect.top) / rect.height) * this.win.span];
+  }
+
+  /** Ask for a name and pin it to a tile. An empty answer drops nothing. */
+  private drop(x: number, y: number): void {
+    if (!this.game.world.inBounds(x, y)) return;
+    const said = this.game.hooks.prompt(`Name this spot (${x}, ${y}):`, '');
+    if (said === null) return;
+    this.game.addMark(x, y, said);
+    this.listMarks();
+  }
+
+  /** Redraw the list of marks under the map. */
+  private listMarks(): void {
+    const g = this.game;
+    this.marksEl.replaceChildren();
+    if (!g.marks.length) {
+      const none = document.createElement('div');
+      none.className = 'map-none';
+      none.textContent = 'No marks yet. Right-click the map, or press “Mark here”, to pin a name to a spot.';
+      this.marksEl.append(none);
+      return;
+    }
+    const near = [...g.marks].sort((a, b) => Math.hypot(a.x - g.player.x, a.y - g.player.y) - Math.hypot(b.x - g.player.x, b.y - g.player.y));
+    for (const m of near) {
+      const row = document.createElement('div');
+      row.className = 'map-mark';
+      const pip = document.createElement('span');
+      pip.className = 'map-pip';
+      pip.style.background = MARK_CSS(m.colour);
+      pip.title = 'Click for another colour';
+      pip.addEventListener('click', () => {
+        const i = MARK_COLOURS.findIndex((c) => c.id === m.colour);
+        m.colour = MARK_COLOURS[(i + 1) % MARK_COLOURS.length].id;
+        this.listMarks();
+      });
+      const name = document.createElement('span');
+      name.className = 'map-mark-name';
+      const away = Math.round(Math.hypot(m.x - g.player.x, m.y - g.player.y));
+      name.textContent = m.name;
+      name.title = `(${m.x}, ${m.y}), ${away} tiles off. Click to rename.`;
+      name.addEventListener('click', () => {
+        const said = g.hooks.prompt('What is this spot called?', m.name);
+        if (said === null) return;
+        g.renameMark(m.id, said);
+        this.listMarks();
+      });
+      const dist = document.createElement('span');
+      dist.className = 'map-mark-away';
+      dist.textContent = `${away}`;
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'tb-btn tb-small';
+      go.textContent = 'Go';
+      go.title = `Walk to (${m.x}, ${m.y})`;
+      go.addEventListener('click', () => {
+        g.moveTo(m.x, m.y);
+        g.logMsg(`Walking to ${m.name}.`, 'info');
+      });
+      const off = document.createElement('button');
+      off.type = 'button';
+      off.className = 'tb-btn tb-small tb-danger';
+      off.textContent = '×';
+      off.title = 'Rub this mark off the map';
+      off.addEventListener('click', () => {
+        g.removeMark(m.id);
+        this.listMarks();
+      });
+      row.append(pip, name, dist, go, off);
+      this.marksEl.append(row);
+    }
   }
 
   /** The colour of ground nobody has seen, as one packed pixel. */
@@ -211,12 +323,49 @@ export class MinimapPanel {
       ctx.strokeRect((deed.x - deed.radius - ox) * scale, (deed.y - deed.radius - oy) * scale, (deed.radius * 2 + 1) * scale, (deed.radius * 2 + 1) * scale);
       ctx.lineWidth = 1;
     }
+    // The marks, each a pin with its name written beside it. The map is drawn
+    // at a fixed 512 and scaled down with nearest-neighbour, so the writing has
+    // to start larger than it will end up.
+    ctx.font = '15px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const m of this.game.marks) {
+      const mx = (m.x + 0.5 - ox) * scale;
+      const my = (m.y + 0.5 - oy) * scale;
+      if (mx < -20 || my < -20 || mx > this.view.width + 20 || my > this.view.height + 20) continue;
+      const css = MARK_CSS(m.colour);
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(mx, my - 9);
+      ctx.stroke();
+      ctx.strokeStyle = css;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = css;
+      ctx.beginPath();
+      ctx.arc(mx, my - 10, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.stroke();
+      if (!this.names) continue;
+      // The name sits to the right of its pin, and swaps to the left rather
+      // than running off the edge of the map.
+      const w = ctx.measureText(m.name).width;
+      const right = mx + 6 + w + 6 <= this.view.width;
+      const bx = right ? mx + 6 : Math.max(0, mx - 6 - w - 6);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(bx, my - 20, w + 6, 17);
+      ctx.fillStyle = css;
+      ctx.fillText(m.name, bx + 3, my - 11);
+    }
     const p = this.game.player;
     ctx.fillStyle = '#ffe36e';
     ctx.beginPath();
     ctx.arc((p.x - ox) * scale, (p.y - oy) * scale, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 }

@@ -30,6 +30,30 @@ function helpText(): string {
     <b>Skills</b> (what you have learned), <b>Talk</b> and <b>Trouble</b> (what went wrong, and why).
     A tab with lines waiting on it says how many, and opening it clears the count. The box beside the
     tabs searches whatever tab you are on, and <kbd>Esc</kbd> in it clears the search.</p>
+    <h3>Marks on the map, and the way home</h3>
+    <p>An island is a million tiles and the good clay is on one of them. <b>Right-click the map</b>
+    (<kbd>M</kbd>), or press <b>Mark here</b>, to pin a name to a spot; the tile's own menu offers the
+    same with a colour chosen up front. Marks are drawn as pins with their names beside them, listed
+    under the map nearest first, and each has a <b>Go</b> button that walks you to it. Click a pin's
+    dot in the list to cycle its colour, click its name to rename it, and × rubs it off. The map holds
+    sixty-four of them; past that the oldest is pushed off, because a map with a hundred pins on it is
+    a map with none.</p>
+    <p><kbd>Home</kbd>, or the <b>Walk home</b> button on the map, sets off for your settlement token
+    &mdash; or, before you have founded anything, for the shore you came in on or the last bed you
+    woke in.</p>
+    <h3>The camera</h3>
+    <p>The view keeps to you by default; dragging it away lets it go, and <kbd>C</kbd> or the
+    <b>Centre</b> button takes it back. Resting the cursor against the <b>edge of the screen</b>
+    slides the view that way, harder the closer to the edge, which is a way of looking about without
+    holding the mouse down &mdash; and, like dragging, it lets the camera go until you call it back.
+    Neither happens while the cursor is over a window or the toolbar. Both can be turned off in
+    Settings (<kbd>O</kbd>) if you would rather only drag.</p>
+    <h3>Your wildermon, in order</h3>
+    <p>The Wildermon window (<kbd>P</kbd>) has a search box and an order: by name, level, kind,
+    health, hunger, care, age, or the best trait each one carries. The search matches a name, a kind,
+    a job, an age, an orders setting or any trait, so "supreme" finds everything worth breeding from
+    and "hungry" is answered by the footer, which counts the herd and says how many are hungry or
+    hurt. Grouped lists them by where they are; Flat runs the whole herd together.</p>
     <h3>The settlement window</h3>
     <p><kbd>N</kbd> opens the settlement at a glance: its level and how far the border runs, how many
     wildermon are working of how many it can take, what the next upgrade still wants and the button

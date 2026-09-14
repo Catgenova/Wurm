@@ -53,6 +53,7 @@ import { DeedPanel } from './panels/deed';
 import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { jobEntry, pinEntry, pinnable } from './beltmenu';
+import { MARK_COLOURS } from '../game/marks';
 import { SettingsPanel } from './panels/settings';
 import { Hud } from './hud';
 import { buildHelp } from './panels/help';
@@ -679,6 +680,43 @@ export class UI {
       entries.push(this.jobEntry(def, target, reason, def.labelFor?.(target, this.game) ?? def.label));
     }
     if (!building) entries.push(...this.buildingEntries(pick));
+    // Pinning a name to this spot, or rubbing one off.
+    const here = this.game.markNear(pick.x, pick.y, 1.5);
+    if (here) {
+      entries.push({
+        label: `Mark: ${here.name}`,
+        children: [
+          {
+            label: 'Rename it',
+            onSelect: () => {
+              const said = this.game.hooks.prompt('What is this spot called?', here.name);
+              if (said !== null) this.game.renameMark(here.id, said);
+            },
+          },
+          { label: 'Rub it off the map', onSelect: () => this.game.removeMark(here.id) },
+          ...MARK_COLOURS.map((c) => ({
+            label: c.name,
+            note: c.note,
+            onSelect: () => {
+              here.colour = c.id;
+              this.game.events.emit('world', here.x, here.y);
+            },
+          })),
+        ],
+      });
+    } else {
+      entries.push({
+        label: 'Mark this spot on the map',
+        children: MARK_COLOURS.map((c) => ({
+          label: c.name,
+          note: c.note,
+          onSelect: () => {
+            const said = this.game.hooks.prompt(`Name this spot (${pick.x}, ${pick.y}):`, '');
+            if (said !== null) this.game.addMark(pick.x, pick.y, said, c.id);
+          },
+        })),
+      });
+    }
     // Hanging one of this tile's jobs on the belt, to be pressed anywhere after.
     const hangable = this.game.actionsFor(target).filter((a) => pinnable(a.def));
     if (hangable.length && this.game.beltLoops()) {

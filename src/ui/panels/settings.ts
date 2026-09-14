@@ -48,6 +48,18 @@ export class SettingsPanel {
       (v) => (game.settings.tileWindow = v),
     );
     add(
+      'Keep the camera on you',
+      'The view follows you about. Dragging it away turns this off for the moment; C, or the Centre button, takes it back. Untick to leave the camera wherever it was put.',
+      () => game.settings.follow,
+      (v) => (game.settings.follow = v),
+    );
+    add(
+      'Push the view at the screen edge',
+      'Resting the cursor against the edge of the screen slides the view that way, the harder the closer to the edge. Untick if you would rather only drag.',
+      () => game.settings.edgePan,
+      (v) => (game.settings.edgePan = v),
+    );
+    add(
       'Always show deed border',
       'Draw the green boundary of your settlement at all times. Otherwise it only shows while pointing at the token.',
       () => game.settings.deedBorder,

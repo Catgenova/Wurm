@@ -1,9 +1,8 @@
 import { DEED_RADIUS_PER_LEVEL, MAX_DEED_LEVEL, deedWorkersAt, type Game } from '../../game/game';
-import { upgradeProgress, upgradeReason } from '../../game/deed';
+import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../../game/deed';
 import { furnitureDef, furnitureName } from '../../game/furniture';
 import { STANCES, STANCE_NAMES } from '../../game/creatures';
 import { ACTION_BY_ID } from '../../game/actions';
-import { DEED_ACTION_BY_ID } from '../../game/deed';
 import { crateName } from '../../game/crates';
 import { trapName } from '../../game/traps';
 import { bridgeName } from '../../game/bridges';

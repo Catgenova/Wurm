@@ -43,6 +43,7 @@ rebuilds and commits the result.
 | `I` `K` `L` `M` `F1` | Inventory, Skills, Event log, Map, Help |
 | `1`…`9`, `0` | Press a loop on your toolbelt, aimed where the cursor is |
 | `N` | The settlement window |
+| `Home` | Walk back to your settlement token |
 | `G` | Toggle the tile grid |
 | Touch: tap, drag, pinch, long press | Walk, look around, zoom, open the action menu |
 
@@ -866,6 +867,16 @@ rebuilds and commits the result.
   that buys it, a count of everything standing inside the border, the standing
   orders, and a walk-to button beside every building, store, trap, post and
   bridge on the land.
+- **Marks on the map.** Right-click the map, or use the tile's own menu, to
+  pin a name to a spot in one of six colours. Pins are drawn with their names
+  beside them and listed under the map nearest first, each with a button that
+  walks you there; `Home` walks you back to the settlement token. The camera
+  keeps to you unless dragged off, and the cursor at the edge of the screen
+  slides the view — both switchable in Settings.
+- **The herd in order.** The wildermon window searches on name, kind, job,
+  age, orders or trait and orders by name, level, kind, health, hunger, care,
+  age or best trait, with a footer that counts the herd and says how many are
+  hungry or hurt.
 - **The toolbelt, and doing a thing many times.** Every job that runs on and
   on is offered by the handful as well as one at a time — once, five, ten,
   twenty-five, fifty, or until you stop — and a counted job counts itself

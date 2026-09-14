@@ -4,6 +4,7 @@ import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
+import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
@@ -115,6 +116,7 @@ export interface GameInit {
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
+  marks?: Marker[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
   inventory?: Item[];
   nextUid?: number;
@@ -194,6 +196,10 @@ export class Game {
     tileWindow: true,
     /** Hide the land nobody has looked at, and cool what is out of sight. */
     fog: true,
+    /** Keep the camera on the player rather than leaving it where it was dragged. */
+    follow: true,
+    /** Push the view along when the cursor rests against the edge of the screen. */
+    edgePan: true,
   };
   /**
    * Everything placed, filed by the tile it stands on. The renderer asks what
@@ -210,6 +216,9 @@ export class Game {
     posts: new TileIndex<PlacedPost>(),
     traps: new TileIndex<PlacedTrap>(),
   };
+  /** Names pinned to spots on the island, and the next id to give one. */
+  readonly marks: Marker[] = [];
+  private nextMarkId = 1;
   readonly buildings: Buildings;
   /** What can be seen from where you are, and what is only remembered. */
   readonly vision: Vision;
@@ -335,6 +344,10 @@ export class Game {
       this.player.satAt = init.player.satAt ?? -1e9;
       this.player.usedAt = init.player.usedAt ?? {};
       if (init.player.belt) for (let i = 0; i < BELT_MAX; i += 1) this.player.belt[i] = init.player.belt[i] ?? null;
+    }
+    for (const m of init.marks ?? []) {
+      this.marks.push(m);
+      if (m.id >= this.nextMarkId) this.nextMarkId = m.id + 1;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -875,6 +888,77 @@ export class Game {
       return;
     }
     this.requestAction(aim.def, aim.target);
+  }
+
+  /**
+   * Pin a name to a spot. The colour is chosen from the small list in
+   * `marks.ts`; past the cap the oldest mark is pushed off, since a map with
+   * a hundred pins on it is a map with none.
+   */
+  addMark(x: number, y: number, name: string, colour = MARK_COLOURS[0].id): Marker {
+    const mark: Marker = { id: this.nextMarkId++, name: markName(name, x, y), x, y, colour };
+    this.marks.push(mark);
+    while (this.marks.length > MARK_CAP) this.marks.shift();
+    this.logMsg(`You mark ${mark.name} on the map at (${x}, ${y}).`, 'info');
+    this.events.emit('world', x, y);
+    return mark;
+  }
+
+  removeMark(id: number): void {
+    const i = this.marks.findIndex((m) => m.id === id);
+    if (i < 0) return;
+    const [gone] = this.marks.splice(i, 1);
+    this.logMsg(`You rub ${gone.name} off the map.`, 'info');
+    this.events.emit('world', gone.x, gone.y);
+  }
+
+  renameMark(id: number, name: string): void {
+    const mark = this.marks.find((m) => m.id === id);
+    if (!mark) return;
+    mark.name = markName(name, mark.x, mark.y);
+    this.events.emit('world', mark.x, mark.y);
+  }
+
+  /** Nearest mark to a spot, for saying where something is. */
+  markNear(x: number, y: number, within = 4): Marker | undefined {
+    let best: Marker | undefined;
+    let close = within;
+    for (const m of this.marks) {
+      const d = Math.hypot(m.x - x, m.y - y);
+      if (d <= close) {
+        close = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Where home is: the settlement token when there is one, the bed you last
+   * woke in otherwise. Somewhere to walk back to without hunting the map.
+   */
+  home(): { x: number; y: number; name: string } | null {
+    if (this.deed) return { x: this.deed.x, y: this.deed.y, name: this.deed.name };
+    if (this.spawn) return { x: this.spawn.x, y: this.spawn.y, name: 'where you wake' };
+    return null;
+  }
+
+  /** Set off for home, saying so. Returns false when there is nowhere to go. */
+  walkHome(): boolean {
+    const h = this.home();
+    if (!h) {
+      this.logMsg('You have nowhere to call home yet. Plant a settlement token, or sleep in a bed.', 'error');
+      return false;
+    }
+    const away = Math.round(Math.hypot(h.x + 0.5 - this.player.x, h.y + 0.5 - this.player.y));
+    if (away < 2) {
+      this.logMsg(`You are at ${h.name} already.`, 'info');
+      return true;
+    }
+    // moveTo says so itself when there is no way through.
+    if (!this.moveTo(h.x, h.y)) return false;
+    this.logMsg(`You set off for ${h.name}, ${away} tiles off.`, 'info');
+    return true;
   }
 
   /** Everything worn, as pieces of armour. */
@@ -1581,16 +1665,17 @@ export class Game {
   }
 
   /** Walk to a tile; when the tile itself is blocked, stop next to it. */
-  moveTo(x: number, y: number): void {
+  moveTo(x: number, y: number): boolean {
     this.cancelAction();
     const p = this.player;
-    if (!this.world.inBounds(x, y)) return;
+    if (!this.world.inBounds(x, y)) return false;
     const { rule, levels } = this.movement();
-    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, rule, levels)) return;
+    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, rule, levels)) return true;
     const candidates = this.neighbours(x, y).filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
-    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, rule, levels)) return;
+    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, rule, levels)) return true;
     this.logMsg("You can't find a way there.", 'error');
+    return false;
   }
 
   /** The tile a target occupies right now, or null for inventory items. */
