@@ -1,0 +1,118 @@
+# The island, checked three ways.
+#
+# `rules` needs nothing and runs on every push: a Postgres of its own, built
+# from the migrations in this repo, with the whole suite over it. That is the
+# one that catches things, and it costs no secrets and no project.
+#
+# `migrate` and `smoke` touch the real project and so need credentials. They
+# exist because there are things no local database can tell you: whether
+# anonymous sign-in is switched on, whether Realtime is publishing, whether the
+# policies behave the same behind PostgREST as behind psql, and whether eight
+# megabytes of island survives the trip.
+name: Island
+
+on:
+  push:
+    paths:
+      - 'supabase/**'
+      - 'src/net/**'
+      - '.github/workflows/island.yml'
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'src/net/**'
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Also push migrations to the project and smoke-test it'
+        type: boolean
+        default: false
+
+jobs:
+  rules:
+    name: The rules, against a Postgres of our own
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wurm
+          POSTGRES_PASSWORD: wurm
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: wurm
+      PGPASSWORD: wurm
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: The definitions are still what the TypeScript says
+        run: |
+          npm run defs
+          git diff --exit-code supabase/migrations/*_defs.sql \
+            || { echo "::error::The generated definitions are out of date. Run 'npm run defs' and commit."; exit 1; }
+      - name: Joining, refusing, digging, settling and who may write what
+        run: supabase/test/run.sh
+      - name: An island out through the wire format and back, corner by corner
+        run: |
+          npx esbuild supabase/test/landtrip.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/landtrip.mjs --log-level=error
+          node node_modules/.cache/landtrip.mjs
+
+  migrate:
+    name: Push the migrations to the project
+    if: github.event_name == 'workflow_dispatch' && inputs.live
+    needs: rules
+    runs-on: ubuntu-latest
+    environment: supabase
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Link and push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'glebtboagnafcgwjjvfy' }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::Set SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD in the 'supabase' environment."
+            exit 1
+          fi
+          supabase --version
+          supabase link --project-ref "$PROJECT_REF"
+          # What is about to change, before it changes.
+          supabase migration list --linked
+          supabase db push
+          supabase migration list --linked
+
+  smoke:
+    name: Play on the real island
+    if: github.event_name == 'workflow_dispatch' && inputs.live
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: supabase
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Found one, play on it, check it, give it up
+        env:
+          ISLAND_SIZE: '64'
+        run: |
+          npx esbuild supabase/test/smoke.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/smoke.mjs --log-level=error
+          node node_modules/.cache/smoke.mjs

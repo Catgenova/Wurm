@@ -171,3 +171,29 @@ begin
   exception when others then raise notice '26. Hild opening Ivar''s island:      refused — %', sqlerrm; end;
 end $$;
 \echo ''
+\echo '--- giving an island up, and what goes with it'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select id as rock from world where name = 'Rockhaven' \gset
+select rpc_join(:'rock', 'Ivar') \g /dev/null
+select '27. before: ' || (select count(*) from land_corner where world_id = :'rock') || ' rows of corners, '
+     || (select count(*) from land_tile where world_id = :'rock') || ' of tiles, '
+     || (select count(*) from player where world_id = :'rock') || ' body, '
+     || (select count(*) from item where world_id = :'rock') || ' things, '
+     || (select count(*) from skill where world_id = :'rock') || ' skills, '
+     || (select count(*) from event where world_id = :'rock') || ' lines';
+select rpc_abandon(:'rock') \g /dev/null
+select '28. after:  ' || (select count(*) from land_corner where world_id = :'rock') || ' rows of corners, '
+     || (select count(*) from land_tile where world_id = :'rock') || ' of tiles, '
+     || (select count(*) from player where world_id = :'rock') || ' body, '
+     || (select count(*) from item where world_id = :'rock') || ' things, '
+     || (select count(*) from skill where world_id = :'rock') || ' skills, '
+     || (select count(*) from event where world_id = :'rock') || ' lines'
+     || ' — and the other island still has ' || (select count(*) from player) || ' people on it';
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+do $$
+declare w uuid := (select id from world limit 1);
+begin
+  begin perform rpc_abandon(w); raise notice '29. Hild giving up an island that is not hers: ALLOWED';
+  exception when others then raise notice '29. Hild giving up an island that is not hers: refused — %', sqlerrm; end;
+end $$;
+\echo ''

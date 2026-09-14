@@ -51,6 +51,28 @@ create policy event_read on event for select to authenticated using (uid = auth.
 -- exist" — which is a confusing way to be told about a missing grant.
 grant usage on schema public to anon, authenticated;
 
--- The definition tables are the rulebook: public, and the same for everyone.
+/**
+ * The definition tables are the rulebook: readable by everyone, writable by
+ * nobody. They get row level security like everything else — a `grant select`
+ * is not a policy, and a table in an exposed schema with security switched off
+ * is the thing every audit starts by pointing at, however harmless the rows.
+ */
+alter table item_def enable row level security;
+alter table tile_def enable row level security;
+alter table skill_def enable row level security;
+alter table material_def enable row level security;
+alter table action_def enable row level security;
+
+drop policy if exists item_def_read on item_def;
+create policy item_def_read on item_def for select to anon, authenticated using (true);
+drop policy if exists tile_def_read on tile_def;
+create policy tile_def_read on tile_def for select to anon, authenticated using (true);
+drop policy if exists skill_def_read on skill_def;
+create policy skill_def_read on skill_def for select to anon, authenticated using (true);
+drop policy if exists material_def_read on material_def;
+create policy material_def_read on material_def for select to anon, authenticated using (true);
+drop policy if exists action_def_read on action_def;
+create policy action_def_read on action_def for select to anon, authenticated using (true);
+
 grant select on item_def, tile_def, skill_def, material_def, action_def to anon, authenticated;
 grant select on world, land_corner, land_tile, player, skill, item, tile_change, event to authenticated;

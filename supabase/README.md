@@ -52,14 +52,54 @@ hand. Only the *algorithms* (the skill curve, the success roll, what a tool is
 worth) exist twice, in `0004_rules.sql` and in `src/game/`, and the suite checks
 they agree.
 
+## Checked in CI
+
+`.github/workflows/island.yml`, three jobs:
+
+- **rules** — needs no credentials and runs on every push. A Postgres of its
+  own, built from these migrations, with the whole suite over it, plus a check
+  that the generated definitions still match the TypeScript. This is the one
+  that catches things.
+- **migrate** — `supabase db push` against the real project. Manual only
+  (*Run workflow* → tick **live**).
+- **smoke** — founds a real island on the real project, plays on it, checks
+  what came back against what went out, and gives it up again.
+
+The last two need two secrets in a repository environment called `supabase`:
+
+| | |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | a personal access token, from Account → Access Tokens |
+| `SUPABASE_DB_PASSWORD` | the database password, from Project Settings → Database |
+
+Optionally a repository variable `SUPABASE_PROJECT_REF` if the project ever
+changes. The publishable key is not a secret and is committed in
+`src/net/supabase.ts`.
+
+There are things no local database can tell you, which is the whole reason the
+last two exist: whether anonymous sign-in is switched on, whether Realtime is
+publishing, whether the policies behave the same behind PostgREST as behind
+psql, and whether eight megabytes of island survives the trip.
+
 ## Applying it
 
-The migrations are plain SQL, in order. Either paste them into the SQL editor
-in the dashboard, or:
+The migrations are plain SQL, in order, named the way the CLI expects. Either
+paste them into the SQL editor in the dashboard, or:
 
 ```
 supabase link --project-ref <ref>
 supabase db push
+```
+
+or let CI do it, which is the same thing with the credentials somewhere safer.
+
+**Switch anonymous sign-ins on** (Authentication → Sign In / Providers) — every
+door checks `auth.uid()`, and without it nobody can get through any of them.
+
+**Schedule the sweep**, which is the one thing that wants a timer:
+
+```sql
+select cron.schedule('wurm-sweep', '10 seconds', 'select rpc_sweep()');
 ```
 
 `local/00_shim.sql` is **not** part of that. It is the handful of things a real

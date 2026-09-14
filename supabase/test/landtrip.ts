@@ -19,8 +19,14 @@ const SIZE = 64;
  */
 const WHO = '33333333-3333-3333-3333-333333333333';
 const psql = (sql: string): string =>
-  execFileSync('psql', ['-h', '/var/run/postgresql', '-p', '5433', '-U', 'wurm', '-d', 'postgres',
-    '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
+  execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
+    env: {
+      ...process.env,
+      PGHOST: process.env.PGHOST ?? '/var/run/postgresql',
+      PGPORT: process.env.PGPORT ?? '5433',
+      PGUSER: process.env.PGUSER ?? 'wurm',
+      PGDATABASE: process.env.PGDATABASE ?? 'postgres',
+    },
     input: `select set_config('request.jwt.claims', '{"sub":"${WHO}"}', false) \\g /dev/null\n${sql}\n`,
     encoding: 'utf8',
     maxBuffer: 512 * 1024 * 1024,
