@@ -274,3 +274,49 @@ select '39. settled ' || :'swept' || ' goes; queue now ' || (select jsonb_array_
      || ', busy with ' || coalesce((select act from player where uid = :'ivar'), 'nothing')
      || ', and the pack holds ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'plank') || ' planks in all';
 \echo ''
+\echo '--- a fire on the ground, and what it unlocks'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 8.5, y = 8.5 where uid = :'ivar';
+delete from item where holder_uid = :'ivar' and def in ('shaft','log');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'shaft', 30, 4);
+
+-- Baking a potato wants a fire and nothing else, so the fire is the only
+-- thing in the way and the gate opening is visible rather than hidden behind
+-- a missing bowl.
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'potato', 40, 3);
+select coalesce(act_refusal(:'world2', :'ivar', 'bake_potato', '{"kind":"item"}'), 'allowed') as before \gset
+select '40. with a potato in hand and no fire anywhere: ' || :'before';
+select coalesce(act_refusal(:'world2', :'ivar', 'build_campfire', '{"kind":"tile","x":8,"y":8,"sx":1,"sy":1}'), 'allowed') as lay \gset
+select '41. laying a fire with 4 shafts in hand: ' || :'lay';
+select rpc_act(:'world2', 'build_campfire', '{"kind":"tile","x":8,"y":8,"sx":1,"sy":1}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select coalesce((select id::text from placed where world_id = :'world2' and kind = 'campfire' limit 1), '0') as fire \gset
+select '42. the fire is down at ' || round(cx::numeric,2) || ', ' || round(cy::numeric,2)
+     || ' with ' || burns_for(fuel) || ' of fuel, lit: ' || placed_lit(placed.*)::text
+     || ', shafts left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'shaft')
+from placed where id = :'fire';
+select '43. baking while it is laid but unlit:  ' || coalesce(act_refusal(:'world2', :'ivar', 'bake_potato', '{"kind":"item"}'), 'allowed');
+
+select rpc_act(:'world2', 'light_campfire', ('{"kind":"campfire","id":' || :'fire' || '}')::jsonb, 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '44. once it is lit: ' || coalesce((select string_agg(text, ' ' order by n) from event where uid = :'ivar' and kind = 'event' and text like '%kindling%'), 'nothing said')
+     || ' — and baking is now: ' || coalesce(act_refusal(:'world2', :'ivar', 'bake_potato', '{"kind":"item"}'), 'ALLOWED');
+
+-- Fire burns on the wall clock. Nothing ticked it; two minutes simply passed.
+update placed set since = since - interval '130 seconds' where id = :'fire';
+select '45. two minutes later, without anything having run: ' || burns_for(placed_fuel(placed.*)) || ' of fuel left of the '
+     || burns_for(fuel) || ' it had, and ' || floor(placed_ash(placed.*)) || ' lot of ashes'
+from placed where id = :'fire';
+select '46. raking them out: ' || coalesce(act_refusal(:'world2', :'ivar', 'take_ashes_fire', ('{"kind":"campfire","id":' || :'fire' || '}')::jsonb), 'allowed');
+
+-- And a fire left alone long enough goes out by itself.
+update placed set since = since - interval '3 hours' where id = :'fire';
+select '47. left for three hours: lit says ' || placed_lit(placed.*)::text || ', fuel ' || round(placed_fuel(placed.*)::numeric) from placed where id = :'fire';
+select placed_settle(:'fire') \g /dev/null
+select '48. and once anything looks at it, that is written down: lit=' || lit::text || ', fuel=' || round(fuel::numeric)
+     || ', ashes ' || floor(ash) || ' — and baking is refused again: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'bake_potato', '{"kind":"item"}'), 'STILL ALLOWED') from placed where id = :'fire';
+\echo ''

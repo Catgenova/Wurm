@@ -16,6 +16,7 @@ import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
 import { RECIPES } from '../src/game/recipes';
+import { FURNITURE } from '../src/game/furniture';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -65,6 +66,17 @@ out.push(`create table if not exists recipe (
   consume_on_fail boolean not null default false, ql_from_inputs boolean not null default false,
   material text, wood text, extra text, done text not null, fail text
 );`);
+/*
+ * What a thing set down on the ground takes up, and what it is good for.
+ *
+ * Footprints are in subtiles, four to a tile each way, which is what decides
+ * where its centre is and therefore whether you are standing near enough to
+ * use it. A hearth is anything with a fire in it.
+ */
+out.push(`create table if not exists furniture_def (
+  id text primary key, name text not null, w int not null, h int not null,
+  capacity real, hearth boolean not null default false, altar boolean not null default false
+);`);
 out.push(`create table if not exists recipe_input (
   recipe text not null references recipe on delete cascade,
   ord int not null, item text not null, count int not null default 1,
@@ -85,8 +97,9 @@ begin
   execute 'alter table recipe enable row level security';
   execute 'alter table recipe_input enable row level security';
   execute 'alter table recipe_gives enable row level security';
+  execute 'alter table furniture_def enable row level security';
 end $rls$;`);
-for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives']) {
+for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def']) {
   out.push(`drop policy if exists ${t}_read on ${t};`);
   out.push(`create policy ${t}_read on ${t} for select to anon, authenticated using (true);`);
   out.push(`grant select on ${t} to anon, authenticated;`);
@@ -161,7 +174,10 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def;`);
+for (const f of FURNITURE as unknown as A[]) {
+  out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);
+}
 for (const r of RECIPES) {
   out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +
     [q(r.id), q(r.result), q(r.count ?? 1), q(r.tool), q(r.station), q(r.skill), q(r.label), q(r.verb),

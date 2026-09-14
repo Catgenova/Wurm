@@ -33,8 +33,9 @@ simplification rather than a problem:
 | | |
 |---|---|
 | **205** | recipes — every one of them, through one performer |
+| **14** | things set down on the ground: campfires, smelters, furniture |
 | **1** | digging |
-| **167** | known, listed, and honestly refused |
+| **154** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -43,10 +44,9 @@ down on this island yet" invites patience. So every action in the game is in
 `action_def` — generated from the same TypeScript the browser reads — and
 `act_ported()` says which have a performer behind them.
 
-The hundred-odd recipes that want a lit fire, a smelter, a spindle or a loom
-are refused in the recipe's own words until there is something to stand at:
-placeables are the next piece of work, and they unlock a large part of that
-167 at a stroke.
+Of the 205 recipes, 147 need no station and were playable from the start; the
+other 58 want a lit campfire (18), a hot smelter (34), a spindle (3) or a loom
+(2), and all four of those can now be built, set down and lit.
 
 Jobs queue behind one another as they do in the game — three deep, and one
 deeper for every ten points of mind logic above where you began — rather than
@@ -54,7 +54,16 @@ being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the ledger, the journal,
-and the ease a hot oven lends to cooking.
+kilns and what they fire, smelting jobs themselves, and the ease a hot oven
+lends to cooking.
+
+### Fires burn on the wall clock
+
+Like everything else here, nothing ticks them. `fuel` is what was in a fire at
+the moment `since` was stamped, and a lit one has burned the seconds off that
+and made ash the whole while. Both are worked out on reading and written back
+whenever anything touches it. A fire lit and walked away from for three hours
+is out when you come back, and was out for most of them.
 
 ## The front doors
 
