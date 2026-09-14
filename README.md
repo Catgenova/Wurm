@@ -392,6 +392,22 @@ rebuilds and commits the result.
   three trees deep. Lit fires, your own wildermon and your settlement all see
   for themselves. The minimap shows the same three states, it all survives a
   save, and a setting turns it off.
+- **Streamed wildlife.** An island holds a fixed head of wildlife, but only
+  the stretch of country being walked holds it in the flesh. A wild creature
+  left more than 85 tiles behind and unwatched is put back on the books for
+  its region; walk within 60 tiles of a region again and what it owes is let
+  out, never closer than 30 tiles so nothing is seen to appear. The bank is a
+  number per region, not a list of creatures, so memory follows the explored
+  area rather than the map: the island's total is conserved across any amount
+  of walking, and a map ten times the size costs the same to play.
+- **Placed things filed by tile.** Crates, campfires, smelters, kilns,
+  furniture and anvils each sit in a tile index. The renderer asks "what is on
+  this tile?" for every tile it draws, and that used to copy the whole
+  collection each time — at 800 placed things one screen's worth of those
+  questions cost 7.5 ms per frame, for one collection of six. Through the
+  index the same screen costs 0.1 ms. Every "nearest thing within reach"
+  search — a lit fire, a hot oven, a store to put something in, a barrel to
+  pour into — now looks at the handful of tiles it could be on.
 - **Simulation follows what is watched.** The fog is also the engine's answer
   to "who is being looked at", which is what lets the creature count grow.
   Anything in sight or close by is simulated every frame; anything out of

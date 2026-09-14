@@ -66,6 +66,11 @@ export function buildHelp(win: UIWindow): void {
     are working.</p>
     <p>All of that is in Settings under <b>Fog of war</b>, if you would rather see the whole island at
     once.</p>
+    <p>The wildlife works the same way. An island holds so much of it, but only the stretch of country
+    you are walking has it in the flesh: a creature left a long way behind is <b>put back on the books</b>
+    for the country it was in, and comes out again when somebody walks that way. Nothing is ever seen to
+    come or go &mdash; it happens twice as far out as anyone can see &mdash; and the island keeps the same
+    head of wildlife however far you wander. It is what lets the map grow without the game slowing down.</p>
     <h3>Windows</h3>
     <table>
       <tr><td><kbd>I</kbd></td><td>Inventory</td></tr>

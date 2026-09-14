@@ -597,6 +597,24 @@ const FAR_STEP = 0.25;
 const ASLEEP_STEP = 2;
 /** The most time one think may cover, so nothing strides through a wall. */
 const MAX_STEP_TIME = 0.34;
+/**
+ * Streaming. Wild creatures only exist in memory near whoever is playing: past
+ * CULL_RANGE one is put away into the count for the stretch of country it was
+ * in, and when somebody comes back within LIVE_RANGE it is let out again. What
+ * is banked is a number, not a creature, so an island of any size costs the
+ * same as the piece of it being walked. Both ranges sit well outside how far
+ * anyone can see, so nothing is ever seen to come or go.
+ */
+const LIVE_RANGE = 60;
+const CULL_RANGE = 85;
+/** Tiles to a stretch of country, for the purposes of banking. */
+const REGION = 32;
+/** How often creatures are put away and let out, in seconds. */
+const STREAM_EVERY = 2;
+/** Most creatures let out in one pass, so a walk never stalls on it. */
+const STREAM_BATCH = 6;
+/** Wildlife a stretch of country holds, which is what the island adds up to. */
+const PER_REGION = 0.5;
 /** Seconds a wild creature spends grazing. */
 const FORAGE_TIME = 2.5;
 /** Seconds between chances for an unruly companion to turn on its keeper. */
@@ -616,6 +634,14 @@ export class Creatures {
   readonly list = new Map<number, Creature>();
   nextId = 1;
   private byTile = new Map<string, Creature[]>();
+  /**
+   * Wildlife that belongs to a stretch of country but is not in memory just
+   * now, by region. A number apiece: what comes back is of the country rather
+   * than the particular creature that walked away from it.
+   */
+  banked = new Map<number, number>();
+  private streamAt = 0;
+
   /**
    * How the creatures stand: how many are being followed closely, how many are
    * out of sight, how many are left to themselves, and how many of the lot
@@ -768,7 +794,13 @@ export class Creatures {
     this.respawnClock += dt;
     if (this.respawnClock >= RESPAWN_EVERY) {
       this.respawnClock = 0;
-      if (this.wildCount() < WILD_TARGET) this.spawnWild(game, 1, 25);
+      // The island's wildlife grows in the abstract; it only takes a body when
+      // somebody is near enough to meet it.
+      if (this.wildCount() + this.bankedTotal() < this.islandTarget(game)) this.bankOne(game);
+    }
+    if (game.time - this.streamAt >= STREAM_EVERY) {
+      this.streamAt = game.time;
+      this.stream(game);
     }
     this.ticked = { near: 0, far: 0, asleep: 0, thought: 0 };
     const px = game.player.x;
@@ -816,6 +848,113 @@ export class Creatures {
       if (c.moving) c.walkPhase += step * 12;
       if (tier !== 'asleep') this.place(c);
     }
+  }
+
+  /**
+   * Lay a whole island's wildlife on the books at once. Nothing is stood up
+   * here: the first streaming pass gives bodies to whatever is near enough to
+   * be met, which is how a map ten times the size costs the same to start.
+   */
+  stockIsland(game: Game): void {
+    const want = this.islandTarget(game) - this.wildCount() - this.bankedTotal();
+    for (let i = 0; i < want; i++) this.bankOne(game);
+  }
+
+  /** Which stretch of country a point belongs to. */
+  private region(x: number, y: number): number {
+    return Math.floor(y / REGION) * 4096 + Math.floor(x / REGION);
+  }
+
+  /** How much wildlife is banked across the whole island. */
+  bankedTotal(): number {
+    let n = 0;
+    for (const v of this.banked.values()) n += v;
+    return n;
+  }
+
+  /** How much wildlife an island of this size should hold in all. */
+  private islandTarget(game: Game): number {
+    const regions = Math.ceil(game.world.w / REGION) * Math.ceil(game.world.h / REGION);
+    return Math.max(WILD_TARGET, Math.round(regions * PER_REGION));
+  }
+
+  /** Put one more head of wildlife on the books, somewhere out there. */
+  private bankOne(game: Game): void {
+    const w = game.world;
+    for (let tries = 0; tries < 20; tries++) {
+      const x = Math.floor(game.rand() * w.w);
+      const y = Math.floor(game.rand() * w.h);
+      if (!this.tileOk(game, x, y) || w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
+      const r = this.region(x, y);
+      this.banked.set(r, (this.banked.get(r) ?? 0) + 1);
+      return;
+    }
+  }
+
+  /**
+   * Put away what has been left behind and let out what has been come upon.
+   * This is the whole of streaming: the island keeps its wildlife as numbers,
+   * and only the stretch of it being walked costs anything.
+   */
+  private stream(game: Game): void {
+    const px = game.player.x;
+    const py = game.player.y;
+    // Away and unwatched: put it back on the books.
+    for (const c of [...this.list.values()]) {
+      if (c.mode !== 'wild') continue;
+      if (c.enemy !== null || c.attackedBy !== null) continue;
+      const d = Math.max(Math.abs(c.x - px), Math.abs(c.y - py));
+      if (d <= CULL_RANGE || game.vision.isWatched(c.x, c.y)) continue;
+      const r = this.region(c.x, c.y);
+      this.banked.set(r, (this.banked.get(r) ?? 0) + 1);
+      this.list.delete(c.id);
+    }
+    // Come upon: let out what belongs to the country around you, a few at a time.
+    let out = 0;
+    const reach = Math.ceil(LIVE_RANGE / REGION) + 1;
+    const rx = Math.floor(px / REGION);
+    const ry = Math.floor(py / REGION);
+    for (let gy = ry - reach; gy <= ry + reach && out < STREAM_BATCH; gy++) {
+      for (let gx = rx - reach; gx <= rx + reach && out < STREAM_BATCH; gx++) {
+        if (gx < 0 || gy < 0) continue;
+        const r = gy * 4096 + gx;
+        let owed = this.banked.get(r) ?? 0;
+        while (owed > 0 && out < STREAM_BATCH) {
+          if (!this.releaseInto(game, gx, gy)) break;
+          owed--;
+          out++;
+        }
+        if (owed > 0) this.banked.set(r, owed);
+        else this.banked.delete(r);
+      }
+    }
+  }
+
+  /** Try to stand a creature up somewhere in one stretch of country. */
+  private releaseInto(game: Game, gx: number, gy: number): boolean {
+    const w = game.world;
+    const px = game.player.x;
+    const py = game.player.y;
+    for (let tries = 0; tries < 24; tries++) {
+      const x = gx * REGION + Math.floor(game.rand() * REGION);
+      const y = gy * REGION + Math.floor(game.rand() * REGION);
+      if (!w.inBounds(x, y) || !this.tileOk(game, x, y)) continue;
+      if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
+      // Never where it could be seen appearing, and never so far off that it
+      // would be put away again on the next pass.
+      const d = Math.max(Math.abs(x + 0.5 - px), Math.abs(y + 0.5 - py));
+      if (d < 30 || d > LIVE_RANGE) continue;
+      const id = rollTable(WILD_SPECIES, game.rand());
+      const def = SPECIES[id];
+      if (def?.onOre) {
+        if (!bedrockAt(w, x, y).ore) continue;
+      } else if (def?.onSand) {
+        if (w.getTile(x, y) !== TileType.Sand) continue;
+      }
+      this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1832,9 +1971,10 @@ export class Creatures {
     }
   }
 
-  toJSON(): { nextId: number; list: CreatureJSON[] } {
+  toJSON(): { nextId: number; list: CreatureJSON[]; banked?: Array<[number, number]> } {
     return {
       nextId: this.nextId,
+      banked: [...this.banked.entries()],
       list: [...this.list.values()].map((c) => ({
         id: c.id,
         species: c.species,
@@ -1855,10 +1995,11 @@ export class Creatures {
     };
   }
 
-  static fromJSON(data: { nextId: number; list: CreatureJSON[] } | undefined): Creatures {
+  static fromJSON(data: { nextId: number; list: CreatureJSON[]; banked?: Array<[number, number]> } | undefined): Creatures {
     const cs = new Creatures();
     if (!data) return cs;
     cs.nextId = data.nextId ?? 1;
+    for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
       Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });

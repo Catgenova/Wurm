@@ -17,6 +17,7 @@ import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './it
 import { groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { Skills, SKILL_DEFS } from './skills';
+import { TileIndex } from './tileindex';
 import { Vision } from './vision';
 
 export interface ActiveAction {
@@ -79,7 +80,7 @@ export interface GameInit {
   spawn: { x: number; y: number };
   deed?: Deed | null;
   buildings?: BuildingsJSON;
-  creatures?: { nextId: number; list: CreatureJSON[] };
+  creatures?: { nextId: number; list: CreatureJSON[]; banked?: Array<[number, number]> };
   crates?: PlacedCrate[];
   /** Pre-crate-grid saves kept a single deed crate. */
   crate?: { x: number; y: number; items: Item[] } | null;
@@ -148,6 +149,19 @@ export class Game {
     /** Hide the land nobody has looked at, and cool what is out of sight. */
     fog: true,
   };
+  /**
+   * Everything placed, filed by the tile it stands on. The renderer asks what
+   * is on a tile for every tile it draws, so these are what keep that from
+   * being a walk of every crate and every stick of furniture in the world.
+   */
+  readonly placed = {
+    crates: new TileIndex<PlacedCrate>(),
+    campfires: new TileIndex<PlacedCampfire>(),
+    smelters: new TileIndex<PlacedSmelter>(),
+    kilns: new TileIndex<PlacedKiln>(),
+    furniture: new TileIndex<PlacedFurniture>(),
+    anvils: new TileIndex<PlacedAnvil>(),
+  };
   readonly buildings: Buildings;
   /** What can be seen from where you are, and what is only remembered. */
   readonly vision: Vision;
@@ -193,7 +207,9 @@ export class Game {
     const gen = generateWorld(seed, size);
     const game = new Game({ seed, world: gen.world, spawn: gen.spawn });
     game.giveStarterKit();
-    game.creatures.spawnWild(game, 45);
+    // A new island is stocked on the books; what is near the player takes a
+    // body on the first streaming pass, and the rest waits to be walked to.
+    game.creatures.stockIsland(game);
     game.logMsg('Welcome to Wurm Iso. You wash ashore on an untouched island with a few tools and your wits.', 'system');
     game.logMsg('Left-click to walk. Right-click a tile for actions. Drag to look around, scroll to zoom. Press F1 for help.', 'system');
     return game;
@@ -251,6 +267,13 @@ export class Game {
       this.anvils.set(a.id, a);
       if (a.id >= this.nextAnvilId) this.nextAnvilId = a.id + 1;
     }
+    // Everything that came out of the save still has to be filed by tile.
+    this.placed.crates.reset(this.crates.values());
+    this.placed.campfires.reset(this.campfires.values());
+    this.placed.smelters.reset(this.smelters.values());
+    this.placed.kilns.reset(this.kilns.values());
+    this.placed.furniture.reset(this.furniture.values());
+    this.placed.anvils.reset(this.anvils.values());
     this.vision = new Vision(this);
     this.world.onChange((x, y) => {
       // Felling a tree or raising a wall changes what can be seen past it.
@@ -1070,23 +1093,23 @@ export class Game {
   addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false): PlacedCrate {
     const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed };
     this.crates.set(crate.id, crate);
+    this.placed.crates.add(crate);
     return crate;
   }
 
   removeCrate(id: number): void {
+    const crate = this.crates.get(id);
+    if (crate) this.placed.crates.remove(crate);
     this.crates.delete(id);
     this.events.emit('crate');
   }
 
   crateAt(x: number, y: number, sx: number, sy: number): PlacedCrate | undefined {
-    for (const c of this.crates.values()) if (c.x === x && c.y === y && c.sx === sx && c.sy === sy) return c;
-    return undefined;
+    return this.placed.crates.at(x, y).find((c) => c.sx === sx && c.sy === sy);
   }
 
-  cratesOnTile(x: number, y: number): PlacedCrate[] {
-    const out: PlacedCrate[] = [];
-    for (const c of this.crates.values()) if (c.x === x && c.y === y) out.push(c);
-    return out;
+  cratesOnTile(x: number, y: number): readonly PlacedCrate[] {
+    return this.placed.crates.at(x, y);
   }
 
   /** The settlement's crate, where deed workers deliver. */
@@ -1096,17 +1119,17 @@ export class Game {
   }
 
   /** The crate closest to the player. */
-  nearestCrate(): PlacedCrate | undefined {
+  nearestCrate(range = 3): PlacedCrate | undefined {
     let best: PlacedCrate | undefined;
     let bestD = Infinity;
-    for (const c of this.crates.values()) {
+    this.placed.crates.around(this.player.x, this.player.y, range, (c) => {
       const [cx, cy] = crateCentre(c);
       const d = Math.hypot(cx - this.player.x, cy - this.player.y);
       if (d < bestD) {
         bestD = d;
         best = c;
       }
-    }
+    });
     return best;
   }
 
@@ -1156,25 +1179,25 @@ export class Game {
     const [ax, ay] = fireAnchor(sx, sy);
     const fire: PlacedCampfire = { id: this.nextFireId++, x, y, sx: ax, sy: ay, fuel, lit };
     this.campfires.set(fire.id, fire);
+    this.placed.campfires.add(fire);
     this.events.emit('crate');
     return fire;
   }
 
   removeCampfire(id: number): void {
+    const fire = this.campfires.get(id);
+    if (fire) this.placed.campfires.remove(fire);
     this.campfires.delete(id);
     this.events.emit('crate');
   }
 
-  campfiresOnTile(x: number, y: number): PlacedCampfire[] {
-    const out: PlacedCampfire[] = [];
-    for (const f of this.campfires.values()) if (f.x === x && f.y === y) out.push(f);
-    return out;
+  campfiresOnTile(x: number, y: number): readonly PlacedCampfire[] {
+    return this.placed.campfires.at(x, y);
   }
 
   /** The fire covering a subtile, if any. */
   campfireAt(x: number, y: number, sx: number, sy: number): PlacedCampfire | undefined {
-    for (const f of this.campfires.values()) if (f.x === x && f.y === y && fireCovers(f, sx, sy)) return f;
-    return undefined;
+    return this.placed.campfires.at(x, y).find((f) => fireCovers(f, sx, sy));
   }
 
   /** Why a campfire cannot go on this spot, or null when it can. */
@@ -1197,15 +1220,15 @@ export class Game {
   litFireNear(range = 2.4): PlacedCampfire | undefined {
     let best: PlacedCampfire | undefined;
     let bestD = range;
-    for (const f of this.campfires.values()) {
-      if (!f.lit) continue;
+    this.placed.campfires.around(this.player.x, this.player.y, range + 1, (f) => {
+      if (!f.lit) return;
       const [cx, cy] = fireCentre(f);
       const d = Math.hypot(cx - this.player.x, cy - this.player.y);
       if (d <= bestD) {
         bestD = d;
         best = f;
       }
-    }
+    });
     return best;
   }
 
@@ -1218,32 +1241,35 @@ export class Game {
 
   /** The nearest piece of furniture of a kind, within arm's reach. */
   furnitureNear(kind: string, range = 2.4): PlacedFurniture | undefined {
-    for (const f of this.furniture.values()) {
-      if (f.kind !== kind) continue;
+    let best: PlacedFurniture | undefined;
+    this.placed.furniture.around(this.player.x, this.player.y, range + 2, (f) => {
+      if (best || f.kind !== kind) return;
       const [cx, cy] = furnitureCentre(f);
-      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return f;
-    }
-    return undefined;
+      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) best = f;
+    });
+    return best;
   }
 
   /** The nearest smelter that is lit and within reach. */
   hotSmelterNear(range = 2.6): PlacedSmelter | undefined {
-    for (const s of this.smelters.values()) {
-      if (!s.lit) continue;
+    let best: PlacedSmelter | undefined;
+    this.placed.smelters.around(this.player.x, this.player.y, range + 1, (s) => {
+      if (best || !s.lit) return;
       const [cx, cy] = smelterCentre(s);
-      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return s;
-    }
-    return undefined;
+      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) best = s;
+    });
+    return best;
   }
 
   /** The nearest oven that is alight and within reach of the work. */
   hotOvenNear(range = 2.6): PlacedFurniture | undefined {
-    for (const f of this.furniture.values()) {
-      if (!f.lit || !furnitureDef(f.kind).hearth) continue;
+    let best: PlacedFurniture | undefined;
+    this.placed.furniture.around(this.player.x, this.player.y, range + 2, (f) => {
+      if (best || !f.lit || !furnitureDef(f.kind).hearth) return;
       const [cx, cy] = furnitureCentre(f);
-      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) return f;
-    }
-    return undefined;
+      if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) best = f;
+    });
+    return best;
   }
 
   /** Litres a well draws in a second: a deep, true-lined shaft finds more water. */
@@ -1309,6 +1335,7 @@ export class Game {
     f.y = y;
     f.sx = ax;
     f.sy = ay;
+    this.placed.furniture.moved(f, from.x, from.y);
     this.events.emit('world', from.x, from.y);
     this.events.emit('world', f.x, f.y);
   }
@@ -1352,17 +1379,20 @@ export class Game {
     const [ax, ay] = smelterAnchor(sx, sy);
     const s: PlacedSmelter = { id: this.nextSmelterId++, x, y, sx: ax, sy: ay, ql, fuel: 0, lit: false, jobs: [], output: [] };
     this.smelters.set(s.id, s);
+    this.placed.smelters.add(s);
     this.events.emit('smelter');
     return s;
   }
 
   removeSmelter(id: number): void {
+    const s = this.smelters.get(id);
+    if (s) this.placed.smelters.remove(s);
     this.smelters.delete(id);
     this.events.emit('smelter');
   }
 
-  smeltersOnTile(x: number, y: number): PlacedSmelter[] {
-    return [...this.smelters.values()].filter((s) => s.x === x && s.y === y);
+  smeltersOnTile(x: number, y: number): readonly PlacedSmelter[] {
+    return this.placed.smelters.at(x, y);
   }
 
   /** Why a smelter cannot stand on this block of subtiles, or null. */
@@ -1383,17 +1413,20 @@ export class Game {
     const [ax, ay] = kilnAnchor(sx, sy);
     const k: PlacedKiln = { id: this.nextKilnId++, x, y, sx: ax, sy: ay, ql, fuel: 0, lit: false, jobs: [], output: [] };
     this.kilns.set(k.id, k);
+    this.placed.kilns.add(k);
     this.events.emit('smelter');
     return k;
   }
 
   removeKiln(id: number): void {
+    const k = this.kilns.get(id);
+    if (k) this.placed.kilns.remove(k);
     this.kilns.delete(id);
     this.events.emit('smelter');
   }
 
-  kilnsOnTile(x: number, y: number): PlacedKiln[] {
-    return [...this.kilns.values()].filter((k) => k.x === x && k.y === y);
+  kilnsOnTile(x: number, y: number): readonly PlacedKiln[] {
+    return this.placed.kilns.at(x, y);
   }
 
   /** Why a kiln cannot stand on this block of subtiles, or null. */
@@ -1414,17 +1447,20 @@ export class Game {
     const [ax, ay] = furnitureAnchor(kind, sx, sy);
     const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items };
     this.furniture.set(f.id, f);
+    this.placed.furniture.add(f);
     this.events.emit('crate');
     return f;
   }
 
   removeFurniture(id: number): void {
+    const f = this.furniture.get(id);
+    if (f) this.placed.furniture.remove(f);
     this.furniture.delete(id);
     this.events.emit('crate');
   }
 
-  furnitureOnTile(x: number, y: number): PlacedFurniture[] {
-    return [...this.furniture.values()].filter((f) => f.x === x && f.y === y);
+  furnitureOnTile(x: number, y: number): readonly PlacedFurniture[] {
+    return this.placed.furniture.at(x, y);
   }
 
   /** Why a piece of furniture cannot stand on this block of subtiles, or null. */
@@ -1443,10 +1479,10 @@ export class Game {
   }
 
   /** The piece of storage furniture closest to the player. */
-  nearestStore(item?: Item): PlacedFurniture | undefined {
+  nearestStore(item?: Item, range = 3): PlacedFurniture | undefined {
     let best: PlacedFurniture | undefined;
     let bestD = Infinity;
-    for (const f of this.furniture.values()) {
+    for (const f of this.furnitureWithin(range)) {
       if (!furnitureCapacity(f)) continue;
       // A bulk bin that will not take a tool is not the nearest store for a tool.
       if (item && furnitureRefuses(f, item)) continue;
@@ -1460,6 +1496,13 @@ export class Game {
       }
     }
     return best;
+  }
+
+  /** Every piece of furniture on the tiles within reach of the player. */
+  furnitureWithin(range: number): PlacedFurniture[] {
+    const out: PlacedFurniture[] = [];
+    this.placed.furniture.around(this.player.x, this.player.y, range, (f) => out.push(f));
+    return out;
   }
 
   /**
@@ -1537,17 +1580,20 @@ export class Game {
     const [ax, ay] = anvilAnchor(sx, sy);
     const a: PlacedAnvil = { id: this.nextAnvilId++, x, y, sx: ax, sy: ay, metal, ql };
     this.anvils.set(a.id, a);
+    this.placed.anvils.add(a);
     this.events.emit('smelter');
     return a;
   }
 
   removeAnvil(id: number): void {
+    const a = this.anvils.get(id);
+    if (a) this.placed.anvils.remove(a);
     this.anvils.delete(id);
     this.events.emit('smelter');
   }
 
-  anvilsOnTile(x: number, y: number): PlacedAnvil[] {
-    return [...this.anvils.values()].filter((a) => a.x === x && a.y === y);
+  anvilsOnTile(x: number, y: number): readonly PlacedAnvil[] {
+    return this.placed.anvils.at(x, y);
   }
 
   anvilPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
@@ -1567,10 +1613,10 @@ export class Game {
   occupiedSubtile(x: number, y: number, sx: number, sy: number): boolean {
     if (this.crateAt(x, y, sx, sy)) return true;
     if (this.campfireAt(x, y, sx, sy)) return true;
-    for (const s of this.smelters.values()) if (s.x === x && s.y === y && smelterCovers(s, sx, sy)) return true;
-    for (const k of this.kilns.values()) if (k.x === x && k.y === y && kilnCovers(k, sx, sy)) return true;
-    for (const f of this.furniture.values()) if (f.x === x && f.y === y && furnitureCovers(f, sx, sy)) return true;
-    for (const a of this.anvils.values()) if (a.x === x && a.y === y && anvilCovers(a, sx, sy)) return true;
+    for (const s of this.placed.smelters.at(x, y)) if (smelterCovers(s, sx, sy)) return true;
+    for (const k of this.placed.kilns.at(x, y)) if (kilnCovers(k, sx, sy)) return true;
+    for (const f of this.placed.furniture.at(x, y)) if (furnitureCovers(f, sx, sy)) return true;
+    for (const a of this.placed.anvils.at(x, y)) if (anvilCovers(a, sx, sy)) return true;
     return false;
   }
 

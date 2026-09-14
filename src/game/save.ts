@@ -8,7 +8,7 @@ import type { PlacedKiln } from './kiln';
 import type { PlacedFurniture } from './furniture';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
-import { SPECIES, type CreatureJSON } from './creatures';
+import type { CreatureJSON } from './creatures';
 import type { Item } from './items';
 import { Game, type Deed } from './game';
 import type { Stats } from './player';
@@ -40,7 +40,7 @@ interface SaveData {
   savedAt: number;
   deed?: Deed | null;
   buildings?: BuildingsJSON;
-  creatures?: { nextId: number; list: CreatureJSON[] };
+  creatures?: { nextId: number; list: CreatureJSON[]; banked?: Array<[number, number]> };
   crates?: PlacedCrate[];
   campfires?: PlacedCampfire[];
   smelters?: PlacedSmelter[];
@@ -182,12 +182,10 @@ export function loadGame(): Game | null {
       crops: data.crops,
       crate: data.crate ?? null,
     });
-    if (!data.creatures) game.creatures.spawnWild(game, 45);
-    // Saves made before a species existed have none of it; seed a few so the island is not one-note.
-    for (const id of Object.keys(SPECIES)) {
-      if ([...game.creatures.list.values()].some((c) => c.species === id)) continue;
-      game.creatures.spawnSpecies(game, id, 12);
-    }
+    // Whatever the save had, the island is brought up to the wildlife it should
+    // hold. Species no longer need seeding one at a time: what is let out of the
+    // bank is rolled from the whole table, so every one of them turns up.
+    game.creatures.stockIsland(game);
     // The settlement deed form became a carved stake; rename it wherever it sits.
     const restake = (items: Item[]): void => {
       for (const it of items) if (it.id === 'settlement_deed') it.id = 'deed_stake';

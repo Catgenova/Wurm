@@ -38,8 +38,7 @@ const isBed = (f: PlacedFurniture): boolean => (furnitureDef(f.kind).bed ?? 0) >
 
 /** The trash crate you are standing beside, if there is one. */
 export function trashNear(g: Game): PlacedFurniture | undefined {
-  for (const f of g.furniture.values()) if (furnitureDef(f.kind).trash && nearPiece(g, f)) return f;
-  return undefined;
+  return g.furnitureWithin(3).find((f) => furnitureDef(f.kind).trash && nearPiece(g, f));
 }
 
 /** How long an oven's fuel will last, in words. */
@@ -51,7 +50,7 @@ export const ovenBurnsFor = (f: PlacedFurniture): string => {
 /** Every vessel within reach that has a liquid in it, the fullest first. */
 export function vesselsNear(g: Game, kind?: LiquidKind): PlacedFurniture[] {
   const out: PlacedFurniture[] = [];
-  for (const f of g.furniture.values()) {
+  for (const f of g.furnitureWithin(4)) {
     if (!holdsLiquid(f) || litresIn(f) < 1) continue;
     if (kind && f.liquid !== kind) continue;
     if (nearPiece(g, f, 2.6)) out.push(f);
@@ -62,7 +61,7 @@ export function vesselsNear(g: Game, kind?: LiquidKind): PlacedFurniture[] {
 /** A barrel within reach that would take this liquid, the emptiest first. */
 export function barrelFor(g: Game, kind: LiquidKind): PlacedFurniture | undefined {
   let best: PlacedFurniture | undefined;
-  for (const f of g.furniture.values()) {
+  for (const f of g.furnitureWithin(4)) {
     if (!holdsLiquid(f) || isWell(f)) continue;
     if (litresIn(f) > 0 && f.liquid !== kind) continue;
     if (litresIn(f) >= liquidCapacity(f)) continue;
