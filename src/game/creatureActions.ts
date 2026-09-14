@@ -21,13 +21,29 @@ function bait(g: Game, c: Creature, uid?: number) {
   return g.inventory.items.find((it) => isBaitFor(def, it.id));
 }
 
-const dietText = (c: Creature): string => {
+/** "blueberries, raspberries or potatoes" — everything this one will take. */
+export const dietText = (c: Creature): string => {
   const names = SPECIES[c.species].diet.map((id) => itemDef(id).name.toLowerCase());
   return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
 };
 
 /** "a berry or vegetable" for a Rabba, "a spice or vegetable" for a Vola. */
 export const baitHint = (c: Creature): string => SPECIES[c.species].baitHint;
+
+/**
+ * The odds of winning a wild thing over with one offering, as they stand: its
+ * own wariness, how far your taming is past what it asks, whether it is
+ * hungry, what a run of offerings has already bought you, your soul, its age,
+ * and the love path if you walk it. The tooltip and the attempt itself read
+ * the same number, so what you are told is what you get.
+ */
+export function tameChance(g: Game, c: Creature): number {
+  const def = SPECIES[c.species];
+  if (!def || def.monster) return 0;
+  const skill = g.skills.get('taming');
+  const raw = def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coaxBonus(c, g.time) + g.soulBonus();
+  return Math.max(0, Math.min(0.95, raw * ageDef(c, g.time).tame * (g.walks('love', 3) ? 1.25 : 1)));
+}
 
 function nearPlayer(g: Game, c: Creature): boolean {
   return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 1.9;
@@ -119,8 +135,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const skill = g.skills.get('taming');
       // Something that has not yet learned to mistrust you is far easier won,
       // and so is something that has taken food from this hand all afternoon.
-      const coax = coaxBonus(c, g.time);
-      const chance = Math.min(0.95, (def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coax + g.soulBonus()) * ageDef(c, g.time).tame * (g.walks('love', 3) ? 1.25 : 1));
+      const chance = tameChance(g, c);
+      void skill;
       c.hunger = Math.min(1, c.hunger + 0.25);
       if (g.rand() < chance) {
         c.name = def.name;

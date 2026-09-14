@@ -53,6 +53,7 @@ import { DeedPanel } from './panels/deed';
 import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { jobEntry, pinEntry, pinnable } from './beltmenu';
+import { creatureLines } from './creatureinfo';
 import { MARK_COLOURS } from '../game/marks';
 import { SettingsPanel } from './panels/settings';
 import { Hud } from './hud';
@@ -102,6 +103,7 @@ export class UI {
       newWorld: cb.newWorld,
       turn: cb.turn,
       useLoop: (loop) => this.useLoop(loop),
+      numbersTaken: () => this.numbersTaken,
     });
 
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });
@@ -254,6 +256,31 @@ export class UI {
     return { kind: 'tile', x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
   }
 
+  /**
+   * Press a number key. What it does depends on what is in front of you: the
+   * Tile window takes the numbers whenever it is open and looking at
+   * something, since the thing selected is what you mean; otherwise they press
+   * the loops on your belt.
+   */
+  pressNumber(index: number): void {
+    if (this.tilePanel.press(index)) return;
+    this.useLoop(index);
+  }
+
+  /** Whether the selection window is holding the number keys just now. */
+  get numbersTaken(): boolean {
+    return this.bindings.length > 0;
+  }
+
+  /**
+   * What each number key would do right now, for the help and for tests. The
+   * HUD is built before the windows are and draws its belt straight away, so
+   * this has to answer before there is a selection window to ask.
+   */
+  get bindings(): Array<{ key: string; label: string }> {
+    return this.tilePanel?.bindings ?? [];
+  }
+
   /** Press a loop on the belt, aimed at whatever the cursor is on. */
   useLoop(loop: number): void {
     const pick = this.renderer.hover;
@@ -270,11 +297,7 @@ export class UI {
     const growing = this.game.cropAt(pick.x, pick.y);
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {
-      const def = SPECIES[creature.species];
-      lines.push(`${creature.name}${creature.name !== def.name ? ` the ${def.name}` : ''} · ${this.game.creatures.describe(creature)}`);
-      // Only your own wildermon show their condition.
-      if (creature.mode !== 'wild') lines.push(`Health ${Math.ceil(creature.health)}/${def.health} · ${creature.hunger < 0.3 ? 'hungry' : creature.hunger < 0.6 ? 'peckish' : 'well fed'}`);
-      this.tooltip.show(sx, sy, lines);
+      this.tooltip.show(sx, sy, creatureLines(this.game, creature));
       return;
     }
     const sm = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;

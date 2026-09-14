@@ -41,7 +41,7 @@ rebuilds and commits the result.
 | `Esc` | Stop the current action / close the menu |
 | `Enter` | Chat in the event window (`/name`, `/where`, `/help`) |
 | `I` `K` `L` `M` `F1` | Inventory, Skills, Event log, Map, Help |
-| `1`…`9`, `0` | Press a loop on your toolbelt, aimed where the cursor is |
+| `1`…`9`, `0` | Do the numbered action on the selected tile or creature; otherwise press a toolbelt loop |
 | `N` | The settlement window |
 | `Home` | Walk back to your settlement token |
 | `G` | Toggle the tile grid |
@@ -879,6 +879,19 @@ rebuilds and commits the result.
   that buys it, a count of everything standing inside the border, the standing
   orders, and a walk-to button beside every building, store, trap, post and
   bridge on the land.
+- **Number keys on the selection.** With something selected in the Tile
+  window, `1`–`9` and `0` do the first ten things that can actually be done to
+  it, in the order shown, with the key drawn on each row. Submenus and
+  greyed-out rows take no key, so a number never does nothing; with nothing
+  selected the same keys press the toolbelt loops instead, and the belt bar
+  dims while the window has them.
+- **Tooltips that answer the question.** Pointing at a creature gives a wild
+  one's real taming odds — the same number the attempt rolls against, with
+  hunger, soul, age, path and any run of offerings counted — and for your own,
+  name, sex, kind, age, level, health and fullness with bars, care, what it is
+  doing and how good it is at it, a worker's reach, its traits (marked only
+  when better than common, and unread until your husbandry can read them) and
+  how long a carried young has left.
 - **Marks on the map.** Right-click the map, or use the tile's own menu, to
   pin a name to a spot in one of six colours. Pins are drawn with their names
   beside them and listed under the map nearest first, each with a button that

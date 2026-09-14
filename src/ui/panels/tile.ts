@@ -12,10 +12,15 @@ export type TileMenuSource = (pick: Pick) => { title: string; entries: MenuItem[
  * button — a finger, a trackpad, or a left hand that would rather not reach for
  * the other one — and for seeing at a glance why something is not possible yet.
  */
+/** The keys the list binds, in the order it hands them out. */
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+
 export class TilePanel {
   private head: HTMLDivElement;
   private list: HTMLDivElement;
   private pick: Pick | null = null;
+  /** What each number key does right now, in the order the list shows them. */
+  private keyed: MenuItem[] = [];
 
   constructor(
     private readonly win: UIWindow,
@@ -65,6 +70,35 @@ export class TilePanel {
       this.list.append(none);
       return;
     }
-    this.list.append(...buildMenuRows(entries, 0));
+    // The first ten things that can actually be done get a number key, in the
+    // order they are listed. A row that only opens onto more choices is not
+    // one of them, and neither is one that says why it cannot be done.
+    this.keyed = entries.filter((e) => !e.disabled && e.onSelect).slice(0, KEYS.length);
+    const keyFor = new Map(this.keyed.map((e, i) => [e, KEYS[i]]));
+    this.list.append(...buildMenuRows(entries, 0, { keyOf: (item) => keyFor.get(item) }));
+  }
+
+  /**
+   * What each number key would do, for anything that wants to say so. Empty
+   * when the window is shut or looking at nothing, since it takes the keys
+   * only while it is actually in front of you.
+   */
+  get bindings(): Array<{ key: string; label: string }> {
+    if (!this.win.isOpen || !this.pick) return [];
+    return this.keyed.map((e, i) => ({ key: KEYS[i], label: e.label }));
+  }
+
+  /**
+   * Press a number key. Returns false when this window is not showing
+   * anything, so whatever else wants the number keys may have them.
+   */
+  press(index: number): boolean {
+    if (!this.win.isOpen || !this.pick) return false;
+    const entry = this.keyed[index];
+    if (!entry?.onSelect) return false;
+    entry.onSelect();
+    // Doing a thing changes what can be done next, so the list is rebuilt.
+    this.render();
+    return true;
   }
 }

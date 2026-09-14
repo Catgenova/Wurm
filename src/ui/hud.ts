@@ -19,6 +19,8 @@ export interface HudCallbacks {
   turn: (step: number) => void;
   /** Press a loop on the belt, aimed at whatever the cursor is on. */
   useLoop: (loop: number) => void;
+  /** Whether the selection window has the number keys just now. */
+  numbersTaken: () => boolean;
 }
 
 interface Bar {
@@ -82,6 +84,7 @@ export class Hud {
   private loopEls: HTMLButtonElement[] = [];
   private stopBtn: HTMLButtonElement;
   private beltDue = 0;
+  private numbersTaken: () => boolean;
 
   constructor(
     root: HTMLElement,
@@ -244,6 +247,7 @@ export class Hud {
       this.beltEl.append(b);
     }
     root.append(this.beltEl);
+    this.numbersTaken = cb.numbersTaken;
     this.game.events.on('inventory', () => this.drawBelt());
     this.drawBelt();
 
@@ -285,6 +289,11 @@ export class Hud {
   drawBelt(): void {
     const loops = this.game.beltLoops();
     this.beltEl.hidden = loops === 0;
+    // The selection window takes the number keys while it is looking at
+    // something, so the belt says so rather than leaving you to find out.
+    const taken = this.numbersTaken();
+    this.beltEl.classList.toggle('belt-yielded', taken);
+    this.beltEl.title = taken ? 'The Tile window has the number keys while something is selected. Close it, or clear the selection, to press the belt.' : '';
     for (let i = 0; i < BELT_MAX; i += 1) {
       const el = this.loopEls[i];
       el.hidden = i >= loops;

@@ -16,6 +16,8 @@ export interface RowHooks {
   changed?: () => void;
   /** An entry is about to run, so a floating menu can get out of the way. */
   chose?: () => void;
+  /** The key that does this entry, when whatever is showing it binds keys. */
+  keyOf?: (item: MenuItem) => string | undefined;
 }
 
 /**
@@ -30,6 +32,15 @@ function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks): HTMLEleme
   const row = document.createElement('div');
   row.className = 'ctx-item' + (item.disabled ? ' disabled' : '') + (depth ? ' ctx-child' : '');
   row.style.paddingLeft = `${8 + depth * 14}px`;
+  // A key that does this entry, written where it can be seen.
+  const key = hooks.keyOf?.(item);
+  if (key !== undefined) {
+    const kbd = document.createElement('kbd');
+    kbd.className = 'ctx-key';
+    kbd.textContent = key;
+    row.append(kbd);
+    row.classList.add('ctx-keyed');
+  }
   const label = document.createElement('span');
   label.textContent = item.label;
   row.append(label);

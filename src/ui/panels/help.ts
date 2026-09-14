@@ -65,6 +65,25 @@ function helpText(): string {
     the quality it was made at, that decides how fast a job goes, how often it comes out right, and
     how good what comes out of it is. The pack shows both when they differ, as <b>60.0&rarr;45</b>,
     and examining a thing says it in words.</p>
+    <h3>The number keys</h3>
+    <p>The number keys mean one of two things, depending on what is in front of you. With something
+    <b>selected</b> in the Tile window (<kbd>T</kbd>) &mdash; a tile, a tree, a wildermon, a crate
+    &mdash; <kbd>1</kbd> to <kbd>9</kbd> and <kbd>0</kbd> do the <b>first ten things that can actually
+    be done to it</b>, in the order the window lists them, and each row shows its key. A row that only
+    opens onto more choices takes no key, and neither does one that is greyed out with a reason, so a
+    number never does nothing. With <b>nothing selected</b>, or the window shut, the same keys press
+    the loops on your belt; the belt bar dims while the window has them.</p>
+    <h3>What a wildermon's tooltip tells you</h3>
+    <p>Pointing at a creature says what is actually worth knowing about it rather than a line of
+    colour. A <b>wild</b> one gives its kind and age, what it will take from your hand, the taming it
+    asks against the taming you have, and <b>the real odds of one offering</b> &mdash; the same number
+    the attempt itself rolls against, hunger, soul, age, path and a run of offerings all counted. One
+    of <b>your own</b> gives its name, sex, kind, age and level; its health and how full it is, with a
+    bar for each; how well it has been brushed; what it is doing and how good it is at it, with a
+    worker's reach in tiles; the traits it carries, marked when they are better than common and left
+    as <i>something unread</i> until your animal husbandry is high enough to read them; and how long a
+    carried young has left. A <b>monster</b> gives its health and what it hits for, and says plainly
+    that it cannot be tamed.</p>
     <h3>The belt, and doing a thing many times</h3>
     <p>A job that runs on and on &mdash; digging, mining, chopping, making bricks &mdash; is offered by
     the handful as well as one at a time: <b>once</b>, five, ten, twenty-five, fifty, or <b>until you
