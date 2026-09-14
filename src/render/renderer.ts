@@ -18,7 +18,7 @@ import {
   type Wall,
 } from '../game/building';
 import { hash2 } from '../world/noise';
-import { ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
@@ -138,6 +138,12 @@ export function nearestSide(x: number, y: number, wx: number, wy: number): Side 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
 const WATER_STEPS = 24;
+/** How much of a neighbour's colour washes over the edge of a tile. */
+const BLEND_ALPHA = 0.46;
+/** How far in from the edge the neighbour's colour reaches, as a share of the way to the middle. */
+const BLEND_REACH = 0.55;
+/** Specks of grain laid on each tile once you are close enough to see them. */
+const GRAIN_SPECKS = 22;
 const WATER_SHALLOW = [86, 168, 190];
 const WATER_DEEP = [16, 58, 118];
 
@@ -216,6 +222,9 @@ export class Renderer {
   private waterPoly = new Float64Array(16);
   /** Every water polygon drawn this frame, so a wake can be kept on the water. */
   private waterEdge = new Float64Array(4);
+  /** Grain on bare ground, gathered a diagonal at a time so it costs two fills, not two a tile. */
+  private grainDark = new Path2D();
+  private grainPale = new Path2D();
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
@@ -332,6 +341,20 @@ export class Renderer {
     let r = base[0];
     let g = base[1];
     let b = base[2];
+    // Steep ground wears through to the rock under it. A cliff face used to be
+    // whatever was growing on the top of it, stretched down the drop, which is
+    // the one thing a cliff never looks like.
+    if (type !== TileType.Rock) {
+      const bare = bareRock(Math.hypot(gx, gy));
+      if (bare > 0) {
+        const k = bare * 0.88;
+        const face = ROCK_VARIANTS[0].color;
+        const grain = 0.88 + hash2(x, y, 23) * 0.26;
+        r += (face[0] * grain - r) * k;
+        g += (face[1] * grain - g) * k;
+        b += (face[2] * grain - b) * k;
+      }
+    }
     const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
     if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * 0.1;
     else {
@@ -341,6 +364,87 @@ export class Renderer {
       b *= 0.95 * k;
     }
     return `rgb(${clamp255(r * shade)},${clamp255(g * shade)},${clamp255(b * shade)})`;
+  }
+
+  /** A tile's colour as drawn, worked out once and kept until something changes it. */
+  private groundColor(x: number, y: number, idx: number, lit: boolean, sun: [number, number, number]): string {
+    const cache = lit ? this.colors : this.memColors;
+    let color = cache[idx];
+    if (!color) {
+      const w = this.game.world;
+      color = this.computeColor(x, y, w.viewTile(x, y, lit), w.viewData(x, y, lit), sun);
+      cache[idx] = color;
+    }
+    return color;
+  }
+
+  /**
+   * Where one kind of ground meets another. Soil does not stop dead on a tile
+   * line: sand runs into grass, grass into dirt. Each edge with a different
+   * tile across it gets a wedge of that neighbour's colour laid over the half
+   * of the tile nearest it, and since the neighbour does the same back, the
+   * pair of them read as one blended seam. Paving and rock are left alone —
+   * a road stops where it was laid.
+   *
+   * It costs nothing over open country: a field of grass has no edges to
+   * blend, so the work is proportional to how broken up the ground is.
+   */
+  private blendEdges(ctx: CanvasRenderingContext2D, rot: number, u: number, v: number, mine: TileType, lit: boolean, sun: [number, number, number], pts: Float64Array): void {
+    const world = this.game.world;
+    const nb = this.tileBuf;
+    const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
+    const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
+    for (let e = 0; e < 4; e++) {
+      // The four view-space neighbours, in the order the corners are listed.
+      this.viewToWorldTile(rot, u + (e === 1 ? 1 : e === 3 ? -1 : 0), v + (e === 0 ? -1 : e === 2 ? 1 : 0), nb);
+      const nx = nb[0];
+      const ny = nb[1];
+      if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
+      const theirs = world.viewTile(nx, ny, lit) as TileType;
+      if (theirs === mine || HARD_EDGED.has(theirs)) continue;
+      if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
+      const ax = pts[e * 2];
+      const ay = pts[e * 2 + 1];
+      const bx = pts[((e + 1) & 3) * 2];
+      const by = pts[((e + 1) & 3) * 2 + 1];
+      ctx.fillStyle = this.groundColor(nx, ny, ny * world.w + nx, lit, sun);
+      ctx.globalAlpha = BLEND_ALPHA;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.lineTo(bx + (cx - bx) * BLEND_REACH, by + (cy - by) * BLEND_REACH);
+      ctx.lineTo(ax + (cx - ax) * BLEND_REACH, ay + (cy - ay) * BLEND_REACH);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /**
+   * Grain on the ground, close up. From a distance a tile is a flat lozenge of
+   * colour and that is the right amount of detail for it; at the zoom where
+   * you are actually standing on a thing, flat colour reads as paper. Five
+   * specks per tile, placed from the tile's own coordinates so they never
+   * crawl, laid into a path shared by the whole diagonal.
+   *
+   * The specks are plain black and white at low alpha rather than a shade of
+   * the ground, which means no colour has to be worked out per tile and any
+   * ground — sand, rock, a cliff face, a ploughed field — gets grain that
+   * suits it.
+   */
+  private addGrain(x: number, y: number, pts: Float64Array, zoom: number): void {
+    const size = Math.max(1, 2.2 * zoom);
+    for (let i = 0; i < GRAIN_SPECKS; i++) {
+      const a = hash2(x, y, 40 + i * 3);
+      const b = hash2(x, y, 41 + i * 3);
+      // Bilinear across the quad, so a speck sits on the ground however the
+      // corners are pulled about.
+      const top = 1 - b;
+      const sx = (pts[0] * (1 - a) + pts[2] * a) * top + (pts[6] * (1 - a) + pts[4] * a) * b;
+      const sy = (pts[1] * (1 - a) + pts[3] * a) * top + (pts[7] * (1 - a) + pts[5] * a) * b;
+      const path = hash2(x, y, 42 + i * 3) < 0.5 ? this.grainDark : this.grainPale;
+      path.rect(sx - size * 0.5, sy - size * 0.5, size, size);
+    }
   }
 
   render(dt: number): void {
@@ -414,6 +518,10 @@ export class Renderer {
       alpha: 0.45 * (1 - sunUp) * (1 - this.game.darkness()),
     };
     const grassDetail = zoom >= 0.75;
+    // Blended seams are a close-up nicety; from high up the tiles are too small to tell.
+    const blend = zoom >= 0.5;
+    // Grain is only worth drawing once a tile is big enough to hold it.
+    const grain = zoom >= 1.1;
     const player = this.game.player;
     const rot = cam.rotation;
     const tb = this.tileBuf;
@@ -439,6 +547,10 @@ export class Renderer {
 
     for (let d = dLo; d <= dHi; d++) {
       this.ents.length = 0;
+      if (grain) {
+        this.grainDark = new Path2D();
+        this.grainPale = new Path2D();
+      }
       const baseY = (d * HALF_H - cam.cy) * zoom + H / 2;
       let e = eMin;
       if (((e + d) & 1) !== 0) e++;
@@ -482,12 +594,7 @@ export class Renderer {
           continue;
         }
         const lit = fog === VISIBLE;
-        let color = lit ? this.colors[idx] : this.memColors[idx];
-        if (!color) {
-          color = this.computeColor(x, y, world.viewTile(x, y, lit), world.viewData(x, y, lit), sun);
-          if (lit) this.colors[idx] = color;
-          else this.memColors[idx] = color;
-        }
+        const color = this.groundColor(x, y, idx, lit, sun);
         ctx.beginPath();
         ctx.moveTo(pts[0], pts[1]);
         ctx.lineTo(pts[2], pts[3]);
@@ -497,11 +604,15 @@ export class Renderer {
         ctx.fillStyle = color;
         ctx.fill();
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
+        const t0 = world.viewTile(x, y, lit) as TileType;
+        if (blend && !wet && !HARD_EDGED.has(t0)) this.blendEdges(ctx, rot, u, v, t0, lit, sun, pts);
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
         if (wet) this.drawWater(u, v, x, y, c, fogged && !lit ? fogPath : undefined);
 
-        const t = world.viewTile(x, y, lit);
+        if (grain && !wet) this.addGrain(x, y, pts, zoom);
+
+        const t = t0;
         if (!lit) {
           // Remembered ground keeps its shape and its trees and nothing else:
           // no creatures, no piles, no detail, and a cold wash over the lot.
@@ -519,7 +630,9 @@ export class Renderer {
           fogPath.closePath();
           continue;
         }
-        if (t === TileType.Grass && grassDetail && !wet) {
+        // Nothing grows on a cliff face, so nothing is drawn on one either.
+        const steep = bareRock(Math.hypot((c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE, (c[2] + c[3] - (c[0] + c[1])) / 2 / UNITS_PER_TILE)) > 0.45;
+        if (t === TileType.Grass && grassDetail && !wet && !steep) {
           // Tufts show what the tile still has to give: berries to forage, flowers to botanize.
           const state = (this.game.isForaged(x, y, 'forage') ? 0 : 1) | (this.game.isForaged(x, y, 'botanize') ? 0 : 2);
           const spr = grassSprite(state, (x * 7 + y * 13 + ((x ^ y) & 3)) % GRASS_VARIANTS);
@@ -665,6 +778,12 @@ export class Renderer {
           spr: null,
           lift: this.driverSeat() * zoom,
         });
+      }
+      if (grain) {
+        ctx.fillStyle = 'rgba(0,0,0,0.095)';
+        ctx.fill(this.grainDark);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fill(this.grainPale);
       }
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }

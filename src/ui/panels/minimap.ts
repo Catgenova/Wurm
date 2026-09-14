@@ -16,6 +16,15 @@ const VIEW_SIZE = 512;
  */
 const MIN_SPAN = 64;
 
+/**
+ * Contours. The map has always shown height as a wash of shading, which says
+ * which way the ground falls but never how far. A line every twenty units —
+ * half a tile of rise — says it exactly, and every fifth line is drawn harder,
+ * which is how a walker reads a hill off a map without measuring anything.
+ */
+const CONTOUR_STEP = 20;
+const CONTOUR_INDEX = 5;
+
 /** A small overview map, re-painted per tile as the world changes. */
 export class MinimapPanel {
   private base: HTMLCanvasElement;
@@ -251,6 +260,15 @@ export class MinimapPanel {
         r *= 0.8;
         g *= 0.85;
         b *= 0.8;
+      }
+      // A contour runs wherever the ground climbs past a multiple of the step
+      // on the way to the tile east or south of this one.
+      const band = Math.floor(h / CONTOUR_STEP);
+      if (band !== Math.floor(w.centerHeight(x + 1, y) / CONTOUR_STEP) || band !== Math.floor(w.centerHeight(x, y + 1) / CONTOUR_STEP)) {
+        const hard = band % CONTOUR_INDEX === 0 ? 0.55 : 0.74;
+        r *= hard;
+        g *= hard;
+        b *= hard;
       }
     }
     // Ground out of sight keeps its shape but loses its light.

@@ -28,6 +28,22 @@ export type TileType = (typeof TileType)[keyof typeof TileType];
 export type RGB = readonly [number, number, number];
 
 /**
+ * Ground that keeps a hard edge. A paved road stops where it was laid and a
+ * rock face is rock; everything else on the island is soil of one sort or
+ * another, and soil runs into its neighbour rather than stopping dead on a
+ * tile line.
+ */
+export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone, TileType.Gravel]);
+
+/** Where a slope starts wearing through to the rock under it, and where it is all rock. */
+export const BARE_FROM = 0.5;
+export const BARE_FULL = 1.15;
+
+/** How much of the rock shows on a slope this steep, 0..1. */
+export const bareRock = (slope: number): number => Math.max(0, Math.min(1, (slope - BARE_FROM) / (BARE_FULL - BARE_FROM)));
+
+
+/**
  * What a loaded wheel makes of a piece of ground. An empty vehicle rolls over
  * anything at its own pace; a full one is held to what the ground will take.
  * Between the two it is a straight blend, so a half-loaded cart pays half.
