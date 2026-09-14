@@ -37,12 +37,13 @@ simplification rather than a problem:
 | **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
 | **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
 | **8** | fighting: wearing and wielding, sword and bow, butchering, and the first aid that follows |
+| **1** | setting a wildermon to work the deed, which is eleven trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **103** | known, listed, and honestly refused |
+| **102** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -62,11 +63,45 @@ being refused because your hands are full.
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), creatures coming at you
 unprompted (a hunter closing on sight is creature AI rather than fighting),
-the deed jobs a tamed beast can be set to, breeding and pairing, riding and
-the traces, trapping, the ledger, the journal, kilns and what they fire,
-smelting jobs themselves, flattening and levelling, paving with cut slabs,
-planting trees, prospecting, the rest of the deed (disband, upgrade, the
-token's crate), and the ease a hot oven lends to cooking.
+the eleven deed trades that want something this island has not got yet —
+guarding and hunting want the aggression loop, stoking wants hearths, and the
+errands (water, hod, mend, compost, prospect, plant, seek, fetch) want crates,
+posts and a barrel apiece — sowing a field from a worker's own cheeks,
+breeding and pairing, riding and the traces, trapping, crates you place and
+stuff by hand, the ledger, the journal, kilns and what they fire, smelting
+jobs themselves, flattening and levelling, paving with cut slabs, planting
+trees, prospecting, deed upgrades and disbanding, and the ease a hot oven
+lends to cooking.
+
+### A worker is a round trip
+
+A wild creature wanders: legs with no purpose, and the last one is as good an
+answer as any to where it is. A worker is *doing* something, and a round trip
+has parts — out to a tile, work it, back to the crate, put the load down —
+each of which begins and ends at a moment. So a worker is stored as which part
+of the trip it is in and when that part is over, and settling it walks it
+through as many whole trips as have come due.
+
+Which means the result of an hour of a worker's labour is a loop over the
+clock rather than an hour of simulation: the logs are in the crate because the
+arithmetic says they would be, and nothing had to be running to put them
+there. Thirty round trips is as far back as anybody walks; past that the clock
+catches up, the same rule a wild one's legs follow.
+
+Every rule underneath a worker is the one a player gets — a forage bed's
+cooldown, a seam's metal and its level, a field that has come ripe, a tree
+that leaves the rest of itself at the stump because a beast can carry one log.
+A worker is not a second set of rules, it is the same ones with nobody
+watching.
+
+The search for the next tile is worth a word. Written as a scan of the whole
+square within range, it was correct and cost the same whether the answer was
+under the worker's nose or nowhere at all: two workers half an hour behind
+took four seconds to catch up, nearly all of it looking at ground they had no
+need to look at. Ring by ring outwards from the token, stopping at the first
+ring with anything in it — and stopping the catch-up entirely when a search
+comes up empty, because replaying half an hour of finding nothing produces
+exactly nothing — took the same sweep to 274ms.
 
 ### A wound is the second thing that will not sit still
 

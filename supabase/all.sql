@@ -23398,3 +23398,999 @@ begin
 end $$;
 
 select private.lock_doors();
+
+-- ======================================================================
+-- 20260914212000_worker.sql
+-- ======================================================================
+
+-- Wildermon set to work on the deed.
+--
+-- ## A worker is a round trip
+--
+-- A wild creature wanders: legs with no purpose, and the last one is as good
+-- an answer as any to where it is. A worker is doing something, and a round
+-- trip has parts — out to a tile, work it, back to the crate, put the load
+-- down — each of which begins and ends at a moment. So a worker is stored as
+-- which part of the trip it is in and when that part is over, and settling it
+-- walks it through as many whole trips as have come due.
+--
+-- Which means the result of an hour of a worker's labour is a loop over the
+-- clock rather than an hour of simulation: the logs are in the crate because
+-- the arithmetic says they would be, and nothing had to be running to put
+-- them there.
+
+/* ------------------------------------------------------------------ *
+ * Somewhere to put a load down.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The settlement's own crate.
+ *
+ * Only this one, for now: crates you make, place and stuff by hand are their
+ * own family. This is the one the token comes with, and it is here because a
+ * worker that has nowhere to put a log is a worker doing nothing.
+ */
+create table if not exists crate (
+  world_id uuid not null references world on delete cascade,
+  id int not null,
+  kind text not null default 'plank' check (kind in ('log', 'plank')),
+  x int not null,
+  y int not null,
+  sx int not null default 1,
+  sy int not null default 1,
+  material text,
+  name text,
+  /** The settlement's own, which is where a worker takes things by default. */
+  deed boolean not null default false,
+  primary key (world_id, id)
+);
+alter table crate enable row level security;
+drop policy if exists crate_read on crate;
+create policy crate_read on crate for select to authenticated using (true);
+grant select on crate to authenticated;
+revoke insert, update, delete on crate from anon, authenticated;
+
+-- What is in one. `holder = 'crate'` and the crate's own number, which is not
+-- an item number, so it wants a column of its own rather than `inside`.
+alter table item add column if not exists crate int;
+create index if not exists item_in_crate on item (world_id, crate) where holder = 'crate';
+
+create or replace function crate_capacity(c crate) returns int language sql stable as $$
+  select round(case c.kind when 'log' then 30 else 60 end
+    * coalesce((mat_of(c.material)).hold, 1))::int
+$$;
+
+create or replace function crate_units(p_world uuid, p_id int) returns int language sql stable as $$
+  select coalesce(sum(count), 0)::int from item
+  where world_id = p_world and holder = 'crate' and crate = p_id
+$$;
+
+create or replace function crate_centre_x(c crate) returns double precision
+  language sql immutable as $$ select c.x + (c.sx + 0.5) / 4.0 $$;
+create or replace function crate_centre_y(c crate) returns double precision
+  language sql immutable as $$ select c.y + (c.sy + 0.5) / 4.0 $$;
+
+create or replace function deed_crate(p_world uuid) returns crate language sql stable as $$
+  select * from crate where world_id = p_world and deed order by id limit 1
+$$;
+
+/** Put something in a crate, or say it would not go. */
+create or replace function crate_add(p_world uuid, p_id int, p_def text, p_count int,
+    p_ql double precision, p_extra text default null) returns boolean
+  language plpgsql as $$
+declare c crate; stacks boolean; into_id bigint;
+begin
+  select * into c from crate where world_id = p_world and id = p_id;
+  if not found then return false; end if;
+  if crate_units(p_world, p_id) + p_count > crate_capacity(c) then return false; end if;
+  select coalesce(d.stackable, false) into stacks from item_def d where d.id = p_def;
+  if stacks then
+    select i.id into into_id from item i
+    where i.world_id = p_world and i.holder = 'crate' and i.crate = p_id and i.def = p_def
+      and i.extra is not distinct from p_extra
+    limit 1;
+    if into_id is not null then
+      update item set ql = (ql * count + p_ql * p_count) / (count + p_count), count = count + p_count
+        where id = into_id;
+      return true;
+    end if;
+  end if;
+  insert into item (world_id, holder, crate, gx, gy, def, ql, count, extra)
+  values (p_world, 'crate', p_id, c.x, c.y, p_def, greatest(0, least(100, p_ql)), p_count, p_extra);
+  return true;
+end $$;
+
+/** Stand the settlement's crate beside the token, on the first tile that will have it. */
+create or replace function place_deed_crate(p_world uuid) returns int
+  language plpgsql as $$
+declare d deed; spot record; new_id int;
+begin
+  select * into d from deed where world_id = p_world;
+  if not found or (deed_crate(p_world)).id is not null then return null; end if;
+  select gx, gy into spot from (values (1, 0), (0, 1), (-1, 0), (0, -1), (1, 1)) as v(dx, dy),
+    lateral (select d.x + v.dx as gx, d.y + v.dy as gy) q
+  where in_bounds(p_world, q.gx, q.gy) and passable(p_world, q.gx, q.gy)
+    and not has_water(p_world, q.gx, q.gy)
+    and building_at(p_world, q.gx, q.gy) is null
+    and not exists (select 1 from crate cr where cr.world_id = p_world and cr.x = q.gx and cr.y = q.gy)
+  limit 1;
+  if not found then return null; end if;
+  select coalesce(max(id), 0) + 1 into new_id from crate where world_id = p_world;
+  insert into crate (world_id, id, kind, x, y, sx, sy, deed) values (p_world, new_id, 'plank', spot.gx, spot.gy, 1, 1, true);
+  return new_id;
+end $$;
+
+/* ------------------------------------------------------------------ *
+ * The worker itself.
+ * ------------------------------------------------------------------ */
+
+alter table creature add column if not exists job text;
+alter table creature add column if not exists phase text not null default 'idle';
+alter table creature add column if not exists work_x int;
+alter table creature add column if not exists work_y int;
+alter table creature add column if not exists carrying jsonb;
+
+/** How long a worker takes over a task: twice what a player of the same skill would. */
+create or replace function work_duration(p_skill double precision) returns double precision
+  language sql immutable as $$ select 2 * greatest(1.2, 5 * (1 - p_skill / 140)) $$;
+
+/** A worker's task skill, or 1 for a species with no trade. */
+create or replace function task_skill(c creature) returns double precision
+  language sql stable as $$
+  select coalesce((c.skills->>(select skill from gather_def where id =
+    (select gathers from species_def where id = c.species)))::double precision, 1)
+$$;
+
+/** Every ten levels of its trade let a worker range ten tiles further from the token. */
+create or replace function work_range(c creature) returns int language sql stable as $$
+  select round((d.work_range + floor(task_skill(c) / 10) * 10) * trait_mul(c.traits, 'range'))::int
+  from species_def d where d.id = c.species
+$$;
+
+create or replace function workers_on_deed(p_world uuid) returns int language sql stable as $$
+  select count(*)::int from creature where world_id = p_world and mode = 'deed'
+$$;
+
+/** How many wildermon may work the deed at this level. */
+create or replace function worker_cap(p_world uuid) returns int language sql stable as $$
+  select coalesce((select level from deed where world_id = p_world), 0)
+$$;
+
+/** One tile to one worker: nobody else's seam, tree or field. */
+create or replace function claimed(p_world uuid, p_x int, p_y int, p_id int) returns boolean
+  language sql stable as $$
+  select exists (select 1 from creature c where c.world_id = p_world and c.mode = 'deed'
+    and c.id <> p_id and c.work_x = p_x and c.work_y = p_y and c.phase in ('out', 'work'))
+$$;
+
+/** A tile beside one that cannot be stood on: a tree, or open water. */
+create or replace function beside_tile(p_world uuid, p_x int, p_y int)
+  returns table (x int, y int) language sql stable as $$
+  select p_x + dx, p_y + dy from (values (1,0), (-1,0), (0,1), (0,-1)) as v(dx, dy)
+  where creature_tile_ok(p_world, p_x + dx, p_y + dy)
+  limit 1
+$$;
+
+/**
+ * Whether a tile is worth a worker walking to, for its trade.
+ *
+ * Every one of these rules is already in this database somewhere — a forage
+ * bed's cooldown, a seam's metal and its level, a field that has come ripe.
+ * A worker is not a second set of rules, it is the same ones with nobody
+ * watching.
+ */
+create or replace function worker_gatherable(p_world uuid, p_x int, p_y int, p_kind text, c creature)
+  returns boolean language plpgsql stable as $$
+declare here int; t tile_def; rock rock_def;
+begin
+  if not in_bounds(p_world, p_x, p_y) or claimed(p_world, p_x, p_y, c.id) then return false; end if;
+  here := land_tile(p_world, p_x, p_y);
+  select * into t from tile_def where id = here;
+
+  if p_kind = 'woodcut' then
+    -- Any tree with somewhere to stand beside it. An old one is worth a log
+    -- more, which is the felling's business rather than the choosing's.
+    return here = tile_id('Tree') and exists (select 1 from beside_tile(p_world, p_x, p_y));
+  elsif p_kind = 'mine' then
+    rock := bedrock_at(p_world, p_x, p_y);
+    return here = tile_id('Rock') and rock.ore and rock.level <= task_skill(c)
+       and rock_height(p_world, p_x, p_y) > 1;
+  elsif p_kind = 'quarry' then
+    rock := bedrock_at(p_world, p_x, p_y);
+    return here = tile_id('Rock') and not rock.ore and rock_height(p_world, p_x, p_y) > 1;
+  elsif p_kind in ('sand', 'clay') then
+    return here = tile_id(case p_kind when 'sand' then 'Sand' else 'Clay' end)
+       and land_dirt(p_world, p_x, p_y) > 0 and creature_tile_ok(p_world, p_x, p_y);
+  elsif p_kind = 'peat' then
+    return here in (tile_id('Peat'), tile_id('Tar')) and not is_foraged(p_world, p_x, p_y, 'dig')
+       and creature_tile_ok(p_world, p_x, p_y);
+  elsif p_kind = 'reed' then
+    return here = tile_id('Reed') and not is_foraged(p_world, p_x, p_y, 'reed');
+  elsif p_kind = 'fish' then
+    return fishable(p_world, p_x, p_y);
+  elsif p_kind = 'farm' then
+    -- Only ground that has been tilled and sown; a worker never rakes a field
+    -- of its own, and it does not sow one either — that wants seeds in its
+    -- cheeks, which is a piece still to come.
+    perform crop_settle(p_world, p_x, p_y);
+    return exists (select 1 from crop cr where cr.world_id = p_world and cr.x = p_x and cr.y = p_y
+      and (cr.stage >= crop_ripe() or not cr.tended_now));
+  elsif p_kind = 'forage' then
+    return coalesce(t.forage, false) and not is_foraged(p_world, p_x, p_y, 'forage')
+       and creature_tile_ok(p_world, p_x, p_y);
+  elsif p_kind = 'botanize' then
+    return coalesce(t.botanize, false) and not is_foraged(p_world, p_x, p_y, 'botanize')
+       and creature_tile_ok(p_world, p_x, p_y);
+  end if;
+  return false;
+end $$;
+
+/**
+ * The nearest tile to the token worth working, searched ring by ring outwards.
+ *
+ * Written as a scan of the whole square first, which is correct and costs the
+ * same whether the answer is under the worker's nose or nowhere: two workers
+ * half an hour behind took four seconds to catch up, nearly all of it looking
+ * at ground they had no need to look at. Outwards from the token, stopping at
+ * the first ring with anything in it, is both what the browser does and what
+ * the cost wants — and the ring is shuffled so two workers do not queue up on
+ * the same tile.
+ */
+create or replace function find_work_tile(p_world uuid, p_cx int, p_cy int, p_range int,
+    p_kind text, c creature)
+  returns table (x int, y int) language plpgsql stable as $$
+declare ring int; spot record;
+begin
+  for ring in 0..p_range loop
+    for spot in
+      select p_cx + dx as gx, p_cy + dy as gy
+      from generate_series(-ring, ring) dx, generate_series(-ring, ring) dy
+      where greatest(abs(dx), abs(dy)) = ring
+      order by random()
+    loop
+      if worker_gatherable(p_world, spot.gx, spot.gy, p_kind, c) then
+        x := spot.gx; y := spot.gy;
+        return next;
+        return;
+      end if;
+    end loop;
+  end loop;
+  return;
+end $$;
+
+select private.lock_doors();
+
+/* ------------------------------------------------------------------ *
+ * What a worker learns, and what it brings back.
+ * ------------------------------------------------------------------ */
+
+/** A beast learns on the same curve a player does, at half the pace. */
+create or replace function worker_learn(p_world uuid, p_id int, p_skill text, p_base double precision)
+  returns double precision language plpgsql as $$
+declare was double precision; now_v double precision;
+begin
+  was := coalesce((select (skills->>p_skill)::double precision from creature
+                   where world_id = p_world and id = p_id), 1);
+  now_v := least(100, was + skill_gain_of(was, p_base, 0.6 + 0.8 * random()));
+  update creature set skills = jsonb_set(skills, array[p_skill], to_jsonb(now_v)), xp = xp + (now_v - was)
+    where world_id = p_world and id = p_id;
+  return now_v - was;
+end $$;
+
+/**
+ * Do the job, once, and hand back what it is carrying home — or null, because
+ * a trip out is not always a trip back with something.
+ *
+ * Every rule underneath this is the one a player gets. A worker rolls like a
+ * player of its own skill, wears the same forage cooldown into the ground,
+ * fells the same tree and leaves the rest of it at the stump.
+ */
+create or replace function worker_do(p_world uuid, p_id int) returns jsonb
+  language plpgsql as $$
+declare c creature; d species_def; kind text; skill_id text; skill double precision;
+        wx int; wy int; here int; data int; tree tree_def; rock rock_def; logs int;
+        made_ql double precision; got text; careful double precision; chance double precision;
+        cr crop; yld int[]; depth double precision;
+begin
+  select * into c from creature where world_id = p_world and id = p_id;
+  if not found or c.work_x is null then return null; end if;
+  select * into d from species_def where id = c.species;
+  kind := d.gathers;
+  select g.skill into skill_id from gather_def g where g.id = kind;
+  skill := task_skill(c);
+  wx := c.work_x; wy := c.work_y;
+  here := land_tile(p_world, wx, wy);
+  careful := trait_mul(c.traits, 'yield');
+  perform worker_learn(p_world, p_id, skill_id, 0.225);
+  made_ql := least(100, greatest(1, skill * (0.6 + random() * 0.8) + 1) * careful);
+
+  if kind = 'woodcut' then
+    if here <> tile_id('Tree') then return null; end if;
+    data := land_data(p_world, wx, wy);
+    select * into tree from tree_def where id = tree_species(data);
+    logs := tree.logs + case when tree_age(data) = 2 then 1 else 0 end;
+    perform land_set_tile(p_world, wx, wy, tile_id('Grass'));
+    perform land_set_data(p_world, wx, wy, 0);
+    perform land_announce(p_world, wx, wy);
+    -- It can only carry one at a time; the rest of the tree waits at the stump.
+    if logs > 1 then
+      perform drop_on_ground(p_world, wx, wy, 'log', made_ql, tree.name, logs - 1);
+    end if;
+    return jsonb_build_object('def', 'log', 'count', 1, 'ql', made_ql, 'extra', tree.name);
+
+  elsif kind in ('mine', 'quarry') then
+    rock := bedrock_at(p_world, wx, wy);
+    got := case when kind = 'mine' and rock.ore then rock.yields else 'rock_shards' end;
+    made_ql := least(ore_max_ql((select seed from world where id = p_world), wx, wy), made_ql);
+    return jsonb_build_object('def', got, 'count', 1, 'ql', made_ql);
+
+  elsif kind in ('sand', 'clay') then
+    if land_dirt(p_world, wx, wy) <= 0 then return null; end if;
+    perform land_set_dirt(p_world, wx, wy, land_dirt(p_world, wx, wy) - 1);
+    return jsonb_build_object('def', kind, 'count', 1, 'ql', made_ql);
+
+  elsif kind = 'peat' then
+    perform mark_foraged(p_world, wx, wy, 'dig');
+    return jsonb_build_object('def', case when here = tile_id('Tar') then 'tar' else 'peat' end,
+      'count', 1, 'ql', made_ql);
+
+  elsif kind = 'reed' then
+    perform mark_foraged(p_world, wx, wy, 'reed');
+    return jsonb_build_object('def', 'reed', 'count', 1, 'ql', made_ql);
+
+  elsif kind = 'fish' then
+    depth := water_depth(p_world, wx, wy);
+    got := catch_fish(depth, skill, 0, null);
+    if got is null then return null; end if;
+    return jsonb_build_object('def', got, 'count', 1, 'ql', made_ql);
+
+  elsif kind = 'farm' then
+    perform crop_settle(p_world, wx, wy);
+    select * into cr from crop where world_id = p_world and x = wx and y = wy;
+    if not found then return null; end if;
+    if cr.stage < crop_ripe() then
+      -- Not ripe: weed and water it, which is what makes the harvest worth having.
+      if cr.tended_now then return null; end if;
+      update crop set tended = tended + 1, tended_now = true,
+          ql = least(100, ql + greatest(1, skill * 0.2))
+        where world_id = p_world and x = wx and y = wy;
+      return null;
+    end if;
+    yld := crop_yield(cr.tended);
+    select produce into got from crop_def where id = cr.id;
+    delete from crop where world_id = p_world and x = wx and y = wy;
+    perform land_set_tile(p_world, wx, wy, tile_id('Field'));
+    perform land_announce(p_world, wx, wy);
+    -- The seed goes back in the ground's place; the produce goes home.
+    perform drop_on_ground(p_world, wx, wy, (select seed from crop_def where id = cr.id),
+      cr.ql, null, yld[2]);
+    return jsonb_build_object('def', got, 'count', yld[1], 'ql', cr.ql);
+
+  else
+    -- Foraging and botanizing: the same table a player rolls on, and the same
+    -- bed left picked clean behind it.
+    perform mark_foraged(p_world, wx, wy, kind);
+    chance := least(0.98, greatest(0.3, 0.6 + (skill / 100) * 0.38 - 5 / 150.0) * careful);
+    if random() < 0.2 or random() >= chance then return null; end if;
+    got := roll_table(kind, random());
+    if got is null then return null; end if;
+    return jsonb_build_object('def', got, 'count', 1, 'ql', made_ql);
+  end if;
+end $$;
+
+/**
+ * Walk a worker through as many whole round trips as have come due.
+ *
+ * Four parts, each of which begins and ends at a moment: out to the tile,
+ * work it, home to the crate, put the load down. Thirty round trips — a
+ * hundred and twenty of those parts — is as far back as anybody walks; past
+ * that the clock catches up, exactly as it does for a wild one's legs, because
+ * an island left alone for a week should not cost a week of arithmetic the
+ * first time somebody looks at it.
+ */
+create or replace function worker_settle(p_world uuid, p_id int) returns int
+  language plpgsql as $$
+declare c creature; d species_def; dd deed; cr crate; kind text; guard int := 0; done int := 0;
+        spot record; stand record; pace double precision; dist double precision; secs double precision;
+        load jsonb; cx double precision; cy double precision; ax double precision; ay double precision;
+begin
+  select * into c from creature where world_id = p_world and id = p_id for update;
+  if not found or c.mode <> 'deed' then return 0; end if;
+  select * into dd from deed where world_id = p_world;
+  if not found then
+    -- No settlement to work for any more.
+    update creature set mode = 'wild', phase = 'idle', job = null where world_id = p_world and id = p_id;
+    return 0;
+  end if;
+  select * into d from species_def where id = c.species;
+  kind := d.gathers;
+  cr := deed_crate(p_world);
+  pace := d.speed * (age_row(c.born)).speed * trait_mul(c.traits, 'speed')
+          * (1 + greatest(1, task_skill(c)) / 500);
+
+  while c.until <= now() and guard < 120 loop
+    guard := guard + 1;
+    cx := c.to_x; cy := c.to_y;
+
+    if c.phase = 'out' then
+      -- Arrived at the tile. Now the work, which takes as long as it takes.
+      c.phase := 'work';
+      c.leg_at := c.until; c.leg_ends := c.until;
+      c.until := c.until + make_interval(secs => work_duration(task_skill(c)) / trait_mul(c.traits, 'work'));
+
+    elsif c.phase = 'work' then
+      -- Write back where it stands before the job reads the row.
+      update creature set from_x = cx, from_y = cy, to_x = cx, to_y = cy,
+          leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, phase = c.phase,
+          work_x = c.work_x, work_y = c.work_y, settled_at = now()
+        where world_id = p_world and id = p_id;
+      load := worker_do(p_world, p_id);
+      select * into c from creature where world_id = p_world and id = p_id;
+      done := done + 1;
+      c.carrying := load;
+      c.work_x := null; c.work_y := null;
+      if load is null or cr.id is null then
+        -- Nothing to carry, or nowhere to carry it: back to pottering.
+        c.phase := 'idle';
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + interval '1 second';
+      else
+        ax := crate_centre_x(cr); ay := crate_centre_y(cr);
+        dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+        secs := greatest(0.2, dist / greatest(0.1, pace));
+        c.from_x := cx; c.from_y := cy; c.to_x := ax; c.to_y := ay;
+        c.leg_at := c.until; c.leg_ends := c.leg_at + make_interval(secs => secs);
+        c.until := c.leg_ends;
+        c.phase := 'home';
+      end if;
+
+    elsif c.phase = 'home' then
+      -- At the crate. In it goes, if it will go in.
+      if c.carrying is not null and crate_add(p_world, cr.id, c.carrying->>'def',
+          (c.carrying->>'count')::int, (c.carrying->>'ql')::double precision, c.carrying->>'extra') then
+        c.carrying := null;
+      end if;
+      c.phase := 'idle';
+      c.leg_at := c.until; c.leg_ends := c.until;
+      c.until := c.until + interval '1 second';
+
+    else
+      -- Idle: look for something to do, and potter if there is nothing.
+      select * into spot from find_work_tile(p_world, dd.x, dd.y, work_range(c), kind, c);
+      if spot.x is null then
+        /*
+         * Nothing to do. Replaying half an hour of finding nothing costs a
+         * search every four seconds and produces exactly nothing, so the
+         * catch-up stops here: it has been pottering, and it is pottering now.
+         */
+        c.from_x := cx; c.from_y := cy;
+        c.to_x := dd.x + 0.5 + (hash_tile(p_id, guard, 601) * 2 - 1) * 3;
+        c.to_y := dd.y + 0.5 + (hash_tile(p_id, guard, 701) * 2 - 1) * 3;
+        if not creature_tile_ok(p_world, floor(c.to_x)::int, floor(c.to_y)::int) then
+          c.to_x := cx; c.to_y := cy;
+        end if;
+        dist := sqrt((c.to_x - cx) ^ 2 + (c.to_y - cy) ^ 2);
+        c.leg_at := now();
+        c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+        c.until := c.leg_ends + interval '4 seconds';
+        exit;
+      else
+        -- A tree cannot be stood on and neither can the water: both are
+        -- worked from beside.
+        if kind in ('woodcut', 'fish') then
+          select * into stand from beside_tile(p_world, spot.x, spot.y);
+          if stand.x is null then
+            c.until := c.until + interval '4 seconds';
+            continue;
+          end if;
+          ax := stand.x + 0.5; ay := stand.y + 0.5;
+        else
+          ax := spot.x + 0.5; ay := spot.y + 0.5;
+        end if;
+        c.work_x := spot.x; c.work_y := spot.y;
+        dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+        c.from_x := cx; c.from_y := cy; c.to_x := ax; c.to_y := ay;
+        c.leg_at := c.until;
+        c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+        c.until := c.leg_ends;
+        c.phase := 'out';
+      end if;
+    end if;
+  end loop;
+
+  -- Thirty round trips is as far back as anybody walks.
+  if c.until <= now() then
+    c.from_x := c.to_x; c.from_y := c.to_y;
+    c.leg_at := now(); c.leg_ends := now(); c.until := now() + interval '1 second';
+  end if;
+
+  update creature set from_x = c.from_x, from_y = c.from_y, to_x = c.to_x, to_y = c.to_y,
+      leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, phase = c.phase,
+      work_x = c.work_x, work_y = c.work_y, carrying = c.carrying, settled_at = now()
+    where world_id = p_world and id = p_id;
+  return done;
+end $$;
+
+select private.lock_doors();
+
+-- ======================================================================
+-- 20260914212100_worker_acts.sql
+-- ======================================================================
+
+-- Setting one to work, and the settle that does the work.
+
+/** The trades this island knows how to have done for it. */
+create or replace function worker_job_ported(p_kind text) returns boolean
+  language sql immutable as $$
+  select p_kind in ('forage', 'botanize', 'woodcut', 'mine', 'quarry',
+                    'sand', 'clay', 'peat', 'reed', 'fish', 'farm')
+$$;
+
+create or replace function creature_action(p_action text) returns boolean language sql immutable as $$
+  select p_action in ('examine_creature', 'tame', 'feed', 'groom', 'shear', 'milk_creature',
+                      'set_stance', 'rename_creature', 'take_creature', 'store_creature',
+                      'release_creature', 'assign_deed')
+$$;
+
+/**
+ * Settling a creature now settles a worker's day as well.
+ *
+ * The body first — hunger, wounds closing, fleece — and written down, because
+ * the work reads the row back. Then the trips, for whichever of them is on the
+ * deed rather than out in the country.
+ */
+create or replace function creature_settle(p_world uuid, p_id int) returns boolean
+  language plpgsql as $$
+declare c creature; d species_def; a age_def; elapsed double precision; top double precision;
+        guard int := 0; n int; i int; nx double precision; ny double precision;
+        dist double precision; secs double precision; pace double precision; ok boolean;
+        home record;
+begin
+  select * into c from creature where world_id = p_world and id = p_id for update;
+  if not found then return false; end if;
+  select * into d from species_def where id = c.species;
+  a := age_row(c.born);
+  elapsed := extract(epoch from (now() - c.settled_at));
+  if elapsed <= 0 then
+    if c.mode = 'deed' then perform worker_settle(p_world, p_id); end if;
+    return false;
+  end if;
+
+  top := max_health(c);
+  c.hunger := greatest(0, c.hunger - elapsed * hunger_rate(c.mode) * trait_mul(c.traits, 'appetite'));
+  if c.health > top then
+    c.health := top;
+  elsif c.health < top and (c.hurt_at is null or now() - c.hurt_at > interval '6 seconds') then
+    c.health := least(top, c.health + elapsed * case when c.mode = 'wild' then 0.25 else 0.6 end);
+  end if;
+  if d.fleece is not null and a.growth > 0 and c.fleece < 1 then
+    c.fleece := least(1, c.fleece + elapsed * d.fleece * a.growth * trait_mul(c.traits, 'grow'));
+  end if;
+  c.care := greatest(0, c.care - elapsed / (3 * 3600));
+
+  if c.mode = 'wild' then
+    pace := d.speed * a.speed * trait_mul(c.traits, 'speed') * 0.7;
+    while c.until <= now() and guard < 40 loop
+      guard := guard + 1;
+      n := c.leg + 1;
+      ok := false;
+      for i in 0..7 loop
+        nx := c.to_x + (hash_tile(p_id, n, 7001 + i) * 2 - 1) * 4;
+        ny := c.to_y + (hash_tile(p_id, n, 9001 + i) * 2 - 1) * 4;
+        if creature_tile_ok(p_world, floor(nx)::int, floor(ny)::int)
+           and line_clear(p_world, c.to_x, c.to_y, nx, ny) then ok := true; exit; end if;
+      end loop;
+      c.leg := n;
+      if not ok then
+        c.from_x := c.to_x; c.from_y := c.to_y;
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + interval '2 seconds';
+        continue;
+      end if;
+      if c.hunger < 0.5 and coalesce((select forage from tile_def
+            where id = land_tile(p_world, floor(nx)::int, floor(ny)::int)), false) then
+        c.hunger := least(1, c.hunger + 0.5);
+      end if;
+      dist := sqrt((nx - c.to_x) ^ 2 + (ny - c.to_y) ^ 2);
+      secs := greatest(0.2, dist / greatest(0.1, pace));
+      c.from_x := c.to_x; c.from_y := c.to_y;
+      c.to_x := nx; c.to_y := ny;
+      c.leg_at := c.until;
+      c.leg_ends := c.leg_at + make_interval(secs => secs);
+      c.until := c.leg_ends + make_interval(secs => 1 + hash_tile(p_id, n, 11001) * 5);
+    end loop;
+    if c.until <= now() then
+      c.from_x := c.to_x; c.from_y := c.to_y;
+      c.leg_at := now(); c.leg_ends := now();
+      c.until := now() + make_interval(secs => 1 + hash_tile(p_id, c.leg, 11001) * 5);
+    end if;
+  elsif c.mode = 'active' and c.keeper is not null then
+    select p.x, p.y into home from player p where p.world_id = p_world and p.uid = c.keeper;
+    if found then
+      c.from_x := home.x; c.from_y := home.y; c.to_x := home.x; c.to_y := home.y;
+      c.leg_at := now(); c.leg_ends := now(); c.until := now();
+    end if;
+  elsif c.mode = 'stored' then
+    select dd.x + 0.5 as x, dd.y + 1.5 as y into home from deed dd where dd.world_id = p_world;
+    if found then
+      c.from_x := home.x; c.from_y := home.y; c.to_x := home.x; c.to_y := home.y;
+      c.leg_at := now(); c.leg_ends := now(); c.until := now();
+    end if;
+  end if;
+
+  update creature set
+      from_x = c.from_x, from_y = c.from_y, to_x = c.to_x, to_y = c.to_y,
+      leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, leg = c.leg,
+      health = c.health, hunger = c.hunger, fleece = c.fleece, care = c.care,
+      settled_at = now()
+    where world_id = p_world and id = p_id;
+  if c.mode = 'deed' then perform worker_settle(p_world, p_id); end if;
+  return true;
+end $$;
+
+/**
+ * Founding a settlement stands its crate up again.
+ *
+ * It was left out when the deed was first ported because nothing needed it.
+ * A worker needs it: a beast that has walked out for a log and has nowhere to
+ * put it is a beast doing nothing at all.
+ */
+create or replace function perform_deed(p_world uuid, p_uid uuid, p_action text, p_target jsonb)
+  returns void language plpgsql as $$
+declare p player; tx int; ty int; nm text; made int;
+begin
+  select * into p from player where world_id = p_world and uid = p_uid;
+  tx := floor(p.x)::int; ty := floor(p.y)::int;
+  nm := nullif(btrim(coalesce(p_target->>'name', '')), '');
+  if nm is null then nm := 'Homestead'; end if;
+  if not consume(p_world, p_uid, 'deed_stake', 1) then return; end if;
+  insert into deed (world_id, name, x, y, radius, level, founded_by)
+  values (p_world, left(nm, 32), tx, ty, deed_radius(1), 1, p_uid)
+  on conflict do nothing;
+  made := place_deed_crate(p_world);
+  perform tell(p_world, p_uid, 'You found the settlement of ' || left(nm, 32)
+    || '. The land ' || (deed_radius(1) * 2 + 1) || ' tiles across around the token is yours to build on.'
+    || case when made is null then '' else ' A deed crate stands beside the token.' end, 'system');
+end $$;
+
+/**
+ * A settlement's crate is the settlement's to read.
+ *
+ * The item policy let you see what you were carrying and what lay on the
+ * ground, which was every place an item could be until today. A crate nobody
+ * can read is a crate nobody can use, so anybody standing on the island can
+ * see what is in its stores — and still not touch them except through a rule.
+ */
+drop policy if exists item_read on item;
+create policy item_read on item for select to authenticated using (
+  (holder = 'player' and holder_uid = (select auth.uid()))
+  or holder = 'ground'
+  or (holder = 'crate' and private.on_island(world_id))
+);
+
+select private.lock_doors();
+
+-- ======================================================================
+-- 20260914212200_assign.sql
+-- ======================================================================
+
+-- Assigning one to the deed.
+
+create or replace function act_ported(p_action text) returns boolean language sql stable as $$
+  select p_action in (
+      'dig', 'mine', 'chip_corner', 'pack', 'cultivate',
+      'pave_gravel', 'pave_cobble', 'drop_dirt_here',
+      'cut_down', 'forage', 'botanize', 'collect',
+      'till', 'plant_seed', 'tend_crop', 'harvest_crop', 'clear_field',
+      'fish', 'drag_net',
+      'found_settlement',
+      'plan_building', 'add_to_building', 'remove_from_plan', 'rename_building',
+      'plan_wall', 'plan_fence', 'build_wall', 'remove_wall',
+      'add_floor', 'plan_floor', 'build_floor', 'remove_floor', 'remove_storey',
+      'examine_creature', 'tame', 'feed', 'groom', 'shear', 'milk_creature',
+      'set_stance', 'rename_creature', 'take_creature', 'store_creature', 'release_creature',
+      'assign_deed',
+      'equip', 'unequip', 'attack_creature', 'shoot_creature', 'butcher',
+      'bind_wound', 'clean_wound', 'treat_creature',
+      'build_campfire', 'light_campfire', 'put_out_campfire', 'fuel_campfire',
+      'take_ashes_fire', 'take_apart_campfire',
+      'place_smelter', 'pick_up_smelter', 'light_smelter', 'fuel_smelter',
+      'damp_smelter', 'take_ashes_smelter',
+      'place_furniture', 'pick_up_furniture')
+      or exists (select 1 from recipe where id = p_action)
+$$;
+
+create or replace function creature_refusal(p_world uuid, p_uid uuid, p_action text, p_target jsonb)
+  returns text language plpgsql as $$
+declare c creature; d species_def; food text; held int; working int; cap int;
+begin
+  -- Walked forward before it is looked at: where it was is not where it is.
+  perform creature_settle(p_world, (p_target->>'id')::int);
+  c := target_creature(p_world, p_target);
+  if c.world_id is null then return 'It is gone.'; end if;
+  select * into d from species_def where id = c.species;
+
+  if p_action not in ('examine_creature', 'assign_deed')
+     and not creature_in_reach(p_world, p_uid, c) then
+    return case when c.mode = 'wild' then 'The ' || lower(d.name) || ' is not close enough.'
+                else 'Stand next to ' || c.name || '.' end;
+  end if;
+
+  if p_action = 'tame' then
+    if d.monster then
+      return 'A ' || lower(d.name) || ' is not a wildermon. There is nothing to be done with it but kill it.';
+    end if;
+    if c.mode <> 'wild' then return c.name || ' is already yours.'; end if;
+    if skill_of(p_world, p_uid, 'taming') < d.tame_level then
+      return 'You need taming ' || to_char(d.tame_level, 'FM990.#') || ' to try.';
+    end if;
+    if bait_in_pack(p_world, p_uid, c.species) is null then
+      return d.name || 's take ' || diet_text(c.species) || '. Bring some.';
+    end if;
+    if companion_of(p_world, p_uid) is not null and not exists (select 1 from deed where world_id = p_world) then
+      return 'You already have a companion and no settlement to keep another.';
+    end if;
+    return null;
+
+  elsif p_action = 'assign_deed' then
+    if c.mode = 'wild' then return 'It is not yours to set to work.'; end if;
+    if not exists (select 1 from deed where world_id = p_world) then
+      return 'You have no settlement to assign it to.';
+    end if;
+    if d.gathers is null then return 'A ' || lower(d.name) || ' has no trade to be set to.'; end if;
+    if not worker_job_ported(d.gathers) then
+      return 'Nobody has taught this island what ' || (select plain from gather_def where id = d.gathers)
+        || ' looks like yet.';
+    end if;
+    if c.mode <> 'deed' then
+      working := workers_on_deed(p_world);
+      cap := worker_cap(p_world);
+      if working >= cap then
+        return (select name from deed where world_id = p_world) || ' has work for ' || cap
+          || ' wildermon at level ' || cap || '. Upgrade the settlement to take on more.';
+      end if;
+    end if;
+    return null;
+
+  elsif p_action = 'feed' then
+    if c.mode not in ('active', 'deed') then return 'It is not yours to feed.'; end if;
+    if bait_in_pack(p_world, p_uid, c.species) is null then
+      return 'It eats ' || diet_text(c.species) || '.';
+    end if;
+    return null;
+
+  elsif p_action = 'groom' then
+    if d.monster then return 'Not that. Not ever.'; end if;
+    if c.mode = 'wild' then return 'It is not yours to brush.'; end if;
+    if pack_count(p_world, p_uid, 'brush') <= 0 then return 'You need a brush.'; end if;
+    if c.care >= 0.995 then return c.name || ' has been brushed to a shine already.'; end if;
+    return null;
+
+  elsif p_action = 'shear' then
+    if d.fleece is null then return 'There is nothing on it worth shearing.'; end if;
+    if c.mode = 'wild' then return 'Tame it first; it will not stand still for you otherwise.'; end if;
+    if pack_count(p_world, p_uid, 'carving_knife') <= 0 then return 'You need a knife to shear with.'; end if;
+    if c.fleece < 0.35 then
+      return c.name || ' has hardly any '
+        || case when d.shear_yield = 'feather' then 'feathers' else 'fleece' end || ' back yet.';
+    end if;
+    return null;
+
+  elsif p_action = 'milk_creature' then
+    if not d.milk then return 'That is not something you milk.'; end if;
+    if c.mode in ('wild', 'stored') then return 'It is not yours to milk.'; end if;
+    if pack_count(p_world, p_uid, 'bucket') <= 0 then return 'You need an empty bucket.'; end if;
+    if c.sex <> 'female' then return c.name || ' is male. Nothing is coming out of him.'; end if;
+    if c.fleece < 0.4 then return c.name || ' has nothing to give yet.'; end if;
+    return null;
+
+  elsif p_action = 'set_stance' then
+    if c.mode <> 'active' then return 'Only a companion takes orders like that.'; end if;
+    if coalesce(p_target->>'stance', '') not in ('passive', 'defensive', 'aggressive') then
+      return 'Passive, defensive or aggressive.';
+    end if;
+    return null;
+
+  elsif p_action = 'rename_creature' then
+    if c.mode = 'wild' then return 'It is not yours to name.'; end if;
+    if nullif(btrim(coalesce(p_target->>'name', '')), '') is null then return 'Choose a name.'; end if;
+    return null;
+
+  elsif p_action = 'take_creature' then
+    if c.mode not in ('deed', 'stored') then return 'It is already with you.'; end if;
+    held := companion_of(p_world, p_uid);
+    if held is not null and not exists (select 1 from deed where world_id = p_world) then
+      return 'Nowhere to keep your current companion.';
+    end if;
+    return null;
+
+  elsif p_action = 'store_creature' then
+    if c.mode not in ('active', 'deed') then return 'It is already at the token.'; end if;
+    if not exists (select 1 from deed where world_id = p_world) then
+      return 'You have no settlement token to keep it at.';
+    end if;
+    return null;
+
+  elsif p_action = 'release_creature' then
+    if c.mode = 'wild' then return 'It is already wild.'; end if;
+    return null;
+  end if;
+  return null;
+end $$;
+
+/**
+ * The doing of the creature actions, with one more on the end: a beast set to
+ * work walks out on its own from the moment it is told to.
+ */
+create or replace function perform_creature(p_world uuid, p_uid uuid, p_action text, p_target jsonb)
+  returns void language plpgsql as $$
+declare c creature; d species_def; a age_def; food text; n int; made_ql double precision;
+        gained double precision; chance double precision; warm double precision; nm text;
+        held int; brush_id bigint; top double precision; before double precision; skill double precision;
+        dd deed;
+begin
+  c := target_creature(p_world, p_target);
+  if c.world_id is null then return; end if;
+  select * into d from species_def where id = c.species;
+  a := age_row(c.born);
+
+  if p_action = 'examine_creature' then
+    if c.mode = 'wild' and d.monster then
+      perform tell(p_world, p_uid, 'A ' || lower(d.name) || ': ' || d.description
+        || ' It has ' || ceil(c.health) || ' of ' || max_health(c) || ' in it and hits for '
+        || to_char(attack_of(c), 'FM990') || '. It cannot be tamed. Kill it and butcher it, or keep well clear.', 'error');
+    elsif c.mode = 'wild' then
+      warm := coax_bonus(c);
+      perform tell(p_world, p_uid, 'A wild ' || lower(d.name) || ': ' || d.description
+        || ' It eats ' || diet_text(c.species) || '.'
+        || case when warm > 0 then ' It has taken ' ||
+             case when c.coaxed = 1 then 'an offering' else c.coaxed || ' offerings' end
+             || ' from your hand and is ' || to_char(warm * 100, 'FM990') || '% readier for the next.'
+           else '' end
+        || ' You would have to tame it to learn more.', 'event');
+    else
+      perform tell(p_world, p_uid, c.name || ' (' || c.sex || ' ' || lower(d.name) || ', ' || a.name
+        || '): ' || d.description || ' Level ' || creature_level(c.skills)
+        || '. Health ' || ceil(c.health) || '/' || max_health(c) || '. It is ' || care_word(c.care)
+        || ' and carries ' || trait_names(c.traits) || '. '
+        || case when c.hunger < 0.3 then 'It looks hungry.' when c.hunger < 0.6 then 'It could eat.'
+                else 'It looks well fed.' end
+        || ' It eats ' || diet_text(c.species) || '.', 'event');
+    end if;
+
+  elsif p_action = 'tame' then
+    food := bait_in_pack(p_world, p_uid, c.species);
+    if food is null or not consume(p_world, p_uid, food, 1) then return; end if;
+    chance := tame_chance(p_world, p_uid, c);
+    update creature set hunger = least(1, hunger + 0.25) where world_id = p_world and id = c.id;
+    if random() < chance then
+      held := companion_of(p_world, p_uid);
+      update creature set
+          mode = case when held is null then 'active' else 'stored' end,
+          stance = 'defensive', keeper = p_uid, coaxed = 0, coaxed_at = null
+        where world_id = p_world and id = c.id;
+      perform tell(p_world, p_uid, 'The ' || lower(d.name) || ' takes the '
+        || material_name(food, 1) || ' from your hand and trusts you. '
+        || case when held is null then c.name || ' now follows you.'
+             else 'As you already travel with a companion, it is kept at the token of '
+                  || coalesce((select name from deed where world_id = p_world), 'your settlement') || '.' end, 'system');
+      perform skill_raise(p_world, p_uid, 'taming', 0.7);
+      perform skill_raise(p_world, p_uid, 'soul_strength', 0.4);
+    else
+      -- It refused, but it stayed for the offering, and that is worth
+      -- something to the next one.
+      update creature set coaxed = coaxed + 1, coaxed_at = now()
+        where world_id = p_world and id = c.id returning * into c;
+      warm := coax_bonus(c);
+      perform tell(p_world, p_uid, 'The ' || lower(d.name) || ' '
+        || replace(d.tame_fail, '{food}', material_name(food, 1)) || '.'
+        || case when warm > 0 then ' It is ' ||
+             case when warm >= 0.12 then 'as used to you as it will get' else 'growing used to you' end
+             || ': ' || to_char(warm * 100, 'FM990') || '% readier than the first time.'
+           else '' end, 'event');
+      perform skill_raise(p_world, p_uid, 'taming', 0.35);
+      perform skill_raise(p_world, p_uid, 'soul_strength', 0.2);
+    end if;
+
+  elsif p_action = 'feed' then
+    food := bait_in_pack(p_world, p_uid, c.species);
+    if food is null or not consume(p_world, p_uid, food, 1) then return; end if;
+    update creature set hunger = least(1, hunger + 0.5) where world_id = p_world and id = c.id;
+    perform tell(p_world, p_uid, c.name || ' gobbles up the ' || material_name(food, 1) || '.', 'event');
+
+  elsif p_action = 'groom' then
+    select i.id into brush_id from item i
+      where i.world_id = p_world and i.holder = 'player' and i.holder_uid = p_uid and i.def = 'brush'
+      order by tool_worth(i.ql, i.dmg, i.extra, i.rare, i.bless) desc limit 1;
+    skill := skill_of(p_world, p_uid, 'animal_husbandry');
+    before := c.care;
+    top := max_health(c);
+    update creature set
+        care = least(1, care + 0.18 + (skill / 100) * 0.34
+                          + (least(100, tool_ql(p_world, p_uid, 'brush')) / 100) * 0.22),
+        -- A brushing is also a looking-over: it finds the small hurts.
+        health = least(top, health + top * 0.06)
+      where world_id = p_world and id = c.id returning * into c;
+    if brush_id is not null then perform wear_tool(brush_id, 3); end if;
+    gained := skill_raise(p_world, p_uid, 'animal_husbandry', 0.4);
+    perform tell(p_world, p_uid, case when before < 0.12 and c.care >= 0.12
+        then 'You work the dust out of ' || c.name || '''s coat. It leans into the brush. ('
+        else 'You brush ' || c.name || ' down. (' end || care_word(c.care) || ')', 'event');
+
+  elsif p_action = 'shear' then
+    -- A full fleece is three, a half-grown one is one, and quality follows the fleece.
+    n := greatest(1, round(c.fleece * case when coalesce(d.shear_yield, 'wool') = 'wool' then 3 else 6 end)::int);
+    made_ql := greatest(1, least(100, 15 + c.fleece * 45 + skill_of(p_world, p_uid, 'tailoring') * 0.4));
+    perform give(p_world, p_uid, coalesce(d.shear_yield, 'wool'), n, made_ql);
+    update creature set fleece = 0 where world_id = p_world and id = c.id;
+    perform skill_raise(p_world, p_uid, 'tailoring', 0.4);
+    perform skill_raise(p_world, p_uid, 'taming', 0.1);
+    perform tell(p_world, p_uid, 'You '
+      || case when coalesce(d.shear_yield, 'wool') = 'wool' then 'shear' else 'pluck' end
+      || ' ' || c.name || ' and come away with ' || n || ' '
+      || lower((select coalesce(name, 'wool') from item_def where id = coalesce(d.shear_yield, 'wool')))
+      || '. (QL ' || to_char(made_ql, 'FM990.0') || ') It will grow back.', 'event');
+
+  elsif p_action = 'milk_creature' then
+    if not consume(p_world, p_uid, 'bucket', 1) then return; end if;
+    -- What it has been fed on is what comes out of it.
+    made_ql := greatest(1, least(100, 20 + c.fleece * 40 + c.hunger * 30));
+    perform give(p_world, p_uid, 'milk_bucket', 1, made_ql);
+    update creature set fleece = 0 where world_id = p_world and id = c.id;
+    perform skill_raise(p_world, p_uid, 'farming', 0.3);
+    perform tell(p_world, p_uid, 'You milk ' || c.name || ' into the bucket. (QL '
+      || to_char(made_ql, 'FM990.0') || ')', 'event');
+
+  elsif p_action = 'set_stance' then
+    update creature set stance = p_target->>'stance' where world_id = p_world and id = c.id;
+    perform tell(p_world, p_uid, c.name || ' will be ' || (p_target->>'stance') || '.', 'info');
+
+  elsif p_action = 'rename_creature' then
+    nm := left(btrim(p_target->>'name'), 24);
+    update creature set name = nm where world_id = p_world and id = c.id;
+    perform tell(p_world, p_uid, 'It answers to ' || nm || ' now.', 'info');
+
+  elsif p_action = 'take_creature' then
+    held := companion_of(p_world, p_uid);
+    if held is not null then
+      update creature set mode = 'stored' where world_id = p_world and id = held;
+      perform tell(p_world, p_uid,
+        (select name from creature where world_id = p_world and id = held)
+        || ' stays at the token for now.', 'info');
+    end if;
+    update creature set mode = 'active', keeper = p_uid, settled_at = now()
+      where world_id = p_world and id = c.id;
+    perform creature_settle(p_world, c.id);
+    perform tell(p_world, p_uid, c.name || ' now follows you.', 'system');
+
+  elsif p_action = 'store_creature' then
+    update creature set mode = 'stored', settled_at = now() where world_id = p_world and id = c.id;
+    perform creature_settle(p_world, c.id);
+    perform tell(p_world, p_uid, c.name || ' is kept at the token of '
+      || (select name from deed where world_id = p_world) || '.', 'system');
+
+  elsif p_action = 'assign_deed' then
+    select * into dd from deed where world_id = p_world;
+    update creature set mode = 'deed', keeper = p_uid, phase = 'idle', job = d.gathers,
+        work_x = null, work_y = null, carrying = null,
+        from_x = case when c.mode = 'stored' then dd.x + 0.5 else creature_x(c) end,
+        from_y = case when c.mode = 'stored' then dd.y + 1.5 else creature_y(c) end,
+        to_x = case when c.mode = 'stored' then dd.x + 0.5 else creature_x(c) end,
+        to_y = case when c.mode = 'stored' then dd.y + 1.5 else creature_y(c) end,
+        leg_at = now(), leg_ends = now(), until = now(), settled_at = now()
+      where world_id = p_world and id = c.id;
+    perform tell(p_world, p_uid, c.name || ' will '
+      || coalesce((select plain from gather_def where id = d.gathers), 'stay around the settlement')
+      || ' within ' || work_range(c) || ' tiles of the token and bring what it finds to the crate.', 'system');
+
+  elsif p_action = 'release_creature' then
+    -- Blood takes generations to build and a moment to walk away.
+    update creature set mode = 'wild', stance = 'passive', keeper = null,
+        name = d.name, coaxed = 0, coaxed_at = null, until = now()
+      where world_id = p_world and id = c.id;
+    perform tell(p_world, p_uid, 'The ' || lower(d.name) || ' ' || d.leaves || '.', 'system');
+  end if;
+end $$;
+
+select private.lock_doors();
+select private.lock_doors();

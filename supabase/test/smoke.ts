@@ -142,6 +142,20 @@ async function main(): Promise<void> {
     }
 
     /*
+     * The settlement's crate, which the token now comes with again. Founding
+     * one needs a stake we have not got, so what can be checked from out here
+     * is the refusal and the shape of the table behind it.
+     */
+    const { error: crateErr } = await supabase().from('crate').select('id,kind,deed').eq('world_id', id);
+    check('the crates table answers a client', !crateErr, crateErr?.message ?? 'readable, and empty until a stake goes in');
+    if (mob.length) {
+      const wild = mob[0];
+      const notMine = await island.act('assign_deed', { kind: 'creature', id: wild.id }, 1);
+      check('setting something wild to work is refused in its own words',
+        !notMine.started && /yours|settlement/i.test(notMine.why ?? ''), notMine.why ?? 'IT STARTED');
+    }
+
+    /*
      * Material, which for the whole of this port has quietly been nothing.
      *
      * `material_def` was keyed by the index of a list rather than by the name

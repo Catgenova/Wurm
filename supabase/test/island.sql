@@ -1045,3 +1045,103 @@ insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2
 select act_perform(:'world2', :'ivar', 'treat_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb) \g /dev/null
 select '192. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
 \echo ''
+\echo '--- put to work'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set x = 5.5, y = 7.5 where uid = :'ivar';
+select '193. the crate the token came with: '
+     || coalesce((select 'a ' || kind || ' crate at ' || x || ',' || y || ', holding ' || crate_units(:'world2', id)
+                  || ' of ' || crate_capacity(c) from crate c where world_id = :'world2' and deed), 'none');
+select creature_spawn(:'world2', 'rabba', 5.5, 8.5, 'stored', now() - interval '3 hours', :'ivar') as forager \gset
+select creature_spawn(:'world2', 'ulva', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar') as guard \gset
+select creature_spawn(:'world2', 'bevere', 4.5, 8.5, 'stored', now() - interval '3 hours', :'ivar') as feller \gset
+select '194. a rabba forages, an ulva keeps watch, a bevere fells trees — and of the three this island knows '
+     || (select count(*) from (values ('forage'), ('guard'), ('woodcut')) v(k) where worker_job_ported(v.k)) || ' trades';
+select '195. setting the ulva to watch: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'guard' || '}')::jsonb), 'allowed');
+select '196. something wild: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || (select id from creature where world_id = :'world2' and mode = 'wild' order by id limit 1) || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'forager' || '}')::jsonb) \g /dev/null
+select '197. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '198. on the books now: ' || workers_on_deed(:'world2') || ' of ' || worker_cap(:'world2')
+     || ' at deed level ' || (select level from deed where world_id = :'world2')
+     || ' — so a second: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'feller' || '}')::jsonb), 'allowed');
+update deed set level = 3, radius = deed_radius(3) where world_id = :'world2';
+select '199. and at level three: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'feller' || '}')::jsonb), 'allowed');
+
+-- Half an hour of it, with nobody watching at all.
+update creature set until = until - interval '1800 seconds', leg_at = leg_at - interval '1800 seconds',
+    leg_ends = leg_ends - interval '1800 seconds', settled_at = settled_at - interval '1800 seconds'
+  where id = :'forager';
+select worker_settle(:'world2', :'forager') as trips \gset
+select '200. half an hour nobody watched: ' || :'trips' || ' rounds of it, and its foraging went from 1 to '
+     || (select round(((skills->>'foraging')::numeric), 2) from creature where id = :'forager');
+select '201. in the crate: ' || coalesce((select string_agg(def || ' ×' || count, ', ' order by def)
+       from item where world_id = :'world2' and holder = 'crate'), 'nothing')
+     || ' — and it is ' || (select phase from creature where id = :'forager')
+     || ', carrying ' || coalesce((select carrying->>'def' from creature where id = :'forager'), 'nothing');
+select '202. the beds it went over are picked clean for now: '
+     || (select count(*) from foraged where world_id = :'world2' and kind = 'forage') || ' of them';
+
+\echo ''
+\echo '--- a woodcutter, and one tile to one worker'
+-- A stand of oaks inside the deed for it to work.
+do $$
+declare w uuid := (select id from world limit 1); i int; j int;
+begin
+  for j in 9..11 loop
+    for i in 2..5 loop
+      perform land_set_tile(w, i, j, tile_id('Tree'));
+      -- Species 1, old: its own logs and one more for its age.
+      perform land_set_data(w, i, j, 1 + (2 << 4));
+    end loop;
+  end loop;
+end $$;
+select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'feller' || '}')::jsonb) \g /dev/null
+select '203. trees standing inside the deed: ' || (select count(*) from generate_series(0,15) gx, generate_series(0,15) gy where land_tile(:'world2', gx, gy) = tile_id('Tree'));
+update creature set until = until - interval '1200 seconds', leg_at = leg_at - interval '1200 seconds',
+    leg_ends = leg_ends - interval '1200 seconds', settled_at = settled_at - interval '1200 seconds'
+  where id = :'feller';
+select worker_settle(:'world2', :'feller') as fells \gset
+select '204. twenty minutes of felling: ' || :'fells' || ' rounds, and ' || (select count(*) from generate_series(0,15) gx, generate_series(0,15) gy where land_tile(:'world2', gx, gy) = tile_id('Tree')) || ' trees left standing';
+select '205. logs in the crate: ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'log'), '0')
+     || ', and the rest of each tree waiting at its stump: '
+     || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'ground' and def = 'log'), '0')
+     || ' — it can only carry one at a time';
+-- Two workers never walk to the same tile.
+update creature set phase = 'out', work_x = 3, work_y = 10 where id = :'feller';
+select '206. a tile another worker is walking to: ' || claimed(:'world2', 3, 10, :'forager')
+     || ', and the same tile to the worker walking to it: ' || claimed(:'world2', 3, 10, :'feller');
+update creature set phase = 'idle', work_x = null, work_y = null where id = :'feller';
+-- A full crate is a reason to hold on to a load, not to tip it out.
+insert into item (world_id, holder, crate, gx, gy, def, ql, count)
+select :'world2', 'crate', c.id, c.x, c.y, 'rock_shards', 20, crate_capacity(c) - crate_units(:'world2', c.id)
+from crate c where c.world_id = :'world2' and c.deed;
+select '207. the crate is ' || (select crate_units(:'world2', id) || ' of ' || crate_capacity(c) from crate c where world_id = :'world2' and deed) || ' now';
+update creature set until = until - interval '300 seconds', leg_at = leg_at - interval '300 seconds',
+    leg_ends = leg_ends - interval '300 seconds', settled_at = settled_at - interval '300 seconds'
+  where id = :'forager';
+select worker_settle(:'world2', :'forager') \g /dev/null
+select '208. five more minutes against a full crate: it is holding '
+     || coalesce((select carrying->>'def' from creature where id = :'forager'), 'nothing')
+     || ', and the crate is still ' || (select crate_units(:'world2', id) from crate c where world_id = :'world2' and deed)
+     || ' — a worker will not tip a load out on the ground';
+delete from item where world_id = :'world2' and holder = 'crate' and def = 'rock_shards';
+
+\echo ''
+\echo '--- and what a client may do to the stores'
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '209. Hild can see what is in the crate: ' || (select count(*) from item where holder = 'crate');
+do $$ begin
+  begin update item set holder = 'player', holder_uid = auth.uid() where holder = 'crate';
+        raise notice '210. and help herself to it:        ALLOWED';
+  exception when others then raise notice '210. and help herself to it:        refused — %', sqlerrm; end;
+  begin insert into crate (world_id, id, kind, x, y) values ((select id from world limit 1), 99, 'plank', 1, 1);
+        raise notice '211. and stand a crate of her own:  ALLOWED';
+  exception when others then raise notice '211. and stand a crate of her own:  refused — %', sqlerrm; end;
+  begin perform worker_settle((select id from world limit 1), 1);
+        raise notice '212. and work somebody else''s beast: ALLOWED';
+  exception when others then raise notice '212. and work somebody else''s beast: refused — %', sqlerrm; end;
+end $$;
+reset role;
+select '213. and it is all still in the crate: ' || (select coalesce(sum(count), 0) from item where world_id = :'world2' and holder = 'crate');
+\echo ''
