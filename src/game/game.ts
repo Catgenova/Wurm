@@ -1175,7 +1175,7 @@ export class Game {
     const py = this.player.y;
     const near = (x: number, y: number): boolean => Math.abs(x - px) < 60 && Math.abs(y - py) < 60;
     const lamp = this.litLantern();
-    if (lamp) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92 });
+    if (lamp) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92, steady: true });
     for (const f of this.campfires.values()) {
       if (!f.lit || !near(f.x, f.y)) continue;
       const [cx, cy] = fireCentre(f);
@@ -1191,7 +1191,7 @@ export class Game {
     // The two that carry a light of their own.
     for (const c of this.creatures.list.values()) {
       const glow = this.creatures.species(c).glow;
-      if (glow && near(c.x, c.y)) out.push({ x: c.x, y: c.y, radius: glow, strength: 0.7 });
+      if (glow && near(c.x, c.y)) out.push({ x: c.x, y: c.y, radius: glow, strength: 0.7, steady: true });
     }
     return out;
   }

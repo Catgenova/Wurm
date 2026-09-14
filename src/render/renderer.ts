@@ -29,6 +29,7 @@ import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
+import { DAWN, DUSK } from '../game/game';
 import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
@@ -143,8 +144,39 @@ function normalize(x: number, y: number, z: number): [number, number, number] {
   return [x / l, y / l, z / l];
 }
 
-/** Light arrives from the upper-left of the screen, slightly from the top. */
-const LIGHT = normalize(-0.62, -0.28, 0.72);
+/**
+ * Where the light comes from at a given hour. The sun rises on one side, goes
+ * overhead at noon and sets on the other, so a hillside that was bright in the
+ * morning is in shade by the afternoon and every slope on the island changes
+ * shape as the day goes by. Before dawn and after dusk it sits on the horizon,
+ * which is as close to moonlight as this needs to get.
+ */
+export function sunAt(hour: number): [number, number, number] {
+  const t = Math.min(1, Math.max(0, (hour - DAWN) / (DUSK - DAWN)));
+  const a = Math.PI * t;
+  return normalize(0.72 * Math.cos(a), -0.3, 0.3 + 0.7 * Math.sin(a));
+}
+
+/** How finely the sun's walk is cut up: the ground is re-shaded on each step. */
+const SUN_STEPS = 48;
+
+/**
+ * The wash over everything at this hour: warm at the two ends of the day, cold
+ * in the middle of the night, nothing at all at noon. Dusk and dawn overlap
+ * with the night's own blue, which is what gives the half-hour after sundown
+ * its colour.
+ */
+export function skyWash(hour: number, dark: number): Array<{ colour: string; alpha: number }> {
+  const out: Array<{ colour: string; alpha: number }> = [];
+  // A bell on each end of the day, two hours wide.
+  const bell = (centre: number): number => Math.max(0, 1 - Math.abs(hour - centre) / 2);
+  const dusk = bell(DUSK);
+  const dawn = bell(DAWN);
+  if (dusk > 0.01) out.push({ colour: '255, 146, 58', alpha: dusk * 0.22 });
+  if (dawn > 0.01) out.push({ colour: '255, 168, 146', alpha: dawn * 0.18 });
+  if (dark > 0.01) out.push({ colour: '12, 20, 44', alpha: dark * 0.68 });
+  return out;
+}
 
 const WATER_PALETTE: string[] = [];
 for (let i = 0; i < WATER_STEPS; i++) {
@@ -169,6 +201,10 @@ export class Renderer {
   selected: { x: number; y: number } | null = null;
   fps = 0;
   private colors: (string | null)[];
+  /** Which step of the sun's walk the ground was last shaded for. */
+  private lastSun = -1;
+  /** Where a shadow falls this frame, in screen pixels, and how dark it is. */
+  private shadow = { dx: 0, dy: 0, alpha: 0 };
   /** Tile colours as the map remembers them, for ground nobody is watching. */
   private memColors: (string | null)[];
   private lastVision = -1;
@@ -218,6 +254,37 @@ export class Renderer {
   }
 
   /**
+   * One thing's shadow, stretched away from the sun. It is an ellipse squashed
+   * along the direction it falls, which is what a round thing's shadow is on
+   * flat ground, and it fades out as the sun climbs.
+   */
+  private castShadow(ctx: CanvasRenderingContext2D, sx: number, sy: number, size: number): void {
+    const { dx, dy, alpha } = this.shadow;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.5) return;
+    const r = Math.max(3, size * 0.55);
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.fillStyle = `rgba(0,0,0,${alpha.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(len * 0.5, 0, len * 0.5 + r, r * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * How much a light is worth this instant. A fire breathes: two waves out of
+   * step, so it never settles into a rhythm you can watch. A steady light —
+   * a candle behind cloth, a creature that glows — does not do this at all.
+   */
+  private flicker(l: { x: number; y: number; steady?: boolean }): number {
+    if (l.steady) return 1;
+    const seed = l.x * 0.7 + l.y * 1.3;
+    return 1 + 0.055 * Math.sin(this.time * 6.1 + seed) + 0.035 * Math.sin(this.time * 11.3 + seed * 2.1);
+  }
+
+  /**
    * The scratch canvas the night is mixed on. It is kept between frames and
    * only resized when the window is, since making one every frame at screen
    * size is the sort of thing that costs a night's frame rate.
@@ -236,14 +303,14 @@ export class Renderer {
   }
 
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
-  private computeColor(x: number, y: number, type: TileType, data: number): string {
+  private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number]): string {
     const w = this.game.world;
     const def = TILE_DEFS[type];
     const c = w.corners(x, y, this.cornerBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
     const gy = (c[2] + c[3] - (c[0] + c[1])) / 2 / UNITS_PER_TILE;
     const len = Math.hypot(gx, gy, 1);
-    const dot = (-gx * LIGHT[0] - gy * LIGHT[1] + LIGHT[2]) / len;
+    const dot = (-gx * light[0] - gy * light[1] + light[2]) / len;
     let shade = 0.48 + 0.6 * Math.max(0, dot);
     const base =
       type === TileType.Rock
@@ -301,6 +368,33 @@ export class Renderer {
         }
       } else this.memColors.fill(null);
     }
+    // The sun moves through the day, so the ground has to be shaded again as it
+    // goes. It is cut into steps rather than recomputed every frame: a repaint
+    // a few times an in-game hour is nothing, one every frame is not.
+    const hour = this.game.hourOfDay();
+    const sun = sunAt(hour);
+    const sunStep = Math.floor((hour / 24) * SUN_STEPS);
+    if (sunStep !== this.lastSun) {
+      this.lastSun = sunStep;
+      this.colors.fill(null);
+    }
+    /*
+     * Where a shadow falls, and how long it is. Straight down and invisible at
+     * noon; away from the sun and two and a half tiles long when the sun is on
+     * the horizon. Worked out once for the frame: the projection is linear, so
+     * one world vector gives the screen offset for everything on the island.
+     */
+    const sunUp = Math.max(0, sun[2]);
+    const cast = (1 - sunUp) * 2.4;
+    const wx = -sun[0] * cast;
+    const wy = -sun[1] * cast;
+    const du = cam.rotateX(wx, wy);
+    const dv = cam.rotateY(wx, wy);
+    this.shadow = {
+      dx: (du - dv) * HALF_W * zoom,
+      dy: (du + dv) * HALF_H * zoom,
+      alpha: 0.45 * (1 - sunUp) * (1 - this.game.darkness()),
+    };
     const grassDetail = zoom >= 0.75;
     const player = this.game.player;
     const rot = cam.rotation;
@@ -372,7 +466,7 @@ export class Renderer {
         const lit = fog === VISIBLE;
         let color = lit ? this.colors[idx] : this.memColors[idx];
         if (!color) {
-          color = this.computeColor(x, y, world.viewTile(x, y, lit), world.viewData(x, y, lit));
+          color = this.computeColor(x, y, world.viewTile(x, y, lit), world.viewData(x, y, lit), sun);
           if (lit) this.colors[idx] = color;
           else this.memColors[idx] = color;
         }
@@ -757,6 +851,10 @@ export class Renderer {
       const dh = spr.h * zoom;
       const left = ent.sx - spr.ax * zoom;
       const top = ent.sy - spr.ay * zoom;
+      // Anything standing up throws a shadow away from the sun, long at the
+      // ends of the day and gone at noon. The sprite's own contact shadow does
+      // the rest, which is why this can be thrown away entirely at midday.
+      if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
       ctx.drawImage(spr.canvas, left, top, dw, dh);
       if (ent.kind === 'crate' && ent.crateId !== undefined) {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
@@ -1390,24 +1488,33 @@ export class Renderer {
      * Markers and the hud sit on top of the lot.
      */
     const dark = game.darkness();
-    if (dark > 0.01) {
+    // The warm end of the day arrives before the dark does, so the wash is
+    // asked for whatever the darkness reads.
+    const washes = skyWash(game.hourOfDay(), dark);
+    if (washes.length) {
       const lights = game.lights();
       if (!lights.length) {
-        ctx.fillStyle = `rgba(12, 20, 44, ${(dark * 0.68).toFixed(3)})`;
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (const wash of washes) {
+          ctx.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
+          ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
       } else {
         const night = this.nightLayer();
         const nc = night.getContext('2d') as CanvasRenderingContext2D;
         nc.setTransform(1, 0, 0, 1, 0, 0);
         nc.globalCompositeOperation = 'source-over';
-        nc.fillStyle = `rgba(12, 20, 44, ${(dark * 0.68).toFixed(3)})`;
-        nc.fillRect(0, 0, night.width, night.height);
+        nc.clearRect(0, 0, night.width, night.height);
+        for (const wash of washes) {
+          nc.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
+          nc.fillRect(0, 0, night.width, night.height);
+        }
         nc.globalCompositeOperation = 'destination-out';
         for (const l of lights) {
           const h = w.heightAt(l.x, l.y);
           const sx = cam.worldToScreenX(l.x, l.y);
           const sy = cam.worldToScreenY(l.x, l.y, h);
-          const r = Math.max(8, l.radius * HALF_W * zoom);
+          // A flame is never steady; a candle behind cloth very nearly is.
+          const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
           if (sx < -r || sy < -r || sx > night.width + r || sy > night.height + r) continue;
           const grad = nc.createRadialGradient(sx, sy, 0, sx, sy, r);
           grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
@@ -1426,7 +1533,7 @@ export class Renderer {
           const h = w.heightAt(l.x, l.y);
           const sx = cam.worldToScreenX(l.x, l.y);
           const sy = cam.worldToScreenY(l.x, l.y, h);
-          const r = Math.max(8, l.radius * HALF_W * zoom);
+          const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
           if (sx < -r || sy < -r || sx > this.canvas.width + r || sy > this.canvas.height + r) continue;
           const warm = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
           warm.addColorStop(0, `rgba(255, 186, 92, ${(0.16 * dark * l.strength).toFixed(3)})`);

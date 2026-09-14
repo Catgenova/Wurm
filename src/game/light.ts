@@ -17,6 +17,8 @@ export interface LightSource {
   radius: number;
   /** How hard it pushes back the dark at its middle, 0..1. */
   strength: number;
+  /** True for a light that does not breathe: a candle behind cloth, a glow. */
+  steady?: boolean;
 }
 
 /** Seconds of burning in one candle, at a lantern made perfectly. */
