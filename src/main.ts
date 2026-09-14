@@ -14,6 +14,7 @@ import { BAITS, catchFish, FISH } from './game/fishing';
 import { pointOfSail, sailWord, windAt, windFrom, windWord } from './game/wind';
 import { favourCap, prayerWorth } from './game/faith';
 import { PATHS, sittingWorth } from './game/meditation';
+import { BELT_MAX, loopsFor } from './game/belt';
 import { weaponDamage, WEAPON_BY_ID } from './game/gear';
 import { SPECIES } from './game/creatures';
 import { TITLES } from './game/titles';
@@ -72,7 +73,7 @@ declare global {
     wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; TRAPS: typeof TRAPS; BRIDGES: typeof BRIDGES; bridgeDone: typeof bridgeDone; BAITS: typeof BAITS; FISH_IDS: string[]; SPECIES: typeof SPECIES; WEAPON_BY_ID: typeof WEAPON_BY_ID; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
   }
 }
-Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt, windFrom, windWord, pointOfSail, sailWord, favourCap, prayerWorth, PATHS, sittingWorth, weaponDamage });
+Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt, windFrom, windWord, pointOfSail, sailWord, favourCap, prayerWorth, PATHS, sittingWorth, weaponDamage, loopsFor, BELT_MAX });
 window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, BRIDGES, bridgeDone, BAITS, FISH_IDS: FISH.map((f) => f.id), SPECIES, WEAPON_BY_ID, itemName, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {
@@ -105,6 +106,12 @@ input.onPinch = (factor, x, y) => {
 };
 
 input.onKey = (code) => {
+  // The belt: 1 to 9 press the loops on a worn toolbelt, and 0 the tenth.
+  const loop = /^Digit([0-9])$/.exec(code);
+  if (loop) {
+    ui.useLoop((Number(loop[1]) + 9) % 10);
+    return;
+  }
   switch (code) {
     case 'KeyI':
       ui.toggleWindow('inventory');
@@ -142,6 +149,9 @@ input.onKey = (code) => {
       break;
     case 'KeyP':
       ui.toggleWindow('wildermon');
+      break;
+    case 'KeyN':
+      ui.toggleWindow('deed');
       break;
     case 'KeyG':
       game.settings.grid = !game.settings.grid;

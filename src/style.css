@@ -477,6 +477,78 @@ kbd {
   font-size: 11px;
 }
 
+/* The one control on the action bar that can be clicked. */
+.action-stop {
+  margin-top: 5px;
+  pointer-events: auto !important;
+}
+
+/* The belt --------------------------------------------------------------- */
+
+.belt-bar {
+  position: absolute;
+  /* Along the bottom right, which is the one corner nothing else claims: the
+     event log holds the left, and the fps line is the eleven pixels below. */
+  right: 12px;
+  bottom: 30px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: min(640px, 58vw);
+}
+
+/* Same as the loops: display here would otherwise beat the rule for [hidden]. */
+.belt-bar[hidden] {
+  display: none;
+}
+
+.belt-loop {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 118px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+/* A loop the belt does not reach is gone, not merely faint: the display on
+   .belt-loop would otherwise beat the browser's own rule for [hidden]. */
+.belt-loop[hidden] {
+  display: none;
+}
+
+.belt-loop:hover {
+  border-color: var(--ui-accent);
+}
+
+.belt-key {
+  color: var(--ui-accent);
+  font-weight: bold;
+}
+
+.belt-what {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Nothing hung on it yet, or nothing it can do just now. */
+.belt-loop.belt-empty {
+  opacity: 0.45;
+}
+
+.belt-loop.belt-barred .belt-what,
+.belt-loop.belt-barred .belt-key {
+  color: var(--ui-dim);
+}
+
 /* Context menu & tooltip ------------------------------------------------ */
 
 .ctx-menu {
@@ -556,6 +628,13 @@ kbd {
 .ctx-chevron {
   color: var(--ui-accent);
   font-size: 12px;
+  /* Wide enough to hit on its own, since on some rows it means something else. */
+  padding: 0 2px 0 6px;
+  margin-right: -2px;
+}
+
+.ctx-chevron:hover {
+  color: #fff;
 }
 
 .ctx-child {
@@ -937,6 +1016,34 @@ kbd {
   padding: 0;
 }
 
+/* The row of tabs and the find box along the top of the log. */
+.log-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.log-tab {
+  white-space: nowrap;
+}
+
+/* A tab with lines waiting on it says so, and says how many. */
+.log-tab.log-waiting {
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.log-search {
+  flex: 1 1 auto;
+  min-width: 50px;
+  padding: 2px 6px;
+  border-bottom: 0;
+  font-size: 11px;
+}
+
 .log-list {
   flex: 1 1 auto;
   min-height: 0;
@@ -1007,6 +1114,72 @@ kbd {
   object-fit: contain;
   image-rendering: pixelated;
   cursor: crosshair;
+}
+
+/* The help: a search box, a list of contents, and the pages themselves. */
+.help-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.help-search {
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.help-contents {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-height: 96px;
+  overflow-y: auto;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.help-link {
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 11px;
+  color: #c9c1ad;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ui-border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.help-link:hover {
+  color: #fff;
+  border-color: var(--ui-accent);
+}
+
+.help-link[hidden] {
+  display: none;
+}
+
+.help-count {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.help-pages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 10px 10px;
+}
+
+.help-sec[hidden] {
+  display: none;
+}
+
+/* A section jumped to from the contents, marked for a moment so it is found. */
+.help-sec.help-found h3 {
+  color: #fff;
 }
 
 .help-body h3 {
@@ -1081,6 +1254,15 @@ kbd {
 /* What is kept back, what is nearly worn out, and a pack that is too heavy. */
 .inv-kept { font-style: italic; }
 .inv-worn-out { color: #e3b657; }
+/* A tool worth less, or more, than the number it was stamped with. */
+.inv-blunt {
+  color: #c4a86a;
+}
+
+.inv-keen {
+  color: #9fd06c;
+}
+
 .inv-breaking { color: #e0574d; font-weight: 600; }
 .inv-footer.inv-over { color: #e0574d; font-weight: 600; }
 
@@ -1113,3 +1295,84 @@ kbd {
 .store-what { grid-area: what; font-size: 11px; color: #8b978d; line-height: 1.35; }
 .store-what.store-hit { color: #a8d08a; }
 .store-row .tb-btn { grid-area: go; }
+
+/* The settlement window ---------------------------------------------------- */
+
+.deed-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.deed-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 8px 10px;
+}
+
+.deed-head {
+  margin: 8px 0 3px;
+  padding-bottom: 2px;
+  color: var(--ui-accent);
+  font-size: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.deed-head:first-child {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.deed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  color: #c9c1ad;
+}
+
+.deed-value {
+  color: #eadfbf;
+  font-variant-numeric: tabular-nums;
+}
+
+.deed-met {
+  color: #9fd06c;
+}
+
+.deed-unmet {
+  color: #8e857a;
+}
+
+.deed-place span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.deed-upgrade {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.deed-note {
+  margin: 4px 0 2px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.deed-none {
+  padding: 10px 4px;
+  color: var(--ui-dim);
+  line-height: 1.4;
+}
+
+.deed-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}

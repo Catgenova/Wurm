@@ -3,6 +3,7 @@ import { itemDef, itemName, type Item, type ItemCategory, itemWeight, rarityOf, 
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
+import { COUNTS, pinEntry, pinnable } from '../beltmenu';
 
 const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
   ['tool', 'Tools'],
@@ -172,6 +173,19 @@ export class InventoryPanel {
     if (item.locked) name.classList.add('inv-kept');
     const ql = document.createElement('span');
     ql.textContent = item.ql.toFixed(1);
+    // What the thing is worth at the work now: its quality dragged down by the
+    // state it is in and lifted by its metal, its rarity and any blessing.
+    const worth = this.game.toolWorth(item);
+    if (itemDef(item.id).category === 'tool') {
+      ql.title = `Made at ${item.ql.toFixed(1)}; it works as a ${worth.toFixed(1)} today.`;
+      if (worth < item.ql - 0.05) {
+        ql.classList.add('inv-blunt');
+        ql.textContent = `${item.ql.toFixed(1)}→${worth.toFixed(0)}`;
+      } else if (worth > item.ql + 0.05) {
+        ql.classList.add('inv-keen');
+        ql.textContent = `${item.ql.toFixed(1)}→${worth.toFixed(0)}`;
+      }
+    }
     const dmg = document.createElement('span');
     dmg.textContent = item.dmg.toFixed(1);
     // A tool close to going to pieces says so where you are looking at it.
@@ -215,8 +229,27 @@ export class InventoryPanel {
           ],
         };
       }
+      if (def.repeat && !reason) {
+        return {
+          label: def.label,
+          children: [
+            { label: 'Once', onSelect: () => this.game.requestAction(def, target, 1) },
+            ...COUNTS.map((n) => ({ label: `${n} times`, onSelect: () => this.game.requestAction(def, target, n) })),
+            { label: 'Until you stop', note: 'or until your wind gives out', onSelect: () => this.game.requestAction(def, target) },
+          ],
+        };
+      }
       return { label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) };
     }));
+    // Hanging one of this thing's jobs on the belt. The loop remembers the kind
+    // of thing, not this one, so it still works on the next loaf you bake.
+    const hangable = this.game.actionsFor(target).filter((a) => pinnable(a.def));
+    if (hangable.length && this.game.beltLoops()) {
+      entries.push({
+        label: 'Hang a job on your belt',
+        children: hangable.map(({ def }) => ({ label: def.label, children: pinEntry(this.game, { action: def.id, item: item.id }).children })),
+      });
+    }
     this.win.focus();
     this.menu.show(x, y, itemName(item), entries);
   }

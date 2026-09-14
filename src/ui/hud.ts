@@ -8,6 +8,7 @@ import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
 import { ACTION_BY_ID } from '../game/actions';
+import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
 
 export interface HudCallbacks {
@@ -16,6 +17,8 @@ export interface HudCallbacks {
   center: () => void;
   newWorld: () => void;
   turn: (step: number) => void;
+  /** Press a loop on the belt, aimed at whatever the cursor is on. */
+  useLoop: (loop: number) => void;
 }
 
 interface Bar {
@@ -33,6 +36,7 @@ const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) =>
   { label: 'Wildermon', key: 'P', action: (cb) => cb.toggle('wildermon') },
   { label: 'Journal', key: 'J', action: (cb) => cb.toggle('journal') },
   { label: 'Stores', key: 'U', action: (cb) => cb.toggle('stores') },
+  { label: 'Deed', key: 'N', action: (cb) => cb.toggle('deed') },
   { label: 'Grid', key: 'G', action: (cb) => cb.toggleGrid(), id: 'grid' },
   { label: 'Centre', key: 'C', action: (cb) => cb.center() },
   { label: '↻ Turn', key: 'Q', action: (cb) => cb.turn(-1) },
@@ -74,6 +78,10 @@ export class Hud {
   private storeyUp: HTMLButtonElement;
   private storeyDown: HTMLButtonElement;
   private cutBtn: HTMLButtonElement;
+  private beltEl: HTMLDivElement;
+  private loopEls: HTMLButtonElement[] = [];
+  private stopBtn: HTMLButtonElement;
+  private beltDue = 0;
 
   constructor(
     root: HTMLElement,
@@ -192,8 +200,52 @@ export class Hud {
     const hint = document.createElement('div');
     hint.className = 'action-hint';
     hint.textContent = 'Esc or move to stop';
-    this.actionEl.append(this.actionLabel, track, this.queueEl, hint);
+    this.stopBtn = document.createElement('button');
+    this.stopBtn.type = 'button';
+    this.stopBtn.className = 'tb-btn tb-small action-stop';
+    this.stopBtn.textContent = 'Stop';
+    this.stopBtn.title = 'Put the job down (Esc)';
+    this.stopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.game.cancelAction();
+    });
+    this.actionEl.append(this.actionLabel, track, this.queueEl, this.stopBtn, hint);
     root.append(this.actionEl);
+
+    /*
+     * The belt: the jobs you do most, hung on a worn toolbelt's loops and
+     * pressed with the number keys. No belt, no loops.
+     */
+    this.beltEl = document.createElement('div');
+    this.beltEl.className = 'belt-bar';
+    this.beltEl.hidden = true;
+    for (let i = 0; i < BELT_MAX; i += 1) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'belt-loop';
+      b.dataset.loop = String(i);
+      const key = document.createElement('span');
+      key.className = 'belt-key';
+      key.textContent = String((i + 1) % 10);
+      const what = document.createElement('span');
+      what.className = 'belt-what';
+      b.append(key, what);
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cb.useLoop(i);
+      });
+      b.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.game.clearLoop(i);
+        this.drawBelt();
+      });
+      this.loopEls.push(b);
+      this.beltEl.append(b);
+    }
+    root.append(this.beltEl);
+    this.game.events.on('inventory', () => this.drawBelt());
+    this.drawBelt();
 
     /*
      * The storey control: which floor of a building you are looking at, and
@@ -224,6 +276,35 @@ export class Hud {
     });
     this.storeyEl.append(this.storeyUp, this.storeyLabel, this.storeyDown, this.cutBtn);
     root.append(this.storeyEl);
+  }
+
+  /**
+   * Redraw the belt. Only the loops the worn belt actually has are shown, and
+   * a loop greys out when what hangs on it cannot be done just now.
+   */
+  drawBelt(): void {
+    const loops = this.game.beltLoops();
+    this.beltEl.hidden = loops === 0;
+    for (let i = 0; i < BELT_MAX; i += 1) {
+      const el = this.loopEls[i];
+      el.hidden = i >= loops;
+      if (i >= loops) continue;
+      const what = el.querySelector('.belt-what') as HTMLSpanElement;
+      const aim = this.game.aimLoop(i, null);
+      if (!aim) {
+        const pin = this.game.player.belt[i];
+        what.textContent = pin ? pinLabel(pin, undefined) : 'empty';
+        el.classList.toggle('belt-empty', !pin);
+        el.classList.remove('belt-barred');
+        el.title = pin ? 'Right-click to take it off the belt.' : `Loop ${i + 1} is empty. Find a job in a menu and hang it here.`;
+        continue;
+      }
+      const label = pinLabel(aim.pin, aim.def);
+      what.textContent = label;
+      el.classList.remove('belt-empty');
+      el.classList.toggle('belt-barred', !!aim.reason);
+      el.title = aim.reason ? `${label} — ${aim.reason}` : `${label}. Press ${(i + 1) % 10}, or right-click to take it off the belt.`;
+    }
   }
 
   /** Move the view a storey up or down, starting from where the player stands. */
@@ -371,18 +452,27 @@ export class Hud {
     this.eatBtn.disabled = !this.game.bestFood();
     if (this.gridBtn) this.gridBtn.classList.toggle('active', this.game.settings.grid);
 
+    // The belt is cheap to draw but not free, so it is looked over four times a second.
+    this.beltDue -= 1;
+    if (this.beltDue <= 0) {
+      this.beltDue = 15;
+      this.drawBelt();
+    }
+
     const a = this.game.action;
     if (!a) {
       this.actionEl.hidden = true;
       return;
     }
     this.actionEl.hidden = false;
+    // A counted job says how far through the count it is: "3 of 10".
+    const count = a.goes !== undefined && a.left !== undefined ? ` · ${a.goes - a.left + 1} of ${a.goes}` : '';
     if (a.state === 'walking') {
-      this.actionLabel.textContent = `Walking over to ${a.def.label.toLowerCase()}…`;
+      this.actionLabel.textContent = `Walking over to ${a.def.label.toLowerCase()}…${count}`;
       this.actionFill.style.width = '0%';
     } else {
       const pct = Math.min(100, (a.elapsed / a.duration) * 100);
-      this.actionLabel.textContent = `${a.def.label} · ${Math.max(0, a.duration - a.elapsed).toFixed(1)}s`;
+      this.actionLabel.textContent = `${a.def.label} · ${Math.max(0, a.duration - a.elapsed).toFixed(1)}s${count}`;
       this.actionFill.style.width = `${pct}%`;
     }
     // What is lined up behind it, and how much room is left in your head.

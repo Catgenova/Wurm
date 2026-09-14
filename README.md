@@ -41,6 +41,8 @@ rebuilds and commits the result.
 | `Esc` | Stop the current action / close the menu |
 | `Enter` | Chat in the event window (`/name`, `/where`, `/help`) |
 | `I` `K` `L` `M` `F1` | Inventory, Skills, Event log, Map, Help |
+| `1`…`9`, `0` | Press a loop on your toolbelt, aimed where the cursor is |
+| `N` | The settlement window |
 | `G` | Toggle the tile grid |
 | Touch: tap, drag, pinch, long press | Walk, look around, zoom, open the action menu |
 
@@ -848,6 +850,34 @@ rebuilds and commits the result.
   station and every material — so "leather" finds every leather craft, "mason"
   finds the oven and the well, and "nail" finds every recipe that wants nails.
   The footer counts the matches, and Esc in the box clears it.
+- **An event log you can look through.** The log is cut into tabs — All, Work,
+  Skills, Talk and Trouble — with a count on any tab that has lines waiting and
+  a box that searches whichever tab is open. The help is cut the same way: a
+  list of contents across the top jumps to any of its fifty-eight sections, and
+  the search keeps whole sections rather than single lines, because half an
+  explanation is worse than none.
+- **What a tool is really worth.** Damage drags a tool down, its metal lifts or
+  lowers it, rarity and a blessing lift it further, and it is that figure —
+  not the number it was stamped with — that decides how fast a job goes and how
+  well it comes out. The pack shows both when they differ (`60.0→45`) and
+  examining a thing says it in words.
+- **The settlement at a glance.** One window (`N`) for the deed: its level and
+  border, workers of the cap, what the next upgrade still wants with the button
+  that buys it, a count of everything standing inside the border, the standing
+  orders, and a walk-to button beside every building, store, trap, post and
+  bridge on the land.
+- **The toolbelt, and doing a thing many times.** Every job that runs on and
+  on is offered by the handful as well as one at a time — once, five, ten,
+  twenty-five, fifty, or until you stop — and a counted job counts itself
+  down, says "7 of 25" on the action bar and puts the work away at the end,
+  so a hundred bricks is one right-click rather than a hundred. A stitched
+  **toolbelt**, worn, carries the jobs you do most: one loop for every ten
+  points of how well it was made, ten loops on a perfect one, each answering
+  to a number key. A job hung from your pack remembers the kind of thing
+  rather than the one in your hand, so the loop still works on the next loaf
+  you bake; a job hung from the ground is done wherever the cursor is, and on
+  the tile under your own feet when it is on nothing. The bar greys a loop out
+  and says why when what hangs on it cannot be done just now.
 
 ## How it is put together
 

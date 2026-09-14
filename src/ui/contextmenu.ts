@@ -37,11 +37,12 @@ function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks): HTMLEleme
     const chevron = document.createElement('span');
     chevron.className = 'ctx-chevron';
     chevron.textContent = '\u25b8';
+    // A row that is both a job and a fold: the label does it, the arrow opens
+    // the choices. A row that is only a fold opens wherever it is clicked.
+    if (item.onSelect) chevron.title = 'More ways to do this';
     row.append(chevron);
     let open: HTMLElement[] | null = null;
-    row.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (item.disabled) return;
+    const fold = (): void => {
       if (open) {
         for (const el of open) el.remove();
         open = null;
@@ -52,6 +53,21 @@ function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks): HTMLEleme
         chevron.textContent = '\u25be';
       }
       hooks.changed?.();
+    };
+    chevron.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (item.disabled) return;
+      fold();
+    });
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (item.disabled) return;
+      if (!item.onSelect) {
+        fold();
+        return;
+      }
+      hooks.chose?.();
+      item.onSelect();
     });
     return [row];
   }

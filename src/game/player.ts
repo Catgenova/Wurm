@@ -1,6 +1,8 @@
 import type { Boon } from './boons';
 import type { Wound } from './wounds';
 import type { PathId } from './meditation';
+import type { BeltPin } from './belt';
+import { BELT_MAX } from './belt';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
 import { TILE_DEFS } from '../world/tiles';
@@ -67,6 +69,8 @@ export class Player {
   stats: Stats = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
   /** What is worn or held, by slot: the uid of the item, or null. */
   equipped: Record<string, number | null> = { head: null, chest: null, arms: null, legs: null, feet: null, weapon: null, offhand: null };
+  /** Jobs hung on the belt's loops, by loop. Only as many as the belt has are reachable. */
+  belt: Array<BeltPin | null> = Array.from({ length: BELT_MAX }, () => null);
   /** How much armour is weighing you down, 0 for nothing worn. */
   burden = 0;
   /** Steepest step allowed, raised by the climbing skill. */

@@ -2,7 +2,8 @@ import { generateWorld } from '../world/generate';
 import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
-import { ACTIONS, type ActionDef, type Target } from './actions';
+import { ACTIONS, ACTION_BY_ID, type ActionDef, type Target } from './actions';
+import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
@@ -41,6 +42,10 @@ export interface ActiveAction {
   duration: number;
   /** Standing still until this time, waiting for a called wildermon to arrive. */
   waitUntil?: number;
+  /** Goes left, when a number was asked for; undefined runs until the wind goes. */
+  left?: number;
+  /** How many were asked for, for saying so when it is done. */
+  goes?: number;
 }
 
 /** A settlement: a square of land around a token that the player may build on. */
@@ -110,7 +115,7 @@ export interface GameInit {
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number> };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -283,7 +288,7 @@ export class Game {
   hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
   action: ActiveAction | null = null;
   /** Actions lined up behind the one in hand, oldest first. */
-  readonly queue: Array<{ def: ActionDef; target: Target }> = [];
+  readonly queue: Array<{ def: ActionDef; target: Target; goes?: number }> = [];
   /** Items lying on tiles, keyed by "x,y". */
   readonly ground = new Map<string, Item[]>();
   /** Game seconds since the world was created. */
@@ -329,6 +334,7 @@ export class Game {
       this.player.way = init.player.way ?? null;
       this.player.satAt = init.player.satAt ?? -1e9;
       this.player.usedAt = init.player.usedAt ?? {};
+      if (init.player.belt) for (let i = 0; i < BELT_MAX; i += 1) this.player.belt[i] = init.player.belt[i] ?? null;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -807,6 +813,68 @@ export class Game {
     if (item) this.logMsg(`You ${slot === 'weapon' || slot === 'offhand' ? 'take up' : 'put on'} the ${itemName(item).toLowerCase()}.`, 'info');
     else if (before) this.logMsg(`You put the ${itemName(before).toLowerCase()} away.`, 'info');
     this.events.emit('inventory');
+  }
+
+  /**
+   * How many loops the belt you are wearing has: one for every ten points of
+   * how well it was made, and none at all when you are not wearing one. A belt
+   * worn to pieces is still a belt, so damage does not take loops away.
+   */
+  beltLoops(): number {
+    const belt = this.worn('belt');
+    return belt ? loopsFor(belt.ql) : 0;
+  }
+
+  /** Hang a job on a loop. */
+  pinToBelt(loop: number, pin: BeltPin): void {
+    if (loop < 0 || loop >= BELT_MAX) return;
+    this.player.belt[loop] = pin;
+    const def = ACTION_BY_ID.get(pin.action);
+    this.logMsg(`${pinLabel(pin, def)} goes on loop ${loop + 1}.`, 'info');
+    this.events.emit('inventory');
+  }
+
+  /** The first empty loop within reach, or -1 when they are all full. */
+  freeLoop(): number {
+    const loops = this.beltLoops();
+    for (let i = 0; i < loops; i += 1) if (!this.player.belt[i]) return i;
+    return -1;
+  }
+
+  /** Take a job off a loop. */
+  clearLoop(loop: number): void {
+    if (loop < 0 || loop >= BELT_MAX || !this.player.belt[loop]) return;
+    this.player.belt[loop] = null;
+    this.events.emit('inventory');
+  }
+
+  /** What a loop would do right now, for drawing the bar and for pressing it. */
+  aimLoop(loop: number, where: Target | null): { pin: BeltPin; def: ActionDef; target: Target; reason: string | null } | null {
+    const pin = this.player.belt[loop];
+    if (!pin || loop >= this.beltLoops()) return null;
+    const def = ACTION_BY_ID.get(pin.action);
+    if (!def) return null;
+    const aim = aimPin(this, pin, def, where);
+    if (!aim) return { pin, def, target: { kind: 'tile', x: this.player.tileX, y: this.player.tileY, cx: this.player.tileX, cy: this.player.tileY }, reason: `You carry no ${itemName({ uid: 0, id: pin.item ?? '', ql: 1, dmg: 0, count: 1 }).toLowerCase()}.` };
+    return { pin, def, target: aim.target, reason: aim.reason };
+  }
+
+  /** Press a loop: do what hangs on it, where you are pointing. */
+  useLoop(loop: number, where: Target | null): void {
+    if (!this.beltLoops()) {
+      this.logMsg('You are wearing no toolbelt, so there is nothing to hang a job on.', 'error');
+      return;
+    }
+    const aim = this.aimLoop(loop, where);
+    if (!aim) {
+      this.logMsg(`Loop ${loop + 1} is empty.`, 'error');
+      return;
+    }
+    if (aim.reason) {
+      this.logMsg(aim.reason, 'error');
+      return;
+    }
+    this.requestAction(aim.def, aim.target);
   }
 
   /** Everything worn, as pieces of armour. */
@@ -1371,13 +1439,37 @@ export class Game {
     // The body learns from the work itself: wind from spending it, control from doing it.
     if (cost > 0) this.gainSkill('body_stamina', 0.05 + cost * 0.6);
     this.gainSkill('body_control', 0.05);
-    if (again && a.def.repeat && this.player.stats.stamina > 0.05 && this.action === a) {
+    if (this.action !== a) {
+      // Whatever was performed put something else in hand; leave it alone.
+      this.events.emit('action');
+      return;
+    }
+    const counted = a.left !== undefined;
+    if (a.left !== undefined) a.left -= 1;
+    // A job that says it is finished is finished, count or no count: the tree
+    // is down, the wall is built. Everything else is only a matter of wind.
+    const done = a.def.repeat ? !again : false;
+    const winded = this.player.stats.stamina <= 0.05;
+    const more = counted ? (a.left as number) > 0 : again && !!a.def.repeat;
+    // Whether it could be started again this moment, so work that has run out
+    // of ground stops now, and says so, rather than after another turn of the
+    // timer.
+    const barred = more && !done && !winded ? this.jobReason(a.def, a.target) : null;
+    if (more && !done && !winded && !barred) {
       a.elapsed = 0;
       a.duration = this.duration(a.def);
-    } else if (this.action === a) {
-      this.action = null;
-      this.nextInQueue();
+      this.events.emit('action');
+      return;
     }
+    if (counted) {
+      const did = (a.goes as number) - (a.left as number);
+      if (did >= (a.goes as number)) this.logMsg(`That is ${a.goes} of them.`, 'info');
+      else if (winded) this.logMsg(`Your wind gives out after ${did} of ${a.goes}. Rest and pick it up again.`, 'info');
+      else if (barred) this.logMsg(`${barred} That was ${did} of ${a.goes}.`, 'info');
+      else this.logMsg(`That is as far as that goes: ${did} of ${a.goes}.`, 'info');
+    } else if (barred) this.logMsg(barred, 'error');
+    this.action = null;
+    this.nextInQueue();
     this.events.emit('action');
   }
 
@@ -1400,7 +1492,12 @@ export class Game {
     return out;
   }
 
-  requestAction(def: ActionDef, target: Target): void {
+  /**
+   * Ask for a job. A repeating one may be given a **number of goes**: it stops
+   * of its own accord after that many rather than running until your wind
+   * gives out, which is most of what a count is for.
+   */
+  requestAction(def: ActionDef, target: Target, goes?: number): void {
     const reason = def.check?.(target, this);
     if (reason) {
       this.logMsg(reason, 'error');
@@ -1421,17 +1518,17 @@ export class Game {
         this.logMsg(`You can only keep ${this.queueCapacity()} jobs in your head at once. Mind logic is what widens that.`, 'error');
         return;
       }
-      this.queue.push({ def, target });
+      this.queue.push({ def, target, goes });
       this.logMsg(`${def.label} is next, ${this.queue.length + 1} of ${this.queueCapacity()} in hand.`, 'info');
       this.events.emit('action');
       return;
     }
-    this.startAction(def, target);
+    this.startAction(def, target, goes);
   }
 
   /** Put an action in hand and either begin it or start walking to it. */
-  private startAction(def: ActionDef, target: Target): void {
-    this.action = { def, target, state: 'walking', elapsed: 0, duration: this.duration(def) };
+  private startAction(def: ActionDef, target: Target, goes?: number): void {
+    this.action = { def, target, state: 'walking', elapsed: 0, duration: this.duration(def), left: goes, goes };
     if (this.inRange(def, target)) {
       this.beginPerform();
       return;
@@ -1470,7 +1567,7 @@ export class Game {
       this.logMsg(`${next.def.label}: ${reason}`, 'error');
       return this.nextInQueue();
     }
-    this.startAction(next.def, next.target);
+    this.startAction(next.def, next.target, next.goes);
     return true;
   }
 
@@ -1611,8 +1708,17 @@ export class Game {
    */
   toolQl(id: string): number {
     const tool = this.inventory.tool(id);
+    return tool ? this.toolWorth(tool) : 0;
+  }
+
+  /**
+   * The same figure for one named tool rather than the best of its kind, so
+   * the pack can say what each is actually worth: quality, dragged down by the
+   * state it is in, lifted by its metal, its rarity and any blessing on it.
+   */
+  toolWorth(tool: Item): number {
     // A battered tool works like a poorer one than it was.
-    return tool ? Math.min(100, workingQl(tool.ql, tool.extra) * rarityOf(tool).boost * blessBonus(tool.bless)) * Math.max(0.3, 1 - tool.dmg / 160) : 0;
+    return Math.min(100, workingQl(tool.ql, tool.extra) * rarityOf(tool).boost * blessBonus(tool.bless)) * Math.max(0.3, 1 - tool.dmg / 160);
   }
 
   /**

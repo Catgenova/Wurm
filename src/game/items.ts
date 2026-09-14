@@ -264,6 +264,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   corn: { name: 'Corn', category: 'food', weight: 0.2, stackable: true, food: 0.11 },
   cotton: { name: 'Cotton', category: 'material', weight: 0.1, stackable: true, decay: 30 },
   wemp: { name: 'Wemp fibre', category: 'material', weight: 0.1, stackable: true, decay: 30 },
+  toolbelt: { name: 'Toolbelt', category: 'tool', weight: 1.1, decay: 3, description: 'A belt of loops and pouches. Wear it and it carries the jobs you do most, ready to hand: one loop for every ten points of how well it was made.' },
   rug: { name: 'Rug', category: 'tool', weight: 2.2, decay: 6, description: 'Woven wide enough to sit on cross-legged. Lay it down somewhere quiet and think about nothing.' },
   composite_bow: { name: 'Composite bow', category: 'tool', weight: 2, description: 'Tusk laid along the belly, sinew glued along the back, both off something that was trying to kill you. It throws an arrow seventeen tiles.' },
   scale_helm: { name: 'Scale helm', category: 'tool', weight: 1.6, description: 'Dragon scale riveted to a leather cap.' },

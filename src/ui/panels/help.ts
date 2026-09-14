@@ -1,8 +1,7 @@
 import type { UIWindow } from '../windows';
 
-export function buildHelp(win: UIWindow): void {
-  win.body.classList.add('help-body');
-  win.body.innerHTML = `
+function helpText(): string {
+  return `
     <h3>Getting around</h3>
     <table>
       <tr><td><kbd>Left click</kbd></td><td>Walk to a tile</td></tr>
@@ -26,6 +25,37 @@ export function buildHelp(win: UIWindow): void {
       <tr><td><kbd>Esc</kbd></td><td>Stop the current action and forget what is lined up</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>Talk in the event window</td></tr>
     </table>
+    <h3>The event log, and finding things in it</h3>
+    <p>The log is cut into tabs: <b>All</b>, <b>Work</b> (what your hands have been doing),
+    <b>Skills</b> (what you have learned), <b>Talk</b> and <b>Trouble</b> (what went wrong, and why).
+    A tab with lines waiting on it says how many, and opening it clears the count. The box beside the
+    tabs searches whatever tab you are on, and <kbd>Esc</kbd> in it clears the search.</p>
+    <h3>The settlement window</h3>
+    <p><kbd>N</kbd> opens the settlement at a glance: its level and how far the border runs, how many
+    wildermon are working of how many it can take, what the next upgrade still wants and the button
+    that buys it, everything standing inside the border, and the standing orders for everything kept
+    there. Each thing listed has a button that walks you to it.</p>
+    <h3>What a tool is worth</h3>
+    <p>A tool is rarely worth the number stamped on it. Damage drags it down, the metal of its head
+    lifts or lowers it, and rarity and a blessing lift it further &mdash; and it is that figure, not
+    the quality it was made at, that decides how fast a job goes, how often it comes out right, and
+    how good what comes out of it is. The pack shows both when they differ, as <b>60.0&rarr;45</b>,
+    and examining a thing says it in words.</p>
+    <h3>The belt, and doing a thing many times</h3>
+    <p>A job that runs on and on &mdash; digging, mining, chopping, making bricks &mdash; is offered by
+    the handful as well as one at a time: <b>once</b>, five, ten, twenty-five, fifty, or <b>until you
+    stop</b>. Pick a number and it counts itself down and puts the work away when it is done, and the
+    action bar says how far through it is, so a hundred bricks is one right-click rather than a
+    hundred.</p>
+    <p>Stitch a <b>toolbelt</b> (four leather and two ribbon, on an awl) and wear it, and it carries the
+    jobs you do most. It has <b>one loop for every ten points</b> of how well it was made, to a full ten
+    loops on a perfect one, and every loop answers to a number key &mdash; <kbd>1</kbd> to <kbd>9</kbd>,
+    and <kbd>0</kbd> for the tenth. Hang a job on a loop from any menu, by the entry
+    <i>Hang a job on your belt</i>. A job hung from your pack remembers the <b>kind</b> of thing rather
+    than the one in your hand, so the loop still works on the next loaf you bake; a job hung from the
+    ground is done <b>wherever you are pointing</b>, and on the tile under your own feet when you are
+    pointing at nothing. Right-click a loop to take the job off it again. Take the belt off and the
+    loops go with it, but nothing on them is forgotten.</p>
     <p>Ask for a second job while the first is still going and it <b>lines up behind it</b> rather than
     pushing it aside: it starts the moment the one in hand is done, walking you over if it needs to. The
     bar above the action shows what is waiting. You can keep <b>three</b> jobs in your head to begin
@@ -1011,4 +1041,88 @@ export function buildHelp(win: UIWindow): void {
     <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
     a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
   `;
+}
+
+/**
+ * The help, cut into sections at every heading, with a list of contents at the
+ * top and a box to search the lot. Searching keeps whole sections rather than
+ * single lines, because half an explanation is worse than none.
+ */
+export function buildHelp(win: UIWindow): void {
+  win.body.classList.add('help-body');
+  const holder = document.createElement('div');
+  holder.innerHTML = helpText();
+  // Gather the run of nodes under each heading into a section of its own.
+  const sections: Array<{ title: string; el: HTMLElement }> = [];
+  let current: HTMLElement | null = null;
+  for (const node of [...holder.childNodes]) {
+    if (node instanceof HTMLHeadingElement && node.tagName === 'H3') {
+      current = document.createElement('section');
+      current.className = 'help-sec';
+      current.id = `help-${sections.length}`;
+      current.append(node);
+      sections.push({ title: node.textContent ?? '', el: current });
+      continue;
+    }
+    if (current) current.append(node);
+    else if (node.nodeType !== Node.TEXT_NODE || (node.textContent ?? '').trim()) holder.removeChild(node);
+  }
+
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'panel-search help-search';
+  search.placeholder = 'Search the help…';
+  const contents = document.createElement('nav');
+  contents.className = 'help-contents';
+  const pages = document.createElement('div');
+  pages.className = 'help-pages';
+  const count = document.createElement('div');
+  count.className = 'help-count';
+  count.hidden = true;
+
+  const links = sections.map(({ title, el }, i) => {
+    const a = document.createElement('button');
+    a.type = 'button';
+    a.className = 'help-link';
+    a.textContent = title;
+    a.addEventListener('click', () => {
+      // Clear any search first, so the section being jumped to is on the page.
+      if (search.value) {
+        search.value = '';
+        show('');
+      }
+      el.scrollIntoView({ block: 'start' });
+      el.classList.add('help-found');
+      setTimeout(() => el.classList.remove('help-found'), 1200);
+    });
+    a.title = `Jump to “${title}” (section ${i + 1} of ${sections.length})`;
+    return a;
+  });
+  contents.append(...links);
+
+  /** Keep only the sections that answer to what has been typed. */
+  const show = (query: string): void => {
+    const q = query.trim().toLowerCase();
+    let kept = 0;
+    for (let i = 0; i < sections.length; i += 1) {
+      const { title, el } = sections[i];
+      const hit = !q || `${title} ${el.textContent ?? ''}`.toLowerCase().includes(q);
+      el.hidden = !hit;
+      links[i].hidden = !hit;
+      if (hit) kept += 1;
+    }
+    count.hidden = !q;
+    count.textContent = kept ? `${kept} of ${sections.length} sections` : `Nothing in the help answers to “${query.trim()}”.`;
+    pages.scrollTop = 0;
+  };
+  search.addEventListener('input', () => show(search.value));
+  search.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key !== 'Escape') return;
+    search.value = '';
+    show('');
+  });
+
+  pages.append(...sections.map((s) => s.el));
+  win.body.replaceChildren(search, contents, count, pages);
 }

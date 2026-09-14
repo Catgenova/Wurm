@@ -49,8 +49,10 @@ import { TilePanel } from './panels/tile';
 import type { DragPayload } from './dragdrop';
 import { WildermonPanel } from './panels/wildermon';
 import { StoresPanel } from './panels/stores';
+import { DeedPanel } from './panels/deed';
 import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
+import { jobEntry, pinEntry, pinnable } from './beltmenu';
 import { SettingsPanel } from './panels/settings';
 import { Hud } from './hud';
 import { buildHelp } from './panels/help';
@@ -79,6 +81,7 @@ export class UI {
   private readonly cratePanel: CratePanel;
   private readonly wildermon: WildermonPanel;
   private readonly stores: StoresPanel;
+  private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
 
   constructor(
@@ -97,6 +100,7 @@ export class UI {
       center: () => (renderer.camera.follow = true),
       newWorld: cb.newWorld,
       turn: cb.turn,
+      useLoop: (loop) => this.useLoop(loop),
     });
 
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });
@@ -131,6 +135,11 @@ export class UI {
       (id) => this.cratePanel.open(id),
       (id) => this.cratePanel.openFurniture(id),
     );
+    const deedWin = this.windows.create({ id: 'deed', title: 'Settlement', x: 12, y: 56, width: 330, height: 440, anchor: 'tr', open: false });
+    this.deedPanel = new DeedPanel(deedWin, game, (x, y) => {
+      game.moveTo(x, y);
+      game.logMsg(`Walking to (${x}, ${y}).`, 'info');
+    });
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (window.innerHeight - 460) / 2)}px`;
@@ -213,9 +222,43 @@ export class UI {
     this.settings.refresh();
     this.wildermon.update(performance.now());
     this.stores.update(performance.now());
+    this.deedPanel.update(performance.now());
   }
 
   /** Describe what is under the cursor. */
+  /**
+   * One job in a menu. A job that runs on and on is offered by the handful as
+   * well: five, ten, twenty-five, or until your wind gives out. That way a
+   * hundred bricks is one right-click and not a hundred.
+   */
+  private jobEntry(def: ActionDef, target: Target, reason: string | null, label: string): MenuItem {
+    return jobEntry(this.game, def, target, reason, label);
+  }
+
+  /**
+   * The thing under the cursor as a target: whatever is standing on the tile
+   * if anything is, and the tile itself otherwise. What the belt aims at.
+   */
+  private targetOf(pick: Pick): Target {
+    if (pick.creature !== undefined) return { kind: 'creature', id: pick.creature };
+    if (pick.crate !== undefined) return { kind: 'crate', id: pick.crate };
+    if (pick.fire !== undefined) return { kind: 'campfire', id: pick.fire };
+    if (pick.smelter !== undefined) return { kind: 'smelter', id: pick.smelter };
+    if (pick.kiln !== undefined) return { kind: 'kiln', id: pick.kiln };
+    if (pick.anvil !== undefined) return { kind: 'anvil', id: pick.anvil };
+    if (pick.post !== undefined) return { kind: 'post', id: pick.post };
+    if (pick.trap !== undefined) return { kind: 'trap', id: pick.trap };
+    if (pick.bridge !== undefined) return { kind: 'bridge', id: pick.bridge };
+    if (pick.furniture !== undefined) return { kind: 'furniture', id: pick.furniture };
+    return { kind: 'tile', x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
+  }
+
+  /** Press a loop on the belt, aimed at whatever the cursor is on. */
+  useLoop(loop: number): void {
+    const pick = this.renderer.hover;
+    this.game.useLoop(loop, pick ? this.targetOf(pick) : null);
+  }
+
   setHover(pick: Pick | null, sx: number, sy: number): void {
     if (!pick) {
       this.tooltip.hide();
@@ -633,9 +676,17 @@ export class UI {
           continue;
         }
       }
-      entries.push({ label: def.labelFor?.(target, this.game) ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) });
+      entries.push(this.jobEntry(def, target, reason, def.labelFor?.(target, this.game) ?? def.label));
     }
     if (!building) entries.push(...this.buildingEntries(pick));
+    // Hanging one of this tile's jobs on the belt, to be pressed anywhere after.
+    const hangable = this.game.actionsFor(target).filter((a) => pinnable(a.def));
+    if (hangable.length && this.game.beltLoops()) {
+      entries.push({
+        label: 'Hang a job on your belt',
+        children: hangable.map(({ def }) => ({ label: def.label, children: pinEntry(this.game, { action: def.id }).children })),
+      });
+    }
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;
     return { title, entries };
   }

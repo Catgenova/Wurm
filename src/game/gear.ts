@@ -9,9 +9,9 @@ import { matOf } from './materials';
  * and every kind of both trains a subskill of its own, by being used or by
  * being hit.
  */
-export type Slot = 'head' | 'chest' | 'arms' | 'legs' | 'feet' | 'weapon' | 'offhand';
+export type Slot = 'head' | 'chest' | 'arms' | 'legs' | 'feet' | 'weapon' | 'offhand' | 'belt';
 
-export const SLOTS: Slot[] = ['head', 'chest', 'arms', 'legs', 'feet', 'weapon', 'offhand'];
+export const SLOTS: Slot[] = ['head', 'chest', 'arms', 'legs', 'feet', 'weapon', 'offhand', 'belt'];
 export const SLOT_NAMES: Record<Slot, string> = {
   head: 'Head',
   chest: 'Chest',
@@ -20,6 +20,7 @@ export const SLOT_NAMES: Record<Slot, string> = {
   feet: 'Feet',
   weapon: 'Hand',
   offhand: 'Off hand',
+  belt: 'Belt',
 };
 
 /** Where a blow lands, and how likely each is. */
@@ -168,6 +169,7 @@ export function slotOf(id: string): Slot | null {
   if (a) return a.slot;
   if (isWeapon(id)) return 'weapon';
   if (isShield(id)) return 'offhand';
+  if (id === 'toolbelt') return 'belt';
   return null;
 }
 
