@@ -1,6 +1,5 @@
 import { FullscreenCanvas } from './engine/canvas';
 import { Input } from './engine/input';
-import { groundRoll, TILE_DEFS } from './world/tiles';
 import { GameLoop } from './engine/loop';
 import { partsMissing, piecesHeld, RELICS } from './game/archaeology';
 import { cropSprite } from './render/sprites';
@@ -33,6 +32,13 @@ import { Game } from './game/game';
 import { clearSave, loadGame, saveGame, saveOnExit, warmSave } from './game/save';
 import { Renderer } from './render/renderer';
 import { UI } from './ui/ui';
+// Debug surface only. These come last on purpose: main is the entry point, so
+// the order of its imports is the order the module graph is evaluated in.
+import { groundRoll, TILE_DEFS } from './world/tiles';
+import { crateName } from './game/crates';
+import { furnitureName } from './game/furniture';
+import { trapName } from './game/traps';
+import { postName } from './game/posts';
 
 const canvasEl = document.getElementById('game') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLElement;
@@ -82,7 +88,7 @@ declare global {
     wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; TRAPS: typeof TRAPS; BRIDGES: typeof BRIDGES; bridgeDone: typeof bridgeDone; BAITS: typeof BAITS; FISH_IDS: string[]; SPECIES: typeof SPECIES; WEAPON_BY_ID: typeof WEAPON_BY_ID; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
   }
 }
-Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt, windFrom, windWord, pointOfSail, sailWord, favourCap, prayerWorth, PATHS, sittingWorth, weaponDamage, loopsFor, BELT_MAX, coaxBonus, COAX_STEP, COAX_CAP, COAX_LAPSE, rollsAt, PER_ROLL, cropSprite, creatureLines, tameChance, knackLands, knackBonus, KNACK_ODDS, KNACK_CAP, KNACK_BONUS, KNACK_HOME, boonTime, boonOf, BOON_BONUS, tableMul, upkeepMul, fedness, balance, NUTRIENTS, ITEM_DEFS, TILE_DEFS, groundRoll });
+Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt, windFrom, windWord, pointOfSail, sailWord, favourCap, prayerWorth, PATHS, sittingWorth, weaponDamage, loopsFor, BELT_MAX, coaxBonus, COAX_STEP, COAX_CAP, COAX_LAPSE, rollsAt, PER_ROLL, cropSprite, creatureLines, tameChance, knackLands, knackBonus, KNACK_ODDS, KNACK_CAP, KNACK_BONUS, KNACK_HOME, boonTime, boonOf, BOON_BONUS, tableMul, upkeepMul, fedness, balance, NUTRIENTS, ITEM_DEFS, TILE_DEFS, groundRoll, crateName, furnitureName, trapName, postName });
 window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, BRIDGES, bridgeDone, BAITS, FISH_IDS: FISH.map((f) => f.id), SPECIES, WEAPON_BY_ID, itemName, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {

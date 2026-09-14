@@ -676,6 +676,21 @@ export class Renderer {
         drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind, !!ent.piece.lit, dyeOf(ent.piece) ?? undefined, this.sailTrim(ent.piece));
         const [W, D] = furnitureSpan(ent.piece.kind);
         const h = FURNITURE_HEIGHT[ent.piece.kind] ?? 14;
+        // A sign is a board made to be read, so what is written on it stands
+        // over it in the world rather than waiting in a tooltip.
+        if (ent.piece.name && furnitureDef(ent.piece.kind).sign && zoom >= 0.6) {
+          const text = ent.piece.name;
+          ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'alphabetic';
+          const w = ctx.measureText(text).width;
+          const ty = ent.sy - (h + 6) * zoom;
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.fillRect(ent.sx - w / 2 - 4 * zoom, ty - 11 * zoom, w + 8 * zoom, 14 * zoom);
+          ctx.fillStyle = '#e7d7a8';
+          ctx.fillText(text, ent.sx, ty);
+          ctx.textAlign = 'left';
+        }
         this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: ent.piece.id });
       }
       if (ent.kind === 'kiln' && ent.kiln) {

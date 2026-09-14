@@ -35,6 +35,8 @@ export function furnitureSpan(kind: string): [number, number] {
 
 /** How tall a piece stands, in pixels at zoom 1. */
 export const FURNITURE_HEIGHT: Record<string, number> = {
+  sign: 26,
+  great_sign: 30,
   stool: 11,
   chair: 20,
   bench: 15,
@@ -180,6 +182,22 @@ export interface Tint {
 type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean, tint?: Tint, trim?: number) => void;
 
 const DRAW: Record<string, Draw> = {
+  // A board across two posts. Whatever is written on it is drawn by the
+  // renderer above the board itself, so all this has to be is the board.
+  sign: (ctx, W, D, h, _lit, tint) => {
+    const w = WOODS.oak;
+    post(ctx, -W * 0.6, 0, h, w, 1.4);
+    post(ctx, W * 0.6, 0, h, w, 1.4);
+    void tint;
+    box(ctx, 0, 0, W * 0.95, D * 0.22, h * 0.42, WOODS.pale, h * 0.5);
+  },
+  great_sign: (ctx, W, D, h, _lit, tint) => {
+    const w = WOODS.oak;
+    post(ctx, -W * 0.72, 0, h, w, 1.7);
+    post(ctx, W * 0.72, 0, h, w, 1.7);
+    void tint;
+    box(ctx, 0, 0, W * 1.02, D * 0.24, h * 0.46, WOODS.pale, h * 0.48);
+  },
   stool: (ctx, W, D, h) => {
     const w = WOODS.oak;
     for (const [lx, ly] of [[-W * 0.62, 0], [W * 0.62, 0], [0, -D * 0.7]] as Array<[number, number]>) post(ctx, lx, ly, h - 2, w, 1.5);

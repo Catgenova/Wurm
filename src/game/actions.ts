@@ -23,6 +23,7 @@ import { HUSBANDRY_ACTIONS } from './husbandry';
 import { DYE_ACTIONS } from './dyes';
 import { TRAP_ACTIONS } from './traps';
 import { BRIDGE_ACTIONS } from './bridges';
+import { NAMING_ACTIONS } from './naming';
 import { FAITH_ACTIONS } from './faith';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
@@ -1369,6 +1370,7 @@ export const ACTIONS: ActionDef[] = [
   ...HUSBANDRY_ACTIONS,
   ...DYE_ACTIONS,
   ...TRAP_ACTIONS,
+  ...NAMING_ACTIONS,
   ...BRIDGE_ACTIONS,
   ...FAITH_ACTIONS,
   ...MEDITATION_ACTIONS,

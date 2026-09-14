@@ -297,6 +297,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   corpse: { name: 'Corpse', category: 'misc', weight: 12, decay: 90, description: 'Something dead. Butcher it before it rots: meat, fur, leather, bone and glands off a wildermon, and off one of the bad things, tusk, sinew and worse.' },
   // Furniture, carried flat-packed and set down on the subtile grid.
   stool: { name: 'Stool', category: 'misc', weight: 4, decay: 4, description: 'Three legs and a seat. Set it down anywhere.' },
+  sign: { name: 'Sign', category: 'misc', weight: 5, decay: 5, description: 'A board across two posts, made to be written on. Set it up and give it a name, and the name stands there for anyone walking past.' },
+  great_sign: { name: 'Signboard', category: 'misc', weight: 11, decay: 5, description: 'A board wide enough to write a sentence on. Set it up where a road forks and nobody need guess again.' },
   chair: { name: 'Chair', category: 'misc', weight: 7, decay: 4, description: 'A chair with a proper back to it. Set it down anywhere.' },
   bench: { name: 'Bench', category: 'misc', weight: 12, decay: 4, description: 'Seats two at a pinch, three in a good mood.' },
   table: { name: 'Table', category: 'misc', weight: 18, decay: 4, description: 'A square table on four legs.' },

@@ -11,6 +11,8 @@ export type CrateKind = 'log' | 'plank';
 
 export interface PlacedCrate {
   id: number;
+  /** What you have called it, when you have called it anything. */
+  name?: string;
   x: number;
   y: number;
   /** Subtile column and row, 0..3. */
@@ -44,6 +46,7 @@ export const crateUnits = (c: PlacedCrate): number => c.items.reduce((n, it) => 
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const crateCapacity = (c: PlacedCrate): number => Math.round(CRATE_DEFS[c.kind].capacity * matOf(c.material).hold);
 export const crateName = (c: PlacedCrate): string => {
+  if (c.name) return c.name;
   const wood = c.material ? ` (${c.material.toLowerCase()})` : '';
   return c.deed ? `Deed crate (${CRATE_DEFS[c.kind].name.toLowerCase()})${wood}` : `${CRATE_DEFS[c.kind].name}${wood}`;
 };

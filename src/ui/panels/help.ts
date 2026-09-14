@@ -409,6 +409,17 @@ function helpText(): string {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <h3>Calling things by name</h3>
+    <p>A settlement of any age has six bins, four crates and a row of chests, and every one of them is
+    called <i>Bulk bin (oak)</i>. Any crate, bin, chest, cart, piece of furniture, work post or trap
+    will take a name of its own: its menu offers <b>Give it a name</b>, and after that the name is what
+    it is called <b>everywhere</b> &mdash; in the Stores window, in the settlement window, in its own
+    menu, and when you point at it. Answering with nothing takes the name off again. It is the
+    difference between hunting through the lot and walking to the one marked Planks.</p>
+    <p>A <b>sign</b> (2 planks, 2 shafts, 6 nails) and a wider <b>signboard</b> (5 planks, a timber, 2
+    shafts, 12 nails) are boards made to be written on. Set one up, give it a name, and the name stands
+    in the world above the board where anyone walking past can read it &mdash; which is what a fork in
+    a road wants.</p>
     <h3>Bags</h3>
     <p>Three things hold other things and are carried in your pack: a <b>sack</b> of 2 cloth (40 things),
     a <b>satchel</b> of 3 leather and a ribbon (25), and a <b>backpack</b> of 6 leather and 2 ribbons

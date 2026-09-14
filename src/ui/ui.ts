@@ -430,6 +430,7 @@ export class UI {
         const reason = def.check?.(ct, this.game) ?? null;
         entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, ct) });
       }
+      entries.push(...this.nameEntry(ct));
       return { title: crateName(crate), entries };
     }
     const fire = pick.fire !== undefined ? this.game.campfires.get(pick.fire) : undefined;
@@ -437,15 +438,15 @@ export class UI {
     const smelter = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
     if (smelter) return { title: `Smelter (${smelterState(smelter)})`, entries: this.smelterEntries(smelter) };
     const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
-    if (piece) return { title: `${furnitureName(piece)} (${furnitureState(piece)})`, entries: this.furnitureEntries(piece) };
+    if (piece) return { title: `${furnitureName(piece)} (${furnitureState(piece)})`, entries: [...this.furnitureEntries(piece), ...this.nameEntry({ kind: 'furniture', id: piece.id })] };
     const kilnHere = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
     if (kilnHere) return { title: `Kiln (${kilnState(kilnHere)})`, entries: this.kilnEntries(kilnHere) };
     const anvilHere = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
     if (anvilHere) return { title: `${anvilName(anvilHere)} (QL ${anvilHere.ql.toFixed(0)})`, entries: this.anvilEntries(anvilHere) };
     const postHere = pick.post !== undefined ? this.game.posts.get(pick.post) : undefined;
-    if (postHere) return { title: `${postName(postHere)} (${postState(postHere)})`, entries: this.postEntries(postHere) };
+    if (postHere) return { title: `${postName(postHere)} (${postState(postHere)})`, entries: [...this.postEntries(postHere), ...this.nameEntry({ kind: 'post', id: postHere.id })] };
     const trapHere = pick.trap !== undefined ? this.game.traps.get(pick.trap) : undefined;
-    if (trapHere) return { title: `${trapName(trapHere)} (${trapState(trapHere, this.game)})`, entries: this.trapEntries(trapHere) };
+    if (trapHere) return { title: `${trapName(trapHere)} (${trapState(trapHere, this.game)})`, entries: [...this.trapEntries(trapHere), ...this.nameEntry({ kind: 'trap', id: trapHere.id })] };
     const bridgeHere = pick.bridge !== undefined ? this.game.bridges.get(pick.bridge) : undefined;
     if (bridgeHere) return { title: `${bridgeName(bridgeHere)} (${bridgeState(bridgeHere)})`, entries: this.bridgeEntries(bridgeHere) };
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
@@ -1275,6 +1276,13 @@ export class UI {
     push(item('release_creature'));
     push(item('attack_creature'));
     return entries;
+  }
+
+  /** "Give it a name", for anything that will take one. */
+  private nameEntry(t: Target): MenuItem[] {
+    const def = ACTION_BY_ID.get('name_thing');
+    if (!def || !def.applies(t, this.game)) return [];
+    return [{ label: def.labelFor?.(t, this.game) ?? def.label, onSelect: () => this.game.requestAction(def, t) }];
   }
 
   /** Planning and construction entries for a tile: footprint, walls on the nearest side, floors, storeys. */

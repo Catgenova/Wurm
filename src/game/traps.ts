@@ -93,6 +93,8 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
 
 export interface PlacedTrap {
   id: number;
+  /** What you have called it, when you have called it anything. */
+  name?: string;
   x: number;
   y: number;
   /** Subtile it is set on, 0..3 each way. */
@@ -125,7 +127,7 @@ export const trapDecayRate = (t: PlacedTrap): number => 100 / trapLife(t.kind, t
 export const trapLeft = (t: PlacedTrap): number => Math.max(0, trapLife(t.kind, t.ql) * (1 - t.dmg / 100));
 export const trapCentre = (t: PlacedTrap): [number, number] => [t.x + (t.sx + 0.5) / SUBTILES, t.y + (t.sy + 0.5) / SUBTILES];
 export const trapName = (t: PlacedTrap): string =>
-  t.material ? `${trapDef(t).name} (${t.material.toLowerCase()})` : trapDef(t).name;
+  t.name ? t.name : t.material ? `${trapDef(t).name} (${t.material.toLowerCase()})` : trapDef(t).name;
 
 /** How often a set trap is rolled, in seconds. */
 export const CHECK_EVERY = 45;

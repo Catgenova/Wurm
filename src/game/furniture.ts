@@ -17,6 +17,8 @@ export interface FurnitureDef {
   h: number;
   /** Things it holds, for the pieces that hold anything. */
   capacity?: number;
+  /** A board made to be written on: its name is painted across the world. */
+  sign?: boolean;
   /** Boards, shafts and nails it is nailed together from. */
   bill: Array<[string, number]>;
   /** How hard it is to make well. */
@@ -155,6 +157,10 @@ export const FURNITURE: FurnitureDef[] = [
   // Barrels hold liquid and nothing else, in three sizes.
   piece('small_barrel', 'Small barrel', 1, 1, [['plank', 3], ['shaft', 1], ['nail', 6]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
   piece('large_barrel', 'Large barrel', 2, 2, [['plank', 14], ['shaft', 4], ['nail', 26]], 26, 20, 'You raise a great barrel, as tall as you are and twice as wide.', undefined, { liquid: 250 }),
+  // A board on a post, made to carry writing. Name it and the name stands in
+  // the world where anyone walking past can read it.
+  piece('sign', 'Sign', 1, 1, [['plank', 2], ['shaft', 2], ['nail', 6]], 10, 7, 'You nail a board across two posts and set it up straight.', undefined, { sign: true }),
+  piece('great_sign', 'Signboard', 2, 1, [['plank', 5], ['timber', 1], ['shaft', 2], ['nail', 12]], 18, 12, 'You nail up a board wide enough to write a sentence on.', undefined, { sign: true }),
 ];
 
 export const FURNITURE_BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
@@ -173,6 +179,8 @@ export interface PlacedFurniture {
   /** Which of the twenty it is. */
   kind: string;
   ql: number;
+  /** What you have called it, when you have called it anything. */
+  name?: string;
   /** What is stored in it, for the pieces that store anything. */
   items: Item[];
   /** Seconds of fuel left and whether it is alight, for the oven. */
@@ -216,7 +224,8 @@ export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
 export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket' };
 
-export const furnitureName = (f: PlacedFurniture): string => (f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name);
+export const furnitureName = (f: PlacedFurniture): string =>
+  f.name ? f.name : f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name;
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const furnitureCapacity = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold);

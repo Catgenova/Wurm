@@ -15,6 +15,8 @@ import { SPECIES, workRangeOf, GATHER_DO, type Creature } from './creatures';
  */
 export interface PlacedPost {
   id: number;
+  /** What you have called it, when you have called it anything. */
+  name?: string;
   x: number;
   y: number;
   /** Subtile it stands on, 0..3 each way. */
@@ -49,7 +51,7 @@ export const postLeft = (p: PlacedPost): number => Math.max(0, postLife(p.ql) * 
 export const postRadius = (ql: number): number => Math.round(8 + (clampQl(ql) / 100) * 12);
 
 export const postCentre = (p: PlacedPost): [number, number] => [p.x + (p.sx + 0.5) / SUBTILES, p.y + (p.sy + 0.5) / SUBTILES];
-export const postName = (p: PlacedPost): string => (p.material ? `Work post (${p.material.toLowerCase()})` : 'Work post');
+export const postName = (p: PlacedPost): string => (p.name ? p.name : p.material ? `Work post (${p.material.toLowerCase()})` : 'Work post');
 
 /** How long it has left, said the way a person would say it. */
 export function postState(p: PlacedPost): string {

@@ -310,6 +310,12 @@ rebuilds and commits the result.
   where you stand. Barrels hold liquid and nothing else in three sizes (30,
   80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
   empty bucket back, and filling beside a barrel draws out of it.
+- **Calling things by name.** Any crate, bin, chest, cart, piece of furniture,
+  work post or trap takes a name of its own, and that name is what it is called
+  everywhere after — the Stores window, the settlement window, its own menu,
+  the tooltip. Answering with nothing takes the name off again. A **sign** and a
+  wider **signboard** are boards made to be written on: set one up, name it,
+  and the name stands in the world above the board for anyone walking past.
 - **Roads worth their stone.** Feet hardly care what is under them; a laden
   wheel cares about little else. An empty cart rolls over anything at its own
   pace, a full one is held to what the ground will take, and a half-loaded one
