@@ -18,6 +18,12 @@ export type GameEvents = {
   crate: [];
   smelter: [];
   creature: [];
+  /**
+   * Something was hurt, somewhere. Carried so the renderer can put a number
+   * over it without having to go looking for what changed; the log says what
+   * happened in words, this says where to write it.
+   */
+  hit: [x: number, y: number, amount: number, kind: 'dealt' | 'taken'];
   reset: [];
 };
 

@@ -76,6 +76,9 @@ export const SKILL_DEFS: SkillDef[] = [
  * point — nobody finishes a skill by accident, and the last stretch of one is
  * a standing target rather than a thing you tick off.
  */
+/** Every skill by its id, for anything that has an id and wants the name. */
+export const SKILL_BY_ID = new Map(SKILL_DEFS.map((d) => [d.id, d]));
+
 export const SKILL_CURVE = 1.8;
 
 /** What is left of a gain at a given level, 1 at nothing and 0 at mastery. */

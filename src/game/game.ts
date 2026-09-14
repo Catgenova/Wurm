@@ -1089,10 +1089,14 @@ export class Game {
   hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
     const hit = this.absorb(raw);
     if (hit.blocked) {
+      this.player.attackedAt = this.time;
+      this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
       this.logMsg(`You take ${what} on your ${itemName(hit.worn as Item).toLowerCase()}.`, 'error');
       return;
     }
     this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
+    this.player.attackedAt = this.time;
+    this.events.emit('hit', this.player.x, this.player.y, hit.taken, 'taken');
     const wound = this.wound(kind, hit.part, hit.taken);
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
     this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'error');

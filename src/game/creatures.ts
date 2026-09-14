@@ -3472,9 +3472,11 @@ export class Creatures {
   /** Deal damage from a creature or the player; timid wild creatures bolt, and a kill leaves a corpse. */
   hurt(game: Game, t: Creature, dmg: number, by: Creature | 'player'): void {
     const from = by === 'player' ? game.player : by;
+    const before = t.health;
     t.health -= dmg;
     t.attackedBy = by === 'player' ? PLAYER_ATTACKER : by.id;
     t.attackedAt = game.time;
+    game.events.emit('hit', t.x, t.y, Math.max(0, before - Math.max(0, t.health)), 'dealt');
     // Nothing that has been hit takes food from the hand that hit it.
     if (by === 'player') forgetCoaxing(t);
     if (t.mode === 'wild' && this.species(t).timid) {

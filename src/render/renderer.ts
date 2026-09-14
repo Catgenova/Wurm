@@ -40,6 +40,8 @@ import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
+import { FLOAT_COLOURS, Floaters } from './floaters';
+import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { GRASS_SWAY, SWAY_MAX, swayAt } from './sway';
 import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
@@ -147,6 +149,8 @@ const BLEND_ALPHA = 0.46;
 const BLEND_REACH = 0.55;
 /** Specks of grain laid on each tile once you are close enough to see them. */
 const GRAIN_SPECKS = 22;
+/** The colour an outline is drawn in round whatever the cursor is on. */
+const HOVER_INK = 'rgb(255, 226, 120)';
 const WATER_SHALLOW = [86, 168, 190];
 const WATER_DEEP = [16, 58, 118];
 
@@ -255,6 +259,10 @@ export class Renderer {
   readonly wakes = new Wakes();
   /** What has been kicked up underfoot. */
   readonly dust = new Dust();
+  /** Numbers and words standing over what they belong to. */
+  readonly floaters = new Floaters();
+  /** How long a thing keeps the white of being hit, in seconds. */
+  private static readonly FLASH = 0.22;
   /** Which way the wind leans things on screen, and how hard, worked out once a frame. */
   private lean = { x: 0, y: 0, force: 0 };
   /** The light this frame, kept so anything needing a ground colour can ask for one. */
@@ -282,6 +290,24 @@ export class Renderer {
     this.colors = new Array<string | null>(game.world.w * game.world.h).fill(null);
     this.memColors = new Array<string | null>(game.world.w * game.world.h).fill(null);
     game.world.onChange((x, y) => this.invalidate(x, y));
+    // Damage and skill both go up over the thing they happened to. Damage adds
+    // up per target, skill per skill, so a flurry of either reads as one
+    // running number rather than a stack of them.
+    game.events.on('hit', (x, y, amount, kind) => {
+      const key = `${kind}:${Math.round(x)},${Math.round(y)}`;
+      this.floaters.add(x, y, kind, key, amount, this.time, (total) => (total < 0.05 ? 'blocked' : `${kind === 'taken' ? '-' : ''}${total < 10 ? total.toFixed(1) : Math.round(total)}`));
+    });
+    game.events.on('skill', (id, gain) => {
+      if (gain <= 0) return;
+      const name = SKILL_BY_ID.get(id)?.name ?? id;
+      const p = game.player;
+      this.floaters.add(p.x, p.y, 'skill', `skill:${id}`, gain, this.time, (total) => `${name} +${total.toFixed(2)}`);
+    });
+    game.events.on('reset', () => {
+      this.floaters.clear();
+      this.dust.clear();
+      this.wakes.clear();
+    });
     canvas.onResize(() => this.camera.setViewport(canvas.width, canvas.height));
     this.camera.setViewport(canvas.width, canvas.height);
   }
@@ -836,6 +862,7 @@ export class Renderer {
     this.drawSwell(ctx, zoom);
     this.drawWakes(ctx, zoom);
     this.drawAir(ctx, zoom);
+    this.drawFloaters(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
     if (fogged) {
@@ -929,6 +956,92 @@ export class Renderer {
     return up ? SPECIES[up.species]?.mount ?? 0 : 0;
   }
 
+  /**
+   * The scratch one entity is drawn on when it has to be tinted whole. Tinting
+   * with a canvas filter costs per drawing operation, and a wildermon is forty
+   * of them; on the scratch it is one. It is kept between frames and only
+   * resized when the zoom outgrows it.
+   */
+  private tintPad: HTMLCanvasElement | null = null;
+  private tintCtx: CanvasRenderingContext2D | null = null;
+
+  private scratch(zoom: number): { pad: HTMLCanvasElement; g: CanvasRenderingContext2D; ox: number; oy: number } {
+    const side = Math.ceil(124 * Math.max(1, zoom));
+    if (!this.tintPad || this.tintPad.width < side) {
+      this.tintPad = document.createElement('canvas');
+      this.tintPad.width = side;
+      this.tintPad.height = side;
+      this.tintCtx = this.tintPad.getContext('2d');
+    }
+    const g = this.tintCtx as CanvasRenderingContext2D;
+    g.clearRect(0, 0, this.tintPad.width, this.tintPad.height);
+    return { pad: this.tintPad, g, ox: this.tintPad.width / 2, oy: this.tintPad.height * 0.78 };
+  }
+
+  /**
+   * A flat stamp of whatever was last drawn on the scratch: its silhouette,
+   * in one colour. `source-atop` paints only where something is already
+   * there, so the shape comes out of the drawing itself and nothing has to
+   * know what shape a rabba is.
+   */
+  private stamp(colour: string): void {
+    const pad = this.tintPad as HTMLCanvasElement;
+    const g = this.tintCtx as CanvasRenderingContext2D;
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = colour;
+    g.fillRect(0, 0, pad.width, pad.height);
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * Draw one thing, plainly or lit up.
+   *
+   * A canvas filter would do both of these in a line, and costs per drawing
+   * operation rather than per thing — a wildermon is some forty operations, so
+   * a dozen of them flashing at once turned a frame into half a second. This
+   * does the same work with a silhouette taken off a scratch canvas: white
+   * over the top for a blow, and stamped eight ways round the outside for the
+   * thing under the cursor, which is a real outline rather than a glow round
+   * a box.
+   */
+  private paint(
+    ctx: CanvasRenderingContext2D,
+    zoom: number,
+    effect: 'none' | 'flash' | 'hover',
+    power: number,
+    sx: number,
+    sy: number,
+    draw: (g: CanvasRenderingContext2D, px: number, py: number) => void,
+  ): void {
+    if (effect === 'none') {
+      draw(ctx, sx, sy);
+      return;
+    }
+    const { pad, g, ox, oy } = this.scratch(zoom);
+    draw(g, ox, oy);
+    const left = sx - ox;
+    const top = sy - oy;
+    if (effect === 'flash') {
+      ctx.drawImage(pad, left, top);
+      this.stamp('#ffffff');
+      ctx.globalAlpha = Math.max(0, Math.min(1, power));
+      ctx.drawImage(pad, left, top);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    // The outline goes down first and the thing on top of it, so what shows is
+    // the part of the ring that sticks out past the edges.
+    this.stamp(HOVER_INK);
+    const r = Math.max(1.6, 2.1 * zoom);
+    ctx.globalAlpha = 0.9;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.drawImage(pad, left + Math.cos(a) * r, top + Math.sin(a) * r);
+    }
+    ctx.globalAlpha = 1;
+    draw(ctx, sx, sy);
+  }
+
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
@@ -938,46 +1051,56 @@ export class Renderer {
     const screenDx = cam.rotateX(player.dirX, player.dirY) - cam.rotateY(player.dirX, player.dirY);
     if (Math.abs(screenDx) > 0.05) this.playerFacing = screenDx > 0 ? 1 : -1;
     for (const ent of ents) {
+      // Being hit beats being pointed at: a blow should read as a blow even
+      // while the cursor is sitting on the thing taking it.
+      const hovering = this.isHovered(ent);
       if (ent.kind === 'player') {
-        drawPlayer(ctx, ent.sx, ent.sy - (ent.lift ?? 0), zoom, {
-          phase: player.moving ? player.walkPhase : this.time * 6,
-          moving: player.moving,
-          facing: this.playerFacing,
-          swimming: player.swimming,
-          working: this.game.action?.state === 'performing',
-          driving: (ent.lift ?? 0) > 0,
-          // Dyed cloth or leather on the chest and legs is worn where it shows.
-          tunic: dyeOf(this.game.worn('chest'))?.colour,
-          trousers: dyeOf(this.game.worn('legs'))?.colour,
-        });
+        const struck = this.flashOf(player.attackedAt);
+        this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ent.sx, ent.sy - (ent.lift ?? 0), (g, px, py) =>
+          drawPlayer(g, px, py, zoom, {
+            phase: player.moving ? player.walkPhase : this.time * 6,
+            moving: player.moving,
+            facing: this.playerFacing,
+            swimming: player.swimming,
+            working: this.game.action?.state === 'performing',
+            driving: (ent.lift ?? 0) > 0,
+            // Dyed cloth or leather on the chest and legs is worn where it shows.
+            tunic: dyeOf(this.game.worn('chest'))?.colour,
+            trousers: dyeOf(this.game.worn('legs'))?.colour,
+          }),
+        );
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {
         const cr = ent.creature;
         const def = SPECIES[cr.species] ?? SPECIES.rabba;
         const dx = cam.rotateX(cr.dirX, cr.dirY) - cam.rotateY(cr.dirX, cr.dirY);
-        drawCreature(ctx, ent.sx, ent.sy, zoom, {
-          species: def.id,
-          facing: dx >= 0 ? 1 : -1,
-          phase: cr.walkPhase,
-          moving: cr.moving,
-          colors: def.variants[cr.variant] ?? def.variants[0],
-          health: cr.health / maxHealth(cr, def),
-          fleece: cr.fleece,
-          scale: ageDef(cr, this.game.time).scale,
-          label: cr.mode === 'wild' ? undefined : cr.name,
-        });
+        const hit = this.flashOf(cr.attackedAt);
+        this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx, ent.sy, (g, px, py) =>
+          drawCreature(g, px, py, zoom, {
+            species: def.id,
+            facing: dx >= 0 ? 1 : -1,
+            phase: cr.walkPhase,
+            moving: cr.moving,
+            colors: def.variants[cr.variant] ?? def.variants[0],
+            health: cr.health / maxHealth(cr, def),
+            fleece: cr.fleece,
+            scale: ageDef(cr, this.game.time).scale,
+            label: cr.mode === 'wild' ? undefined : cr.name,
+          }),
+        );
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
-        drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind, !!ent.piece.lit, dyeOf(ent.piece) ?? undefined, this.sailTrim(ent.piece));
-        const [W, D] = furnitureSpan(ent.piece.kind);
-        const h = FURNITURE_HEIGHT[ent.piece.kind] ?? 14;
+        const piece = ent.piece;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.sailTrim(piece)));
+        const [W, D] = furnitureSpan(piece.kind);
+        const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
         // A sign is a board made to be read, so what is written on it stands
         // over it in the world rather than waiting in a tooltip.
-        if (ent.piece.name && furnitureDef(ent.piece.kind).sign && zoom >= 0.6) {
-          const text = ent.piece.name;
+        if (piece.name && furnitureDef(piece.kind).sign && zoom >= 0.6) {
+          const text = piece.name;
           ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'alphabetic';
@@ -989,15 +1112,17 @@ export class Renderer {
           ctx.fillText(text, ent.sx, ty);
           ctx.textAlign = 'left';
         }
-        this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: ent.piece.id });
+        this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: piece.id });
       }
       if (ent.kind === 'kiln' && ent.kiln) {
-        drawKiln(ctx, ent.sx, ent.sy, zoom, ent.kiln.lit, ent.kiln.jobs.length > 0, this.time);
-        this.kilnHits.push({ x: ent.x, y: ent.y, left: ent.sx - 26 * zoom, top: ent.sy - 44 * zoom, w: 52 * zoom, h: 48 * zoom, kiln: ent.kiln.id });
+        const kiln = ent.kiln;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawKiln(g, px, py, zoom, kiln.lit, kiln.jobs.length > 0, this.time));
+        this.kilnHits.push({ x: ent.x, y: ent.y, left: ent.sx - 26 * zoom, top: ent.sy - 44 * zoom, w: 52 * zoom, h: 48 * zoom, kiln: kiln.id });
       }
       if (ent.kind === 'smelter' && ent.smelter) {
-        drawSmelter(ctx, ent.sx, ent.sy, zoom, ent.smelter.lit, ent.smelter.jobs.length > 0, this.time);
-        this.smelterHits.push({ x: ent.x, y: ent.y, left: ent.sx - 34 * zoom, top: ent.sy - 58 * zoom, w: 68 * zoom, h: 62 * zoom, smelter: ent.smelter.id });
+        const sm = ent.smelter;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawSmelter(g, px, py, zoom, sm.lit, sm.jobs.length > 0, this.time));
+        this.smelterHits.push({ x: ent.x, y: ent.y, left: ent.sx - 34 * zoom, top: ent.sy - 58 * zoom, w: 68 * zoom, h: 62 * zoom, smelter: sm.id });
         continue;
       }
       if (ent.kind === 'anvil' && ent.anvil) {
@@ -1007,28 +1132,32 @@ export class Renderer {
         const c = rock ? rock.color : ([150, 150, 156] as const);
         const face = `rgb(${c[0]},${c[1]},${c[2]})`;
         const shade = `rgb(${Math.round(c[0] * 0.68)},${Math.round(c[1] * 0.68)},${Math.round(c[2] * 0.68)})`;
-        drawAnvil(ctx, ent.sx, ent.sy, zoom, face, shade);
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawAnvil(g, px, py, zoom, face, shade));
         this.anvilHits.push({ x: ent.x, y: ent.y, left: ent.sx - 20 * zoom, top: ent.sy - 27 * zoom, w: 40 * zoom, h: 30 * zoom, anvil: ent.anvil.id });
         continue;
       }
       if (ent.kind === 'post' && ent.post) {
-        drawWorkPost(ctx, ent.sx, ent.sy, zoom, postLeft(ent.post) / postLife(ent.post.ql), ent.post.worker !== null);
-        this.postHits.push({ x: ent.x, y: ent.y, left: ent.sx - 9 * zoom, top: ent.sy - 30 * zoom, w: 18 * zoom, h: 32 * zoom, post: ent.post.id });
+        const post = ent.post;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawWorkPost(g, px, py, zoom, postLeft(post) / postLife(post.ql), post.worker !== null));
+        this.postHits.push({ x: ent.x, y: ent.y, left: ent.sx - 9 * zoom, top: ent.sy - 30 * zoom, w: 18 * zoom, h: 32 * zoom, post: post.id });
         continue;
       }
       if (ent.kind === 'deck' && ent.deck) {
-        drawDeck(ctx, ent.sx, ent.sy, zoom, ent.deck.kind, ent.deck.done, ent.deck.drop);
-        this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: ent.deck.id });
+        const deck = ent.deck;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawDeck(g, px, py, zoom, deck.kind, deck.done, deck.drop));
+        this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: deck.id });
         continue;
       }
       if (ent.kind === 'trap' && ent.trap) {
-        drawTrap(ctx, ent.sx, ent.sy, zoom, ent.trap.kind, !!ent.trap.bait, ent.trap.caught !== null);
-        this.trapHits.push({ x: ent.x, y: ent.y, left: ent.sx - 8 * zoom, top: ent.sy - 12 * zoom, w: 16 * zoom, h: 14 * zoom, trap: ent.trap.id });
+        const trap = ent.trap;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawTrap(g, px, py, zoom, trap.kind, !!trap.bait, trap.caught !== null));
+        this.trapHits.push({ x: ent.x, y: ent.y, left: ent.sx - 8 * zoom, top: ent.sy - 12 * zoom, w: 16 * zoom, h: 14 * zoom, trap: trap.id });
         continue;
       }
       if (ent.kind === 'campfire' && ent.fire) {
-        drawCampfire(ctx, ent.sx, ent.sy, zoom, ent.fire.lit, ent.fire.fuel, this.time);
-        this.fireHits.push({ x: ent.x, y: ent.y, left: ent.sx - 22 * zoom, top: ent.sy - 20 * zoom, w: 44 * zoom, h: 30 * zoom, fire: ent.fire.id });
+        const fire = ent.fire;
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawCampfire(g, px, py, zoom, fire.lit, fire.fuel, this.time));
+        this.fireHits.push({ x: ent.x, y: ent.y, left: ent.sx - 22 * zoom, top: ent.sy - 20 * zoom, w: 44 * zoom, h: 30 * zoom, fire: fire.id });
         continue;
       }
       const spr = ent.spr;
@@ -1052,7 +1181,7 @@ export class Renderer {
         ctx.restore();
         continue;
       }
-      ctx.drawImage(spr.canvas, left, top, dw, dh);
+      this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(spr.canvas, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh));
       if (ent.kind === 'crate' && ent.crateId !== undefined) {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
@@ -1651,6 +1780,89 @@ export class Renderer {
         ctx.fill();
       }
     }
+  }
+
+  /**
+   * Whether this is the thing under the cursor. Picking already knows what it
+   * is by id; this asks the other way round, so an entity about to be drawn
+   * can be told to light up.
+   */
+  private isHovered(ent: Entity): boolean {
+    const h = this.hover;
+    if (!h) return false;
+    switch (ent.kind) {
+      case 'creature':
+        return h.creature !== undefined && h.creature === ent.creature?.id;
+      case 'crate':
+        return h.crate !== undefined && h.crate === ent.crateId;
+      case 'campfire':
+        return h.fire !== undefined && h.fire === ent.fire?.id;
+      case 'smelter':
+        return h.smelter !== undefined && h.smelter === ent.smelter?.id;
+      case 'kiln':
+        return h.kiln !== undefined && h.kiln === ent.kiln?.id;
+      case 'furniture':
+        return h.furniture !== undefined && h.furniture === ent.piece?.id;
+      case 'anvil':
+        return h.anvil !== undefined && h.anvil === ent.anvil?.id;
+      case 'post':
+        return h.post !== undefined && h.post === ent.post?.id;
+      case 'trap':
+        return h.trap !== undefined && h.trap === ent.trap?.id;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * The light that comes up around whatever the cursor is on. It hugs the
+   * silhouette rather than boxing it, which is the difference between knowing
+   * a thing is selected and knowing which thing is selected — in a crowded
+   * pen with four rabba standing on the same tile, a box round the tile tells
+   * you nothing.
+   */
+  /**
+   * The numbers and words standing over the world. They are drawn after
+   * everything else on the ground and before the fog, so a number over a
+   * wildermon in the dark is still readable — which is the whole point of it
+   * being a number rather than a line in the log.
+   */
+  private drawFloaters(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const live = this.floaters.live(this.time);
+    if (!live.length) return;
+    const cam = this.camera;
+    const w = this.game.world;
+    const size = Math.max(11, Math.round(13 * Math.min(1.4, zoom)));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineJoin = 'round';
+    for (const f of live) {
+      const { lift, alpha, scale } = Floaters.rise(f, this.time);
+      if (alpha <= 0.01) continue;
+      const sx = cam.worldToScreenX(f.x, f.y);
+      const sy = cam.worldToScreenY(f.x, f.y, w.heightAt(f.x, f.y)) - 26 * zoom - lift * zoom;
+      ctx.font = `600 ${Math.round(size * scale)}px system-ui, sans-serif`;
+      // Written twice: a dark surround first, so it stays legible over grass,
+      // over sand, over water and over a wildermon.
+      ctx.strokeStyle = `rgba(12,12,14,${(alpha * 0.85).toFixed(3)})`;
+      ctx.lineWidth = 3.4;
+      ctx.strokeText(f.text, sx, sy);
+      ctx.fillStyle = `rgba(${FLOAT_COLOURS[f.kind]},${alpha.toFixed(3)})`;
+      ctx.fillText(f.text, sx, sy);
+    }
+    ctx.lineWidth = 1;
+    ctx.textAlign = 'left';
+  }
+
+  /**
+   * How white a thing is from having just been hit. It is a short, hard flash
+   * — long enough to see, short enough that a run of blows reads as a run of
+   * blows rather than one long glow.
+   */
+  private flashOf(at: number): number {
+    const since = this.game.time - at;
+    if (since < 0 || since > Renderer.FLASH) return 0;
+    return 1 - since / Renderer.FLASH;
   }
 
   private markWakes(): void {
