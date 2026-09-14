@@ -27,6 +27,7 @@ import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
 import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
+import { BAIT_BY_ID } from '../game/fishing';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
@@ -403,16 +404,16 @@ export class UI {
     }
     // Setting a carried trap on the spot under the cursor.
     const trapSet = ACTION_BY_ID.get('set_trap');
-    const trapItems = this.game.inventory.items.filter((it) => it.id === 'snare' || it.id === 'deadfall');
+    const trapItems = this.game.inventory.items.filter((it) => it.id === 'snare' || it.id === 'deadfall' || it.id === 'creel');
     if (trapSet && trapItems.length) {
       const [tx0, ty0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
       for (const it of trapItems) {
         const tt: Target = { ...target, sx: tx0, sy: ty0, itemUid: it.uid };
         const reason = trapSet.check?.(tt, this.game) ?? null;
-        const kind = TRAPS[it.id as 'snare' | 'deadfall'];
+        const kind = TRAPS[it.id as 'snare' | 'deadfall' | 'creel'];
         entries.push({
           label: `Set ${itemName(it).toLowerCase()} here (spot ${tx0 + 1},${ty0 + 1})`,
-          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall', it.ql) / 60)} min · holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`,
+          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall' | 'creel', it.ql) / 60)} min · ${kind.water ? `holds ${kind.hold ?? 8} fish` : `holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`}`,
           hint: reason ?? undefined,
           disabled: !!reason,
           onSelect: () => this.game.requestAction(trapSet, tt),
@@ -820,7 +821,10 @@ export class UI {
     const tt: Target = { kind: 'trap', id: t.id };
     const entries: MenuItem[] = [];
     const def = trapDef(t);
-    entries.push({ label: `QL ${t.ql.toFixed(0)} · holds to taming ${trapHolds(t)} · reaches ${def.reach} tiles`, disabled: true });
+    entries.push({
+      label: def.water ? `QL ${t.ql.toFixed(0)} · holds ${def.hold ?? 8} fish` : `QL ${t.ql.toFixed(0)} · holds to taming ${trapHolds(t)} · reaches ${def.reach} tiles`,
+      disabled: true,
+    });
     const held = t.caught !== null ? g.creatures.get(t.caught) : undefined;
     if (held) {
       const s = SPECIES[held.species];
@@ -837,9 +841,12 @@ export class UI {
         children: choices.length
           ? choices.slice(0, 12).map((it) => {
               const comers = Object.values(SPECIES).filter((sp) => isBaitFor(sp, it.id) && sp.tameLevel <= trapHolds(t));
+              const fishy = BAIT_BY_ID.get(it.id);
               return {
                 label: itemName(it),
-                note: comers.length ? comers.map((sp) => sp.name).slice(0, 4).join(', ') : 'nothing this will hold',
+                note: def.water
+                  ? fishy ? fishy.favours.map((f) => itemDef(f).name.toLowerCase()).join(', ') : 'nothing comes to that'
+                  : comers.length ? comers.map((sp) => sp.name).slice(0, 4).join(', ') : 'nothing this will hold',
                 onSelect: () => {
                   // Put the chosen one at the front so the action picks it up.
                   const idx = g.inventory.items.indexOf(it);
@@ -851,7 +858,7 @@ export class UI {
           : undefined,
       });
     }
-    for (const id of ['take_catch', 'free_catch', 'pick_up_trap']) {
+    for (const id of ['empty_creel', 'take_catch', 'free_catch', 'pick_up_trap']) {
       const a = ACTION_BY_ID.get(id);
       if (!a || !a.applies(tt, g)) continue;
       const reason = a.check?.(tt, g) ?? null;

@@ -161,6 +161,11 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
  * itself every third swing is a shaft nobody planned.
  */
 export const MINE_COLLAPSE = 0.01;
+
+/** Ground with anything living in it, and the damp ground that is full of them. */
+const WORMY = new Set<TileType>([TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Marsh, TileType.Moss]);
+const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
+
 /** How often a deliberate chip at a corner actually takes it down: one in four. */
 export const CHIP_CHANCE = 0.25;
 
@@ -252,6 +257,39 @@ export const ACTIONS: ActionDef[] = [
       }
       const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You fill a shovel with ${itemDef(yieldId).name.toLowerCase()} off the top of the bed. (QL ${item.ql.toFixed(1)})`, 'event');
+    },
+  },
+  {
+    id: 'dig_worms',
+    label: 'Turn it over for worms',
+    verb: 'turning the dirt over',
+    skill: 'digging',
+    tool: 'shovel',
+    stamina: 0.04,
+    baseTime: 6,
+    repeat: true,
+    applies: (t, g) => t.kind === 'tile' && WORMY.has(g.world.getTile(t.x, t.y)),
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('shovel')) return 'You need a shovel.';
+      if (g.world.hasWater(t.x, t.y)) return 'Not under water.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      g.gainSkill('digging', 0.2);
+      g.wearTool('shovel', 0.4);
+      // Damp ground gives more than dry: a marsh is full of them.
+      const rich = RICH_WORMS.has(g.world.getTile(t.x, t.y));
+      const n = Math.floor(g.rand() * (rich ? 5 : 3)) + (rich ? 1 : 0);
+      if (!n) {
+        g.logMsg('You turn a spadeful over and nothing is moving in it.', 'event');
+        return true;
+      }
+      g.inventory.add('worm', { count: n, ql: 20 + g.rand() * 40 });
+      g.note('worms');
+      g.logMsg(`You turn the dirt over and pick ${n} worm${n > 1 ? 's' : ''} out of it.`, 'event');
+      return true;
     },
   },
   {

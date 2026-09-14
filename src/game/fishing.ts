@@ -31,6 +31,35 @@ export const FISH: FishDef[] = [
 export const FISH_BY_ID = new Map(FISH.map((f) => [f.id, f]));
 export const isFish = (id: string): boolean => FISH_BY_ID.has(id);
 
+/**
+ * Bait, and what comes to it.
+ *
+ * A bare hook catches whatever happens to be passing, which in practice means
+ * minnows. Put something on it and you are fishing for a particular thing:
+ * worms out of the dirt bring up perch, a live minnow brings up a pike, and a
+ * pike takes a perch on the hook. It is a ladder, and every rung of it is
+ * something you caught on the rung below.
+ */
+export interface BaitDef {
+  /** The item put on the hook. */
+  id: string;
+  /** What it brings up, in the order it favours them. */
+  favours: string[];
+  note: string;
+}
+
+export const BAITS: BaitDef[] = [
+  { id: 'worm', favours: ['perch', 'minnow'], note: 'Worms out of turned dirt. Everything small comes to them.' },
+  { id: 'corn', favours: ['minnow', 'perch'], note: 'Corn, which is what you use when you have nothing better.' },
+  { id: 'minnow', favours: ['pike', 'trout'], note: 'A live minnow. Nothing small enough to be eaten swims like that.' },
+  { id: 'meat', favours: ['pike', 'trout'], note: 'Raw meat. A pike will come up out of the weed for it.' },
+  { id: 'perch', favours: ['sturgeon', 'pike'], note: 'A whole perch on a hook, which is a lot of fish to give away for one that may not come.' },
+];
+export const BAIT_BY_ID = new Map(BAITS.map((b) => [b.id, b]));
+export const isBait = (id: string): boolean => BAIT_BY_ID.has(id);
+/** How much harder a favoured fish bites: a bait is worth eight of it. */
+export const BAIT_PULL = 8;
+
 /** How deep the water is on a tile, in height units; zero on dry land. */
 export const waterDepth = (g: Game, x: number, y: number): number => (g.world.hasWater(x, y) ? Math.max(0, -g.world.centerHeight(x, y)) : 0);
 
@@ -44,20 +73,50 @@ export const fishHere = (depth: number, skill: number): FishDef[] => FISH.filter
  * What comes up, or null for a bite that came off. Deeper water and a better
  * hand both help; the rarer fish are simply rarer wherever you stand.
  */
-export function catchFish(g: Game, depth: number, rodQl: number): FishDef | null {
+export function catchFish(g: Game, depth: number, rodQl: number, bait?: string | null): FishDef | null {
   const skill = g.skills.get('fishing');
   const pool = fishHere(depth, skill);
   if (!pool.length) return null;
-  // A poor hand loses most of what takes the hook.
-  if (g.rand() > Math.min(0.92, 0.3 + skill / 190 + rodQl / 320)) return null;
+  // A poor hand loses most of what takes the hook; something on it helps.
+  const b = bait ? BAIT_BY_ID.get(bait) : undefined;
+  if (g.rand() > Math.min(0.95, 0.3 + skill / 190 + rodQl / 320 + (b ? 0.12 : 0))) return null;
+  return pickFish(g, pool, b);
+}
+
+/** One fish out of a pool, weighted, with whatever is on the hook counted in. */
+export function pickFish(g: Game, pool: FishDef[], b?: BaitDef): FishDef | null {
+  if (!pool.length) return null;
+  const weightOf = (f: FishDef): number => {
+    if (!b) return f.weight;
+    const rank = b.favours.indexOf(f.id);
+    return rank < 0 ? f.weight * 0.35 : f.weight * (BAIT_PULL / (rank + 1));
+  };
   let total = 0;
-  for (const f of pool) total += f.weight;
+  for (const f of pool) total += weightOf(f);
   let roll = g.rand() * total;
   for (const f of pool) {
-    roll -= f.weight;
+    roll -= weightOf(f);
     if (roll <= 0) return f;
   }
   return pool[0];
+}
+
+/** The bait in the pack that is worth using here: the one favouring the best fish available. */
+export function baitFor(g: Game, depth: number): { id: string; def: BaitDef } | null {
+  const pool = fishHere(depth, g.skills.get('fishing'));
+  if (!pool.length) return null;
+  let best: { id: string; def: BaitDef; score: number } | null = null;
+  for (const b of BAITS) {
+    if (!g.inventory.has(b.id)) continue;
+    // Rate a bait by the rarest thing it brings up that actually swims here.
+    let score = 0;
+    for (const want of b.favours) {
+      const f = pool.find((x) => x.id === want);
+      if (f) score = Math.max(score, 100 - f.weight);
+    }
+    if (score > 0 && (!best || score > best.score)) best = { id: b.id, def: b, score };
+  }
+  return best ? { id: best.id, def: best.def } : null;
 }
 
 /** The best water within reach of where the player is standing. */
@@ -91,11 +150,76 @@ export function castAt(g: Game, x: number, y: number): { x: number; y: number; d
 /** How far a line will go from where you are standing. */
 export const CAST = 3.6;
 
+/** How far a net is dragged, and how much water it wants under it. */
+export const NET_REACH = 2.6;
+export const NET_MIN_DEPTH = 1;
+/** The most a net brings up in one drag, before the roll. */
+export const NET_HAUL = 5;
+
 export const FISHING_ACTIONS: ActionDef[] = [
+  {
+    id: 'drag_net',
+    label: 'Drag the net',
+    verb: 'dragging the net',
+    skill: 'fishing',
+    tool: 'fishing_net',
+    range: NET_REACH,
+    repeat: true,
+    stamina: 0.09,
+    baseTime: 16,
+    applies: (t, g) => t.kind === 'tile' && g.inventory.has('fishing_net') && (fishable(g, t.x, t.y) || bestWaterNear(g, 2) !== null),
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('fishing_net')) return 'You need a net.';
+      const spot = fishable(g, t.x, t.y) && Math.hypot(t.x + 0.5 - g.player.x, t.y + 0.5 - g.player.y) <= NET_REACH ? { depth: waterDepth(g, t.x, t.y) } : bestWaterNear(g, 2);
+      if (!spot) return 'There is no water close enough to drag a net through. Wade in.';
+      if (spot.depth < NET_MIN_DEPTH) return 'The water is too thin to drag a net through.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const near = fishable(g, t.x, t.y) && Math.hypot(t.x + 0.5 - g.player.x, t.y + 0.5 - g.player.y) <= NET_REACH;
+      const spot = near ? { depth: waterDepth(g, t.x, t.y) } : bestWaterNear(g, 2);
+      if (!spot) return;
+      const netQl = g.toolQl('fishing_net');
+      g.gainSkill('fishing', 0.55);
+      g.wearTool('fishing_net', 1.4);
+      // A net takes numbers, not size: the big fish go round it or through it.
+      const pool = fishHere(spot.depth, g.skills.get('fishing')).filter((f) => f.depth <= 8 || g.rand() < 0.12);
+      if (!pool.length) {
+        g.logMsg('The net comes up with nothing in it but weed.', 'event');
+        return true;
+      }
+      const haul = 1 + Math.floor(g.rand() * (1 + (NET_HAUL - 1) * (0.3 + Math.min(100, netQl) / 160)));
+      const got = new Map<string, number>();
+      for (let i = 0; i < haul; i++) {
+        const f = pickFish(g, pool);
+        if (f) got.set(f.id, (got.get(f.id) ?? 0) + 1);
+      }
+      if (!got.size) {
+        g.logMsg('The net comes up empty.', 'event');
+        return true;
+      }
+      const parts: string[] = [];
+      for (const [id, n] of got) {
+        g.inventory.add(id, { count: n, ql: g.productQl('fishing', netQl) });
+        g.note(`fish:${id}`);
+        parts.push(`${n} \u00d7 ${itemDef(id).name.toLowerCase()}`);
+      }
+      g.note('netted');
+      g.logMsg(`You walk the net round and haul it in: ${parts.join(', ')}.`, 'event');
+      return true;
+    },
+  },
   {
     id: 'fish',
     label: 'Fish',
     verb: 'fishing',
+    labelFor: (t, g) => {
+      const spot = t.kind === 'tile' ? castAt(g, t.x, t.y) : null;
+      const bait = spot ? baitFor(g, spot.depth) : null;
+      return bait ? `Fish with ${itemDef(bait.id).name.toLowerCase()}` : 'Fish';
+    },
     skill: 'fishing',
     tool: 'fishing_rod',
     // A cast reaches; you do not walk out to the fish.
@@ -122,14 +246,25 @@ export const FISHING_ACTIONS: ActionDef[] = [
       const rodQl = g.toolQl('fishing_rod');
       g.gainSkill('fishing', 0.4);
       g.wearTool('fishing_rod', 0.5);
-      const got = catchFish(g, spot.depth, rodQl);
+      // Something goes on the hook if anything worth using is in the pack.
+      const bait = baitFor(g, spot.depth);
+      if (bait) {
+        const it = g.inventory.find(bait.id);
+        if (it) g.inventory.remove(it.uid, 1);
+        else return true;
+      }
+      const got = catchFish(g, spot.depth, rodQl, bait?.id);
       if (!got) {
-        g.logMsg('Something takes it and comes off again.', 'event');
+        g.logMsg(bait ? `Something takes the ${itemDef(bait.id).name.toLowerCase()} and comes off again.` : 'Something takes it and comes off again.', 'event');
         return true;
       }
       const item = g.inventory.add(got.id, { ql: g.productQl('fishing', rodQl) });
       g.note(`fish:${got.id}`);
-      g.logMsg(`You land ${/^[aeiou]/i.test(got.name) ? 'an' : 'a'} ${got.name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
+      if (bait) g.note('baited');
+      g.logMsg(
+        `You land ${/^[aeiou]/i.test(got.name) ? 'an' : 'a'} ${got.name.toLowerCase()}${bait ? ` on the ${itemDef(bait.id).name.toLowerCase()}` : ''}. (QL ${item.ql.toFixed(1)})`,
+        'event',
+      );
       return true;
     },
   },

@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Sixty-four goals in seven chapters — Ashore, The
+- **A journal of goals.** Sixty-eight goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -498,6 +498,19 @@ rebuilds and commits the result.
   rope**. Rope is a real input rather than a curiosity: a bridle takes one
   for the reins, a rowing boat two, a sailing boat eight and two hawsers of
   standing rigging, and a well a hawser to hang its bucket on.
+- **Bait, nets and creels.** **Bait** decides what bites, in a ladder every
+  rung of which is something you caught on the rung below: **worms** (turned
+  out of damp dirt with a shovel) bring up **perch**, a live **minnow** or
+  raw meat brings up a **pike**, and a whole **perch** on the hook is what
+  brings up a **sturgeon** — a bare hook gives 4 sturgeon in a hundred in
+  deep water, a perch on the hook gives 28. Whatever is worth using comes
+  out of your pack by itself. A **net** (twelve yarn, two ropes, a needle)
+  is dragged through wadeable water and takes several small fish a haul
+  while the big ones go through it. A **creel** (fourteen reed and a rope)
+  is a basket with the throat turned inward: sink it off a bank, bait it,
+  walk away, and it fishes on its own — holds eight, gives four or five to
+  a baiting, and kept baited is worth about twenty-five fish an hour for no
+  work at all.
 - **Traps.** The other way of taking a wild thing: set it, bait it, walk
   away, and whatever came to the bait is waiting when you come back —
   **alive**, with the blood it was born with still in it. A **snare** (a

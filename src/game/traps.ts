@@ -3,6 +3,7 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { isBaitFor, SPECIES, type Creature } from './creatures';
 import { itemDef, itemName, type Item } from './items';
+import { BAIT_BY_ID, isBait } from './fishing';
 import { matOf } from './materials';
 
 /**
@@ -21,7 +22,7 @@ import { matOf } from './materials';
  * hold most of what walks, and it is a great deal more work to build.
  */
 
-export type TrapKind = 'snare' | 'deadfall';
+export type TrapKind = 'snare' | 'deadfall' | 'creel';
 
 export interface TrapDef {
   id: TrapKind;
@@ -39,6 +40,10 @@ export interface TrapDef {
   /** Seconds it stands out in the weather at quality one and at a hundred. */
   lifeMin: number;
   lifeMax: number;
+  /** Goes in the water and takes fish rather than standing on land and taking beasts. */
+  water?: boolean;
+  /** The most fish one of these holds before it stops taking any. */
+  hold?: number;
   note: string;
 }
 
@@ -55,6 +60,21 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
     lifeMin: 20 * 60,
     lifeMax: 90 * 60,
     note: 'A noose of rope on a bent shaft. It takes the small and the trusting; anything with weight in it walks off wearing the rope.',
+  },
+  creel: {
+    id: 'creel',
+    name: 'Creel',
+    bill: [['reed', 14], ['rope', 1]],
+    difficulty: 16,
+    time: 16,
+    holds: 0,
+    reach: 0,
+    odds: 0.34,
+    lifeMin: 40 * 60,
+    lifeMax: 3 * 60 * 60,
+    water: true,
+    hold: 8,
+    note: 'A woven basket with a throat turned inward, so what swims in stays in. It sits in the water and works while you are elsewhere.',
   },
   deadfall: {
     id: 'deadfall',
@@ -88,6 +108,8 @@ export interface PlacedTrap {
   caught: number | null;
   /** Game time of the next roll. */
   checkAt: number;
+  /** What has swum into it, for a creel. */
+  fish?: Item[];
   /** The wood it was made of. */
   material?: string;
 }
@@ -129,6 +151,11 @@ export function catchChance(t: PlacedTrap, c: Creature): number {
 
 /** What it says it is doing, for the menu and the log. */
 export function trapState(t: PlacedTrap, g: Game): string {
+  if (trapDef(t).water) {
+    const n = (t.fish ?? []).reduce((a, f) => a + f.count, 0);
+    const left = Math.ceil(trapLeft(t) / 60);
+    return `${n ? `${n} in it` : 'empty'} \u00b7 ${t.bait ? `baited with ${itemName(t.bait).toLowerCase()}` : 'not baited'} \u00b7 ${left}m left`;
+  }
   if (t.caught !== null) {
     const c = g.creatures.get(t.caught);
     if (c) return `${SPECIES[c.species]?.name ?? 'Something'} in it`;
@@ -147,8 +174,11 @@ const nearTrap = (g: Game, t: PlacedTrap): boolean => {
 };
 
 /** Anything in the pack some wild thing would come to. */
-export const baitInPack = (g: Game): Item[] =>
-  g.inventory.items.filter((it) => Object.values(SPECIES).some((s) => isBaitFor(s, it.id)));
+export const baitInPack = (g: Game, t?: PlacedTrap): Item[] => {
+  // A creel is baited with what fish come to; a land trap with what beasts eat.
+  if (t && trapDef(t).water) return g.inventory.items.filter((it) => isBait(it.id));
+  return g.inventory.items.filter((it) => Object.values(SPECIES).some((s) => isBaitFor(s, it.id)));
+};
 
 export const TRAP_ACTIONS: ActionDef[] = [
   {
@@ -163,15 +193,18 @@ export const TRAP_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return 'Choose a spot.';
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (!item || !(item.id in TRAPS)) return 'You have no trap to set.';
-      return g.trapPlaceReason(t.x, t.y, t.sx, t.sy);
+      return g.trapPlaceReason(t.x, t.y, t.sx, t.sy, item.id as TrapKind);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return;
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (!item || !(item.id in TRAPS) || !g.inventory.remove(item.uid, 1)) return;
       const trap = g.addTrap(item.id as TrapKind, t.x, t.y, t.sx, t.sy, item.ql, item.extra);
+      const mins = Math.round(trapLife(trap.kind, trap.ql) / 60);
       g.logMsg(
-        `You set the ${trapName(trap).toLowerCase()} and cover the sign of it. It will stand about ${Math.round(trapLife(trap.kind, trap.ql) / 60)} minutes and will hold anything up to taming ${trapHolds(trap)}. Bait it.`,
+        trapDef(trap).water
+          ? `You sink the ${trapName(trap).toLowerCase()} and make the line fast. It will fish about ${mins} minutes and holds ${trapDef(trap).hold ?? 8}. Bait it.`
+          : `You set the ${trapName(trap).toLowerCase()} and cover the sign of it. It will stand about ${mins} minutes and will hold anything up to taming ${trapHolds(trap)}. Bait it.`,
         'event',
       );
       g.events.emit('world', trap.x, trap.y);
@@ -197,12 +230,12 @@ export const TRAP_ACTIONS: ActionDef[] = [
       if (!trap) return 'It is gone.';
       if (trap.caught !== null) return 'There is something in it already.';
       if (!nearTrap(g, trap)) return 'Stand at the trap.';
-      if (!baitInPack(g).length) return 'You have nothing anything would come to. Carry a berry, a vegetable, a nut, a spice.';
+      if (!baitInPack(g, trap).length) return trapDef(trap).water ? 'You have nothing a fish would come to. Dig worms, or use corn, meat or a small fish.' : 'You have nothing anything would come to. Carry a berry, a vegetable, a nut, a spice.';
       return null;
     },
     perform: (t, g) => {
       const trap = trapOf(g, t);
-      const bait = baitInPack(g)[0];
+      const bait = baitInPack(g, trap)[0];
       if (!trap || !bait) return;
       const one = g.inventory.take(bait.uid, 1);
       if (!one) return;
@@ -210,11 +243,16 @@ export const TRAP_ACTIONS: ActionDef[] = [
       if (trap.bait) g.inventory.addItem(trap.bait);
       trap.bait = one;
       trap.checkAt = g.time + CHECK_EVERY;
-      const comers = Object.values(SPECIES).filter((s) => isBaitFor(s, one.id) && s.tameLevel <= trapHolds(trap));
-      g.logMsg(
-        `You lay the ${itemName(one).toLowerCase()} in the ${trapName(trap).toLowerCase()}. ${comers.length ? `${comers.length === 1 ? 'One sort' : `${comers.length} sorts`} would come to that.` : 'Nothing this trap will hold eats that.'}`,
-        'event',
-      );
+      if (trapDef(trap).water) {
+        const b = BAIT_BY_ID.get(one.id);
+        g.logMsg(`You put the ${itemName(one).toLowerCase()} in the creel and sink it again. ${b ? b.note : ''}`, 'event');
+      } else {
+        const comers = Object.values(SPECIES).filter((s) => isBaitFor(s, one.id) && s.tameLevel <= trapHolds(trap));
+        g.logMsg(
+          `You lay the ${itemName(one).toLowerCase()} in the ${trapName(trap).toLowerCase()}. ${comers.length ? `${comers.length === 1 ? 'One sort' : `${comers.length} sorts`} would come to that.` : 'Nothing this trap will hold eats that.'}`,
+          'event',
+        );
+      }
       g.events.emit('world', trap.x, trap.y);
     },
   },
@@ -299,6 +337,43 @@ export const TRAP_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'empty_creel',
+    label: 'Empty it',
+    verb: 'emptying the creel',
+    stamina: 0.03,
+    baseTime: 5,
+    applies: (t, g) => {
+      const trap = trapOf(g, t);
+      return !!trap && !!trapDef(trap).water && (trap.fish ?? []).length > 0;
+    },
+    labelFor: (t, g) => {
+      const trap = trapOf(g, t);
+      const n = (trap?.fish ?? []).reduce((a, f) => a + f.count, 0);
+      return n ? `Empty it (${n} fish)` : 'Empty it';
+    },
+    check: (t, g) => {
+      const trap = trapOf(g, t);
+      if (!trap) return 'It is gone.';
+      if (!(trap.fish ?? []).length) return 'There is nothing in it yet.';
+      if (!nearTrap(g, trap)) return 'Stand at the creel.';
+      return null;
+    },
+    perform: (t, g) => {
+      const trap = trapOf(g, t);
+      if (!trap || !trap.fish?.length) return;
+      const parts: string[] = [];
+      for (const f of trap.fish) {
+        g.inventory.addItem(f);
+        parts.push(`${f.count} \u00d7 ${itemDef(f.id).name.toLowerCase()}`);
+      }
+      trap.fish = [];
+      g.note('creeled');
+      g.gainSkill('fishing', 0.5);
+      g.logMsg(`You lift the creel and tip it out: ${parts.join(', ')}.`, 'event');
+      g.events.emit('world', trap.x, trap.y);
+    },
+  },
+  {
     id: 'pick_up_trap',
     label: 'Take it up',
     verb: 'taking the trap up',
@@ -316,6 +391,7 @@ export const TRAP_ACTIONS: ActionDef[] = [
       const trap = trapOf(g, t);
       if (!trap) return;
       if (trap.bait) g.inventory.addItem(trap.bait);
+      for (const f of trap.fish ?? []) g.inventory.addItem(f);
       const back = g.inventory.add(trap.kind, { ql: trap.ql, extra: trap.material });
       back.dmg = trap.dmg;
       g.removeTrap(trap.id);

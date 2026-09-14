@@ -851,6 +851,51 @@ export function drawTrap(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
   ctx.fill();
   const wood = '#6b543a';
   const dark = '#4a3a28';
+  if (kind === 'creel') {
+    // A woven basket sitting low, with a float and a line up to the bank.
+    ctx.strokeStyle = '#cfc3a4';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(4, -5.5);
+    ctx.lineTo(7, -9);
+    ctx.stroke();
+    ctx.fillStyle = '#c9b06a';
+    ctx.beginPath();
+    ctx.ellipse(-2, -2.4, 5.2, 3, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#a68f52';
+    ctx.beginPath();
+    ctx.ellipse(-2, -1.2, 5.2, 3, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#7d6a3c';
+    ctx.lineWidth = 0.5;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.ellipse(-2, -2.4 + i * 1.1, 5.2 - Math.abs(i) * 0.8, 2.6, 0, Math.PI * 0.06, Math.PI * 0.94);
+      ctx.stroke();
+    }
+    // The throat, turned inward.
+    ctx.fillStyle = '#4a3f22';
+    ctx.beginPath();
+    ctx.ellipse(2.4, -2.6, 1.4, 1.1, 0, 0, TAU);
+    ctx.fill();
+    if (sprung) {
+      ctx.fillStyle = '#8fb6c8';
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(-3.4 + i * 1.6, -2.2 + (i % 2) * 0.9, 1.2, 0.5, 0, 0, TAU);
+        ctx.fill();
+      }
+    }
+    if (baited) {
+      ctx.fillStyle = '#c06a4a';
+      ctx.beginPath();
+      ctx.ellipse(-2, -2.6, 0.9, 0.6, 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
   if (kind === 'deadfall') {
     // A board, propped at an angle on a stick, or lying flat once it has gone.
     ctx.strokeStyle = dark;

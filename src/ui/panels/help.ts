@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: sixty-four goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: sixty-eight goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -176,6 +176,22 @@ export function buildHelp(win: UIWindow): void {
     beach will never give you more than perch however good you get; a sheer bank with deep water right
     off the edge will give you everything. Each goes over a fire, and what comes off it follows the size
     of the fish &mdash; a pike is four helpings and a sturgeon ten.</p>
+    <p><b>Bait</b> decides what bites. A bare hook catches whatever is passing, which mostly means
+    minnows. Put something on it and you are fishing for a particular thing, and it is a ladder every
+    rung of which is something you caught on the rung below: <b>worms</b> (turned out of damp dirt with
+    a shovel &mdash; a marsh is full of them) bring up <b>perch</b>; a live <b>minnow</b> or raw
+    <b>meat</b> brings up a <b>pike</b>; a whole <b>perch</b> on the hook is what brings a
+    <b>sturgeon</b> up. Corn does at a pinch. Anything worth using is taken out of your pack and put on
+    the hook by itself, and the menu says which. Measured in deep water: a bare hook gives 4 sturgeon in
+    a hundred, a perch on the hook gives 28.</p>
+    <p>Two things fish without a rod. A <b>net</b> &mdash; twelve yarn and two ropes, knotted with a
+    needle &mdash; is <b>dragged</b> through water you can wade to: it takes several small fish at a
+    haul and lets the big ones through, so it is how you feed a settlement rather than how you land a
+    sturgeon. A <b>creel</b> &mdash; fourteen reed and a rope &mdash; is a basket with the throat turned
+    inward. <b>Sink it in water</b> off a bank, bait it, and walk away: it fishes on its own while you
+    are elsewhere, holds eight, and gives about <b>four or five fish to a baiting</b> before the bait is
+    worked out of it. Empty it from the bank. Kept baited, one is worth around twenty-five fish an
+    hour for no work at all.</p>
     <p>The <b>Wadd</b>, being the one thing on the island that swims, now fishes: set one to a deed or a
     work post and it works the banks in its range and carries the catch home.</p>
     <h3>Fruit trees</h3>

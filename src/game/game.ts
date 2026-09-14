@@ -22,6 +22,7 @@ import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
+import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
@@ -1529,8 +1530,15 @@ export class Game {
   }
 
   /** Why a trap cannot be set here, or null. */
-  trapPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+  trapPlaceReason(x: number, y: number, sx: number, sy: number, kind: TrapKind = 'snare'): string | null {
     if (!this.world.inBounds(x, y)) return 'Not there.';
+    if (TRAPS[kind]?.water) {
+      // A creel goes in the water, within reach of a bank you can stand on.
+      if (waterDepth(this, x, y) < 1) return 'A creel goes in the water. Set it off a bank with some depth to it.';
+      if (Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y) > 3.6) return 'Too far out. Set it within reach of where you stand.';
+      if (this.trapAt(x, y, sx, sy)) return 'Something is already there.';
+      return null;
+    }
     if (this.onDeed(x, y)) return 'Nothing wild comes inside your own borders. Set it out in the country.';
     if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A trap needs dry ground it can be covered on.';
     if (this.buildings.buildingAt(x, y)) return 'Not inside a building.';
@@ -1566,10 +1574,42 @@ export class Game {
         this.logMsg(`A ${trapName(t).toLowerCase()} has rotted through out in the country.`, 'system');
         continue;
       }
-      if (t.caught !== null || !t.bait || this.time < t.checkAt) continue;
+      if (!t.bait || this.time < t.checkAt) continue;
       t.checkAt = this.time + CHECK_EVERY;
-      this.rollTrap(t);
+      if (TRAPS[t.kind]?.water) this.rollCreel(t);
+      else if (t.caught === null) this.rollTrap(t);
     }
+  }
+
+  /**
+   * One roll of a creel. It takes what the water it sits in holds, weighted by
+   * whatever is in it, and it goes on filling until it is full or the bait is
+   * gone — which is the whole of why a creel is worth weaving.
+   */
+  private rollCreel(t: PlacedTrap): void {
+    const def = TRAPS[t.kind];
+    const held = (t.fish ?? []).reduce((a, f) => a + f.count, 0);
+    if (held >= (def.hold ?? 8)) return;
+    const depth = waterDepth(this, t.x, t.y);
+    const pool = fishHere(depth, this.skills.get('fishing'));
+    if (!pool.length) return;
+    if (this.rand() >= def.odds * (0.6 + Math.max(1, Math.min(100, t.ql)) / 250)) return;
+    const bait = t.bait ? BAIT_BY_ID.get(t.bait.id) : undefined;
+    const got = pickFish(this, pool, bait);
+    if (!got) return;
+    t.fish ??= [];
+    const ql = Math.max(1, Math.min(100, t.ql * (0.5 + this.rand() * 0.7)));
+    const stack = t.fish.find((f) => f.id === got.id);
+    if (stack) {
+      stack.ql = (stack.ql * stack.count + ql) / (stack.count + 1);
+      stack.count += 1;
+    } else t.fish.push({ uid: this.inventory.nextUid++, id: got.id, ql, dmg: 0, count: 1 });
+    // Every so often the bait is worked out of it and the creel goes on empty.
+    if (this.rand() < 0.14 && t.bait) {
+      t.bait = null;
+      this.logMsg(`The bait is gone out of a creel. It will take nothing more until it is baited again.`, 'system');
+    }
+    this.events.emit('world', t.x, t.y);
   }
 
   /** One roll of one trap against the country round it. */
