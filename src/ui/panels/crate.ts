@@ -1,4 +1,4 @@
-import { crateCentre, crateName, crateUnits, CRATE_DEFS } from '../../game/crates';
+import { crateCentre, crateName, crateCapacity, crateUnits } from '../../game/crates';
 import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
 import type { Game } from '../../game/game';
 import { itemDef, type Item, itemName } from '../../game/items';
@@ -68,11 +68,11 @@ export class CratePanel {
       return {
         title: crateName(crate),
         items: crate.items,
-        capacity: CRATE_DEFS[crate.kind].capacity,
+        capacity: crateCapacity(crate),
         centre: crateCentre(crate),
         what: 'crate',
         take: (uid) => this.game.crateTake(crate, uid),
-        refuses: (item) => (crateUnits(crate) + item.count > CRATE_DEFS[crate.kind].capacity ? `The ${crateName(crate).toLowerCase()} is full.` : null),
+        refuses: (item) => (crateUnits(crate) + item.count > crateCapacity(crate) ? `The ${crateName(crate).toLowerCase()} is full.` : null),
         add: (item) => this.game.crateAdd(crate, item),
       };
     }

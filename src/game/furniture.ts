@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
+import { matOf } from './materials';
 
 /**
  * Furniture: everything a fine carpenter nails together and sets down indoors.
@@ -161,6 +162,8 @@ export interface PlacedFurniture {
   driven?: boolean;
   /** Comb drawn but not yet capped, for a hive. */
   comb?: number;
+  /** The wood it was built of, for the pieces a carpenter builds. */
+  material?: string;
 }
 
 /** The two liquids worth keeping a barrel for. */
@@ -177,12 +180,10 @@ export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
 export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket' };
 
-export const furnitureName = (f: PlacedFurniture): string => furnitureDef(f.kind).name;
+export const furnitureName = (f: PlacedFurniture): string => (f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name);
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
-export const furnitureCapacity = (f: PlacedFurniture): number => {
-  const def = furnitureDef(f.kind);
-  return def.capacity ?? def.hive ?? 0;
-};
+/** What it holds: its build, and how strong a wood it was built out of. */
+export const furnitureCapacity = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold);
 export const furnitureCentre = (f: PlacedFurniture): [number, number] => {
   const def = furnitureDef(f.kind);
   return [f.x + (f.sx + def.w / 2) / SUBTILES, f.y + (f.sy + def.h / 2) / SUBTILES];
@@ -208,14 +209,15 @@ export const teamOf = (f: PlacedFurniture): number[] => f.team ?? [];
 /** Litres a vessel holds: a barrel by its build, a well by how deep it was sunk. */
 export const liquidCapacity = (f: PlacedFurniture): number => {
   const def = furnitureDef(f.kind);
-  return def.liquid ?? def.well ?? 0;
+  // A well is a lined shaft in the ground; only the coopered things vary.
+  return def.liquid ? Math.round(def.liquid * matOf(f.material).hold) : def.well ?? 0;
 };
 export const holdsLiquid = (f: PlacedFurniture): boolean => liquidCapacity(f) > 0;
 export const litresIn = (f: PlacedFurniture): number => f.litres ?? 0;
 /** A well draws its own water; a barrel only holds what is poured into it. */
 export const isWell = (f: PlacedFurniture): boolean => (furnitureDef(f.kind).well ?? 0) > 0;
 /** A hive fills itself, and takes nothing from anyone's hands. */
-export const hiveRoom = (f: PlacedFurniture): number => (furnitureDef(f.kind).hive ?? 0) - furnitureUnits(f);
+export const hiveRoom = (f: PlacedFurniture): number => furnitureCapacity(f) - furnitureUnits(f);
 export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hive ?? 0) > 0;
 
 /**
@@ -241,7 +243,7 @@ export function furnitureState(f: PlacedFurniture): string {
     return `${ql} · ${litres.toFixed(0)} / ${liquidCapacity(f)} litres of ${what}`;
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
-  if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${def.hive} of comb`;
+  if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} of comb`;
   const cap = furnitureCapacity(f);
   const held = cap ? `${ql} · ${furnitureUnits(f)} / ${cap} things` : ql;
   const v = def.vehicle;
@@ -275,7 +277,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile' || t.itemUid === undefined || t.sx === undefined || t.sy === undefined) return;
       const item = g.inventory.get(t.itemUid);
       if (!item || !isFurniture(item.id) || !g.inventory.remove(item.uid, 1)) return;
-      const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql);
+      const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra);
       g.logMsg(`You set the ${furnitureName(f).toLowerCase()} down.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
@@ -302,7 +304,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length) return;
       g.removeFurniture(f.id);
-      g.inventory.add(f.kind, { ql: f.ql });
+      g.inventory.add(f.kind, { ql: f.ql, extra: f.material });
       g.logMsg(`You pick the ${furnitureName(f).toLowerCase()} up.`, 'event');
       g.events.emit('world', f.x, f.y);
     },

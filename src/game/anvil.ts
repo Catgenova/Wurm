@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, type Item } from './items';
+import { matOf, matOfItem, workingQl } from './materials';
 import { METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
 
 /**
@@ -48,10 +49,13 @@ function lumpFor(g: Game, uid?: number): Item | undefined {
   return g.inventory.items.find((it) => METAL_BY_LUMP.has(it.id));
 }
 
+/** What the anvil is worth to beat on: its quality, and how hard its own metal is. */
+export const anvilQl = (a: PlacedAnvil): number => workingQl(a.ql, METAL_BY_ID.get(a.metal)?.name);
+
 /** How good a piece comes out: the smith, the mould, the metal and the anvil all have a say. */
 export function smithQl(g: Game, def: MouldDef, mouldQl: number, lumpQl: number, anvil: PlacedAnvil): number {
   const skill = g.skills.get(def.skill);
-  return Math.max(1, Math.min(100, (g.productQl(def.skill) + mouldQl + lumpQl + anvil.ql) / 4 + skill / 25));
+  return Math.max(1, Math.min(100, (g.productQl(def.skill) + mouldQl + lumpQl + anvilQl(anvil)) / 4 + skill / 25));
 }
 
 export const ANVIL_ACTIONS: ActionDef[] = [
@@ -126,12 +130,15 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (!mould || !def || !lump || !metal || lump.count < def.lumps) return;
       if (!g.inventory.remove(lump.uid, def.lumps)) return;
       const mouldQl = Math.max(1, mould.ql - mould.dmg / 2);
-      // Every filling wears the mould, and no mould can be mended.
-      mould.dmg = Math.min(100, mould.dmg + mouldWear(mould.ql));
+      // Every filling wears the mould, and no mould can be mended. A hard
+      // metal takes more out of it than a soft one.
+      mould.dmg = Math.min(100, mould.dmg + mouldWear(mould.ql) * (1 + matOf(metal.name).difficulty / 30));
       const broke = mould.dmg >= 100;
       if (broke) g.inventory.remove(mould.uid, 1);
       g.events.emit('inventory');
-      if (!g.skillCheck(def.skill, def.difficulty, a.ql, g.mindEase())) {
+      // The deeper the seam it came out of, the harder it is to beat into shape.
+      const hard = def.difficulty + matOfItem(lump).difficulty;
+      if (!g.skillCheck(def.skill, hard, anvilQl(a), g.mindEase())) {
         g.gainSkill(def.skill, 0.25);
         g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and you throw the metal back.${broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through.` : ''}`, 'event');
         return;

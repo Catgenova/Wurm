@@ -4,7 +4,7 @@ import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
-import { CRATE_DEFS, crateCentre, crateName, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
+import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
@@ -16,7 +16,8 @@ import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
-import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
+import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
+import { matOf, rollEase, workingQl } from './materials';
 import { Skills, SKILL_DEFS } from './skills';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
@@ -317,23 +318,25 @@ export class Game {
 
   giveStarterKit(): void {
     // Everything here is marked as issued: rough gear off the beach, good
-    // enough to get a first tool made with and not worth working on.
-    for (const [id, ql] of [
-      ['hatchet', 20],
-      ['shovel', 20],
-      ['pickaxe', 20],
-      ['carving_knife', 20],
-      ['chisel', 15],
-      ['mallet', 20],
-      ['trowel', 20],
-      ['saw', 20],
-      ['butchering_knife', 20],
-      ['rake', 20],
-      ['water_skin', 30],
-    ] as Array<[string, number]>) {
-      this.inventory.add(id, { ql, issued: true });
+    // enough to get a first tool made with and not worth working on. Copper
+    // heads on pine handles, which is the poorest of everything: the first
+    // bronze tool you cast for yourself is already better than any of it.
+    for (const [id, ql, made] of [
+      ['hatchet', 20, 'Copper'],
+      ['shovel', 20, 'Copper'],
+      ['pickaxe', 20, 'Copper'],
+      ['carving_knife', 20, 'Copper'],
+      ['chisel', 15, 'Copper'],
+      ['mallet', 20, 'Pine'],
+      ['trowel', 20, 'Copper'],
+      ['saw', 20, 'Copper'],
+      ['butchering_knife', 20, 'Copper'],
+      ['rake', 20, 'Copper'],
+      ['water_skin', 30, ''],
+    ] as Array<[string, number, string]>) {
+      this.inventory.add(id, { ql, issued: true, extra: made || undefined });
     }
-    this.inventory.add('deed_stake', { ql: 50 });
+    this.inventory.add('deed_stake', { ql: 50, extra: 'Pine' });
   }
 
   /** Whether the player can stand on a tile at a storey: the ground, or a finished floor, staircase or ladder. */
@@ -559,7 +562,7 @@ export class Game {
   /** How much armour slows you down and tires you: the price of plate. */
   burden(): number {
     let sum = 0;
-    for (const { def } of this.wornArmour()) sum += ARMOUR_CLASSES[def.cls].burden / 5;
+    for (const { def, item } of this.wornArmour()) sum += pieceBurden(def, item);
     const shield = this.worn('offhand');
     const sh = shield && SHIELDS[shield.id];
     if (sh) sum += sh.burden;
@@ -1110,10 +1113,16 @@ export class Game {
     return Math.max(1.2, def.baseTime * (1 - skill / 140) * (1 - toolQl / 400) * this.controlSpeed());
   }
 
+  /**
+   * What a tool is worth at the work: its quality, dragged down by the state
+   * it is in and lifted or lowered by the metal of its head. This is what
+   * decides how fast a job goes, how often it comes out right, and how good
+   * what comes out of it is, so the metal reaches all three at once.
+   */
   toolQl(id: string): number {
     const tool = this.inventory.tool(id);
     // A battered tool works like a poorer one than it was.
-    return tool ? tool.ql * Math.max(0.3, 1 - tool.dmg / 160) : 0;
+    return tool ? workingQl(tool.ql, tool.extra) * Math.max(0.3, 1 - tool.dmg / 160) : 0;
   }
 
   /**
@@ -1135,7 +1144,8 @@ export class Game {
   damageItem(item: Item, amount: number): void {
     if (amount <= 0) return;
     const before = item.dmg;
-    item.dmg = Math.min(100, item.dmg + amount);
+    // Oak takes a third of what pine takes; seryll barely marks at all.
+    item.dmg = Math.min(100, item.dmg + amount * matOf(item.extra).wear);
     const step = (v: number): number => Math.floor((v - DAMAGE_WARN) / 5);
     if (item.dmg >= 100) {
       this.inventory.remove(item.uid, 1);
@@ -1192,8 +1202,8 @@ export class Game {
     return false;
   }
 
-  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false): PlacedCrate {
-    const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed };
+  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false, material?: string): PlacedCrate {
+    const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed, material };
     this.crates.set(crate.id, crate);
     this.placed.crates.add(crate);
     return crate;
@@ -1258,7 +1268,7 @@ export class Game {
 
   /** Add an item to a crate; false when it would not fit. */
   crateAdd(crate: PlacedCrate, item: Item): boolean {
-    if (crateUnits(crate) + item.count > CRATE_DEFS[crate.kind].capacity) return false;
+    if (crateUnits(crate) + item.count > crateCapacity(crate)) return false;
     const def = ITEM_DEFS[item.id];
     const stack = def?.stackable ? crate.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
     if (stack) {
@@ -1502,7 +1512,9 @@ export class Game {
     // Every beast adds its own share of the pull; the ones bred for it add more.
     let pull = 0.75;
     for (const c of team) pull += this.creatures.species(c).pull ?? 0.25;
-    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)));
+    // A body of light wood rolls a shade easier than one of oak, which is the
+    // price oak charges for holding more and lasting longer.
+    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material));
   }
 
   /** What a team knows about hills between them, which is what a slope asks. */
@@ -2046,9 +2058,9 @@ export class Game {
     return null;
   }
 
-  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = []): PlacedFurniture {
+  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = [], material?: string): PlacedFurniture {
     const [ax, ay] = furnitureAnchor(kind, sx, sy);
-    const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items };
+    const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items, material };
     this.furniture.set(f.id, f);
     this.placed.furniture.add(f);
     this.events.emit('crate');
@@ -2124,7 +2136,7 @@ export class Game {
     const out: DeedStore[] = [];
     for (const c of this.crates.values()) {
       if (!this.onDeed(c.x, c.y)) continue;
-      const cap = CRATE_DEFS[c.kind].capacity;
+      const cap = crateCapacity(c);
       out.push({
         x: c.x,
         y: c.y,
@@ -2147,7 +2159,7 @@ export class Game {
         items: f.items,
         name: def.name,
         deed: false,
-        room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= (def.capacity ?? 0),
+        room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= furnitureCapacity(f),
         add: (item) => this.furnitureAdd(f, item),
         changed: () => this.events.emit('crate'),
       });

@@ -1,5 +1,5 @@
 import type { Game } from '../../game/game';
-import { itemDef, itemName, type Item, type ItemCategory } from '../../game/items';
+import { itemDef, itemName, type Item, type ItemCategory, itemWeight } from '../../game/items';
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
@@ -91,7 +91,6 @@ export class InventoryPanel {
   }
 
   private row(item: Item): HTMLDivElement {
-    const def = itemDef(item.id);
     const row = document.createElement('div');
     row.className = 'inv-row' + (item.uid === this.selected ? ' selected' : '');
     const name = document.createElement('span');
@@ -104,7 +103,7 @@ export class InventoryPanel {
     const dmg = document.createElement('span');
     dmg.textContent = item.dmg.toFixed(1);
     const wt = document.createElement('span');
-    wt.textContent = (def.weight * item.count).toFixed(1);
+    wt.textContent = itemWeight(item).toFixed(1);
     row.append(name, ql, dmg, wt);
     const open = (e: MouseEvent): void => {
       e.preventDefault();

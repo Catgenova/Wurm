@@ -3,7 +3,8 @@ import { creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { itemDef, itemName } from './items';
-import { hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
+import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
+import { matOfItem } from './materials';
 
 type CreatureTarget = Extract<Target, { kind: 'creature' }>;
 const isCreature = (t: Target): t is CreatureTarget => t.kind === 'creature';
@@ -339,12 +340,11 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (g.rand() > hitChance(g, usable)) {
         g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'event');
       } else {
-        const dmg = weaponDamage(g, usable, item) * (0.75 + g.rand() * 0.5);
+        // Silver's old virtue: what carries its own light hates a silver edge.
+        const bane = banes(item) && def.glow ? BANE_BONUS : 1;
+        const dmg = weaponDamage(g, usable, item) * bane * (0.75 + g.rand() * 0.5);
         g.creatures.hurt(g, c, dmg, 'player');
-        if (item) {
-          item.dmg = Math.min(100, item.dmg + 0.35);
-          g.events.emit('inventory');
-        }
+        if (item) g.damageItem(item, 0.35);
         g.logMsg(
           `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`,
           'event',
@@ -403,10 +403,12 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (g.rand() > hitChance(g, bow) * reach) {
         g.logMsg(`Your arrow goes wide of the ${def.name.toLowerCase()}.`, 'event');
       } else {
-        const dmg = weaponDamage(g, bow, held) * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
+        // The stave throws it; the head is what goes in. Both have a say.
+        const head = matOfItem(arrow);
+        const bane = head.bane && def.glow ? BANE_BONUS : 1;
+        const dmg = weaponDamage(g, bow, held) * head.edge * bane * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
         g.creatures.hurt(g, c, dmg, 'player');
-        held.dmg = Math.min(100, held.dmg + 0.25);
-        g.events.emit('inventory');
+        g.damageItem(held, 0.25);
         g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.`, 'event');
       }
       if (c.health <= 0) return false;

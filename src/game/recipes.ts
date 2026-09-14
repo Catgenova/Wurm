@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { itemDef } from './items';
 import { FURNITURE } from './furniture';
 import { MOULDS } from './metal';
+import { isMaterialKind, matOf, type MaterialKind } from './materials';
 
 /**
  * Everything the player can make from what they carry. A recipe is a tool
@@ -49,6 +50,15 @@ export interface Recipe {
    * how little of that quality is lost in the pouring.
    */
   qlFromInputs?: boolean;
+  /**
+   * The product is made of something, and takes it from the first input that
+   * carries a material of this kind: a plank crate is of the wood its planks
+   * were, a fitted sword of the metal of its blade. One craft draws on one
+   * material; you cannot nail an oak plank to a pine one and call it a chest.
+   */
+  material?: MaterialKind;
+  /** The one wood it may be made from, for the things that are that fussy. */
+  wood?: string;
   /** Things handed back when it succeeds, such as the bucket the lye was in. */
   returns?: Array<[string, number]>;
   /**
@@ -63,13 +73,13 @@ export interface Recipe {
 
 export const RECIPES: Recipe[] = [
   // Woodwork
-  { id: 'make_planks', category: 'Woodwork', result: 'plank', count: 3, inputs: [{ item: 'log' }], tool: 'saw', skill: 'carpentry', label: 'Saw into planks', verb: 'sawing', baseTime: 5, stamina: 0.04, done: 'You saw the log into three planks.' },
-  { id: 'make_timbers', category: 'Woodwork', result: 'timber', count: 2, inputs: [{ item: 'log' }], tool: 'saw', skill: 'carpentry', label: 'Saw into timbers', verb: 'sawing', baseTime: 5, stamina: 0.04, done: 'You saw the log into two timbers.' },
-  { id: 'make_shafts', category: 'Woodwork', result: 'shaft', count: 4, inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve shafts', verb: 'carving shafts', baseTime: 5, stamina: 0.03, done: 'You carve the log into four shafts.' },
-  { id: 'make_mallet', category: 'Woodwork', result: 'mallet', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve a mallet', verb: 'carving a mallet', baseTime: 8, stamina: 0.04, difficulty: 8, done: 'You carve a mallet from the log.', fail: 'The head splits as you shape it. You fail to carve a mallet.' },
-  { id: 'make_deed_stake', category: 'Woodwork', result: 'deed_stake', inputs: [{ item: 'shaft' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve a deed stake', verb: 'carving a deed stake', baseTime: 10, stamina: 0.05, difficulty: 10, done: 'You whittle the shaft to a point and notch it for a claim.', fail: 'The shaft splits along the grain. You fail to carve a deed stake.' },
-  { id: 'make_log_crate', category: 'Woodwork', result: 'crate_log', inputs: [{ item: 'log', count: 3 }], tool: 'mallet', skill: 'carpentry', label: 'Build log crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You notch the logs and lash a crate together, not a nail in it. Place it on any spot of a tile.' },
-  { id: 'make_plank_crate', category: 'Woodwork', result: 'crate_plank', inputs: [{ item: 'plank', count: 6 }, { item: 'nail', count: 12 }], tool: 'mallet', skill: 'carpentry', label: 'Build plank crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You nail together a plank crate. Place it on any spot of a tile.' },
+  { id: 'make_planks', category: 'Woodwork', result: 'plank', count: 3, inputs: [{ item: 'log' }], tool: 'saw', skill: 'carpentry', material: 'wood', label: 'Saw into planks', verb: 'sawing', baseTime: 5, stamina: 0.04, done: 'You saw the log into three planks.' },
+  { id: 'make_timbers', category: 'Woodwork', result: 'timber', count: 2, inputs: [{ item: 'log' }], tool: 'saw', skill: 'carpentry', material: 'wood', label: 'Saw into timbers', verb: 'sawing', baseTime: 5, stamina: 0.04, done: 'You saw the log into two timbers.' },
+  { id: 'make_shafts', category: 'Woodwork', result: 'shaft', count: 4, inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', material: 'wood', label: 'Carve shafts', verb: 'carving shafts', baseTime: 5, stamina: 0.03, done: 'You carve the log into four shafts.' },
+  { id: 'make_mallet', category: 'Woodwork', result: 'mallet', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', material: 'wood', label: 'Carve a mallet', verb: 'carving a mallet', baseTime: 8, stamina: 0.04, difficulty: 8, done: 'You carve a mallet from the log.', fail: 'The head splits as you shape it. You fail to carve a mallet.' },
+  { id: 'make_deed_stake', category: 'Woodwork', result: 'deed_stake', inputs: [{ item: 'shaft' }], tool: 'carving_knife', skill: 'carpentry', material: 'wood', label: 'Carve a deed stake', verb: 'carving a deed stake', baseTime: 10, stamina: 0.05, difficulty: 10, done: 'You whittle the shaft to a point and notch it for a claim.', fail: 'The shaft splits along the grain. You fail to carve a deed stake.' },
+  { id: 'make_log_crate', category: 'Woodwork', result: 'crate_log', inputs: [{ item: 'log', count: 3 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build log crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You notch the logs and lash a crate together, not a nail in it. Place it on any spot of a tile.' },
+  { id: 'make_plank_crate', category: 'Woodwork', result: 'crate_plank', inputs: [{ item: 'plank', count: 6 }, { item: 'nail', count: 12 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build plank crate', verb: 'building a crate', baseTime: 6, stamina: 0.05, done: 'You nail together a plank crate. Place it on any spot of a tile.' },
   // Stonework
   { id: 'make_stone_brick', category: 'Stonework', result: 'stone_brick', inputs: [{ item: 'rock_shards' }], tool: 'chisel', skill: 'stonecutting', label: 'Chisel stone brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a stone brick.', fail: 'The shard splits the wrong way. You fail to make a brick.' },
   { id: 'make_slate_brick', category: 'Stonework', result: 'slate_brick', inputs: [{ item: 'slate_shards' }], tool: 'chisel', skill: 'stonecutting', label: 'Chisel slate brick', verb: 'chiselling', baseTime: 6, stamina: 0.04, difficulty: 12, done: 'You chisel a slate brick.', fail: 'The slate flakes apart. You fail to make a brick.' },
@@ -91,12 +101,12 @@ export const RECIPES: Recipe[] = [
   { id: 'make_clay_pot', category: 'Clay & thatch', result: 'unfired_clay_pot', inputs: [{ item: 'clay', count: 2 }], skill: 'pottery', label: 'Shape a pot', verb: 'shaping a pot', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You raise the walls of a deep pot. Fire it in a kiln.', fail: 'The pot goes out of true as you draw it up and you press it back into a lump.' },
   { id: 'make_clay_jar', category: 'Clay & thatch', result: 'unfired_clay_jar', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a jar', verb: 'shaping a jar', baseTime: 7, stamina: 0.02, difficulty: 10, done: 'You shape a jar and a lid to sit on it. Fire them in a kiln.', fail: 'The neck collapses. You fail to shape a jar.' },
   { id: 'make_adobe', category: 'Clay & thatch', result: 'adobe', inputs: [{ item: 'clay' }, { item: 'mixed_grass' }], skill: 'pottery', label: 'Make adobe', verb: 'making adobe', baseTime: 4, stamina: 0.02, done: 'You press clay and grass into an adobe block.' },
-  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
-  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
-  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
-  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
-  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
-  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
+  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
+  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
+  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
+  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
+  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
+  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
   // Fibre is spun on a spindle and woven on a loom; nothing shortcuts either.
   { id: 'spin_wool', category: 'Cloth', result: 'yarn', count: 2, inputs: [{ item: 'wool', count: 2 }], station: 'spindle', skill: 'tailoring', label: 'Spin into yarn', verb: 'spinning', baseTime: 6, stamina: 0.02, difficulty: 8, done: 'You spin the wool into two lengths of yarn.', fail: 'The thread breaks over and over and the wool is a tangle.', consumeOnFail: true },
   { id: 'spin_cotton', category: 'Cloth', result: 'yarn', count: 2, inputs: [{ item: 'cotton', count: 2 }], station: 'spindle', skill: 'tailoring', label: 'Spin into yarn', verb: 'spinning', baseTime: 6, stamina: 0.02, difficulty: 10, done: 'You spin the cotton into two lengths of yarn.', fail: 'The thread breaks over and over and the cotton is a tangle.', consumeOnFail: true },
@@ -119,28 +129,28 @@ export const RECIPES: Recipe[] = [
   { id: 'make_leather_trousers', category: 'Cloth', result: 'leather_trousers', inputs: [{ item: 'leather', count: 4 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather trousers', verb: 'working leather', baseTime: 14, stamina: 0.05, difficulty: 20, done: 'You cut and stitch a pair of leather trousers.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
   { id: 'make_leather_boots', category: 'Cloth', result: 'leather_boots', inputs: [{ item: 'leather', count: 3 }], tool: 'carving_knife', skill: 'leatherworking', label: 'Cut leather boots', verb: 'working leather', baseTime: 13, stamina: 0.04, difficulty: 18, done: 'You cut and stitch a pair of leather boots.', fail: 'The hide tears along the stitch line.', consumeOnFail: true },
   // Vehicle parts. A wheel is a carpenter's piece; the metal in it is banded on.
-  { id: 'make_large_wheel', category: 'Woodwork', result: 'large_wheel', inputs: [{ item: 'plank', count: 4 }, { item: 'shaft', count: 6 }, { item: 'ribbon', count: 1 }, { item: 'nail', count: 12 }], tool: 'mallet', skill: 'carpentry', label: 'Build a large wheel', verb: 'building a wheel', baseTime: 16, stamina: 0.05, difficulty: 28, done: 'You set the spokes into the hub, lay the felloes round them and shrink the tyre on hot.', fail: 'The wheel will not run true and you knock it apart again.', consumeOnFail: true },
+  { id: 'make_large_wheel', category: 'Woodwork', result: 'large_wheel', inputs: [{ item: 'plank', count: 4 }, { item: 'shaft', count: 6 }, { item: 'ribbon', count: 1 }, { item: 'nail', count: 12 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build a large wheel', verb: 'building a wheel', baseTime: 16, stamina: 0.05, difficulty: 28, done: 'You set the spokes into the hub, lay the felloes round them and shrink the tyre on hot.', fail: 'The wheel will not run true and you knock it apart again.', consumeOnFail: true },
   { id: 'make_saddle', category: 'Cloth', result: 'saddle', inputs: [{ item: 'leather', count: 6 }, { item: 'plank', count: 2 }, { item: 'ribbon', count: 1 }, { item: 'nail', count: 8 }], tool: 'awl', skill: 'leatherworking', label: 'Stitch a saddle', verb: 'stitching a saddle', baseTime: 18, stamina: 0.05, difficulty: 26, done: 'You build the tree, stretch the leather over it and hang the stirrups.', fail: 'The seat pulls out of line and the whole thing is scrap.', consumeOnFail: true },
   { id: 'make_bridle', category: 'Cloth', result: 'bridle', inputs: [{ item: 'leather', count: 3 }, { item: 'ribbon', count: 1 }], tool: 'awl', skill: 'leatherworking', label: 'Stitch a bridle', verb: 'stitching a bridle', baseTime: 10, stamina: 0.03, difficulty: 18, done: 'You cut the headstall, set the bit and knot the reins to it.', fail: 'The cheekpieces come out uneven and the bit sits crooked.', consumeOnFail: true },
-  { id: 'make_yoke', category: 'Cloth', result: 'yoke', inputs: [{ item: 'shaft', count: 1 }, { item: 'leather', count: 2 }, { item: 'nail', count: 4 }], tool: 'awl', skill: 'leatherworking', label: 'Stitch a yoke', verb: 'stitching a yoke', baseTime: 12, stamina: 0.04, difficulty: 18, done: 'You shape the bar and stitch a harness to it. Something can be hitched to that.', fail: 'The harness tears along the stitch line.', consumeOnFail: true },
+  { id: 'make_yoke', category: 'Cloth', result: 'yoke', inputs: [{ item: 'shaft', count: 1 }, { item: 'leather', count: 2 }, { item: 'nail', count: 4 }], tool: 'awl', skill: 'leatherworking', material: 'wood', label: 'Stitch a yoke', verb: 'stitching a yoke', baseTime: 12, stamina: 0.04, difficulty: 18, done: 'You shape the bar and stitch a harness to it. Something can be hitched to that.', fail: 'The harness tears along the stitch line.', consumeOnFail: true },
   { id: 'make_cheese', category: 'Cooking', result: 'cheese', count: 3, inputs: [{ item: 'milk_bucket' }], tool: 'clay_bowl', skill: 'cooking', returns: [['bucket', 1]], label: 'Press into cheese', verb: 'pressing cheese', baseTime: 14, stamina: 0.03, difficulty: 14, done: 'You curdle the milk, press it and turn out three cheeses.', fail: 'The milk will not take and you pour off a bucket of whey.', consumeOnFail: true },
   { id: 'make_candle', category: 'Cloth', result: 'candle', count: 2, inputs: [{ item: 'wax', count: 2 }, { item: 'yarn' }], skill: 'alchemy', label: 'Draw candles', verb: 'drawing candles', baseTime: 9, stamina: 0.02, difficulty: 10, done: 'You draw the wick through the wax until two candles hang off it.', fail: 'The wax sets in lumps and the wick is wasted.', consumeOnFail: true },
-  { id: 'make_bucket', category: 'Woodwork', result: 'bucket', inputs: [{ item: 'plank', count: 3 }, { item: 'nail', count: 6 }], tool: 'mallet', skill: 'carpentry', label: 'Build a bucket', verb: 'building a bucket', baseTime: 7, stamina: 0.03, difficulty: 12, done: 'You raise the staves and hoop a bucket.', fail: 'The staves will not pull together and the bucket leaks.' },
+  { id: 'make_bucket', category: 'Woodwork', result: 'bucket', inputs: [{ item: 'plank', count: 3 }, { item: 'nail', count: 6 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build a bucket', verb: 'building a bucket', baseTime: 7, stamina: 0.03, difficulty: 12, done: 'You raise the staves and hoop a bucket.', fail: 'The staves will not pull together and the bucket leaks.' },
   // Weapons: a head from the anvil and a length of wood to put it on.
-  { id: 'fit_short_sword_blade', category: 'Woodwork', result: 'short_sword', inputs: [{ item: 'short_sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 6, stamina: 0.03, done: 'You bind a grip to the blade and the short sword is finished.' },
-  { id: 'fit_long_sword_blade', category: 'Woodwork', result: 'long_sword', inputs: [{ item: 'long_sword_blade' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 8, stamina: 0.04, done: 'You bind a two-handed grip to the blade and the long sword is finished.' },
-  { id: 'fit_axe_head', category: 'Woodwork', result: 'battle_axe', inputs: [{ item: 'axe_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.04, done: 'You wedge the head onto a long haft and the battle axe is finished.' },
-  { id: 'fit_maul_head', category: 'Woodwork', result: 'maul', inputs: [{ item: 'maul_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 4 }], skill: 'carpentry', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.05, done: 'You wedge the head onto a long haft and the maul is finished.' },
-  { id: 'fit_spear_head', category: 'Woodwork', result: 'spear', inputs: [{ item: 'spear_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 2 }], skill: 'carpentry', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 6, stamina: 0.03, done: 'You bind the head to a long shaft and the spear is finished.' },
-  { id: 'make_hunting_knife', category: 'Woodwork', result: 'hunting_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 5, stamina: 0.02, done: 'You fit a grip and the hunting knife is finished.' },
-  { id: 'make_club', category: 'Woodwork', result: 'club', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', label: 'Carve a club', verb: 'carving a club', baseTime: 7, stamina: 0.04, difficulty: 8, done: 'You carve a heavy club out of the log.', fail: 'The grain runs out of true and the club splits.' },
-  { id: 'make_wooden_shield', category: 'Woodwork', result: 'wooden_shield', inputs: [{ item: 'plank', count: 4 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', label: 'Build a wooden shield', verb: 'building a shield', baseTime: 11, stamina: 0.05, difficulty: 16, done: 'You nail up a wooden shield and fit its grip.', fail: 'The boards will not pull together and the shield is scrap.' },
-  { id: 'make_metal_shield', category: 'Woodwork', result: 'metal_shield', inputs: [{ item: 'shield_boss' }, { item: 'plank', count: 3 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', label: 'Build a metal shield', verb: 'building a shield', baseTime: 13, stamina: 0.06, difficulty: 20, done: 'You face the boards with the boss and the metal shield is finished.', fail: 'The rivets pull through the boards and the shield is scrap.' },
+  { id: 'fit_short_sword_blade', category: 'Woodwork', result: 'short_sword', inputs: [{ item: 'short_sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 6, stamina: 0.03, done: 'You bind a grip to the blade and the short sword is finished.' },
+  { id: 'fit_long_sword_blade', category: 'Woodwork', result: 'long_sword', inputs: [{ item: 'long_sword_blade' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 8, stamina: 0.04, done: 'You bind a two-handed grip to the blade and the long sword is finished.' },
+  { id: 'fit_axe_head', category: 'Woodwork', result: 'battle_axe', inputs: [{ item: 'axe_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', material: 'metal', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.04, done: 'You wedge the head onto a long haft and the battle axe is finished.' },
+  { id: 'fit_maul_head', category: 'Woodwork', result: 'maul', inputs: [{ item: 'maul_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 4 }], skill: 'carpentry', material: 'metal', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.05, done: 'You wedge the head onto a long haft and the maul is finished.' },
+  { id: 'fit_spear_head', category: 'Woodwork', result: 'spear', inputs: [{ item: 'spear_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 6, stamina: 0.03, done: 'You bind the head to a long shaft and the spear is finished.' },
+  { id: 'make_hunting_knife', category: 'Woodwork', result: 'hunting_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 5, stamina: 0.02, done: 'You fit a grip and the hunting knife is finished.' },
+  { id: 'make_club', category: 'Woodwork', result: 'club', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', material: 'wood', label: 'Carve a club', verb: 'carving a club', baseTime: 7, stamina: 0.04, difficulty: 8, done: 'You carve a heavy club out of the log.', fail: 'The grain runs out of true and the club splits.' },
+  { id: 'make_wooden_shield', category: 'Woodwork', result: 'wooden_shield', inputs: [{ item: 'plank', count: 4 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build a wooden shield', verb: 'building a shield', baseTime: 11, stamina: 0.05, difficulty: 16, done: 'You nail up a wooden shield and fit its grip.', fail: 'The boards will not pull together and the shield is scrap.' },
+  { id: 'make_metal_shield', category: 'Woodwork', result: 'metal_shield', inputs: [{ item: 'shield_boss' }, { item: 'plank', count: 3 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', material: 'metal', label: 'Build a metal shield', verb: 'building a shield', baseTime: 13, stamina: 0.06, difficulty: 20, done: 'You face the boards with the boss and the metal shield is finished.', fail: 'The rivets pull through the boards and the shield is scrap.' },
   // Bows and arrows.
-  { id: 'make_short_bow', category: 'Woodwork', result: 'short_bow', inputs: [{ item: 'shaft', count: 2 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', label: 'Tiller a short bow', verb: 'tillering a bow', baseTime: 12, stamina: 0.04, difficulty: 16, done: 'You tiller a short bow and string it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
-  { id: 'make_medium_bow', category: 'Woodwork', result: 'medium_bow', inputs: [{ item: 'shaft', count: 3 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', label: 'Tiller a medium bow', verb: 'tillering a bow', baseTime: 15, stamina: 0.05, difficulty: 22, done: 'You tiller a medium bow and string it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
-  { id: 'make_long_bow', category: 'Woodwork', result: 'long_bow', inputs: [{ item: 'shaft', count: 4 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', label: 'Tiller a long bow', verb: 'tillering a bow', baseTime: 18, stamina: 0.06, difficulty: 30, done: 'You tiller a long bow and string it. It takes an age to draw and ends most things at the end of it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
-  { id: 'make_arrows', category: 'Woodwork', result: 'arrow', count: 3, inputs: [{ item: 'shaft' }, { item: 'arrow_head', count: 3 }, { item: 'feather', count: 3 }], tool: 'carving_knife', skill: 'fletching', label: 'Fletch arrows', verb: 'fletching', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You split the shaft, set the heads and fletch three arrows.', fail: 'The fletching will not sit straight and the arrows are spoiled.', consumeOnFail: true },
+  { id: 'make_short_bow', category: 'Woodwork', result: 'short_bow', inputs: [{ item: 'shaft', count: 2 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', material: 'wood', wood: 'Willow', label: 'Tiller a short bow', verb: 'tillering a bow', baseTime: 12, stamina: 0.04, difficulty: 16, done: 'You tiller a short bow and string it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
+  { id: 'make_medium_bow', category: 'Woodwork', result: 'medium_bow', inputs: [{ item: 'shaft', count: 3 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', material: 'wood', wood: 'Birch', label: 'Tiller a medium bow', verb: 'tillering a bow', baseTime: 15, stamina: 0.05, difficulty: 22, done: 'You tiller a medium bow and string it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
+  { id: 'make_long_bow', category: 'Woodwork', result: 'long_bow', inputs: [{ item: 'shaft', count: 4 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', material: 'wood', wood: 'Oak', label: 'Tiller a long bow', verb: 'tillering a bow', baseTime: 18, stamina: 0.06, difficulty: 30, done: 'You tiller a long bow and string it. It takes an age to draw and ends most things at the end of it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
+  { id: 'make_arrows', category: 'Woodwork', result: 'arrow', count: 3, inputs: [{ item: 'shaft' }, { item: 'arrow_head', count: 3 }, { item: 'feather', count: 3 }], tool: 'carving_knife', skill: 'fletching', material: 'metal', label: 'Fletch arrows', verb: 'fletching', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You split the shaft, set the heads and fletch three arrows.', fail: 'The fletching will not sit straight and the arrows are spoiled.', consumeOnFail: true },
   // Alchemy: ashes leached in water, and what lye is for.
   { id: 'make_lye', category: 'Alchemy', result: 'lye_bucket', inputs: [{ item: 'water_bucket' }, { item: 'ash', count: 2 }], skill: 'alchemy', label: 'Leach into lye', verb: 'making lye', baseTime: 12, stamina: 0.03, difficulty: 14, done: 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', fail: 'The ashes settle out again and you are left with dirty water.', consumeOnFail: true, salvage: [['bucket', 1]] },
   { id: 'tan_hide', category: 'Alchemy', result: 'leather', inputs: [{ item: 'hide' }, { item: 'lye_bucket' }], tool: 'carving_knife', skill: 'leatherworking', returns: [['bucket', 1]], label: 'Tan in lye', verb: 'tanning a hide', baseTime: 14, stamina: 0.05, difficulty: 16, done: 'The lye takes the hair off the hide and you work it soft. It is leather now, and the bucket is empty.', fail: 'The hide is left too long in the lye and comes out brittle and useless.', consumeOnFail: true },
@@ -203,6 +213,8 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
   inputs: f.bill.map(([item, count]) => ({ item, count })),
   tool: f.tool ?? 'mallet',
   skill: f.skill ?? 'fine_carpentry',
+  // A carpenter's piece is of the wood it is built from; a mason's is brick.
+  material: f.skill === 'masonry' ? undefined : ('wood' as const),
   label: `Build ${f.name.toLowerCase()}`,
   verb: `building a ${f.name.toLowerCase()}`,
   baseTime: f.time,
@@ -227,26 +239,92 @@ export interface RecipeStatus {
   ready: boolean;
   /** How many times it can be made with what is carried. */
   max: number;
+  /** What it would come out made of, for the recipes that are made of something. */
+  material?: string;
 }
 
 export function recipeStatus(r: Recipe, g: Game): RecipeStatus {
   const tool = !r.tool || g.inventory.has(r.tool);
   const station = !r.station || g.atStation(r.station);
-  const inputs = r.inputs.map((i) => ({ item: i.item, need: i.count ?? 1, have: g.inventory.count(i.item) }));
+  const material = chooseMaterial(g, r);
+  const inputs = r.inputs.map((i) => ({ item: i.item, need: i.count ?? 1, have: countFor(g, r, i.item, material) }));
   const max = tool && station ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
-  return { tool, station, inputs, ready: max >= 1, max };
+  return { tool, station, inputs, ready: max >= 1, max, material };
 }
 
 const lower = (id: string): string => itemDef(id).name.toLowerCase();
 const plural = (id: string, n: number): string => (n === 1 ? lower(id) : `${lower(id)}${itemDef(id).stackable && !lower(id).endsWith('s') ? 's' : ''}`);
 
+/**
+ * How many of an item are on hand for a craft. Once a material has been
+ * settled on, only stock of that material counts towards the inputs that
+ * carry one — the nails in an oak chest are still whatever metal the nails
+ * are, but every plank in it has to be oak.
+ */
+function countFor(g: Game, r: Recipe, id: string, mat: string | undefined): number {
+  if (!mat) return g.inventory.count(id);
+  let matching = 0;
+  let kindly = 0;
+  let all = 0;
+  for (const it of g.inventory.items) {
+    if (it.id !== id) continue;
+    all += it.count;
+    if (it.extra === mat) matching += it.count;
+    else if (isMaterialKind(it.extra, r.material as MaterialKind)) kindly += it.count;
+  }
+  // An input that could be of this material has to be of the chosen one; one
+  // that never is — the nails in an oak chest — counts whatever it is.
+  return matching > 0 || kindly > 0 ? matching : all;
+}
+
+/** Whether this input has to be of the settled material rather than anything. */
+const strictInput = (g: Game, r: Recipe, id: string): boolean =>
+  !!r.material && g.inventory.items.some((it) => it.id === id && isMaterialKind(it.extra, r.material as MaterialKind));
+
+/**
+ * Which material this craft will be made of: whatever was clicked if it will
+ * serve, and otherwise whichever the player has most of. A recipe that names
+ * its wood takes that and nothing else.
+ */
+export function chooseMaterial(g: Game, r: Recipe, preferUid?: number): string | undefined {
+  if (!r.material) return undefined;
+  if (r.wood) return r.wood;
+  for (const i of r.inputs) {
+    const stacks = g.inventory.items.filter((it) => it.id === i.item && isMaterialKind(it.extra, r.material as MaterialKind));
+    if (!stacks.length) continue;
+    const clicked = stacks.find((it) => it.uid === preferUid);
+    if (clicked) return clicked.extra;
+    const need = i.count ?? 1;
+    const held = new Map<string, number>();
+    for (const st of stacks) held.set(st.extra as string, (held.get(st.extra as string) ?? 0) + st.count);
+    let best: string | undefined;
+    let bestN = -1;
+    for (const [name, n] of held) if (n >= need && n > bestN) [bestN, best] = [n, name];
+    if (best) return best;
+    // Nothing named covers it. Plain stock from before the woods were told
+    // apart still will, so let that through rather than blocking on it.
+    const plain = g.inventory.items.filter((it) => it.id === i.item && !it.extra).reduce((n, it) => n + it.count, 0);
+    return plain >= need ? undefined : [...held.keys()][0];
+  }
+  return undefined;
+}
+
 /** Why a recipe cannot be made right now, or null. */
-export function recipeReason(r: Recipe, g: Game): string | null {
+export function recipeReason(r: Recipe, g: Game, preferUid?: number): string | null {
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
+  const mat = chooseMaterial(g, r, preferUid);
+  if (r.wood) {
+    const i = r.inputs[0];
+    const need = i.count ?? 1;
+    if (countFor(g, r, i.item, r.wood) < need) return `A ${lower(r.result)} is tillered from ${r.wood.toLowerCase()} and nothing else: ${need} ${plural(i.item, need)} of it.`;
+  }
   for (const i of r.inputs) {
     const need = i.count ?? 1;
-    if (g.inventory.count(i.item) < need) return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${x.count ?? 1} ${plural(x.item, x.count ?? 1)}`).join(', ')})` : ''}.`;
+    if (countFor(g, r, i.item, mat) < need) {
+      const of = mat && strictInput(g, r, i.item) ? ` of ${mat.toLowerCase()}` : '';
+      return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${of}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${x.count ?? 1} ${plural(x.item, x.count ?? 1)}`).join(', ')})` : ''}.`;
+    }
   }
   return null;
 }
@@ -271,10 +349,18 @@ function inputQl(g: Game, r: Recipe): number {
   return weight ? total / weight : 1;
 }
 
-/** Use up `n` units of an item, drawing from the clicked stack first, then any other (logs differ by wood). */
-function consumeAcross(g: Game, id: string, n: number, preferUid?: number): boolean {
-  if (g.inventory.count(id) < n) return false;
-  const stacks = g.inventory.items.filter((it) => it.id === id).sort((a, b) => Number(b.uid === preferUid) - Number(a.uid === preferUid));
+/**
+ * Use up `n` units of an item, drawing from the clicked stack first and then
+ * any other. Once a material has been settled on, only stock of that material
+ * is drawn from for the inputs that have any of it — which is what stops a
+ * chest being half oak and half pine.
+ */
+function consumeAcross(g: Game, id: string, n: number, preferUid?: number, mat?: string, strict = false): boolean {
+  const pool = g.inventory.items.filter((it) => it.id === id && (!mat || it.extra === mat));
+  const enough = pool.reduce((sum, it) => sum + it.count, 0) >= n;
+  if (strict && !enough) return false;
+  const stacks = (enough ? pool : g.inventory.items.filter((it) => it.id === id)).sort((a, b) => Number(b.uid === preferUid) - Number(a.uid === preferUid));
+  if (stacks.reduce((sum, it) => sum + it.count, 0) < n) return false;
   let left = n;
   for (const st of stacks) {
     if (left <= 0) break;
@@ -291,7 +377,7 @@ export function recipeAction(r: Recipe): ActionDef {
   const more = (t: Target, g: Game): boolean => {
     if (t.kind !== 'item' || (t.count ?? 1) <= 1) return false;
     t.count = (t.count ?? 1) - 1;
-    return recipeReason(r, g) === null;
+    return recipeReason(r, g, t.uid) === null;
   };
   return {
     id: r.id,
@@ -305,16 +391,23 @@ export function recipeAction(r: Recipe): ActionDef {
     quantity: true,
     repeat: true,
     applies: (t, g) => t.kind === 'item' && materials.includes(g.inventory.get(t.uid)?.id ?? ''),
-    check: (_t, g) => recipeReason(r, g),
+    check: (t, g) => recipeReason(r, g, t.kind === 'item' ? t.uid : undefined),
     maxRepeat: (_t, g) => recipeStatus(r, g).max,
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       // An oven holds its heat evenly: what would burn over a fire comes out right.
       const oven = r.station === 'campfire' ? g.hotOvenNear() : undefined;
       const ease = g.mindEase() + (oven ? 10 : 0);
-      if (r.difficulty !== undefined && !g.skillCheck(r.skill, r.difficulty, toolQl(g), ease)) {
+      // What it is being made of decides how stubborn the work is: oak and
+      // the deep metals fight the hands that shape them.
+      const mat = chooseMaterial(g, r, t.uid);
+      // Worked out before anything is used up, since using things up changes
+      // the answer.
+      const strict = new Map(r.inputs.map((i) => [i.item, strictInput(g, r, i.item)]));
+      const hard = (r.difficulty ?? 0) + matOf(mat).difficulty;
+      if (r.difficulty !== undefined && !g.skillCheck(r.skill, hard, toolQl(g), ease)) {
         if (r.consumeOnFail) {
-          for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid);
+          for (const i of r.inputs) consumeAcross(g, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item));
           // The batch is wasted, not the vessel: you tip the ruin out and keep
           // the bucket.
           for (const [id, n] of r.salvage ?? r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
@@ -323,13 +416,13 @@ export function recipeAction(r: Recipe): ActionDef {
         return more(t, g);
       }
       const fromInputs = r.qlFromInputs ? inputQl(g, r) : 0;
-      for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid)) return;
+      for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item))) return;
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
-      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql });
+      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql, extra: mat });
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', 0.25);
-      g.logMsg(`${r.done} (QL ${item.ql.toFixed(1)})`, 'event');
+      g.logMsg(`${r.done} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');
       return more(t, g);
     },
   };

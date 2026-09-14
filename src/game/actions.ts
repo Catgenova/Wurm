@@ -20,7 +20,8 @@ import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
-import { itemDef, itemName } from './items';
+import { materialOfItem } from './materials';
+import { itemDef, itemName, itemWeight } from './items';
 import { RECIPE_ACTIONS } from './recipes';
 
 /**
@@ -788,7 +789,10 @@ export const ACTIONS: ActionDef[] = [
       if (!item) return;
       const def = itemDef(item.id);
       const desc = def.description ? ` ${def.description}` : '';
-      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${(def.weight * item.count).toFixed(2)} kg.${desc}`, 'event');
+      // What it is made of is half of what it is, so it is said here.
+      const made = materialOfItem(item);
+      const stuff = made ? ` ${made.name}: ${made.note}` : '';
+      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${desc}${stuff}`, 'event');
     },
   },
   {

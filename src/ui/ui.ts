@@ -22,7 +22,7 @@ import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
 import { itemDef, itemName, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
-import { crateKindOfItem, crateName, CRATE_DEFS, crateUnits, subtileOf } from '../game/crates';
+import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
@@ -254,7 +254,7 @@ export class UI {
     const crate = pick.crate !== undefined ? this.game.crates.get(pick.crate) : undefined;
     if (crate) {
       lines.push(crateName(crate));
-      lines.push(`${crateUnits(crate)} / ${CRATE_DEFS[crate.kind].capacity} things · spot ${crate.sx + 1},${crate.sy + 1} of tile ${crate.x}, ${crate.y}`);
+      lines.push(`${crateUnits(crate)} / ${crateCapacity(crate)} things · spot ${crate.sx + 1},${crate.sy + 1} of tile ${crate.x}, ${crate.y}`);
       this.tooltip.show(sx, sy, lines);
       return;
     }

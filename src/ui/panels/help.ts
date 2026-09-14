@@ -115,6 +115,37 @@ export function buildHelp(win: UIWindow): void {
     them and red when you do not, and whatever you can make right now sits at the top of its group. Tick
     <i>Only what I can make</i> to hide the rest. The same recipes are on each material's own menu,
     where <i>All</i> keeps going until the materials run out.</p>
+    <h3>What a thing is made of</h3>
+    <p>The same bill of materials in two different woods, or two different metals, makes two different
+    things. A log keeps the wood it was cut from all the way through &mdash; planks, timbers, shafts and
+    whatever you nail together out of them &mdash; and a lump keeps its metal from the seam to the
+    finished blade. Every wood and every metal carries the same eight numbers: how hard it is to work,
+    what it weighs, how much punishment it takes, how fast it rots, what it is worth as an edge, as
+    armour, as a tool, and as a box to put things in. The examine line on any item says what it is made
+    of and what that lends it.</p>
+    <p><b>One craft, one material.</b> You cannot nail an oak plank to a pine one and call it a chest.
+    The crafting window shows what the piece would come out <i>of</i>, and picks whichever you have most
+    of; click a different stack in your pack to use that one instead. Nails and the like are exempt
+    &mdash; they are whatever metal they are. <b>Improving</b> is the same rule: an oak chest wants more
+    oak, and a bronze blade will not take copper.</p>
+    <p><b>The six woods.</b> <b>Pine</b> is soft, light and quick to work, and rots as fast as it grew.
+    <b>Willow</b> and <b>birch</b> are light and springy. <b>Maple</b> is even-tempered. <b>Oak</b> is
+    hard going and worth it: an oak thing takes about a third of the knocks a pine one does, holds more
+    and swings harder, at the price of weight. <b>Cedar</b> barely rots at all &mdash; whatever you mean
+    to leave standing in the rain, build it of cedar. A <b>bow</b> is the fussiest thing on the island:
+    a short bow is tillered from <b>willow</b>, a medium bow from <b>birch</b> and a long bow from
+    <b>oak</b>, and nothing else will do.</p>
+    <p><b>The fourteen metals.</b> <b>Copper</b> is what everything starts in and is soft with it.
+    <b>Tin</b>, <b>zinc</b>, <b>lead</b> and <b>pewter</b> are stock for alloys and nothing you would
+    want to swing. <b>Bronze</b> and <b>brass</b> are the first real step up. <b>Silver</b> hardly
+    tarnishes and bites anything that carries its own light half again as hard, which is what a
+    <b>Lume</b> or an <b>Embra</b> is. <b>Gold</b> never decays, weighs twice what copper does and is
+    good for nothing else. The four out of the deep seams are what a lifetime of mining is for:
+    <b>adamantine</b> takes the keenest edge, <b>glimmersteel</b> is light and turns aside half again
+    what copper does, <b>mithril</b> is lighter than the wood it is hafted to, and <b>seryll</b>
+    scarcely takes a mark at all. A tool's metal decides how fast and how true it works, so a bronze
+    hatchet at forty beats a copper one at fifty; a weapon's metal decides what it does; armour's metal
+    decides both what it stops and what it costs you to carry.</p>
     <h3>Farming</h3>
     <p>With a <b>rake</b> in your pack, <b>Till</b> any grass or dirt to rake it into a field. Seeds turn
     up while foraging and botanizing &mdash; vegetables and starches in the one, spices and fibres in the

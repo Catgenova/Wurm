@@ -4,6 +4,7 @@ import { FURNITURE_BY_ID } from './furniture';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
 import { isMould } from './metal';
+import { materialOfItem, matOf } from './materials';
 
 /**
  * Improving: taking a finished thing and making it better than it was made.
@@ -93,15 +94,24 @@ function missingTool(g: Game, def: MaterialDef): string | null {
   return null;
 }
 
-/** The stock carried for a material, preferring the poorest so the good stays. */
-function stockFor(g: Game, def: MaterialDef): Item | undefined {
+/**
+ * The stock carried for a material, preferring the poorest so the good stays.
+ * A thing that is made of something can only be built up with more of the
+ * same: you do not patch an oak chest with pine, and a copper blade will not
+ * take bronze.
+ */
+function stockFor(g: Game, def: MaterialDef, made: string | undefined): Item | undefined {
   let worst: Item | undefined;
   for (const it of g.inventory.items) {
     if (!def.stock.includes(it.id)) continue;
+    if (made && materialOfItem(it)?.name !== made) continue;
     if (!worst || it.ql < worst.ql) worst = it;
   }
   return worst;
 }
+
+/** What a thing is made of, when that is a thing it can be made of. */
+const madeOf = (item: Item): string | undefined => materialOfItem(item)?.name;
 
 export const IMPROVE_ACTIONS: ActionDef[] = [
   {
@@ -126,7 +136,8 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       if (item.dmg > 10) return 'It is too knocked about to work on. Repair it first.';
       const missing = missingTool(g, what.material);
       if (missing) return `You need ${what.material.tools.map((id) => itemDef(id).name.toLowerCase()).join(' and ')} to work ${what.material.name}.`;
-      if (!stockFor(g, what.material)) return `You have no ${what.material.name} to work into it.`;
+      const made = madeOf(item);
+      if (!stockFor(g, what.material, made)) return `You have no ${made ? made.toLowerCase() : what.material.name} to work into it, and nothing else will do.`;
       const ceiling = improveCeiling(g, what.skill);
       if (item.ql >= ceiling) return `Your ${what.skill.replace(/_/g, ' ')} is not good enough to better it further.`;
       if (item.ql >= 99.9) return 'It cannot be bettered.';
@@ -137,12 +148,14 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.uid);
       const what = item && improvable(item.id);
       if (!item || !what) return;
-      const stock = stockFor(g, what.material);
+      const made = madeOf(item);
+      const stock = stockFor(g, what.material, made);
       if (!stock || !g.inventory.remove(stock.uid, 1)) return;
       const toolQl = Math.max(...what.material.tools.map((id) => g.toolQl(id)));
       g.gainSkill(what.skill, 0.4);
-      // A failed pass marks the piece rather than spoiling it outright.
-      if (!g.skillCheck(what.skill, 12 + item.ql / 3, toolQl, g.mindEase())) {
+      // A failed pass marks the piece rather than spoiling it outright. Oak
+      // and the deep metals are stubborn under the file as under the saw.
+      if (!g.skillCheck(what.skill, 12 + item.ql / 3 + matOf(item.extra).difficulty, toolQl, g.mindEase())) {
         g.damageItem(item, 3 + g.rand() * 5);
         g.logMsg(`You work at the ${itemName(item).toLowerCase()} and mark it. (damage ${item.dmg.toFixed(1)})`, 'event');
         return item.dmg <= 10;
@@ -151,8 +164,8 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       item.ql = Math.max(item.ql, Math.min(ceiling, item.ql + improveStep(g, item, what.skill)));
       g.events.emit('inventory');
       g.logMsg(`The ${itemName(item).toLowerCase()} is better than it was. (QL ${item.ql.toFixed(1)})`, 'event');
-      // Keep at it while there is room and stock left.
-      return item.ql < ceiling && !!stockFor(g, what.material);
+      // Keep at it while there is room and stock of the right stuff left.
+      return item.ql < ceiling && !!stockFor(g, what.material, made);
     },
   },
 ];

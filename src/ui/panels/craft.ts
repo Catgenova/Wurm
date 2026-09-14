@@ -142,6 +142,15 @@ export class CraftPanel {
       span.append(have);
       parts.push(span);
     }
+    // What it would come out made of, since the same bill in two woods makes
+    // two different things.
+    if (st.material) {
+      const made = document.createElement('span');
+      made.className = 'have';
+      made.textContent = `of ${st.material.toLowerCase()}`;
+      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : 'Pick a different stack from your pack to use another';
+      parts.push(made);
+    }
     parts.forEach((p, k) => {
       if (k) needs.append(document.createTextNode(' · '));
       needs.append(p);
@@ -170,7 +179,11 @@ export class CraftPanel {
 
   private craft(r: Recipe, times: number): void {
     const def = ACTION_BY_ID.get(r.id);
-    const material = this.game.inventory.find(r.inputs[0].item);
+    // Start on a stack of whatever the window said it would be made of, so
+    // clicking Craft makes the thing the row described.
+    const want = recipeStatus(r, this.game).material;
+    const stock = this.game.inventory.items;
+    const material = (want ? stock.find((it) => it.id === r.inputs[0].item && it.extra === want) : undefined) ?? this.game.inventory.find(r.inputs[0].item);
     if (!def || !material) return;
     this.game.requestAction(def, { kind: 'item', uid: material.uid, count: times });
   }

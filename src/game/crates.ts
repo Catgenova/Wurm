@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemName, type Item } from './items';
+import { matOf } from './materials';
 
 /**
  * Crates are the first placeable objects. Each tile is a 4 by 4 grid of
@@ -19,6 +20,8 @@ export interface PlacedCrate {
   items: Item[];
   /** The settlement's crate: deed workers deliver here. */
   deed?: boolean;
+  /** The wood it was built of. */
+  material?: string;
 }
 
 export interface CrateDef {
@@ -38,7 +41,12 @@ export const SUBTILES = 4;
 
 export const crateKindOfItem = (itemId: string): CrateKind | null => (itemId === 'crate_log' ? 'log' : itemId === 'crate_plank' ? 'plank' : null);
 export const crateUnits = (c: PlacedCrate): number => c.items.reduce((n, it) => n + it.count, 0);
-export const crateName = (c: PlacedCrate): string => (c.deed ? `Deed crate (${CRATE_DEFS[c.kind].name.toLowerCase()})` : CRATE_DEFS[c.kind].name);
+/** What it holds: its build, and how strong a wood it was built out of. */
+export const crateCapacity = (c: PlacedCrate): number => Math.round(CRATE_DEFS[c.kind].capacity * matOf(c.material).hold);
+export const crateName = (c: PlacedCrate): string => {
+  const wood = c.material ? ` (${c.material.toLowerCase()})` : '';
+  return c.deed ? `Deed crate (${CRATE_DEFS[c.kind].name.toLowerCase()})${wood}` : `${CRATE_DEFS[c.kind].name}${wood}`;
+};
 /** World position of a crate's centre. */
 export const crateCentre = (c: PlacedCrate): [number, number] => [c.x + (c.sx + 0.5) / SUBTILES, c.y + (c.sy + 0.5) / SUBTILES];
 
@@ -80,8 +88,8 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.itemUid);
       const kind = item && crateKindOfItem(item.id);
       if (!item || !kind || !g.inventory.remove(item.uid, 1)) return;
-      const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy);
-      g.logMsg(`You set the ${CRATE_DEFS[kind].name.toLowerCase()} down.`, 'event');
+      const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra);
+      g.logMsg(`You set the ${crateName(crate).toLowerCase()} down.`, 'event');
       g.events.emit('world', crate.x, crate.y);
     },
   },
@@ -102,7 +110,7 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const c = crateOf(g, t);
       if (!c || c.items.length) return;
       g.removeCrate(c.id);
-      g.inventory.add(CRATE_DEFS[c.kind].item, { ql: 20 });
+      g.inventory.add(CRATE_DEFS[c.kind].item, { ql: 20, extra: c.material });
       g.logMsg(`You pick up the ${CRATE_DEFS[c.kind].name.toLowerCase()}.${c.deed ? ' Deed workers will leave their finds by the token until a deed crate stands again.' : ''}`, 'event');
       g.events.emit('world', c.x, c.y);
     },
@@ -142,7 +150,7 @@ export const CRATE_ACTIONS: ActionDef[] = [
       if (!c || !nearCrate(g, c)) return 'Stand next to a crate.';
       if (t.kind === 'item') {
         const item = g.inventory.get(t.uid);
-        if (item && crateUnits(c) + (t.count ?? 1) > CRATE_DEFS[c.kind].capacity) return `The ${CRATE_DEFS[c.kind].name.toLowerCase()} is full.`;
+        if (item && crateUnits(c) + (t.count ?? 1) > crateCapacity(c)) return `The ${CRATE_DEFS[c.kind].name.toLowerCase()} is full.`;
       }
       return null;
     },

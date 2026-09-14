@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemDef, type Item } from './items';
+import { matOf } from './materials';
 
 /**
  * What you wear and what you swing. Armour is worn a piece to a slot and only
@@ -158,23 +159,42 @@ export function slotOf(id: string): Slot | null {
   return null;
 }
 
-/** How much of a blow a piece of armour turns aside, given its state and the wearer. */
+/**
+ * How much of a blow a piece of armour turns aside, given its state, what it
+ * is made of and the wearer. A gold breastplate is a costly way to be killed;
+ * the same plate in glimmersteel turns aside half again as much.
+ */
 export function pieceSoak(def: ArmourDef, item: Item, skill: number): number {
   const cls = ARMOUR_CLASSES[def.cls];
   const wear = Math.max(0.25, 1 - item.dmg / 130);
   const quality = 0.55 + item.ql / 220;
-  return Math.min(0.9, cls.soak * quality * wear * (1 + skill / 400));
+  return Math.min(0.92, cls.soak * matOf(item.extra).soak * quality * wear * (1 + skill / 400));
 }
 
-/** Damage a weapon does in these hands, before the armour on the other side. */
+/** What a full set of this stuff costs to carry: heavy metal is heavy. */
+export const pieceBurden = (def: ArmourDef, item: Item): number => (ARMOUR_CLASSES[def.cls].burden / 5) * matOf(item.extra).weight;
+
+/**
+ * Damage a weapon does in these hands, before the armour on the other side.
+ * The metal of the head has as much say as the quality: a lead maul is a
+ * heavy way of annoying something, and an adamantine one is not.
+ */
 export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number {
   const skill = g.skills.get(def.kind);
   const fighting = g.skills.get('fighting');
   const ql = item?.ql ?? 20;
   const wear = item ? Math.max(0.4, 1 - item.dmg / 150) : 1;
   const body = 0.7 + g.skills.get('body_strength') / 90;
-  return def.damage * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260);
+  const edge = item ? matOf(item.extra).edge : 1;
+  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260);
 }
+
+/**
+ * Silver's old virtue: it bites the unnatural. Anything that carries its own
+ * light — a Lume, an Embra — takes half again from a silver edge.
+ */
+export const BANE_BONUS = 1.5;
+export const banes = (item: Item | null): boolean => !!item && !!matOf(item.extra).bane;
 
 /** Chance a swing lands at all: the weapon's own skill, then fighting behind it. */
 export function hitChance(g: Game, def: WeaponDef): number {

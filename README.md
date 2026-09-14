@@ -130,6 +130,30 @@ rebuilds and commits the result.
   can make right now at the top and a switch to hide the rest. Each
   material's own menu offers the same recipes. A deed stake, the thing you plant to found a
   settlement, is carved from a shaft with a carving knife.
+- **What a thing is made of matters.** The same bill of materials in two
+  different woods, or two different metals, makes two different things. A log
+  keeps the wood it was cut from all the way through — planks, timbers, shafts
+  and whatever is nailed together out of them — and a lump keeps its metal
+  from the seam to the finished blade. Every wood and every metal carries the
+  same eight numbers: difficulty to work, weight, how much punishment it takes,
+  how fast it rots, and what it is worth as an edge, as armour, as a tool and
+  as a container. **Pine** is soft, light and rots fast; **willow** and
+  **birch** are light and springy; **maple** is even-tempered; **oak** takes a
+  third of the knocks a pine thing does, holds a tenth more and swings harder,
+  at the price of weight and an afternoon's extra work; **cedar** barely rots
+  at all. Among the metals **copper** is the soft starting point, **tin**,
+  **zinc**, **lead** and **pewter** are stock for alloys, **bronze** and
+  **brass** the first real step up, **silver** hardly tarnishes and bites
+  anything that carries its own light half again as hard, **gold** never decays
+  and is good for nothing else, and the four deep-seam metals —
+  **adamantine** (the keenest edge), **glimmersteel** (light and the best
+  armour), **mithril** (lightest of all) and **seryll** (scarcely takes a
+  mark) — are what a lifetime of mining is for. One craft draws on one
+  material: you cannot nail an oak plank to a pine one and call it a chest,
+  and improving an oak chest wants more oak. The crafting window shows what a
+  piece would come out *of*; click a different stack to use that one. Bows are
+  the fussiest thing on the island — a short bow is tillered from willow, a
+  medium bow from birch and a long bow from oak, and nothing else will do.
 - **Queued actions.** Ask for a job while one is already going and it lines up
   behind it instead of cancelling it, starting the moment the first is done and
   walking you over if it must. Three fit in your head to begin with, one more

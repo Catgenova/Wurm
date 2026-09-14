@@ -1,3 +1,4 @@
+import { matOfItem, workingQl } from './materials';
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
 
 export interface ItemDef {
@@ -311,12 +312,21 @@ export function itemDef(id: string): ItemDef {
   return ITEM_DEFS[id] ?? { name: id, category: 'misc', weight: 1 };
 }
 
-/** Damage per real hour for an item lying on the ground; better quality holds up longer. */
+/**
+ * Damage per real hour for an item lying on the ground; better quality holds
+ * up longer, and what it is made of decides the rest. A cedar chest left in
+ * the rain is still a chest a long time after the pine one has gone.
+ */
 export function groundDecayRate(item: Item): number {
   const def = itemDef(item.id);
   const base = def.decay ?? CATEGORY_DECAY[def.category];
-  return base * Math.max(0.3, 1.4 - item.ql / 120);
+  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay;
 }
+
+/** What one of a thing weighs, which is its make and what it is made of. */
+export const unitWeight = (item: { id: string; extra?: string }): number => itemDef(item.id).weight * matOfItem(item).weight;
+/** What a whole stack of it weighs. */
+export const itemWeight = (item: { id: string; extra?: string; count: number }): number => unitWeight(item) * item.count;
 
 export function itemName(item: Item): string {
   const def = itemDef(item.id);
@@ -393,11 +403,21 @@ export class Inventory {
     return true;
   }
 
-  /** Consume `count` of the first matching item id (optionally with a specific extra). */
+  /**
+   * Consume `count` of an item id, drawing across as many stacks as it takes.
+   * Once wood and metal are told apart, a pack holds three separate piles of
+   * plank as often as one, and a bill for five of them should not care.
+   */
   consume(id: string, count = 1, extra?: string): boolean {
-    const item = this.items.find((it) => it.id === id && (extra === undefined || it.extra === extra) && it.count >= count);
-    if (!item) return false;
-    return this.remove(item.uid, count);
+    const stacks = this.items.filter((it) => it.id === id && (extra === undefined || it.extra === extra));
+    if (stacks.reduce((n, it) => n + it.count, 0) < count) return false;
+    let left = count;
+    for (const st of [...stacks]) {
+      if (left <= 0) break;
+      const take = Math.min(left, st.count);
+      if (this.remove(st.uid, take)) left -= take;
+    }
+    return left === 0;
   }
 
   find(id: string, extra?: string): Item | undefined {
@@ -416,14 +436,23 @@ export class Inventory {
     return this.items.filter((it) => it.id === id).reduce((n, it) => n + it.count, 0);
   }
 
-  /** Best quality tool of a kind, or undefined. */
+  /**
+   * The best tool of a kind to work with, or undefined. Quality is only half
+   * of it once metals differ: a bronze hatchet at forty beats a copper one at
+   * fifty, so they are weighed by what they are actually worth at the work.
+   */
   tool(id: string): Item | undefined {
     let best: Item | undefined;
-    for (const it of this.items) if (it.id === id && (!best || it.ql > best.ql)) best = it;
+    let bestWorth = -1;
+    for (const it of this.items) {
+      if (it.id !== id) continue;
+      const worth = workingQl(it.ql, it.extra) * Math.max(0.3, 1 - it.dmg / 160);
+      if (worth > bestWorth) [bestWorth, best] = [worth, it];
+    }
     return best;
   }
 
   totalWeight(): number {
-    return this.items.reduce((sum, it) => sum + itemDef(it.id).weight * it.count, 0);
+    return this.items.reduce((sum, it) => sum + itemWeight(it), 0);
   }
 }
