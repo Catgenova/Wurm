@@ -2,6 +2,7 @@ import { clockLeft } from '../game/boons';
 import { SKILL_DEFS } from '../game/skills';
 import { WOUND_KINDS, woundText } from '../game/wounds';
 import { sailWord, windFrom, windWord } from '../game/wind';
+import { FAITH, favourCap } from '../game/faith';
 import { FURNITURE_BY_ID } from '../game/furniture';
 import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
@@ -290,6 +291,8 @@ export class Hud {
     const boons = this.game.activeBoons();
     const parts: string[] = [];
     if (rested > 0) parts.push(`Rested ${clockLeft(rested)} · everything ×2`);
+    const favour = this.game.player.favour;
+    if (favour >= 1) parts.push(`Favour ${Math.floor(favour)} of ${Math.floor(favourCap(this.game.skills.get(FAITH)))}`);
     for (const b of boons) {
       const name = SKILL_DEFS.find((d) => d.id === b.skill)?.name ?? b.skill;
       parts.push(`${name} +${Math.round(b.bonus * 100)}% · ${clockLeft(b.until - this.game.time)}`);

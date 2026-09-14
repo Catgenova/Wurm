@@ -28,6 +28,7 @@ import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
+import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
@@ -108,7 +109,7 @@ export interface GameInit {
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -212,6 +213,8 @@ export class Game {
   readonly posts = new Map<number, PlacedPost>();
   readonly traps = new Map<number, PlacedTrap>();
   nextTrapId = 1;
+  /** Game time a fair wind holds until; the weather does as it is told till then. */
+  favourWind = -1e9;
   readonly bridges = new Map<number, Bridge>();
   nextBridgeId = 1;
   /** Tile key to the bridge whose deck covers it, rebuilt whenever one changes. */
@@ -320,6 +323,8 @@ export class Game {
       this.player.title = init.player.title ?? null;
       this.player.wounds = init.player.wounds ?? [];
       this.player.nextWound = init.player.nextWound ?? 1;
+      this.player.favour = init.player.favour ?? 0;
+      this.player.prayedAt = init.player.prayedAt ?? -1e9;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
     this.inventory.onChange = () => this.events.emit('inventory');
@@ -519,7 +524,10 @@ export class Game {
 
   /** The wind at this hour, worked out from the clock rather than stored. */
   wind(): Wind {
-    return windAt(this.seed, this.time);
+    const w = windAt(this.seed, this.time);
+    // A fair wind is still the weather; it has only been asked to oblige.
+    if (this.time < this.favourWind) return { dir: this.heading(), force: Math.max(0.62, w.force) };
+    return w;
   }
 
   /** Where the player is pointed, in the same radians the wind uses. */
@@ -545,6 +553,21 @@ export class Game {
     const cap = furnitureCapacity(f);
     const load = cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
     return def.speed * body * hull * weather * (1 - load * 0.33);
+  }
+
+  /** Bring every crop on the settlement on one stage, and say how many. */
+  hastenCrops(): number {
+    let n = 0;
+    for (const crop of this.crops.values()) {
+      if (!this.deed || !this.onDeed(crop.x, crop.y)) continue;
+      if (crop.stage >= RIPE) continue;
+      crop.stage += 1;
+      crop.stageAt = this.time;
+      crop.tendedNow = false;
+      this.events.emit('world', crop.x, crop.y);
+      n++;
+    }
+    return n;
   }
 
   /** What the wind is doing, and what the hull under you makes of it. */
@@ -1113,6 +1136,9 @@ export class Game {
       if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1 && !this.bleeding()) s.health = Math.min(1, s.health + dt * 0.004);
     }
     this.tendWounds(dt);
+    // Favour comes back on its own, at a trickle, up to what faith carries.
+    const cap = favourCap(this.skills.get(FAITH));
+    if (this.player.favour < cap) this.player.favour = Math.min(cap, this.player.favour + dt * FAVOUR_TRICKLE);
     if (s.health <= 0) this.die();
 
     if (this.action) this.updateAction(dt);
@@ -1491,7 +1517,7 @@ export class Game {
   toolQl(id: string): number {
     const tool = this.inventory.tool(id);
     // A battered tool works like a poorer one than it was.
-    return tool ? Math.min(100, workingQl(tool.ql, tool.extra) * rarityOf(tool).boost) * Math.max(0.3, 1 - tool.dmg / 160) : 0;
+    return tool ? Math.min(100, workingQl(tool.ql, tool.extra) * rarityOf(tool).boost * blessBonus(tool.bless)) * Math.max(0.3, 1 - tool.dmg / 160) : 0;
   }
 
   /**

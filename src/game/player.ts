@@ -37,6 +37,9 @@ export class Player {
   rested = 0;
   /** Affinities running just now, from what you have eaten and drunk. */
   boons: Boon[] = [];
+  /** Banked favour, and the hour you last had anything to say. */
+  favour = 0;
+  prayedAt = -1e9;
   /** What is open on you, and what is on it. */
   wounds: Wound[] = [];
   nextWound = 1;

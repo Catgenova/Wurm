@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Seventy-eight goals in seven chapters — Ashore, The
+- **A journal of goals.** Eighty-two goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -534,6 +534,21 @@ rebuilds and commits the result.
   walk away, and it fishes on its own — holds eight, gives four or five to
   a baiting, and kept baited is worth about twenty-five fish an hour for no
   work at all.
+- **An altar, and favour.** No god with a name; a stone table, the hour
+  before the sun is properly up, and the plain fact that a thing knelt over
+  at dawn comes out better. An **altar** is sixteen bricks, eight mortar,
+  four slabs and a lump of gold. Kneeling banks **favour** on the new
+  **prayer** skill — once in most of an island day, worth half again around
+  dawn or dusk, and better from a better-built altar; it also trickles back
+  on its own up to what your faith carries (25 at the start, 120 at the
+  top). Six things it buys, none available any other way: **Call** (12) puts
+  your companion beside you from wherever it had got to; **Mend** (18) takes
+  every mark of use off one thing; **Light of the dawn** (26) closes every
+  wound and cleans what had gone bad; **Circle of cunning** (34) makes a
+  tool work 9% better than it was ever made to, permanently, three times
+  over; **Fair wind** (30) brings the wind round behind wherever you are
+  pointed; **Bounty** (44) brings every field on the settlement on a stage
+  at once.
 - **The things that are not wildermon.** Four of them, and none can be
   tamed, trapped, bred or brushed. A **goblin** (40 health, hits for 14) is
   knee-high and entirely malice; an **orc** (95, 22) is a head taller than

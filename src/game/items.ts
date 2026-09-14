@@ -367,6 +367,8 @@ export interface Item {
   inside?: Item[];
   /** The colour it has been dyed, for the things that take a dye. */
   dye?: string;
+  /** Circles of cunning worked into it, 1..3; absent for the ordinary run of things. */
+  bless?: number;
 }
 
 /**

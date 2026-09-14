@@ -23,6 +23,7 @@ import { HUSBANDRY_ACTIONS } from './husbandry';
 import { DYE_ACTIONS } from './dyes';
 import { TRAP_ACTIONS } from './traps';
 import { BRIDGE_ACTIONS } from './bridges';
+import { FAITH_ACTIONS } from './faith';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
@@ -55,6 +56,8 @@ export type Target =
       sx?: number;
       sy?: number;
       itemUid?: number;
+      /** Which cast is being called for, when one is. */
+      spell?: string;
     }
   | { kind: 'crate'; id: number }
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
@@ -65,7 +68,7 @@ export type Target =
   | { kind: 'post'; id: number; creatureId?: number }
   | { kind: 'trap'; id: number }
   | { kind: 'bridge'; id: number }
-  | { kind: 'item'; uid: number; count?: number }
+  | { kind: 'item'; uid: number; count?: number; spell?: string }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
 
@@ -1280,6 +1283,7 @@ export const ACTIONS: ActionDef[] = [
   ...DYE_ACTIONS,
   ...TRAP_ACTIONS,
   ...BRIDGE_ACTIONS,
+  ...FAITH_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...FIRST_AID_ACTIONS,
   ...PLACEABLE_ACTIONS,

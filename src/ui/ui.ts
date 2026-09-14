@@ -29,6 +29,8 @@ import { postCandidates, postLife, postName, postRadius, postState, type PlacedP
 import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
+import { CASTS, FAITH, favourCap } from '../game/faith';
+import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
@@ -696,6 +698,47 @@ export class UI {
     const ft: Target = { kind: 'furniture', id: f.id };
     const def = furnitureDef(f.kind);
     const entries: MenuItem[] = [];
+    // The stone table: kneel at it, and spend what kneeling banks.
+    if (def.altar) {
+      const pray = ACTION_BY_ID.get('pray');
+      entries.push({ label: `Favour ${Math.floor(g.player.favour)} of ${Math.floor(favourCap(g.skills.get(FAITH)))}`, disabled: true });
+      if (pray) {
+        const why = pray.check?.(ft, g) ?? null;
+        entries.push({ label: 'Pray', hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(pray, ft) });
+      }
+      const cast = ACTION_BY_ID.get('cast');
+      if (cast) {
+        entries.push({
+          label: 'Call on it',
+          children: CASTS.map((c) => {
+            const wantsItem = c.on === 'item';
+            const targets = wantsItem ? g.inventory.items.filter((it) => canImprove(it.id) || it.dmg > 0) : [];
+            const plain: Target = { kind: 'tile', x: f.x, y: f.y, cx: 0, cy: 0, spell: c.id };
+            const why = cast.check?.(wantsItem ? { kind: 'item', uid: targets[0]?.uid ?? -1, spell: c.id } : plain, g) ?? null;
+            return {
+              label: c.name,
+              note: `${c.cost} favour · prayer ${c.level}`,
+              hint: why ?? c.note,
+              disabled: !!why && !wantsItem,
+              children: wantsItem
+                ? targets.slice(0, 20).map((it) => {
+                    const t: Target = { kind: 'item', uid: it.uid, spell: c.id };
+                    const reason = cast.check?.(t, g) ?? null;
+                    return {
+                      label: itemName(it),
+                      note: it.bless ? `already ${it.bless} of 3` : it.dmg > 0 ? `damage ${it.dmg.toFixed(1)}` : undefined,
+                      hint: reason ?? undefined,
+                      disabled: !!reason,
+                      onSelect: () => g.requestAction(cast, t),
+                    };
+                  })
+                : undefined,
+              onSelect: wantsItem ? undefined : () => g.requestAction(cast, plain),
+            };
+          }),
+        });
+      }
+    }
     if (furnitureCapacity(f)) {
       entries.push({ label: 'Open', note: `${furnitureUnits(f)} / ${furnitureCapacity(f)} things`, onSelect: () => this.cratePanel.openFurniture(f.id) });
     }

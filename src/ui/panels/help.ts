@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: seventy-eight goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: eighty-two goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -825,6 +825,25 @@ export function buildHelp(win: UIWindow): void {
     it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <h3>An altar, and what kneeling at one buys</h3>
+    <p>There is no god on this island with a name and nobody here would claim to know one. There is a
+    stone table, there is the hour before the sun is properly up, and there is the plain fact that a
+    thing knelt over at dawn comes out better than a thing that was not.</p>
+    <p>An <b>altar</b> is masonry: sixteen bricks, eight mortar, four slabs and a <b>lump of gold</b>,
+    laid with a trowel. Kneel at it and you bank <b>favour</b>, on the new <b>prayer</b> skill. You may
+    say what you have to say once in most of an island day, and it is worth half again as much in the
+    hour around <b>dawn</b> or around <b>dusk</b>. A good altar banks more than a rough one. Favour also
+    trickles back on its own, slowly, up to whatever your faith carries &mdash; 25 at the start and 120
+    at the very top.</p>
+    <p>Six things it buys, and none of them can be had any other way:</p>
+    <table>
+      <tr><td><b>Call</b></td><td>12 favour, prayer 3. Whatever travels with you is beside you again, from wherever it had got to.</td></tr>
+      <tr><td><b>Mend</b></td><td>18, prayer 8. Every mark of use comes off one thing at once.</td></tr>
+      <tr><td><b>Light of the dawn</b></td><td>26, prayer 16. Everything open on you closes, and what had gone bad is clean.</td></tr>
+      <tr><td><b>Circle of cunning</b></td><td>34, prayer 24. A tool works <b>9% better</b> than it was ever made to, and stays that way. Three is as far as anything will take it.</td></tr>
+      <tr><td><b>Fair wind</b></td><td>30, prayer 30. The wind comes round behind wherever you are pointed and holds there six minutes.</td></tr>
+      <tr><td><b>Bounty</b></td><td>44, prayer 40. Every field on the settlement comes on a stage at once.</td></tr>
+    </table>
     <h3>The things that are not wildermon</h3>
     <p>Most of what walks this island can be tamed. Four things cannot. A <b>goblin</b> is knee-high and
     entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>
