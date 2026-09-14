@@ -694,12 +694,16 @@ function helpText(): string {
     <b>title</b> at 50, 70, 90 and 99 &mdash; Joiner, Carpenter, Master Carpenter, Legendary Carpenter
     &mdash; and you wear <b>one at a time</b>, chosen in the Skills window (<kbd>K</kbd>) and shown
     beside your position. Click the one you are wearing to take it off again.</p>
-    <p>Every <b>ten points</b> of any skill also leaves a <b>knack</b> behind. It usually lands on the
-    trade you were working and sometimes on one beside it &mdash; ten points of carpentry may leave you
-    better at bowyery, because it is the same hands and the same wood. A knack is worth a tenth more on
-    everything that trade teaches you from then on, it never wears off, and a trade holds <b>five</b> of
-    them: half again on every gain, for good. They stack with a night's rest and with what you have
-    eaten, and the Skills window shows how many each trade has.</p>
+    <p>A <b>knack</b> comes of the work itself: <b>one go in five thousand</b>, at any trade and at any
+    level, leaves one behind. It usually lands on the trade you were working and sometimes on one
+    beside it &mdash; a long day of carpentry may leave you better at bowyery, because it is the same
+    hands and the same wood. A knack is worth a tenth more on everything that trade teaches you from
+    then on, it never wears off, and a trade holds <b>five</b> of them: half again on every gain, for
+    good. They stack with a night's rest and with what you have eaten, and the Skills window shows how
+    many each trade has.</p>
+    <p>Because it is luck rather than levels, a knack can land at any moment and the well never runs
+    dry: the ten-thousandth hour at a trade is as likely to leave one as the first. Nothing is owed to
+    you at a round number, and nothing stops coming once the early levels are behind you.</p>
     <h3>Dye</h3>
     <p>Everything made here comes out the colour of what it was made from: cloth the grey-white of the
     wool, leather the brown of the hide. A <b>dye</b> changes that, and it is the first thing in the

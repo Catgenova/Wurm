@@ -500,12 +500,14 @@ rebuilds and commits the result.
 - **Titles and knacks.** Every trade hands out a **title** at 50, 70, 90 and
   99 — Joiner, Carpenter, Master Carpenter, Legendary Carpenter — and you
   wear one at a time, picked in the Skills window and shown beside your
-  position. Every **ten points** of any skill also leaves a permanent
-  **knack**, usually in that trade and sometimes in one beside it (ten
-  points of carpentry may leave you better at bowyery — same hands, same
-  wood). A knack is a tenth more on everything that trade teaches you, it
-  never wears off, and a trade holds five of them: half again on every
-  gain, for good, stacking with rest and with what you have eaten.
+  position. A permanent **knack** comes of the work itself: **one go in five
+  thousand**, at any trade and any level, usually in that trade and sometimes
+  in one beside it (a long day of carpentry may leave you better at bowyery —
+  same hands, same wood). A knack is a tenth more on everything that trade
+  teaches you, it never wears off, and a trade holds five of them: half again
+  on every gain, for good, stacking with rest and with what you have eaten.
+  Being luck rather than levels, it can land at any moment and never dries up
+  — the ten-thousandth hour is as likely to leave one as the first.
 - **Rope.** Wemp fibre goes two ways: spun on a spindle it is coarse yarn,
   laid up on a **rope tool** it is **rope** — four fibres to a rope, on the
   new **ropemaking** skill — and three ropes laid up again make a **thick

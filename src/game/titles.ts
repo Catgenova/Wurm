@@ -5,9 +5,10 @@ import { SKILL_DEFS } from './skills';
  *
  * Two things come out of a long climb. A **title** is the name a skill earns
  * you — four of them, at 50, 70, 90 and 99 — and you wear one of them at a
- * time. An **affinity** is what rubs off: every ten points of any skill leaves
- * a permanent knack, usually in that skill and sometimes in one of its
- * neighbours, and a knack makes the work go in faster for good.
+ * time. An **affinity** is what rubs off: one go in five thousand at any trade
+ * leaves a permanent knack, usually in that trade and sometimes in one beside
+ * it, and a knack makes the work go in faster for good. It is a matter of luck
+ * rather than of levels, so it can come at any moment and it never dries up.
  */
 
 /** The four rungs, and the skill each one wants. */
@@ -121,8 +122,6 @@ for (const [name, members] of Object.entries(FAMILIES)) for (const id of members
 /** The trades that sit beside this one, itself included. */
 export const kin = (skill: string): string[] => FAMILIES[FAMILY_OF.get(skill) ?? ''] ?? [skill];
 
-/** Every ten points of a skill leaves a knack behind. */
-export const AFFINITY_EVERY = 10;
 /** What one knack is worth on the rate that skill goes in at. */
 export const KNACK_BONUS = 0.1;
 /** The most knacks one trade will hold. */
@@ -130,9 +129,13 @@ export const KNACK_CAP = 5;
 /** How often the knack lands on the trade you were working rather than a neighbour. */
 export const KNACK_HOME = 0.6;
 
-/** How many tens this gain carried the skill across. */
-export const stepsCrossed = (before: number, after: number): number =>
-  Math.max(0, Math.floor(after / AFFINITY_EVERY) - Math.floor(before / AFFINITY_EVERY));
+/**
+ * One go in this many leaves a knack behind. It is not tied to the level you
+ * reach, so a trade keeps paying knacks for as long as you keep working at it
+ * rather than stopping dead once the early tens are behind you — and a knack
+ * can come at any moment, which is the whole pleasure of it.
+ */
+export const KNACK_ODDS = 5000;
 
 /** Where a knack earned at this trade lands. */
 export function knackLands(skill: string, rand: () => number): string {

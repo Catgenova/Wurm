@@ -1,6 +1,7 @@
 import type { Game } from '../../game/game';
 import type { Pick } from '../../render/renderer';
 import { buildMenuRows, type MenuItem } from '../contextmenu';
+import { Repaint } from '../repaint';
 import type { UIWindow } from '../windows';
 
 /** What the window is looking at, and everything that could be done to it. */
@@ -12,6 +13,10 @@ export type TileMenuSource = (pick: Pick) => { title: string; entries: MenuItem[
  * button — a finger, a trackpad, or a left hand that would rather not reach for
  * the other one — and for seeing at a glance why something is not possible yet.
  */
+/** Everything about an entry that shows on screen, for telling one list from the next. */
+const sign = (e: MenuItem): string =>
+  `${e.label}\u0001${e.disabled ? 1 : 0}\u0001${e.hint ?? ''}\u0001${e.note ?? ''}\u0001${e.children ? e.children.map(sign).join('\u0002') : ''}`;
+
 /** The keys the list binds, in the order it hands them out. */
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 
@@ -21,6 +26,9 @@ export class TilePanel {
   private pick: Pick | null = null;
   /** What each number key does right now, in the order the list shows them. */
   private keyed: MenuItem[] = [];
+  /** Which submenus are open, kept across rebuilds. */
+  private readonly folds = new Set<string>();
+  private readonly repaint = new Repaint(250);
 
   constructor(
     private readonly win: UIWindow,
@@ -35,7 +43,10 @@ export class TilePanel {
     win.body.append(this.head, this.list);
     // The list is only as good as the world it was built from, so rebuild it
     // whenever the world, the pack or the job in hand changes.
-    for (const ev of ['world', 'inventory', 'action', 'crate', 'skill'] as const) game.events.on(ev, () => this.render());
+    // Every action gains a skill, so these fire several times a second while
+    // you work. The list is looked at on a beat and only redrawn when it would
+    // actually say something different.
+    for (const ev of ['world', 'inventory', 'action', 'crate', 'skill'] as const) game.events.on(ev, () => this.repaint.ask());
     this.render();
   }
 
@@ -47,13 +58,24 @@ export class TilePanel {
   /** Point the window at a tile, opening it if it is closed. */
   select(pick: Pick | null, open = true): void {
     this.pick = pick;
+    // A new thing selected is a different list; nothing is kept open from the
+    // last one, and it is drawn at once rather than on the next beat.
+    this.folds.clear();
+    this.repaint.force();
     if (pick && open) this.win.open();
     this.render();
   }
 
-  render(): void {
-    this.list.replaceChildren();
+  /** Look again, on a beat, and redraw only if the list has changed. */
+  update(now: number): void {
+    if (!this.win.isOpen || !this.repaint.due(now)) return;
+    this.render(now);
+  }
+
+  render(now = performance.now()): void {
     if (!this.pick) {
+      if (!this.repaint.changed(now, 'nothing')) return;
+      this.list.replaceChildren();
       this.head.textContent = 'Nothing selected';
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
@@ -62,6 +84,10 @@ export class TilePanel {
       return;
     }
     const { title, entries } = this.source(this.pick);
+    // What the list would say, down to every reason and every note. If it
+    // matches what is already on screen, nothing is touched.
+    if (!this.repaint.changed(now, title + '\u0000' + entries.map(sign).join('\u0000'))) return;
+    this.list.replaceChildren();
     this.head.textContent = title;
     if (!entries.length) {
       const none = document.createElement('div');
@@ -75,7 +101,7 @@ export class TilePanel {
     // one of them, and neither is one that says why it cannot be done.
     this.keyed = entries.filter((e) => !e.disabled && e.onSelect).slice(0, KEYS.length);
     const keyFor = new Map(this.keyed.map((e, i) => [e, KEYS[i]]));
-    this.list.append(...buildMenuRows(entries, 0, { keyOf: (item) => keyFor.get(item) }));
+    this.list.append(...buildMenuRows(entries, 0, { keyOf: (item) => keyFor.get(item), folds: this.folds }));
   }
 
   /**
@@ -97,7 +123,9 @@ export class TilePanel {
     const entry = this.keyed[index];
     if (!entry?.onSelect) return false;
     entry.onSelect();
-    // Doing a thing changes what can be done next, so the list is rebuilt.
+    // Doing a thing changes what can be done next, so the list is looked at
+    // again at once rather than on the next beat.
+    this.repaint.ask();
     this.render();
     return true;
   }

@@ -369,7 +369,7 @@ export class Renderer {
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
-        if (wet) this.drawWater(u, v, x, y, c);
+        if (wet) this.drawWater(u, v, x, y, c, fogged && !lit ? fogPath : undefined);
 
         const t = world.viewTile(x, y, lit);
         if (!lit) {
@@ -1243,7 +1243,14 @@ export class Renderer {
   }
 
   /** Water surface at height 0, clipped to the part of the tile that lies below it. Built in view space. */
-  private drawWater(u: number, v: number, x: number, y: number, c: number[]): void {
+  /**
+   * The water lying on a tile. Its surface is drawn flat at sea level, not on
+   * the drowned ground, so on screen it sits well clear of the tile's own
+   * diamond — which is why remembered water used to stay bright while the land
+   * around it went cold. `fogInto` takes the same shape so the wash covers
+   * what was actually drawn rather than what is underneath it.
+   */
+  private drawWater(u: number, v: number, x: number, y: number, c: number[], fogInto?: Path2D): void {
     const poly = this.waterPoly;
     let n = 0;
     for (let i = 0; i < 4; i++) {
@@ -1276,10 +1283,16 @@ export class Renderer {
     for (let k = 0; k < n; k += 2) {
       const sx = cam.viewToScreenX(poly[k], poly[k + 1]);
       const sy = cam.viewToScreenY(poly[k], poly[k + 1], 0);
-      if (k === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
+      if (k === 0) {
+        ctx.moveTo(sx, sy);
+        fogInto?.moveTo(sx, sy);
+      } else {
+        ctx.lineTo(sx, sy);
+        fogInto?.lineTo(sx, sy);
+      }
     }
     ctx.closePath();
+    fogInto?.closePath();
     ctx.fill();
     ctx.globalAlpha = 1;
   }

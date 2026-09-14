@@ -27,7 +27,7 @@ import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapNam
 import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { Skills, SKILL_DEFS } from './skills';
-import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
+import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
@@ -1213,23 +1213,23 @@ export class Game {
   }
 
   /**
-   * Every ten points of a trade leaves a knack behind: usually in that trade,
-   * sometimes in one beside it. They are permanent and they stack, up to five
-   * to a trade, which is half again on everything that trade teaches you.
+   * A knack from a go at a trade: one in five thousand, whatever the level and
+   * whatever the go. It lands usually in that trade and sometimes in one
+   * beside it. They are permanent and they stack, up to five to a trade, which
+   * is half again on everything that trade teaches you.
    */
-  private earnKnacks(skill: string, before: number, after: number): void {
-    for (let i = 0; i < stepsCrossed(before, after); i++) {
-      const id = knackLands(skill, this.rand);
-      const had = this.player.affinities[id] ?? 0;
-      if (had >= KNACK_CAP) continue;
-      this.player.affinities[id] = had + 1;
-      const def = SKILL_DEFS.find((d) => d.id === id);
-      this.logMsg(
-        `You have a knack for ${def?.name.toLowerCase() ?? id} now. It goes in ${Math.round(knackBonus(had + 1) * 100)}% faster.`,
-        'skill',
-      );
-      this.note('knack');
-    }
+  private earnKnacks(skill: string): void {
+    if (this.rand() >= 1 / KNACK_ODDS) return;
+    const id = knackLands(skill, this.rand);
+    const had = this.player.affinities[id] ?? 0;
+    if (had >= KNACK_CAP) return;
+    this.player.affinities[id] = had + 1;
+    const def = SKILL_DEFS.find((d) => d.id === id);
+    this.logMsg(
+      `You have a knack for ${def?.name.toLowerCase() ?? id} now. It goes in ${Math.round(knackBonus(had + 1) * 100)}% faster.`,
+      'skill',
+    );
+    this.note('knack');
   }
 
   /** Titles this level has earned that were not earned before, worn if you have none. */
@@ -1304,7 +1304,7 @@ export class Game {
       const places = gain < 0.0001 ? 6 : 4;
       this.logMsg(`${def.name} increased by ${gain.toFixed(places)} to ${now.toFixed(4)}.`, 'skill');
     }
-    this.earnKnacks(id, before, now);
+    this.earnKnacks(id);
     this.earnTitles(id, before, now);
     this.events.emit('skill', id, gain);
     return gain;
@@ -3530,8 +3530,17 @@ export class Game {
     p.x = this.spawn.x + 0.5;
     p.y = this.spawn.y + 0.5;
     p.level = 0;
+    // Whatever killed you is behind you. Waking up whole means waking up
+    // without the wounds that did it: they would open you again in a minute,
+    // and nothing you could do about it would be quick enough.
+    const carried = p.wounds.length;
+    p.wounds = [];
+    p.attackedBy = null;
+    p.attackedAt = -1e9;
+    this.player.boons = this.player.boons.filter((b) => b.until > this.time);
     this.cancelAction(true);
-    this.logMsg('You have died. You wake up, shivering, where you first came ashore.', 'error');
+    this.logMsg(`You have died. You wake up, shivering, where you first came ashore${carried ? `, and whole: ${carried === 1 ? 'the wound that did it is' : `the ${carried} wounds that did it are`} behind you` : ''}.`, 'error');
+    this.events.emit('inventory');
   }
 
   say(text: string): void {

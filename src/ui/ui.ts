@@ -83,6 +83,7 @@ export class UI {
   private readonly cratePanel: CratePanel;
   private readonly wildermon: WildermonPanel;
   private readonly stores: StoresPanel;
+  private readonly craftPanel: CraftPanel;
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
 
@@ -113,7 +114,7 @@ export class UI {
     const skills = this.windows.create({ id: 'skills', title: 'Skills', x: 364, y: 56, width: 260, height: 380, anchor: 'tr', open: false });
     new SkillsPanel(skills, game);
     const craft = this.windows.create({ id: 'craft', title: 'Crafting', x: 364, y: 56, width: 360, height: 360, anchor: 'tr', open: false });
-    new CraftPanel(craft, game);
+    this.craftPanel = new CraftPanel(craft, game);
     const tileWin = this.windows.create({ id: 'tile', title: 'Tile', x: 12, y: 200, width: 300, height: 320, open: false });
     this.tilePanel = new TilePanel(tileWin, game, (pick) => this.menuFor(pick));
     const map = this.windows.create({ id: 'map', title: 'Map', x: 12, y: 370, width: 236, height: 262, anchor: 'tr', open: false });
@@ -226,6 +227,8 @@ export class UI {
     this.wildermon.update(performance.now());
     this.stores.update(performance.now());
     this.deedPanel.update(performance.now());
+    this.tilePanel.update(performance.now());
+    this.craftPanel.update(performance.now());
   }
 
   /** Describe what is under the cursor. */

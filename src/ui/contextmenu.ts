@@ -18,17 +18,23 @@ export interface RowHooks {
   chose?: () => void;
   /** The key that does this entry, when whatever is showing it binds keys. */
   keyOf?: (item: MenuItem) => string | undefined;
+  /**
+   * Which folds are open, by path. A list that is rebuilt while you work would
+   * otherwise shut every submenu under your hand; passing the same set back in
+   * keeps them open across as many rebuilds as it takes.
+   */
+  folds?: Set<string>;
 }
 
 /**
  * Build the rows for a list of menu entries. The right-click menu and the tile
  * window both draw their entries with this, so the two can never drift apart.
  */
-export function buildMenuRows(items: MenuItem[], depth: number, hooks: RowHooks = {}): HTMLElement[] {
-  return items.flatMap((item) => buildMenuRow(item, depth, hooks));
+export function buildMenuRows(items: MenuItem[], depth: number, hooks: RowHooks = {}, path = ''): HTMLElement[] {
+  return items.flatMap((item) => buildMenuRow(item, depth, hooks, `${path}/${item.label}`));
 }
 
-function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks): HTMLElement[] {
+function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks, path: string): HTMLElement[] {
   const row = document.createElement('div');
   row.className = 'ctx-item' + (item.disabled ? ' disabled' : '') + (depth ? ' ctx-child' : '');
   row.style.paddingLeft = `${8 + depth * 14}px`;
@@ -53,18 +59,24 @@ function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks): HTMLEleme
     if (item.onSelect) chevron.title = 'More ways to do this';
     row.append(chevron);
     let open: HTMLElement[] | null = null;
-    const fold = (): void => {
+    const fold = (remember = true): void => {
       if (open) {
         for (const el of open) el.remove();
         open = null;
         chevron.textContent = '\u25b8';
+        if (remember) hooks.folds?.delete(path);
       } else {
-        open = buildMenuRows(item.children ?? [], depth + 1, hooks);
+        open = buildMenuRows(item.children ?? [], depth + 1, hooks, path);
         row.after(...open);
         chevron.textContent = '\u25be';
+        if (remember) hooks.folds?.add(path);
       }
       hooks.changed?.();
     };
+    // A fold that was open before this list was rebuilt opens again with it.
+    if (hooks.folds?.has(path)) queueMicrotask(() => {
+      if (row.isConnected && !open) fold(false);
+    });
     chevron.addEventListener('click', (e) => {
       e.stopPropagation();
       if (item.disabled) return;

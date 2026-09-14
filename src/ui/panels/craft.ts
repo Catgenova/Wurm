@@ -4,6 +4,7 @@ import { itemDef } from '../../game/items';
 import { RECIPE_CATEGORIES, RECIPES, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
+import { Repaint } from '../repaint';
 
 const skillName = (id: string): string => SKILL_DEFS.find((s) => s.id === id)?.name ?? id;
 const lower = (id: string): string => itemDef(id).name.toLowerCase();
@@ -14,13 +15,14 @@ const lower = (id: string): string => itemDef(id).name.toLowerCase();
  * can be made right now come first. A switch narrows it to just those.
  */
 export class CraftPanel {
+  private readonly repaint = new Repaint(250);
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
   private search: HTMLInputElement;
   private query = '';
   private readyOnly = false;
 
-  constructor(win: UIWindow, private readonly game: Game) {
+  constructor(private readonly win: UIWindow, private readonly game: Game) {
     win.body.classList.add('inv-body');
     this.search = document.createElement('input');
     this.search.type = 'search';
@@ -55,8 +57,11 @@ export class CraftPanel {
     this.footer = document.createElement('div');
     this.footer.className = 'inv-footer';
     win.body.append(this.search, head, this.list, this.footer);
-    game.events.on('inventory', () => this.render());
-    game.events.on('skill', () => this.render());
+    // Every action gains a skill, so this fires several times a second while
+    // you work. The book is looked at on a beat and redrawn only when what it
+    // would say has actually changed.
+    game.events.on('inventory', () => this.repaint.ask());
+    game.events.on('skill', () => this.repaint.ask());
     this.render();
   }
 
@@ -71,8 +76,18 @@ export class CraftPanel {
     return parts.join(' ').toLowerCase().includes(this.query);
   }
 
-  render(): void {
+  /** Look again, on a beat, and redraw only if the book has changed. */
+  update(now: number): void {
+    if (!this.win.isOpen || !this.repaint.due(now)) return;
+    this.render(now);
+  }
+
+  render(now = performance.now()): void {
     const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game)]));
+    // What the book would say. Standing at an anvil hammering, this is the
+    // same from one second to the next, so nothing is touched.
+    const sig = `${this.query}\u0000${this.readyOnly ? 1 : 0}\u0000${RECIPES.map((r) => `${r.id}${statuses.get(r)?.ready ? 1 : 0}${statuses.get(r)?.max ?? 0}`).join('')}`;
+    if (!this.repaint.changed(now, sig)) return;
     this.list.replaceChildren();
     let shown = 0;
     let ready = 0;
