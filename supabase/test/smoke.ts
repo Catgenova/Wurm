@@ -114,6 +114,34 @@ async function main(): Promise<void> {
       notYet ? `${tried}: ${notYet.why}` : 'every one of them is ported now, which is the point of the exercise');
 
     /*
+     * The wildlife, which the island stocked for itself the moment the land
+     * was finished and which has been getting on with its life ever since.
+     *
+     * Two calls a few seconds apart: the first walks everything near us
+     * forward, the second asks again. Something within sight will have moved,
+     * because the only thing that makes this island move is being looked at.
+     */
+    const { data: first, error: mobErr } = await supabase().rpc('rpc_creatures', { p_world: id, p_range: 60 });
+    const mob = (first ?? []) as Array<{ id: number; species: string; x: number; y: number }>;
+    check('the island stocked itself with wildlife', !mobErr && mob.length > 0,
+      mobErr ? mobErr.message : `${mob.length} within sixty tiles`);
+    if (mob.length) {
+      await new Promise((go) => setTimeout(go, 4000));
+      const { data: second } = await supabase().rpc('rpc_creatures', { p_world: id, p_range: 60 });
+      const later = new Map(((second ?? []) as typeof mob).map((c) => [c.id, c]));
+      const moved = mob.filter((c) => {
+        const then = later.get(c.id);
+        return then && (Math.abs(then.x - c.x) > 0.05 || Math.abs(then.y - c.y) > 0.05);
+      });
+      check('and it moves when it is looked at', moved.length > 0,
+        `${moved.length} of ${mob.length} are somewhere else four seconds later`);
+      const wild = mob[0];
+      const noBait = await island.act('tame', { kind: 'creature', id: wild.id }, 1);
+      check('taming one with an empty hand is refused in its own words',
+        !noBait.started && /(take|tamed|taming|close)/i.test(noBait.why ?? ''), noBait.why ?? 'IT STARTED');
+    }
+
+    /*
      * The building rules, which start by saying no.
      *
      * A fresh island has no settlement on it, so both of these are refused for

@@ -21,6 +21,9 @@ import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
+import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
+         GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
+import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -70,6 +73,51 @@ out.push(`create table if not exists build_material_def (
 out.push(`create table if not exists build_material_bill (
   material text not null, ord int not null, item text not null, n int not null,
   primary key (material, item)
+);`);
+/*
+ * The wildermon, their blood and their ages.
+ *
+ * Everything here is a number the browser already had: what a Rabba can take,
+ * what it eats, what ground it settles on, what a trait is worth on each
+ * channel. The rules that read them are ported by hand; none of this is.
+ */
+out.push(`create table if not exists species_def (
+  id text primary key, name text not null, description text not null,
+  health real not null, attack real not null, speed real not null,
+  tame_level real not null, tame_chance real not null, bait_hint text not null,
+  timid boolean not null default false, gathers text, work_range real not null default 0,
+  tame_fail text not null, leaves text not null, variants int not null default 1,
+  near_water boolean not null default false, near_trees boolean not null default false,
+  on_ore boolean not null default false, on_sand boolean not null default false,
+  near_clay boolean not null default false, near_tar boolean not null default false,
+  on_stone boolean not null default false, hunter boolean not null default false,
+  nocturnal boolean not null default false, monster boolean not null default false,
+  defensive boolean not null default false, milk boolean not null default false,
+  fleece real, unruly real, default_stance text, shear_yield text, wound text,
+  notice real, sight real
+);`);
+out.push(`create table if not exists species_diet (
+  species text not null, item text not null, primary key (species, item)
+);`);
+out.push(`create table if not exists wild_table (
+  species text primary key, weight real not null, monster boolean not null default false, cap int
+);`);
+out.push(`create table if not exists gather_def (
+  id text primary key, skill text not null, verb text not null, plain text not null
+);`);
+out.push(`create table if not exists trait_def (
+  id text primary key, name text not null, tier text not null,
+  aura boolean not null default false, note text not null
+);`);
+out.push(`create table if not exists trait_effect (
+  trait text not null, channel text not null, mul real not null, primary key (trait, channel)
+);`);
+out.push(`create table if not exists age_def (
+  id text primary key, name text not null, speed real not null, pull real not null,
+  yield real not null, growth real not null, tame real not null, works boolean not null
+);`);
+out.push(`create table if not exists tier_odds (
+  tier text primary key, ord int not null, weight real not null
 );`);
 out.push(`create table if not exists action_def (
   id text primary key, label text not null, verb text not null, skill text, tool text,
@@ -259,7 +307,37 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def;`);
+type S = Record<string, unknown>;
+for (const d of Object.values(SPECIES) as unknown as S[]) {
+  out.push(`insert into species_def values (` + [
+    q(d.id), q(d.name), q(d.description), q(d.health), q(d.attack), q(d.speed),
+    q(d.tameLevel), q(d.tameChance), q(d.baitHint), q(!!d.timid), q(d.gathers),
+    q(d.workRange ?? 0), q(d.tameFail), q(d.leaves), q((d.variants as unknown[]).length),
+    q(!!d.nearWater), q(!!d.nearTrees), q(!!d.onOre), q(!!d.onSand), q(!!d.nearClay),
+    q(!!d.nearTar), q(!!d.onStone), q(!!d.hunter), q(!!d.nocturnal), q(!!d.monster),
+    q(!!d.defensive), q(!!d.milk), q(d.fleece ?? null), q(d.unruly ?? null),
+    q(d.defaultStance ?? null), q(d.shearYield ?? null), q(d.wound ?? null),
+    q(d.notice ?? null), q(d.sight ?? null)].join(', ') + `);`);
+  for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
+}
+for (const [id, skill] of Object.entries(GATHER_SKILL)) {
+  out.push(`insert into gather_def values (${q(id)}, ${q(skill)}, ${q(GATHER_VERB[id as 'forage'])}, ${q(GATHER_DO[id as 'forage'])});`);
+}
+for (const [id, weight] of WILD_SPECIES) out.push(`insert into wild_table values (${q(id)}, ${q(weight)}, false, null);`);
+for (const [id, weight] of MONSTERS) out.push(`insert into wild_table values (${q(id)}, ${q(weight)}, true, ${q(MONSTER_CAP[id] ?? 1)});`);
+for (const t of TRAITS) {
+  out.push(`insert into trait_def values (${q(t.id)}, ${q(t.name)}, ${q(t.tier)}, ${q(!!t.aura)}, ${q(t.note)});`);
+  for (const [channel, mul] of Object.entries(t.effects)) out.push(`insert into trait_effect values (${q(t.id)}, ${q(channel)}, ${q(mul)});`);
+}
+for (const a of Object.values(AGES)) {
+  out.push(`insert into age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.speed)}, ${q(a.pull)}, ${q(a.yield)}, ${q(a.growth)}, ${q(a.tame)}, ${q(a.works)});`);
+}
+['common', 'rare', 'supreme', 'fantastic'].forEach((tier, ord) =>
+  out.push(`insert into tier_odds values (${q(tier)}, ${q(ord)}, ${q(WILD_ODDS[tier as 'common'])});`));
+// The two loose numbers, as functions rather than a row with no table to be in.
+out.push(`create or replace function monster_share() returns double precision language sql immutable as $fn$ select ${q(MONSTER_SHARE)}::double precision $fn$;`);
+out.push(`create or replace function trait_slots() returns int language sql immutable as $fn$ select ${q(TRAIT_SLOTS)} $fn$;`);
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
 }

@@ -35,12 +35,13 @@ simplification rather than a problem:
 | **204** | recipes — every one of them, through one performer |
 | **14** | things set down on the ground: campfires, smelters, furniture |
 | **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
+| **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **122** | known, listed, and honestly refused |
+| **111** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -58,11 +59,38 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), creatures, the ledger,
-the journal, kilns and what they fire, smelting jobs themselves, flattening
-and levelling, paving with cut slabs, planting trees, prospecting, the rest of
-the deed (disband, upgrade, the token's crate), and the ease a hot oven lends
-to cooking.
+not the recovery, would make the island unplayable), fighting and butchering,
+the deed jobs a tamed beast can be set to, breeding and pairing, riding and
+the traces, trapping, the ledger, the journal, kilns and what they fire,
+smelting jobs themselves, flattening and levelling, paving with cut slabs,
+planting trees, prospecting, the rest of the deed (disband, upgrade, the
+token's crate), and the ease a hot oven lends to cooking.
+
+### A creature is a walk, not a place
+
+Everything else on the island settles from a timestamp — a fire burns down, a
+crop comes on, a forage bed recovers — and none of them move. A creature does,
+and a column called `x` would be a lie the moment the last person looked away:
+it would say where the thing *was*.
+
+So a creature is stored as the leg it is on: from a point, to a point,
+starting at a moment and ending at one, and then standing still until the next
+leg begins. Where it is now is the interpolation, which anybody can work out
+without writing anything; when the leg is over, whoever touches it next walks
+it forward. The next leg is a hash of the creature and the leg number rather
+than a roll, so walking the same row forward twice lands it in the same place,
+and a leg begins when the last one's rest ended rather than now — the same
+no-drift rule the crops follow. Forty legs is as far back as anybody walks;
+past that the creature is where it got to and the clock catches up with it,
+which is all anybody arriving could tell anyway.
+
+The browser keeps only the wildlife near the player and banks the rest as a
+number per stretch of country, because a frame has to touch everything that
+exists. Nothing here touches a creature unless somebody asks about it, so the
+whole island's wildlife is simply rows — and an island nobody has ever walked
+still has wildlife on it that has been getting on with its life the whole
+time. `rpc_creatures()` is the one call that makes any of it move: it walks
+everything near the caller forward and then says what is there.
 
 ### Nothing a player owns may point at generated data
 

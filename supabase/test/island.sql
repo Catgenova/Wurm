@@ -688,3 +688,191 @@ select '120. and it is all still his: ' || (select name from building where worl
      || ', ' || (select count(*) from wall where world_id = :'world2') || ' walls, deed of '
      || (select name from deed where world_id = :'world2');
 \echo ''
+\echo '--- the things that are alive when nobody is looking'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 6.5, y = 7.5 where uid = :'ivar';
+-- Its own statement: folding a write into the select that reports on it reads
+-- the snapshot from before it ran, which is how this file lies to you.
+select creature_stock(:'world2') as stocked \gset
+select '121. stocking a 16-tile island: ' || :'stocked' || ' head of wildlife, '
+     || (select count(distinct species) from creature where world_id = :'world2') || ' sorts of it';
+select '122. and none of it on the deed: ' || (select count(*) from creature c where on_deed(:'world2', floor(c.to_x)::int, floor(c.to_y)::int));
+-- Habitat: what settles where is the ground's business, not the roll's.
+select '123. a bevere wants open water: ' || suits(:'world2', 'bevere', 3, 4) || ' by the shore, '
+     || suits(:'world2', 'bevere', 14, 14) || ' inland'
+     || ' | a seavic wants trees: ' || suits(:'world2', 'seavic', 14, 14) || ' by the oak, '
+     || suits(:'world2', 'seavic', 3, 4) || ' out on the grass'
+     || ' | a crawler wants sand: ' || suits(:'world2', 'crawler', 14, 14);
+
+-- One creature, watched, then not watched.
+select creature_spawn(:'world2', 'rabba', 6.8, 7.4, 'wild', now() - interval '2 hours') as cid \gset
+create temp table snap as select * from creature where world_id = :'world2' and id = :'cid';
+select '124. a rabba stands at ' || round(to_x::numeric, 2) || ',' || round(to_y::numeric, 2)
+     || ' on leg ' || leg || ', and it is ' || age_of(born) || ', ' || sex || ', carrying ' || trait_names(traits)
+  from creature where id = :'cid';
+update creature set until = until - interval '30 seconds', leg_at = leg_at - interval '30 seconds',
+    leg_ends = leg_ends - interval '30 seconds', settled_at = settled_at - interval '30 seconds' where id = :'cid';
+select creature_settle(:'world2', :'cid') \g /dev/null
+select '125. thirty seconds nobody watched: it is at ' || round(to_x::numeric, 2) || ',' || round(to_y::numeric, 2)
+     || ' on leg ' || leg from creature where id = :'cid';
+select to_x || ',' || to_y as walk1 from creature where id = :'cid' \gset
+-- The same row, walked forward again: the legs are a hash, not a roll.
+delete from creature where world_id = :'world2' and id = :'cid';
+insert into creature select * from snap;
+update creature set until = until - interval '30 seconds', leg_at = leg_at - interval '30 seconds',
+    leg_ends = leg_ends - interval '30 seconds', settled_at = settled_at - interval '30 seconds' where id = :'cid';
+select creature_settle(:'world2', :'cid') \g /dev/null
+select '126. the same row walked forward again: ' ||
+       case when (select to_x || ',' || to_y from creature where id = :'cid') = :'walk1'
+            then 'the same place' else 'SOMEWHERE ELSE' end;
+-- Mid-leg, it is neither at one end nor the other.
+update creature set from_x = 4, from_y = 4, to_x = 8, to_y = 4,
+    leg_at = now() - interval '2 seconds', leg_ends = now() + interval '2 seconds', until = now() + interval '5 seconds'
+  where id = :'cid';
+select '127. halfway along a leg from 4,4 to 8,4: ' || round(creature_x(c)::numeric, 1) || ',' || round(creature_y(c)::numeric, 1)
+  from creature c where id = :'cid';
+update creature set leg_at = now() - interval '9 seconds', leg_ends = now() - interval '5 seconds' where id = :'cid';
+select '128. and once the leg is over it stays put: ' || round(creature_x(c)::numeric, 1) || ',' || round(creature_y(c)::numeric, 1)
+  from creature c where id = :'cid';
+-- An hour with nobody near it at all.
+update creature set from_x = 6.8, from_y = 7.4, to_x = 6.8, to_y = 7.4, leg = 0,
+    until = now() - interval '1 hour', leg_at = now() - interval '1 hour', leg_ends = now() - interval '1 hour',
+    settled_at = now() - interval '1 hour', hunger = 0.8 where id = :'cid';
+select creature_settle(:'world2', :'cid') \g /dev/null
+select '129. an hour alone: leg ' || leg || ' (forty is as far back as anyone walks), it is at '
+     || round(to_x::numeric, 1) || ',' || round(to_y::numeric, 1) || ', and it fed itself: hunger '
+     || round(hunger::numeric, 2) from creature where id = :'cid';
+
+\echo ''
+\echo '--- winning one over'
+update creature set from_x = 6.8, from_y = 7.4, to_x = 6.8, to_y = 7.4,
+    leg_at = now(), leg_ends = now(), until = now() + interval '1 hour', settled_at = now(),
+    hunger = 0.8, coaxed = 0, coaxed_at = null where id = :'cid';
+delete from event where uid = :'ivar';
+delete from item where holder_uid = :'ivar' and def in (select item from species_diet where species = 'rabba');
+select act_perform(:'world2', :'ivar', 'examine_creature', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
+select '130. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '131. with an empty hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'tame', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'blueberry', 30, 20);
+select '132. with berries: ' || coalesce(act_refusal(:'world2', :'ivar', 'tame', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb), 'allowed')
+     || ' | across the island: ' || coalesce(act_refusal(:'world2', :'ivar', 'tame', ('{"kind":"creature","id":' || (select id from creature where world_id = :'world2' and id <> :'cid' and greatest(abs(to_x - 6.5), abs(to_y - 7.5)) > 4 order by id limit 1) || '}')::jsonb), 'allowed');
+select '133. the odds as they stand: ' || round((select tame_chance(:'world2', :'ivar', c) * 100 from creature c where id = :'cid')::numeric, 1)
+     || '% — and hungry, at taming 60, with three offerings already taken:';
+update skill set value = 60 where uid = :'ivar' and id = 'taming';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'taming', 60 where not exists (select 1 from skill where uid = :'ivar' and id = 'taming');
+update creature set hunger = 0.2, coaxed = 3, coaxed_at = now() where id = :'cid';
+select '     ' || round((select tame_chance(:'world2', :'ivar', c) * 100 from creature c where id = :'cid')::numeric, 1) || '%';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'tame', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
+select '134. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('system','event'))
+     || ' — it is ' || (select mode from creature where id = :'cid');
+update creature set mode = 'active', keeper = :'ivar', stance = 'defensive' where id = :'cid';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'feed', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
+select '135. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — belly ' || (select round(hunger::numeric, 2) from creature where id = :'cid');
+select '136. brushing it with nothing in hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'groom', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'brush', 60, 1);
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        c int := (select max(id) from creature where species = 'rabba'); i int;
+begin
+  for i in 1..4 loop
+    exit when act_refusal(w, me, 'groom', jsonb_build_object('kind', 'creature', 'id', c)) is not null;
+    perform act_perform(w, me, 'groom', jsonb_build_object('kind', 'creature', 'id', c));
+  end loop;
+end $$;
+select '137. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+select '138. and once it shines: ' || coalesce(act_refusal(:'world2', :'ivar', 'groom', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb), 'allowed');
+select '139. a rabba carries no fleece: ' || coalesce(act_refusal(:'world2', :'ivar', 'shear', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb), 'allowed');
+
+-- Something with a coat on it, and something with milk in it.
+select creature_spawn(:'world2', 'woola', 6.6, 7.6, 'deed', now() - interval '3 hours', :'ivar') as woola \gset
+update creature set fleece = 1, sex = 'female' where id = :'woola';
+delete from event where uid = :'ivar';
+select '140. shearing with bare hands: ' || coalesce(act_refusal(:'world2', :'ivar', 'shear', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'carving_knife', 40, 1);
+select act_perform(:'world2', :'ivar', 'shear', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb) \g /dev/null
+select '141. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '142. straight away again: ' || coalesce(act_refusal(:'world2', :'ivar', 'shear', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb), 'allowed');
+update creature set fleece = 0.9 where id = :'woola';
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'bucket', 40, 1);
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'milk_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb) \g /dev/null
+select '143. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and there is ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'milk_bucket') || ' bucket of milk in the pack';
+update creature set sex = 'male', fleece = 0.9 where id = :'woola';
+select '144. and the same of a male: ' || coalesce(act_refusal(:'world2', :'ivar', 'milk_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb), 'allowed');
+
+-- One companion at a time, and the token keeps the rest.
+delete from event where uid = :'ivar';
+select '145. one at heel and one working: ' || (select count(*) from creature where keeper = :'ivar' and mode = 'active')
+     || ' active, ' || (select count(*) from creature where keeper = :'ivar' and mode = 'deed') || ' on the deed';
+select act_perform(:'world2', :'ivar', 'take_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb) \g /dev/null
+select '146. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('info','system'))
+     || ' — at heel ' || (select count(*) from creature where keeper = :'ivar' and mode = 'active')
+     || ', at the token ' || (select count(*) from creature where keeper = :'ivar' and mode = 'stored');
+select act_perform(:'world2', :'ivar', 'take_creature', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'rename_creature', ('{"kind":"creature","id":' || :'cid' || ',"name":"Thump"}')::jsonb) \g /dev/null
+select act_perform(:'world2', :'ivar', 'set_stance', ('{"kind":"creature","id":' || :'cid' || ',"stance":"aggressive"}')::jsonb) \g /dev/null
+select '147. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+select '148. a companion stands where its keeper stands: ' ||
+  (select case when round(creature_x(c)::numeric, 1) = 6.5 and round(creature_y(c)::numeric, 1) = 7.5
+          then 'yes' else round(creature_x(c)::numeric,1) || ',' || round(creature_y(c)::numeric,1) end
+   from creature c where id = :'cid');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'release_creature', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
+select '149. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — it is ' || (select mode || ', called ' || name || ', keeper ' || coalesce(keeper::text, 'nobody') from creature where id = :'cid');
+select '150. a monster is not a wildermon: ' || coalesce(act_refusal(:'world2', :'ivar', 'tame',
+       ('{"kind":"creature","id":' || (select creature_spawn(:'world2', 'goblin', 6.9, 7.2, 'wild')) || '}')::jsonb), 'allowed');
+\echo ''
+\echo '--- and through the front door'
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'examine_creature', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) as looked \gset
+select '151. examining through rpc_act, which takes no time: done=' || coalesce((:'looked'::jsonb->>'done'), 'no')
+     || ' — ' || coalesce((select text from event where uid = :'ivar' order by n desc limit 1), 'nothing said');
+select '152. what is around us: ' || jsonb_array_length(rpc_creatures(:'world2', 6)) || ' within six tiles, '
+     || jsonb_array_length(rpc_creatures(:'world2', 200)) || ' on the whole island';
+select rpc_creatures(:'world2', 3) as near \gset
+select '153. the nearest of them: ' || coalesce((:'near'::jsonb->0->>'species'), 'nothing')
+     || ' at ' || coalesce(round((:'near'::jsonb->0->>'x')::numeric, 1)::text, '-')
+     || ',' || coalesce(round((:'near'::jsonb->0->>'y')::numeric, 1)::text, '-')
+     || ', ours: ' || coalesce((:'near'::jsonb->0->>'mine'), '-');
+-- Everything on the island moves because somebody looked at it.
+update creature set until = until - interval '5 minutes', leg_at = leg_at - interval '5 minutes',
+    leg_ends = leg_ends - interval '5 minutes', settled_at = settled_at - interval '5 minutes'
+  where world_id = :'world2' and mode = 'wild';
+select '154. five minutes on, ' || (select count(*) from creature where world_id = :'world2' and now() - until > interval '30 seconds')
+     || ' of them are a good way behind the clock';
+select creature_sweep(:'world2', 6.5, 7.5, 200) as swept \gset
+/*
+ * "Still behind" is not a number worth chasing to nought: a creature whose
+ * next leg falls due in two seconds is behind the clock two seconds later,
+ * which is what being alive looks like. What matters is that none of them is
+ * *minutes* behind any more.
+ */
+select '155. one look walks ' || :'swept' || ' of them forward, and '
+     || (select count(*) from creature where world_id = :'world2' and now() - until > interval '30 seconds')
+     || ' are still a good way behind';
+
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '156. Hild can see the wildlife: ' || (select count(*) from creature);
+do $$ begin
+  begin update creature set health = 1; raise notice '157. and strike it from her chair:  ALLOWED';
+  exception when others then raise notice '157. and strike it from her chair:  refused — %', sqlerrm; end;
+  begin update creature set keeper = auth.uid(), mode = 'active';
+        raise notice '158. help herself to somebody''s pet: ALLOWED';
+  exception when others then raise notice '158. help herself to somebody''s pet: refused — %', sqlerrm; end;
+  begin perform creature_settle((select id from world limit 1), 1);
+        raise notice '159. walk one forward by hand:      ALLOWED';
+  exception when others then raise notice '159. walk one forward by hand:      refused — %', sqlerrm; end;
+end $$;
+reset role;
+select '160. and it is all still Ivar''s: ' || (select count(*) from creature where keeper = :'ivar')
+     || ' of them, and nothing is hurt: ' || (select count(*) from creature where health < 1);
+\echo ''

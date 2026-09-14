@@ -1177,18 +1177,18 @@ export const SPECIES: Record<string, SpeciesDef> = {
  * The bad things, and how often one of the wild's slots turns out to be one.
  * A goblin is a bad afternoon; a dragon is something almost nobody sees.
  */
-const MONSTERS: Array<[string, number]> = [
+export const MONSTERS: Array<[string, number]> = [
   ['goblin', 60],
   ['orc', 26],
   ['ogre', 12],
   ['dragon', 2],
 ];
 /** The share of everything that stands up out there that is a monster. */
-const MONSTER_SHARE = 0.022;
+export const MONSTER_SHARE = 0.022;
 /** How many of each may be walking about at once, across the whole island. */
-const MONSTER_CAP: Record<string, number> = { goblin: 6, orc: 3, ogre: 2, dragon: 1 };
+export const MONSTER_CAP: Record<string, number> = { goblin: 6, orc: 3, ogre: 2, dragon: 1 };
 
-const WILD_SPECIES: Array<[string, number]> = [
+export const WILD_SPECIES: Array<[string, number]> = [
   ['rabba', 27],
   ['vola', 23],
   ['bevere', 15],
