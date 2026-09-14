@@ -3530,16 +3530,15 @@ export class Game {
     p.x = this.spawn.x + 0.5;
     p.y = this.spawn.y + 0.5;
     p.level = 0;
-    // Whatever killed you is behind you. Waking up whole means waking up
-    // without the wounds that did it: they would open you again in a minute,
-    // and nothing you could do about it would be quick enough.
-    const carried = p.wounds.length;
+    // Whatever killed you stays with the body. The wounds that did it would
+    // open you again in a minute, and nothing you could do would be quick
+    // enough; waking up is waking up whole.
     p.wounds = [];
     p.attackedBy = null;
     p.attackedAt = -1e9;
     this.player.boons = this.player.boons.filter((b) => b.until > this.time);
     this.cancelAction(true);
-    this.logMsg(`You have died. You wake up, shivering, where you first came ashore${carried ? `, and whole: ${carried === 1 ? 'the wound that did it is' : `the ${carried} wounds that did it are`} behind you` : ''}.`, 'error');
+    this.logMsg('You have died. You wake up, shivering, where you first came ashore.', 'error');
     this.events.emit('inventory');
   }
 
