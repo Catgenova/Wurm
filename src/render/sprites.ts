@@ -841,6 +841,114 @@ export function drawKiln(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
  * open at the foot of it; a deadfall is a board propped on a stick over the
  * bait. Either one is drawn sprung when there is something in it.
  */
+/**
+ * One tile of bridge deck, drawn at the height the deck is carried at. The
+ * unfinished part is drawn as bare stringers so you can see what is left.
+ */
+export function drawDeck(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  zoom: number,
+  kind: string,
+  done: boolean,
+  drop: number,
+): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  // The deck fills its tile exactly, or the spans do not meet.
+  const W = 48;
+  const D = 24;
+  const stone = kind === 'stone';
+  const top = stone ? '#9a968c' : kind === 'rope' ? '#8a7550' : '#7d6243';
+  const side = stone ? '#6f6b62' : '#523d28';
+  // What holds it up: piers for stone and wood, two hawsers for a rope bridge.
+  if (drop > 2) {
+    if (kind !== 'rope') {
+      // A pier down into whatever is underneath, cut off before it gets silly.
+      const h = Math.min(34, drop * 0.8);
+      ctx.fillStyle = side;
+      ctx.beginPath();
+      ctx.moveTo(-5, 2);
+      ctx.lineTo(5, 2);
+      ctx.lineTo(5, 2 + h);
+      ctx.lineTo(-5, 2 + h);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(1, 2, 4, h);
+    }
+  }
+  if (!done) {
+    // Stringers only: two beams across the gap and nothing to walk on.
+    ctx.strokeStyle = side;
+    ctx.lineWidth = 1.6;
+    for (const o of [-0.42, 0.42]) {
+      ctx.beginPath();
+      ctx.moveTo(-W, o * D * 0.5);
+      ctx.lineTo(0, o * D + D * 0.5 * o);
+      ctx.lineTo(W, o * D * 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+  // The deck itself: a flat lozenge on the tile, with a lip on the near side.
+  ctx.fillStyle = top;
+  ctx.beginPath();
+  ctx.moveTo(-W, 0);
+  ctx.lineTo(0, -D);
+  ctx.lineTo(W, 0);
+  ctx.lineTo(0, D);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = side;
+  ctx.beginPath();
+  ctx.moveTo(-W, 0);
+  ctx.lineTo(0, D);
+  ctx.lineTo(W, 0);
+  ctx.lineTo(W, 2);
+  ctx.lineTo(0, D + 2);
+  ctx.lineTo(-W, 2);
+  ctx.closePath();
+  ctx.fill();
+  // Planking across the run, or the courses of an arch.
+  ctx.strokeStyle = 'rgba(0,0,0,0.14)';
+  ctx.lineWidth = 0.8;
+  for (let i = -3; i <= 3; i++) {
+    const t = i / 4;
+    ctx.beginPath();
+    ctx.moveTo(t * W, -D + Math.abs(t) * D);
+    ctx.lineTo(t * W, D - Math.abs(t) * D);
+    ctx.stroke();
+  }
+  if (kind === 'rope') {
+    // Handropes along both sides, which is all that is between you and the drop.
+    ctx.strokeStyle = '#cfc3a4';
+    ctx.lineWidth = 1;
+    for (const o of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(-W, o * D * 0.5 - 5);
+      ctx.lineTo(0, o * D - 6);
+      ctx.lineTo(W, o * D * 0.5 - 5);
+      ctx.stroke();
+    }
+  } else {
+    // A kerb along both edges so the deck reads as something you stay on.
+    ctx.strokeStyle = side;
+    ctx.lineWidth = 1.4;
+    for (const o of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(-W, o * D * 0.5 - 1);
+      ctx.lineTo(0, o * D - 1);
+      ctx.lineTo(W, o * D * 0.5 - 1);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawTrap(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, baited: boolean, sprung: boolean): void {
   ctx.save();
   ctx.translate(sx, sy);

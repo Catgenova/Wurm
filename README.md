@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Seventy goals in seven chapters — Ashore, The
+- **A journal of goals.** Seventy-one goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -498,6 +498,17 @@ rebuilds and commits the result.
   rope**. Rope is a real input rather than a curiosity: a bridle takes one
   for the reins, a rowing boat two, a sailing boat eight and two hawsers of
   standing rigging, and a well a hawser to hang its bucket on.
+- **Bridges.** Water and ravines were walls; now they are gaps. Stand on one
+  bank and right-click the other to throw a bridge across: it must run
+  straight, both ends must be dry ground, the ends must be within twelve
+  height units of each other, and what is between must be at least three
+  units below the deck — a gap, not a slope. A **rope bridge** (two hawsers,
+  three planks, four nails a span) spans fourteen tiles and takes feet only;
+  a **wooden bridge** (four timber, six planks, twelve nails) spans ten and
+  carries a cart; a **stone arch** (ten bricks, six mortar, three slabs)
+  spans eight. It is built a span at a time like a wall, nothing crosses
+  until the last span is decked, and pulling one down returns half of what
+  went into it. A boat passes underneath.
 - **Wind.** A direction and a strength, both wandering, both worked out from
   the clock rather than stored — the same wind for anyone there at that hour,
   a different wind on a different island. Oars ignore it; a sail lives on it,

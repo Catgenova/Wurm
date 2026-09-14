@@ -36,7 +36,7 @@ import { FURNITURE_BY_ID } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap } from './sprites';
+import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -60,6 +60,8 @@ export interface Pick {
   post?: number;
   /** A trap under the cursor, when one is. */
   trap?: number;
+  /** A bridge under the cursor, when one is. */
+  bridge?: number;
   /** A kiln under the cursor, when one is. */
   kiln?: number;
   /** A piece of furniture under the cursor, when one is. */
@@ -67,7 +69,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap' | 'deck';
   x: number;
   y: number;
   sx: number;
@@ -82,6 +84,7 @@ interface Entity {
   anvil?: PlacedAnvil;
   post?: PlacedPost;
   trap?: PlacedTrap;
+  deck?: { kind: string; done: boolean; drop: number; id: number };
   /**
    * Pixels to draw above where it sorts. A driver sits on the cart, so the
    * figure belongs above it on screen while still sorting as though it stood
@@ -107,6 +110,7 @@ interface HitRect {
   anvil?: number;
   post?: number;
   trap?: number;
+  bridge?: number;
 }
 
 const VOID_COLOR = '#12395f';
@@ -184,6 +188,7 @@ export class Renderer {
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
+  private deckHits: HitRect[] = [];
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -299,6 +304,7 @@ export class Renderer {
     this.anvilHits.length = 0;
     this.postHits.length = 0;
     this.trapHits.length = 0;
+    this.deckHits.length = 0;
     this.drawnTiles = 0;
 
     for (let d = dLo; d <= dHi; d++) {
@@ -450,6 +456,23 @@ export class Renderer {
             this.ents.push({ kind: 'post', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, post: po });
           }
         }
+        if (this.game.bridges.size) {
+          const bridge = this.game.bridgeAt(x, y);
+          if (bridge) {
+            const span = bridge.spans.find((sp) => sp.x === x && sp.y === y);
+            const wx = x + 0.5;
+            const wy = y + 0.5;
+            this.ents.push({
+              kind: 'deck',
+              x,
+              y,
+              sx: cam.worldToScreenX(wx, wy),
+              sy: cam.worldToScreenY(wx, wy, bridge.height),
+              spr: null,
+              deck: { kind: bridge.kind, done: !!span && Object.values(span.needed).every((n) => n <= 0), drop: bridge.height - world.centerHeight(x, y), id: bridge.id },
+            });
+          }
+        }
         if (this.game.traps.size) {
           for (const tr of this.game.trapsOnTile(x, y)) {
             const [wx, wy] = trapCentre(tr);
@@ -469,13 +492,15 @@ export class Renderer {
           }
         }
         if (this.game.creatures.list.size) {
+          // Anything standing on a tile with finished deck over it stands on the deck.
+          const deckHere = this.game.bridges.size ? this.game.deckAt(x, y) : null;
           for (const cr of this.game.creatures.atTile(x, y)) {
             this.ents.push({
               kind: 'creature',
               x,
               y,
               sx: cam.worldToScreenX(cr.x, cr.y),
-              sy: cam.worldToScreenY(cr.x, cr.y, Math.max(world.heightAt(cr.x, cr.y), -4)),
+              sy: cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), -4)),
               spr: null,
               creature: cr,
             });
@@ -485,7 +510,10 @@ export class Renderer {
       }
 
       if (d === playerDepth) {
-        const ph = Math.max(world.heightAt(player.x, player.y), -4) + player.visualLevel * WALL_HEIGHT;
+        // On a bridge you stand on the deck, not in whatever is under it.
+        // On the deck unless you are in a hull passing under it.
+        const deck = this.game.bridges.size && !this.game.afloat() ? this.game.deckAt(player.tileX, player.tileY) : null;
+        const ph = deck !== null ? deck : Math.max(world.heightAt(player.x, player.y), -4) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
@@ -673,6 +701,11 @@ export class Renderer {
       if (ent.kind === 'post' && ent.post) {
         drawWorkPost(ctx, ent.sx, ent.sy, zoom, postLeft(ent.post) / postLife(ent.post.ql), ent.post.worker !== null);
         this.postHits.push({ x: ent.x, y: ent.y, left: ent.sx - 9 * zoom, top: ent.sy - 30 * zoom, w: 18 * zoom, h: 32 * zoom, post: ent.post.id });
+        continue;
+      }
+      if (ent.kind === 'deck' && ent.deck) {
+        drawDeck(ctx, ent.sx, ent.sy, zoom, ent.deck.kind, ent.deck.done, ent.deck.drop);
+        this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: ent.deck.id });
         continue;
       }
       if (ent.kind === 'trap' && ent.trap) {
@@ -1428,6 +1461,10 @@ export class Renderer {
     for (let i = this.trapHits.length - 1; i >= 0; i--) {
       const h = this.trapHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), trap: h.trap };
+    }
+    for (let i = this.deckHits.length - 1; i >= 0; i--) {
+      const h = this.deckHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), bridge: h.bridge };
     }
     for (let i = this.anvilHits.length - 1; i >= 0; i--) {
       const h = this.anvilHits[i];

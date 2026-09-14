@@ -23,6 +23,7 @@ import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
 import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
+import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
@@ -101,6 +102,8 @@ export interface GameInit {
   posts?: PlacedPost[];
   traps?: PlacedTrap[];
   nextTrapId?: number;
+  bridges?: Bridge[];
+  nextBridgeId?: number;
   tally?: Record<string, number>;
   ticked?: string[];
   anvils?: PlacedAnvil[];
@@ -209,6 +212,10 @@ export class Game {
   readonly posts = new Map<number, PlacedPost>();
   readonly traps = new Map<number, PlacedTrap>();
   nextTrapId = 1;
+  readonly bridges = new Map<number, Bridge>();
+  nextBridgeId = 1;
+  /** Tile key to the bridge whose deck covers it, rebuilt whenever one changes. */
+  private deckIndex = new Map<string, number>();
   private nextPostId = 1;
   /**
    * A running count of things done: felled trees, landed fish, brews set
@@ -359,6 +366,12 @@ export class Game {
       if (t.id >= this.nextTrapId) this.nextTrapId = t.id + 1;
     }
     if (init.nextTrapId) this.nextTrapId = Math.max(this.nextTrapId, init.nextTrapId);
+    for (const b of init.bridges ?? []) {
+      this.bridges.set(b.id, b);
+      if (b.id >= this.nextBridgeId) this.nextBridgeId = b.id + 1;
+    }
+    if (init.nextBridgeId) this.nextBridgeId = Math.max(this.nextBridgeId, init.nextBridgeId);
+    if (this.bridges.size) this.reindexDecks();
     for (const s of init.smelters ?? []) {
       this.smelters.set(s.id, s);
       if (s.id >= this.nextSmelterId) this.nextSmelterId = s.id + 1;
@@ -439,6 +452,8 @@ export class Game {
   readonly stepRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
     const b = this.buildings;
     if (this.connector(x1, y1, level + 1) && !b.blocksAt(level, x0, y0, x1, y1)) return level + 1;
+    // Deck is ground: it is flat, and the drop under it is not your problem.
+    if (level === 0 && this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) return 0;
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
       if (level === 0 && !groundStep(this.world, x0, y0, x1, y1, this.climbStep())) return null;
       return level;
@@ -455,6 +470,14 @@ export class Game {
    */
   readonly driveRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
     if (level !== 0) return null;
+    // A wooden bridge or a stone arch carries wheels; a rope bridge does not.
+    if (this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) {
+      const b = this.bridgeAt(x1, y1) ?? this.bridgeAt(x0, y0);
+      if (!b || !BRIDGES[b.kind].carts) return null;
+      // Coming off the deck onto the bank: the bank still has to take wheels.
+      if (!this.bridgeAt(x1, y1) && !this.vehicleGround(x1, y1)) return null;
+      return 0;
+    }
     if (!this.vehicleGround(x1, y1)) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
     return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) ? 0 : null;
@@ -1391,6 +1414,13 @@ export class Game {
       const t = this.traps.get(target.id);
       return t ? { x: t.x, y: t.y } : null;
     }
+    if (target.kind === 'bridge') {
+      const b = this.bridges.get(target.id);
+      if (!b) return null;
+      // The open span is where the work is; failing that, the near end.
+      const open = b.spans.find((sp) => Object.values(sp.needed).some((n) => n > 0));
+      return open ? { x: open.x, y: open.y } : { x: b.ax, y: b.ay };
+    }
     return { x: target.x, y: target.y };
   }
 
@@ -1539,6 +1569,92 @@ export class Game {
       }
     }
     return false;
+  }
+
+  // ---- Bridges: ground where there was none. ----
+
+  addBridge(kind: BridgeKind, ax: number, ay: number, bx: number, by: number, height: number, material?: string): Bridge {
+    const spans = spanTiles(ax, ay, bx, by).map(([x, y]) => ({ x, y, ...spanBill(kind) }));
+    const b: Bridge = { id: this.nextBridgeId++, kind, ax, ay, bx, by, height, material, spans };
+    this.bridges.set(b.id, b);
+    this.reindexDecks();
+    return b;
+  }
+
+  removeBridge(id: number): void {
+    const b = this.bridges.get(id);
+    if (!b) return;
+    this.bridges.delete(id);
+    this.reindexDecks();
+    for (const s of b.spans) this.events.emit('world', s.x, s.y);
+  }
+
+  /** Which tiles have deck over them, worked out once rather than per step. */
+  reindexDecks(): void {
+    this.deckIndex.clear();
+    for (const b of this.bridges.values()) {
+      for (const s of b.spans) this.deckIndex.set(`${s.x},${s.y}`, b.id);
+    }
+  }
+
+  /** The bridge whose deck covers this tile, finished or not. */
+  bridgeAt(x: number, y: number): Bridge | undefined {
+    const id = this.deckIndex.get(`${x},${y}`);
+    return id === undefined ? undefined : this.bridges.get(id);
+  }
+
+  /** The height of finished deck over this tile, or null for open ground. */
+  deckAt(x: number, y: number): number | null {
+    const b = this.bridgeAt(x, y);
+    return b && bridgeDone(b) ? b.height : null;
+  }
+
+  /** Whether a bridge's ends or deck cover this tile, which is where you may step on. */
+  onBridge(b: Bridge, x: number, y: number): boolean {
+    if ((x === b.ax && y === b.ay) || (x === b.bx && y === b.by)) return true;
+    return b.spans.some((s) => s.x === x && s.y === y);
+  }
+
+  /**
+   * Whether a step is a step along a bridge. You get onto a deck at an end
+   * and walk it; you do not climb onto one out of the water underneath.
+   */
+  bridgeStep(x0: number, y0: number, x1: number, y1: number): boolean {
+    // Onto the deck, from an end or from the deck itself.
+    const to = this.bridgeAt(x1, y1);
+    if (to && bridgeDone(to) && this.onBridge(to, x0, y0)) return true;
+    // And off the far end of it again, which is a step down onto solid ground
+    // from a deck the terrain underneath knows nothing about.
+    const from = this.bridgeAt(x0, y0);
+    return !!from && bridgeDone(from) && this.onBridge(from, x1, y1);
+  }
+
+  /** Why a bridge of this sort cannot be thrown between these two tiles, or null. */
+  bridgeReason(kind: BridgeKind, ax: number, ay: number, bx: number, by: number): string | null {
+    const def = BRIDGES[kind];
+    const w = this.world;
+    if (!w.inBounds(ax, ay) || !w.inBounds(bx, by)) return 'Not there.';
+    if (ax !== bx && ay !== by) return 'A bridge runs straight. Pick an end level with this one, north, south, east or west.';
+    const span = spanTiles(ax, ay, bx, by);
+    if (!span.length) return 'There is nothing between those two. Bridge a gap.';
+    if (span.length > def.span) return `A ${def.name.toLowerCase()} spans ${def.span} tiles; that is ${span.length}.`;
+    for (const [x, y] of [[ax, ay], [bx, by]]) {
+      // The bank of a ravine always shares a corner with the ravine, so what
+      // matters is whether you can stand in the middle of the tile, not
+      // whether every corner of it is dry.
+      if (!w.isPassable(x, y) || w.centerHeight(x, y) < 0) return 'Both ends want dry, solid ground to stand on.';
+      if (this.bridgeAt(x, y)) return 'One end is already under a bridge.';
+    }
+    const ha = w.centerHeight(ax, ay);
+    const hb = w.centerHeight(bx, by);
+    if (Math.abs(ha - hb) > END_SLOP) return `The two ends are ${Math.abs(ha - hb).toFixed(0)} apart in height. One deck will not meet both; level one of them.`;
+    const height = Math.round((ha + hb) / 2);
+    for (const [x, y] of span) {
+      if (this.bridgeAt(x, y)) return 'Something is already bridged across there.';
+      if (this.buildings.buildingAt(x, y)) return 'Not over a building.';
+      if (height - w.centerHeight(x, y) < CLEARANCE) return 'That is not a gap, it is ground. Walk it.';
+    }
+    return null;
   }
 
   // ---- Traps: what you catch while you are somewhere else. ----

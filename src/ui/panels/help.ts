@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: seventy goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: seventy-one goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -371,6 +371,22 @@ export function buildHelp(win: UIWindow): void {
     <p>A <b>small cart</b> holds 100 things and, once you <b>take hold of it</b>, follows you wherever
     you go until you <b>let go</b>. Load it at the mine and walk home. Only one cart at a time, and it
     will not follow you into water or up anything it cannot roll over.</p>
+    <h3>Bridges</h3>
+    <p>Water and ravines have been walls: the island is full of places you can see across and cannot get
+    to. A <b>bridge</b> is a run of deck between two pieces of solid ground at much the same height, and
+    once it is finished it is simply ground &mdash; you walk it, you ride it, and depending on what it is
+    made of you drive a cart over it.</p>
+    <p>Stand on one bank and right-click the other: <b>Throw a bridge across from here</b>. It must run
+    straight (north, south, east or west), both ends must be dry ground you can stand in the middle of,
+    the two ends must be within twelve height units of each other, and everything between must be at
+    least three units below the deck &mdash; a gap, not a slope. Three kinds: a <b>rope bridge</b> (two
+    hawsers, three planks and four nails a span) goes <b>fourteen</b> tiles for very little and takes
+    foot traffic only; a <b>wooden bridge</b> (four timber, six planks, twelve nails) goes <b>ten</b> and
+    carries a cart; a <b>stone arch</b> (ten bricks, six mortar, three slabs, with a trowel) goes
+    <b>eight</b> and will outlast everybody who used it.</p>
+    <p>A planned bridge is built a span at a time, exactly as a wall is: stand by the open part and feed
+    it what it wants, one unit a go. Until the last span is decked nothing crosses. Pulling one down
+    again gives you half of what went into it. A boat passes underneath.</p>
     <h3>Boats</h3>
     <p>Two hulls, both a carpenter's work. A <b>rowing boat</b> is 20 planks, 6 timbers, 2 shafts and 30
     nails; she carries <b>300 things</b>, wants <b>two deep</b> of water under her and is rowed, so your

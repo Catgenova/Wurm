@@ -28,6 +28,7 @@ import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
 import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
+import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
@@ -357,6 +358,8 @@ export class UI {
     if (postHere) return { title: `${postName(postHere)} (${postState(postHere)})`, entries: this.postEntries(postHere) };
     const trapHere = pick.trap !== undefined ? this.game.traps.get(pick.trap) : undefined;
     if (trapHere) return { title: `${trapName(trapHere)} (${trapState(trapHere, this.game)})`, entries: this.trapEntries(trapHere) };
+    const bridgeHere = pick.bridge !== undefined ? this.game.bridges.get(pick.bridge) : undefined;
+    if (bridgeHere) return { title: `${bridgeName(bridgeHere)} (${bridgeState(bridgeHere)})`, entries: this.bridgeEntries(bridgeHere) };
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
@@ -399,6 +402,25 @@ export class UI {
           hint: reason ?? undefined,
           disabled: !!reason,
           onSelect: () => this.game.requestAction(postDef, pt),
+        });
+      }
+    }
+    // Throwing a bridge from where you are standing to the tile under the cursor.
+    const planBridge = ACTION_BY_ID.get('plan_bridge');
+    if (planBridge && (pick.x !== this.game.player.tileX || pick.y !== this.game.player.tileY)) {
+      const options = (Object.keys(BRIDGES) as Array<keyof typeof BRIDGES>)
+        .map((kind) => ({ kind, def: BRIDGES[kind], reason: planBridge.check?.({ ...target, material: kind }, this.game) ?? null }))
+        .filter((o) => o.reason === null || !/runs straight|nothing between|a gap, it is ground|dry, solid ground/.test(o.reason));
+      if (options.length) {
+        entries.push({
+          label: 'Throw a bridge across from here',
+          children: options.map((o) => ({
+            label: o.def.name,
+            note: o.reason ? undefined : `${o.def.bill.map(([id, n]) => `${n} ${itemName({ uid: 0, id, ql: 1, dmg: 0, count: 1 }).toLowerCase()}`).join(', ')} a span · ${o.def.carts ? 'carts cross' : 'foot only'}`,
+            hint: o.reason ?? undefined,
+            disabled: !!o.reason,
+            onSelect: () => this.game.requestAction(planBridge, { ...target, material: o.kind }),
+          })),
         });
       }
     }
@@ -811,6 +833,24 @@ export class UI {
       if (!def || !def.applies(pt, g)) continue;
       const reason = def.check?.(pt, g) ?? null;
       entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, pt) });
+    }
+    return entries;
+  }
+
+  /** Working on a bridge, or taking it down again. */
+  private bridgeEntries(b: Bridge): MenuItem[] {
+    const g = this.game;
+    const bt: Target = { kind: 'bridge', id: b.id };
+    const def = bridgeDef(b);
+    const entries: MenuItem[] = [];
+    const open = b.spans.find((s) => !isDone(s));
+    entries.push({ label: `${b.spans.length} spans · ${def.carts ? 'carries a cart' : 'foot traffic only'}`, disabled: true });
+    if (open) entries.push({ label: `The open span wants ${spanWants(open)}`, disabled: true });
+    for (const id of ['build_bridge', 'demolish_bridge']) {
+      const a = ACTION_BY_ID.get(id);
+      if (!a || !a.applies(bt, g)) continue;
+      const reason = a.check?.(bt, g) ?? null;
+      entries.push({ label: a.labelFor?.(bt, g) ?? a.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(a, bt) });
     }
     return entries;
   }
