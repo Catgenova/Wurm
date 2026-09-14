@@ -1145,3 +1145,66 @@ end $$;
 reset role;
 select '213. and it is all still in the crate: ' || (select coalesce(sum(count), 0) from item where world_id = :'world2' and holder = 'crate');
 \echo ''
+\echo '--- crates, and the beast that fills them'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set x = 4.5, y = 7.5 where uid = :'ivar';
+select '214. setting one down with nothing in hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', '{"kind":"tile","x":4,"y":7,"sx":1,"sy":1}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'crate_log', 20, 2, 'Oak')
+  returning id as boxes \gset
+select '215. with a log crate in hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb), 'allowed')
+     || ' | on the token: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":5,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb), 'allowed')
+     || ' | out in the water: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":3,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb) \g /dev/null
+select '216. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — an oak log crate holds ' || (select crate_capacity(c) from crate c where world_id = :'world2' and x = 4 and y = 7)
+     || ', where a plain one holds 30';
+select '217. and another on the same spot: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb), 'allowed');
+select id as box from crate where world_id = :'world2' and x = 4 and y = 7 \gset
+
+delete from event where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 45, 12, 'Pine')
+  returning id as pine \gset
+select '218. stowing a dozen pine logs: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'pine' || ',"count":12}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'pine' || ',"count":12}')::jsonb) \g /dev/null
+select '219. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — the crate holds ' || crate_units(:'world2', :'box') || ', the pack holds '
+     || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log' and extra = 'Pine');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 45, 40, 'Pine')
+  returning id as more \gset
+select '220. forty more into a crate with room for twenty-two: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'more' || ',"count":40}')::jsonb), 'allowed');
+select '221. and a crate inside a crate: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'boxes' || ',"count":1}')::jsonb), 'allowed');
+update player set x = 12.5, y = 12.5 where uid = :'ivar';
+select '222. from across the deed: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'more' || ',"count":1}')::jsonb), 'allowed')
+     || ' | and emptying it from there: ' || coalesce(act_refusal(:'world2', :'ivar', 'crate_take_all', ('{"kind":"crate","id":' || :'box' || '}')::jsonb), 'allowed');
+update player set x = 4.5, y = 7.5 where uid = :'ivar';
+select '223. lifting a crate with logs in it: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_crate', ('{"kind":"crate","id":' || :'box' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'crate_take_all', ('{"kind":"crate","id":' || :'box' || '}')::jsonb) \g /dev/null
+select '224. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '225. now: ' || coalesce(act_refusal(:'world2', :'ivar', 'crate_take_all', ('{"kind":"crate","id":' || :'box' || '}')::jsonb), 'allowed')
+     || ' | and lifting it: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_crate', ('{"kind":"crate","id":' || :'box' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_up_crate', ('{"kind":"crate","id":' || :'box' || '}')::jsonb) \g /dev/null
+select '226. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — crates standing: ' || (select count(*) from crate where world_id = :'world2')
+     || ', crates in the pack: ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'crate_log');
+
+\echo ''
+\echo '--- and a magga, which tidies up'
+select '227. logs lying at the stumps: ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'ground' and def = 'log'), '0');
+select creature_spawn(:'world2', 'magga', 5.5, 8.5, 'stored', now() - interval '3 hours', :'ivar') as tidier \gset
+select '228. a magga clears up: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'tidier' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'tidier' || '}')::jsonb) \g /dev/null
+-- Room in the settlement's crate for what it brings in.
+delete from item where world_id = :'world2' and holder = 'crate';
+update creature set until = until - interval '900 seconds', leg_at = leg_at - interval '900 seconds',
+    leg_ends = leg_ends - interval '900 seconds', settled_at = settled_at - interval '900 seconds'
+  where id = :'tidier';
+select worker_settle(:'world2', :'tidier') as tidied \gset
+select '229. fifteen minutes of it: ' || :'tidied' || ' rounds, ' ||
+       coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'ground' and def = 'log'), '0')
+     || ' logs still at the stumps, and ' ||
+       coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'log'), '0')
+     || ' of them in the deed crate';
+\echo ''

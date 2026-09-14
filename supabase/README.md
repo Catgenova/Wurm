@@ -37,13 +37,14 @@ simplification rather than a problem:
 | **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
 | **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
 | **8** | fighting: wearing and wielding, sword and bow, butchering, and the first aid that follows |
-| **1** | setting a wildermon to work the deed, which is eleven trades and a crate to fill |
+| **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
+| **1** | setting a wildermon to work the deed, which is twelve trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **102** | known, listed, and honestly refused |
+| **98** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -63,15 +64,28 @@ being refused because your hands are full.
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), creatures coming at you
 unprompted (a hunter closing on sight is creature AI rather than fighting),
-the eleven deed trades that want something this island has not got yet —
+the ten deed trades that want something this island has not got yet —
 guarding and hunting want the aggression loop, stoking wants hearths, and the
-errands (water, hod, mend, compost, prospect, plant, seek, fetch) want crates,
-posts and a barrel apiece — sowing a field from a worker's own cheeks,
-breeding and pairing, riding and the traces, trapping, crates you place and
-stuff by hand, the ledger, the journal, kilns and what they fire, smelting
+errands (water, hod, mend, compost, prospect, plant, seek) want posts and a
+barrel apiece — sowing a field from a worker's own cheeks,
+breeding and pairing, riding and the traces, trapping,
+the ledger, the journal, kilns and what they fire, smelting
 jobs themselves, flattening and levelling, paving with cut slabs, planting
 trees, prospecting, deed upgrades and disbanding, and the ease a hot oven
 lends to cooking.
+
+### A prefix is a guess about names nobody has thought of yet
+
+The dispatcher used to route the placeables by two `like` tests: anything
+beginning `build_` or `place_`. That was unambiguous the day it was written,
+and it has been wrong twice since. `build_wall` was very nearly handed to the
+code that lights campfires; `place_crate` would have been the second, and
+neither would have said a word about it — the wall would simply have been lit.
+
+Both are named lists now, and the last `like` in the dispatcher went with
+them. A prefix is a bet that no other family will ever want the same verb, and
+on an island with three hundred and seventy-three actions that bet keeps
+losing.
 
 ### A worker is a round trip
 
@@ -118,6 +132,19 @@ once a second. There is no second here, so the odds over the whole stretch are
 minutes has had ten minutes to turn, whether or not anybody was there to watch
 it. `settle()` calls it, and every way into this island already calls
 `settle()`, so touching a player is enough.
+
+### Every local gets a prefix, not just the ones that have bitten
+
+`land_tile.y`, `crop.y`, `trait_def.tier`, `species_butcher.n`, and then
+`crate_def.kind`: five times a plpgsql variable has had the same name as a
+column in a query beside it, and Postgres has either refused the whole
+function or — worse, the first two times — quietly meant the column.
+
+The convention was written down after the fourth. It did not hold, because it
+was applied where the last bite had been rather than everywhere, which is not
+a convention, it is a scar. Locals in these functions carry `v_` now whether
+or not anything has gone wrong near them, and a column inside a query is
+written with its table in front of it.
 
 ### Material had never had any effect
 

@@ -27,6 +27,7 @@ import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
 import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/game/gear';
 import { WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
+import { CRATE_DEFS } from '../src/game/crates';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -139,6 +140,9 @@ out.push(`create table if not exists hoard_metal (item text primary key, ord int
  * with `if not exists`, so the only way to widen one is to say so. */
 out.push(`alter table material_def add column if not exists bane boolean not null default false;`);
 out.push(`alter table species_def add column if not exists glow real;`);
+out.push(`create table if not exists crate_def (
+  kind text primary key, name text not null, item text not null, capacity int not null
+);`);
 out.push(`create table if not exists gather_def (
   id text primary key, skill text not null, verb text not null, plain text not null
 );`);
@@ -354,7 +358,7 @@ for (const a of ACTIONS as unknown as A[]) {
  */
 out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
-  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal;`);
+  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -368,6 +372,9 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
     q(d.notice ?? null), q(d.sight ?? null)].join(', ') + `);`);
   if (d.glow !== undefined) out.push(`update species_def set glow = ${q(d.glow)} where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
+}
+for (const [kind, d] of Object.entries(CRATE_DEFS)) {
+  out.push(`insert into crate_def values (${q(kind)}, ${q(d.name)}, ${q(d.item)}, ${q(d.capacity)});`);
 }
 for (const w of WEAPONS) {
   out.push(`insert into weapon_def values (${q(w.id)}, ${q(w.kind)}, ${q(w.damage)}, ${q(w.swing)}, ${q(w.range ?? null)}, ${q(w.ammo ?? null)}, ${q(!!w.twoHanded)});`);
