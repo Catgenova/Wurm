@@ -12,12 +12,24 @@ const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
   ['misc', 'Other'],
 ];
 
+/** How a pack may be put in order. */
+type SortKey = 'name' | 'ql' | 'weight' | 'dmg' | 'count';
+const SORTS: Array<[SortKey, string]> = [
+  ['name', 'Name'],
+  ['ql', 'Quality'],
+  ['weight', 'Weight'],
+  ['dmg', 'Damage'],
+  ['count', 'How many'],
+];
+
 export class InventoryPanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
   private search: HTMLInputElement;
   private query = '';
   private selected: number | null = null;
+  private sort: SortKey = 'name';
+  private grouped = true;
 
   constructor(
     private readonly win: UIWindow,
@@ -43,6 +55,35 @@ export class InventoryPanel {
       this.query = '';
       this.render();
     });
+    // How the list is put in order, and whether it is grouped by kind.
+    const bar = document.createElement('div');
+    bar.className = 'panel-bar';
+    const sortSel = document.createElement('select');
+    sortSel.className = 'panel-select';
+    sortSel.title = 'How to order the list';
+    for (const [key, label] of SORTS) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = label;
+      sortSel.append(opt);
+    }
+    sortSel.addEventListener('change', () => {
+      this.sort = sortSel.value as SortKey;
+      this.render();
+    });
+    const groupBtn = document.createElement('button');
+    groupBtn.type = 'button';
+    groupBtn.className = 'tb-btn tb-small';
+    groupBtn.textContent = 'Grouped';
+    groupBtn.title = 'Group by kind, or run everything together in one list';
+    groupBtn.addEventListener('click', () => {
+      this.grouped = !this.grouped;
+      groupBtn.textContent = this.grouped ? 'Grouped' : 'Flat';
+      groupBtn.classList.toggle('tb-on', this.grouped);
+      this.render();
+    });
+    groupBtn.classList.add('tb-on');
+    bar.append(sortSel, groupBtn);
     const head = document.createElement('div');
     head.className = 'inv-head';
     head.innerHTML = '<span>Item</span><span>QL</span><span>Dmg</span><span>Wt</span>';
@@ -50,7 +91,7 @@ export class InventoryPanel {
     this.list.className = 'inv-list';
     this.footer = document.createElement('div');
     this.footer.className = 'inv-footer';
-    win.body.append(this.search, head, this.list, this.footer);
+    win.body.append(this.search, bar, head, this.list, this.footer);
     win.body.classList.add('inv-body');
     makeDropZone(
       this.list,
@@ -68,10 +109,25 @@ export class InventoryPanel {
     return `${itemName(item)} ${def.category} ${def.description ?? ''}`.toLowerCase().includes(this.query);
   }
 
+  /** The order the list is asked for: name climbs, everything else falls. */
+  private ordered(items: Item[]): Item[] {
+    const by: Record<SortKey, (a: Item, b: Item) => number> = {
+      name: (a, b) => itemName(a).localeCompare(itemName(b)),
+      ql: (a, b) => b.ql - a.ql,
+      weight: (a, b) => itemWeight(b) - itemWeight(a),
+      dmg: (a, b) => b.dmg - a.dmg,
+      count: (a, b) => b.count - a.count,
+    };
+    return [...items].sort(by[this.sort]);
+  }
+
   render(): void {
     const items = this.game.inventory.items;
     const shown = items.filter((it) => this.matches(it));
     this.list.replaceChildren();
+    if (!this.grouped) {
+      for (const item of this.ordered(shown)) this.list.append(this.row(item));
+    } else
     for (const [cat, label] of CATEGORY_ORDER) {
       const group = shown.filter((it) => itemDef(it.id).category === cat);
       if (!group.length) continue;
@@ -79,7 +135,7 @@ export class InventoryPanel {
       header.className = 'inv-group';
       header.textContent = label;
       this.list.append(header);
-      for (const item of group.sort((a, b) => itemName(a).localeCompare(itemName(b)))) this.list.append(this.row(item));
+      for (const item of this.ordered(group)) this.list.append(this.row(item));
     }
     if (!shown.length) {
       const empty = document.createElement('div');
@@ -104,8 +160,11 @@ export class InventoryPanel {
     const name = document.createElement('span');
     name.className = 'inv-name';
     const worn = this.game.isEquipped(item.uid);
-    const marks = [worn ? 'worn' : '', item.locked ? 'kept back' : ''].filter(Boolean);
-    name.textContent = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (marks.length ? ` · ${marks.join(' · ')}` : '');
+    const marks = [worn ? 'worn' : '', item.locked ? 'kept' : ''].filter(Boolean);
+    const full = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (marks.length ? ` · ${marks.join(' · ')}` : '');
+    name.textContent = full;
+    // The column is narrow and some of these names are long.
+    name.title = item.locked ? `${full}. Kept back: nothing will spend, drop or feed it away.` : full;
     // A rare thing is written in its own colour, so it is not lost in a list.
     const rare = rarityOf(item);
     if (rare.colour) name.style.color = rare.colour;

@@ -1123,6 +1123,32 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'pick_up_all',
+    label: 'Pick up everything here',
+    verb: 'gathering up',
+    stamina: 0.02,
+    baseTime: 2,
+    applies: (t, g) => t.kind === 'ground' || (t.kind === 'tile' && g.sweepable(t.x, t.y) > 0),
+    check: (t, g) => {
+      const x = t.kind === 'ground' || t.kind === 'tile' ? t.x : g.player.tileX;
+      const y = t.kind === 'ground' || t.kind === 'tile' ? t.y : g.player.tileY;
+      return g.sweepable(x, y) ? null : 'There is nothing lying about here.';
+    },
+    perform: (t, g) => {
+      const x = t.kind === 'ground' || t.kind === 'tile' ? t.x : g.player.tileX;
+      const y = t.kind === 'ground' || t.kind === 'tile' ? t.y : g.player.tileY;
+      const got = g.sweep(x, y);
+      if (!got.length) {
+        g.logMsg('There is nothing lying about here.', 'error');
+        return;
+      }
+      const counts = new Map<string, number>();
+      for (const it of got) counts.set(itemDef(it.id).name.toLowerCase(), (counts.get(itemDef(it.id).name.toLowerCase()) ?? 0) + it.count);
+      const what = [...counts.entries()].map(([n, c]) => (c > 1 ? `${c} × ${n}` : n)).join(', ');
+      g.logMsg(`You gather up ${what}.`, 'event');
+    },
+  },
+  {
     id: 'lock_item',
     label: 'Keep this back',
     verb: 'setting it aside',

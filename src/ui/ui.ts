@@ -48,6 +48,7 @@ import { CratePanel } from './panels/crate';
 import { TilePanel } from './panels/tile';
 import type { DragPayload } from './dragdrop';
 import { WildermonPanel } from './panels/wildermon';
+import { StoresPanel } from './panels/stores';
 import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { SettingsPanel } from './panels/settings';
@@ -77,6 +78,7 @@ export class UI {
   private readonly settings: SettingsPanel;
   private readonly cratePanel: CratePanel;
   private readonly wildermon: WildermonPanel;
+  private readonly stores: StoresPanel;
   private readonly tilePanel: TilePanel;
 
   constructor(
@@ -121,6 +123,13 @@ export class UI {
       game,
       (id) => this.creatureEntries(id),
       (x, y, title, items) => this.menu.show(x, y, title, items),
+    );
+    const stores = this.windows.create({ id: 'stores', title: 'Stores', x: 12, y: 486, width: 360, height: 300, anchor: 'tr', open: false });
+    this.stores = new StoresPanel(
+      stores,
+      game,
+      (id) => this.cratePanel.open(id),
+      (id) => this.cratePanel.openFurniture(id),
     );
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
@@ -203,6 +212,7 @@ export class UI {
     this.minimap.update();
     this.settings.refresh();
     this.wildermon.update(performance.now());
+    this.stores.update(performance.now());
   }
 
   /** Describe what is under the cursor. */

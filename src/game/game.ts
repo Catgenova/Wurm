@@ -3269,6 +3269,33 @@ export class Game {
   }
 
   /** Remove one item (by uid) or everything (null) from a tile. */
+  /** How far a sweep of the ground reaches: the tile you are on and its neighbours. */
+  private static readonly SWEEP = 1;
+
+  /** How many loose things are lying within reach of a spot. */
+  sweepable(x: number, y: number): number {
+    let n = 0;
+    for (let dy = -Game.SWEEP; dy <= Game.SWEEP; dy++) {
+      for (let dx = -Game.SWEEP; dx <= Game.SWEEP; dx++) n += this.groundAt(x + dx, y + dy).length;
+    }
+    return n;
+  }
+
+  /** Gather up everything lying within reach of a spot, nearest first. */
+  sweep(x: number, y: number): Item[] {
+    const got: Item[] = [];
+    const spots: Array<[number, number]> = [];
+    for (let dy = -Game.SWEEP; dy <= Game.SWEEP; dy++) for (let dx = -Game.SWEEP; dx <= Game.SWEEP; dx++) spots.push([x + dx, y + dy]);
+    spots.sort((a, b) => Math.hypot(a[0] - x, a[1] - y) - Math.hypot(b[0] - x, b[1] - y));
+    for (const [sx, sy] of spots) {
+      for (const it of this.takeFromGround(sx, sy, null)) {
+        this.inventory.addItem(it);
+        got.push(it);
+      }
+    }
+    return got;
+  }
+
   takeFromGround(x: number, y: number, uid: number | null): Item[] {
     const key = `${x},${y}`;
     const pile = this.ground.get(key);

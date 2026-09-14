@@ -23,6 +23,7 @@ export interface Store {
 export class CratePanel {
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
+  private bar: HTMLDivElement;
   private crateId: number | null = null;
   private furnitureId: number | null = null;
   private creatureId: number | null = null;
@@ -41,7 +42,29 @@ export class CratePanel {
     this.list.className = 'inv-list';
     this.footer = document.createElement('div');
     this.footer.className = 'inv-footer';
-    win.body.append(head, this.list, this.footer);
+    // Moving things a stack at a time is most of the tedium of a settlement.
+    this.bar = document.createElement('div');
+    this.bar.className = 'panel-bar';
+    const takeAll = document.createElement('button');
+    takeAll.type = 'button';
+    takeAll.className = 'tb-btn tb-small';
+    takeAll.textContent = 'Take all';
+    takeAll.title = 'Empty it into your pack, as far as your back will take';
+    takeAll.addEventListener('click', () => this.takeAll());
+    const putAll = document.createElement('button');
+    putAll.type = 'button';
+    putAll.className = 'tb-btn tb-small';
+    putAll.textContent = 'Put all in';
+    putAll.title = 'Put everything loose in your pack into it';
+    putAll.addEventListener('click', () => this.putAll());
+    const putKind = document.createElement('button');
+    putKind.type = 'button';
+    putKind.className = 'tb-btn tb-small';
+    putKind.textContent = 'Put in what it holds';
+    putKind.title = 'Put in only the kinds already in it — top the store up without emptying your pack';
+    putKind.addEventListener('click', () => this.putAll(true));
+    this.bar.append(takeAll, putAll, putKind);
+    win.body.append(head, this.list, this.bar, this.footer);
     makeDropZone(
       this.list,
       (p) => p.from === 'inventory' && this.store() !== undefined,
@@ -132,6 +155,62 @@ export class CratePanel {
     return undefined;
   }
 
+  /** Empty the open store into the pack, as far as it will go. */
+  private takeAll(): void {
+    const store = this.store();
+    if (!store) return;
+    if (!this.withinReach()) {
+      this.game.logMsg(`Stand next to the ${store.what} to take things out.`, 'error');
+      return;
+    }
+    let moved = 0;
+    for (const item of [...store.items]) {
+      const it = store.take(item.uid);
+      if (!it) break;
+      this.game.inventory.addItem(it);
+      moved += it.count;
+    }
+    this.game.logMsg(moved ? `You empty the ${store.what}: ${moved} things into your pack.` : `The ${store.what} is empty.`, 'event');
+    this.render();
+  }
+
+  /**
+   * Put the pack into the open store. Kept-back things stay where they are,
+   * and so does anything worn; with `sameKinds` only what is already in there
+   * goes in, which is how a store is topped up rather than filled with
+   * everything you happen to be holding.
+   */
+  private putAll(sameKinds = false): void {
+    const store = this.store();
+    if (!store) return;
+    if (!this.withinReach()) {
+      this.game.logMsg(`Stand next to the ${store.what} to put things in.`, 'error');
+      return;
+    }
+    const kinds = new Set(store.items.map((it) => it.id));
+    let moved = 0;
+    let refused = '';
+    for (const item of [...this.game.inventory.items]) {
+      if (item.locked || this.game.isEquipped(item.uid)) continue;
+      if (sameKinds && !kinds.has(item.id)) continue;
+      const why = store.refuses(item);
+      if (why) {
+        refused ||= why;
+        continue;
+      }
+      const taken = this.game.inventory.take(item.uid, item.count);
+      if (!taken) continue;
+      if (store.add(taken)) moved += taken.count;
+      else this.game.inventory.addItem(taken);
+    }
+    this.game.events.emit('inventory');
+    this.game.logMsg(
+      moved ? `You put ${moved} things into the ${store.what}.${refused ? ` ${refused}` : ''}` : refused || `There is nothing loose to put in the ${store.what}.`,
+      moved ? 'event' : 'error',
+    );
+    this.render();
+  }
+
   render(): void {
     const store = this.store();
     this.list.replaceChildren();
@@ -141,10 +220,12 @@ export class CratePanel {
       empty.textContent = 'Open a crate or a cupboard to see what is inside.';
       this.list.append(empty);
       this.footer.textContent = '';
+      this.bar.hidden = true;
       this.win.titleText.textContent = 'Storage';
       return;
     }
     this.win.titleText.textContent = store.title;
+    this.bar.hidden = false;
     if (!store.items.length) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';

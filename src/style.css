@@ -1083,3 +1083,33 @@ kbd {
 .inv-worn-out { color: #e3b657; }
 .inv-breaking { color: #e0574d; font-weight: 600; }
 .inv-footer.inv-over { color: #e0574d; font-weight: 600; }
+
+/* A small strip of controls at the head of a list. */
+.panel-bar { display: flex; gap: 6px; align-items: center; padding: 4px 6px 2px; }
+.panel-select {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 4px;
+  color: #cfd8cf;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid #4a5550;
+  border-radius: 3px;
+}
+.tb-btn.tb-on { border-color: #e3b657; color: #e3b657; }
+
+/* Where everything is: one row a store. */
+.store-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'name go' 'what go';
+  gap: 0 8px;
+  align-items: center;
+  padding: 5px 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.store-name { grid-area: name; font-size: 12px; color: #d6ded6; display: flex; gap: 6px; align-items: baseline; }
+.store-fill { font-size: 10px; color: #8b978d; }
+.store-fill.store-full { color: #e3b657; }
+.store-what { grid-area: what; font-size: 11px; color: #8b978d; line-height: 1.35; }
+.store-what.store-hit { color: #a8d08a; }
+.store-row .tb-btn { grid-area: go; }

@@ -534,6 +534,15 @@ rebuilds and commits the result.
   walk away, and it fishes on its own — holds eight, gives four or five to
   a baiting, and kept baited is worth about twenty-five fish an hour for no
   work at all.
+- **Finding things and moving them in bulk.** A **Stores** window lists every
+  container you own, nearest first, with how full each is and what is in it;
+  type what you are after and it narrows to the stores that have it, with
+  **Walk there** and **Open**. Any open container has **Take all**, **Put all
+  in** and **Put in what it holds** — the last tops a store up with only the
+  kinds already in it. Nothing kept back or worn moves either way. The
+  inventory sorts by name, quality, weight, damage or count and groups by
+  kind or runs flat. **Pick up everything here** sweeps your tile and the
+  eight around it in one go.
 - **Keeping things back, and what your back will take.** Any item can be
   **kept back**: never spent by a recipe, never used as bait, never fed away,
   never dropped — but still usable as a tool, which is the point. You carry

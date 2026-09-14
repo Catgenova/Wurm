@@ -32,6 +32,7 @@ const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) =>
   { label: 'Map', key: 'M', action: (cb) => cb.toggle('map') },
   { label: 'Wildermon', key: 'P', action: (cb) => cb.toggle('wildermon') },
   { label: 'Journal', key: 'J', action: (cb) => cb.toggle('journal') },
+  { label: 'Stores', key: 'U', action: (cb) => cb.toggle('stores') },
   { label: 'Grid', key: 'G', action: (cb) => cb.toggleGrid(), id: 'grid' },
   { label: 'Centre', key: 'C', action: (cb) => cb.center() },
   { label: '↻ Turn', key: 'Q', action: (cb) => cb.turn(-1) },

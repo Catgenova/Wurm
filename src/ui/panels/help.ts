@@ -479,6 +479,20 @@ export function buildHelp(win: UIWindow): void {
     some of your hurt mended; a well-made bed is a better night than a thin cot. The world does not wait
     for you: fires burn down, crops come on, kilns finish and everything left outside ages by however
     long you were under. You wake up hungry and thirsty, too.</p>
+    <h3>Finding things, and moving them in bulk</h3>
+    <p>A settlement of any age has a dozen crates, bins, chests and carts in it, and opening all of them
+    to find the planks is no way to live. The <b>Stores</b> window (<kbd>U</kbd>) lists every container
+    you own, nearest first, with how full each is and what is in it. Type what you are after and it
+    narrows to the stores that have it and says how many; <b>Walk there</b> takes you, and <b>Open</b>
+    opens it when you are already standing at it.</p>
+    <p>Any open container has three buttons at the foot of it. <b>Take all</b> empties it into your pack.
+    <b>Put all in</b> puts everything loose in your pack into it. <b>Put in what it holds</b> puts in only
+    the kinds already in there, which is how a store is topped up without emptying your pack into it.
+    Nothing <b>kept back</b> and nothing worn moves either way.</p>
+    <p>The <b>inventory</b> can be ordered by name, quality, weight, damage or how many, and grouped by
+    kind or run together in one flat list.</p>
+    <p><b>Pick up everything here</b> sweeps the tile you are standing on and the eight around it in one
+    go, nearest pile first, rather than one entry per pile.</p>
     <h3>Keeping something back</h3>
     <p>Right-click anything in the pack and choose <b>Keep this back</b>. A kept thing is never spent: no
     recipe takes it, no hook baits with it, nothing is fed it, and it cannot be dropped. It can still be
