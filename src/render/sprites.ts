@@ -441,19 +441,30 @@ export function cropSprite(cropId: string, stage: number, look: string, leaf: st
   let spr = cache.get(key);
   if (spr) return spr;
   const rng = mulberry32(hashString(cropId) + stage * 7919);
+  // How far out of the tile centre anything drawn on the field may reach, as a
+  // share of the tile. A hair inside the half-tile, so nothing touches the edge.
+  const EDGE = 0.46;
   // A tile's worth of furrows, anchored at the tile centre.
   spr = makeSprite(96, 72, 48, 54, (ctx) => {
     const cx = 48;
     const cy = 52;
     const iso = (u: number, v: number): [number, number] => [cx + (u - v) * 44, cy + (u + v) * 22];
     ctx.lineCap = 'round';
-    // Furrows run across the field under the plants.
+    /*
+     * Furrows run across the field under the plants. The ground they have to
+     * stay on is a diamond, so a furrow further from the middle is a shorter
+     * furrow: at the widest the full width of the tile, and at the last one
+     * before the corner barely more than a nick. Drawing them all the same
+     * length ran them a third of a tile out over the grass on either side.
+     */
     ctx.strokeStyle = 'rgba(70,50,32,0.45)';
     ctx.lineWidth = 2;
     for (let i = -2; i <= 2; i++) {
       const f = i * 0.19;
-      const [ax, ay] = iso(f - 0.46, f + 0.46);
-      const [bx, by] = iso(f + 0.46, f - 0.46);
+      const half = EDGE - Math.abs(f);
+      if (half <= 0.03) continue;
+      const [ax, ay] = iso(f - half, f + half);
+      const [bx, by] = iso(f + half, f - half);
       ctx.beginPath();
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
