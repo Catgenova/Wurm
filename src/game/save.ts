@@ -1,4 +1,4 @@
-import { oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
+import { needsIron, oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
 import { World } from '../world/world';
 import type { BuildingsJSON } from './building';
 import type { PlacedAnvil } from './anvil';
@@ -404,6 +404,22 @@ async function loadFromDb(): Promise<{ meta: SaveMeta; ground: GroundBlob; fog: 
   return { meta: m, ground: g, fog: known };
 }
 
+/**
+ * Lay the metal into the rock, on the same terms a new world would: thick
+ * under land, thin under water. Used for worlds saved before the rock was
+ * written down at all, and for worlds rolled before iron was in the ground —
+ * which would otherwise keep a hole where the useful metal ought to be
+ * however many times they were loaded. Only unopened seams change: a tile
+ * already cut back to bare rock keeps what it was showing.
+ */
+function layRock(world: World): void {
+  world.fillRock((x, y) => {
+    const density = world.hasWater(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
+    const ore = oreKindFor(world.seed, x, y, density);
+    return ore >= 0 ? ore : stoneKindAt(world.seed, x, y);
+  });
+}
+
 export async function loadGame(): Promise<Game | null> {
   const found = await loadFromDb();
   if (found) {
@@ -411,6 +427,7 @@ export async function loadGame(): Promise<Game | null> {
     const size = m.size;
     const world = new World(size, size, g.heights, g.tiles, g.data, g.dirt, g.rock, f?.seen, f?.mem, f?.memData);
     world.seed = m.seed;
+    if (needsIron(world.rock)) layRock(world);
     if (!f) world.rememberAll();
     // Both halves are already in the store, so neither is written again until
     // something moves it.
@@ -462,13 +479,7 @@ export async function loadGame(): Promise<Game | null> {
     if (!dirtBytes || dirtBytes.length !== (size + 1) * (size + 1)) world.deriveDirt();
     // Worlds saved before the rock was written down get it laid in now, on the
     // same terms a new world would: metal thick under land, thin under water.
-    if (!rockBytes || rockBytes.length !== size * size) {
-      world.fillRock((x, y) => {
-        const density = world.hasWater(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
-        const ore = oreKindFor(world.seed, x, y, density);
-        return ore >= 0 ? ore : stoneKindAt(world.seed, x, y);
-      });
-    }
+    if (!rockBytes || rockBytes.length !== size * size || needsIron(world.rock)) layRock(world);
     return finish(world, patched(data));
   } catch {
     return null;

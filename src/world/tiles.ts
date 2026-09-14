@@ -214,7 +214,6 @@ export const ROCK_VARIANTS: RockVariantDef[] = [
   { name: 'Sandstone', color: [198, 172, 124], yields: 'sandstone_shards' },
   // Metal, in order of the skill it takes to work.
   { name: 'Copper vein', color: [162, 116, 74], yields: 'copper_ore', level: 1 },
-  { name: 'Iron vein', color: [124, 82, 74], yields: 'iron_ore', level: 5 },
   { name: 'Coal seam', color: [58, 56, 58], yields: 'coal', level: 1 },
   { name: 'Tin vein', color: [178, 180, 174], yields: 'tin_ore', level: 10 },
   { name: 'Zinc vein', color: [154, 166, 172], yields: 'zinc_ore', level: 20 },
@@ -225,8 +224,19 @@ export const ROCK_VARIANTS: RockVariantDef[] = [
   { name: 'Glimmersteel vein', color: [206, 216, 230], yields: 'glimmersteel_ore', level: 70 },
   { name: 'Mithril vein', color: [138, 166, 214], yields: 'mithril_ore', level: 80 },
   { name: 'Seryll vein', color: [214, 196, 132], yields: 'seryll_ore', level: 90 },
+  // Iron belongs at mining 5, between copper and tin, and sits here at the end
+  // of the list instead. Which rock lies under which tile is written down per
+  // tile as an index into this array, so putting a metal in the middle would
+  // quietly turn every saved coal seam into iron, every tin vein into coal, and
+  // so on down the line. The order of this list is storage; `level` is the
+  // ladder.
+  { name: 'Iron vein', color: [124, 82, 74], yields: 'iron_ore', level: 5 },
 ];
-/** Four bits of the data byte, so there is room for every kind of seam. */
+/**
+ * Four bits of the data byte, which is sixteen kinds of rock and no more —
+ * and the list above now holds exactly sixteen. A seventeenth needs another
+ * bit before it needs a name.
+ */
 export const rockVariant = (data: number): number => Math.min(ROCK_VARIANTS.length - 1, data & 15);
 
 export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);

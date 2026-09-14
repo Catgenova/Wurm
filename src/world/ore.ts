@@ -118,3 +118,18 @@ export function oreAt(world: World, x: number, y: number): OreInfo | null {
   const rock = bedrockAt(world, x, y);
   return rock.ore ? rock : null;
 }
+
+/** The index of the iron seam, which is what says whether a world knows about iron. */
+const IRON = ROCK_VARIANTS.findIndex((r) => r.yields === 'iron_ore');
+
+/**
+ * Whether this world was made before iron was in the ground. The rock under
+ * each tile is written down per tile, so a world rolled without iron keeps a
+ * hole where the useful metal ought to be however many times it is loaded.
+ * With iron over half of every seam, a world without a single one of them is
+ * not a world that got unlucky.
+ */
+export function needsIron(rock: Uint8Array): boolean {
+  for (let i = 0; i < rock.length; i += 1) if (rock[i] === IRON) return false;
+  return true;
+}
