@@ -162,13 +162,15 @@ export interface PlacedFurniture {
   driven?: boolean;
   /** Comb drawn but not yet capped, for a hive. */
   comb?: number;
+  /** Seconds a brew still has to work before it can be drawn off. */
+  ferment?: number;
   /** The wood it was built of, for the pieces a carpenter builds. */
   material?: string;
 }
 
 /** The two liquids worth keeping a barrel for. */
-export type LiquidKind = 'water' | 'lye' | 'milk';
-export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk' };
+export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine';
+export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk', ale: 'ale', cider: 'cider', mead: 'mead', wine: 'wine' };
 /** A bucket holds five litres, whichever way it is going. */
 export const BUCKET_LITRES = 5;
 /** Which liquid a full vessel is carrying, and which empty vessel it leaves. */
@@ -176,9 +178,13 @@ export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
   water_bucket: { liquid: 'water', empty: 'bucket' },
   lye_bucket: { liquid: 'lye', empty: 'bucket' },
   milk_bucket: { liquid: 'milk', empty: 'bucket' },
+  ale_bucket: { liquid: 'ale', empty: 'bucket' },
+  cider_bucket: { liquid: 'cider', empty: 'bucket' },
+  mead_bucket: { liquid: 'mead', empty: 'bucket' },
+  wine_bucket: { liquid: 'wine', empty: 'bucket' },
 };
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
-export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket' };
+export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket' };
 
 export const furnitureName = (f: PlacedFurniture): string => (f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name);
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
@@ -240,7 +246,10 @@ export function furnitureState(f: PlacedFurniture): string {
   if (holdsLiquid(f)) {
     const litres = litresIn(f);
     const what = f.liquid ? LIQUID_NAME[f.liquid] : 'empty';
-    return `${ql} · ${litres.toFixed(0)} / ${liquidCapacity(f)} litres of ${what}`;
+    // A barrel that is working says so, and how long it has to go.
+    const left = f.ferment ?? 0;
+    const working = left > 0 ? ` · working, ${left >= 60 ? `${Math.ceil(left / 60)}m` : `${Math.ceil(left)}s`} to go` : '';
+    return `${ql} · ${litres.toFixed(0)} / ${liquidCapacity(f)} litres of ${what}${working}`;
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
   if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} of comb`;

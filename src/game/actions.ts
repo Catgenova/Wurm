@@ -4,6 +4,7 @@ import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
 import { POST_ACTIONS } from './posts';
 import { FISHING_ACTIONS } from './fishing';
+import { BREWING_ACTIONS } from './brewing';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
@@ -55,7 +56,7 @@ export type Target =
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'smelter'; id: number; itemUid?: number; count?: number }
   | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
-  | { kind: 'furniture'; id: number; itemUid?: number; count?: number }
+  | { kind: 'furniture'; id: number; itemUid?: number; count?: number; brew?: string }
   | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
   | { kind: 'post'; id: number; creatureId?: number }
   | { kind: 'item'; uid: number; count?: number }
@@ -995,7 +996,9 @@ export const ACTIONS: ActionDef[] = [
       item.charges = (item.charges ?? 1) - 1;
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + (itemDef(item.id).drink ?? 0));
       g.inventory.onChange?.();
-      g.logMsg(`You take a drink from the ${itemDef(item.id).name.toLowerCase()}.`, 'event');
+      // Milk and anything brewed favour a trade the way a cooked dish does.
+      const favour = g.grantAffinity(item.id, item.ql);
+      g.logMsg(`You take a drink from the ${itemDef(item.id).name.toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
     },
   },
   {
@@ -1239,6 +1242,7 @@ export const ACTIONS: ActionDef[] = [
   ...ANVIL_ACTIONS,
   ...POST_ACTIONS,
   ...FISHING_ACTIONS,
+  ...BREWING_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,
   {

@@ -146,6 +146,19 @@ export function buildHelp(win: UIWindow): void {
     scarcely takes a mark at all. A tool's metal decides how fast and how true it works, so a bronze
     hatchet at forty beats a copper one at fifty; a weapon's metal decides what it does; armour's metal
     decides both what it stops and what it costs you to carry.</p>
+    <h3>Brewing</h3>
+    <p>Fill a barrel from a well or the shore, stand at it and <b>set a brew going</b>. Four of them:
+    <b>ale</b> from 12 wheat in a quarter of an hour, <b>cider</b> from 20 apples in half an hour,
+    <b>mead</b> from 12 honey in forty minutes, and <b>wine</b> from 30 cherries in three quarters of an
+    hour. Each takes 15 litres of water and gives back 15 litres of drink.</p>
+    <p>While it is working the barrel says so and nothing can be drawn off it &mdash; and nothing hurries
+    it. When it stops, draw it into a bucket like any other liquid and drink from that. The quality of
+    what comes out is half what went in and half your <b>brewing</b>, and a brew that will not take
+    sours the whole barrel.</p>
+    <p>What brewing is <i>for</i> is the affinity. Anything drunk favours a trade the way a cooked dish
+    does, and a brew carries it far longer than food &mdash; a baked potato is nine minutes and a bucket
+    of wine three quarters of an hour. A barrel of the right thing before a long afternoon at the anvil
+    is the single best use of an orchard.</p>
     <h3>Fishing</h3>
     <p>Splice a <b>fishing rod</b> from 2 shafts, a bowstring and a ribbon bent into a hook, stand at
     water and fish. The line reaches about three tiles, and it goes into whatever water within a cast is

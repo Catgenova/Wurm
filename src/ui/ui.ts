@@ -26,6 +26,7 @@ import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from
 import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
+import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
 import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
@@ -672,6 +673,24 @@ export class UI {
         });
       }
       if (f.lit) entries.push({ label: 'Cook', children: this.cookEntries() });
+    }
+    // A barrel of water is where every brew starts.
+    const brewDef = ACTION_BY_ID.get('start_brew');
+    if (brewDef && brewDef.applies(ft, g) && !(f.ferment ?? 0)) {
+      entries.push({
+        label: 'Set a brew going',
+        children: BREWS.map((b) => {
+          const bt: Target = { ...ft, brew: b.id } as Target;
+          const reason = brewDef.check?.(bt, g) ?? null;
+          return {
+            label: b.name,
+            note: `${b.count} × ${itemDef(b.input).name.toLowerCase()} · ${b.litres} litres · ${Math.round(b.time / 60)}m`,
+            hint: reason ?? undefined,
+            disabled: !!reason,
+            onSelect: () => g.requestAction(brewDef, bt),
+          };
+        }),
+      });
     }
     for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'leave_vehicle', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);

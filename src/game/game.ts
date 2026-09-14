@@ -9,7 +9,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
@@ -1640,6 +1640,13 @@ export class Game {
       if (def.hive && hiveRoom(f) > 0 && this.onDeed(f.x, f.y)) {
         if (swarms < 0) swarms = this.swarms();
         if (swarms > 0) this.fillHive(f, swarms, dt);
+      }
+      if (f.ferment !== undefined && f.ferment > 0) {
+        f.ferment = Math.max(0, f.ferment - dt);
+        if (f.ferment === 0) {
+          this.logMsg(`The ${furnitureName(f).toLowerCase()} has stopped working. There is ${LIQUID_NAME[f.liquid ?? 'water']} in it.`, 'event');
+          this.events.emit('crate');
+        }
       }
       if (def.well) {
         const before = f.litres ?? 0;

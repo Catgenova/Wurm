@@ -471,6 +471,16 @@ rebuilds and commits the result.
   deed with honey and beeswax, and two wax and a length of yarn draw a pair of
   candles; and the **Lume**, found only after dark, carries its own daylight
   about with it.
+- **Brewing.** Fill a barrel from a well or the shore and set a brew going:
+  **ale** from 12 wheat in a quarter of an hour, **cider** from 20 apples in
+  half an hour, **mead** from 12 honey in forty minutes, **wine** from 30
+  cherries in three quarters. Each takes 15 litres of water and gives back 15
+  of drink. A working barrel says so and cannot be drawn off, and nothing
+  hurries it; the quality is half what went in and half your **brewing**, and
+  a brew that will not take sours the barrel. What it is for is the affinity —
+  anything drunk favours a trade like a cooked dish, and a brew carries it far
+  longer: a baked potato is nine minutes, a bucket of wine three quarters of
+  an hour.
 - **Fishing.** A **fishing rod** spliced from 2 shafts, a bowstring and a
   ribbon bent into a hook. Stand at water and fish: the line reaches about
   three tiles and goes into whatever water within a cast is deepest, so where

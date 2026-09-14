@@ -1,3 +1,4 @@
+import { drinkable, isBrew, isWorking } from './brewing';
 import type { ActionDef, Target } from './actions';
 import { FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import {
@@ -321,22 +322,25 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     baseTime: 2,
     applies: (t, g) => {
       const f = pieceOf(g, t);
-      return !!f && holdsLiquid(f) && f.liquid === 'water' && litresIn(f) >= 1;
+      return !!f && holdsLiquid(f) && drinkable(f.liquid) && litresIn(f) >= 1;
     },
     check: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
       if (!nearPiece(g, f)) return 'Stand next to it.';
-      if (f.liquid !== 'water') return 'You would not want to drink that.';
+      if (!drinkable(f.liquid)) return 'You would not want to drink that.';
+      if (isWorking(f)) return 'It is still working. Let it alone.';
       if (litresIn(f) < 1) return 'It is dry.';
-      if (g.player.stats.thirst >= 0.999) return 'You are not thirsty.';
+      if (g.player.stats.thirst >= 0.999 && !isBrew(f.liquid)) return 'You are not thirsty.';
       return null;
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f || !drawFrom(g, f, 1)) return;
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + 0.5);
-      g.logMsg(`You drink your fill from the ${furnitureName(f).toLowerCase()}.`, 'event');
+      // A brew straight out of the barrel favours a trade like any other.
+      const favour = isBrew(f.liquid) ? g.grantAffinity(BUCKET_OF[f.liquid as LiquidKind], f.ql) : null;
+      g.logMsg(`You drink your fill from the ${furnitureName(f).toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
     },
   },
   {
@@ -509,7 +513,8 @@ export const PLACEABLE_ACTION_BY_ID = new Map(PLACEABLE_ACTIONS.map((a) => [a.id
 
 /** The liquid a bucket filled here would come up with, and where from. */
 export function sourceFor(g: Game): { from: PlacedFurniture | null; liquid: LiquidKind } | null {
-  const vessel = vesselsNear(g)[0];
+  // A barrel still working is not drawn off; whatever is in it is not ready.
+  const vessel = vesselsNear(g).find((v) => !isWorking(v));
   if (vessel && litresIn(vessel) >= BUCKET_LITRES && vessel.liquid) return { from: vessel, liquid: vessel.liquid };
   if (g.nearWater()) return { from: null, liquid: 'water' };
   return null;
