@@ -579,6 +579,14 @@ export function buildHelp(win: UIWindow): void {
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>
+    <p><b>Age.</b> Everything alive was born at some hour and gets older from there. A <b>young</b> one is
+    two thirds the size, moves a little slower, grows no fleece and gives no milk, and is no use in the
+    traces or under a saddle &mdash; but it has not learned to mistrust you, so it is half again as easy
+    to tame. It is <b>grown</b> after an hour, and everything in the book describes it then. After six
+    hours it is <b>old</b>: slower again and poorer in the traces, slower to grow a fleece back, but
+    heavier, and an old carcass is worth a third more than a grown one. The Wildermon window says which
+    it is and how long a yearling has left to grow. What was already walking about when the island was
+    raised counts as grown.</p>
     <p><b>The working sorts.</b> Eighteen more wildermon came out of the same country, and most of them
     are kept for a job. The <b>Bogga</b> wallows in the marshes and cuts <b>peat and tar</b> for the
     deed. The <b>Sedra</b> is a long-necked wader that shears <b>reeds</b> at the water's edge, which is

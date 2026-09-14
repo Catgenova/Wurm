@@ -431,6 +431,15 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Wildermon age.** Everything alive was born at some hour and gets older
+  from there. A **young** one is two thirds the size, a little slower, grows
+  no fleece and gives no milk, and is no use in the traces or under a saddle —
+  but it has not learned to mistrust you and is half again as easy to tame. It
+  is **grown** after an hour of real time, and **old** after six: slower again
+  and poorer at pulling, slower to grow a fleece back, but heavier, and an old
+  carcass is worth a third more. Wild country carries a spread of ages rather
+  than a field of yearlings, and age is drawn as size rather than written on
+  the creature.
 - **Eighteen more wildermon.** Most of them are kept for a job: the **Bogga**
   cuts peat and tar out of the marshes; the **Sedra**, a long-necked wader,
   shears reeds at the water's edge; the **Holla** carries water in its throat

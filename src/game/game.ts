@@ -11,7 +11,7 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
-import { CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf } from './items';
@@ -1689,13 +1689,13 @@ export class Game {
     let sum = 0;
     let worst = 1;
     for (const c of team) {
-      sum += this.creatures.species(c).speed;
+      sum += this.creatures.species(c).speed * ageDef(c, this.time).speed;
       worst = Math.min(worst, 0.6 + 0.4 * c.hunger);
     }
     const mean = sum / team.length;
     // Every beast adds its own share of the pull; the ones bred for it add more.
     let pull = 0.75;
-    for (const c of team) pull += this.creatures.species(c).pull ?? 0.25;
+    for (const c of team) pull += (this.creatures.species(c).pull ?? 0.25) * ageDef(c, this.time).pull;
     // A body of light wood rolls a shade easier than one of oak, which is the
     // price oak charges for holding more and lasting longer.
     return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material));
@@ -1728,7 +1728,7 @@ export class Game {
   /** How fast a mount carries a rider: its own pace, steadied by practice. */
   mountSpeed(c: Creature): number {
     const def = this.creatures.species(c);
-    return Math.min(MAX_MOUNT_SPEED, def.speed * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger));
+    return Math.min(MAX_MOUNT_SPEED, def.speed * ageDef(c, this.time).speed * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger));
   }
 
   /**

@@ -952,10 +952,15 @@ export interface CreaturePose {
   species?: string;
   /** How much fleece is on it, 0..1, for the species that grow one. */
   fleece?: number;
+  /** How much of its full size it is: a yearling is small and an old one heavy. */
+  scale?: number;
 }
 
 /** Draws a wildermon of any species with its feet at (sx, sy), then its health bar and name. */
 export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  // Age is drawn rather than written: a yearling is two thirds the size of
+  // its parents and an old one has put weight on.
+  zoom *= pose.scale ?? 1;
   if (pose.species === 'vola') drawVolaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'bevere') drawBevereBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'seavic') drawSeavicBody(ctx, sx, sy, zoom, pose);

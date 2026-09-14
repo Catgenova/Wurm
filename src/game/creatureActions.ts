@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { ageDef, creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { itemDef, itemName } from './items';
@@ -106,7 +106,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const foodName = itemDef(food.id).name.toLowerCase();
       g.inventory.remove(food.uid, 1);
       const skill = g.skills.get('taming');
-      const chance = Math.min(0.95, def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + g.soulBonus());
+      // Something that has not yet learned to mistrust you is far easier won.
+      const chance = Math.min(0.95, (def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + g.soulBonus()) * ageDef(c, g.time).tame);
       c.hunger = Math.min(1, c.hunger + 0.25);
       if (g.rand() < chance) {
         c.name = def.name;
@@ -485,6 +486,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return 'It is gone.';
       if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
+      if (!ageDef(c, g.time).works) return `${c.name} is not grown. Nothing that young takes a saddle.`;
       const want = TACK.filter((id) => !g.inventory.has(id));
       if (want.length) return `You need ${want.map((id) => itemDef(id).name.toLowerCase()).join(' and ')}.`;
       return null;
@@ -537,6 +539,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return 'It is gone.';
       if (!c.tacked) return `${c.name} has no saddle or bridle on.`;
+      if (!ageDef(c, g.time).works) return `${c.name} is not grown enough to carry you.`;
       if (c.hitchedTo !== null) return `${c.name} is in the traces.`;
       if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
       if (g.driving()) return 'Get down off what you are driving first.';
@@ -582,6 +585,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const [cx, cy] = furnitureCentre(f);
       if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return `Stand by the ${furnitureName(f).toLowerCase()}.`;
       if (c.mode !== 'stored' && Math.hypot(c.x - g.player.x, c.y - g.player.y) > 4) return `${c.name} is too far off. Call it over first.`;
+      if (!ageDef(c, g.time).works) return `${c.name} is not grown. A yearling is no use in the traces.`;
       if (c.hunger < 0.15) return `${c.name} is too hungry to pull anything. Feed it first.`;
       return null;
     },

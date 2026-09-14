@@ -1144,6 +1144,54 @@ const startSkills = (species: SpeciesDef): Record<string, number> => {
   return skills;
 };
 
+/**
+ * Age. Everything alive on the island was born at some hour and gets older
+ * from there. A young one is small, quick to trust and no use in the traces;
+ * a grown one is what the numbers in the book describe; an old one has slowed
+ * down and put on weight, which is bad for a cart and good for a butcher.
+ */
+export type Age = 'young' | 'grown' | 'old';
+/** Seconds of real time spent young, and the hour it turns old. */
+export const YOUNG_FOR = 60 * 60;
+export const OLD_AT = 6 * 60 * 60;
+
+export interface AgeDef {
+  id: Age;
+  name: string;
+  /** Multiplier on how fast it moves, in the traces and under a rider alike. */
+  speed: number;
+  /** Multiplier on its share of a team's pull. */
+  pull: number;
+  /** Multiplier on what the carcass is worth. */
+  yield: number;
+  /** Multiplier on how fast fleece grows back and milk comes in. */
+  growth: number;
+  /** How much of its full size it is drawn at. */
+  scale: number;
+  /** Taming is easier on something that has not learned to mistrust you. */
+  tame: number;
+  /** Old enough to be worked, ridden or put in the traces. */
+  works: boolean;
+}
+
+export const AGES: Record<Age, AgeDef> = {
+  young: { id: 'young', name: 'young', speed: 0.8, pull: 0.4, yield: 0.4, growth: 0, scale: 0.62, tame: 1.6, works: false },
+  grown: { id: 'grown', name: 'grown', speed: 1, pull: 1, yield: 1, growth: 1, scale: 1, tame: 1, works: true },
+  old: { id: 'old', name: 'old', speed: 0.85, pull: 0.8, yield: 1.35, growth: 0.6, scale: 1.12, tame: 0.8, works: true },
+};
+
+/** How old a creature is now. */
+export const ageOf = (c: Creature, now: number): Age => {
+  // Nothing born before the clock started has an age worth working out: what
+  // was already walking about when the island was raised is simply grown.
+  if (c.born <= 0) return 'grown';
+  const lived = Math.max(0, now - c.born);
+  return lived < YOUNG_FOR ? 'young' : lived < OLD_AT ? 'grown' : 'old';
+};
+export const ageDef = (c: Creature, now: number): AgeDef => AGES[ageOf(c, now)];
+/** How long until it is grown, in seconds; zero once it is. */
+export const growsAt = (c: Creature, now: number): number => Math.max(0, c.born + YOUNG_FOR - now);
+
 /** What a draught beast trains by pulling, and a mount by being ridden. */
 export const HAUL_SKILL = 'climbing';
 /** What a hunter trains, which decides how hard it hits and how far it ranges. */
@@ -1208,6 +1256,8 @@ export interface Creature {
   pannier: Item[];
   /** Set while the player is up on its back. */
   ridden: boolean;
+  /** The hour it was born, which is all that age is. */
+  born: number;
   /**
    * The work post it takes its orders from, if any. A worker with one treats
    * that post exactly as another treats the settlement token — until the post
@@ -1239,6 +1289,7 @@ export interface CreatureJSON {
   tacked?: boolean;
   pannier?: Item[];
   post?: number | null;
+  born?: number;
 }
 
 /**
@@ -1332,8 +1383,9 @@ export class Creatures {
     return SPECIES[c.species] ?? SPECIES.rabba;
   }
 
-  spawn(species: string, x: number, y: number, mode: CreatureMode = 'wild', rand: () => number = Math.random): Creature {
+  spawn(species: string, x: number, y: number, mode: CreatureMode = 'wild', rand: () => number = Math.random, born = 0): Creature {
     const c = Creatures.make(this.nextId++, species, x, y, mode, rand);
+    c.born = born;
     this.list.set(c.id, c);
     return c;
   }
@@ -1382,6 +1434,7 @@ export class Creatures {
       ridden: false,
       pannier: [],
       post: null,
+      born: 0,
     };
   }
 
@@ -1478,7 +1531,8 @@ export class Creatures {
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
       const id = species ?? rollTable(WILD_SPECIES, game.rand());
       if (!this.suits(game, SPECIES[id], x, y)) continue;
-      this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
+      // Born at some point in the past, so the country is not all yearlings.
+      this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand, game.time - game.rand() * OLD_AT * 1.6);
       placed++;
     }
     return placed;
@@ -1657,7 +1711,7 @@ export class Creatures {
       if (d < 30 || d > LIVE_RANGE) continue;
       const id = rollTable(WILD_SPECIES, game.rand());
       if (!this.suits(game, SPECIES[id], x, y)) continue;
-      this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
+      this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand, game.time - game.rand() * OLD_AT * 1.6);
       return true;
     }
     return false;
@@ -1674,7 +1728,9 @@ export class Creatures {
     c.cooldown = Math.max(0, c.cooldown - elapsed);
     c.moving = false;
     if (c.health < def.health && game.time - c.attackedAt > 6) c.health = Math.min(def.health, c.health + elapsed * (c.mode === 'wild' ? 0.25 : 0.6));
-    if (def.fleece && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece);
+    // A yearling grows no fleece and gives no milk; an old one is slower at both.
+    const growth = ageDef(c, game.time).growth;
+    if (def.fleece && growth > 0 && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece * growth);
     return def;
   }
 
@@ -1720,7 +1776,7 @@ export class Creatures {
     const dist = Math.hypot(dx, dy);
     if (dist < 0.12) return 'arrived';
     const pace = c.mode === 'deed' ? 1 + Math.max(1, ...Object.values(c.skills)) / 500 : 1;
-    const step = Math.min(this.species(c).speed * speedMul * pace * dt, dist);
+    const step = Math.min(this.species(c).speed * ageDef(c, game.time).speed * speedMul * pace * dt, dist);
     const vx = dx / dist;
     const vy = dy / dist;
     const nx = c.x + vx * step;
@@ -3034,7 +3090,9 @@ export class Creatures {
     const def = this.species(t);
     const x = Math.floor(t.x);
     const y = Math.floor(t.y);
-    game.dropOnGround(x, y, { uid: game.inventory.nextUid++, id: 'corpse', ql: 15 + game.rand() * 35, dmg: 0, count: 1, extra: def.name });
+    // What the carcass is worth follows the size of the thing that left it.
+    const size = ageDef(t, game.time).yield;
+    game.dropOnGround(x, y, { uid: game.inventory.nextUid++, id: 'corpse', ql: Math.max(1, Math.min(100, (15 + game.rand() * 35) * size)), dmg: 0, count: 1, extra: def.name });
     if (killer === 'player') game.logMsg(`You kill the wild ${def.name.toLowerCase()}. Its corpse lies where it fell.`, 'event');
     else if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'error');
     else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'event');
@@ -3082,6 +3140,7 @@ export class Creatures {
         tacked: c.tacked,
         pannier: c.pannier,
         post: c.post,
+        born: c.born,
       })),
     };
   }
@@ -3093,7 +3152,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, born: j.born ?? 0, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

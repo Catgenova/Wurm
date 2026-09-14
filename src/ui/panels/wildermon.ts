@@ -1,4 +1,5 @@
-import { creatureLevel, GATHER_VERB, RANGE_PER_STEP, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { clockLeft } from '../../game/boons';
+import { ageOf, growsAt, creatureLevel, GATHER_VERB, RANGE_PER_STEP, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
 
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
@@ -68,7 +69,11 @@ export class WildermonPanel {
     name.textContent = `${c.name}${c.name !== def.name ? ` · ${def.name}` : ''}`;
     const level = document.createElement('span');
     level.className = 'pal-level';
-    level.textContent = `Lv ${creatureLevel(c)}`;
+    // Age reads before anything else: a yearling cannot be worked at all.
+    const age = ageOf(c, this.game.time);
+    const growing = growsAt(c, this.game.time);
+    level.textContent = `${age === 'grown' ? '' : `${age} · `}Lv ${creatureLevel(c)}`;
+    level.title = growing > 0 ? `Grown in ${clockLeft(growing)}` : age === 'old' ? 'Slower, but a better carcass' : 'Grown';
     const menu = document.createElement('button');
     menu.type = 'button';
     menu.className = 'tb-btn tb-small';

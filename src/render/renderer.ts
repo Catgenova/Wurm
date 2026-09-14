@@ -22,6 +22,7 @@ import { ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVar
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
+import { ageDef } from '../game/creatures';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
@@ -618,6 +619,7 @@ export class Renderer {
           colors: def.variants[cr.variant] ?? def.variants[0],
           health: cr.health / def.health,
           fleece: cr.fleece,
+          scale: ageDef(cr, this.game.time).scale,
           label: cr.mode === 'wild' ? undefined : cr.name,
         });
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
