@@ -908,7 +908,7 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && !!itemDef(item.id).food;
+      return !!item && !!itemDef(item.id).food && !item.locked;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
@@ -1123,6 +1123,40 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'lock_item',
+    label: 'Keep this back',
+    verb: 'setting it aside',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => t.kind === 'item' && !g.inventory.get(t.uid)?.locked,
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item) return;
+      item.locked = true;
+      g.logMsg(`You set the ${itemName(item).toLowerCase()} aside. Nothing will spend it, drop it or feed it away until you say so.`, 'info');
+      g.events.emit('inventory');
+    },
+  },
+  {
+    id: 'unlock_item',
+    label: 'Put it back in the pack',
+    verb: 'putting it back',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => t.kind === 'item' && !!g.inventory.get(t.uid)?.locked,
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item) return;
+      delete item.locked;
+      g.logMsg(`The ${itemName(item).toLowerCase()} is fair game again.`, 'info');
+      g.events.emit('inventory');
+    },
+  },
+  {
     id: 'drop',
     label: 'Drop',
     verb: 'dropping',
@@ -1133,7 +1167,7 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && item.id !== 'dirt';
+      return !!item && item.id !== 'dirt' && !item.locked;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;

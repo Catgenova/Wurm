@@ -534,6 +534,14 @@ rebuilds and commits the result.
   walk away, and it fishes on its own — holds eight, gives four or five to
   a baiting, and kept baited is worth about twenty-five fish an hour for no
   work at all.
+- **Keeping things back, and what your back will take.** Any item can be
+  **kept back**: never spent by a recipe, never used as bait, never fed away,
+  never dropped — but still usable as a tool, which is the point. You carry
+  forty kilos plus most of a kilo per point of body strength; past that you
+  are slower and tire faster, and the inventory footer and the bars both say
+  by how much. The damage column turns amber past 75 and red past 90.
+  Releasing a wildermon that carries supreme or fantastic blood names what is
+  on it and warns you that you will not get it back.
 - **Meditation, and the three paths.** Weave a **rug**, sit on it once every
   twelve minutes, and where you sit decides what it is worth — your own yard
   is the worst place, high thin air is worth half again. At five meditation

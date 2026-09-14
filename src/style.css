@@ -1077,3 +1077,9 @@ kbd {
 .hud-wind { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; color: #a8bcc4; }
 .wind-arrow { display: inline-block; font-size: 13px; line-height: 1; color: #8fc8f0; }
 .wind-irons { color: #e08a72; font-weight: 600; }
+
+/* What is kept back, what is nearly worn out, and a pack that is too heavy. */
+.inv-kept { font-style: italic; }
+.inv-worn-out { color: #e3b657; }
+.inv-breaking { color: #e0574d; font-weight: 600; }
+.inv-footer.inv-over { color: #e0574d; font-weight: 600; }

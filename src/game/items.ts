@@ -370,6 +370,12 @@ export interface Item {
   dye?: string;
   /** Circles of cunning worked into it, 1..3; absent for the ordinary run of things. */
   bless?: number;
+  /**
+   * Locked. A locked thing will not be dropped, eaten, fed to anything, put on
+   * a hook, or swallowed by a craft that was looking for one of its kind. It
+   * is the only way to keep your last good hatchet out of the next recipe.
+   */
+  locked?: boolean;
 }
 
 /**
@@ -523,6 +529,11 @@ export class Inventory {
     return this.addItem(item);
   }
 
+  /** Whether anything may quietly take this: a craft, a hook, a hungry beast. */
+  loose(item: Item): boolean {
+    return !item.locked;
+  }
+
   /** Put an existing item into the inventory, merging it into a matching stack. */
   addItem(item: Item): Item {
     const def = itemDef(item.id);
@@ -573,8 +584,14 @@ export class Inventory {
    * Once wood and metal are told apart, a pack holds three separate piles of
    * plank as often as one, and a bill for five of them should not care.
    */
+  /**
+   * Take things to be used up. A **locked** thing is never taken: that is the
+   * whole of what locking is for, and it is why `find`, `consume` and `count`
+   * look past one while `has`, `get` and `tool` do not — you can still work
+   * with a locked hatchet, nothing will quietly eat it.
+   */
   consume(id: string, count = 1, extra?: string): boolean {
-    const stacks = this.items.filter((it) => it.id === id && (extra === undefined || it.extra === extra));
+    const stacks = this.items.filter((it) => it.id === id && !it.locked && (extra === undefined || it.extra === extra));
     if (stacks.reduce((n, it) => n + it.count, 0) < count) return false;
     let left = count;
     for (const st of [...stacks]) {
@@ -585,8 +602,9 @@ export class Inventory {
     return left === 0;
   }
 
+  /** The first loose one of a kind: something locked is not offered up. */
   find(id: string, extra?: string): Item | undefined {
-    return this.items.find((it) => it.id === id && (extra === undefined || it.extra === extra));
+    return this.items.find((it) => it.id === id && !it.locked && (extra === undefined || it.extra === extra));
   }
 
   get(uid: number): Item | undefined {
@@ -597,7 +615,13 @@ export class Inventory {
     return this.items.some((it) => it.id === id);
   }
 
+  /** How many of a kind are loose and could be spent. */
   count(id: string): number {
+    return this.items.filter((it) => it.id === id && !it.locked).reduce((n, it) => n + it.count, 0);
+  }
+
+  /** How many there are of a kind, locked or not, for saying so plainly. */
+  countAll(id: string): number {
     return this.items.filter((it) => it.id === id).reduce((n, it) => n + it.count, 0);
   }
 
@@ -617,6 +641,10 @@ export class Inventory {
     return best;
   }
 
+  /**
+   * What a back will take before it starts to tell. Body strength is most of
+   * it, and everything above this is carried at a price in pace and wind.
+   */
   totalWeight(): number {
     return this.items.reduce((sum, it) => sum + itemWeight(it), 0);
   }

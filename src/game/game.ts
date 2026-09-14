@@ -820,14 +820,33 @@ export class Game {
     return out;
   }
 
-  /** How much armour slows you down and tires you: the price of plate. */
+  /**
+   * What you can carry before it tells on you: a plain forty kilos, and most
+   * of a kilo more for every point of body strength. Nothing stops you going
+   * over it; going over it simply costs.
+   */
+  carryLimit(): number {
+    return 40 + this.skills.get('body_strength') * 0.9;
+  }
+
+  /** How far past the limit you are, 0 when you are inside it. */
+  overloaded(): number {
+    const over = this.inventory.totalWeight() - this.carryLimit();
+    return over > 0 ? over : 0;
+  }
+
+  /** How much armour and a full pack slow you down and tire you. */
   burden(): number {
     let sum = 0;
     for (const { def, item } of this.wornArmour()) sum += pieceBurden(def, item);
     const shield = this.worn('offhand');
     const sh = shield && SHIELDS[shield.id];
     if (sh) sum += sh.burden;
-    // A strong back carries the same steel for a fifth less of it.
+    // Everything past what your back will take is carried at a price, and the
+    // price climbs: twice your limit is not twice as bad, it is worse.
+    const over = this.overloaded();
+    if (over > 0) sum += Math.min(1.2, (over / this.carryLimit()) * 1.1);
+    // A strong back carries the same steel, and the same load, for a fifth less.
     return this.walks('power', 1) ? sum * 0.8 : sum;
   }
 

@@ -88,8 +88,14 @@ export class InventoryPanel {
       this.list.append(empty);
     }
     const weight = this.game.inventory.totalWeight();
-    const all = `${items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} kg`;
+    const limit = this.game.carryLimit();
+    const over = this.game.overloaded();
+    const all = `${items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} / ${limit.toFixed(0)} kg`;
     this.footer.textContent = this.query ? `${shown.reduce((n, it) => n + it.count, 0)} of ${all}` : all;
+    this.footer.classList.toggle('inv-over', over > 0);
+    this.footer.title = over > 0
+      ? `${over.toFixed(1)} kg past what your back will take. You are slower and you tire faster; put something down or raise body strength.`
+      : `${(limit - weight).toFixed(1)} kg to spare.`;
   }
 
   private row(item: Item): HTMLDivElement {
@@ -98,15 +104,25 @@ export class InventoryPanel {
     const name = document.createElement('span');
     name.className = 'inv-name';
     const worn = this.game.isEquipped(item.uid);
-    name.textContent = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (worn ? ' · worn' : '');
+    const marks = [worn ? 'worn' : '', item.locked ? 'kept back' : ''].filter(Boolean);
+    name.textContent = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (marks.length ? ` · ${marks.join(' · ')}` : '');
     // A rare thing is written in its own colour, so it is not lost in a list.
     const rare = rarityOf(item);
     if (rare.colour) name.style.color = rare.colour;
     if (worn) name.classList.add('inv-worn');
+    if (item.locked) name.classList.add('inv-kept');
     const ql = document.createElement('span');
     ql.textContent = item.ql.toFixed(1);
     const dmg = document.createElement('span');
     dmg.textContent = item.dmg.toFixed(1);
+    // A tool close to going to pieces says so where you are looking at it.
+    if (item.dmg >= 90) {
+      dmg.classList.add('inv-breaking');
+      dmg.title = 'About to go to pieces. Repair it now.';
+    } else if (item.dmg >= 75) {
+      dmg.classList.add('inv-worn-out');
+      dmg.title = 'Getting badly worn. Repair it before it breaks.';
+    }
     const wt = document.createElement('span');
     wt.textContent = itemWeight(item).toFixed(1);
     row.append(name, ql, dmg, wt);

@@ -479,6 +479,19 @@ export function buildHelp(win: UIWindow): void {
     some of your hurt mended; a well-made bed is a better night than a thin cot. The world does not wait
     for you: fires burn down, crops come on, kilns finish and everything left outside ages by however
     long you were under. You wake up hungry and thirsty, too.</p>
+    <h3>Keeping something back</h3>
+    <p>Right-click anything in the pack and choose <b>Keep this back</b>. A kept thing is never spent: no
+    recipe takes it, no hook baits with it, nothing is fed it, and it cannot be dropped. It can still be
+    <b>worked with</b> &mdash; that is the point, so your best hatchet can chop all day without a craft
+    quietly eating it &mdash; and <b>Put it back in the pack</b> undoes it. Kept things read
+    <i>kept back</i> in the list.</p>
+    <h3>What your back will take</h3>
+    <p>You carry <b>forty kilos</b> plus most of a kilo for every point of <b>body strength</b>, so about
+    58 at the start and 129 at ninety-nine. Nothing stops you going over it; going over it costs, and the
+    cost climbs &mdash; thirty kilos past the mark is worth about as much drag as a suit of plate. The
+    inventory footer turns red and says by how much, and the bars say so too.</p>
+    <p>The damage column turns <b>amber past 75</b> and <b>red past 90</b>, so a tool about to go to
+    pieces says so where you are looking rather than only in the log.</p>
     <h3>Eating, and keeping your things</h3>
     <p>The <b>Eat</b> button beside the food bar eats the best thing you are carrying, and the
     <b>Feed</b> button on your companion's line gives it the <i>poorest</i> thing it will take, so the

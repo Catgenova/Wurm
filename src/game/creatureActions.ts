@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import { ageDef, attackOf, careWord, creatureLevel, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
-import { traitList } from './traits';
+import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { itemDef, itemName } from './items';
@@ -643,7 +643,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
-      if (!g.hooks.confirm(`Release ${c.name} back into the wild?`)) return;
+      // Blood takes generations to build and a moment to walk away.
+      const tier = bestTier(c.traits);
+      const worth = tier === 'supreme' || tier === 'fantastic';
+      const ask = worth
+        ? `${c.name} carries ${tier} blood: ${traitList(c.traits)}. Release it back into the wild? You will not get that back.`
+        : `Release ${c.name} back into the wild?`;
+      if (!g.hooks.confirm(ask)) return;
       if (c.mode === 'stored' && g.deed) {
         c.x = g.deed.x + 0.5;
         c.y = g.deed.y + 1.5;

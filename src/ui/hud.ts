@@ -293,6 +293,8 @@ export class Hud {
     if (rested > 0) parts.push(`Rested ${clockLeft(rested)} · everything ×2`);
     const favour = this.game.player.favour;
     if (favour >= 1) parts.push(`Favour ${Math.floor(favour)} of ${Math.floor(favourCap(this.game.skills.get(FAITH)))}`);
+    const over = this.game.overloaded();
+    if (over > 0) parts.push(`Overloaded by ${over.toFixed(0)} kg`);
     for (const b of boons) {
       const name = SKILL_DEFS.find((d) => d.id === b.skill)?.name ?? b.skill;
       parts.push(`${name} +${Math.round(b.bonus * 100)}% · ${clockLeft(b.until - this.game.time)}`);
