@@ -117,8 +117,9 @@ async function main(): Promise<void> {
       check('the hole got dug', changes.length > 0 && typeof after === 'number' && after < before,
         changes.length ? `height ${before} → ${after} on the island's own reckoning` : 'no tile changed at all');
       check('the island told us about it', lines.some((l) => /dig/i.test(l)), lines.slice(-2).join(' | '));
+      check('the channel is listening', island.channelState === 'listening', island.channelState);
       check('Realtime carried the change', ground.length > 0,
-        ground.length ? `${ground.length} tile(s) arrived on the channel` : 'nothing arrived on the channel');
+        ground.length ? `${ground.length} tile(s) arrived on the channel` : `nothing arrived (channel: ${island.channelState})`);
       check('and our own copy of the land moved with it', back.getHeight(cx, cy) < before,
         `${before} → ${back.getHeight(cx, cy)} here`);
 
@@ -133,8 +134,20 @@ async function main(): Promise<void> {
     check('we are carrying the starting kit', (pack ?? []).length >= 9, `${(pack ?? []).length} things`);
 
     // What a client must not be able to do, asked for real through PostgREST.
+    /*
+     * A refused UPDATE is not an error.
+     *
+     * With no policy to match, Postgres touches no rows and reports success —
+     * so asking "did that come back with an error?" is the wrong question, and
+     * it answered "no, so it worked" about a write that had done nothing. The
+     * right question is whether the body moved.
+     */
+    const was = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
     const { error: wrote } = await supabase().from('player').update({ x: 0, y: 0 }).eq('world_id', id).eq('uid', uid);
-    check('writing to our own body directly is refused', !!wrote, wrote?.message ?? 'IT WENT THROUGH');
+    const now = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
+    const moved = was.data && now.data && (was.data.x !== now.data.x || was.data.y !== now.data.y);
+    check('writing to our own body directly is refused', !moved,
+      moved ? 'THE BODY MOVED' : `${wrote ? wrote.message : 'no error, but'} — it is still at ${now.data?.x}, ${now.data?.y}`);
     const { error: minted } = await supabase().from('item').insert({ world_id: id, holder: 'player', holder_uid: uid, def: 'gold_lump', ql: 100 });
     check('minting ourselves gold is refused', !!minted, minted?.message ?? 'IT WENT THROUGH');
   } finally {

@@ -35,3 +35,18 @@ create table if not exists auth.users (id uuid primary key);
 grant usage on schema auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
 grant select on auth.users to authenticated;
+
+/**
+ * Supabase's default privileges, which are more generous than a bare
+ * Postgres's and so must be copied here or every local test is run against a
+ * stricter database than the real one.
+ *
+ * A real project grants ALL on every new table in `public` to `anon` and
+ * `authenticated`, leaving row level security as the only thing between a
+ * client and a write. Locally those grants did not exist, so "you may not
+ * update your own row" passed for a reason that does not hold in production —
+ * a table grant that was never there rather than a policy that refuses. The
+ * live island found it; this is so that the local suite finds it next time.
+ */
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant all on sequences to anon, authenticated;

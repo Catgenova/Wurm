@@ -86,6 +86,15 @@ export class Island {
   uid = '';
   readonly people = new Map<string, PlayerRow>();
   private channel: RealtimeChannel | null = null;
+  /**
+   * What the channel said when we asked to listen.
+   *
+   * Worth keeping rather than discarding, because "subscribed and nothing has
+   * happened" and "never subscribed at all" look identical from here — and a
+   * client that has quietly stopped listening is a client watching a world
+   * that has moved on without it.
+   */
+  channelState = 'not asked';
   private lastMove = 0;
   private lastSaid = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
@@ -207,7 +216,39 @@ export class Island {
         })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: on },
         () => void this.refreshPack());
-    await this.channel.subscribe();
+
+    // Realtime authorises against the signed-in user's token; make sure it has
+    // the current one rather than whatever it started life with.
+    try {
+      const { data } = await sb.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) (sb.realtime as unknown as { setAuth: (t: string) => void }).setAuth(token);
+    } catch {
+      // An older or newer client may not want telling; the status below says
+      // whether it mattered.
+    }
+
+    // Wait for the channel to actually say it is listening. `subscribe()`
+    // hands back the channel immediately, so awaiting it proves nothing at
+    // all: the status arrives later, through the callback, or never.
+    const channel = this.channel;
+    this.channelState = await new Promise<string>((resolve) => {
+      let answered = false;
+      const settle = (why: string): void => {
+        if (!answered) {
+          answered = true;
+          resolve(why);
+        }
+      };
+      channel.subscribe((status: string, err?: Error) => {
+        if (status === 'SUBSCRIBED') settle('listening');
+        else settle(`${status}${err ? `: ${err.message}` : ''}`);
+      });
+      setTimeout(() => settle('never answered'), 20000);
+    });
+    if (this.channelState !== 'listening') {
+      this.hooks.say(`The island is not telling this machine what it does (${this.channelState}).`, 'error');
+    }
     await this.refreshPeople();
     await this.refreshPack();
   }
