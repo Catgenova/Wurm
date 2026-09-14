@@ -37,6 +37,8 @@ import { FURNITURE_BY_ID } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
+import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA } from './water';
+import { Wakes } from './wake';
 import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -212,6 +214,15 @@ export class Renderer {
   private cornerBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
   private waterPoly = new Float64Array(16);
+  /** Every water polygon drawn this frame, so a wake can be kept on the water. */
+  private waterEdge = new Float64Array(4);
+  /** Whether any water was drawn this frame; an inland view skips the surface pass. */
+  private drewWater = false;
+  private seaPath = new Path2D();
+  /** What everything on the water has left behind it. */
+  readonly wakes = new Wakes();
+  /** The wind as the surface sees it, worked out once a frame rather than per tile. */
+  private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
   private tileBuf = [0, 0];
   private playerFacing = 1;
@@ -357,6 +368,13 @@ export class Renderer {
     const vision = this.game.vision;
     const fogged = this.game.settings.fog;
     const fogPath = new Path2D();
+    this.seaPath = new Path2D();
+    this.drewWater = false;
+    // The swell runs down the wind, and everything crossing open water drags
+    // something behind it. Both are worked out once for the frame.
+    const wind = this.game.wind();
+    this.surf = { dirX: Math.cos(wind.dir), dirY: Math.sin(wind.dir), force: wind.force };
+    this.markWakes();
     // A tile last seen a moment ago has a new memory; throw away the colour
     // that was worked out from the old one.
     if (vision.revision !== this.lastVision) {
@@ -650,6 +668,10 @@ export class Renderer {
       }
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }
+    // The surface and then what crossed it, both clipped to the water, so
+    // neither washes up over a beach standing in front of them.
+    this.drawSwell(ctx, zoom);
+    this.drawWakes(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
     if (fogged) {
@@ -1381,8 +1403,174 @@ export class Renderer {
    * around it went cold. `fogInto` takes the same shape so the wash covers
    * what was actually drawn rather than what is underneath it.
    */
+  /**
+   * Note where everything on open water is this frame. A swimmer drags a
+   * narrow wake, a hull as wide as its beam; a wildermon out of its depth
+   * leaves one too. Nothing on dry land leaves anything.
+   */
+  private markWakes(): void {
+    const w = this.game.world;
+    const now = this.time;
+    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < -0.5;
+    const player = this.game.player;
+    const boat = this.game.driving();
+    const hull = boat && furnitureDef(boat.kind).boat ? boat : null;
+    if (hull) {
+      const [bx, by] = furnitureCentre(hull);
+      const [sw, sd] = furnitureSpan(hull.kind);
+      if (afloat(bx, by)) this.wakes.mark('hull', bx, by, now, Math.max(sw, sd) * 0.42);
+    } else if (afloat(player.x, player.y)) {
+      this.wakes.mark('player', player.x, player.y, now, 0.3);
+    }
+    if (this.game.creatures.list.size) {
+      for (const cr of this.game.creatures.list.values()) {
+        if (afloat(cr.x, cr.y)) this.wakes.mark('c' + cr.id, cr.x, cr.y, now, 0.26);
+      }
+    }
+  }
+
+  /**
+   * The swell, drawn across the whole sea at once rather than a shade per
+   * tile. One band of light and dark runs down the wind and a shorter, faster
+   * chop is set across it; both are laid on as gradients over the water
+   * polygon, which is what keeps the surface continuous instead of breaking
+   * at every tile edge — a sea drawn a diamond at a time reads as a tiled
+   * floor no matter what the arithmetic says.
+   */
+  private drawSwell(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (!this.drewWater) return;
+    ctx.save();
+    ctx.clip(this.seaPath);
+    this.swellBand(ctx, zoom, 0, LONG_WAVE, CREST_ALPHA, 1);
+    this.swellBand(ctx, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62);
+    ctx.restore();
+  }
+
+  /** One train of waves: a wavelength, a lean off the wind, and a speed. */
+  private swellBand(ctx: CanvasRenderingContext2D, zoom: number, lean: number, waveTiles: number, amp: number, rate: number): void {
+    const cam = this.camera;
+    const a = Math.atan2(this.surf.dirY, this.surf.dirX) + lean;
+    const wdx = Math.cos(a);
+    const wdy = Math.sin(a);
+    // Where one tile lands on screen, along the wind and across it. The
+    // projection squashes one axis and not the other, so the line a crest runs
+    // along is not square to the direction it travels — the gradient has to be
+    // laid out across the crests, not down the wind.
+    const shift = (dx: number, dy: number): [number, number] => {
+      const du = cam.rotateX(dx, dy);
+      const dv = cam.rotateY(dx, dy);
+      return [(du - dv) * HALF_W * zoom, (du + dv) * HALF_H * zoom];
+    };
+    const [pwx, pwy] = shift(wdx, wdy);
+    const [pnx, pny] = shift(-wdy, wdx);
+    const nlen = Math.hypot(pnx, pny);
+    if (nlen < 0.001) return;
+    let gx = pny / nlen;
+    let gy = -pnx / nlen;
+    let k = pwx * gx + pwy * gy;
+    if (k < 0) {
+      gx = -gx;
+      gy = -gy;
+      k = -k;
+    }
+    if (k < 2) return;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < 4; i++) {
+      const q = ((i & 1 ? W : 0) - cx) * gx + ((i & 2 ? H : 0) - cy) * gy;
+      if (q < lo) lo = q;
+      if (q > hi) hi = q;
+    }
+    const lenPx = waveTiles * k;
+    const show = swellShow(this.surf.force);
+    // Which bit of sea is under the middle of the screen, so the swell stays
+    // on the water as you walk along the beach rather than travelling with
+    // the view. The gradient is in screen space; this is what pins it down.
+    const mid = cam.screenToWorld(cx, cy, 0);
+    const drift = (this.time * SWELL_SPEED * (0.3 + 0.7 * this.surf.force) * rate - (mid.x * wdx + mid.y * wdy)) * k;
+    const g = ctx.createLinearGradient(cx + gx * lo, cy + gy * lo, cx + gx * hi, cy + gy * hi);
+    const span = hi - lo;
+    const steps = Math.max(8, Math.min(140, Math.ceil((span / lenPx) * 9)));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const w = Math.sin(((lo + t * span - drift) / lenPx) * Math.PI * 2);
+      const alpha = amp * Math.abs(w) * show;
+      g.addColorStop(t, w >= 0 ? `rgba(226,242,252,${alpha.toFixed(3)})` : `rgba(4,22,52,${alpha.toFixed(3)})`);
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  /**
+   * What crossed the water, clipped to the water so a wake never washes up
+   * over a beach standing in front of it. Each trail is drawn as a ribbon
+   * that widens and fades behind whatever left it: one quad per pair of
+   * points, which is what gives the spread its taper without anything having
+   * to work out the shape of a wake.
+   */
+  private drawWakes(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const trails = this.wakes.live(this.time);
+    if (!trails.length) return;
+    const cam = this.camera;
+    ctx.save();
+    ctx.clip(this.seaPath);
+    for (const trail of trails) {
+      // One outline for the whole trail — up one side and back down the other
+      // — so there is no seam anywhere along it. The width at each point is
+      // how far that bit of water has had time to spread.
+      const sx = (x: number, y: number): number => cam.worldToScreenX(x, y);
+      const sy = (x: number, y: number): number => cam.worldToScreenY(x, y, 0);
+      const side = (i: number, hand: number): [number, number] => {
+        const p = trail[i];
+        const a = trail[Math.max(0, i - 1)];
+        const b = trail[Math.min(trail.length - 1, i + 1)];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const w = Wakes.spread(p, this.time).width * hand;
+        return [p.x + (-dy / len) * w, p.y + (dx / len) * w];
+      };
+      ctx.beginPath();
+      for (let i = 0; i < trail.length; i++) {
+        const [wx, wy] = side(i, 1);
+        if (i === 0) ctx.moveTo(sx(wx, wy), sy(wx, wy));
+        else ctx.lineTo(sx(wx, wy), sy(wx, wy));
+      }
+      for (let i = trail.length - 1; i >= 0; i--) {
+        const [wx, wy] = side(i, -1);
+        ctx.lineTo(sx(wx, wy), sy(wx, wy));
+      }
+      ctx.closePath();
+      // Brightest at the stern and gone by the far end, laid along the trail.
+      const head = trail[trail.length - 1];
+      const tail = trail[0];
+      const g = ctx.createLinearGradient(sx(head.x, head.y), sy(head.x, head.y), sx(tail.x, tail.y), sy(tail.x, tail.y));
+      const lead = Wakes.spread(head, this.time).alpha;
+      g.addColorStop(0, `rgba(228,242,250,${lead.toFixed(3)})`);
+      g.addColorStop(0.55, `rgba(228,242,250,${(lead * 0.5).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(228,242,250,0)');
+      ctx.fillStyle = g;
+      ctx.fill();
+      // And a curl of broken water right where the thing is now.
+      ctx.fillStyle = 'rgba(240,250,255,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(sx(head.x, head.y), sy(head.x, head.y), head.beam * 1.15 * HALF_W * zoom, head.beam * 1.15 * HALF_H * zoom, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   private drawWater(u: number, v: number, x: number, y: number, c: number[], fogInto?: Path2D): void {
     const poly = this.waterPoly;
+    // Where the ground crosses zero: two points on a beach tile, none on open
+    // water, and four on the rare saddle, which gets no foam rather than the
+    // wrong foam.
+    const edge = this.waterEdge;
+    let cross = 0;
     let n = 0;
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) & 3;
@@ -1398,8 +1586,14 @@ export class Renderer {
       }
       if (ha < 0 !== hb < 0) {
         const t = ha / (ha - hb);
-        poly[n++] = ax + (bx - ax) * t;
-        poly[n++] = ay + (by - ay) * t;
+        const cx = ax + (bx - ax) * t;
+        const cy = ay + (by - ay) * t;
+        if (cross < 4) {
+          edge[cross++] = cx;
+          edge[cross++] = cy;
+        } else cross = 5;
+        poly[n++] = cx;
+        poly[n++] = cy;
       }
     }
     if (n < 6) return;
@@ -1407,9 +1601,10 @@ export class Renderer {
     const cam = this.camera;
     const depth = Math.max(0, -(c[0] + c[1] + c[2] + c[3]) / 4);
     const level = Math.min(WATER_STEPS - 1, Math.floor(depth / 1.6));
-    ctx.globalAlpha = 0.94 + 0.06 * Math.sin(this.time * 1.2 + (x + y) * 0.35 + (x - y) * 0.11);
+    const { dirX, dirY, force } = this.surf;
+    const wave = swellAt(x, y, this.time, dirX, dirY, force);
+    const show = swellShow(force);
     ctx.fillStyle = WATER_PALETTE[level];
-    ctx.strokeStyle = WATER_PALETTE[level];
     ctx.beginPath();
     for (let k = 0; k < n; k += 2) {
       const sx = cam.viewToScreenX(poly[k], poly[k + 1]);
@@ -1417,15 +1612,29 @@ export class Renderer {
       if (k === 0) {
         ctx.moveTo(sx, sy);
         fogInto?.moveTo(sx, sy);
+        this.seaPath.moveTo(sx, sy);
       } else {
         ctx.lineTo(sx, sy);
         fogInto?.lineTo(sx, sy);
+        this.seaPath.lineTo(sx, sy);
       }
     }
     ctx.closePath();
     fogInto?.closePath();
+    this.seaPath.closePath();
+    this.drewWater = true;
     ctx.fill();
-    ctx.globalAlpha = 1;
+    // Foam, where the ground crosses the waterline. The two points the
+    // polygon had to interpolate to know its own shape are the beach.
+    if (cross === 4) {
+      ctx.strokeStyle = `rgba(240,250,255,${foamAlpha(wave, force).toFixed(3)})`;
+      ctx.lineWidth = FOAM_WIDTH * cam.zoom * (0.72 + 0.42 * Math.max(0, wave) * show);
+      ctx.beginPath();
+      ctx.moveTo(cam.viewToScreenX(edge[0], edge[1]), cam.viewToScreenY(edge[0], edge[1], 0));
+      ctx.lineTo(cam.viewToScreenX(edge[2], edge[3]), cam.viewToScreenY(edge[2], edge[3], 0));
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
   }
 
   private tilePath(ctx: CanvasRenderingContext2D, x: number, y: number): void {
