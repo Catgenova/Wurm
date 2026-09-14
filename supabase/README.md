@@ -37,6 +37,7 @@ simplification rather than a problem:
 | **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
 | **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
 | **8** | fighting: wearing and wielding, sword and bow, butchering, and the first aid that follows |
+| **11** | firing: a kiln built, packed, lit and unpacked, and the smelter's own queue — ore in, lumps and anvils out |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
 | **1** | setting a wildermon to work the deed, which is twelve trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
@@ -44,7 +45,7 @@ simplification rather than a problem:
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **98** | known, listed, and honestly refused |
+| **87** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -69,10 +70,37 @@ guarding and hunting want the aggression loop, stoking wants hearths, and the
 errands (water, hod, mend, compost, prospect, plant, seek) want posts and a
 barrel apiece — sowing a field from a worker's own cheeks,
 breeding and pairing, riding and the traces, trapping,
-the ledger, the journal, kilns and what they fire, smelting
-jobs themselves, flattening and levelling, paving with cut slabs, planting
+the ledger, the journal, flattening and levelling, paving with cut slabs, planting
 trees, prospecting, deed upgrades and disbanding, and the ease a hot oven
 lends to cooking.
+
+### A queue is a fuel budget spent in order
+
+A fire already settles on the wall clock: what was in it when `since` was
+stamped, less the seconds gone by. A queue of work is the same arithmetic read
+differently. The furnace has a budget — however many seconds of burning it has
+done since anybody looked — and it spends that budget down the list in order:
+the first job takes what it still needed, the second takes what it needs, and
+so on until either the list or the budget runs out.
+
+The browser spends that budget a frame at a time. Here it is one pass down a
+jsonb array, and the pieces come out at the moment they would have. Two
+hundred seconds against an hour of fuel fires all eight bricks; six bowls at
+thirty-two seconds each against a hundred seconds of fuel gives three, leaves
+three, and the kiln goes cold — which is the half of it worth checking, because
+it is the half where the budget and the list disagree.
+
+### A file holds what it is for, and nothing it inherited
+
+Each dispatcher migration was written by copying the last one and editing the
+middle. That quietly carried the *other* definitions in it forward too: a
+`fire_action` taught about kilns an hour earlier was silently replaced by the
+older copy riding along inside the new dispatcher, and `place_kiln` routed
+nowhere at all — the refusal said yes and the doing did nothing, which is the
+worst shape a bug can take.
+
+A dispatcher holds the dispatch. Everything it calls is defined where it
+belongs and left there.
 
 ### A prefix is a guess about names nobody has thought of yet
 

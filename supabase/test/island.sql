@@ -1208,3 +1208,102 @@ select '229. fifteen minutes of it: ' || :'tidied' || ' rounds, ' ||
        coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'log'), '0')
      || ' of them in the deed crate';
 \echo ''
+\echo '--- a kiln, and the queue it works through'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set x = 8.5, y = 8.5 where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'kiln', 55, 1)
+  returning id as kit \gset
+select '230. a brick takes ' || round(fire_seconds('unfired_clay_brick', 55)) || ' seconds in a QL 55 kiln, '
+     || round(fire_seconds('unfired_clay_brick', 20)) || ' in a rough one, and comes out at QL '
+     || round(fired_ql(60, 55)::numeric, 1) || ' from QL 60 green ware';
+select '231. setting it down: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb) \g /dev/null
+select coalesce(max(id), 0) as kiln from placed where world_id = :'world2' and kind = 'kiln' \gset
+select '232. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — it holds ' || furnace_capacity('kiln') || ' pieces at once';
+delete from event where uid = :'ivar';
+select '233. packing it with nothing to pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'load_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'unfired_clay_brick', 60, 8);
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 6, 'Pine');
+select act_perform(:'world2', :'ivar', 'load_kiln', ('{"kind":"kiln","id":' || :'kiln' || ',"count":8}')::jsonb) \g /dev/null
+select '234. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '235. lighting a kiln with a cold firebox: ' || coalesce(act_refusal(:'world2', :'ivar', 'light_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'fuel_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb) \g /dev/null
+select act_perform(:'world2', :'ivar', 'light_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb) \g /dev/null
+select '236. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+select '237. and nothing out of it yet: ' || coalesce(act_refusal(:'world2', :'ivar', 'kiln_take_all', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
+/*
+ * The budget, spent in order. Two hundred seconds go by, but there are only
+ * six hundred of fuel in it and each brick wants twenty-three: what comes out
+ * is what the arithmetic says came out, in one pass, with nobody there.
+ */
+select '238. fuel in it: ' || round((select fuel from placed where id = :'kiln')::numeric) || ' seconds';
+update placed set since = since - interval '200 seconds' where id = :'kiln';
+select furnace_settle(:'world2', :'kiln') as fired \gset
+select '239. two hundred seconds of it, nobody watching: ' || :'fired' || ' bricks fired, '
+     || (select jsonb_array_length(state->'jobs') from placed where id = :'kiln') || ' still in the kiln, '
+     || round((select fuel from placed where id = :'kiln')::numeric) || ' seconds of fuel left';
+-- And the other half of a budget: one that runs out part way down the list.
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'unfired_clay_bowl', 60, 6);
+select act_perform(:'world2', :'ivar', 'load_kiln', ('{"kind":"kiln","id":' || :'kiln' || ',"count":6}')::jsonb) \g /dev/null
+update placed set fuel = 100, lit = true, since = now() - interval '600 seconds' where id = :'kiln';
+select furnace_settle(:'world2', :'kiln') as part \gset
+select '240. six bowls at ' || round(fire_seconds('unfired_clay_bowl', 55)) || ' seconds each, against a hundred of fuel: '
+     || :'part' || ' came out, ' || (select jsonb_array_length(state->'jobs') from placed where id = :'kiln')
+     || ' left inside, and the kiln is ' || (select case when lit then 'still burning' else 'cold' end from placed where id = :'kiln');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'kiln_take_all', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb) \g /dev/null
+select '241. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '242. bricks in the pack: ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'clay_brick')
+     || ' at QL ' || (select round(max(ql)::numeric, 1) from item where holder_uid = :'ivar' and def = 'clay_brick')
+     || ', and the kiln is empty of finished work: ' || coalesce(act_refusal(:'world2', :'ivar', 'kiln_take_all', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
+
+\echo ''
+\echo '--- and the smelter, which takes its time by the metal'
+select '243. copper takes ' || round(smelt_seconds('copper', 40, 50)) || ' seconds of heat, iron '
+     || round(smelt_seconds('iron', 40, 50)) || ', seryll ' || round(smelt_seconds('seryll', 40, 50))
+     || ' — and a better furnace hurries all of them: copper in a QL 90 smelter is '
+     || round(smelt_seconds('copper', 40, 90));
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'smelter', 50, 1)
+  returning id as skit \gset
+select act_perform(:'world2', :'ivar', 'place_smelter', ('{"kind":"tile","x":8,"y":8,"sx":2,"sy":2,"uid":' || :'skit' || '}')::jsonb) \g /dev/null
+select coalesce(max(id), 0) as furnace from placed where world_id = :'world2' and kind = 'smelter' \gset
+delete from event where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'iron_ore', 40, 5)
+  returning id as ore \gset
+select '244. charging it with a clay brick: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'clay_brick' limit 1) || '}')::jsonb), 'allowed');
+select '245. and with iron ore: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":5}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":5}')::jsonb) \g /dev/null
+select '246. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 4, 'Pine');
+select act_perform(:'world2', :'ivar', 'fuel_smelter', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
+select act_perform(:'world2', :'ivar', 'light_smelter', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
+update placed set since = since - interval '90 seconds' where id = :'furnace';
+select furnace_settle(:'world2', :'furnace') as run \gset
+select '247. ninety seconds of heat: ' || :'run' || ' lumps drawn, '
+     || (select jsonb_array_length(state->'jobs') from placed where id = :'furnace') || ' still charged';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'smelter_take_all', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
+select '248. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+
+delete from event where uid = :'ivar';
+select '249. pouring an anvil with no mould: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'iron_lump' limit 1) || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'anvil_mould', 45, 1);
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'copper_lump', 50, 2);
+select '250. with two lumps where it takes four: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
+update item set count = 6 where holder_uid = :'ivar' and def = 'copper_lump';
+select '251. and with six: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb) \g /dev/null
+select '252. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — lumps left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'copper_lump')
+     || ', moulds left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'anvil_mould');
+update placed set fuel = 900, lit = true, since = now() - interval '600 seconds' where id = :'furnace';
+select furnace_settle(:'world2', :'furnace') \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'smelter_take_all', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
+select '253. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and it remembers what it was poured from: '
+     || coalesce((select extra from item where holder_uid = :'ivar' and def = 'anvil' limit 1), 'nothing');
+\echo ''

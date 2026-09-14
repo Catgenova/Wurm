@@ -142,6 +142,18 @@ async function main(): Promise<void> {
     }
 
     /*
+     * The furnaces. Neither can be built with a starting kit, so what reaches
+     * this far is the arithmetic behind them and the refusal in front.
+     */
+    const { data: metals } = await supabase().from('metal_def').select('id,work').in('id', ['copper', 'seryll']);
+    const work = new Map(((metals ?? []) as Array<{ id: string; work: number }>).map((m) => [m.id, m.work]));
+    check('the smelting chain is on the project', work.size === 2 && work.get('seryll')! > work.get('copper')!,
+      `copper ${work.get('copper')}, seryll ${work.get('seryll')} — seryll is the stubborn one`);
+    const noKiln = await island.act('load_kiln', { kind: 'kiln', id: 1 }, 1);
+    check('packing a kiln that is not there is refused in its own words',
+      !noKiln.started && /gone|kiln/i.test(noKiln.why ?? ''), noKiln.why ?? 'IT STARTED');
+
+    /*
      * The settlement's crate, which the token now comes with again. Founding
      * one needs a stake we have not got, so what can be checked from out here
      * is the refusal and the shape of the table behind it.

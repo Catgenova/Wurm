@@ -28,6 +28,8 @@ import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/
 import { WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
+import { METALS, MOULDS } from '../src/game/metal';
+import { POTTERY } from '../src/game/kiln';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -140,6 +142,21 @@ out.push(`create table if not exists hoard_metal (item text primary key, ord int
  * with `if not exists`, so the only way to widen one is to say so. */
 out.push(`alter table material_def add column if not exists bane boolean not null default false;`);
 out.push(`alter table species_def add column if not exists glow real;`);
+/*
+ * The firing chain: what ore becomes, what green ware becomes, and what a
+ * mould full of metal cools into.
+ */
+out.push(`create table if not exists metal_def (
+  id text primary key, name text not null, ore text, lump text not null,
+  level real not null, work real not null
+);`);
+out.push(`create table if not exists pottery_def (
+  unfired text primary key, fired text not null, seconds real not null
+);`);
+out.push(`create table if not exists mould_def (
+  id text primary key, name text not null, makes text not null, skill text not null,
+  sand int not null, difficulty real not null, lumps int not null, per int not null default 1
+);`);
 out.push(`create table if not exists crate_def (
   kind text primary key, name text not null, item text not null, capacity int not null
 );`);
@@ -358,7 +375,7 @@ for (const a of ACTIONS as unknown as A[]) {
  */
 out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
-  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def;`);
+  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -372,6 +389,13 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
     q(d.notice ?? null), q(d.sight ?? null)].join(', ') + `);`);
   if (d.glow !== undefined) out.push(`update species_def set glow = ${q(d.glow)} where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
+}
+for (const m of METALS) {
+  out.push(`insert into metal_def values (${q(m.id)}, ${q(m.name)}, ${q(m.ore)}, ${q(m.lump)}, ${q(m.level)}, ${q(m.work)});`);
+}
+for (const d of POTTERY) out.push(`insert into pottery_def values (${q(d.unfired)}, ${q(d.fired)}, ${q(d.seconds)});`);
+for (const d of MOULDS) {
+  out.push(`insert into mould_def values (${q(d.id)}, ${q(d.name)}, ${q(d.makes)}, ${q(d.skill)}, ${q(d.sand)}, ${q(d.difficulty)}, ${q(d.lumps)}, ${q(d.per ?? 1)});`);
 }
 for (const [kind, d] of Object.entries(CRATE_DEFS)) {
   out.push(`insert into crate_def values (${q(kind)}, ${q(d.name)}, ${q(d.item)}, ${q(d.capacity)});`);
