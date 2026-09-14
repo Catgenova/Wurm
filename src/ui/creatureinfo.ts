@@ -74,9 +74,9 @@ export function creatureLines(g: Game, c: Creature): string[] {
   else if (c.hitchedTo !== null) lines.push('In the traces');
   else if (c.mode === 'stored') lines.push('Kept at the token · idle');
   else if (c.mode === 'deed') {
-    const job = def.gathers ? GATHER_VERB[def.gathers] : 'no trade of its own';
-    const skill = def.gathers ? taskSkill(c, def) : 0;
-    lines.push(`Deed worker · ${job}${def.gathers ? ` at ${skill.toFixed(1)}` : ''} · reaches ${workRangeOf(c, def)} tiles`);
+    // A reach means nothing to something with no trade to range out and do.
+    if (def.gathers) lines.push(`Deed worker · ${GATHER_VERB[def.gathers]} at ${taskSkill(c, def).toFixed(1)} · reaches ${workRangeOf(c, def)} tiles`);
+    else lines.push(`Deed worker · no trade of its own, so it keeps the deed company`);
     if (c.carrying) lines.push(`Carrying ${itemDef(c.carrying.id).name.toLowerCase()} home`);
   } else lines.push(`Your companion · ${STANCE_NAMES[c.stance].toLowerCase()} · hits for ${attackOf(c, def).toFixed(0)}`);
 
