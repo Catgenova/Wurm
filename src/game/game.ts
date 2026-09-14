@@ -32,6 +32,7 @@ import { TileIndex } from './tileindex';
 import { Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
+import { ledgerTotals, record, type Ledger } from './ledger';
 import { emptyNutrition, helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
@@ -114,6 +115,7 @@ export interface GameInit {
   bridges?: Bridge[];
   nextBridgeId?: number;
   tally?: Record<string, number>;
+  ledger?: Ledger;
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
@@ -244,6 +246,8 @@ export class Game {
    * only place that knows there is anything worth doing.
    */
   readonly tally: Record<string, number> = {};
+  /** Everything ever made: how many, and the best one. */
+  readonly ledger: Ledger = {};
   /** Goals already ticked off, which stay ticked whatever happens after. */
   readonly ticked = new Set<string>();
   private journalAt = -1e9;
@@ -251,6 +255,27 @@ export class Game {
   /** Note that something was done, once. */
   note(key: string, n = 1): void {
     this.tally[key] = (this.tally[key] ?? 0) + n;
+  }
+
+  /**
+   * Write a finished thing into the ledger, and say so when it is the best of
+   * its kind you have ever managed. A first one is worth saying too: it is the
+   * only time you will ever make your first of anything.
+   */
+  madeIt(id: string, ql: number, count = 1, rare = 0): void {
+    const had = this.ledger[id];
+    const before = had?.best ?? 0;
+    const rec = record(this.ledger, id, ql, count, rare, this.time);
+    this.note('made');
+    this.note(`made:${id}`);
+    const name = itemDef(id).name.toLowerCase();
+    if (!had) this.logMsg(`The first ${name} you have ever made. (Ledger, J)`, 'skill');
+    else if (rec.best > before + 0.05 && rec.n > 1) this.logMsg(`The best ${name} you have made: QL ${rec.best.toFixed(1)}, over ${before.toFixed(1)}.`, 'skill');
+  }
+
+  /** What the ledger adds up to. */
+  ledgerTotals(): ReturnType<typeof ledgerTotals> {
+    return ledgerTotals(this.ledger);
   }
 
   /**
@@ -387,6 +412,7 @@ export class Game {
       if (f.id >= this.nextFurnitureId) this.nextFurnitureId = f.id + 1;
     }
     Object.assign(this.tally, init.tally ?? {});
+    Object.assign(this.ledger, init.ledger ?? {});
     for (const id of init.ticked ?? []) this.ticked.add(id);
     for (const p of init.posts ?? []) {
       this.posts.set(p.id, p);

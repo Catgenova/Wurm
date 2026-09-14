@@ -1518,3 +1518,9 @@ kbd {
 .hud-food.hud-food-full .hud-food-label {
   color: var(--ui-accent);
 }
+
+/* The ledger: what, how many, how many rare, and the best one. */
+.ledger-head,
+.ledger-row {
+  grid-template-columns: 1fr 46px 46px 52px;
+}

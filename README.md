@@ -43,6 +43,7 @@ rebuilds and commits the result.
 | `I` `K` `L` `M` `F1` | Inventory, Skills, Event log, Map, Help |
 | `1`…`9`, `0` | Do the numbered action on the selected tile or creature; otherwise press a toolbelt loop |
 | `N` | The settlement window |
+| `B` | The ledger of everything you have made |
 | `Home` | Walk back to your settlement token |
 | `G` | Toggle the tile grid |
 | Touch: tap, drag, pinch, long press | Walk, look around, zoom, open the action menu |
@@ -309,6 +310,11 @@ rebuilds and commits the result.
   where you stand. Barrels hold liquid and nothing else in three sizes (30,
   80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
   empty bucket back, and filling beside a barrel draws out of it.
+- **A ledger of everything made.** Every kind of thing that has come off a
+  bench, an anvil or an oven is written down: how many, how many came off rare
+  or better, and the best one ever managed, ordered by any of those or by name
+  or newest first, and searchable. The first of anything says so in the log,
+  and so does every time you beat your own best.
 - **What is in a meal.** Four nutrients — starch, flesh, fat, greens — are
   kept under the food bar, fed by different food and falling away over fifty
   minutes. Raw food feeds one of them a little (a potato is 6 starch, meat 9

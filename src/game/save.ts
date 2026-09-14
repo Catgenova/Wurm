@@ -15,6 +15,7 @@ import type { PathId } from './meditation';
 import type { BeltPin } from './belt';
 import type { Marker } from './marks';
 import type { Nutrient } from './nutrition';
+import type { Ledger } from './ledger';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -219,6 +220,7 @@ interface SaveData {
   bridges?: Bridge[];
   nextBridgeId?: number;
   tally?: Record<string, number>;
+  ledger?: Ledger;
   ticked?: string[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
@@ -274,6 +276,7 @@ function meta(game: Game): SaveMeta {
     bridges: [...game.bridges.values()],
     nextBridgeId: game.nextBridgeId,
     tally: { ...game.tally },
+    ledger: { ...game.ledger },
     ticked: [...game.ticked],
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
@@ -503,6 +506,7 @@ function finish(world: World, m: SaveMeta): Game {
     bridges: m.bridges,
     nextBridgeId: m.nextBridgeId,
     tally: m.tally,
+    ledger: m.ledger,
     ticked: m.ticked,
     anvils: m.anvils,
     crops: m.crops,

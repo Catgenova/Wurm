@@ -50,6 +50,7 @@ import type { DragPayload } from './dragdrop';
 import { WildermonPanel } from './panels/wildermon';
 import { StoresPanel } from './panels/stores';
 import { DeedPanel } from './panels/deed';
+import { LedgerPanel } from './panels/ledger';
 import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
 import { jobEntry, pinEntry, pinnable } from './beltmenu';
@@ -84,6 +85,7 @@ export class UI {
   private readonly wildermon: WildermonPanel;
   private readonly stores: StoresPanel;
   private readonly craftPanel: CraftPanel;
+  private readonly ledgerPanel: LedgerPanel;
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
 
@@ -144,6 +146,8 @@ export class UI {
       game.moveTo(x, y);
       game.logMsg(`Walking to (${x}, ${y}).`, 'info');
     });
+    const ledgerWin = this.windows.create({ id: 'ledger', title: 'Ledger', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
+    this.ledgerPanel = new LedgerPanel(ledgerWin, game);
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (window.innerHeight - 460) / 2)}px`;
@@ -229,6 +233,7 @@ export class UI {
     this.deedPanel.update(performance.now());
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());
+    this.ledgerPanel.update(performance.now());
   }
 
   /** Describe what is under the cursor. */

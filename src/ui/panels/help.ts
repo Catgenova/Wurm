@@ -182,6 +182,14 @@ function helpText(): string {
     what goes into it &mdash; so <i>leather</i> finds every leather thing, <i>mason</i> finds the oven
     and the well, and <i>nail</i> finds all forty-odd recipes that want nails. The count at the foot
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
+    <h3>The ledger</h3>
+    <p>Everything that has ever come off your bench, your anvil or your oven is written down in the
+    Ledger (<kbd>B</kbd>): every kind of thing, how many of them, how many came off <b>rare</b> or
+    better, and <b>the best one you ever managed</b>. It can be put in order by any of those, or by
+    name, or newest first, and searched. The first of anything says so in the log, and so does every
+    time you beat your own best at something.</p>
+    <p>The journal says what there is to do. This says what you have done, which is the number a maker
+    actually keeps.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
     (<kbd>J</kbd>) is that list: eighty-five goals in seven chapters, from felling your first tree to

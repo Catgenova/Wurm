@@ -162,6 +162,9 @@ input.onKey = (code) => {
     case 'KeyN':
       ui.toggleWindow('deed');
       break;
+    case 'KeyB':
+      ui.toggleWindow('ledger');
+      break;
     case 'KeyG':
       game.settings.grid = !game.settings.grid;
       break;

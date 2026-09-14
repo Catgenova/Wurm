@@ -154,6 +154,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
       g.note('smithed');
+      g.madeIt(def.makes, made.ql, per, rare);
       if (['adamantine', 'glimmersteel', 'mithril', 'seryll'].includes(metal.id)) g.note('moonmetal');
       g.logMsg(
         `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${plural(itemDef(def.makes).name.toLowerCase(), per)} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
