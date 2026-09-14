@@ -48,6 +48,10 @@ are refused in the recipe's own words until there is something to stand at:
 placeables are the next piece of work, and they unlock a large part of that
 167 at a stroke.
 
+Jobs queue behind one another as they do in the game — three deep, and one
+deeper for every ten points of mind logic above where you began — rather than
+being refused because your hands are full.
+
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the ledger, the journal,
 and the ease a hot oven lends to cooking.

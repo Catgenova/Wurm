@@ -82,6 +82,21 @@ async function main(): Promise<void> {
     }
 
     /*
+     * The other three hundred and sixty-eight, as far as they can be reached
+     * with nothing in hand but the starting kit. Both of these are refusals,
+     * and refusals are the half of the dispatcher worth checking live: one
+     * says a recipe is known and wants materials, the other says an action is
+     * known and has no performer yet. Between them they prove that every
+     * action in the game reached the island.
+     */
+    const noLogs = await island.act('make_planks', { kind: 'item' }, 1);
+    check('a recipe we lack the materials for is refused in its own words',
+      !noLogs.started && /plank/i.test(noLogs.why ?? ''), noLogs.why ?? 'IT STARTED');
+    const notYet = await island.act('cut_down', { kind: 'tile', x: cx, y: cy }, 1);
+    check('an action with no performer yet says so honestly',
+      !notYet.started && /yet/i.test(notYet.why ?? ''), notYet.why ?? 'IT STARTED');
+
+    /*
      * Find a corner actually worth digging, rather than assuming the one we
      * washed up on is.
      *
@@ -154,21 +169,6 @@ async function main(): Promise<void> {
       check('we can read the people on the island', !peopleErr && (people ?? []).length > 0,
         peopleErr ? peopleErr.message : `${(people ?? []).length} body`);
     }
-
-    /*
-     * The other three hundred and sixty-eight, as far as they can be reached
-     * with nothing in hand but the starting kit. Both of these are refusals,
-     * and refusals are the half of the dispatcher worth checking live: one
-     * says a recipe is known and wants materials, the other says an action is
-     * known and has no performer yet. Between them they prove that every
-     * action in the game reached the island.
-     */
-    const noLogs = await island.act('make_planks', { kind: 'item' }, 1);
-    check('a recipe we lack the materials for is refused in its own words',
-      !noLogs.started && /plank/i.test(noLogs.why ?? ''), noLogs.why ?? 'IT STARTED');
-    const notYet = await island.act('cut_down', { kind: 'tile', x: cx, y: cy }, 1);
-    check('an action with no performer yet says so honestly',
-      !notYet.started && /yet/i.test(notYet.why ?? ''), notYet.why ?? 'IT STARTED');
 
     const { data: pack } = await supabase().from('item').select('*').eq('world_id', id).eq('holder_uid', uid);
     check('we are carrying the starting kit', (pack ?? []).length >= 9, `${(pack ?? []).length} things`);

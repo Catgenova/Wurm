@@ -248,3 +248,29 @@ select '37. of ' || (select count(*) from action_def) || ' actions the island kn
      || (select count(*) from action_def where act_ported(id)) || ' can be done and '
      || (select count(*) from action_def where not act_ported(id)) || ' are honestly refused';
 \echo ''
+\echo '--- jobs held in your head'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]' where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 30, 9, 'Pine');
+/*
+ * Every value below goes through coalesce before \gset sees it. A null unsets
+ * the variable rather than emptying it, and the next line then hands psql the
+ * literal text `:'q1'`, which fails as a syntax error a long way from the
+ * thing that actually went wrong.
+ */
+select coalesce(queue_capacity(:'world2', :'ivar')::text, '?') as cap \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'started', 'no') as first \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'inHand', 'not queued') as second \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'inHand', 'not queued') as third \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'why', 'still room') as fourth \gset
+select '38. he can hold ' || :'cap' || ': the first is started (' || :'first' || '), then ' || :'second'
+     || ' in hand, then ' || :'third' || ', and the next is refused — "' || :'fourth' || '"';
+select '    told: ' || string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'info';
+delete from event where uid = :'ivar';
+update player set act_started = act_started - interval '600 seconds', act_ends = act_ends - interval '600 seconds' where uid = :'ivar';
+select coalesce(settle(:'world2', :'ivar')::text, '0') as swept \gset
+select '39. settled ' || :'swept' || ' goes; queue now ' || (select jsonb_array_length(act_queue) from player where uid = :'ivar')
+     || ', busy with ' || coalesce((select act from player where uid = :'ivar'), 'nothing')
+     || ', and the pack holds ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'plank') || ' planks in all';
+\echo ''
