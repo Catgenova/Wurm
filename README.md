@@ -178,8 +178,18 @@ rebuilds and commits the result.
   there, and it fires when something wild crosses the border: aggressive ones
   break off work and go for it, defensive ones answer only what has struck at
   them or at you, passive ones carry on working.
-- **Improving.** Anything finished can be bettered: each pass spends stock and
-  raises quality, fast at first and slowly near the top, while a failure marks
+- **Quality: the skill is the ceiling, the tool is the chance.** Every piece of
+  work comes out either at your skill in that trade or at 1, and the tool's
+  quality is the percentage chance of the good one — a quality 20 hatchet off
+  the beach is right four times in twenty, a hatchet worked up to 90 nine times
+  in ten. Nothing is ever finer than the hands that made it, so a fine tool in
+  a beginner's hands makes beginner's work and simply stops wasting the
+  material. Work with no tool at all — foraging, farming — has nothing to roll
+  against and comes out around what the skill can do.
+- **Improving.** Anything finished can be bettered — except the kit you washed
+  ashore with, which is issued gear: it mends but it does not improve, so the
+  first real job on the island is making your own tools. Each pass spends stock
+  and raises quality, fast at first and slowly near the top, while a failure marks
   the piece and past 10 damage it must be repaired before the work can go on.
   What you need is decided by the material — a file and a whetstone for metal,
   a carving knife and a file for wood, a needle for cloth, an awl and needle

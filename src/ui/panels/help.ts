@@ -321,11 +321,24 @@ export function buildHelp(win: UIWindow): void {
     a fight and choose <b>Treat its wounds</b>: it takes a bandage and puts back a share of its whole
     health, which is far more forgiving than waiting for it to mend itself. A wild creature will not
     stand still for you.</p>
+    <h3>What quality is worth</h3>
+    <p><b>Your skill is the ceiling and your tool is the chance of reaching it.</b> Every piece of work
+    comes out either at your skill in that trade or at <b>1</b>, and the quality of the tool in your
+    hand is the percentage chance of the good one. The hatchet you washed ashore with is quality 20, so
+    four logs in twenty come out worth having and the rest are firewood; a hatchet worked up to 90 gives
+    you nine in ten. Nothing you make is ever finer than the hands that made it, so a fine tool in a
+    beginner's hands still only makes beginner's work &mdash; it just stops wasting the material.</p>
+    <p>Work done with no tool at all &mdash; picking berries, tending a field &mdash; has nothing to
+    roll against and comes out around what your skill can do, as it always did.</p>
     <h3>Improving</h3>
     <p>A finished thing can be made better than it was made. Right-click it and choose <b>Improve</b>:
     each pass eats a little stock, and a success raises the quality &mdash; a great deal at first and
     very little near the end. A failure marks the piece instead, and once it is knocked about past 10
     damage you must <b>Repair</b> it before you can work on it again.</p>
+    <p><b>The kit you came ashore with cannot be improved.</b> It is issued gear, serviceable and no
+    more: mend it as often as you like, but there is nothing in it to work up. The first real job on
+    this island is making your own tools and then bettering those, because every quality roll you will
+    ever make is a roll against the tool in your hand.</p>
     <p><b>What you need depends on what it is made of.</b></p>
     <table>
       <tr><td><b>Metal</b></td><td>A <b>file</b> and a <b>whetstone</b>, and a lump of metal per pass</td></tr>

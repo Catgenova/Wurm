@@ -293,6 +293,11 @@ export interface Item {
   extra?: string;
   /** Remaining drinks in a container. */
   charges?: number;
+  /**
+   * Handed out rather than made. What you washed ashore with is serviceable
+   * and no more: it can be mended, but there is nothing in it to better.
+   */
+  issued?: boolean;
 }
 
 export function itemDef(id: string): ItemDef {
@@ -326,11 +331,12 @@ export class Inventory {
     }
   }
 
-  add(id: string, opts: { ql?: number; count?: number; extra?: string } = {}): Item {
+  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean } = {}): Item {
     const def = itemDef(id);
     const count = opts.count ?? 1;
     const ql = Math.max(1, Math.min(100, opts.ql ?? 20));
     const item: Item = { uid: this.nextUid++, id, ql, dmg: 0, count, extra: opts.extra };
+    if (opts.issued) item.issued = true;
     if (def.charges) item.charges = def.charges;
     return this.addItem(item);
   }

@@ -114,7 +114,7 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && canImprove(item.id);
+      return !!item && !item.issued && canImprove(item.id);
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
@@ -122,6 +122,7 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       if (!item) return 'It is gone.';
       const what = improvable(item.id);
       if (!what) return 'That is not something you can better.';
+      if (item.issued) return 'That came ashore with you. There is nothing in it to better — make one of your own.';
       if (item.dmg > 10) return 'It is too knocked about to work on. Repair it first.';
       const missing = missingTool(g, what.material);
       if (missing) return `You need ${what.material.tools.map((id) => itemDef(id).name.toLowerCase()).join(' and ')} to work ${what.material.name}.`;

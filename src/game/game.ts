@@ -310,17 +310,23 @@ export class Game {
   }
 
   giveStarterKit(): void {
-    this.inventory.add('hatchet', { ql: 20 });
-    this.inventory.add('shovel', { ql: 20 });
-    this.inventory.add('pickaxe', { ql: 20 });
-    this.inventory.add('carving_knife', { ql: 20 });
-    this.inventory.add('chisel', { ql: 15 });
-    this.inventory.add('mallet', { ql: 20 });
-    this.inventory.add('trowel', { ql: 20 });
-    this.inventory.add('saw', { ql: 20 });
-    this.inventory.add('butchering_knife', { ql: 20 });
-    this.inventory.add('rake', { ql: 20 });
-    this.inventory.add('water_skin', { ql: 30 });
+    // Everything here is marked as issued: rough gear off the beach, good
+    // enough to get a first tool made with and not worth working on.
+    for (const [id, ql] of [
+      ['hatchet', 20],
+      ['shovel', 20],
+      ['pickaxe', 20],
+      ['carving_knife', 20],
+      ['chisel', 15],
+      ['mallet', 20],
+      ['trowel', 20],
+      ['saw', 20],
+      ['butchering_knife', 20],
+      ['rake', 20],
+      ['water_skin', 30],
+    ] as Array<[string, number]>) {
+      this.inventory.add(id, { ql, issued: true });
+    }
     this.inventory.add('deed_stake', { ql: 50 });
   }
 
@@ -1143,9 +1149,24 @@ export class Game {
     return this.rand() < chance;
   }
 
+  /**
+   * What a piece of work comes out at.
+   *
+   * Your skill is the ceiling — nothing you make is finer than the hands that
+   * made it — and the tool decides whether you reach it. A tool's quality is
+   * the percentage chance of the piece coming out at that ceiling; every other
+   * time it comes out at 1, fit for nothing but being used up. A rough issued
+   * hatchet is right four times in twenty; a hatchet somebody has worked up to
+   * ninety is right nine times in ten, and that is the whole reason to better
+   * a tool.
+   *
+   * Work done with no tool at all has nothing to roll against, so it keeps the
+   * older reckoning: what your hands can do, give or take.
+   */
   productQl(skill: string, toolQl = 0): number {
-    const s = this.skills.get(skill);
-    return Math.min(100, Math.max(1, s * (0.6 + this.rand() * 0.8) + toolQl * 0.15 + 1));
+    const s = Math.min(100, Math.max(1, this.skills.get(skill)));
+    if (toolQl <= 0) return Math.min(100, Math.max(1, s * (0.6 + this.rand() * 0.8) + 1));
+    return this.rand() * 100 < toolQl ? s : 1;
   }
 
   nearestCornerToPlayer(): { cx: number; cy: number } {

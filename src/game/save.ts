@@ -503,7 +503,8 @@ function finish(world: World, m: SaveMeta): Game {
     ['rake', 'a rake'],
   ]) {
     if (!game.inventory.has(id)) {
-      game.inventory.add(id, { ql: 20 });
+      // Handed out, like the rest of the kit, and no more improvable for it.
+      game.inventory.add(id, { ql: 20, issued: true });
       granted.push(name);
     }
   }
