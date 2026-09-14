@@ -149,7 +149,7 @@ export const JOURNAL: Chapter[] = [
       { id: 'title', text: 'Earn a title', hint: 'Any trade at 50', met: (g) => g.player.titles.length > 0 },
       { id: 'master', text: 'Earn a master title', hint: 'Any trade at 90', met: (g) => g.player.titles.some((t) => t.endsWith(':90') || t.endsWith(':99')) },
       { id: 'knack', text: 'Find a knack for something', hint: 'Every ten points of a trade leaves one', met: did('knack') },
-      { id: 'knack5', text: 'Fill a trade with knacks', hint: 'Five of them in one skill', met: (g) => Object.values(g.player.affinities).some((n) => n >= 5) },
+      { id: 'knack5', text: 'Fill a trade with knacks', hint: 'Five of them in one skill', met: (g) => Object.values(g.player.knacks).some((n) => n >= 5) },
     ],
   },
 ];

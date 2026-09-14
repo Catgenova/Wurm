@@ -2,6 +2,7 @@ import type { Boon } from './boons';
 import type { Wound } from './wounds';
 import type { PathId } from './meditation';
 import type { BeltPin } from './belt';
+import { emptyNutrition, type Nutrient } from './nutrition';
 import { BELT_MAX } from './belt';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
@@ -38,8 +39,10 @@ export class Player {
    * and everything you do while it burns teaches you twice as much.
    */
   rested = 0;
-  /** Affinities running just now, from what you have eaten and drunk. */
+  /** Knacks running just now off what you have eaten and drunk; these wear off. */
   boons: Boon[] = [];
+  /** What is actually in you, by nutrient. Eating well holds hunger off and teaches you more. */
+  nutrition: Record<Nutrient, number> = emptyNutrition();
   /** The path chosen at the rug, once and for good, and when you last sat. */
   way: PathId | null = null;
   satAt = -1e9;
@@ -51,8 +54,8 @@ export class Player {
   /** What is open on you, and what is on it. */
   wounds: Wound[] = [];
   nextWound = 1;
-  /** Knacks earned on the way up, by skill: each is worth a tenth more gain in it. */
-  affinities: Record<string, number> = {};
+  /** Knacks earned at the work, by trade: each is worth a tenth more gain in it. */
+  knacks: Record<string, number> = {};
   /** Titles earned, and the one being worn. */
   titles: string[] = [];
   title: string | null = null;

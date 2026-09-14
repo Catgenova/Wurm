@@ -1,4 +1,5 @@
 import { clockLeft } from '../game/boons';
+import { balance, fedWord, NUTRIENTS, NUTRIENT_NAMES, NUTRIENT_NOTES, tableMul } from '../game/nutrition';
 import { SKILL_DEFS } from '../game/skills';
 import { WOUND_KINDS, woundText } from '../game/wounds';
 import { sailWord, windFrom, windWord } from '../game/wind';
@@ -84,6 +85,8 @@ export class Hud {
   private loopEls: HTMLButtonElement[] = [];
   private stopBtn: HTMLButtonElement;
   private beltDue = 0;
+  private foodEl: HTMLDivElement;
+  private foodBars = new Map<string, HTMLDivElement>();
   private numbersTaken: () => boolean;
 
   constructor(
@@ -153,6 +156,31 @@ export class Hud {
     this.woundEl.className = 'hud-companion hud-wounds';
     this.woundEl.hidden = true;
     status.append(this.woundEl);
+    /*
+     * What is actually in you: four thin bars under the food bar. Eating well
+     * holds hunger and thirst off; eating well in all four teaches you more,
+     * and that reads off the shortest of them, so the short one is the one to
+     * look at.
+     */
+    this.foodEl = document.createElement('div');
+    this.foodEl.className = 'hud-food';
+    for (const k of NUTRIENTS) {
+      const cell = document.createElement('div');
+      cell.className = 'hud-food-cell';
+      const label = document.createElement('span');
+      label.className = 'hud-food-label';
+      label.textContent = NUTRIENT_NAMES[k].slice(0, 2);
+      const track = document.createElement('div');
+      track.className = 'hud-food-track';
+      const fill = document.createElement('div');
+      fill.className = `hud-food-fill food-${k}`;
+      track.append(fill);
+      cell.append(label, track);
+      cell.title = `${NUTRIENT_NAMES[k]} — ${NUTRIENT_NOTES[k]}`;
+      this.foodBars.set(k, fill);
+      this.foodEl.append(cell);
+    }
+    status.append(this.foodEl);
     this.gearEl = document.createElement('div');
     this.gearEl.className = 'hud-companion hud-gear';
     this.gearEl.hidden = true;
@@ -377,7 +405,7 @@ export class Hud {
     const deed = this.game.deed && this.game.onDeed(p.tileX, p.tileY) ? `  ·  ${this.game.deed.name}` : '';
     const title = this.game.titleName();
     this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}${title ? `  ·  ${title}` : ''}`;
-    // Rest and affinities, when there are any.
+    // Rest and the knacks running off what you have eaten, when there are any.
     const rested = this.game.player.rested;
     const boons = this.game.activeBoons();
     const parts: string[] = [];
@@ -450,6 +478,16 @@ export class Hud {
       this.gearEl.textContent = bits.join(' · ');
       this.gearEl.hidden = false;
     } else this.gearEl.hidden = true;
+    // The four nutrients, and what the table is worth right now.
+    const n = this.game.player.nutrition;
+    for (const k of NUTRIENTS) {
+      const fill = this.foodBars.get(k);
+      if (fill) fill.style.width = `${Math.round(Math.max(0, Math.min(1, n[k])) * 100)}%`;
+    }
+    const worth = Math.round((tableMul(n) - 1) * 100);
+    this.foodEl.title = `${fedWord(n)} — everything you do goes in ${worth}% faster. It reads off whichever of the four is shortest (${Math.round(balance(n) * 100)}%), so a full board is worth a fifth and bread alone is worth nothing.`;
+    this.foodEl.classList.toggle('hud-food-full', balance(n) >= 0.999);
+
     const companion = this.game.creatures.active();
     if (companion) {
       const hunger = companion.hunger < 0.3 ? 'hungry' : companion.hunger < 0.6 ? 'peckish' : 'fed';

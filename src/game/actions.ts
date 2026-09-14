@@ -30,7 +30,7 @@ import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './fora
 import type { FloorKind, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
-import { affinityOf } from './boons';
+import { boonOf } from './boons';
 import { SKILL_DEFS } from './skills';
 import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, isBag } from './items';
 import { RECIPE_ACTIONS } from './recipes';
@@ -915,7 +915,7 @@ export const ACTIONS: ActionDef[] = [
       const stuff = made ? ` ${made.name}: ${made.note}` : '';
       const r = rarityOf(item);
       const rare = r.name ? ` It is ${r.name}: better at what it is for by a ${r.boost > 1.3 ? 'half' : r.boost > 1.15 ? 'quarter' : 'tenth'}, slower to wear and to rot, and can be bettered ${r.ceiling} past your own skill.` : '';
-      const skill = affinityOf(g.seed, item.id);
+      const skill = boonOf(g.seed, item.id);
       const favours = skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '';
       // What it is worth at the work now, which is rarely the number stamped on it.
       const worth = g.toolWorth(item);
@@ -943,8 +943,9 @@ export const ACTIONS: ActionDef[] = [
       g.player.stats.hunger = Math.min(1, g.player.stats.hunger + (def.food ?? 0) * (0.7 + item.ql / 200));
       // A dish favours a trade, and having eaten it you are better at that
       // trade for a while.
-      const favour = g.grantAffinity(item.id, item.ql);
-      g.logMsg(`You eat the ${def.name.toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
+      const favour = g.grantBoon(item.id, item.ql);
+      const full = g.nourish(item.id, item.ql);
+      g.logMsg(`You eat the ${def.name.toLowerCase()}.${favour ? ` ${favour}` : ''}${full ? ` ${full}` : ''}`, 'event');
     },
   },
   {
@@ -1074,8 +1075,9 @@ export const ACTIONS: ActionDef[] = [
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + (itemDef(item.id).drink ?? 0));
       g.inventory.onChange?.();
       // Milk and anything brewed favour a trade the way a cooked dish does.
-      const favour = g.grantAffinity(item.id, item.ql);
-      g.logMsg(`You take a drink from the ${itemDef(item.id).name.toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
+      const favour = g.grantBoon(item.id, item.ql);
+      const full = g.nourish(item.id, item.ql);
+      g.logMsg(`You take a drink from the ${itemDef(item.id).name.toLowerCase()}.${favour ? ` ${favour}` : ''}${full ? ` ${full}` : ''}`, 'event');
     },
   },
   {

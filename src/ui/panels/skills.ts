@@ -91,7 +91,7 @@ export class SkillsPanel {
   private note(id: string): string {
     const g = this.game;
     // A knack is worth saying before anything else: it never wears off.
-    const knacks = Math.min(KNACK_CAP, g.player.affinities[id] ?? 0);
+    const knacks = Math.min(KNACK_CAP, g.player.knacks[id] ?? 0);
     if (knacks) return `knack ×${knacks} · +${Math.round(knackBonus(knacks) * 100)}%${this.plain(id) ? ` · ${this.plain(id)}` : ''}`;
     return this.plain(id);
   }

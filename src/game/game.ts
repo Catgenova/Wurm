@@ -19,7 +19,7 @@ import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events'
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
-import { affinityOf, affinityTime, AFFINITY_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
+import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
@@ -32,6 +32,7 @@ import { TileIndex } from './tileindex';
 import { Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
+import { emptyNutrition, helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
@@ -117,7 +118,9 @@ export interface GameInit {
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   marks?: Marker[];
-  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
+  player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
+  /** What knacks were called before they were called knacks. */
+  affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -333,7 +336,9 @@ export class Game {
       if (init.player.equipped) this.player.equipped = { ...this.player.equipped, ...init.player.equipped };
       this.player.rested = init.player.rested ?? 0;
       this.player.boons = init.player.boons ?? [];
-      this.player.affinities = init.player.affinities ?? {};
+      this.player.nutrition = { ...emptyNutrition(), ...(init.player.nutrition ?? {}) };
+      // A save written before knacks were called knacks still says affinities.
+      this.player.knacks = init.player.knacks ?? init.player.affinities ?? {};
       this.player.titles = init.player.titles ?? [];
       this.player.title = init.player.title ?? null;
       this.player.wounds = init.player.wounds ?? [];
@@ -1205,9 +1210,12 @@ export class Game {
   skillMult(id: string): number {
     let mult = this.player.rested > 0 ? REST_MULT : 1;
     // A knack earned on the way up never wears off, unlike a meal or a night's sleep.
-    mult += knackBonus(this.player.affinities[id]);
+    mult += knackBonus(this.player.knacks[id]);
     // And the reader's path is a tenth on everything, for good.
     if (this.walks('knowledge', 1)) mult += 0.1;
+    // A table with all four things on it is worth a fifth more on everything.
+    // It reads off the worst of the four, so bread alone buys nothing.
+    mult *= tableMul(this.player.nutrition);
     for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
     return mult;
   }
@@ -1221,9 +1229,9 @@ export class Game {
   private earnKnacks(skill: string): void {
     if (this.rand() >= 1 / KNACK_ODDS) return;
     const id = knackLands(skill, this.rand);
-    const had = this.player.affinities[id] ?? 0;
+    const had = this.player.knacks[id] ?? 0;
     if (had >= KNACK_CAP) return;
-    this.player.affinities[id] = had + 1;
+    this.player.knacks[id] = had + 1;
     const def = SKILL_DEFS.find((d) => d.id === id);
     this.logMsg(
       `You have a knack for ${def?.name.toLowerCase() ?? id} now. It goes in ${Math.round(knackBonus(had + 1) * 100)}% faster.`,
@@ -1265,18 +1273,43 @@ export class Game {
    * while. A second helping of the same thing puts the clock back rather
    * than stacking on itself.
    */
-  grantAffinity(itemId: string, ql: number): string | null {
-    const skill = affinityOf(this.seed, itemId);
+  grantBoon(itemId: string, ql: number): string | null {
+    const skill = boonOf(this.seed, itemId);
     if (!skill) return null;
-    const seconds = affinityTime(itemId, ql);
+    const seconds = boonTime(itemId, ql);
     const def = SKILL_DEFS.find((d) => d.id === skill);
     const already = this.player.boons.find((b) => b.skill === skill && b.until > this.time);
     if (already) already.until = Math.max(already.until, this.time + seconds);
-    else this.player.boons.push({ skill, bonus: AFFINITY_BONUS, until: this.time + seconds, from: itemName({ id: itemId, uid: 0, ql, dmg: 0, count: 1 }) });
+    else this.player.boons.push({ skill, bonus: BOON_BONUS, until: this.time + seconds, from: itemName({ id: itemId, uid: 0, ql, dmg: 0, count: 1 }) });
     // Keep the list from growing without end as things run out.
     this.player.boons = this.player.boons.filter((b) => b.until > this.time);
     this.events.emit('inventory');
     return def ? `${def.name} comes easier for the next ${clockLeft(seconds)}.` : null;
+  }
+
+  /**
+   * What a helping actually puts into you. Raw food feeds one of the four a
+   * little; a cooked dish feeds several, and better food feeds them fuller.
+   * Returns a word about it when something has been filled right up, since
+   * that is the moment worth knowing about.
+   */
+  nourish(itemId: string, ql: number): string | null {
+    const feeds = itemDef(itemId).feeds;
+    if (!feeds) return null;
+    const n = this.player.nutrition;
+    const share = helpingOf(ql);
+    const filled: string[] = [];
+    for (const k of NUTRIENTS) {
+      const gain = (feeds[k] ?? 0) * share;
+      if (gain <= 0) continue;
+      const was = n[k];
+      n[k] = Math.min(1, was + gain);
+      if (n[k] >= 1 && was < 1) filled.push(NUTRIENT_NAMES[k].toLowerCase());
+    }
+    if (!filled.length) return null;
+    const all = NUTRIENTS.every((k) => n[k] >= 1);
+    if (all) return 'You could not eat another thing. Everything you do goes in a fifth faster while it lasts.';
+    return `That is as much ${filled.join(' and ')} as you can hold.`;
   }
 
   /** Bank a night's sleep as rest, up to the hour that will stay banked. */
@@ -1338,8 +1371,12 @@ export class Game {
 
     if (up) this.carryRider(up, dt, moved);
     const s = p.stats;
-    s.hunger = Math.max(0, s.hunger - dt * 0.0004);
-    s.thirst = Math.max(0, s.thirst - dt * 0.0006);
+    // What is in you falls away on its own, and while it is there it holds
+    // hunger and thirst off: a body with something behind it goes longer.
+    const keep = upkeepMul(p.nutrition);
+    for (const k of NUTRIENTS) p.nutrition[k] = Math.max(0, p.nutrition[k] - dt * NUTRIENT_DECAY);
+    s.hunger = Math.max(0, s.hunger - dt * 0.0004 * keep);
+    s.thirst = Math.max(0, s.thirst - dt * 0.0006 * keep);
 
     // What climbing and swimming have earned, and what the armour costs, before the next step.
     p.burden = this.burden();

@@ -309,7 +309,18 @@ rebuilds and commits the result.
   where you stand. Barrels hold liquid and nothing else in three sizes (30,
   80 and 250 litres), one liquid to a barrel; pouring a bucket in gives the
   empty bucket back, and filling beside a barrel draws out of it.
-- **Rest and affinities.** Sleeping in a bed banks **rest** — about half the
+- **What is in a meal.** Four nutrients — starch, flesh, fat, greens — are
+  kept under the food bar, fed by different food and falling away over fifty
+  minutes. Raw food feeds one of them a little (a potato is 6 starch, meat 9
+  flesh); a cooked dish feeds several and feeds them properly (bread 30
+  starch, cooked fish 28 flesh and 10 fat), and a stew is the only thing that
+  feeds all four. Anything in you holds hunger and thirst off — on a full
+  board they fall at three fifths of their pace, 29 minutes to half a food bar
+  against 21 — and a board with all four full makes everything you do go in a
+  fifth faster. That last reads off the *shortest* of the four, so three full
+  and one empty is worth nothing: 200 goes take digging to 50.5 on an empty
+  stomach and 54.4 on a full one.
+- **Rest and knacks from the table.** Sleeping in a bed banks **rest** — about half the
   night, more from a better bed, up to an hour held at a time. It burns only
   while you are actually working, and everything done while it burns teaches
   you twice as much. Separately, every cooked dish **favours one trade**:
@@ -694,7 +705,7 @@ rebuilds and commits the result.
   cherries in three quarters. Each takes 15 litres of water and gives back 15
   of drink. A working barrel says so and cannot be drawn off, and nothing
   hurries it; the quality is half what went in and half your **brewing**, and
-  a brew that will not take sours the barrel. What it is for is the affinity —
+  a brew that will not take sours the barrel. What it is for is the knack —
   anything drunk favours a trade like a cooked dish, and a brew carries it far
   longer: a baked potato is nine minutes, a bucket of wine three quarters of
   an hour.

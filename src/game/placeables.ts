@@ -370,8 +370,10 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (!f || !drawFrom(g, f, 1)) return;
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + 0.5);
       // A brew straight out of the barrel favours a trade like any other.
-      const favour = isBrew(f.liquid) ? g.grantAffinity(BUCKET_OF[f.liquid as LiquidKind], f.ql) : null;
-      g.logMsg(`You drink your fill from the ${furnitureName(f).toLowerCase()}.${favour ? ` ${favour}` : ''}`, 'event');
+      const brew = isBrew(f.liquid) ? BUCKET_OF[f.liquid as LiquidKind] : null;
+      const favour = brew ? g.grantBoon(brew, f.ql) : null;
+      const full = brew ? g.nourish(brew, f.ql) : null;
+      g.logMsg(`You drink your fill from the ${furnitureName(f).toLowerCase()}.${favour ? ` ${favour}` : ''}${full ? ` ${full}` : ''}`, 'event');
     },
   },
   {

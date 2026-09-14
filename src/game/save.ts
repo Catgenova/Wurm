@@ -14,6 +14,7 @@ import type { Wound } from './wounds';
 import type { PathId } from './meditation';
 import type { BeltPin } from './belt';
 import type { Marker } from './marks';
+import type { Nutrient } from './nutrition';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -194,7 +195,9 @@ interface SaveData {
   memData?: string;
   spawn: { x: number; y: number };
   marks?: Marker[];
-  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
+  player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
+  /** What knacks were called before they were called knacks. */
+  affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -249,7 +252,7 @@ function meta(game: Game): SaveMeta {
     size: w.w,
     spawn: game.spawn,
     marks: game.marks,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, affinities: game.player.affinities, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, belt: game.player.belt },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, knacks: game.player.knacks, nutrition: game.player.nutrition, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, belt: game.player.belt },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),

@@ -235,8 +235,8 @@ function helpText(): string {
     it. When it stops, draw it into a bucket like any other liquid and drink from that. The quality of
     what comes out is half what went in and half your <b>brewing</b>, and a brew that will not take
     sours the whole barrel.</p>
-    <p>What brewing is <i>for</i> is the affinity. Anything drunk favours a trade the way a cooked dish
-    does, and a brew carries it far longer than food &mdash; a baked potato is nine minutes and a bucket
+    <p>What brewing is <i>for</i> is the knack. Anything drunk leaves one the way a cooked dish does,
+    and a brew carries it far longer than food &mdash; a baked potato is nine minutes and a bucket
     of wine three quarters of an hour. A barrel of the right thing before a long afternoon at the anvil
     is the single best use of an orchard.</p>
     <h3>Fishing</h3>
@@ -535,13 +535,36 @@ function helpText(): string {
     <p>Sleeping in a bed banks <b>rest</b> &mdash; about half the night, and more from a better bed, up
     to an hour of it held at a time. Rest burns only while you are actually working, and everything you
     do while it burns <b>teaches you twice as much</b>. The hud shows how much you have left.</p>
-    <p>Every cooked dish <b>favours one trade</b>, and eating it leaves you better at that trade for a
-    while &mdash; half as much again, for anything from four minutes to half an hour by how filling the
-    dish was and how well it was made. Which dish favours which trade is settled when the island is
+    <p>Every cooked dish <b>favours one trade</b>, and eating it leaves a <b>knack</b> for that trade
+    for a while &mdash; half as much again, for anything from four minutes to half an hour by how
+    filling the dish was and how well it was made. It is the same kind of thing a long day at a trade
+    leaves behind, with the one difference that a knack off the table wears off and a knack earned at
+    the work never does. Which dish favours which trade is settled when the island is
     raised and never changes on it, and no two islands agree, so <b>examine</b> a dish to see what it is
     good for. A second helping of the same thing puts the clock back rather than stacking. That is what
     the stews and the bread and the cheese are for: not the food bar, which a raw potato would fill, but
     an afternoon of carpentry that goes half again as fast.</p>
+    <h3>What is actually in a meal</h3>
+    <p>Filling the food bar takes a raw potato. Eating <i>well</i> is a different question. Four things
+    a body wants are kept separately under the food bar, each fed by different food and each falling
+    away on its own over <b>fifty minutes</b>:</p>
+    <table>
+      <tr><td><b>Starch</b></td><td>bread, porridge, roots and grain</td></tr>
+      <tr><td><b>Flesh</b></td><td>meat and fish &mdash; cooked, they are worth about twice raw</td></tr>
+      <tr><td><b>Fat</b></td><td>oil, nuts, cheese and what is fried in them</td></tr>
+      <tr><td><b>Greens</b></td><td>vegetables, fruit and berries</td></tr>
+    </table>
+    <p>Raw food feeds one of them a little: a potato is six parts of a hundred of starch, a piece of
+    meat nine of flesh. A <b>cooked dish feeds several, and feeds them properly</b> &mdash; bread is
+    thirty starch, cooked fish twenty-eight flesh and ten fat, and a <b>stew</b> is the only thing on
+    the island that feeds all four at once. Better cooking fills them fuller, so quality tells here as
+    everywhere.</p>
+    <p>Two things come of it. Anything in you at all <b>holds hunger and thirst off</b>: on a full board
+    they fall at <b>three fifths</b> of their ordinary pace, which is half an hour of digging rather
+    than twenty minutes before the bar is down to half. And a board with <b>all four</b> full makes
+    everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
+    is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
+    bread buys you nothing; it is the spread that pays.</p>
     <h3>Night, and a bed to wake in</h3>
     <p>The island keeps a clock now, shown beside your position: a full day and night passes in
     <b>twenty-four minutes</b>, an hour to the minute. The sun goes down at eight and comes up at six,
@@ -704,6 +727,9 @@ function helpText(): string {
     <p>Because it is luck rather than levels, a knack can land at any moment and the well never runs
     dry: the ten-thousandth hour at a trade is as likely to leave one as the first. Nothing is owed to
     you at a round number, and nothing stops coming once the early levels are behind you.</p>
+    <p>A cooked dish leaves a knack too, and a stronger one &mdash; half again rather than a tenth
+    &mdash; but it wears off within the hour. One is earned and kept; the other is eaten and spent. The
+    two stack, as does a night's rest.</p>
     <h3>Dye</h3>
     <p>Everything made here comes out the colour of what it was made from: cloth the grey-white of the
     wool, leather the brown of the hide. A <b>dye</b> changes that, and it is the first thing in the

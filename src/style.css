@@ -1472,3 +1472,49 @@ kbd {
   font-size: 11px;
   line-height: 1.35;
 }
+
+/* What is actually in you: four thin bars under the food bar. */
+.hud-food {
+  display: flex;
+  gap: 5px;
+  margin: 2px 0 1px;
+}
+
+.hud-food-cell {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.hud-food-label {
+  flex: 0 0 auto;
+  color: var(--ui-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.hud-food-track {
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 0;
+  background: #1a1612;
+  border: 1px solid #000;
+}
+
+.hud-food-fill {
+  height: 100%;
+  width: 0;
+  transition: width 0.25s linear;
+}
+
+.food-starch { background: #d8b45c; }
+.food-flesh { background: #c2705f; }
+.food-fat { background: #e0d9a8; }
+.food-greens { background: #8fbf63; }
+
+/* Every one of them full, which is the fifth on everything. */
+.hud-food.hud-food-full .hud-food-label {
+  color: var(--ui-accent);
+}

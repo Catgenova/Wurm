@@ -5,7 +5,7 @@ import { SKILL_DEFS } from './skills';
  *
  * Two things come out of a long climb. A **title** is the name a skill earns
  * you — four of them, at 50, 70, 90 and 99 — and you wear one of them at a
- * time. An **affinity** is what rubs off: one go in five thousand at any trade
+ * time. A **knack** is what rubs off: one go in five thousand at any trade
  * leaves a permanent knack, usually in that trade and sometimes in one beside
  * it, and a knack makes the work go in faster for good. It is a matter of luck
  * rather than of levels, so it can come at any moment and it never dries up.
@@ -98,7 +98,7 @@ export const titlesFor = (skill: string): TitleDef[] => TITLES.filter((t) => t.s
 /** Every title this level of this skill has earned, lowest first. */
 export const earnedBy = (skill: string, level: number): TitleDef[] => titlesFor(skill).filter((t) => level >= t.at);
 
-// ---- Affinities ----
+// ---- Knacks ----
 
 /**
  * Trades that sit next to each other. Ten points of carpentry usually leaves
