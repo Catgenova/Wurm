@@ -18,6 +18,7 @@ import { ACTIONS } from '../src/game/actions';
 import { RECIPES } from '../src/game/recipes';
 import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
+import { CROP_LIST } from '../src/game/farming';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -93,6 +94,12 @@ out.push(`create table if not exists bush_def (id int primary key, name text not
 out.push(`create table if not exists loot_table (
   id text not null, item text not null, weight real not null, primary key (id, item)
 );`);
+/* What grows in a field: the seed it is sown from, what it gives, and how long
+ * each of its four stages takes. */
+out.push(`create table if not exists crop_def (
+  id text primary key, name text not null, seed text not null, produce text not null,
+  stage_seconds real not null
+);`);
 out.push(`create table if not exists furniture_def (
   id text primary key, name text not null, w int not null, h int not null,
   capacity real, hearth boolean not null default false, altar boolean not null default false
@@ -122,8 +129,9 @@ begin
   execute 'alter table tree_def enable row level security';
   execute 'alter table bush_def enable row level security';
   execute 'alter table loot_table enable row level security';
+  execute 'alter table crop_def enable row level security';
 end $rls$;`);
-for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def', 'rock_def', 'tree_def', 'bush_def', 'loot_table']) {
+for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def', 'rock_def', 'tree_def', 'bush_def', 'loot_table', 'crop_def']) {
   out.push(`drop policy if exists ${t}_read on ${t};`);
   out.push(`create policy ${t}_read on ${t} for select to anon, authenticated using (true);`);
   out.push(`grant select on ${t} to anon, authenticated;`);
@@ -198,7 +206,10 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def;`);
+for (const c of CROP_LIST) {
+  out.push(`insert into crop_def values (${q(c.id)}, ${q(c.name)}, ${q(c.seed)}, ${q(c.produce)}, ${q(c.stageSeconds)});`);
+}
 TREE_DEFS.forEach((t, i) => out.push(`insert into tree_def values (${q(i)}, ${q(t.name)}, ${q(t.logs)});`));
 BUSH_DEFS.forEach((b, i) => out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`));
 for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE]] as Array<[string, Array<[string, number]>]>) {

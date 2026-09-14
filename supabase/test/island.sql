@@ -414,3 +414,53 @@ select '61. going back to the same spot: ' || coalesce(act_refusal(:'world2', :'
 update foraged set at = at - interval '200 seconds' where x = 12 and y = 12;
 select '62. and three minutes later: ' || coalesce(act_refusal(:'world2', :'ivar', 'forage', '{"kind":"tile","x":12,"y":12}'), 'allowed again');
 \echo ''
+\echo '--- a field, sown and left to itself'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 13.5, y = 13.5 where uid = :'ivar';
+do $$ declare w uuid := (select id from world order by name limit 1);
+begin
+  perform land_set_tile(w, 13, 13, tile_id('Grass'));
+  perform land_set_height(w, 13, 13, 60); perform land_set_height(w, 14, 13, 60);
+  perform land_set_height(w, 14, 14, 60); perform land_set_height(w, 13, 14, 60);
+end $$;
+select '63. raking grass into a field: ' || coalesce(act_refusal(:'world2', :'ivar', 'till', '{"kind":"tile","x":13,"y":13}'), 'allowed');
+select rpc_act(:'world2', 'till', '{"kind":"tile","x":13,"y":13}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '64. it is now ' || (select name from tile_def where id = land_tile(:'world2',13,13))
+     || '; sowing with nothing in hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'plant_seed', '{"kind":"tile","x":13,"y":13}'), 'ALLOWED');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'mint_seed', 55, 3);
+select coalesce((select id::text from item where holder_uid = :'ivar' and def = 'mint_seed'), '0') as seed \gset
+select rpc_act(:'world2', 'plant_seed', ('{"kind":"tile","x":13,"y":13,"uid":' || :'seed' || '}')::jsonb, 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '65. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said')
+     || ' — seeds left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint_seed');
+select '66. the field holds ' || id || ', ' || crop_stage_name(stage) || ', tended ' || tended || ' of 3, at QL ' || round(ql::numeric,1)
+from crop where x = 13 and y = 13;
+select '67. harvesting it now: ' || coalesce(act_refusal(:'world2', :'ivar', 'harvest_crop', '{"kind":"tile","x":13,"y":13}'), 'ALLOWED');
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'tend_crop', '{"kind":"tile","x":13,"y":13}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '68. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said');
+select '69. tending it again straight away: ' || coalesce(act_refusal(:'world2', :'ivar', 'tend_crop', '{"kind":"tile","x":13,"y":13}'), 'ALLOWED');
+
+-- Mint takes fifty seconds a stage. Nothing here has to sit up with it.
+update crop set stage_at = stage_at - interval '200 seconds' where x = 13 and y = 13;
+select '70. left alone for two hundred seconds — before anybody looks, the row still says ' || crop_stage_name(stage) from crop where x = 13 and y = 13;
+select crop_settle(:'world2', 13, 13) \g /dev/null
+select '71. and once anybody does: ' || crop_stage_name(stage) || ', tended ' || tended
+     || ', and the stage clock reads ' || round(extract(epoch from (now() - stage_at))::numeric) || 's into it — not reset to zero'
+from crop where x = 13 and y = 13;
+delete from event where uid = :'ivar';
+select rpc_act(:'world2', 'harvest_crop', '{"kind":"tile","x":13,"y":13}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '72. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said');
+select '73. the field is ' || (select name from tile_def where id = land_tile(:'world2',13,13))
+     || ' with ' || (select count(*) from crop where x = 13 and y = 13) || ' growing in it, and the pack holds '
+     || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint') || ' mint and '
+     || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint_seed') || ' seeds';
+\echo ''

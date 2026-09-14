@@ -50,11 +50,27 @@ jobs:
       PGDATABASE: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: No migration has been deleted or renamed
+        run: |
+          # A migration the project has already run is a fact about its
+          # history, and the CLI refuses to push when the remote holds a
+          # version the repository has forgotten: "Remote migration versions
+          # not found in local migrations directory". Replacing a function
+          # means a NEW migration, never an edited or renamed one.
+          gone=$(git diff --diff-filter=DR --name-only HEAD~1 HEAD -- supabase/migrations/ || true)
+          if [ -n "$gone" ]; then
+            echo "::error::These migrations were deleted or renamed, which will break 'supabase db push':"
+            echo "$gone"
+            exit 1
+          fi
+          echo "no migrations removed"
       - name: The definitions are still what the TypeScript says
         run: |
           npm run defs

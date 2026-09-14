@@ -35,8 +35,9 @@ simplification rather than a problem:
 | **205** | recipes — every one of them, through one performer |
 | **14** | things set down on the ground: campfires, smelters, furniture |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
+| **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
-| **142** | known, listed, and honestly refused |
+| **137** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -56,8 +57,21 @@ being refused because your hands are full.
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the ledger, the journal,
 kilns and what they fire, smelting jobs themselves, flattening and levelling,
-paving with cut slabs, farming, fishing, planting trees, prospecting, and the
-ease a hot oven lends to cooking.
+paving with cut slabs, fishing, planting trees, prospecting, and the ease a hot
+oven lends to cooking.
+
+### Crops grow while nobody is watching
+
+The clearest case yet for doing nothing. A crop moves on a stage every so many
+seconds and there is no process here to move it — so it does not move at all
+until somebody looks, and then it moves by however many stages it should have.
+A field sown and left overnight is ripe in the morning because the arithmetic
+says so, not because anything sat up with it.
+
+One subtlety earns its keep: a stage that comes due adds *its own length* to
+the clock rather than restarting from now. Otherwise every glance at a field
+would nudge the next stage further off, and a watched crop really would grow
+more slowly.
 
 ### Tile numbers are looked up, not typed
 
@@ -140,6 +154,17 @@ There are things no local database can tell you, which is the whole reason the
 last two exist: whether anonymous sign-in is switched on, whether Realtime is
 publishing, whether the policies behave the same behind PostgREST as behind
 psql, and whether eight megabytes of island survives the trip.
+
+## Migrations are append-only, without exception
+
+A migration the project has run is a fact about its history. Delete or rename
+one and `supabase db push` stops dead — *"Remote migration versions not found
+in local migrations directory"* — and the only way out is `migration repair`.
+
+So: to change a function, write a **new** migration that replaces it. Never
+edit or rename the one that first created it, however tempting it is to keep
+the file tidy while the feature is still being built. CI checks this on every
+push.
 
 ## A convention worth keeping
 
