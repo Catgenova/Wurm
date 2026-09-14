@@ -1,5 +1,6 @@
 import type { ActionDef, Target } from './actions';
-import { ageDef, creatureLevel, GATHER_DO, isBaitFor, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { ageDef, attackOf, careWord, creatureLevel, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { itemDef, itemName } from './items';
@@ -73,7 +74,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const mood = c.hunger < 0.3 ? 'It looks hungry.' : c.hunger < 0.6 ? 'It could eat.' : 'It looks well fed.';
       const skills = Object.entries(c.skills).map(([id, v]) => `${id} ${v.toFixed(1)}`).join(', ');
       const range = c.mode === 'deed' && def.gathers ? ` It works up to ${workRangeOf(c, def)} tiles from the token.` : '';
-      g.logMsg(`${c.name} (${def.name}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${def.health}.${range} ${mood} It eats ${dietText(c)}.`, 'event');
+      g.logMsg(`${c.name} (${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${maxHealth(c, def)}. It is ${careWord(c.care)} and carries ${traitList(c.traits)}.${range} ${mood} It eats ${dietText(c)}.`, 'event');
     },
   },
   {
@@ -351,7 +352,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         g.creatures.hurt(g, c, dmg, 'player');
         if (item) g.damageItem(item, 0.35);
         g.logMsg(
-          `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.` : ''}`,
+          `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.` : ''}`,
           'event',
         );
       }
@@ -360,7 +361,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (def.defensive || g.rand() < 0.35) {
         g.player.attackedBy = c.id;
         g.player.attackedAt = g.time;
-        g.hurtPlayer(def.attack * 0.012, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`);
+        g.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`);
       }
       // Keep swinging while it is still within reach.
       return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= meleeReach(g);
@@ -414,7 +415,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
         g.creatures.hurt(g, c, dmg, 'player');
         g.damageItem(held, 0.25);
-        g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${def.health}.`, 'event');
+        g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'event');
       }
       if (c.health <= 0) return false;
       return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= (bow.range ?? 6);
@@ -449,13 +450,14 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 6,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && !!SPECIES[c.species].milk && c.mode !== 'wild' && c.mode !== 'stored';
+      return !!c && !!SPECIES[c.species].milk && c.sex === 'female' && c.mode !== 'wild' && c.mode !== 'stored';
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return 'It is gone.';
       if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
       if (!g.inventory.has('bucket')) return 'You need an empty bucket.';
+      if (c.sex !== 'female') return `${c.name} is male. Nothing is coming out of him.`;
       if (c.fleece < 0.4) return `${c.name} has nothing to give yet.`;
       return null;
     },

@@ -31,7 +31,7 @@ import { UNSEEN, VISIBLE } from '../game/vision';
 import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
-import { SPECIES, type Creature } from '../game/creatures';
+import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -617,7 +617,7 @@ export class Renderer {
           phase: cr.walkPhase,
           moving: cr.moving,
           colors: def.variants[cr.variant] ?? def.variants[0],
-          health: cr.health / def.health,
+          health: cr.health / maxHealth(cr, def),
           fleece: cr.fleece,
           scale: ageDef(cr, this.game.time).scale,
           label: cr.mode === 'wild' ? undefined : cr.name,

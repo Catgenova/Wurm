@@ -1,5 +1,6 @@
 import { crateCentre, crateName, crateCapacity, crateUnits } from '../../game/crates';
 import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
+import { bloodMul } from '../../game/creatures';
 import type { Game } from '../../game/game';
 import { bagAdd, bagRefuses, bagRoom, bagTake, itemDef, type Item, itemName } from '../../game/items';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
@@ -79,7 +80,7 @@ export class CratePanel {
     }
     const beast = this.creatureId !== null ? this.game.creatures.get(this.creatureId) : undefined;
     if (beast) {
-      const cap = this.game.creatures.species(beast).pannier ?? 0;
+      const cap = Math.round((this.game.creatures.species(beast).pannier ?? 0) * bloodMul(beast, 'haul'));
       const units = (): number => beast.pannier.reduce((n, it) => n + it.count, 0);
       return {
         title: `${beast.name}'s panniers`,

@@ -11,6 +11,7 @@ import { groundStep } from './player';
 import { skillGain } from './skills';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
+import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel } from './traits';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -18,6 +19,10 @@ import { BUCKET_LITRES, furnitureCentre } from './furniture';
  */
 
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
+/** Every wildermon is one or the other, and it takes one of each to breed. */
+export type Sex = 'male' | 'female';
+export const SEX_NAMES: Record<Sex, string> = { male: 'male', female: 'female' };
+export const SEX_MARK: Record<Sex, string> = { male: '\u2642', female: '\u2640' };
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
 export type GatherKind =
@@ -1116,7 +1121,8 @@ export function taskSkill(c: Creature, species: SpeciesDef): number {
 }
 /** How far from the token this worker may range right now. */
 export function workRangeOf(c: Creature, species: SpeciesDef): number {
-  return species.workRange + rangeSteps(taskSkill(c, species)) * (species.rangePerStep ?? RANGE_PER_STEP);
+  const earned = species.workRange + rangeSteps(taskSkill(c, species)) * (species.rangePerStep ?? RANGE_PER_STEP);
+  return Math.round(earned * traitMul(c.traits, 'range'));
 }
 
 /**
@@ -1156,6 +1162,10 @@ export type Age = 'young' | 'grown' | 'old';
 /** Seconds of real time spent young, and the hour it turns old. */
 export const YOUNG_FOR = 60 * 60;
 export const OLD_AT = 6 * 60 * 60;
+/** How long a dam carries: half an island day. */
+export const GESTATION = 12 * 60;
+/** How long after a covering either parent will look at another. */
+export const BREED_REST = 20 * 60;
 
 export interface AgeDef {
   id: Age;
@@ -1194,6 +1204,33 @@ export const ageDef = (c: Creature, now: number): AgeDef => AGES[ageOf(c, now)];
 /** How long until it is grown, in seconds; zero once it is. */
 export const growsAt = (c: Creature, now: number): number => Math.max(0, c.born + YOUNG_FOR - now);
 
+/**
+ * Care. A wildermon that is brushed and looked over works better and learns
+ * faster than one that is only fed, and the care goes out of it again over a
+ * few hours of being left alone. It is also half of what decides whether a
+ * pairing throws anything worth keeping.
+ */
+export const CARE_HOURS = 3;
+export const CARE_DECAY = 1 / (CARE_HOURS * 3600);
+/** What a thoroughly looked-after beast is worth over a neglected one. */
+export const CARE_BONUS = 0.25;
+export const careMul = (c: Creature): number => 1 + Math.max(0, Math.min(1, c.care)) * CARE_BONUS;
+/** How it reads on a card: groomed, kept, or let go. */
+export const careWord = (care: number): string =>
+  care >= 0.75 ? 'well looked after' : care >= 0.4 ? 'kept' : care >= 0.12 ? 'wanting a brush' : 'neglected';
+
+/** Its own blood on one channel, with nothing communal in it. */
+export const bloodMul = (c: Creature, channel: TraitChannel): number => traitMul(c.traits, channel);
+
+/** What it can take, once its blood is counted. */
+export const maxHealth = (c: Creature, species: SpeciesDef): number =>
+  Math.round(species.health * bloodMul(c, 'hardy'));
+/** What its attack lands for. */
+export const attackOf = (c: Creature, species: SpeciesDef): number => species.attack * bloodMul(c, 'tough');
+
+/** What a set of traits is worth, written out for a log line. */
+export const TRAIT_COUNT = TRAIT_SLOTS;
+
 /** What a draught beast trains by pulling, and a mount by being ridden. */
 export const HAUL_SKILL = 'climbing';
 /** What a hunter trains, which decides how hard it hits and how far it ranges. */
@@ -1217,6 +1254,18 @@ export interface Creature {
   fleece: number;
   /** Task skills, on the same 1..100 scale as the player's. */
   skills: Record<string, number>;
+  /** Male or female. It decides what can be bred, and what can be milked. */
+  sex: Sex;
+  /** The three traits it was born with. Blood, and the whole of what breeding is for. */
+  traits: string[];
+  /** How well it has been looked after lately, 0..1. Brushing puts it up; time takes it down. */
+  care: number;
+  /** Game time it was last put to a mate, so nothing is bred twice in an afternoon. */
+  bredAt: number;
+  /** Game time a carried young is due, or 0 for one that is not in calf. */
+  due: number;
+  /** What is coming, settled at the covering so no sire need survive to the birth. */
+  unborn: { traits: string[]; sex: Sex } | null;
   // Runtime state below; not saved.
   state: string;
   until: number;
@@ -1292,6 +1341,12 @@ export interface CreatureJSON {
   pannier?: Item[];
   post?: number | null;
   born?: number;
+  sex?: Sex;
+  traits?: string[];
+  care?: number;
+  bredAt?: number;
+  due?: number;
+  unborn?: { traits: string[]; sex: Sex } | null;
 }
 
 /**
@@ -1394,7 +1449,7 @@ export class Creatures {
 
   private static make(id: number, species: string, x: number, y: number, mode: CreatureMode, rand: () => number): Creature {
     const def = SPECIES[species] ?? SPECIES.rabba;
-    return {
+    const c: Creature = {
       id,
       species: def.id,
       name: def.name,
@@ -1409,6 +1464,12 @@ export class Creatures {
       xp: 0,
       fleece: 0.6 + rand() * 0.4,
       skills: startSkills(def),
+      sex: rand() < 0.5 ? 'male' : 'female',
+      traits: rollTraits(rand),
+      care: 0,
+      bredAt: -1e9,
+      due: 0,
+      unborn: null,
       state: 'idle',
       until: 0,
       tx: x,
@@ -1438,6 +1499,10 @@ export class Creatures {
       post: null,
       born: 0,
     };
+    // Blood decides what it can take, so the ceiling is read off the traits it
+    // was just given rather than off the book.
+    c.health = maxHealth(c, def);
+    return c;
   }
 
   remove(id: number): void {
@@ -1452,6 +1517,41 @@ export class Creatures {
   /** How far this one ranges from the token at the skill it has now. */
   rangeFor(c: Creature): number {
     return workRangeOf(c, this.species(c));
+  }
+
+  /**
+   * The communal part of a channel: what every wildermon working the same
+   * settlement — or the same post — lends to all of them, the bearer included.
+   * A lead beast standing in the field makes the whole deed quicker.
+   */
+  aura(c: Creature, channel: TraitChannel): number {
+    if (c.mode !== 'deed') return 1;
+    let m = 1;
+    for (const o of this.list.values()) {
+      if (o.mode !== 'deed' || o.post !== c.post) continue;
+      m *= auraMul(o.traits, channel);
+    }
+    return m;
+  }
+
+  /** Everything that bears on how fast it moves. */
+  speedMul(c: Creature): number {
+    return bloodMul(c, 'speed') * this.aura(c, 'speed');
+  }
+
+  /** Everything that bears on how fast it gets a task done: blood, herd, and how it is kept. */
+  workMul(c: Creature): number {
+    return bloodMul(c, 'work') * this.aura(c, 'work') * careMul(c);
+  }
+
+  /** Everything that bears on how fast the work goes into it. */
+  learnMul(c: Creature): number {
+    return bloodMul(c, 'learn') * this.aura(c, 'learn') * careMul(c);
+  }
+
+  /** Everything that bears on what it brings home from a trip out. */
+  yieldMul(c: Creature): number {
+    return bloodMul(c, 'yield') * this.aura(c, 'yield');
   }
 
   /** The player's companion. */
@@ -1567,6 +1667,9 @@ export class Creatures {
     const px = game.player.x;
     const py = game.player.y;
     for (const c of this.list.values()) {
+      // A young one arrives on its own hour, whether or not anybody is looking
+      // and whether its dam is out working or standing at the token.
+      if (c.due > 0 && game.time >= c.due) this.giveBirth(game, c);
       if (c.mode === 'stored') continue;
       const tier = this.tierOf(game, c, px, py);
       this.ticked[tier]++;
@@ -1729,10 +1832,14 @@ export class Creatures {
     const def = this.species(c);
     c.cooldown = Math.max(0, c.cooldown - elapsed);
     c.moving = false;
-    if (c.health < def.health && game.time - c.attackedAt > 6) c.health = Math.min(def.health, c.health + elapsed * (c.mode === 'wild' ? 0.25 : 0.6));
+    const top = maxHealth(c, def);
+    if (c.health > top) c.health = top;
+    else if (c.health < top && game.time - c.attackedAt > 6) c.health = Math.min(top, c.health + elapsed * (c.mode === 'wild' ? 0.25 : 0.6));
     // A yearling grows no fleece and gives no milk; an old one is slower at both.
     const growth = ageDef(c, game.time).growth;
-    if (def.fleece && growth > 0 && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece * growth);
+    if (def.fleece && growth > 0 && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece * growth * bloodMul(c, 'grow'));
+    // A brushing wears off over a few hours of being left to itself.
+    if (c.care > 0) c.care = Math.max(0, c.care - elapsed * CARE_DECAY);
     return def;
   }
 
@@ -1769,7 +1876,7 @@ export class Creatures {
     if (Math.hypot(p.x - c.x, p.y - c.y) > 2 || game.rand() >= (def.unruly ?? 0)) return;
     p.attackedBy = c.id;
     p.attackedAt = game.time;
-    game.hurtPlayer(def.attack * 0.012, `${c.name} rounds on you and gets a claw in`);
+    game.hurtPlayer(attackOf(c, def) * 0.012, `${c.name} rounds on you and gets a claw in`);
   }
 
   private stepToward(game: Game, c: Creature, tx: number, ty: number, dt: number, speedMul = 1): MoveResult {
@@ -1778,7 +1885,7 @@ export class Creatures {
     const dist = Math.hypot(dx, dy);
     if (dist < 0.12) return 'arrived';
     const pace = c.mode === 'deed' ? 1 + Math.max(1, ...Object.values(c.skills)) / 500 : 1;
-    const step = Math.min(this.species(c).speed * ageDef(c, game.time).speed * speedMul * pace * dt, dist);
+    const step = Math.min(this.species(c).speed * ageDef(c, game.time).speed * this.speedMul(c) * speedMul * pace * dt, dist);
     const vx = dx / dist;
     const vy = dy / dist;
     const nx = c.x + vx * step;
@@ -2013,7 +2120,7 @@ export class Creatures {
 
   private beginForage(game: Game, c: Creature, kind: GatherKind): void {
     c.state = 'forage';
-    c.until = game.time + (c.mode === 'deed' ? workDuration(c.skills[GATHER_SKILL[kind]] ?? 1) : FORAGE_TIME);
+    c.until = game.time + (c.mode === 'deed' ? workDuration(c.skills[GATHER_SKILL[kind]] ?? 1) / this.workMul(c) : FORAGE_TIME);
   }
 
   /**
@@ -2048,10 +2155,11 @@ export class Creatures {
     const skillId = GATHER_SKILL[kind];
     const skill = c.skills[skillId] ?? 1;
     this.gainSkill(game, c, skillId, 0.225);
-    const chance = Math.min(0.98, Math.max(0.3, 0.6 + (skill / 100) * 0.38 - 5 / 150));
+    const careful = this.yieldMul(c);
+    const chance = Math.min(0.98, Math.max(0.3, 0.6 + (skill / 100) * 0.38 - 5 / 150) * careful);
     if (game.rand() < 0.2 || game.rand() >= chance) return null;
     const id = rollTable(table, game.rand());
-    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1) * careful);
     return { uid: game.inventory.nextUid++, id, ql, dmg: 0, count: 1 };
   }
 
@@ -2726,12 +2834,48 @@ export class Creatures {
     c.until = game.time + 4;
   }
 
+  /**
+   * Put two together. What the pairing throws is settled here and now, at the
+   * covering, and carried by the dam: a sire that is sold, released or eaten
+   * before the hour comes has already had his say.
+   */
+  pair(game: Game, dam: Creature, sire: Creature, husbandry: number): void {
+    const care = (dam.care + sire.care) / 2;
+    dam.unborn = { traits: breedTraits(sire.traits, dam.traits, husbandry, care, game.rand), sex: game.rand() < 0.5 ? 'male' : 'female' };
+    dam.due = game.time + GESTATION;
+    dam.bredAt = game.time;
+    sire.bredAt = game.time;
+  }
+
+  /** The hour comes. */
+  giveBirth(game: Game, dam: Creature): Creature | null {
+    const coming = dam.unborn;
+    dam.unborn = null;
+    dam.due = 0;
+    if (!coming) return null;
+    const def = this.species(dam);
+    // Born where the dam is if she is out in the world, and at the token if she
+    // is not. Either way it goes to the herd: nothing that young is put to work.
+    const at = game.deed && dam.mode === 'stored' ? [game.deed.x + 0.5, game.deed.y + 1.5] : [dam.x, dam.y];
+    const c = this.spawn(dam.species, at[0], at[1], 'stored', game.rand, game.time);
+    c.traits = coming.traits;
+    c.sex = coming.sex;
+    c.hunger = 0.9;
+    c.care = 0.5;
+    c.health = maxHealth(c, def);
+    game.logMsg(`${dam.name} drops a young ${def.name.toLowerCase()} (${SEX_NAMES[c.sex]}): ${traitList(c.traits)}. It is at the token until it is grown.`, 'event');
+    game.note('bred');
+    if (c.traits.some((t) => traitTier(t) === 'supreme' || traitTier(t) === 'fantastic')) game.note('goodblood');
+    game.events.emit('creature');
+    return c;
+  }
+
   /** Same diminishing curve as the player's skills. */
   gainSkill(game: Game, c: Creature, id: string, base: number): number {
     const v = c.skills[id] ?? 1;
     // A beast learns on the same curve a player does, and crawls the same last
     // stretch of it.
-    const gain = skillGain(v, base, 0.6 + 0.8 * game.rand());
+    const gain = skillGain(v, base * this.learnMul(c), 0.6 + 0.8 * game.rand());
     const before = creatureLevel(c);
     const beforeSteps = rangeSteps(v);
     c.skills[id] = Math.min(100, v + gain);
@@ -2745,7 +2889,7 @@ export class Creatures {
   }
 
   private updateWild(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.wild);
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.wild * bloodMul(c, 'appetite'));
     const def = this.species(c);
     const kind = wildGather(def);
     if (c.state === 'flee') {
@@ -2799,7 +2943,7 @@ export class Creatures {
     const p = game.player;
     const d = Math.hypot(p.x - c.x, p.y - c.y);
     const hunting = c.enemy === PLAYER_ATTACKER;
-    if (hunting && (d > HUNT_GIVE_UP || c.health < def.health * 0.3)) {
+    if (hunting && (d > HUNT_GIVE_UP || c.health < maxHealth(c, def) * 0.3)) {
       c.enemy = null;
       return false;
     }
@@ -2815,7 +2959,7 @@ export class Creatures {
         c.cooldown = 1.4;
         p.attackedBy = c.id;
         p.attackedAt = game.time;
-        game.hurtPlayer(def.attack * 0.012, `The ${def.name.toLowerCase()} is on you`);
+        game.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} is on you`);
       }
       return true;
     }
@@ -2824,7 +2968,7 @@ export class Creatures {
   }
 
   private updateActive(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.active);
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.active * bloodMul(c, 'appetite'));
     const p = game.player;
     const distP = Math.hypot(p.x - c.x, p.y - c.y);
     if (distP > 18) {
@@ -2885,7 +3029,7 @@ export class Creatures {
   }
 
   private updateWorker(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed);
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed * bloodMul(c, 'appetite'));
     // A post stands in for the token: the same loop, a different middle.
     const deed = game.workSite(c);
     if (!deed) {
@@ -3176,6 +3320,12 @@ export class Creatures {
         pannier: c.pannier,
         post: c.post,
         born: c.born,
+        sex: c.sex,
+        traits: c.traits,
+        care: c.care,
+        bredAt: c.bredAt,
+        due: c.due,
+        unborn: c.unborn,
       })),
     };
   }
@@ -3187,7 +3337,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, born: j.born ?? 0, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

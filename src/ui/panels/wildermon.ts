@@ -1,5 +1,7 @@
 import { clockLeft } from '../../game/boons';
-import { ageOf, growsAt, creatureLevel, GATHER_VERB, RANGE_PER_STEP, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { ageOf, attackOf, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { TIER_COLOUR, traitOf } from '../../game/traits';
+import { TIER_LEVEL } from '../../game/husbandry';
 
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
@@ -66,7 +68,8 @@ export class WildermonPanel {
     head.className = 'pal-head';
     const name = document.createElement('span');
     name.className = 'pal-name';
-    name.textContent = `${c.name}${c.name !== def.name ? ` · ${def.name}` : ''}`;
+    name.textContent = `${SEX_MARK[c.sex]} ${c.name}${c.name !== def.name ? ` · ${def.name}` : ''}`;
+    name.title = `${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}`;
     const level = document.createElement('span');
     level.className = 'pal-level';
     // Age reads before anything else: a yearling cannot be worked at all.
@@ -105,8 +108,13 @@ export class WildermonPanel {
       row.append(l, track, v);
       return row;
     };
-    card.append(bar('Health', c.health / def.health, 'bar-health', `${Math.ceil(c.health)}/${def.health}`));
+    const top = maxHealth(c, def);
+    card.append(bar('Health', c.health / top, 'bar-health', `${Math.ceil(c.health)}/${top}`));
     card.append(bar('Hunger', c.hunger, 'bar-hunger', `${Math.round(c.hunger * 100)}%`));
+    const care = bar('Care', c.care, 'bar-care', `${Math.round(c.care * 100)}%`);
+    care.title = `${careWord(c.care)} \u2014 a brushed wildermon works and learns a quarter faster, and throws better young`;
+    card.append(care);
+    card.append(this.blood(c));
 
     const info = document.createElement('div');
     info.className = 'pal-info';
@@ -114,6 +122,7 @@ export class WildermonPanel {
     if (c.ridden) parts.push('Under the saddle');
     else if (c.hitchedTo !== null) parts.push('In the traces');
     else if (c.tacked) parts.push('Saddled and bridled');
+    if (c.due > 0) parts.push(`In young, due in ${clockLeft(Math.max(0, c.due - this.game.time))}`);
     if (c.mode === 'active') parts.push(`Stance: ${STANCE_NAMES[c.stance]}`);
     if (c.mode === 'deed') {
       const verb = def.gathers ? GATHER_VERB[def.gathers] : 'working';
@@ -123,12 +132,42 @@ export class WildermonPanel {
       const toNext = SKILL_STEP - (taskSkill(c, def) % SKILL_STEP);
       parts.push(`Range ${workRangeOf(c, def)} tiles (+${def.rangePerStep ?? RANGE_PER_STEP} in ${toNext.toFixed(1)} skill)`);
     }
-    parts.push(`Attack ${def.attack}`);
+    parts.push(`Attack ${attackOf(c, def).toFixed(attackOf(c, def) % 1 ? 1 : 0)}`);
     const skills = Object.entries(c.skills).map(([id, v]) => `${id[0].toUpperCase()}${id.slice(1)} ${v.toFixed(2)}`);
     parts.push(...skills);
     parts.push(`Experience ${c.xp.toFixed(1)}`);
     info.textContent = parts.join(' · ');
     card.append(info);
     return card;
+  }
+
+  /**
+   * The three traits it was born with. What you can read off an animal depends
+   * on the husbandry behind your eyes: a common trait is plain to anybody, old
+   * blood takes a breeder to know.
+   */
+  private blood(c: Creature): HTMLDivElement {
+    const row = document.createElement('div');
+    row.className = 'pal-traits';
+    const skill = this.game.skills.get('animal_husbandry');
+    for (const id of c.traits) {
+      const t = traitOf(id);
+      if (!t) continue;
+      const chip = document.createElement('span');
+      chip.className = 'trait-chip';
+      const known = skill >= 1 + TIER_LEVEL[t.tier];
+      if (known) {
+        chip.textContent = t.aura ? `\u25c9 ${t.name}` : t.name;
+        chip.style.color = TIER_COLOUR[t.tier];
+        chip.style.borderColor = TIER_COLOUR[t.tier];
+        chip.title = `${t.tier}${t.aura ? ', communal: it lifts the whole deed' : ''} \u2014 ${t.note}`;
+      } else {
+        chip.textContent = 'something';
+        chip.classList.add('trait-unread');
+        chip.title = `You can see there is something in it. ${1 + TIER_LEVEL[t.tier]} animal husbandry would tell you what.`;
+      }
+      row.append(chip);
+    }
+    return row;
   }
 }

@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { isBoat } from './furniture';
 import { isDone } from './building';
 import { canImprove } from './improve';
+import { traitTier } from './traits';
 
 /**
  * A journal of goals. There is a great deal to do on this island and nothing
@@ -90,6 +91,12 @@ export const JOURNAL: Chapter[] = [
       { id: 'wagon', text: 'Fill all four yokes of a wagon', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'wagon' && (f.team?.length ?? 0) >= 4) },
       { id: 'hive', text: 'Keep a hive and take honey from it', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'hive' && f.items.length > 0) },
       { id: 'post', text: 'Set a wildermon to a work post', met: did('posted') },
+      { id: 'groom', text: 'Brush a wildermon down', hint: 'A brush: a plank and two wool', met: did('groom') },
+      { id: 'groomfull', text: 'Brush one to a shine', hint: 'Care full to the top, which takes a few passes', met: did('groomfull') },
+      { id: 'bred', text: 'Breed a wildermon of your own', hint: 'A male and a female of one sort, grown, fed and side by side', met: did('bred') },
+      { id: 'goodblood', text: 'Breed one carrying supreme blood', met: did('goodblood') },
+      { id: 'fantastic_blood', text: 'Breed one carrying a fantastic trait', met: (g) => [...g.creatures.list.values()].some((c) => c.mode !== 'wild' && c.traits.some((t) => traitTier(t) === 'fantastic')) },
+      { id: 'husbandry', text: 'Take animal husbandry to 50', met: skill('animal_husbandry', 50) },
     ],
   },
   {

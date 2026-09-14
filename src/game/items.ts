@@ -46,6 +46,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   trowel: { name: 'Trowel', category: 'tool', weight: 1, description: 'Lays bricks, mortar and stone floors.' },
   saw: { name: 'Saw', category: 'tool', weight: 1.5, description: 'Cuts logs into planks and timbers.' },
   rake: { name: 'Rake', category: 'tool', weight: 1.5, description: 'Tills grass and dirt into a field, ready for sowing.' },
+  brush: { name: 'Brush', category: 'tool', weight: 0.6, description: 'A block of wood set with bristles. Brush a wildermon down and it works better, learns faster and throws better young.' },
   sword: { name: 'Sword', category: 'tool', weight: 2, description: 'A proper blade. It hits far harder than a working tool.' },
   short_sword: { name: 'Short sword', category: 'tool', weight: 1.4, description: 'Quick in the hand, and it leaves your other hand free for a shield.' },
   long_sword: { name: 'Long sword', category: 'tool', weight: 3, description: 'Two hands, a long reach and a heavy blow.' },

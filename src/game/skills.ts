@@ -35,6 +35,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'armorsmithing', name: 'Armoursmithing', group: 'Skills', start: 1 },
   { id: 'farming', name: 'Farming', group: 'Skills', start: 1 },
   { id: 'taming', name: 'Taming', group: 'Skills', start: 1 },
+  { id: 'animal_husbandry', name: 'Animal husbandry', group: 'Skills', start: 1 },
   { id: 'butchering', name: 'Butchering', group: 'Skills', start: 1 },
   { id: 'alchemy', name: 'Alchemy', group: 'Skills', start: 1 },
   { id: 'repair', name: 'Repair', group: 'Skills', start: 1 },

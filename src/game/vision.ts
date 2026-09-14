@@ -1,4 +1,5 @@
 import { TileType } from '../world/tiles';
+import { bloodMul } from './creatures';
 import type { Game } from './game';
 
 /**
@@ -163,7 +164,8 @@ export class Vision {
       const def = g.creatures.species(c);
       // A watcher is worth a hill; a Lume carries its own daylight about with
       // it, so what it lights is lit whatever the hour.
-      const range = def.glow ? Math.max(def.glow, COMPANION_SIGHT * (1 - NIGHT_LOSS * g.darkness())) : (def.sight ?? COMPANION_SIGHT) * (1 - NIGHT_LOSS * g.darkness() * 0.5);
+      const keen = bloodMul(c, 'sight');
+      const range = def.glow ? Math.max(def.glow, COMPANION_SIGHT * (1 - NIGHT_LOSS * g.darkness())) * keen : (def.sight ?? COMPANION_SIGHT) * keen * (1 - NIGHT_LOSS * g.darkness() * 0.5);
       this.cast(next, c.x, c.y, Math.max(3, range), mark);
     }
     const deed = g.deed;

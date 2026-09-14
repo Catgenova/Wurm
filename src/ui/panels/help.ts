@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: forty-seven goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: fifty-three goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -727,6 +727,39 @@ export function buildHelp(win: UIWindow): void {
     it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <h3>Blood, the brush and breeding</h3>
+    <p>Every wildermon is born <b>male</b> or <b>female</b> and carries <b>three traits</b>, and the
+    traits are the whole difference between one Roxxen and the next. A trait sits in one of four tiers
+    &mdash; <b>common</b>, <b>rare</b>, <b>supreme</b>, <b>fantastic</b> &mdash; and what it is worth
+    climbs steeply with the tier: a common trait is a few percent, a fantastic one is half again or
+    better. Traits lift how fast it <b>moves</b>, how quickly it <b>works</b>, how fast what it does
+    goes into it as <b>skill</b>, what it can <b>carry and pull</b>, what it <b>brings back</b>, how
+    little it <b>eats</b>, how much it can <b>take</b>, how hard it <b>hits</b>, how far it
+    <b>sees</b>, how far it will <b>range</b>, and how fast <b>fleece and milk</b> come back on it.</p>
+    <p>A few traits are <b>communal</b> (marked &#9673;): what they lift, they lift for every wildermon
+    working the same settlement or the same post, the bearer included. One <i>pack leader</i> standing
+    in the field makes a whole deed quicker and brighter.</p>
+    <p>What is walking about in the wild is almost all common. Better blood is <b>bred</b>, and that is
+    what <b>animal husbandry</b> is for. Make a <b>brush</b> (a plank and two wool, with a carving
+    knife) and <b>brush a wildermon down</b>: it puts <b>care</b> into the animal, and a cared-for beast
+    works quicker, learns faster and heals as you go over it. Care runs out again over about three hours
+    of being left alone, so it is a thing you keep up rather than do once.</p>
+    <p>To breed, stand a <b>male</b> and a <b>female</b> of one sort within four tiles of each other,
+    both <b>grown</b>, both <b>fed</b>, and neither put to a mate in the last twenty minutes, then
+    choose <b>Put it to a mate</b>. You need a settlement: the young one goes to the token. If it takes,
+    the female carries for about twelve minutes and then drops a young one, and what it is born with was
+    settled at that moment &mdash; a sire sold, released or eaten in between has already had his say.</p>
+    <p>Three slots are filled one at a time. Each is drawn from what the pair carry between them, and
+    husbandry decides two things: <b>how often the parents' blood comes through</b> rather than whatever
+    the wild throws up (half at no skill, nearly all at a hundred with a well-brushed pair), and
+    <b>how often a trait comes through one tier better than either parent had it</b> &mdash; commons
+    becoming rares, rares becoming supremes. That second chance is the whole of why husbandry is worth
+    having: it is how a line climbs. A high-husbandry eye also falls on the best of what the pair carry
+    rather than picking evenly.</p>
+    <p>You cannot read what you do not know. <b>Look it over</b> names the traits your husbandry is good
+    enough to recognise: common blood is plain to anybody, rare takes 16, supreme 36, and old blood
+    takes 61 to know when it is standing in front of you. Until then the card shows only that there is
+    <i>something</i> there. Only a <b>female</b> is in milk, and nothing young or past it will breed.</p>
     <h3>Terraforming</h3>
     <p>Every corner of the map has soil sitting on bedrock. <b>Digging</b> lowers the corner nearest to
     where you click (the small marker) and takes a spadeful of that soil; when the last of it is gone

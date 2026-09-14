@@ -1034,3 +1034,18 @@ kbd {
   margin: 6px 0;
   color: #c9c1ad;
 }
+
+/* A wildermon's care, and the three traits it was born with. */
+.hud-bar-fill.bar-care { background: linear-gradient(90deg, #6f9a6a, #a8d08a); }
+.pal-traits { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.trait-chip {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid #4a5550;
+  border-radius: 3px;
+  color: #9fb0a4;
+  background: rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+}
+.trait-chip.trait-unread { color: #6d7a72; border-style: dashed; font-style: italic; }

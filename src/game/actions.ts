@@ -19,6 +19,7 @@ import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, waterNear } from './place
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
+import { HUSBANDRY_ACTIONS } from './husbandry';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
@@ -1232,6 +1233,7 @@ export const ACTIONS: ActionDef[] = [
   },
   ...BUILD_ACTIONS,
   ...CREATURE_ACTIONS,
+  ...HUSBANDRY_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...FIRST_AID_ACTIONS,
   ...PLACEABLE_ACTIONS,

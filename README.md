@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Forty-seven goals in seven chapters — Ashore, The
+- **A journal of goals.** Fifty-three goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -458,6 +458,33 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Traits, genders and animal husbandry.** Every wildermon is born **male**
+  or **female** and carries **three traits**, drawn from four tiers —
+  **common**, **rare**, **supreme**, **fantastic** — whose worth climbs steeply
+  with the tier: a common trait is a few percent, a fantastic one half again or
+  better. Between them the thirty-one traits lift how fast it moves, how
+  quickly it works, how fast the work goes into it as skill, what it carries
+  and pulls, what it brings back, how little it eats, how much it can take, how
+  hard it hits, how far it sees, how far it will range, and how fast fleece and
+  milk come back on it. Four are **communal**: what they lift, they lift for
+  every wildermon working the same settlement or the same post — one *pack
+  leader* makes a whole deed quicker and brighter. What is walking about in the
+  wild is almost all common (a fantastic trait is about one animal in seventy),
+  so better blood is bred rather than caught. **Animal husbandry** is the skill
+  and the **brush** is the tool: brushing a wildermon down puts **care** into
+  it, and a cared-for beast works a quarter faster, learns a quarter faster and
+  heals as you go over it. Care runs out over about three hours alone.
+  **Breeding** takes a grown, fed male and female of one sort standing within
+  four tiles, neither put to a mate in the last twenty minutes; the female
+  carries twelve minutes and drops a young one at the token. What it is born
+  with is settled at the covering. Each of the three slots is drawn from what
+  the pair carry between them, and husbandry decides how often the parents'
+  blood comes through at all (half at nothing, nearly all at a hundred with a
+  well-brushed pair) and how often a trait comes through **one tier better than
+  either parent had it** — which is how a line climbs. Blood does not read
+  itself, either: **Look it over** names only the traits your husbandry is good
+  enough to recognise, rare at 16, supreme at 36, old blood at 61. Only a
+  female is in milk.
 - **Wildermon age.** Everything alive was born at some hour and gets older
   from there. A **young** one is two thirds the size, a little slower, grows
   no fleece and gives no milk, and is no use in the traces or under a saddle —

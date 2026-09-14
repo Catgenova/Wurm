@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { SPECIES, type Creature } from './creatures';
+import { maxHealth, SPECIES, type Creature } from './creatures';
 import type { Game } from './game';
 import { itemName } from './items';
 
@@ -65,13 +65,13 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
     baseTime: 9,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.mode !== 'wild' && c.health < SPECIES[c.species].health;
+      return !!c && c.mode !== 'wild' && c.health < maxHealth(c, SPECIES[c.species]);
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return 'It is gone.';
       if (c.mode === 'wild') return 'It will not stand still for you while it is wild.';
-      if (c.health >= SPECIES[c.species].health) return `${c.name} is not hurt.`;
+      if (c.health >= maxHealth(c, SPECIES[c.species])) return `${c.name} is not hurt.`;
       if (!bestBandage(g)) return 'You have no bandages. Cut some from cloth.';
       if (Math.hypot(c.x - g.player.x, c.y - g.player.y) > 1.9) return 'You need to be beside it.';
       return null;
@@ -84,12 +84,13 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       const ql = bandage.ql;
       if (!g.inventory.remove(bandage.uid, 1)) return;
       const clean = g.skillCheck('first_aid', 14, ql, g.mindEase());
-      const healed = def.health * healAmount(g.skills.get('first_aid'), ql) * (clean ? 1 : 0.35);
-      c.health = Math.min(def.health, c.health + healed);
+      const top = maxHealth(c, def);
+      const healed = top * healAmount(g.skills.get('first_aid'), ql) * (clean ? 1 : 0.35);
+      c.health = Math.min(top, c.health + healed);
       g.logMsg(
         clean
-          ? `You dress ${c.name}'s wounds with the ${itemName(bandage).toLowerCase()}. It is up to ${Math.ceil(c.health)} of ${def.health}.`
-          : `${c.name} will not hold still and the dressing goes on badly. It is up to ${Math.ceil(c.health)} of ${def.health}.`,
+          ? `You dress ${c.name}'s wounds with the ${itemName(bandage).toLowerCase()}. It is up to ${Math.ceil(c.health)} of ${top}.`
+          : `${c.name} will not hold still and the dressing goes on badly. It is up to ${Math.ceil(c.health)} of ${top}.`,
         'event',
       );
     },
