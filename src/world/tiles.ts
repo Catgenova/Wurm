@@ -35,6 +35,40 @@ export type RGB = readonly [number, number, number];
  */
 export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone, TileType.Gravel]);
 
+
+/**
+ * How much a footfall raises off a given ground. Dry loose stuff — sand,
+ * gravel, a ploughed field — goes up in a cloud; turf and moss hold together
+ * and barely mark; a marsh swallows the whole question.
+ */
+export const DUSTINESS: Readonly<Record<number, number>> = {
+  [TileType.Sand]: 1,
+  [TileType.Gravel]: 0.95,
+  [TileType.Dirt]: 0.9,
+  [TileType.PackedDirt]: 0.8,
+  [TileType.Field]: 0.85,
+  [TileType.Clay]: 0.65,
+  [TileType.Steppe]: 0.7,
+  [TileType.Rock]: 0.55,
+  [TileType.Tundra]: 0.5,
+  [TileType.Snow]: 0.45,
+  [TileType.Peat]: 0.45,
+  [TileType.Cobblestone]: 0.3,
+  [TileType.Slabs]: 0.25,
+  [TileType.Grass]: 0.16,
+  [TileType.Tree]: 0.16,
+  [TileType.Bush]: 0.16,
+  [TileType.Lawn]: 0.13,
+  [TileType.Tar]: 0.12,
+  [TileType.Moss]: 0.1,
+  [TileType.Marsh]: 0,
+  [TileType.Kelp]: 0,
+  [TileType.Reed]: 0,
+};
+
+/** What this ground gives up underfoot, 0 for ground that gives up nothing. */
+export const dustiness = (type: number): number => DUSTINESS[type] ?? 0.4;
+
 /** Where a slope starts wearing through to the rock under it, and where it is all rock. */
 export const BARE_FROM = 0.5;
 export const BARE_FULL = 1.15;

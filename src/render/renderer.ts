@@ -18,7 +18,7 @@ import {
   type Wall,
 } from '../game/building';
 import { hash2 } from '../world/noise';
-import { bareRock, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, dustiness, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
@@ -39,6 +39,9 @@ import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crate
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA } from './water';
 import { Wakes } from './wake';
+import { Dust } from './dust';
+import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
+import { GRASS_SWAY, SWAY_MAX, swayAt } from './sway';
 import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -195,6 +198,26 @@ for (let i = 0; i < WATER_STEPS; i++) {
   WATER_PALETTE.push(`rgba(${r},${g},${b},${(0.42 + 0.5 * t).toFixed(3)})`);
 }
 
+/**
+ * What a ground colour looks like once it is in the air. Kicked-up ground is
+ * always paler than the ground it came off — it is the dry, fine part of it,
+ * lit from every side at once — which also happens to be the only way dust off
+ * a green field can be seen against the green field.
+ */
+function dustTone(colour: string): string {
+  const m = /(\d+),(\d+),(\d+)/.exec(colour);
+  if (!m) return 'rgb(210,198,176)';
+  const r = +m[1];
+  const g = +m[2];
+  const b = +m[3];
+  // Dry earth for ordinary ground; for ground already brighter than that —
+  // snow, marble chippings — it goes towards white instead, since dust off a
+  // snowfield is not the colour of a ploughed field.
+  const pale = (r + g + b) / 3 > 190;
+  const mix = (v: number, to: number): number => Math.round(v + (to - v) * 0.62);
+  return `rgb(${mix(r, pale ? 255 : 236)},${mix(g, pale ? 255 : 226)},${mix(b, pale ? 255 : 202)})`;
+}
+
 const clamp255 = (v: number): number => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
 
 /**
@@ -230,6 +253,12 @@ export class Renderer {
   private seaPath = new Path2D();
   /** What everything on the water has left behind it. */
   readonly wakes = new Wakes();
+  /** What has been kicked up underfoot. */
+  readonly dust = new Dust();
+  /** Which way the wind leans things on screen, and how hard, worked out once a frame. */
+  private lean = { x: 0, y: 0, force: 0 };
+  /** The light this frame, kept so anything needing a ground colour can ask for one. */
+  private sunNow: [number, number, number] = [0, 0, 1];
   /** The wind as the surface sees it, worked out once a frame rather than per tile. */
   private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
@@ -478,7 +507,18 @@ export class Renderer {
     // something behind it. Both are worked out once for the frame.
     const wind = this.game.wind();
     this.surf = { dirX: Math.cos(wind.dir), dirY: Math.sin(wind.dir), force: wind.force };
+    // Which way the wind pushes on screen. Everything rooted leans this way
+    // and smoke drifts this way, so it is worked out once for the frame.
+    {
+      const lu = cam.rotateX(this.surf.dirX, this.surf.dirY);
+      const lv = cam.rotateY(this.surf.dirX, this.surf.dirY);
+      const lx = (lu - lv) * HALF_W;
+      const ly = (lu + lv) * HALF_H;
+      const ll = Math.hypot(lx, ly) || 1;
+      this.lean = { x: lx / ll, y: ly / ll, force: wind.force };
+    }
     this.markWakes();
+    this.markDust();
     // A tile last seen a moment ago has a new memory; throw away the colour
     // that was worked out from the old one.
     if (vision.revision !== this.lastVision) {
@@ -495,6 +535,7 @@ export class Renderer {
     // a few times an in-game hour is nothing, one every frame is not.
     const hour = this.game.hourOfDay();
     const sun = sunAt(hour);
+    this.sunNow = sun;
     const sunStep = Math.floor((hour / 24) * SUN_STEPS);
     if (sunStep !== this.lastSun) {
       this.lastSun = sunStep;
@@ -638,7 +679,10 @@ export class Renderer {
           const spr = grassSprite(state, (x * 7 + y * 13 + ((x ^ y) & 3)) % GRASS_VARIANTS);
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           const gy = baseY + hh - avg * hs;
-          ctx.drawImage(spr.canvas, baseX - spr.ax * zoom, gy - spr.ay * zoom, spr.w * zoom, spr.h * zoom);
+          // A tuft is shoved rather than sheared: at a couple of pixels it
+          // reads as sway, and there are hundreds of them on a screen.
+          const shove = swayAt(x, y, this.time, this.lean.force) * SWAY_MAX * GRASS_SWAY * spr.h * zoom;
+          ctx.drawImage(spr.canvas, baseX - spr.ax * zoom + this.lean.x * shove, gy - spr.ay * zoom + this.lean.y * shove * 0.3, spr.w * zoom, spr.h * zoom);
         }
         if (t === TileType.Tree || t === TileType.Bush) {
           const data = world.getData(x, y);
@@ -791,6 +835,7 @@ export class Renderer {
     // neither washes up over a beach standing in front of them.
     this.drawSwell(ctx, zoom);
     this.drawWakes(ctx, zoom);
+    this.drawAir(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
     if (fogged) {
@@ -996,6 +1041,17 @@ export class Renderer {
       // ends of the day and gone at noon. The sprite's own contact shadow does
       // the rest, which is why this can be thrown away entirely at midday.
       if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
+      if (ent.kind === 'tree' || ent.kind === 'bush') {
+        // Rooted at the foot, leaning at the head: the shear is taken about
+        // the trunk, so the tree bends rather than slides.
+        const bend = (swayAt(ent.x, ent.y, this.time, this.lean.force) * SWAY_MAX * (ent.kind === 'bush' ? 0.6 : 1)) / 2;
+        ctx.save();
+        ctx.translate(ent.sx, ent.sy);
+        ctx.transform(1, 0, -this.lean.x * bend, 1, 0, 0);
+        ctx.drawImage(spr.canvas, left - ent.sx, top - ent.sy, dw, dh);
+        ctx.restore();
+        continue;
+      }
       ctx.drawImage(spr.canvas, left, top, dw, dh);
       if (ent.kind === 'crate' && ent.crateId !== undefined) {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
@@ -1527,6 +1583,76 @@ export class Renderer {
    * narrow wake, a hull as wide as its beam; a wildermon out of its depth
    * leaves one too. Nothing on dry land leaves anything.
    */
+  /**
+   * Note what is walking about on dry ground. The dust is the colour of the
+   * ground it came off, which is why a run across a beach and a run across a
+   * ploughed field do not look the same.
+   */
+  private markDust(): void {
+    if (this.camera.zoom < 0.6) return;
+    const w = this.game.world;
+    const now = this.time;
+    const sun = this.sunNow;
+    const dry = (x: number, y: number): boolean => w.heightAt(x, y) >= 0;
+    const kick = (id: string, x: number, y: number): void => {
+      const tx = Math.floor(x);
+      const ty = Math.floor(y);
+      if (!w.inBounds(tx, ty) || !dry(x, y)) return;
+      this.dust.step(id, x, y, now, dustTone(this.groundColor(tx, ty, ty * w.w + tx, true, sun)), dustiness(w.viewTile(tx, ty, true)));
+    };
+    // Whether a thing counts as walking is settled by how far it has actually
+    // gone, not by a flag: a pace covered is a pace, whoever or whatever moved
+    // it. Standing still covers no ground and so raises none.
+    const p = this.game.player;
+    if (!p.swimming) kick('player', p.x, p.y);
+    if (this.game.creatures.list.size) {
+      for (const cr of this.game.creatures.list.values()) kick('c' + cr.id, cr.x, cr.y);
+    }
+  }
+
+  /**
+   * The dust in the air and the smoke over what is burning, both drawn after
+   * everything on the ground because both of them are above it.
+   */
+  private drawAir(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const cam = this.camera;
+    const w = this.game.world;
+    for (const p of this.dust.live(this.time)) {
+      const { radius, lift, alpha } = Dust.spread(p, this.time);
+      if (alpha < 0.02) continue;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.colour;
+      ctx.beginPath();
+      ctx.ellipse(cam.worldToScreenX(p.x, p.y), cam.worldToScreenY(p.x, p.y, w.heightAt(p.x, p.y)) - lift * zoom, radius * zoom, radius * 0.55 * zoom, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    const fires = this.game.fires();
+    if (!fires.length) return;
+    const drift = this.lean.force * PUFF_DRIFT;
+    for (const f of fires) {
+      const sx = cam.worldToScreenX(f.x, f.y);
+      const sy = cam.worldToScreenY(f.x, f.y, w.heightAt(f.x, f.y));
+      const seed = (f.x * 0.37 + f.y * 0.71) % 1;
+      for (let i = 0; i < PUFFS; i++) {
+        const age = puffAge(i, this.time, seed);
+        const puff = puffOf(age, f.heat);
+        if (puff.alpha < 0.012) continue;
+        // Higher up it has been in the wind longer, so a plume leans over
+        // rather than standing straight.
+        const blown = drift * age * age * HALF_W * zoom;
+        const px = sx + this.lean.x * blown + Math.sin(age * 7 + seed * 11) * 1.6 * zoom;
+        const py = sy + this.lean.y * blown * 0.4 - (6 + age * PUFF_RISE) * zoom;
+        // Dark and tight at the fire, pale and open once it has thinned.
+        const grey = Math.round(64 + age * 168);
+        ctx.fillStyle = `rgba(${grey},${grey - 4},${grey - 10},${puff.alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.ellipse(px, py, puff.radius * zoom, puff.radius * 0.82 * zoom, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
   private markWakes(): void {
     const w = this.game.world;
     const now = this.time;

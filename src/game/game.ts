@@ -1196,6 +1196,33 @@ export class Game {
     return out;
   }
 
+  /**
+   * Everything actually burning, whatever the hour. `lights` answers a
+   * different question — what is pushing back the dark — so it is empty at
+   * noon and counts a lantern and a glowing wildermon among its answers. A
+   * fire smokes whether or not anyone needs the light of it, and by day is
+   * when you can see that it does.
+   */
+  fires(): Array<{ x: number; y: number; heat: number }> {
+    const out: Array<{ x: number; y: number; heat: number }> = [];
+    const px = this.player.x;
+    const py = this.player.y;
+    const near = (x: number, y: number): boolean => Math.abs(x - px) < 60 && Math.abs(y - py) < 60;
+    for (const f of this.campfires.values()) {
+      if (!f.lit || !near(f.x, f.y)) continue;
+      const [cx, cy] = fireCentre(f);
+      out.push({ x: cx, y: cy, heat: 0.7 });
+    }
+    for (const f of this.furniture.values()) {
+      if (!f.lit || !near(f.x, f.y)) continue;
+      const [cx, cy] = furnitureCentre(f);
+      out.push({ x: cx, y: cy, heat: 0.62 });
+    }
+    for (const k of this.kilns.values()) if (k.lit && near(k.x, k.y)) out.push({ x: k.x + 0.5, y: k.y + 0.5, heat: 0.85 });
+    for (const sm of this.smelters.values()) if (sm.lit && near(sm.x, sm.y)) out.push({ x: sm.x + 1, y: sm.y + 0.5, heat: 1 });
+    return out;
+  }
+
   /** Hours since midnight, 0 up to 24. */
   hourOfDay(): number {
     return ((this.time % DAY_SECONDS) / DAY_SECONDS) * 24;
