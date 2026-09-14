@@ -92,6 +92,8 @@ export const JOURNAL: Chapter[] = [
       { id: 'hive', text: 'Keep a hive and take honey from it', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'hive' && f.items.length > 0) },
       { id: 'post', text: 'Set a wildermon to a work post', met: did('posted') },
       { id: 'worms', text: 'Turn up a spadeful of worms', met: did('worms') },
+      { id: 'reach', text: 'Sail a beam reach in a fresh wind', hint: 'Across the wind is the fastest a hull goes', met: did('reach') },
+      { id: 'laden', text: 'Sail a hull loaded past half her hold', met: did('laden') },
       { id: 'baited', text: 'Land a fish on bait', met: did('baited') },
       { id: 'netted', text: 'Haul a net in', met: did('netted') },
       { id: 'creeled', text: 'Empty a creel', hint: 'Woven from reed, sunk in water, baited and left', met: did('creeled') },

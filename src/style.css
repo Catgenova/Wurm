@@ -1072,3 +1072,8 @@ kbd {
 .wound-row { font-size: 11px; color: #b9a99c; line-height: 1.35; }
 .wound-row.wound-open { color: #e08a72; }
 .wound-row.wound-bad { color: #d05a4a; font-weight: 600; }
+
+/* The wind, when there is a sail over you. */
+.hud-wind { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; color: #a8bcc4; }
+.wind-arrow { display: inline-block; font-size: 13px; line-height: 1; color: #8fc8f0; }
+.wind-irons { color: #e08a72; font-weight: 600; }

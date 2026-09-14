@@ -1,6 +1,8 @@
 import { clockLeft } from '../game/boons';
 import { SKILL_DEFS } from '../game/skills';
 import { WOUND_KINDS, woundText } from '../game/wounds';
+import { sailWord, windFrom, windWord } from '../game/wind';
+import { FURNITURE_BY_ID } from '../game/furniture';
 import { MAX_LEVELS } from '../game/building';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
@@ -64,6 +66,7 @@ export class Hud {
   private companionText = document.createElement('span');
   private boonEl: HTMLDivElement;
   private woundEl: HTMLDivElement;
+  private windEl: HTMLDivElement;
   private storeyEl: HTMLDivElement;
   private storeyLabel: HTMLButtonElement;
   private storeyUp: HTMLButtonElement;
@@ -127,6 +130,11 @@ export class Hud {
     this.boonEl.className = 'hud-companion hud-boons';
     this.boonEl.hidden = true;
     status.append(this.boonEl);
+    // The wind, when you are in something that cares about it.
+    this.windEl = document.createElement('div');
+    this.windEl.className = 'hud-companion hud-wind';
+    this.windEl.hidden = true;
+    status.append(this.windEl);
     // Anything open on you, which is the first thing you want to know.
     this.woundEl = document.createElement('div');
     this.woundEl.className = 'hud-companion hud-wounds';
@@ -288,6 +296,25 @@ export class Hud {
     }
     this.boonEl.hidden = !parts.length;
     if (parts.length) this.boonEl.textContent = parts.join('  ·  ');
+    // The wind, which only matters when there is a sail over you.
+    const boat = this.game.afloat();
+    const sailing = boat && FURNITURE_BY_ID.get(boat.kind)?.boat?.sail;
+    this.windEl.hidden = !sailing;
+    if (sailing) {
+      const w = this.game.wind();
+      const point = sailWord(this.game.heading(), w);
+      this.windEl.replaceChildren();
+      const arrow = document.createElement('span');
+      arrow.className = 'wind-arrow';
+      // The arrow flies with the wind, and the compass rose is already turned.
+      arrow.style.transform = `rotate(${(w.dir * 180) / Math.PI + 90 + renderer.camera.northAngle()}deg)`;
+      arrow.textContent = '\u2191';
+      const text = document.createElement('span');
+      text.className = point === 'in irons' ? 'wind-irons' : '';
+      text.textContent = `${windWord(w.force)} out of the ${windFrom(w)} · ${point}`;
+      this.windEl.append(arrow, text);
+      this.windEl.title = point === 'in irons' ? 'You are pointed into the wind and she will not go. Bear away and tack up.' : 'Across the wind is fastest; straight into it, she stops.';
+    }
     // What is open on you, worst first, with the herb each one wants.
     const wounds = this.game.player.wounds;
     this.woundEl.hidden = !wounds.length;

@@ -177,7 +177,7 @@ export interface Tint {
   colour: string;
   shade: string;
 }
-type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean, tint?: Tint) => void;
+type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean, tint?: Tint, trim?: number) => void;
 
 const DRAW: Record<string, Draw> = {
   stool: (ctx, W, D, h) => {
@@ -557,7 +557,7 @@ const DRAW: Record<string, Draw> = {
       ctx.stroke();
     }
   },
-  sailing_boat: (ctx, W, D, h, _lit, tint) => {
+  sailing_boat: (ctx, W, D, h, _lit, tint, trim) => {
     hull(ctx, W, D, h * 0.45, WOODS.oak);
     // A mast with the sail bent on, leaning the way she is going.
     const mh = h * 0.95;
@@ -567,18 +567,23 @@ const DRAW: Record<string, Draw> = {
     ctx.moveTo(0, -h * 0.45);
     ctx.lineTo(0, -mh);
     ctx.stroke();
+    // The sail goes out on whichever side the wind is on, and empties when
+    // she is pointed into it.
+    const set = trim ?? 1;
+    const belly = Math.max(0.12, Math.abs(set));
+    const side = set < 0 ? -1 : 1;
     ctx.fillStyle = tint?.colour ?? LINEN.top;
     ctx.beginPath();
-    ctx.moveTo(0.6, -mh + 1);
-    ctx.quadraticCurveTo(W * 0.62, -mh * 0.72, W * 0.34, -h * 0.46);
-    ctx.lineTo(0.6, -h * 0.46);
+    ctx.moveTo(0.6 * side, -mh + 1);
+    ctx.quadraticCurveTo(side * W * 0.62 * belly, -mh * 0.72, side * W * 0.34 * belly, -h * 0.46);
+    ctx.lineTo(0.6 * side, -h * 0.46);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = tint?.shade ?? LINEN.right;
     ctx.beginPath();
-    ctx.moveTo(0.6, -mh + 1);
-    ctx.quadraticCurveTo(W * 0.3, -mh * 0.7, W * 0.16, -h * 0.46);
-    ctx.lineTo(0.6, -h * 0.46);
+    ctx.moveTo(0.6 * side, -mh + 1);
+    ctx.quadraticCurveTo(side * W * 0.3 * belly, -mh * 0.7, side * W * 0.16 * belly, -h * 0.46);
+    ctx.lineTo(0.6 * side, -h * 0.46);
     ctx.closePath();
     ctx.fill();
   },
@@ -702,7 +707,7 @@ function wheel(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, 
 }
 
 /** Draw one piece with its floor contact at (sx, sy). */
-export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint): void {
+export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number): void {
   const [W, D] = furnitureSpan(kind);
   const h = FURNITURE_HEIGHT[kind] ?? 14;
   ctx.save();
@@ -712,6 +717,6 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
   ctx.beginPath();
   ctx.ellipse(0, 0, W * 0.95, D * 0.95, 0, 0, TAU);
   ctx.fill();
-  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit, tint);
+  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit, tint, trim);
   ctx.restore();
 }

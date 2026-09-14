@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: sixty-eight goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: seventy goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -385,6 +385,23 @@ export function buildHelp(win: UIWindow): void {
     <p>What a boat is really for, besides the coast itself, is the water under it. A line cast over the
     side of a boat in thirty feet of water reaches everything that swims &mdash; pike and sturgeon
     included &mdash; which no bank on a shelving shore will ever do.</p>
+    <h3>Wind, and how a sail uses it</h3>
+    <p>The wind has a direction and a strength and neither of them is yours. Both wander &mdash; it may
+    be a flat calm at one hour and a gale two hours later &mdash; and it is worked out from the clock,
+    so it is the same wind for anybody who was there at that hour and it is a different wind on a
+    different island.</p>
+    <p>A <b>rowing boat</b> ignores all of it: oars are oars. A <b>sailing boat</b> lives on it, and far
+    more on the <b>angle</b> you hold than on the strength. Across the wind is fastest; before it is
+    steady and slower; hard up into it is hard work; and inside the last thirty-six degrees she is
+    <b>in irons</b> &mdash; the sail shakes, she makes almost no way at all, and the only way to get
+    somewhere upwind is to <b>tack</b>: sail as close as she will lie on one side of it, then bear away
+    and do the same on the other. Measured on a ql 70 oak hull in a hard blow: 6.1 tiles a second on a
+    beam reach, 5.0 running, 3.5 close-hauled, and 0.7 in irons.</p>
+    <p>The bars show the wind whenever you are under sail: an arrow flying with it, what it is called,
+    where it is out of, and what point of sail you are on. The sail on the boat goes out on whichever
+    side the wind is and empties when you point into it.</p>
+    <p>A sailing boat <b>holds fifteen hundred things</b>, crates included, and that is what she is for
+    &mdash; but a hull loaded to her marks is a third slower than one running empty.</p>
     <h3>Large carts and wagons</h3>
     <p>A small cart is a barrow you pull yourself. The two that follow are <b>driven</b>: a wildermon
     goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the

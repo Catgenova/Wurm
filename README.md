@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Sixty-eight goals in seven chapters — Ashore, The
+- **A journal of goals.** Seventy goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -498,6 +498,18 @@ rebuilds and commits the result.
   rope**. Rope is a real input rather than a curiosity: a bridle takes one
   for the reins, a rowing boat two, a sailing boat eight and two hawsers of
   standing rigging, and a well a hawser to hang its bucket on.
+- **Wind.** A direction and a strength, both wandering, both worked out from
+  the clock rather than stored — the same wind for anyone there at that hour,
+  a different wind on a different island. Oars ignore it; a sail lives on it,
+  and far more on the **angle** than the strength. Across the wind is
+  fastest, before it is steady and slower, hard up into it is hard work, and
+  inside the last thirty-six degrees she is **in irons** and makes almost no
+  way — so getting anywhere upwind means **tacking**. On a ql 70 oak hull in
+  a hard blow: 6.1 tiles a second on a beam reach, 5.0 running, 3.5
+  close-hauled, 0.7 in irons. The bars show an arrow flying with the wind and
+  the point of sail you are on, and the sail itself goes out on whichever
+  side the wind is. A hull loaded to her marks is a third slower than one
+  running empty.
 - **Bait, nets and creels.** **Bait** decides what bites, in a ladder every
   rung of which is something you caught on the rung below: **worms** (turned
   out of damp dirt with a shovel) bring up **perch**, a live **minnow** or

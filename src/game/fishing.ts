@@ -107,7 +107,9 @@ export function baitFor(g: Game, depth: number): { id: string; def: BaitDef } | 
   if (!pool.length) return null;
   let best: { id: string; def: BaitDef; score: number } | null = null;
   for (const b of BAITS) {
-    if (!g.inventory.has(b.id)) continue;
+    // A fish on the hook is a fish you are not eating, so the last one of
+    // anything is left alone: you have to be able to spare it.
+    if (g.inventory.count(b.id) < (isFish(b.id) ? 2 : 1)) continue;
     // Rate a bait by the rarest thing it brings up that actually swims here.
     let score = 0;
     for (const want of b.favours) {

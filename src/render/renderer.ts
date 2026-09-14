@@ -31,6 +31,8 @@ import { furnitureCentre, furnitureDef, type PlacedFurniture } from '../game/fur
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
+import { sailTrim } from '../game/wind';
+import { FURNITURE_BY_ID } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
@@ -643,7 +645,7 @@ export class Renderer {
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
-        drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind, !!ent.piece.lit, dyeOf(ent.piece) ?? undefined);
+        drawFurniture(ctx, ent.sx, ent.sy, zoom, ent.piece.kind, !!ent.piece.lit, dyeOf(ent.piece) ?? undefined, this.sailTrim(ent.piece));
         const [W, D] = furnitureSpan(ent.piece.kind);
         const h = FURNITURE_HEIGHT[ent.piece.kind] ?? 14;
         this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: ent.piece.id });
@@ -1379,6 +1381,17 @@ export class Renderer {
 
   /** Sides in drawing order, exported for menus. */
   static readonly SIDES = SIDES;
+
+  /**
+   * How a sail is set: which side it is out on and how full it is. A hull
+   * nobody is sailing sits with the sail slack.
+   */
+  private sailTrim(f: PlacedFurniture): number | undefined {
+    const def = FURNITURE_BY_ID.get(f.kind)?.boat;
+    if (!def?.sail) return undefined;
+    if (!f.driven) return 0.25;
+    return sailTrim(this.game.heading(), this.game.wind());
+  }
 
   /** Screen point to tile, taking terrain height into account; creatures and trees are picked by their sprite. */
   /**

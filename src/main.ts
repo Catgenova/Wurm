@@ -10,6 +10,7 @@ import { DYES } from './game/dyestuffs';
 import { WOUND_KINDS } from './game/wounds';
 import { TRAPS } from './game/traps';
 import { BAITS, catchFish, FISH } from './game/fishing';
+import { pointOfSail, sailWord, windAt, windFrom, windWord } from './game/wind';
 import { SPECIES } from './game/creatures';
 import { TITLES } from './game/titles';
 import { itemName } from './game/items';
@@ -67,7 +68,7 @@ declare global {
     wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; TRAPS: typeof TRAPS; BAITS: typeof BAITS; FISH_IDS: string[]; SPECIES: typeof SPECIES; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
   }
 }
-(window as unknown as { catchFish: typeof catchFish }).catchFish = catchFish;
+Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt, windFrom, windWord, pointOfSail, sailWord });
 window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, BAITS, FISH_IDS: FISH.map((f) => f.id), SPECIES, itemName, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {

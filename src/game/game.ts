@@ -27,6 +27,7 @@ import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
+import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
 export interface ActiveAction {
@@ -493,15 +494,44 @@ export class Game {
     return f && isBoat(f) ? f : undefined;
   }
 
-  /** How fast the hull goes: the build, the arms behind it, and the load off it. */
+  /** The wind at this hour, worked out from the clock rather than stored. */
+  wind(): Wind {
+    return windAt(this.seed, this.time);
+  }
+
+  /** Where the player is pointed, in the same radians the wind uses. */
+  heading(): number {
+    const p = this.player;
+    return Math.atan2(p.dirY, p.dirX);
+  }
+
+  /**
+   * How fast the hull goes: the build, the arms behind it, and — under sail —
+   * the weather and the angle you are holding to it.
+   */
   boatSpeed(f: PlacedFurniture): number {
     const def = furnitureDef(f.kind).boat;
     if (!def) return 0;
     // Oars are worked by the body; a sail is worked by the weather, and the
-    // best you can do is not get in its way.
+    // best you can do is hold the angle that suits her.
     const body = def.sail ? 0.9 + this.skills.get('body_control') / 320 : 0.6 + this.skills.get('body_strength') / 150;
     const hull = 0.75 + f.ql / 220;
-    return def.speed * body * hull;
+    const weather = def.sail ? sailFactor(this.heading(), this.wind()) : 1;
+    // What is in the hold rides on the hull, and the hull feels it: a boat
+    // loaded to her marks is a third slower than one running empty.
+    const cap = furnitureCapacity(f);
+    const load = cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
+    return def.speed * body * hull * weather * (1 - load * 0.33);
+  }
+
+  /** What the wind is doing, and what the hull under you makes of it. */
+  sailNote(): string {
+    const w = this.wind();
+    const from = `${windWord(w.force)} out of the ${windFrom(w)}`;
+    const boat = this.afloat();
+    const def = boat && furnitureDef(boat.kind).boat;
+    if (!def?.sail) return from;
+    return `${from} \u00b7 ${sailWord(this.heading(), w)}`;
   }
 
   /** Water deep enough to float this hull, near where the player is standing. */
@@ -1006,6 +1036,13 @@ export class Game {
     p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
     const { rule } = this.movement();
     const moved = p.update(dt, this.world, rule);
+    if (boat && furnitureDef(boat.kind).boat?.sail && moved > 0) {
+      const w = this.wind();
+      if (w.force >= 0.5 && sailWord(this.heading(), w) === 'reaching') this.note('reach');
+      const cap = furnitureCapacity(boat);
+      if (cap && furnitureUnits(boat) > cap / 2) this.note('laden');
+    }
+
     if (up) this.carryRider(up, dt, moved);
     const s = p.stats;
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
