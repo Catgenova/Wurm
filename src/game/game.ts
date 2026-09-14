@@ -10,11 +10,11 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, teamOf, vehicleOf, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
-import { CALL_WINDOW, Creatures, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './items';
-import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_SPEED } from './player';
+import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { Skills, SKILL_DEFS } from './skills';
 import { TileIndex } from './tileindex';
@@ -114,8 +114,14 @@ const MAX_VEHICLE_SPEED = 4;
 const TRACE_LENGTH = 1.6;
 /** How fast a wildermon in the traces works its dinner off while hauling. */
 const HAUL_HUNGER = 0.0006;
-/** Steepest ground a wheel will go up, against a walker's own limit. */
+/** Steepest ground a green team will take a wheel up, against a walker's limit. */
 const VEHICLE_STEP = MAX_STEP / 2;
+/** Height units of extra slope every point of a beast's climbing is worth. */
+const CLIMB_PITCH = 0.16;
+/** No mount carries a rider faster than this. */
+const MAX_MOUNT_SPEED = 5;
+/** What practice on bad ground is worth: nothing at all to half again. */
+const footing = (climb: number): number => 0.9 + climb / 140;
 /** Tiles to a side of a new island. */
 export const WORLD_SIZE = 1024;
 /** A day and a night, in seconds: one game hour to the real minute. */
@@ -359,12 +365,28 @@ export class Game {
     if (level !== 0) return null;
     if (!this.vehicleGround(x1, y1)) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
-    return groundStep(this.world, x0, y0, x1, y1, VEHICLE_STEP) ? 0 : null;
+    return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) ? 0 : null;
+  };
+
+  /**
+   * The rule for riding. A mount takes a slope a walker would balk at, the
+   * better the further it has been worked, but it will not swim and it will
+   * not go indoors.
+   */
+  readonly rideRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
+    const up = this.mounted();
+    if (!up || level !== 0) return null;
+    if (!this.world.inBounds(x1, y1) || !this.world.isPassable(x1, y1)) return null;
+    if (this.world.heightAt(x1 + 0.5, y1 + 0.5) < -SWIM_DEPTH) return null;
+    if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
+    return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) ? 0 : null;
   };
 
   /** How the player may move right now, and how many storeys they may cross. */
   movement(): { rule: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null; levels: number } {
-    return this.driving() ? { rule: this.driveRule, levels: 1 } : { rule: this.stepRule, levels: MAX_LEVELS };
+    if (this.driving()) return { rule: this.driveRule, levels: 1 };
+    if (this.mounted()) return { rule: this.rideRule, levels: 1 };
+    return { rule: this.stepRule, levels: MAX_LEVELS };
   }
 
   /** Height of the player's feet, storeys included. */
@@ -629,7 +651,7 @@ export class Game {
     if (this.campfires.size) this.burnFires(seconds);
     if (this.smelters.size) this.runSmelters(seconds);
     if (this.kilns.size) this.runKilns(seconds);
-    if (this.furniture.size) this.runPlaceables(seconds);
+    if (this.furniture.size) this.runPlaceables(seconds, 0);
     if (this.crops.size) this.growCrops();
     if (this.ground.size) this.applyDecay(seconds);
     const s = this.player.stats;
@@ -684,10 +706,14 @@ export class Game {
     this.time += dt;
     this.vision.update();
     const p = this.player;
-    // On a seat you go at your team's pace; on your feet, at your own.
+    // On a seat you go at your team's pace, in the saddle at your mount's, and
+    // on your own feet at your own.
     const driven = this.driving();
-    p.speedMul = driven ? this.vehicleSpeed(driven) / BASE_SPEED : 1;
-    const moved = p.update(dt, this.world, driven ? this.driveRule : this.stepRule);
+    const up = this.mounted();
+    p.speedMul = driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
+    const { rule } = this.movement();
+    const moved = p.update(dt, this.world, rule);
+    if (up) this.carryRider(up, dt, moved);
     const s = p.stats;
     s.hunger = Math.max(0, s.hunger - dt * 0.0004);
     s.thirst = Math.max(0, s.thirst - dt * 0.0006);
@@ -731,7 +757,7 @@ export class Game {
     if (this.campfires.size) this.burnFires(dt);
     if (this.smelters.size) this.runSmelters(dt);
     if (this.kilns.size) this.runKilns(dt);
-    if (this.furniture.size) this.runPlaceables(dt);
+    if (this.furniture.size) this.runPlaceables(dt, moved);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
@@ -1323,7 +1349,7 @@ export class Game {
    * Everything placed that works by itself: ovens burning down, wells filling,
    * rubbish rotting where it was thrown, and a cart following you about.
    */
-  private runPlaceables(dt: number): void {
+  private runPlaceables(dt: number, moved: number): void {
     for (const f of this.furniture.values()) {
       const def = furnitureDef(f.kind);
       if (def.hearth && f.lit) {
@@ -1356,7 +1382,7 @@ export class Game {
         }
       }
       if (f.hitched) this.dragCart(f);
-      if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt);
+      if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt, moved);
     }
   }
 
@@ -1382,8 +1408,9 @@ export class Game {
   /**
    * How fast a team takes a vehicle along, in tiles a second. The animals
    * decide it and nothing else: a quick one gets there sooner, more of them
-   * pull better than fewer, and a hungry one drags its feet. What is loaded on
-   * the back has no say at all, which is the whole point of putting it there.
+   * pull better than fewer, a practised one finds its feet, and a hungry one
+   * drags. What is loaded on the back has no say at all, which is the whole
+   * point of putting it there.
    */
   vehicleSpeed(f: PlacedFurniture): number {
     const v = vehicleOf(f);
@@ -1396,7 +1423,71 @@ export class Game {
       worst = Math.min(worst, 0.6 + 0.4 * c.hunger);
     }
     const mean = sum / team.length;
-    return Math.min(MAX_VEHICLE_SPEED, mean * (0.75 + 0.25 * team.length) * worst);
+    return Math.min(MAX_VEHICLE_SPEED, mean * (0.75 + 0.25 * team.length) * worst * footing(this.teamClimb(f)));
+  }
+
+  /** What a team knows about hills between them, which is what a slope asks. */
+  teamClimb(f: PlacedFurniture): number {
+    const team = this.team(f);
+    if (!team.length) return 0;
+    let sum = 0;
+    for (const c of team) sum += c.skills[HAUL_SKILL] ?? 0;
+    return sum / team.length;
+  }
+
+  /**
+   * The steepest step a vehicle will take, in height units. Wheels start off
+   * worse than a walker and a trained team ends up better: what a draught
+   * beast learns in the traces is which lines it can hold.
+   */
+  vehicleStep(f: PlacedFurniture | undefined): number {
+    return VEHICLE_STEP + (f ? this.teamClimb(f) * CLIMB_PITCH : 0);
+  }
+
+  /** The wildermon the player is up on, if any. */
+  mounted(): Creature | undefined {
+    for (const c of this.creatures.list.values()) if (c.ridden) return c;
+    return undefined;
+  }
+
+  /** How fast a mount carries a rider: its own pace, steadied by practice. */
+  mountSpeed(c: Creature): number {
+    const def = this.creatures.species(c);
+    return Math.min(MAX_MOUNT_SPEED, def.speed * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger));
+  }
+
+  /**
+   * The steepest step a mount will take. A green one is no worse than your own
+   * legs and a worked one goes up what you would have to go round, which is
+   * what the climbing it earns on bad ground is for.
+   */
+  mountStep(c: Creature): number {
+    return MAX_STEP + (c.skills[HAUL_SKILL] ?? 0) * CLIMB_PITCH * 2;
+  }
+
+  /** Get up on a saddled wildermon. */
+  mount(c: Creature): boolean {
+    if (!this.creatures.species(c).mount || !c.tacked || c.hitchedTo !== null || this.driving()) return false;
+    const up = this.mounted();
+    if (up) up.ridden = false;
+    c.ridden = true;
+    c.enemy = null;
+    c.state = 'idle';
+    c.x = this.player.x;
+    c.y = this.player.y;
+    this.events.emit('creature');
+    return true;
+  }
+
+  /** Get down again, wherever the pair of you have got to. */
+  dismount(): void {
+    const c = this.mounted();
+    if (!c) return;
+    c.ridden = false;
+    c.moving = false;
+    this.player.speedMul = 1;
+    this.player.stop();
+    this.events.emit('creature');
   }
 
   /**
@@ -1427,7 +1518,7 @@ export class Game {
   /** Put a wildermon in a vehicle's traces. */
   hitch(c: Creature, f: PlacedFurniture): boolean {
     const v = vehicleOf(f);
-    if (!v || c.hitchedTo !== null || teamOf(f).length >= v.yokes) return false;
+    if (!v || c.hitchedTo !== null || c.ridden || teamOf(f).length >= v.yokes) return false;
     if (c.mode === 'stored') {
       // Fetched out of the token and walked round to the front.
       const [cx, cy] = furnitureCentre(f);
@@ -1475,6 +1566,34 @@ export class Game {
     this.events.emit('world', f.x, f.y);
   }
 
+  /**
+   * Keep a mount under its rider, and let the work teach it something. A
+   * beast learns the hills by being taken over them, which is the same thing
+   * that happens in the traces.
+   */
+  private carryRider(c: Creature, dt: number, moved: number): void {
+    c.x = this.player.x;
+    c.y = this.player.y;
+    c.dirX = this.player.dirX;
+    c.dirY = this.player.dirY;
+    c.moving = this.player.moving;
+    if (!this.player.moving) return;
+    c.walkPhase += dt * 10;
+    c.hunger = Math.max(0, c.hunger - dt * HAUL_HUNGER);
+    this.workClimb(c, moved);
+  }
+
+  /**
+   * What a draught beast picks up from a stretch of ground: nothing on the
+   * flat, and something worth having on a slope, which is why a hill team is
+   * made on hills.
+   */
+  workClimb(c: Creature, moved: number): void {
+    if (moved <= 0) return;
+    const grade = Math.abs(this.world.heightAt(c.x, c.y) - this.world.heightAt(c.x - this.player.dirX * 0.5, c.y - this.player.dirY * 0.5));
+    this.creatures.gainSkill(this, c, HAUL_SKILL, moved * (0.05 + Math.min(0.5, grade / 12)));
+  }
+
   /** Whether a vehicle could stand on a tile: solid, dry, level enough ground. */
   vehicleGround(x: number, y: number): boolean {
     const w = this.world;
@@ -1487,7 +1606,7 @@ export class Game {
    * being driven sits wherever the player does — they are on the seat — and
    * the team walks a length ahead of it, spread across the yokes.
    */
-  private haulVehicle(f: PlacedFurniture, dt: number): void {
+  private haulVehicle(f: PlacedFurniture, dt: number, moved: number): void {
     const team = this.team(f);
     // Anything that died or was let go in the meantime leaves its yoke empty.
     if (team.length !== teamOf(f).length) f.team = team.map((c) => c.id);
@@ -1535,8 +1654,9 @@ export class Game {
         c.dirX = fx;
         c.dirY = fy;
         c.walkPhase += dt * 12;
-        // Hauling is work, and work is hungry.
+        // Hauling is work, and work is hungry — and it teaches the hills.
         c.hunger = Math.max(0, c.hunger - dt * HAUL_HUNGER);
+        if (c.skills[HAUL_SKILL] !== undefined) this.workClimb(c, moved);
       }
       c.enemy = null;
       c.state = 'idle';

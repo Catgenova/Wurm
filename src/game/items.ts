@@ -183,6 +183,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   big_axle: { name: 'Big axle', category: 'material', weight: 8, stackable: true, decay: 1, description: 'A cast axle as long as a cart is wide. Two wheels turn on one.' },
   large_wheel: { name: 'Large wheel', category: 'material', weight: 12, stackable: true, decay: 10, description: 'Spokes, felloes and a metal tyre shrunk on hot. A cart takes two and a wagon four.' },
   yoke: { name: 'Yoke', category: 'material', weight: 4, stackable: true, decay: 10, description: 'A shaped bar and a leather harness. A wildermon is hitched into one to pull.' },
+  saddle: { name: 'Saddle', category: 'material', weight: 7, stackable: true, decay: 8, description: 'A tree of wood under stitched leather, girthed and stirruped. Fit one to an Orse and you can ride it.' },
+  bridle: { name: 'Bridle', category: 'material', weight: 2, stackable: true, decay: 8, description: 'Headstall, bit and reins. Without one there is nothing to steer by.' },
   thatch: { name: 'Thatch', category: 'material', weight: 0.5, stackable: true, decay: 60 },
   sprout: { name: 'Sprout', category: 'plant', weight: 0.1, stackable: true, decay: 160, description: 'Plant it on grass or dirt to grow a tree. Wilts quickly if left lying around.' },
   blueberry: { name: 'Blueberries', category: 'food', weight: 0.1, stackable: true, food: 0.08 },

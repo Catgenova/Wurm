@@ -261,6 +261,9 @@ export function buildHelp(win: UIWindow): void {
     else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
     drags its feet, so feed the team. A Seavic pair will outrun you at a walk; four Quarra will not,
     but they will shift ten thousand bricks.</p>
+    <p>The team is not only the pace but the pitch: a draught beast trains <b>climbing</b> by hauling
+    over bad ground, and what the team knows between them decides both how fast the wheels turn and how
+    steep a step they will take. A green pair balks at a bank a worked pair goes straight up.</p>
     <p>Wheels keep to open ground: no fords, no stairs and nothing steeper than a horse would take. You
     cannot pick a vehicle up with anything on it or anything in the yokes, and a beast in the traces
     cannot be sent to the token or released until you unbuckle it.</p>
@@ -461,7 +464,20 @@ export function buildHelp(win: UIWindow): void {
     <b>Ulva</b> is the first thing on this island that will come at you unprovoked: it hunts by scent
     from seven tiles off and does not stop until you are well away or it is badly hurt. It takes taming
     30 to try, and a tamed one keeps watch over the deed, going for anything wild that crosses the
-    border. The <b>Noot</b> is a plump upright waddler that
+    border. The
+    <b>Roxxen</b> is a slab-shouldered ox that will not start anything and will finish most things that
+    start with it. It does no job on a deed; it is there to be hitched, and what it learns in the traces
+    (its <b>climbing</b>) decides how fast a cart or wagon goes and how steep a line the wheels will
+    take. A green pair labours over ground a worked pair walks up. It also leaves the biggest carcass on
+    the island by a long way. The <b>Orse</b> is long in the leg and learns the same skill, in the traces
+    or under a rider: stitch a <b>saddle</b> and a <b>bridle</b>, fit both from its menu, and
+    <b>mount</b> it. A green one carries you a little faster than your own legs and over the same ground;
+    a well-worked one is half again as fast and goes up slopes you would have to walk round. The
+    <b>Rowl</b> hunts on sight in the wild &mdash; taming 35, and even then it is unruly &mdash; and
+    tamed on a deed it hunts <b>for</b> you: it works a circuit of the token, runs down anything wild
+    inside it, and carries the carcasses back to storage for butchering. Its <b>fighting</b> skill is
+    both its bite and its beat: it hits nearly half again as hard at mastery, and its circuit grows from
+    twelve tiles to over a hundred. The <b>Noot</b> is a plump upright waddler that
     lives beside the clay pits, eats root vegetables, and digs <b>clay</b> with its bill for its deed,
     carrying it to the crate a load at a time &mdash; which is what keeps a potter in clay without
     walking the shore for it. Carry what the creature eats (a berry or vegetable for

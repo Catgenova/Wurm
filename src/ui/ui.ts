@@ -833,6 +833,10 @@ export class UI {
         });
       } else push(item('feed'));
     }
+    push(item('tack_creature'));
+    push(item('mount_creature'));
+    push(item('dismount_creature'));
+    push(item('untack_creature'));
     push(item('hitch_creature'));
     push(item('unhitch_creature'));
     push(item('assign_deed'));

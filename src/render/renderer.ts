@@ -458,13 +458,15 @@ export class Renderer {
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
+        const up = this.game.mounted();
         // A driver sorts with the vehicle rather than with their own feet, a
         // hair behind it, so the figure is drawn onto the seat and not under
         // the box it is sitting on.
         // Sat on the box, the driver goes where the box goes rather than where
         // their own feet are, and sorts a hair behind it so it is drawn first.
         const [vx, vy] = drivenBy ? furnitureCentre(drivenBy) : [player.x, player.y];
-        const sy = drivenBy ? cam.worldToScreenY(vx, vy, world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
+        // A rider sits where their mount stands, which is where they stand.
+        const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
         this.ents.push({
           kind: 'player',
           x: player.tileX,
@@ -565,7 +567,9 @@ export class Renderer {
    */
   private driverSeat(): number {
     const f = this.game.driving();
-    return f ? furnitureDef(f.kind).vehicle?.seat ?? 0 : 0;
+    if (f) return furnitureDef(f.kind).vehicle?.seat ?? 0;
+    const up = this.game.mounted();
+    return up ? SPECIES[up.species]?.mount ?? 0 : 0;
   }
 
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {

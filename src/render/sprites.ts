@@ -906,8 +906,232 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   else if (pose.species === 'woola') drawWoolaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'ulva') drawUlvaBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'magga') drawMaggaBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'roxxen') drawRoxxenBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'orse') drawOrseBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'rowl') drawRowlBody(ctx, sx, sy, zoom, pose);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
+}
+
+/** A Roxxen: a wall of ox, head low, horns forward. Feet at (sx, sy). */
+function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const plod = pose.moving ? Math.abs(Math.sin(pose.phase * 0.8)) * 0.8 : 0;
+  const [hide, pale] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 14, 5.6, 0, 0, TAU);
+  ctx.fill();
+  // Four posts of legs, swinging slowly and barely leaving the ground.
+  ctx.strokeStyle = hide;
+  ctx.lineWidth = 3.4;
+  ctx.lineCap = 'round';
+  for (const [lx, ph] of [[-7, 0], [-5, Math.PI], [5.5, Math.PI], [7.5, 0]] as Array<[number, number]>) {
+    const step = pose.moving ? Math.sin(pose.phase * 0.8 + ph) * 1.6 : 0;
+    ctx.beginPath();
+    ctx.moveTo(lx, -10 - plod);
+    ctx.lineTo(lx + step, -0.8);
+    ctx.stroke();
+  }
+  // A deep barrel of a body with a hump over the shoulders.
+  ctx.fillStyle = hide;
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -13 - plod, 10.5, 6.4, 0, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(4.5, -18 - plod, 5, 3.4, -0.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(-1, -9.5 - plod, 8, 2.6, 0, 0, TAU);
+  ctx.fill();
+  // Tail with a tuft on the end of it.
+  ctx.strokeStyle = hide;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(-10, -15 - plod);
+  ctx.quadraticCurveTo(-13.5, -12 - plod, -12.6, -5 - plod);
+  ctx.stroke();
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(-12.6, -4.2 - plod, 1.2, 2, 0, 0, TAU);
+  ctx.fill();
+  // Head carried low, and horns that sweep forward past the muzzle.
+  ctx.fillStyle = hide;
+  ctx.beginPath();
+  ctx.ellipse(11.5, -13 - plod, 5, 4.2, 0.15, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(15.5, -11.5 - plod, 3.4, 2.6, 0.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(17.4, -11 - plod, 1.8, 1.7, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = '#e8e2d0';
+  ctx.lineWidth = 2;
+  for (const up of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(10.5, -16.5 - plod + up * 0.8);
+    ctx.quadraticCurveTo(15, -18.5 - plod + up * 1.6, 18.5, -15.5 - plod + up * 2.4);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#2a2018';
+  ctx.beginPath();
+  ctx.arc(13.4, -14 - plod, 0.8, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** An Orse: long legs, deep chest, a mane over one side. Feet at (sx, sy). */
+function drawOrseBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const gait = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.4 : 0;
+  const [coat, mane] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 12, 4.8, 0, 0, TAU);
+  ctx.fill();
+  // Long legs, a fore and a hind pair out of phase.
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  for (const [lx, ph] of [[-6.4, 0], [-4.6, Math.PI], [5, Math.PI], [7, 0]] as Array<[number, number]>) {
+    const swing = pose.moving ? Math.sin(pose.phase + ph) * 3 : 0;
+    ctx.beginPath();
+    ctx.moveTo(lx, -13 - gait);
+    ctx.quadraticCurveTo(lx + swing * 0.4, -7 - gait, lx + swing, -0.7);
+    ctx.stroke();
+  }
+  // Barrel and quarters.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(0, -15.5 - gait, 9.4, 4.8, 0, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-6.4, -16 - gait, 4.4, 4.4, 0, 0, TAU);
+  ctx.fill();
+  // Tail.
+  ctx.strokeStyle = mane;
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(-9.6, -17 - gait);
+  ctx.quadraticCurveTo(-13.4, -13 - gait, -12.4, -5.5 - gait);
+  ctx.stroke();
+  // Neck up to a small head, with the mane lying along it.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.moveTo(6, -13 - gait);
+  ctx.quadraticCurveTo(10.6, -16 - gait, 12.4, -23 - gait);
+  ctx.lineTo(15.4, -22.4 - gait);
+  ctx.quadraticCurveTo(13.6, -15.4 - gait, 9.6, -12.4 - gait);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = mane;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(7.6, -17.4 - gait);
+  ctx.quadraticCurveTo(11.4, -20 - gait, 13.2, -24 - gait);
+  ctx.stroke();
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(15, -24 - gait, 3.6, 2.5, 0.35, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(17.6, -22.4 - gait, 2.2, 1.7, 0.35, 0, TAU);
+  ctx.fill();
+  // Ears pricked, and an eye.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.moveTo(13.4, -26.4 - gait);
+  ctx.lineTo(14.4, -29 - gait);
+  ctx.lineTo(15.4, -26 - gait);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#20191a';
+  ctx.beginPath();
+  ctx.arc(15.8, -24.4 - gait, 0.8, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A Rowl: leaner than an Ulva, ruffed at the shoulder, nose down. */
+function drawRowlBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const lope = pose.moving ? Math.abs(Math.sin(pose.phase * 1.2)) * 1.1 : 0;
+  const [coat, ruff] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 11, 4.4, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  for (const [lx, ph] of [[-5.4, 0], [-3.8, Math.PI], [4.2, Math.PI], [6, 0]] as Array<[number, number]>) {
+    const swing = pose.moving ? Math.sin(pose.phase * 1.2 + ph) * 2.6 : 0.2;
+    ctx.beginPath();
+    ctx.moveTo(lx, -9.5 - lope);
+    ctx.quadraticCurveTo(lx + swing * 0.5, -5 - lope, lx + swing, -0.7);
+    ctx.stroke();
+  }
+  // A long back that drops away to the hips.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.moveTo(-7.6, -9.4 - lope);
+  ctx.quadraticCurveTo(-2, -12.6 - lope, 4.4, -13.6 - lope);
+  ctx.quadraticCurveTo(9, -13.8 - lope, 9.4, -9.6 - lope);
+  ctx.quadraticCurveTo(2, -7.4 - lope, -7.2, -7.6 - lope);
+  ctx.closePath();
+  ctx.fill();
+  // The ruff, which is what tells it from an Ulva at a distance.
+  ctx.fillStyle = ruff;
+  ctx.beginPath();
+  ctx.ellipse(6.6, -12 - lope, 3.6, 3.2, -0.3, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(1.5, -8.6 - lope, 3.6, 1.4, -0.1, 0, TAU);
+  ctx.fill();
+  // Brush of a tail, carried low.
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-7.6, -10.2 - lope);
+  ctx.quadraticCurveTo(-12.4, -9 - lope, -14.8, -5.6 - lope);
+  ctx.stroke();
+  // Head low and long, muzzle first, ears back.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(10.4, -11.4 - lope, 3.8, 3, -0.18, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(12.2, -12.6 - lope);
+  ctx.lineTo(17.4, -10.4 - lope);
+  ctx.lineTo(12.2, -9 - lope);
+  ctx.closePath();
+  ctx.fill();
+  for (const dx of [-1.4, 0.9]) {
+    ctx.beginPath();
+    ctx.moveTo(9.4 + dx, -13.8 - lope);
+    ctx.lineTo(9.9 + dx, -16.4 - lope);
+    ctx.lineTo(11.4 + dx, -13.4 - lope);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#c9a227';
+  ctx.beginPath();
+  ctx.arc(12.2, -12 - lope, 0.75, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#1b1714';
+  ctx.beginPath();
+  ctx.arc(17.2, -10.4 - lope, 0.7, 0, TAU);
+  ctx.fill();
+  ctx.restore();
 }
 
 /** A Rabba: round body, long ears, twitchy. Feet at (sx, sy). */

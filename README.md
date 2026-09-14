@@ -321,7 +321,20 @@ rebuilds and commits the result.
   Ulva, the one creature that hunts the player unprovoked, tracking by scent
   from seven tiles and giving up only when you are well away or it is badly
   hurt — taming 30 to try, and a tamed one keeps watch over the deed and goes
-  for anything wild that crosses the border. The Crawler is defensive by nature: it hits back every time
+  for anything wild that crosses the border. Three more come with the wheels:
+  the **Roxxen**, a slab-shouldered ox that does no job but pull, leaves the
+  largest carcass on the island, and trains **climbing** in the traces — what
+  a team knows between them sets both the pace of a cart and the steepness of
+  the line it will take, so a green pair balks at a bank a worked pair walks
+  up; the **Orse**, which learns the same skill hauling or under a rider and
+  can be **mounted** once a saddle and a bridle are stitched and fitted, a
+  green one carrying you a shade faster than your own legs and a worked one
+  half again as fast and up slopes you would have to go round; and the
+  **Rowl**, which hunts on sight in the wild and hunts for you tamed — it
+  works a circuit of the token, runs down anything wild inside it, and carries
+  the carcasses back to storage, its **fighting** skill deciding both how hard
+  it bites and how wide that circuit runs, from twelve tiles to over a
+  hundred. The Crawler is defensive by nature: it hits back every time
   it is struck, and even a tamed one turns on whoever stands beside it now and
   then, though a helm blunts it. Each puts the tile on the same cooldown a
   player would, and none retaliates for a failed taming attempt. A companion

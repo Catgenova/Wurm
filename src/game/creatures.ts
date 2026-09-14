@@ -16,12 +16,12 @@ import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
-export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine' | 'sand' | 'clay' | 'quarry' | 'stoke' | 'fetch' | 'guard';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch' };
+export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine' | 'sand' | 'clay' | 'quarry' | 'stoke' | 'fetch' | 'guard' | 'hunt';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -89,6 +89,13 @@ export interface SpeciesDef {
   rangePerStep?: number;
   /** Stance a newly tamed one takes; defensive unless it is a gentle sort. */
   defaultStance?: Stance;
+  /**
+   * Bred to pull. A draught beast trains climbing in the traces, and what it
+   * knows decides how fast a vehicle goes and how steep a line it can take.
+   */
+  draught?: boolean;
+  /** Can be ridden once it is saddled and bridled; the seat height in pixels. */
+  mount?: number;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -401,6 +408,89 @@ export const SPECIES: Record<string, SpeciesDef> = {
     nearTrees: true,
     defaultStance: 'passive',
   },
+  roxxen: {
+    id: 'roxxen',
+    name: 'Roxxen',
+    description: 'A great slab-shouldered ox with horns that sweep forward and a head it holds low. It will not start anything, and it will finish most things that start with it. Nothing on the island pulls a loaded wagon like a pair of them.',
+    health: 80,
+    attack: 11,
+    speed: 1.1,
+    tameLevel: 25,
+    tameChance: 0.07,
+    diet: ['mixed_grass', 'wheat', 'corn', 'cabbage', 'carrot'],
+    baitHint: 'grass or grain',
+    timid: false,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#7a5a3c', '#c2a077'],
+      ['#4a4441', '#8f8880'],
+      ['#8d4f34', '#caa484'],
+      ['#b3a894', '#e4dccb'],
+    ],
+    butcher: { meat: 26, fur: 4, leather: 14, bone: 18, gland: 1 },
+    tameFail: 'chews through the {food} without once looking up, and goes back to the grass',
+    leaves: 'walks off at its own pace and does not look back',
+    defensive: true,
+    draught: true,
+  },
+  orse: {
+    id: 'orse',
+    name: 'Orse',
+    description: 'Long in the leg and deep in the chest, with a mane that falls to one side. It will carry a rider once it is saddled and bridled, and the further it has been worked the surer its footing on a bad slope.',
+    health: 50,
+    attack: 7,
+    speed: 3,
+    tameLevel: 30,
+    tameChance: 0.07,
+    diet: ['mixed_grass', 'wheat', 'corn', 'carrot', 'acorn'],
+    baitHint: 'grass, grain or a root',
+    timid: false,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#6b4830', '#2e2320'],
+      ['#8f8880', '#514c47'],
+      ['#3a3330', '#211d1b'],
+      ['#a8703c', '#e0c294'],
+    ],
+    butcher: { meat: 14, fur: 3, leather: 10, bone: 12, gland: 1 },
+    tameFail: 'lips the {food} out of your hand, tosses its head, and moves off a few lengths',
+    leaves: 'wheels away at a canter and is over the rise before you can call it',
+    defensive: true,
+    draught: true,
+    mount: 16,
+  },
+  rowl: {
+    id: 'rowl',
+    name: 'Rowl',
+    description: 'A deep-chested hunter that runs the treeline in the half-light. It hunts the moment it sees you, and tamed it will hunt for you instead: give it a settlement and it works a circuit of it, and the more it fights the wider that circuit gets.',
+    health: 46,
+    attack: 14,
+    speed: 2.5,
+    tameLevel: 35,
+    tameChance: 0.05,
+    diet: ['meat', 'cooked_meat'],
+    baitHint: 'meat',
+    timid: false,
+    gathers: 'hunt',
+    workRange: 12,
+    rangePerStep: 12,
+    variants: [
+      ['#575450', '#b5aea3'],
+      ['#2f2c2a', '#6f6862'],
+      ['#c8c2b6', '#eee9df'],
+      ['#7a5b40', '#c8ac8c'],
+    ],
+    butcher: { meat: 8, fur: 6, leather: 5, bone: 6, gland: 2 },
+    tameFail: 'takes the {food} and keeps its shoulder to you the whole while, unconvinced',
+    leaves: 'goes off at a long easy lope and is lost in the trees',
+    nearTrees: true,
+    hunter: true,
+    defensive: true,
+    unruly: 0.08,
+    defaultStance: 'aggressive',
+  },
 };
 
 /** Which species roam wild, by weight. */
@@ -417,6 +507,9 @@ const WILD_SPECIES: Array<[string, number]> = [
   ['quarra', 8],
   ['embra', 6],
   ['ulva', 6],
+  ['roxxen', 9],
+  ['orse', 9],
+  ['rowl', 5],
 ];
 
 /** How far off a hunter picks up your scent, and how far you must get to lose it. */
@@ -473,7 +566,7 @@ export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE)
 
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
-const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard']);
+const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard', 'hunt']);
 export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers && INDOOR_JOBS.has(species.gathers) ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
@@ -493,8 +586,17 @@ export function workRangeOf(c: Creature, species: SpeciesDef): number {
 /** Fresh task skills for a species. */
 const startSkills = (species: SpeciesDef): Record<string, number> => {
   const id = workSkill(species);
-  return id ? { [id]: 1 } : {};
+  const skills: Record<string, number> = id ? { [id]: 1 } : {};
+  // A beast bred to pull starts knowing nothing about hills and learns in the
+  // traces, which is what decides the pace of everything it is put in front of.
+  if (species.draught) skills[HAUL_SKILL] = 1;
+  return skills;
 };
+
+/** What a draught beast trains by pulling, and a mount by being ridden. */
+export const HAUL_SKILL = 'climbing';
+/** What a hunter trains, which decides how hard it hits and how far it ranges. */
+export const FIGHT_SKILL = 'fighting';
 
 export interface Creature {
   id: number;
@@ -549,6 +651,10 @@ export interface Creature {
    * themselves when a world is read back, so it is never saved twice.
    */
   hitchedTo: number | null;
+  /** Saddled and bridled, for the sorts that can be ridden. */
+  tacked: boolean;
+  /** Set while the player is up on its back. */
+  ridden: boolean;
 }
 
 export type FarmJob = 'sow' | 'tend' | 'harvest';
@@ -571,6 +677,7 @@ export interface CreatureJSON {
   xp?: number;
   fleece?: number;
   skills?: Record<string, number>;
+  tacked?: boolean;
 }
 
 /**
@@ -710,6 +817,8 @@ export class Creatures {
       pouch: null,
       job: null,
       hitchedTo: null,
+      tacked: false,
+      ridden: false,
     };
   }
 
@@ -720,6 +829,11 @@ export class Creatures {
   /** Creatures standing on a tile, from the index rebuilt each update. */
   atTile(x: number, y: number): Creature[] {
     return this.byTile.get(`${x},${y}`) ?? [];
+  }
+
+  /** How far this one ranges from the token at the skill it has now. */
+  rangeFor(c: Creature): number {
+    return workRangeOf(c, this.species(c));
   }
 
   /** The player's companion. */
@@ -836,9 +950,9 @@ export class Creatures {
       }
       this.ticked.thought++;
       const def = this.body(game, c, elapsed);
-      // A beast in the traces goes where the vehicle takes it. It heals and
-      // grows its fleece like any other; it just does no thinking of its own.
-      if (c.hitchedTo !== null) {
+      // A beast in the traces, or under a rider, goes where it is taken. It
+      // heals and grows its fleece like any other; it just does no thinking.
+      if (c.hitchedTo !== null || c.ridden) {
         this.place(c);
         continue;
       }
@@ -1541,6 +1655,101 @@ export class Creatures {
   }
 
   /** A guard walks its border and goes for anything wild that crosses it. */
+  /**
+   * A hunter's circuit of the settlement.
+   *
+   * It runs down anything wild inside its range, and its range is what it has
+   * learned: a young one works the border, an old one quarters half a valley.
+   * What it pulls down it goes back for, and carries home like any other load,
+   * because a carcass left in the grass is meat nobody eats.
+   */
+  private packHunt(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): boolean {
+    const def = this.species(c);
+    const range = workRangeOf(c, def);
+    if (c.enemy !== null) {
+      const e = this.list.get(c.enemy);
+      const gone = !e || e.mode !== 'wild' || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 4;
+      if (gone) c.enemy = null;
+      else {
+        const d = Math.hypot(e.x - c.x, e.y - c.y);
+        if (d <= 1.1) {
+          if (c.cooldown <= 0) {
+            this.attack(game, c, e);
+            c.cooldown = 1.1;
+          }
+        } else if (this.stepToward(game, c, e.x, e.y, dt, 1.4) === 'blocked') c.enemy = null;
+        return true;
+      }
+    }
+    // Nothing in its teeth: go back for a carcass, this kill or an older one
+    // left lying about. The piles on the ground are few, so the whole lot is
+    // cheaper to look through than a box of tiles round the hunter.
+    if (c.workX < 0 && game.time >= c.searchAt) {
+      let bestD = Infinity;
+      for (const [key, pile] of game.ground) {
+        if (!pile.some((it) => it.id === 'corpse')) continue;
+        const [gx, gy] = key.split(',').map(Number);
+        if (Math.max(Math.abs(gx - deed.x), Math.abs(gy - deed.y)) > range) continue;
+        const d = Math.hypot(gx + 0.5 - c.x, gy + 0.5 - c.y);
+        if (d < bestD) {
+          bestD = d;
+          c.workX = gx;
+          c.workY = gy;
+        }
+      }
+    }
+    // Back for the kill, wherever it went down.
+    if (c.workX >= 0) {
+      const pile = game.groundAt(c.workX, c.workY);
+      const carcass = pile.find((it) => it.id === 'corpse');
+      if (!carcass) c.workX = -1;
+      else if (Math.hypot(c.workX + 0.5 - c.x, c.workY + 0.5 - c.y) <= 1.2) {
+        const [taken] = game.takeFromGround(c.workX, c.workY, carcass.uid);
+        c.workX = -1;
+        if (taken) {
+          c.carrying = taken;
+          c.state = 'idle';
+          c.until = game.time + 0.5;
+          return true;
+        }
+      } else if (this.stepToward(game, c, c.workX + 0.5, c.workY + 0.5, dt) === 'blocked') c.workX = -1;
+      else return true;
+    }
+    if (game.time >= c.searchAt) {
+      c.searchAt = game.time + 1.2;
+      let best: Creature | null = null;
+      let bestD = Infinity;
+      for (const o of this.list.values()) {
+        if (o.id === c.id || o.mode !== 'wild') continue;
+        if (Math.max(Math.abs(o.x - deed.x), Math.abs(o.y - deed.y)) > range) continue;
+        const d = Math.hypot(o.x - c.x, o.y - c.y);
+        if (d < bestD) {
+          bestD = d;
+          best = o;
+        }
+      }
+      if (best) {
+        c.enemy = best.id;
+        this.gainSkill(game, c, FIGHT_SKILL, 0.08);
+        return true;
+      }
+    }
+    // Nothing worth chasing: walk the country and look again.
+    if (c.state === 'wander') {
+      if (this.stepToward(game, c, c.tx, c.ty, dt, 0.9) !== 'moving') {
+        c.state = 'idle';
+        c.until = game.time + 2;
+      }
+      return true;
+    }
+    if (game.time >= c.until) {
+      this.wanderTarget(game, c, Math.min(range, 8), deed.x + 0.5, deed.y + 0.5);
+      c.state = 'wander';
+      c.until = game.time + 6;
+    }
+    return true;
+  }
+
   private guardStep(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): void {
     const range = deed.radius + 1;
     if (c.enemy !== null) {
@@ -1766,6 +1975,9 @@ export class Creatures {
     if (kind === 'stoke' && !c.carrying && c.state !== 'forage') {
       if (this.stokeStep(game, c, dt)) return;
     }
+    if (kind === 'hunt' && !c.carrying && c.state !== 'forage') {
+      if (this.packHunt(game, c, dt, deed)) return;
+    }
     if (c.state === 'forage') {
       if (game.time >= c.until) {
         c.carrying = kind ? this.finishForage(game, c, kind) : null;
@@ -1930,8 +2142,11 @@ export class Creatures {
   }
 
   attack(game: Game, a: Creature, t: Creature): void {
-    const dmg = this.species(a).attack * (0.7 + game.rand() * 0.6);
+    // A hunter hits harder the more hunting it has done: half again at mastery.
+    const trained = 1 + (a.skills[FIGHT_SKILL] ?? 0) / 200;
+    const dmg = this.species(a).attack * trained * (0.7 + game.rand() * 0.6);
     this.hurt(game, t, dmg, a);
+    if (a.skills[FIGHT_SKILL] !== undefined) this.gainSkill(game, a, FIGHT_SKILL, 0.05);
   }
 
   /** Deal damage from a creature or the player; timid wild creatures bolt, and a kill leaves a corpse. */
@@ -1955,8 +2170,16 @@ export class Creatures {
 
   /** Remove a creature and leave its corpse lying on the tile, ready for butchering. */
   kill(game: Game, t: Creature, killer: Creature | 'player' | null): void {
-    // A beast that dies in the traces leaves an empty yoke behind it.
+    // A beast that dies in the traces leaves an empty yoke behind it, and one
+    // that dies under a rider puts them on the ground.
     if (t.hitchedTo !== null) game.unhitch(t);
+    if (t.ridden) game.dismount();
+    // A hunter marks where its kill went down and comes back for it.
+    if (killer && killer !== 'player' && this.species(killer).gathers === 'hunt' && !killer.carrying) {
+      killer.workX = Math.floor(t.x);
+      killer.workY = Math.floor(t.y);
+      this.gainSkill(game, killer, FIGHT_SKILL, 0.4);
+    }
     this.list.delete(t.id);
     for (const o of this.list.values()) if (o.enemy === t.id) o.enemy = null;
     const def = this.species(t);
@@ -1971,6 +2194,7 @@ export class Creatures {
   describe(c: Creature): string {
     const job = this.species(c).gathers;
     const verb = job ? GATHER_VERB[job] : 'busy';
+    if (c.ridden) return 'under the saddle';
     if (c.hitchedTo !== null) return 'in the traces';
     switch (c.mode) {
       case 'active':
@@ -2006,6 +2230,7 @@ export class Creatures {
         xp: c.xp,
         fleece: c.fleece,
         skills: c.skills,
+        tacked: c.tacked,
       })),
     };
   }
@@ -2017,7 +2242,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

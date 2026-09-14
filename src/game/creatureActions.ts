@@ -40,6 +40,9 @@ function vehicleFor(g: Game, c: Creature) {
   return c.mode === 'stored' ? g.vehicleNear(g.player.x, g.player.y, 3) : g.vehicleNear(c.x, c.y, 5);
 }
 
+/** What has to be fitted before anything can be ridden. */
+const TACK = ['saddle', 'bridle'];
+
 /** Bare hands: what you fight with when there is nothing in them. */
 const FIST: WeaponDef = { id: 'fist', kind: 'knives', damage: 3, swing: 1.8 };
 /** How far you can reach with what is in your hand. */
@@ -216,7 +219,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && (c.mode === 'active' || c.mode === 'stored');
+      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.mode === 'stored');
     },
     check: (t, g) => {
       if (!g.deed) return 'You have no settlement to assign it to.';
@@ -253,7 +256,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && (c.mode === 'deed' || c.mode === 'stored');
+      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'deed' || c.mode === 'stored');
     },
     check: (_t, g) => (g.creatures.active() && !g.deed ? 'Nowhere to keep your current companion.' : null),
     perform: (t, g) => {
@@ -284,7 +287,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && (c.mode === 'active' || c.mode === 'deed');
+      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.mode === 'deed');
     },
     check: (_t, g) => (g.deed ? null : 'You have no settlement token to keep it at.'),
     perform: (t, g) => {
@@ -425,6 +428,99 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.logMsg(`It answers to ${c.name} now.`, 'info');
     },
   },
+  // ---- The saddle: tack fitted, and a rider up. ----
+  {
+    id: 'tack_creature',
+    label: 'Saddle and bridle it',
+    verb: 'tacking it up',
+    stamina: 0.02,
+    baseTime: 4,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && !c.tacked;
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
+      const want = TACK.filter((id) => !g.inventory.has(id));
+      if (want.length) return `You need ${want.map((id) => itemDef(id).name.toLowerCase()).join(' and ')}.`;
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      for (const id of TACK) {
+        const it = g.inventory.find(id);
+        if (!it || !g.inventory.remove(it.uid, 1)) return;
+      }
+      c.tacked = true;
+      g.logMsg(`You saddle ${c.name} and slip the bit into its mouth. It stands for it.`, 'event');
+    },
+  },
+  {
+    id: 'untack_creature',
+    label: 'Take the tack off',
+    verb: 'unsaddling it',
+    stamina: 0.01,
+    baseTime: 2,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && c.tacked && !c.ridden;
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      return nearPlayer(g, c) ? null : `Stand next to ${c.name}.`;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      c.tacked = false;
+      for (const id of TACK) g.inventory.add(id, { ql: 40 });
+      g.logMsg(`You strip the saddle and bridle off ${c.name}.`, 'event');
+    },
+  },
+  {
+    id: 'mount_creature',
+    label: 'Mount',
+    verb: 'getting up',
+    stamina: 0.02,
+    baseTime: 1.5,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && !c.ridden;
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      if (!c.tacked) return `${c.name} has no saddle or bridle on.`;
+      if (c.hitchedTo !== null) return `${c.name} is in the traces.`;
+      if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
+      if (g.driving()) return 'Get down off what you are driving first.';
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c || !g.mount(c)) return;
+      g.logMsg(`You take a fistful of mane and swing up onto ${c.name}.`, 'event');
+    },
+  },
+  {
+    id: 'dismount_creature',
+    label: 'Get down',
+    verb: 'dismounting',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => !!creatureOf(g, t)?.ridden,
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      g.dismount();
+      g.logMsg(`You swing down off ${c.name}.`, 'event');
+    },
+  },
   // ---- The traces: a wildermon put to a cart or a wagon. ----
   {
     id: 'hitch_creature',
@@ -434,7 +530,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 2.5,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.mode !== 'wild' && c.hitchedTo === null && !!vehicleFor(g, c);
+      return !!c && c.mode !== 'wild' && c.hitchedTo === null && !c.ridden && !!vehicleFor(g, c);
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
@@ -483,7 +579,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.mode !== 'wild' && c.hitchedTo === null;
+      return !!c && c.mode !== 'wild' && c.hitchedTo === null && !c.ridden;
     },
     perform: (t, g) => {
       const c = creatureOf(g, t);
