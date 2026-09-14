@@ -30,6 +30,9 @@ import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
 import { METALS, MOULDS } from '../src/game/metal';
 import { POTTERY } from '../src/game/kiln';
+import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
+import { NUTRIENTS } from '../src/game/nutrition';
+import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -141,11 +144,41 @@ out.push(`create table if not exists hoard_metal (item text primary key, ord int
 /* Two columns that arrived after their tables did. A generated table is made
  * with `if not exists`, so the only way to widen one is to say so. */
 out.push(`alter table material_def add column if not exists bane boolean not null default false;`);
+/* The label an item carries — `Oak`, `Steel` — as against the lower-cased id
+ * it is keyed by. Anything that has to *say* what a thing is made of wants
+ * this one. */
+out.push(`alter table material_def add column if not exists name text;`);
 out.push(`alter table species_def add column if not exists glow real;`);
 /*
  * The firing chain: what ore becomes, what green ware becomes, and what a
  * mould full of metal cools into.
  */
+/*
+ * What a thing is made of, for the file and the whetstone.
+ *
+ * `improvable()` is a chain of questions asked of static tables — is it
+ * armour, is it a metal tool, is it a bow — and the answer for any one item id
+ * never changes. A constant is a constant: it is generated rather than ported,
+ * which is the rule the rest of this file already follows.
+ */
+out.push(`create table if not exists improve_material_def (
+  id text primary key, name text not null, skill text not null
+);`);
+out.push(`create table if not exists improve_tool (
+  material text not null, ord int not null, tool text not null, primary key (material, tool)
+);`);
+out.push(`create table if not exists improve_stock (
+  material text not null, ord int not null, item text not null, primary key (material, item)
+);`);
+out.push(`create table if not exists improvable_def (
+  item text primary key, material text not null, skill text not null
+);`);
+out.push(`create table if not exists item_feeds (
+  item text not null, nutrient text not null, amount real not null, primary key (item, nutrient)
+);`);
+out.push(`create table if not exists boon_skill (ord int primary key, skill text not null);`);
+out.push(`alter table item_def add column if not exists food real;`);
+out.push(`alter table item_def add column if not exists drink real;`);
 out.push(`create table if not exists metal_def (
   id text primary key, name text not null, ore text, lump text not null,
   level real not null, work real not null
@@ -319,7 +352,7 @@ for (const d of SKILL_DEFS) {
  * the whole port: a seryll hatchet wore out exactly as fast as a pine one.
  */
 for (const m of MATERIALS) {
-  out.push(`insert into material_def (id, difficulty, weight, wear, decay, edge, soak, bite, hold, bane) values (` + [q(m.id), q(m.difficulty), q(m.weight), q(m.wear), q(m.decay), q(m.edge), q(m.soak), q(m.bite), q(m.hold), q(!!(m as { bane?: boolean }).bane)].join(', ') + `);`);
+  out.push(`insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane) values (` + [q(m.id), q(m.name), q(m.difficulty), q(m.weight), q(m.wear), q(m.decay), q(m.edge), q(m.soak), q(m.bite), q(m.hold), q(!!(m as { bane?: boolean }).bane)].join(', ') + `);`);
 }
 
 /*
@@ -375,7 +408,8 @@ for (const a of ACTIONS as unknown as A[]) {
  */
 out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
-  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def;`);
+  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
+  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -390,6 +424,26 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.glow !== undefined) out.push(`update species_def set glow = ${q(d.glow)} where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
 }
+for (const m of Object.values(IMPROVE_MATERIALS)) {
+  out.push(`insert into improve_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.skill)});`);
+  m.tools.forEach((t, ord) => out.push(`insert into improve_tool values (${q(m.id)}, ${q(ord)}, ${q(t)});`));
+  m.stock.forEach((i, ord) => out.push(`insert into improve_stock values (${q(m.id)}, ${q(ord)}, ${q(i)});`));
+}
+for (const id of Object.keys(ITEM_DEFS)) {
+  const what = canImprove(id) ? improvable(id) : null;
+  if (what) out.push(`insert into improvable_def values (${q(id)}, ${q(what.material.id)}, ${q(what.skill)});`);
+}
+for (const [id, d] of Object.entries(ITEM_DEFS)) {
+  if (d.food !== undefined) out.push(`update item_def set food = ${q(d.food)} where id = ${q(id)};`);
+  if (d.drink !== undefined) out.push(`update item_def set drink = ${q(d.drink)} where id = ${q(id)};`);
+  for (const n of NUTRIENTS) {
+    const v = d.feeds?.[n];
+    if (v) out.push(`insert into item_feeds values (${q(id)}, ${q(n)}, ${q(v)});`);
+  }
+}
+BOON_SKILLS.forEach((id, ord) => out.push(`insert into boon_skill values (${q(ord)}, ${q(id)});`));
+out.push(`create or replace function boon_seconds() returns double precision language sql immutable as $fn$ select ${q(BOON_SECONDS)}::double precision $fn$;`);
+out.push(`create or replace function boon_bonus() returns double precision language sql immutable as $fn$ select ${q(BOON_BONUS)}::double precision $fn$;`);
 for (const m of METALS) {
   out.push(`insert into metal_def values (${q(m.id)}, ${q(m.name)}, ${q(m.ore)}, ${q(m.lump)}, ${q(m.level)}, ${q(m.work)});`);
 }

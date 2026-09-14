@@ -145,10 +145,29 @@ async function main(): Promise<void> {
      * The furnaces. Neither can be built with a starting kit, so what reaches
      * this far is the arithmetic behind them and the refusal in front.
      */
-    const { data: metals } = await supabase().from('metal_def').select('id,work').in('id', ['copper', 'seryll']);
+    const { data: metals, error: metalErr } = await supabase().from('metal_def').select('id,work').in('id', ['copper', 'seryll']);
     const work = new Map(((metals ?? []) as Array<{ id: string; work: number }>).map((m) => [m.id, m.work]));
     check('the smelting chain is on the project', work.size === 2 && work.get('seryll')! > work.get('copper')!,
-      `copper ${work.get('copper')}, seryll ${work.get('seryll')} — seryll is the stubborn one`);
+      metalErr ? metalErr.message : work.size
+        ? `copper ${work.get('copper')}, seryll ${work.get('seryll')} — seryll is the stubborn one`
+        : 'no rows came back at all');
+
+    /*
+     * The rulebook, which a client could not read a row of until a live run
+     * said so. A hand-kept `grant select` list went stale the first time a
+     * table was generated after it was written; the doors are set by a rule
+     * now — everything without a `world_id` on it is reference data — and this
+     * asks about a spread of it rather than one table, so the next one that
+     * goes missing is noticed here.
+     */
+    const rulebook = ['recipe', 'species_def', 'weapon_def', 'crate_def', 'pottery_def', 'improvable_def', 'trait_def'];
+    const shut: string[] = [];
+    for (const table of rulebook) {
+      const { error } = await supabase().from(table).select('*', { count: 'exact', head: true });
+      if (error) shut.push(`${table}: ${error.message}`);
+    }
+    check('every part of the rulebook answers a client', shut.length === 0,
+      shut.length ? shut.join(' | ') : `${rulebook.length} tables, all readable`);
     const noKiln = await island.act('load_kiln', { kind: 'kiln', id: 1 }, 1);
     check('packing a kiln that is not there is refused in its own words',
       !noKiln.started && /gone|kiln/i.test(noKiln.why ?? ''), noKiln.why ?? 'IT STARTED');

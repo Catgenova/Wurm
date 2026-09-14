@@ -38,6 +38,7 @@ simplification rather than a problem:
 | **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
 | **8** | fighting: wearing and wielding, sword and bow, butchering, and the first aid that follows |
 | **11** | firing: a kiln built, packed, lit and unpacked, and the smelter's own queue — ore in, lumps and anvils out |
+| **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
 | **1** | setting a wildermon to work the deed, which is twelve trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
@@ -45,7 +46,7 @@ simplification rather than a problem:
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **87** | known, listed, and honestly refused |
+| **82** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -73,6 +74,29 @@ breeding and pairing, riding and the traces, trapping,
 the ledger, the journal, flattening and levelling, paving with cut slabs, planting
 trees, prospecting, deed upgrades and disbanding, and the ease a hot oven
 lends to cooking.
+
+### The rulebook was never readable
+
+`grant select` on the definition tables was a list of five names, written when
+there were five of them. Every table generated since — recipes, fish, crops,
+species, traits, weapons, armour, wall types, metals, moulds, pottery, crates,
+what a carcass gives, what a dish feeds — arrived with row level security on,
+no read policy and no grant. A client could not read one row of any of it.
+
+Nothing said so, because nothing had asked: the browser still reads its own
+copy of the numbers out of TypeScript, and almost every question in the local
+suite is asked as the owner. It took a live run through PostgREST, as a real
+signed-in client, to get a straight no — which is the entire reason that run
+exists.
+
+The fix is a rule rather than another list, because a list would go stale again
+on the next `npm run defs`. There is a real invariant to lean on: **everything
+belonging to a player or an island carries a `world_id`, and the rulebook does
+not.** `private.lock_doors()` sets the doors by that now, every time it is
+called — which every migration already does on its last line — so a definition
+table generated tomorrow is readable the moment it exists. The suite asks the
+same question as a client: 48 tables in the rulebook, 48 readable, none
+writable.
 
 ### A queue is a fuel budget spent in order
 

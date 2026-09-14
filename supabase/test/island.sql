@@ -1307,3 +1307,144 @@ select '253. ' || (select text from event where uid = :'ivar' order by n desc li
      || ' — and it remembers what it was poured from: '
      || coalesce((select extra from item where holder_uid = :'ivar' and def = 'anvil' limit 1), 'nothing');
 \echo ''
+\echo '--- bettering a thing, and mending it'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set x = 8.5, y = 8.5, stats = '{"health":1,"stamina":1,"hunger":0.4,"thirst":0.3}'::jsonb,
+    nutrition = '{}'::jsonb, boons = '[]'::jsonb where uid = :'ivar';
+delete from item where holder_uid = :'ivar' and def in ('file', 'whetstone', 'iron_lump', 'copper_lump');
+select '254. the kit you washed ashore with: ' || coalesce(item_refusal(:'world2', :'ivar', 'improve_item',
+       ('{"kind":"item","uid":' || (select id from item where holder_uid = :'ivar' and def = 'hatchet' and issued limit 1) || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'hatchet', 30, 1, 'Iron')
+  returning id as axe \gset
+select '255. one of your own, with nothing in hand: ' || coalesce(item_refusal(:'world2', :'ivar', 'improve_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'file', 50, 1), (:'world2', 'player', :'ivar', 'whetstone', 50, 1);
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'copper_lump', 40, 3, 'Copper');
+select '256. and with the wrong metal to build it up: ' || coalesce(item_refusal(:'world2', :'ivar', 'improve_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'iron_lump', 40, 10, 'Iron');
+select '257. with iron in the pack, at blacksmithing ' || to_char(skill_of(:'world2', :'ivar', 'blacksmithing'), 'FM990.0')
+     || ': ' || coalesce(item_refusal(:'world2', :'ivar', 'improve_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+update skill set value = 45 where uid = :'ivar' and id = 'blacksmithing';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'blacksmithing', 45 where not exists (select 1 from skill where uid = :'ivar' and id = 'blacksmithing');
+select '258. at 45 the ceiling is ' || round(improve_ceiling(:'world2', :'ivar', 'blacksmithing', null)::numeric, 1)
+     || ', and a rare one would go to ' || round(improve_ceiling(:'world2', :'ivar', 'blacksmithing', 'rare')::numeric, 1)
+     || ' — a rare thing has something in it the hands did not put there';
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        c bigint := (select max(id) from item where def = 'hatchet' and not issued); i int;
+begin
+  for i in 1..8 loop
+    exit when item_refusal(w, me, 'improve_item', jsonb_build_object('kind', 'item', 'uid', c)) is not null;
+    perform perform_item(w, me, 'improve_item', jsonb_build_object('kind', 'item', 'uid', c));
+  end loop;
+end $$;
+select '259. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+select '260. the hatchet is QL ' || (select round(ql::numeric, 1) from item where id = :'axe')
+     || ' from 30, with ' || (select round(dmg::numeric, 1) from item where id = :'axe')
+     || ' damage on it, and ' || (select coalesce(sum(count), 0) from item where holder_uid = :'ivar' and def = 'iron_lump')
+     || ' lumps left of ten — a failed pass marks the piece rather than spoiling it';
+-- Just past whatever the hand is worth now: the ceiling follows the skill,
+-- and the skill has been climbing all the way up this section.
+update item set ql = improve_ceiling(:'world2', :'ivar', 'blacksmithing', null) + 0.5, dmg = 0 where id = :'axe';
+select '261. and once it is as good as the hands that made it: ' || coalesce(item_refusal(:'world2', :'ivar', 'improve_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+update item set dmg = 22 where id = :'axe';
+select ql as before_repair from item where id = :'axe' \gset
+select '262. too knocked about to work on: ' || coalesce(item_refusal(:'world2', :'ivar', 'improve_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed')
+     || ' | and mending it: ' || coalesce(item_refusal(:'world2', :'ivar', 'repair_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+do $$
+declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
+        c bigint := (select max(id) from item where def = 'hatchet' and not issued); i int;
+begin
+  for i in 1..30 loop
+    exit when item_refusal(w, me, 'repair_item', jsonb_build_object('kind', 'item', 'uid', c)) is not null;
+    perform perform_item(w, me, 'repair_item', jsonb_build_object('kind', 'item', 'uid', c));
+  end loop;
+end $$;
+select '263. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar')
+     || ' — 22 points of damage came out, and ' || (select round(:'before_repair'::numeric - ql::numeric, 2) from item where id = :'axe')
+     || ' of quality went with them';
+select '264. nothing left to mend: ' || coalesce(item_refusal(:'world2', :'ivar', 'repair_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+
+\echo ''
+\echo '--- a meal, and what is actually in it'
+delete from event where uid = :'ivar';
+select '265. hunger ' || (select round(((stats->>'hunger')::numeric), 2) from player where uid = :'ivar')
+     || ', thirst ' || (select round(((stats->>'thirst')::numeric), 2) from player where uid = :'ivar')
+     || ', and nothing in the four';
+select '266. eating a hatchet: ' || coalesce(item_refusal(:'world2', :'ivar', 'eat', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'cheese', 70, 3)
+  returning id as cheese \gset
+select '267. cheese feeds ' || (select string_agg(nutrient || ' ' || amount, ', ' order by nutrient) from item_feeds where item = 'cheese')
+     || ', and a QL 70 helping of it is worth ' || round(helping_of(70)::numeric, 2) || ' of that';
+select act_perform(:'world2', :'ivar', 'eat', ('{"kind":"item","uid":' || :'cheese' || '}')::jsonb) \g /dev/null
+select '268. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '269. hunger is now ' || (select round(((stats->>'hunger')::numeric), 2) from player where uid = :'ivar')
+     || ', and the four read ' || (select nutrition::text from player where uid = :'ivar');
+select '270. the knack it left: ' || coalesce((select string_agg(b->>'skill' || ' +' || (b->>'bonus'), ', ')
+       from player p, jsonb_array_elements(p.boons) b where p.uid = :'ivar'), 'none')
+     || ' — and on an island raised from a different seed, cheese would favour '
+     || coalesce(boon_of(999, 'cheese'), 'nothing') || ' instead of ' || coalesce(boon_of((select seed from world where id = :'world2'), 'cheese'), 'nothing');
+delete from event where uid = :'ivar';
+-- A second helping pushes the hour out rather than stacking a second bonus.
+select act_perform(:'world2', :'ivar', 'eat', ('{"kind":"item","uid":' || :'cheese' || '}')::jsonb) \g /dev/null
+select '271. a second helping: ' || (select jsonb_array_length(boons) from player where uid = :'ivar')
+     || ' knack, not two — it runs longer rather than harder';
+
+\echo ''
+\echo '--- and something to drink'
+delete from event where uid = :'ivar';
+update player set stats = jsonb_set(stats, '{thirst}', '0.2') where uid = :'ivar';
+update player set x = 3.5, y = 4.5 where uid = :'ivar';
+select '272. drinking from dry ground: ' || coalesce(act_refusal(:'world2', :'ivar', 'drink', '{"kind":"tile","x":3,"y":4}'), 'allowed')
+     || ' | from the shore: ' || coalesce(act_refusal(:'world2', :'ivar', 'drink', '{"kind":"tile","x":3,"y":3}'), 'allowed');
+select act_perform(:'world2', :'ivar', 'drink', '{"kind":"tile","x":3,"y":3}') \g /dev/null
+select '273. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — thirst ' || (select round(((stats->>'thirst')::numeric), 2) from player where uid = :'ivar');
+update player set stats = jsonb_set(stats, '{thirst}', '0.3') where uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count, charges) values (:'world2', 'player', :'ivar', 'milk_bucket', 60, 1, 2)
+  returning id as milk \gset
+delete from event where uid = :'ivar';
+select '274. a bucket of milk: ' || coalesce(item_refusal(:'world2', :'ivar', 'drink_skin', ('{"kind":"item","uid":' || :'milk' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'drink_skin', ('{"kind":"item","uid":' || :'milk' || '}')::jsonb) \g /dev/null
+select act_perform(:'world2', :'ivar', 'drink_skin', ('{"kind":"item","uid":' || :'milk' || '}')::jsonb) \g /dev/null
+select '275. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+select '276. and the bucket is: ' || coalesce(item_refusal(:'world2', :'ivar', 'drink_skin', ('{"kind":"item","uid":' || :'milk' || '}')::jsonb), 'allowed')
+     || ' — thirst ' || (select round(((stats->>'thirst')::numeric), 2) from player where uid = :'ivar')
+     || ', and the four now read ' || (select nutrition::text from player where uid = :'ivar');
+\echo ''
+\echo '--- the rulebook, as a client sees it'
+/*
+ * This is the check that was missing, and the live run had to find it instead.
+ *
+ * `grant select` on the definition tables was a list of five names written
+ * when there were five of them. Everything generated since arrived with row
+ * level security on and no way through it, and nothing here noticed because
+ * almost every question in this file is asked as the owner. So: ask as a
+ * client, about every table that has no `world_id` on it — which is the rule
+ * the doors are set by now.
+ */
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '277. tables in the rulebook a client can read: ' || count(*) || ' of ' ||
+       (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and not exists (select 1 from pg_attribute a where a.attrelid = c.oid
+            and a.attname = 'world_id' and a.attnum > 0 and not a.attisdropped))
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r'
+    and not exists (select 1 from pg_attribute a where a.attrelid = c.oid
+      and a.attname = 'world_id' and a.attnum > 0 and not a.attisdropped)
+    and has_table_privilege('authenticated', c.oid, 'select');
+select '278. and some of what is in it: ' || (select count(*) from recipe) || ' recipes, '
+     || (select count(*) from species_def) || ' species, ' || (select count(*) from metal_def) || ' metals, '
+     || (select count(*) from weapon_def) || ' weapons, ' || (select count(*) from improvable_def) || ' things worth bettering';
+do $$ begin
+  begin update item_def set weight = 0; raise notice '279. and rewriting it:            ALLOWED';
+  exception when others then raise notice '279. and rewriting it:            refused — %', sqlerrm; end;
+  begin insert into metal_def values ('unobtainium', 'Unobtainium', null, 'x_lump', 1, 1);
+        raise notice '280. and adding a metal of her own: ALLOWED';
+  exception when others then raise notice '280. and adding a metal of her own: refused — %', sqlerrm; end;
+end $$;
+reset role;
+\echo ''
