@@ -38,6 +38,8 @@ import { RARITIES } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { WORMY, RICH_WORMS } from '../src/game/actions';
+import { VESSELS, LIQUID_NAME, BUCKET_LITRES, type LiquidKind } from '../src/game/furniture';
+import { isBrew, drinkable } from '../src/game/brewing';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -200,6 +202,17 @@ out.push(`alter table tile_def add column if not exists rich_worms boolean not n
 out.push(`create table if not exists slab_def (
   id int primary key, name text not null, item text not null
 );`);
+/* What a barrel holds and what a well finds for itself, in litres. */
+out.push(`alter table furniture_def add column if not exists liquid real;`);
+out.push(`alter table furniture_def add column if not exists well real;`);
+/* Which full bucket carries which liquid, and which empty one it leaves. */
+out.push(`create table if not exists vessel_def (
+  item text primary key, liquid text not null, empty text not null
+);`);
+out.push(`create table if not exists liquid_def (
+  id text primary key, name text not null,
+  drinkable boolean not null default false, brew boolean not null default false
+);`);
 out.push(`alter table item_def add column if not exists holds real;`);
 /* Rarity and colour, which are half of what a thing is called. */
 out.push(`create table if not exists rarity_def (
@@ -361,7 +374,7 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def;');
 out.push('');
 
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
@@ -555,6 +568,13 @@ TREE_DEFS.forEach((t, i) => {
   if (t.fruit) out.push(`update tree_def set fruit = ${q(t.fruit)} where id = ${q(i)};`);
 });
 SLAB_VARIANTS.forEach((v, i) => out.push(`insert into slab_def values (${q(i)}, ${q(v.name)}, ${q(v.item)});`));
+for (const [item, v] of Object.entries(VESSELS)) {
+  out.push(`insert into vessel_def values (${q(item)}, ${q(v.liquid)}, ${q(v.empty)});`);
+}
+for (const [id, name] of Object.entries(LIQUID_NAME)) {
+  const l = id as LiquidKind;
+  out.push(`insert into liquid_def values (${q(id)}, ${q(name)}, ${q(drinkable(l))}, ${q(isBrew(l))});`);
+}
 for (const id of WORMY) out.push(`update tile_def set wormy = true where id = ${q(id)};`);
 for (const id of RICH_WORMS) out.push(`update tile_def set rich_worms = true where id = ${q(id)};`);
 BUSH_DEFS.forEach((b, i) => out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`));
@@ -567,6 +587,8 @@ ROCK_VARIANTS.forEach((r, i) => {
 });
 for (const f of FURNITURE as unknown as A[]) {
   out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);
+  if (f.liquid !== undefined) out.push(`update furniture_def set liquid = ${q(f.liquid)} where id = ${q(f.id)};`);
+  if (f.well !== undefined) out.push(`update furniture_def set well = ${q(f.well)} where id = ${q(f.id)};`);
 }
 for (const r of RECIPES) {
   out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +

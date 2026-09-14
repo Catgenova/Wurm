@@ -41,14 +41,15 @@ simplification rather than a problem:
 | **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
 | **8** | and to what is lying about: pick one up, sweep the lot, put one down, look at a thing or a tile, set a thing aside and take it back, call something by a name |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
-| **1** | setting a wildermon to work the deed, which is twenty trades and a crate to fill |
+| **1** | setting a wildermon to work the deed, which is twenty-one trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **11** | and shaping it: flatten a tile, drop dirt on a named corner, lay and lift cut slabs, cut grass and reeds, pick fruit and sprouts, plant a tree, turn the ground over for worms, read it for metal |
+| **6** | liquids: fill a bucket at a shore, a well or a barrel, tip it out, pour it in, drink from it, fill a skin |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **63** | known, listed, and honestly refused |
+| **57** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -66,12 +67,40 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), the two deed trades that
-want something this island has not got yet — `water` wants barrels that hold
-liquid and `seek` wants archaeology — sowing a field from a worker's own
-cheeks, breeding and pairing, riding and the traces, trapping, the ledger, the
-journal, bags, ovens and lanterns, deed upgrades and disbanding, and the ease
-a hot oven lends to cooking.
+not the recovery, would make the island unplayable), the one deed trade that
+wants something this island has not got — `seek` wants archaeology — sowing a
+field from a worker's own cheeks, breeding and pairing, riding and the traces,
+trapping, brewing, the ledger, the journal, bags, ovens and lanterns, deed
+upgrades and disbanding, and the ease a hot oven lends to cooking.
+
+### A well is the fifth thing that will not sit still
+
+A fire burns down, a crop comes on, a forage bed recovers, a creature walks. A
+well draws its own water, and it draws it whether or not anybody is standing
+over it — so it settles like all the others: what was in it when somebody last
+touched it, plus the seconds since, stopped at the depth it was sunk to. Five
+minutes gives 16.8 litres and a day gives 50, which is the whole of the shaft
+and not a drop more.
+
+A barrel is the other half and the easy half. It holds what is poured in and
+loses nothing, so its litres are a number on the row.
+
+The one thing this turned up is a difference between the two that reads as a
+bug the first time it bites. A barrel says on its row what is in it, because
+somebody poured it in. A well never needed telling — it is water, it was always
+going to be water — and its column only catches up the next time anybody draws
+from it. So a bucket filled at a fresh well came up holding nothing at all,
+because the code read the column. `placed_liquid()` answers the question
+instead of the column does, and a well answers water.
+
+### A sixth prefix, and the first caught by running
+
+`kind` is a local in `errand_do` and a column of `placed`. That is the sixth
+time this exact class has bitten — after `land_tile.y`, `crop.y`,
+`trait_def.tier`, `species_butcher.n` and `crate_def.kind` — and the first that
+was caught by running the suite rather than by reading the diff. The fix is the
+one the surrounding code already uses: alias the table, every time, even when
+the query looks unambiguous on the page.
 
 ### A hash on something that never changes is not a hash
 

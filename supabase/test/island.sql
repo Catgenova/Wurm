@@ -2003,6 +2003,111 @@ select '350. of the twenty-two trades a wildermon may be set to, this island now
                                       ('clay'), ('quarry'), ('stoke'), ('fetch'), ('guard'), ('hunt'),
                                       ('peat'), ('reed'), ('water'), ('prospect'), ('plant'), ('hod'),
                                       ('mend'), ('compost'), ('seek'), ('fish')) v(k) where worker_job_ported(v.k))
-     || ' — and the two it does not: '
+     || ' — and the one it does not: '
      || (select string_agg(v.k, ', ' order by v.k) from (values ('water'), ('seek')) v(k)
          where not worker_job_ported(v.k));
+
+\echo ''
+\echo '--- barrels, buckets, and a well that fills itself'
+update player set x = 5.5, y = 7.5,
+    stats = jsonb_set(stats, '{thirst}', '0.3') where world_id = :'world2' and uid = :'ivar';
+delete from placed where world_id = :'world2' and kind = 'furniture' and sub in ('barrel', 'well');
+select give(:'world2', :'ivar', 'barrel', 1, 60) \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'barrel' order by id desc limit 1) || ',"x":5,"y":8,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as barrel from placed where world_id = :'world2' and sub = 'barrel' order by id desc limit 1 \gset
+select '351. a barrel set down at 5,8 holds ' || liquid_capacity((select p from placed p where p.id = :'barrel'))
+     || ' litres and has ' || placed_litres((select p from placed p where p.id = :'barrel')) || ' in it';
+
+-- A well, which is the fifth thing on this island that will not sit still.
+select give(:'world2', :'ivar', 'well', 1, 80) \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'well' order by id desc limit 1) || ',"x":6,"y":8,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as well from placed where world_id = :'world2' and sub = 'well' order by id desc limit 1 \gset
+select '352. a well at QL 80 finds ' || round(well_rate(80)::numeric, 4) || ' litres a second'
+     || ', so a fresh one has ' || round(placed_litres((select p from placed p where p.id = :'well'))::numeric, 1) || ' in it';
+update placed set since = now() - interval '5 minutes' where id = :'well';
+select round(placed_litres((select p from placed p where p.id = :'well'))::numeric, 1) as five \gset
+update placed set since = now() - interval '1 day' where id = :'well';
+select '353. five minutes nobody watched: ' || :'five' || ' litres — and a day of it: '
+     || round(placed_litres((select p from placed p where p.id = :'well'))::numeric, 1)
+     || ', which is the depth it was sunk to and not a drop more';
+update placed set since = now() - interval '5 minutes' where id = :'well';
+
+\echo ''
+\echo '--- a bucket, filled and tipped out'
+select give(:'world2', :'ivar', 'bucket', 3, 50) \g /dev/null
+select id as bucket from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'bucket' order by id desc limit 1 \gset
+update player set x = 6.5, y = 8.5 where world_id = :'world2' and uid = :'ivar';
+select '354. standing at the well: ' || coalesce(act_refusal(:'world2', :'ivar', 'fill_bucket',
+       ('{"kind":"item","uid":' || :'bucket' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'fill_bucket', ('{"kind":"item","uid":' || :'bucket' || '}')::jsonb) \g /dev/null
+select '355. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — the well is down to ' || round(placed_litres((select p from placed p where p.id = :'well'))::numeric, 1)
+     || ', and the pack holds ' || pack_count(:'world2', :'ivar', 'water_bucket') || ' of water';
+
+update player set x = 5.5, y = 8.5 where world_id = :'world2' and uid = :'ivar';
+select id as full_bucket from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'water_bucket' order by id desc limit 1 \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pour_into_barrel', ('{"kind":"item","uid":' || :'full_bucket' || '}')::jsonb) \g /dev/null
+select '356. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and the empty bucket is back: ' || pack_count(:'world2', :'ivar', 'bucket') || ' of them';
+
+\echo ''
+\echo '--- drinking out of it, and tipping it out'
+select '357. thirst before: ' || (select round((stats->>'thirst')::numeric, 2) from player where uid = :'ivar')
+     || ', and drinking from the barrel: ' || coalesce(act_refusal(:'world2', :'ivar', 'drink_from_vessel',
+        ('{"kind":"furniture","id":' || :'barrel' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'drink_from_vessel', ('{"kind":"furniture","id":' || :'barrel' || '}')::jsonb) \g /dev/null
+select '358. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — thirst ' || (select round((stats->>'thirst')::numeric, 2) from player where uid = :'ivar')
+     || ', and ' || round(placed_litres((select p from placed p where p.id = :'barrel'))::numeric, 1) || ' left in it';
+update player set stats = jsonb_set(stats, '{thirst}', '1') where world_id = :'world2' and uid = :'ivar';
+select '359. and asked again with a full belly: ' || coalesce(act_refusal(:'world2', :'ivar', 'drink_from_vessel',
+       ('{"kind":"furniture","id":' || :'barrel' || '}')::jsonb), 'allowed');
+update placed set liquid = 'lye' where id = :'barrel';
+select '360. a barrel of lye: ' || coalesce(act_refusal(:'world2', :'ivar', 'drink_from_vessel',
+       ('{"kind":"furniture","id":' || :'barrel' || '}')::jsonb), 'allowed')
+     || ' | and a well, which is not something you tip out: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'empty_vessel', ('{"kind":"furniture","id":' || :'well' || '}')::jsonb), 'allowed');
+update placed set liquid = 'water' where id = :'barrel';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'empty_vessel', ('{"kind":"furniture","id":' || :'barrel' || '}')::jsonb) \g /dev/null
+select '361. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — ' || round(placed_litres((select p from placed p where p.id = :'barrel'))::numeric, 1) || ' left';
+
+-- A water skin, which is the other way of carrying it.
+select give(:'world2', :'ivar', 'water_skin', 1, 50) \g /dev/null
+update item set charges = 1 where world_id = :'world2' and holder_uid = :'ivar' and def = 'water_skin';
+select id as skin from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'water_skin' limit 1 \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'fill_skin', ('{"kind":"item","uid":' || :'skin' || '}')::jsonb) \g /dev/null
+select '362. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — it is now ' || (select charges from item where id = :'skin') || ' of '
+     || (select charges from item_def where id = 'water_skin')
+     || ', and filling it again: ' || coalesce(act_refusal(:'world2', :'ivar', 'fill_skin',
+        ('{"kind":"item","uid":' || :'skin' || '}')::jsonb), 'allowed');
+
+\echo ''
+\echo '--- and a holla, which carries the shore to your barrels'
+delete from creature where world_id = :'world2' and mode in ('deed', 'wild');
+update placed set litres = 0, liquid = null, since = now() where id = :'barrel';
+select creature_spawn(:'world2', 'holla', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as carrier \gset
+select '363. a holla set to carry water, ranging ' || work_range((select c from creature c where c.id = :'carrier'))
+     || ' tiles — the barrel at 5,8 is empty and the well at 6,8 has '
+     || round(placed_litres((select p from placed p where p.id = :'well'))::numeric, 1) || ' in it';
+update creature set phase = 'idle', until = now() - interval '900 seconds',
+    leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
+    settled_at = now() - interval '900 seconds' where id = :'carrier';
+select worker_settle(:'world2', :'carrier') as carried \gset
+select '364. a quarter of an hour of it: ' || :'carried' || ' goes — a fill and a pour apiece — and the barrel holds '
+     || round(placed_litres((select p from placed p where p.id = :'barrel'))::numeric, 1) || ' of '
+     || liquid_capacity((select p from placed p where p.id = :'barrel')) || ' litres of '
+     || coalesce((select liquid from placed where id = :'barrel'), 'nothing')
+     || ', with ' || round(placed_litres((select p from placed p where p.id = :'well'))::numeric, 1)
+     || ' left in the well: it stops when there is not a bucket''s worth down there';
+select '365. the six the liquids brought: '
+     || (select string_agg(id, ', ' order by id) from action_def where liquid_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));

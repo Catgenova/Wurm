@@ -185,6 +185,24 @@ async function main(): Promise<void> {
       fruitErr ? fruitErr.message : ((fruiting ?? []) as Array<{ name: string; fruit: string }>).map((t) => `${t.name.toLowerCase()} → ${t.fruit}`).join(', '));
 
     /*
+     * Barrels and the well. Neither can be built with a starting kit, so what
+     * reaches out here is the arithmetic behind them and the refusal in front.
+     */
+    const { data: vessels, error: vesselErr } = await supabase().from('furniture_def')
+      .select('id,name,liquid,well').or('liquid.not.is.null,well.not.is.null');
+    check('barrels and wells are on the project', !vesselErr && (vessels ?? []).length >= 4,
+      vesselErr ? vesselErr.message
+        : ((vessels ?? []) as Array<{ id: string; liquid: number | null; well: number | null }>)
+            .map((v) => `${v.id} ${v.liquid ?? v.well}L`).join(', '));
+    const { data: liquids, error: liquidErr } = await supabase().from('liquid_def').select('id,drinkable,brew');
+    check('and what each of them may be full of', !liquidErr && (liquids ?? []).length === 7,
+      liquidErr ? liquidErr.message
+        : `${(liquids ?? []).length}, of which ${((liquids ?? []) as Array<{ drinkable: boolean }>).filter((l) => l.drinkable).length} you would drink`);
+    const dry = await island.act('fill_bucket', { kind: 'item', uid: 1 }, 1);
+    check('filling a bucket we have not got is refused in its own words',
+      !dry.started && /gone|bucket/i.test(dry.why ?? ''), dry.why ?? 'IT STARTED');
+
+    /*
      * The furnaces. Neither can be built with a starting kit, so what reaches
      * this far is the arithmetic behind them and the refusal in front.
      */
