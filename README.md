@@ -80,6 +80,13 @@ rebuilds and commits the result.
   packing dirt in to bring low ground up, so a terrace can be carried outwards
   tile by tile; flattening the tile under your feet takes it down to its own
   lowest corner. Slopes you may create are limited by your digging skill.
+- **Beds you take off the top.** Sand, clay, peat and tar are beds rather than
+  soil: stand on one and **Collect** fills a shovel off it — the entry names
+  what is underfoot — leaving the tile's type, its corner heights and its soil
+  exactly as they were, so a clay pit is still there tomorrow. It takes a
+  moment longer than cutting a corner away, which is the only thing you give
+  up; digging the corner still lowers the ground for when that is what you
+  want.
 - **Gathering.** Cut down trees for logs, pick and plant sprouts, forage and
   botanize with per-tile cooldowns, drink from any water or from a water skin
   you fill at the shore.
@@ -130,10 +137,11 @@ rebuilds and commits the result.
   now.
 - **Nails.** A nail mould is fired from sand at a smelter and cast on an
   anvil: one lump of metal runs out as a hundred nails of ten grams each.
-  Everything that is nailed together needs them — crates, tool heads fitted to
-  shafts, and all twenty pieces of furniture — while sawing planks, carving
-  shafts and bundling thatch need none, so nothing in the early game waits on a
-  smith.
+  Everything that is nailed together needs them — plank crates, tool heads
+  fitted to shafts, and all twenty pieces of furniture — while sawing planks,
+  carving shafts, bundling thatch, notching a log crate together and raising a
+  wall of any material need none at all, so neither the first shelter nor the
+  first storage waits on a smith.
 - **Furniture and storage.** Fine carpentry, the furniture hand as distinct
   from the carpentry that cuts the wood, builds twenty pieces from planks,
   timbers, shafts and nails: stool, chair, bench, table, long table, writing

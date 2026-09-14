@@ -59,6 +59,8 @@ export type Target =
 export interface ActionDef {
   id: string;
   label: string;
+  /** A label that reads off the target: "Collect clay" rather than "Collect". */
+  labelFor?(t: Target, g: Game): string;
   /** Present participle used in messages: "You start digging." */
   verb: string;
   skill?: string;
@@ -193,6 +195,45 @@ export const ACTIONS: ActionDef[] = [
       const crates = g.cratesOnTile(t.x, t.y);
       if (crates.length) extra += ` ${crates.length === 1 ? 'A crate stands' : `${crates.length} crates stand`} here.`;
       g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');
+    },
+  },
+  {
+    // Sand, clay, peat and tar lie in beds. You fill a shovel off the top of
+    // one without cutting the ground about, which is what digging a corner
+    // does: stand on the tile, and the tile is as it was when you walk off it.
+    id: 'collect',
+    label: 'Collect',
+    labelFor: (t, g) => `Collect ${TILE_DEFS[tile(t, g)].name.toLowerCase()}`,
+    verb: 'filling a shovel',
+    skill: 'digging',
+    tool: 'shovel',
+    // Nought tiles of reach: you have to be standing on the bed itself, and
+    // the walk that starts an action puts you there.
+    range: 0,
+    stamina: 0.05,
+    baseTime: 7,
+    difficulty: 6,
+    applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].collect,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('shovel')) return 'You need a shovel to dig with.';
+      const def = TILE_DEFS[tile(t, g)];
+      if (!def.collect) return 'There is no bed of anything here.';
+      const under = g.buildings.buildingAt(t.x, t.y);
+      if (under) return `${under.name} stands on it.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const def = TILE_DEFS[g.world.getTile(t.x, t.y)];
+      const yieldId = def.digYield;
+      if (!def.collect || !yieldId) return;
+      if (!g.skillCheck('digging', 6, g.toolQl('shovel'))) {
+        g.logMsg(`Your shovel comes up with nothing but a smear of ${def.name.toLowerCase()}.`, 'event');
+        return;
+      }
+      const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
+      g.logMsg(`You fill a shovel with ${itemDef(yieldId).name.toLowerCase()} off the top of the bed. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {

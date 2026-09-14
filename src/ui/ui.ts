@@ -502,7 +502,7 @@ export class UI {
           continue;
         }
       }
-      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) });
+      entries.push({ label: def.labelFor?.(target, this.game) ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(def, target) });
     }
     if (!building) entries.push(...this.buildingEntries(pick));
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;

@@ -1058,6 +1058,9 @@ export class Game {
         { x: target.cx - 1, y: target.cy },
         { x: target.cx, y: target.cy },
       ];
+    } else if (def.range === 0) {
+      // Nought tiles of reach means there is one place to stand: on it.
+      candidates = [{ x: tile.x, y: tile.y }];
     } else {
       candidates = [{ x: tile.x, y: tile.y }, ...this.neighbours(tile.x, tile.y)];
     }

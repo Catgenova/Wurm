@@ -510,7 +510,8 @@ export function buildHelp(win: UIWindow): void {
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
     <p>Every tile is a 4 by 4 grid of spots for placing things. Build a <b>log crate</b> from three
-    logs or a <b>plank crate</b> from six planks (with a mallet), then right-click the spot on a tile
+    logs &mdash; notched and lashed, not a nail in it &mdash; or a <b>plank crate</b> from six planks
+    and twelve nails (with a mallet), then right-click the spot on a tile
     where you want it; it snaps to the grid. Crates hold 30 or 60 things, can be opened, emptied and
     picked up again when empty. The deed crate beside the token is one of them.</p>
     <p><b>Where a worker puts things.</b> A deed worker fills the deed crate first, and when that is
@@ -533,6 +534,12 @@ export function buildHelp(win: UIWindow): void {
     your shovel grates on rock and will go no further. Strip all four corners of a tile bare and the
     rock beneath is exposed, and the tile becomes rock &mdash; whatever kind lies there, which may be a
     seam of silver or gold. Drop dirt on a corner to bury the rock again.</p>
+    <p><b>Beds of sand, clay, peat and tar</b> are not dug like that unless you want them dug. Stand on
+    one and choose <b>Collect</b> &mdash; the entry names what is underfoot, <i>Collect clay</i>,
+    <i>Collect tar</i> &mdash; and you fill a shovel off the top of it: the tile keeps its type, its
+    corners keep their height and their soil, and the bed is there the next time you come back. It takes
+    a moment longer than cutting a corner away, which is the whole of the difference. Digging the corner
+    still does what it always did, for when you actually want the ground lower.</p>
     <p><b>Packing</b> is what makes a floor of the ground. A shovel treads <b>grass, dirt, lawn, steppe,
     tundra or moss</b> down into <b>packed dirt</b>: on sod it cuts the turf away first. Packed dirt is
     what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; gravel,
