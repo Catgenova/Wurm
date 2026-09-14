@@ -4,10 +4,12 @@ import type { DeedStore, Game } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { MINE_COLLAPSE } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
+import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { itemDef, type Item } from './items';
 import { groundStep } from './player';
 import { skillGain } from './skills';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
+import { BUCKET_LITRES, furnitureCentre } from './furniture';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -17,12 +19,33 @@ import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
-export type GatherKind = 'forage' | 'botanize' | 'woodcut' | 'farm' | 'mine' | 'sand' | 'clay' | 'quarry' | 'stoke' | 'fetch' | 'guard' | 'hunt';
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting' };
+export type GatherKind =
+  | 'forage'
+  | 'botanize'
+  | 'woodcut'
+  | 'farm'
+  | 'mine'
+  | 'sand'
+  | 'clay'
+  | 'quarry'
+  | 'stoke'
+  | 'fetch'
+  | 'guard'
+  | 'hunt'
+  | 'peat'
+  | 'reed'
+  | 'water'
+  | 'prospect'
+  | 'plant'
+  | 'hod'
+  | 'mend'
+  | 'compost'
+  | 'seek';
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -97,6 +120,26 @@ export interface SpeciesDef {
   draught?: boolean;
   /** Can be ridden once it is saddled and bridled; the seat height in pixels. */
   mount?: number;
+  /** How far it sees for you, in tiles; seven unless it is a watcher. */
+  sight?: number;
+  /** Lights the ground around it whatever the hour, like a carried fire. */
+  glow?: number;
+  /** What its climbing is worth as slope under a rider: one unless it is a goat. */
+  pitch?: number;
+  /** Crosses deep water with a rider on its back. */
+  swims?: boolean;
+  /** Its share of a team's pull; a quarter unless it was bred for the traces. */
+  pull?: number;
+  /** Things it carries on its own back, for the ones that take panniers. */
+  pannier?: number;
+  /** What shearing takes off it; wool unless it says otherwise. */
+  shearYield?: string;
+  /** Can be milked into an empty bucket. */
+  milk?: boolean;
+  /** Keeps a hive of its own going, so long as one stands on the deed. */
+  hives?: boolean;
+  /** Only ever found out of doors after dark. */
+  nocturnal?: boolean;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -412,7 +455,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   roxxen: {
     id: 'roxxen',
     name: 'Roxxen',
-    description: 'A great slab-shouldered ox with horns that sweep forward and a head it holds low. It will not start anything, and it will finish most things that start with it. Nothing on the island pulls a loaded wagon like a pair of them.',
+    description: 'A great slab-shouldered ox with horns that sweep forward and a head it holds low. It will not start anything, and it will finish most things that start with it. Nothing but a Shaggan pulls a loaded wagon like a pair of them.',
     health: 80,
     attack: 11,
     speed: 1.1,
@@ -434,6 +477,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     leaves: 'walks off at its own pace and does not look back',
     defensive: true,
     draught: true,
+    pull: 0.3,
   },
   orse: {
     id: 'orse',
@@ -492,6 +536,474 @@ export const SPECIES: Record<string, SpeciesDef> = {
     unruly: 0.08,
     defaultStance: 'aggressive',
   },
+  // ---- The working sorts. ----
+  bogga: {
+    id: 'bogga',
+    name: 'Bogga',
+    description: 'A flat-tailed wallower, black to the shoulder and never far from the black ground. It works peat and tar out of the bog with its forepaws and thinks nothing of the smell.',
+    health: 30,
+    attack: 4,
+    speed: 1.4,
+    tameLevel: 10,
+    tameChance: 0.11,
+    diet: ['mixed_grass', 'cabbage', 'carrot', 'potato'],
+    baitHint: 'grass or a root',
+    timid: true,
+    gathers: 'peat',
+    workRange: 9,
+    variants: [
+      ['#3a332c', '#7a6c58'],
+      ['#2b2a28', '#645f56'],
+      ['#4a3b2c', '#8b7458'],
+      ['#221f1d', '#4f4a44'],
+    ],
+    butcher: { meat: 4, fur: 3, leather: 3, bone: 3, gland: 1 },
+    tameFail: 'takes the {food} in both paws, eats it where it stands, and wallows off',
+    leaves: 'slides back into the peat and is gone',
+    nearTar: true,
+  },
+  sedra: {
+    id: 'sedra',
+    name: 'Sedra',
+    description: 'A long-necked wader that stands in the shallows all day and cuts reeds with a bill like a pair of shears. Papyrus starts with this bird whether you keep one or not.',
+    health: 22,
+    attack: 3,
+    speed: 2,
+    tameLevel: 8,
+    tameChance: 0.12,
+    diet: ['reed', 'wheat', 'corn', 'nuts'],
+    baitHint: 'reeds or grain',
+    timid: true,
+    gathers: 'reed',
+    workRange: 10,
+    variants: [
+      ['#9aa88c', '#e4e0cc'],
+      ['#7d8c9a', '#d6dce2'],
+      ['#b0a276', '#eee7cd'],
+      ['#6f7a6a', '#c8ccb8'],
+    ],
+    butcher: { meat: 3, feather: 4, leather: 1, bone: 2 },
+    tameFail: 'lifts one foot, looks at the {food}, and goes back to the reeds',
+    leaves: 'runs three steps on the water and is away',
+    nearWater: true,
+  },
+  holla: {
+    id: 'holla',
+    name: 'Holla',
+    description: 'A barrel of a creature with a throat pouch that holds more water than you would credit. It carries the shore to your barrels so that you do not have to.',
+    health: 34,
+    attack: 3,
+    speed: 1.6,
+    tameLevel: 12,
+    tameChance: 0.1,
+    diet: ['mixed_grass', 'wheat', 'corn', 'cabbage'],
+    baitHint: 'grass or grain',
+    timid: true,
+    gathers: 'water',
+    workRange: 10,
+    variants: [
+      ['#6f8496', '#cfd8dd'],
+      ['#57707f', '#b6c3cb'],
+      ['#8a8f7a', '#dcdcc8'],
+      ['#4a5a66', '#9fadb6'],
+    ],
+    butcher: { meat: 6, fur: 2, leather: 4, bone: 4, gland: 1 },
+    tameFail: 'drinks noisily, takes the {food} as an afterthought, and lumbers off',
+    leaves: 'wades out until only the pouch shows, and then not even that',
+    nearWater: true,
+  },
+  dowse: {
+    id: 'dowse',
+    name: 'Dowse',
+    description: 'A whiskered burrower that will not settle anywhere there is no metal under it. Put one on a deed and it spends its days reading the ground and telling you what is down there.',
+    health: 20,
+    attack: 3,
+    speed: 1.8,
+    tameLevel: 15,
+    tameChance: 0.1,
+    diet: ['nuts', 'acorn', 'clay', 'potato'],
+    baitHint: 'nuts or a root',
+    timid: true,
+    gathers: 'prospect',
+    workRange: 8,
+    rangePerStep: 12,
+    variants: [
+      ['#6d6357', '#c3b49a'],
+      ['#8a7a5e', '#ded0ae'],
+      ['#514b44', '#a49a8a'],
+      ['#7c6a6a', '#cbb9b4'],
+    ],
+    butcher: { meat: 2, fur: 3, leather: 2, bone: 2, gland: 2 },
+    tameFail: 'sniffs the {food}, sniffs the ground, and decides the ground is more interesting',
+    leaves: 'goes down a hole that was not there a moment ago',
+    onOre: true,
+  },
+  sappa: {
+    id: 'sappa',
+    name: 'Sappa',
+    description: 'A moss-backed browser of the deep woods that buries more seed than it eats and forgets where. Kept on a deed it plants the ground back up behind your axe.',
+    health: 26,
+    attack: 3,
+    speed: 1.7,
+    tameLevel: 10,
+    tameChance: 0.12,
+    diet: ['acorn', 'nuts', 'sprout', 'blueberry'],
+    baitHint: 'nuts or an acorn',
+    timid: true,
+    gathers: 'plant',
+    workRange: 10,
+    variants: [
+      ['#5d6b45', '#b6bd94'],
+      ['#6f5a3c', '#c4ab80'],
+      ['#47533c', '#9aa585'],
+      ['#7a6f4e', '#d3c8a0'],
+    ],
+    butcher: { meat: 3, fur: 3, leather: 2, bone: 2, gland: 1 },
+    tameFail: 'buries the {food} instead of eating it and wanders off pleased with itself',
+    leaves: 'goes up the nearest trunk and out of sight among the leaves',
+    nearTrees: true,
+  },
+  cobbe: {
+    id: 'cobbe',
+    name: 'Cobbe',
+    description: 'A squat, hard-headed hauler with shoulders like a wall itself. It carries brick and mortar to whatever you have planned and fits it, one piece at a time, without being asked twice.',
+    health: 40,
+    attack: 5,
+    speed: 1.5,
+    tameLevel: 20,
+    tameChance: 0.09,
+    diet: ['bread', 'baked_potato', 'mixed_grass', 'corn'],
+    baitHint: 'bread or something cooked',
+    timid: false,
+    gathers: 'hod',
+    workRange: 12,
+    variants: [
+      ['#8a8178', '#cfc7bb'],
+      ['#6e6259', '#b2a79a'],
+      ['#9a8467', '#ddcaa8'],
+      ['#5c5a58', '#a09d99'],
+    ],
+    butcher: { meat: 6, fur: 1, leather: 5, bone: 6 },
+    tameFail: 'eats the {food} in one, looks at you, and goes back to shoving rocks about',
+    leaves: 'walks off with its head down and does not look back',
+    defensive: true,
+  },
+  tinka: {
+    id: 'tinka',
+    name: 'Tinka',
+    description: 'A small, fussy thing with far too many fingers, forever taking something apart to see how it is put together. Left alone with your gear it mends it, which is more than most would do.',
+    health: 16,
+    attack: 2,
+    speed: 2,
+    tameLevel: 25,
+    tameChance: 0.08,
+    diet: ['nuts', 'acorn', 'blueberry', 'honey'],
+    baitHint: 'nuts or something sweet',
+    timid: true,
+    gathers: 'mend',
+    workRange: 6,
+    variants: [
+      ['#8c7a5c', '#e0d1ac'],
+      ['#6a6a72', '#bdbdc6'],
+      ['#94694f', '#e4bb96'],
+      ['#5f6b5a', '#b3c0ab'],
+    ],
+    butcher: { meat: 1, fur: 2, leather: 1, bone: 1, gland: 2 },
+    tameFail: 'turns the {food} over twice looking for a seam in it, then puts it down',
+    leaves: 'pockets something of yours and is gone before you can see which',
+  },
+  middun: {
+    id: 'middun',
+    name: 'Middun',
+    description: 'A low, patient scavenger that eats what everything else has given up on. What comes out the other end is the best thing that ever happened to a field.',
+    health: 24,
+    attack: 3,
+    speed: 1.5,
+    tameLevel: 8,
+    tameChance: 0.13,
+    diet: ['meat', 'potato', 'cabbage', 'corpse'],
+    baitHint: 'meat or a vegetable',
+    timid: true,
+    gathers: 'compost',
+    workRange: 10,
+    variants: [
+      ['#5a4a38', '#9f8a6e'],
+      ['#41382e', '#7d7062'],
+      ['#6d5a44', '#b39a78'],
+      ['#332e2a', '#665f57'],
+    ],
+    butcher: { meat: 3, fur: 3, leather: 2, bone: 3, gland: 1 },
+    tameFail: 'eats the {food} and everything within a foot of where it fell',
+    leaves: 'shuffles into the undergrowth after something it can smell and you cannot',
+  },
+  // ---- Backs and saddles. ----
+  bura: {
+    id: 'bura',
+    name: 'Bura',
+    description: 'A broad, slow, endlessly patient creature that was clearly made to have things strapped to it. Two hundred things ride on its back, and it neither hurries nor complains.',
+    health: 55,
+    attack: 6,
+    speed: 1.5,
+    tameLevel: 22,
+    tameChance: 0.09,
+    diet: ['mixed_grass', 'wheat', 'corn', 'carrot'],
+    baitHint: 'grass or grain',
+    timid: false,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#9c8a6a', '#ded0b0'],
+      ['#7a6a54', '#c0b090'],
+      ['#6a6f74', '#b4bcc2'],
+      ['#8a6a58', '#cfae99'],
+    ],
+    butcher: { meat: 14, fur: 4, leather: 9, bone: 10, gland: 1 },
+    tameFail: 'accepts the {food}, considers it, and goes back to standing still',
+    leaves: 'ambles away at exactly the pace it does everything else',
+    defensive: true,
+    pannier: 200,
+  },
+  gorral: {
+    id: 'gorral',
+    name: 'Gorral',
+    description: 'A horned cliff-goat that stands on ground you would not put a ladder against. Under a saddle it goes up what an Orse turns away from, and the more it is worked the worse the ground it will take.',
+    health: 44,
+    attack: 7,
+    speed: 2.4,
+    tameLevel: 40,
+    tameChance: 0.06,
+    diet: ['mixed_grass', 'cabbage', 'acorn', 'carrot'],
+    baitHint: 'grass or a root',
+    timid: false,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#8e8578', '#e2dbcd'],
+      ['#5d5751', '#aaa49b'],
+      ['#a8865c', '#e6cda4'],
+      ['#3f3d3b', '#8a8681'],
+    ],
+    butcher: { meat: 10, fur: 5, leather: 7, bone: 8, gland: 1 },
+    tameFail: 'takes the {food} off the flat of your hand and is four lengths up the rock before you blink',
+    leaves: 'goes up the face in three bounds and looks down at you from the top',
+    onStone: true,
+    defensive: true,
+    draught: true,
+    mount: 15,
+    pitch: 2,
+  },
+  wadd: {
+    id: 'wadd',
+    name: 'Wadd',
+    description: 'A slick-furred swimmer with webbed feet and a rudder of a tail. It is the one thing on the island that will take a rider across deep water instead of drowning them.',
+    health: 40,
+    attack: 6,
+    speed: 2.2,
+    tameLevel: 38,
+    tameChance: 0.07,
+    diet: ['meat', 'reed', 'nuts'],
+    baitHint: 'meat or reeds',
+    timid: false,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#4a5a52', '#a8bcae'],
+      ['#3c4a58', '#9cb0c0'],
+      ['#5f5142', '#c0ab90'],
+      ['#2e3a38', '#84968e'],
+    ],
+    butcher: { meat: 9, fur: 6, leather: 6, bone: 7, gland: 2 },
+    tameFail: 'slides the {food} into the water, eats it there, and looks back at you',
+    leaves: 'goes into the water without a sound and surfaces a long way out',
+    nearWater: true,
+    defensive: true,
+    draught: true,
+    mount: 14,
+    swims: true,
+  },
+  shaggan: {
+    id: 'shaggan',
+    name: 'Shaggan',
+    description: 'A mountain of hair on four legs, slower than anything else that pulls and stronger than all of them. One in the traces is a waste of a Shaggan; four of them will move a loaded wagon as though it were empty.',
+    health: 90,
+    attack: 12,
+    speed: 1,
+    tameLevel: 35,
+    tameChance: 0.06,
+    diet: ['mixed_grass', 'wheat', 'corn', 'cabbage'],
+    baitHint: 'grass or grain',
+    timid: false,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#6b5a44', '#b39a76'],
+      ['#4a4038', '#8d8076'],
+      ['#8a7050', '#d0b288'],
+      ['#585a56', '#a2a49e'],
+    ],
+    butcher: { meat: 30, fur: 10, leather: 16, bone: 20, gland: 1 },
+    tameFail: 'eats the {food}, and the grass around it, and stands there',
+    leaves: 'turns and walks into the wind, which is where it was going anyway',
+    defensive: true,
+    draught: true,
+    pull: 0.45,
+  },
+  // ---- Eyes, produce and the rare sort. ----
+  warda: {
+    id: 'warda',
+    name: 'Warda',
+    description: 'A tall, still, long-sighted thing that picks the highest ground it can find and watches from it. Nothing comes near a settlement with one of these on the hill without you knowing.',
+    health: 30,
+    attack: 5,
+    speed: 1.9,
+    tameLevel: 30,
+    tameChance: 0.08,
+    diet: ['meat', 'nuts', 'acorn'],
+    baitHint: 'meat or nuts',
+    timid: false,
+    gathers: null,
+    workRange: 8,
+    variants: [
+      ['#7d7a72', '#d6d2c6'],
+      ['#5a6470', '#b0bac6'],
+      ['#8a7256', '#d9c19c'],
+      ['#43474a', '#93989c'],
+    ],
+    butcher: { meat: 4, feather: 5, leather: 2, bone: 3, gland: 1 },
+    tameFail: 'takes the {food} without once taking its eyes off the horizon',
+    leaves: 'lifts, circles once to see everything, and is a speck',
+    defensive: true,
+    sight: 18,
+  },
+  quill: {
+    id: 'quill',
+    name: 'Quill',
+    description: 'A heavy ground-bird that would rather run than fly and would rather eat than run. Its long wing feathers grow back as fast as you can take them, which is what keeps an archer in arrows.',
+    health: 26,
+    attack: 4,
+    speed: 1.9,
+    tameLevel: 12,
+    tameChance: 0.11,
+    diet: ['wheat', 'corn', 'nuts', 'acorn'],
+    baitHint: 'grain or nuts',
+    timid: true,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#8a6a44', '#e0c08a'],
+      ['#6a5a4a', '#c2ae94'],
+      ['#96585a', '#e2a8a4'],
+      ['#4f5a44', '#a8b894'],
+    ],
+    butcher: { meat: 5, feather: 8, leather: 2, bone: 3 },
+    tameFail: 'bolts with the {food} and eats it at a safe distance, watching you',
+    leaves: 'runs off with its neck out, going faster than looks possible',
+    fleece: 1 / 700,
+    shearYield: 'feather',
+  },
+  cudda: {
+    id: 'cudda',
+    name: 'Cudda',
+    description: 'A placid, deep-bellied grazer that chews whatever it is given and gives milk back for it. Bring a bucket.',
+    health: 48,
+    attack: 4,
+    speed: 1.2,
+    tameLevel: 14,
+    tameChance: 0.12,
+    diet: ['mixed_grass', 'cabbage', 'carrot', 'wheat'],
+    baitHint: 'grass, grain or a root',
+    timid: true,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#a89880', '#eee3cf'],
+      ['#7d6a58', '#c8b49a'],
+      ['#5e5a55', '#aaa49c'],
+      ['#b0705a', '#e8bfa6'],
+    ],
+    butcher: { meat: 18, fur: 4, leather: 10, bone: 12, gland: 1 },
+    tameFail: 'chews the {food} at you for a while and then chews something else',
+    leaves: 'walks to the far side of the field and carries on chewing',
+    fleece: 1 / 600,
+    milk: true,
+  },
+  vesp: {
+    id: 'vesp',
+    name: 'Vesp',
+    description: 'Not one creature so much as a small furious cloud of them, which settles where there are flowers. Give the swarm a hive on your deed and it will fill it with honey and wax and defend it from anything foolish.',
+    health: 12,
+    attack: 3,
+    speed: 2.4,
+    tameLevel: 18,
+    tameChance: 0.1,
+    diet: ['blueberry', 'raspberry', 'strawberry', 'honey'],
+    baitHint: 'berries or honey',
+    timid: false,
+    gathers: null,
+    workRange: 8,
+    variants: [
+      ['#c8a03a', '#3a3128'],
+      ['#a8862e', '#2e2820'],
+      ['#d8b858', '#4a3f30'],
+      ['#8a6a24', '#241f18'],
+    ],
+    butcher: { meat: 1, gland: 3 },
+    tameFail: 'lifts off the {food} in a body, hangs in the air a moment, and settles again',
+    leaves: 'rises all at once and pours away over the hedge',
+    defensive: true,
+    hives: true,
+  },
+  snout: {
+    id: 'snout',
+    name: 'Snout',
+    description: 'Wrinkled, half blind, and the finest nose on the island. It smells what is under the ground, and what is under the ground on this island is other people\'s lives.',
+    health: 24,
+    attack: 4,
+    speed: 1.6,
+    tameLevel: 50,
+    tameChance: 0.05,
+    diet: ['meat', 'nuts', 'gland', 'cooked_meat'],
+    baitHint: 'meat or nuts',
+    timid: false,
+    gathers: 'seek',
+    workRange: 10,
+    rangePerStep: 12,
+    variants: [
+      ['#8a7a6a', '#d8c8b4'],
+      ['#6a5a50', '#b6a294'],
+      ['#a08878', '#e6d2c0'],
+      ['#4f4844', '#98908a'],
+    ],
+    butcher: { meat: 4, fur: 3, leather: 3, bone: 3, gland: 3 },
+    tameFail: 'works its way over the {food}, over your boots, and over the ground you are standing on',
+    leaves: 'follows its nose away and is not seen again',
+  },
+  lume: {
+    id: 'lume',
+    name: 'Lume',
+    description: 'A pale slow drifter that is only ever out after dark, and glows with a light that has nothing to do with fire. Keep one and the night stops being half blind.',
+    health: 10,
+    attack: 1,
+    speed: 1.3,
+    tameLevel: 55,
+    tameChance: 0.05,
+    diet: ['gland', 'nuts', 'honey'],
+    baitHint: 'a gland or something sweet',
+    timid: true,
+    gathers: null,
+    workRange: 6,
+    variants: [
+      ['#dfe6c8', '#f6f8e6'],
+      ['#c8e0e6', '#e8f6f8'],
+      ['#e6d6c0', '#f8efdd'],
+      ['#d0c8e6', '#eee8f8'],
+    ],
+    butcher: { meat: 1, gland: 4 },
+    tameFail: 'drifts around the {food} twice, dims, and drifts away',
+    leaves: 'goes out like a blown candle and is not there when the light comes back',
+    glow: 8,
+    nocturnal: true,
+  },
 };
 
 /** Which species roam wild, by weight. */
@@ -511,6 +1023,24 @@ const WILD_SPECIES: Array<[string, number]> = [
   ['roxxen', 9],
   ['orse', 9],
   ['rowl', 5],
+  ['middun', 9],
+  ['quill', 9],
+  ['cudda', 9],
+  ['sedra', 8],
+  ['sappa', 8],
+  ['bogga', 6],
+  ['holla', 6],
+  ['cobbe', 6],
+  ['bura', 6],
+  ['vesp', 6],
+  ['dowse', 5],
+  ['warda', 5],
+  ['tinka', 4],
+  ['gorral', 4],
+  ['wadd', 4],
+  ['shaggan', 4],
+  ['snout', 2],
+  ['lume', 2],
 ];
 
 /** How far off a hunter picks up your scent, and how far you must get to lose it. */
@@ -567,7 +1097,9 @@ export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE)
 
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
-const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard', 'hunt']);
+/** The jobs that are errands rather than a walk out for a load of something. */
+const ERRAND_JOBS = new Set<GatherKind>(['water', 'hod', 'mend', 'plant', 'prospect', 'compost']);
+const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard', 'hunt', 'water', 'prospect', 'plant', 'hod', 'mend', 'compost', 'seek']);
 export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers && INDOOR_JOBS.has(species.gathers) ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
@@ -654,6 +1186,8 @@ export interface Creature {
   hitchedTo: number | null;
   /** Saddled and bridled, for the sorts that can be ridden. */
   tacked: boolean;
+  /** What is riding on its back, for the sorts that carry panniers. */
+  pannier: Item[];
   /** Set while the player is up on its back. */
   ridden: boolean;
 }
@@ -679,6 +1213,7 @@ export interface CreatureJSON {
   fleece?: number;
   skills?: Record<string, number>;
   tacked?: boolean;
+  pannier?: Item[];
 }
 
 /**
@@ -820,6 +1355,7 @@ export class Creatures {
       hitchedTo: null,
       tacked: false,
       ridden: false,
+      pannier: [],
     };
   }
 
@@ -863,6 +1399,32 @@ export class Creatures {
     return w.inBounds(x, y) && w.isPassable(x, y) && w.centerHeight(x, y) >= -1;
   }
 
+  /**
+   * Whether a stretch of ground is the sort a species settles on. A Mola
+   * settles over metal, bare or buried, a Crawler on the sand and a Gorral on
+   * bare rock; the rest want something growing. Beyond the ground itself a
+   * few of them want water, trees, clay or tar within sight of the door, and
+   * a Lume wants the sun down.
+   */
+  suits(game: Game, def: SpeciesDef | undefined, x: number, y: number): boolean {
+    if (!def) return false;
+    const w = game.world;
+    if (def.onOre) {
+      if (!bedrockAt(w, x, y).ore) return false;
+    } else if (def.onSand) {
+      if (w.getTile(x, y) !== TileType.Sand) return false;
+    } else if (def.onStone) {
+      // Bare rock with nothing in it: the Mola takes the seams, the Quarra the rest.
+      if (w.getTile(x, y) !== TileType.Rock || bedrockAt(w, x, y).ore) return false;
+    } else if (!TILE_DEFS[w.getTile(x, y)].forage) return false;
+    if (def.nearWater && !nearWater(game, x, y)) return false;
+    if (def.nearTrees && !nearTrees(game, x, y)) return false;
+    if (def.nearClay && !nearClay(game, x, y)) return false;
+    if (def.nearTar && !nearTar(game, x, y)) return false;
+    if (def.nocturnal && !game.isNight()) return false;
+    return true;
+  }
+
   /** Drop wild creatures on grazing land away from the player and the deed. */
   spawnWild(game: Game, count: number, minDistance = 12): number {
     return this.spawnSpecies(game, null, count, minDistance);
@@ -879,21 +1441,7 @@ export class Creatures {
       if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
       const id = species ?? rollTable(WILD_SPECIES, game.rand());
-      const def = SPECIES[id];
-      // A Mola settles over metal, bare or buried, a Crawler on the sand; the rest want grazing.
-      if (def?.onOre) {
-        if (!bedrockAt(w, x, y).ore) continue;
-      } else if (def?.onSand) {
-        if (w.getTile(x, y) !== TileType.Sand) continue;
-      } else if (def?.onStone) {
-        // Bare rock with nothing in it: the Mola takes the seams, the Quarra the rest.
-        if (w.getTile(x, y) !== TileType.Rock || bedrockAt(w, x, y).ore) continue;
-      } else if (!TILE_DEFS[w.getTile(x, y)].forage) continue;
-      // A Bevere lives on land, but only ever within sight of water; a Seavic needs trees.
-      if (def?.nearWater && !nearWater(game, x, y)) continue;
-      if (def?.nearTrees && !nearTrees(game, x, y)) continue;
-      if (def?.nearClay && !nearClay(game, x, y)) continue;
-      if (def?.nearTar && !nearTar(game, x, y)) continue;
+      if (!this.suits(game, SPECIES[id], x, y)) continue;
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
       placed++;
     }
@@ -1072,12 +1620,7 @@ export class Creatures {
       const d = Math.max(Math.abs(x + 0.5 - px), Math.abs(y + 0.5 - py));
       if (d < 30 || d > LIVE_RANGE) continue;
       const id = rollTable(WILD_SPECIES, game.rand());
-      const def = SPECIES[id];
-      if (def?.onOre) {
-        if (!bedrockAt(w, x, y).ore) continue;
-      } else if (def?.onSand) {
-        if (w.getTile(x, y) !== TileType.Sand) continue;
-      }
+      if (!this.suits(game, SPECIES[id], x, y)) continue;
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand);
       return true;
     }
@@ -1249,6 +1792,21 @@ export class Creatures {
       if (game.world.getTile(x, y) !== TileType.Rock || rock.ore) return false;
       return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
     }
+    if (kind === 'peat') {
+      // A bed of the black stuff, taken off the top and left as it was.
+      const t = game.world.getTile(x, y);
+      if (t !== TileType.Peat && t !== TileType.Tar) return false;
+      return this.tileOk(game, x, y) && !game.isForaged(x, y, 'dig') && !this.claimed(x, y, c);
+    }
+    if (kind === 'reed') {
+      if (game.world.getTile(x, y) !== TileType.Reed) return false;
+      return !game.isForaged(x, y, 'reed') && !!this.beside(game, x, y) && !this.claimed(x, y, c);
+    }
+    if (kind === 'seek') {
+      // Ground nobody has been over yet, which is the only ground worth a nose.
+      if (game.world.hasWater(x, y) || !DIGGABLE.has(game.world.getTile(x, y))) return false;
+      return this.tileOk(game, x, y) && !game.isForaged(x, y, 'dig') && !this.claimed(x, y, c);
+    }
     if (kind === 'fetch') {
       // Anything lying on the deed that is not already somebody's errand.
       if (!game.onDeed(x, y) || !game.groundAt(x, y).length) return false;
@@ -1373,9 +1931,15 @@ export class Creatures {
     if (kind === 'sand' || kind === 'clay') return this.finishDigging(game, c, kind === 'sand' ? 'sand' : 'clay');
     if (kind === 'stoke' || kind === 'guard') return null;
     if (kind === 'quarry') return this.finishQuarry(game, c);
+    if (kind === 'peat') return this.finishPeat(game, c);
+    if (kind === 'reed') return this.finishReed(game, c);
+    if (kind === 'seek') return this.finishSeek(game, c);
     if (kind === 'fetch') return this.finishFetch(game, c);
     game.markForaged(x, y, kind);
     const table = GATHER_TABLE[kind];
+    // An errand has no table to roll on: it is done where it is done, and
+    // whatever it produced was handed over there.
+    if (!table.length) return null;
     if (c.mode !== 'deed') {
       if (game.rand() < 0.25) return null;
       const id = rollTable(table, game.rand());
@@ -1462,6 +2026,48 @@ export class Creatures {
     return { uid: game.inventory.nextUid++, id: rock.yields, ql, dmg: 0, count: 1 };
   }
 
+  /** Cut a shovel of peat or tar without touching the shape of the bog. */
+  private finishPeat(game: Game, c: Creature): Item | null {
+    const t = game.world.getTile(c.workX, c.workY);
+    const id = t === TileType.Tar ? 'tar' : t === TileType.Peat ? 'peat' : null;
+    if (!id) return null;
+    const skill = c.skills[GATHER_SKILL.peat] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.peat, 0.225);
+    game.markForaged(c.workX, c.workY, 'dig');
+    return { uid: game.inventory.nextUid++, id, ql: Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1)), dmg: 0, count: 1 };
+  }
+
+  /** Shear a stand of reeds back to the water, as the player's knife would. */
+  private finishReed(game: Game, c: Creature): Item | null {
+    if (game.world.getTile(c.workX, c.workY) !== TileType.Reed) return null;
+    const skill = c.skills[GATHER_SKILL.reed] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.reed, 0.225);
+    game.markForaged(c.workX, c.workY, 'reed');
+    const count = 1 + Math.floor(skill / 35);
+    return { uid: game.inventory.nextUid++, id: 'reed', ql: Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1)), dmg: 0, count };
+  }
+
+  /** Nose through a patch of soil for something worked and long buried. */
+  private finishSeek(game: Game, c: Creature): Item | null {
+    const skill = c.skills[GATHER_SKILL.seek] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.seek, 0.225);
+    game.markForaged(c.workX, c.workY, 'dig');
+    if (game.rand() > findChance(skill, 30)) return null;
+    const within = relicsWithin(skill);
+    if (!within.length) return null;
+    const relic = within[Math.floor(game.rand() * within.length)];
+    const part = 1 + Math.floor(game.rand() * relic.parts);
+    const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8)));
+    return {
+      uid: game.inventory.nextUid++,
+      id: 'fragment',
+      ql,
+      dmg: 20 + game.rand() * 45,
+      count: 1,
+      extra: `${relic.name} ${part}/${relic.parts}`,
+    };
+  }
+
   /** Pick up one thing lying on the tile a fetcher walked to. */
   private finishFetch(game: Game, c: Creature): Item | null {
     const pile = game.groundAt(c.workX, c.workY);
@@ -1541,6 +2147,201 @@ export class Creatures {
    * Fetch wood from the crate for whatever is burning low. Returns true when
    * the stoker has taken the job in hand this tick.
    */
+  /**
+   * The errand jobs: the ones that do not come home with a load of something.
+   *
+   * Each is the same shape — look for a thing worth doing inside the range the
+   * worker has earned, walk to it, do one unit of it — and each returns true
+   * while it has work in hand, so the ordinary worker loop leaves it alone.
+   */
+  private errandStep(game: Game, c: Creature, dt: number, kind: GatherKind, deed: { x: number; y: number; radius: number }): boolean {
+    const def = this.species(c);
+    const range = workRangeOf(c, def);
+    const goto = (tx: number, ty: number, reach = 1.3): boolean => {
+      if (Math.hypot(tx - c.x, ty - c.y) <= reach) return true;
+      if (this.stepToward(game, c, tx, ty, dt) === 'blocked') {
+        // There is no way through to it: drop the spot and pick another.
+        c.workX = -1;
+        c.state = 'idle';
+        c.until = game.time + 2;
+      }
+      return false;
+    };
+    const near = (x: number, y: number): boolean => Math.max(Math.abs(x - deed.x), Math.abs(y - deed.y)) <= range;
+
+    if (kind === 'water') return this.waterStep(game, c, dt, range, goto, near);
+    if (kind === 'hod') return this.hodStep(game, c, dt, goto, near);
+    if (kind === 'mend') return this.mendStep(game, c, goto);
+    if (kind === 'plant') return this.plantStep(game, c, goto, near, range, deed);
+    if (kind === 'prospect') return this.prospectStep(game, c, goto, near, range, deed);
+    if (kind === 'compost') return this.compostStep(game, c, goto, near);
+    return false;
+  }
+
+  /**
+   * Carrying water. A pouch is filled at the shore or out of a well and poured
+   * into whichever barrel on the deed has room for it, which is the errand
+   * nobody wants to run themselves.
+   */
+  private waterStep(
+    game: Game,
+    c: Creature,
+    dt: number,
+    range: number,
+    goto: (x: number, y: number, reach?: number) => boolean,
+    near: (x: number, y: number) => boolean,
+  ): boolean {
+    const full = c.carrying?.id === 'water_bucket';
+    const vessel = game.thirstyVessel();
+    if (!vessel) return false;
+    if (full) {
+      const [vx, vy] = furnitureCentre(vessel);
+      if (!goto(vx, vy)) return true;
+      game.pourInto(vessel, BUCKET_LITRES, 'water');
+      c.carrying = null;
+      this.gainSkill(game, c, GATHER_SKILL.water, 0.2);
+      c.state = 'idle';
+      c.until = game.time + 0.5;
+      return true;
+    }
+    const source = game.waterSource(c.x, c.y, range, near);
+    if (!source) return false;
+    if (!goto(source.x, source.y, 1.5)) return true;
+    if (source.well) game.drawFromWell(source.well, BUCKET_LITRES);
+    c.carrying = { uid: game.inventory.nextUid++, id: 'water_bucket', ql: 40, dmg: 0, count: 1 };
+    return true;
+  }
+
+  /** Carrying the hod: one piece of a planned wall at a time, out of the stores. */
+  private hodStep(
+    game: Game,
+    c: Creature,
+    dt: number,
+    goto: (x: number, y: number, reach?: number) => boolean,
+    near: (x: number, y: number) => boolean,
+  ): boolean {
+    const job = game.wallNeeding(near, c.carrying?.id);
+    if (!job) {
+      c.carrying = null;
+      return false;
+    }
+    if (!c.carrying) {
+      const store = game.deedStores().find((st) => st.items.some((it: Item) => it.id === job.item));
+      const stock = store?.items.find((it: Item) => it.id === job.item);
+      if (!store || !stock) return false;
+      const [sx, sy] = store.centre;
+      if (!goto(sx, sy)) return true;
+      stock.count -= 1;
+      if (stock.count <= 0) store.items.splice(store.items.indexOf(stock), 1);
+      store.changed();
+      c.carrying = { uid: game.inventory.nextUid++, id: job.item, ql: stock.ql, dmg: 0, count: 1 };
+      return true;
+    }
+    if (!goto(job.x + 0.5, job.y + 0.5, 1.6)) return true;
+    game.fitIntoWall(job.wall, c.carrying.id);
+    c.carrying = null;
+    this.gainSkill(game, c, GATHER_SKILL.hod, 0.25);
+    return true;
+  }
+
+  /** Mending: it works at the stores, on whatever in them is knocked about. */
+  private mendStep(game: Game, c: Creature, goto: (x: number, y: number, reach?: number) => boolean): boolean {
+    const found = game.damagedInStores();
+    if (!found) return false;
+    const [sx, sy] = found.store.centre;
+    if (!goto(sx, sy)) return true;
+    const skill = c.skills[GATHER_SKILL.mend] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.mend, 0.2);
+    // The same bargain the player's own repair makes: damage out, a little
+    // quality with it, and a better hand loses less of it.
+    found.item.dmg = Math.max(0, found.item.dmg - (2 + skill / 12));
+    found.item.ql = Math.max(1, found.item.ql - Math.max(0.05, 0.6 - skill / 220));
+    found.store.changed();
+    c.busyUntil = game.time + 1.5;
+    return true;
+  }
+
+  /** Planting: a sprout out of the stores, put in where the wood has gone. */
+  private plantStep(
+    game: Game,
+    c: Creature,
+    goto: (x: number, y: number, reach?: number) => boolean,
+    near: (x: number, y: number) => boolean,
+    range: number,
+    deed: { x: number; y: number },
+  ): boolean {
+    if (!c.carrying) {
+      const store = game.deedStores().find((st) => st.items.some((it: Item) => it.id === 'sprout'));
+      const sprout = store?.items.find((it: Item) => it.id === 'sprout');
+      if (!store || !sprout) return false;
+      const [sx, sy] = store.centre;
+      if (!goto(sx, sy)) return true;
+      sprout.count -= 1;
+      if (sprout.count <= 0) store.items.splice(store.items.indexOf(sprout), 1);
+      store.changed();
+      c.carrying = { uid: game.inventory.nextUid++, id: 'sprout', ql: sprout.ql, dmg: 0, count: 1, extra: sprout.extra };
+      return true;
+    }
+    if (c.carrying.id !== 'sprout') return false;
+    if (c.workX < 0 || !game.plantableTile(c.workX, c.workY)) {
+      const spot = game.plantingSpot(deed.x, deed.y, range, near, c.x, c.y);
+      if (!spot) return false;
+      c.workX = spot.x;
+      c.workY = spot.y;
+    }
+    if (!goto(c.workX + 0.5, c.workY + 0.5)) return true;
+    game.plantSprout(c.workX, c.workY, c.carrying.extra);
+    c.carrying = null;
+    c.workX = -1;
+    this.gainSkill(game, c, GATHER_SKILL.plant, 0.25);
+    return true;
+  }
+
+  /** Reading the ground: it walks the country and marks what is under it. */
+  private prospectStep(
+    game: Game,
+    c: Creature,
+    goto: (x: number, y: number, reach?: number) => boolean,
+    near: (x: number, y: number) => boolean,
+    range: number,
+    deed: { x: number; y: number },
+  ): boolean {
+    if (c.workX < 0) {
+      const spot = game.unreadGround(deed.x, deed.y, range, near, c.x, c.y);
+      if (!spot) return false;
+      c.workX = spot.x;
+      c.workY = spot.y;
+    }
+    if (!goto(c.workX + 0.5, c.workY + 0.5)) return true;
+    const skill = c.skills[GATHER_SKILL.prospect] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.prospect, 0.22);
+    game.readGround(c, c.workX, c.workY, 2 + Math.floor(skill / 20));
+    c.workX = -1;
+    c.busyUntil = game.time + 2;
+    return true;
+  }
+
+  /** Clearing up: what is rotting on the ground goes back to the fields. */
+  private compostStep(
+    game: Game,
+    c: Creature,
+    goto: (x: number, y: number, reach?: number) => boolean,
+    near: (x: number, y: number) => boolean,
+  ): boolean {
+    if (c.carrying) return false;
+    const rot = game.rottingNear(near);
+    if (!rot) return false;
+    if (!goto(rot.x + 0.5, rot.y + 0.5)) return true;
+    const [taken] = game.takeFromGround(rot.x, rot.y, rot.uid);
+    if (!taken) return true;
+    this.gainSkill(game, c, GATHER_SKILL.compost, 0.2);
+    // Whatever it was, what comes back is compost, and the more of it the better.
+    c.carrying = { uid: game.inventory.nextUid++, id: 'compost', ql: Math.min(100, 20 + (c.skills[GATHER_SKILL.compost] ?? 1) * 0.6), dmg: 0, count: Math.max(1, Math.round(taken.count / 2)) };
+    return true;
+  }
+
+  /** Nothing else to do: walk the border, and look again in a moment. */
+
   private stokeStep(game: Game, c: Creature, dt: number): boolean {
     const def = this.species(c);
     const hearth = this.coldHearth(game, c, workRangeOf(c, def));
@@ -1980,6 +2781,9 @@ export class Creatures {
     if (kind === 'hunt' && !c.carrying && c.state !== 'forage') {
       if (this.packHunt(game, c, dt, deed)) return;
     }
+    if (kind && ERRAND_JOBS.has(kind) && c.state !== 'forage') {
+      if (this.errandStep(game, c, dt, kind, deed)) return;
+    }
     if (c.state === 'forage') {
       if (game.time >= c.until) {
         c.carrying = kind ? this.finishForage(game, c, kind) : null;
@@ -2062,7 +2866,9 @@ export class Creatures {
       return;
     }
     if (game.time < c.until) return;
-    if (kind) {
+    // An errand worker never walks out to a tile to work it, so it does not
+    // join the search below: when its errand has nothing in it, it waits.
+    if (kind && !ERRAND_JOBS.has(kind)) {
       const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, workRangeOf(c, def), kind, c);
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
@@ -2233,6 +3039,7 @@ export class Creatures {
         fleece: c.fleece,
         skills: c.skills,
         tacked: c.tacked,
+        pannier: c.pannier,
       })),
     };
   }
@@ -2244,7 +3051,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

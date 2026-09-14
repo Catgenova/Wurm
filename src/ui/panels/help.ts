@@ -505,6 +505,32 @@ export function buildHelp(win: UIWindow): void {
     a Rabba, a spice or vegetable for a Vola), long-press or right-click one and choose <b>Tame</b>: the
     food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>
+    <p><b>The working sorts.</b> Eighteen more wildermon came out of the same country, and most of them
+    are kept for a job. The <b>Bogga</b> wallows in the marshes and cuts <b>peat and tar</b> for the
+    deed. The <b>Sedra</b> is a long-necked wader that shears <b>reeds</b> at the water's edge, which is
+    where papyrus starts. The <b>Holla</b> carries <b>water</b> in its throat from the shore or a well
+    and pours it into your barrels. The <b>Dowse</b> will not live anywhere there is no metal under it,
+    and on a deed it <b>reads the ground</b> and marks what is down there. The <b>Sappa</b> buries more
+    seed than it eats, and on a deed it <b>plants sprouts</b> where the axe has been. The <b>Cobbe</b>
+    carries the <b>hod</b>: brick, mortar and timber out of your stores and into whatever wall you have
+    planned, one piece at a time. The <b>Tinka</b> <b>mends</b> the damaged gear in your stores. The
+    <b>Middun</b> eats what is rotting on the ground and turns it into <b>compost</b>. The <b>Snout</b>
+    smells out <b>buried relics</b> and marks where to dig &mdash; taming 50, and worth every point of
+    it.</p>
+    <p><b>Backs and traces.</b> The <b>Bura</b> does no work but carries <b>200 things</b> in panniers on
+    its own back; open them from its menu. The <b>Gorral</b> is a horned cliff-goat that takes a saddle
+    and goes up ground an Orse turns away from. The <b>Wadd</b> is the one mount that will swim deep
+    water with a rider on it. The <b>Shaggan</b> is slower in the traces than anything else and stronger
+    than all of them: four of them move a loaded wagon as though it were empty.</p>
+    <p><b>Eyes and produce.</b> The <b>Warda</b> is a watcher: keep one and it sees 18 tiles for you
+    wherever it stands. The <b>Quill</b> is a ground-bird you <b>pluck</b> rather than shear, for
+    <b>feathers</b>, which is what keeps an archer in arrows. The <b>Cudda</b> is <b>milked</b> into an
+    empty bucket, and a bucket of milk presses into three <b>cheeses</b>. The <b>Vesp</b> is a swarm
+    rather than a creature: build a <b>hive</b> (6 planks, 2 shafts, a cloth and 12 nails), set it down
+    on your deed and keep a tamed Vesp there, and the swarm fills it with <b>honey</b> and
+    <b>beeswax</b> &mdash; and two wax with a length of yarn draw a pair of <b>candles</b>. The
+    <b>Lume</b> is only ever out after dark and carries its own daylight about with it: keep one and the
+    night stops being half blind.</p>
     <p>Right-click any tile of your settlement for the <b>deed menu</b>: it lists the wildermon kept
     there, sets their <b>orders</b>, offers to <b>upgrade</b> the settlement, and renames or disbands it.
     Orders apply to every wildermon on the deed at once and take effect the moment something wild

@@ -55,6 +55,7 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   coat_rack: 30,
   planter: 10,
   firewood_rack: 17,
+  hive: 22,
   spindle: 18,
   loom: 26,
   oven: 24,
@@ -533,6 +534,29 @@ const DRAW: Record<string, Draw> = {
         ctx.ellipse(bx, -5.5 - row * 4.2 + (bx / W) * D * 0.7, 2.6, 2.3, 0, 0, TAU);
         ctx.fill();
       }
+    }
+  },
+  hive: (ctx, W, D, h) => {
+    // Four shallow boxes stacked, a flat lid on top and a landing board at
+    // the mouth, with the swarm going in and out of it.
+    const boxes = 4;
+    const each = (h - 3) / boxes;
+    for (let i = 0; i < boxes; i++) {
+      box(ctx, 0, 0, W * 0.62, D * 0.62, each - 0.6, i % 2 ? WOODS.pale : WOODS.oak, i * each);
+    }
+    box(ctx, 0, 0, W * 0.72, D * 0.72, 2.2, WOODS.grey, h - 2.2);
+    box(ctx, W * 0.5, 0, W * 0.26, D * 0.26, 1, WOODS.pale, 1.5);
+    // The mouth, cut low on the south face.
+    ctx.fillStyle = '#2b2118';
+    ctx.beginPath();
+    ctx.ellipse(W * 0.3, -3 + D * 0.3, 2.6, 1.1, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#d8b858';
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * TAU + 1.1;
+      ctx.beginPath();
+      ctx.ellipse(W * 0.36 + Math.cos(a) * W * 0.5, -h * 0.55 + Math.sin(a) * D * 1.5, 0.9, 0.7, 0, 0, TAU);
+      ctx.fill();
     }
   },
 };

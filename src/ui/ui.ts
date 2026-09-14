@@ -834,6 +834,10 @@ export class UI {
         });
       } else push(item('feed'));
     }
+    if ((SPECIES[c.species].pannier ?? 0) > 0 && c.mode !== 'wild' && c.mode !== 'stored') {
+      entries.push({ label: 'Open the panniers', onSelect: () => this.cratePanel.openPannier(c.id) });
+    }
+    push(item('milk_creature'));
     push(item('tack_creature'));
     push(item('mount_creature'));
     push(item('dismount_creature'));

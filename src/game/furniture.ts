@@ -43,6 +43,12 @@ export interface FurnitureDef {
   hearth?: boolean;
   /** Can be slept in; the number is how much of a rest it is. */
   bed?: number;
+  /**
+   * A swarm's own house. Nobody puts anything into a hive: a tamed Vesp on
+   * the deed fills it with comb, and the number is how much it will hold
+   * before the swarm stops and waits for it to be emptied.
+   */
+  hive?: number;
 }
 
 /**
@@ -101,6 +107,7 @@ export const FURNITURE: FurnitureDef[] = [
   piece('coat_rack', 'Coat rack', 1, 1, [['plank', 1], ['shaft', 4], ['nail', 6]], 10, 6, 'You nail up a rack of pegs for the door.'),
   piece('planter', 'Planter', 2, 1, [['plank', 6], ['nail', 10]], 10, 7, 'You nail up a planter and fill it with earth.'),
   piece('firewood_rack', 'Firewood rack', 2, 1, [['plank', 2], ['shaft', 6], ['nail', 10]], 12, 8, 'You nail up a rack to keep firewood off the wet.', 40),
+  piece('hive', 'Hive', 2, 1, [['plank', 6], ['shaft', 2], ['cloth', 1], ['nail', 12]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
   // The two the cloth trade is built on. Stand at one to spin or weave.
   piece('spindle', 'Spindle', 1, 1, [['plank', 2], ['shaft', 3], ['nail', 8]], 14, 9, 'You turn a spindle and set it on its stand.'),
   piece('loom', 'Loom', 2, 2, [['plank', 8], ['timber', 4], ['shaft', 6], ['nail', 24]], 22, 18, 'You build a loom and thread the warp.'),
@@ -152,24 +159,30 @@ export interface PlacedFurniture {
   team?: number[];
   /** Set while the player is up on the seat with the reins in hand. */
   driven?: boolean;
+  /** Comb drawn but not yet capped, for a hive. */
+  comb?: number;
 }
 
 /** The two liquids worth keeping a barrel for. */
-export type LiquidKind = 'water' | 'lye';
-export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye' };
+export type LiquidKind = 'water' | 'lye' | 'milk';
+export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk' };
 /** A bucket holds five litres, whichever way it is going. */
 export const BUCKET_LITRES = 5;
 /** Which liquid a full vessel is carrying, and which empty vessel it leaves. */
 export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
   water_bucket: { liquid: 'water', empty: 'bucket' },
   lye_bucket: { liquid: 'lye', empty: 'bucket' },
+  milk_bucket: { liquid: 'milk', empty: 'bucket' },
 };
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
-export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket' };
+export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket' };
 
 export const furnitureName = (f: PlacedFurniture): string => furnitureDef(f.kind).name;
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
-export const furnitureCapacity = (f: PlacedFurniture): number => furnitureDef(f.kind).capacity ?? 0;
+export const furnitureCapacity = (f: PlacedFurniture): number => {
+  const def = furnitureDef(f.kind);
+  return def.capacity ?? def.hive ?? 0;
+};
 export const furnitureCentre = (f: PlacedFurniture): [number, number] => {
   const def = furnitureDef(f.kind);
   return [f.x + (f.sx + def.w / 2) / SUBTILES, f.y + (f.sy + def.h / 2) / SUBTILES];
@@ -201,6 +214,9 @@ export const holdsLiquid = (f: PlacedFurniture): boolean => liquidCapacity(f) > 
 export const litresIn = (f: PlacedFurniture): number => f.litres ?? 0;
 /** A well draws its own water; a barrel only holds what is poured into it. */
 export const isWell = (f: PlacedFurniture): boolean => (furnitureDef(f.kind).well ?? 0) > 0;
+/** A hive fills itself, and takes nothing from anyone's hands. */
+export const hiveRoom = (f: PlacedFurniture): number => (furnitureDef(f.kind).hive ?? 0) - furnitureUnits(f);
+export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hive ?? 0) > 0;
 
 /**
  * Why a piece will not take something, or null if it will. A bulk bin takes
@@ -210,6 +226,7 @@ export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null 
   const def = furnitureDef(f.kind);
   const it = `${/^[aeiou]/i.test(def.name) ? 'An' : 'A'} ${def.name.toLowerCase()}`;
   if (holdsLiquid(f)) return `${it} holds liquid and nothing else.`;
+  if (def.hive) return `${it} is the swarm's, not yours. Take what is in it; do not put anything back.`;
   if (!def.capacity) return `${it} does not hold things.`;
   if (def.bulk && !itemDef(item.id).stackable) return 'A bulk bin takes bulk: things that stack, by the pile.';
   return null;
@@ -224,6 +241,7 @@ export function furnitureState(f: PlacedFurniture): string {
     return `${ql} · ${litres.toFixed(0)} / ${liquidCapacity(f)} litres of ${what}`;
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
+  if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${def.hive} of comb`;
   const cap = furnitureCapacity(f);
   const held = cap ? `${ql} · ${furnitureUnits(f)} / ${cap} things` : ql;
   const v = def.vehicle;

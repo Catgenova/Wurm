@@ -133,6 +133,10 @@ export const CREATURE_ACTIONS: ActionDef[] = [
   {
     id: 'shear',
     label: 'Shear',
+    labelFor: (t, g) => {
+      const c = creatureOf(g, t);
+      return (c && SPECIES[c.species]?.shearYield) === 'feather' ? 'Pluck' : 'Shear';
+    },
     verb: 'shearing',
     skill: 'tailoring',
     tool: 'carving_knife',
@@ -148,7 +152,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!SPECIES[c.species]?.fleece) return 'There is nothing on it worth shearing.';
       if (c.mode === 'wild') return 'Tame it first; it will not stand still for you otherwise.';
       if (!g.inventory.has('carving_knife')) return 'You need a knife to shear with.';
-      if (c.fleece < 0.35) return `${c.name} has hardly any fleece back yet.`;
+      if (c.fleece < 0.35) return `${c.name} has hardly any ${SPECIES[c.species].shearYield === 'feather' ? 'feathers' : 'fleece'} back yet.`;
       return null;
     },
     perform: (t, g) => {
@@ -159,13 +163,14 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         return;
       }
       // A full fleece is three, a half-grown one is one, and quality follows the fleece.
-      const n = Math.max(1, Math.round(c.fleece * 3));
+      const yields = SPECIES[c.species].shearYield ?? 'wool';
+      const n = Math.max(1, Math.round(c.fleece * (yields === 'wool' ? 3 : 6)));
       const ql = Math.max(1, Math.min(100, 15 + c.fleece * 45 + g.skills.get('tailoring') * 0.4));
-      const wool = g.inventory.add('wool', { count: n, ql });
+      const wool = g.inventory.add(yields, { count: n, ql });
       c.fleece = 0;
       g.gainSkill('tailoring', 0.4);
       g.gainSkill('taming', 0.1);
-      g.logMsg(`You shear ${c.name} and come away with ${n} wool. (QL ${wool.ql.toFixed(1)}) It will grow back.`, 'event');
+      g.logMsg(`You ${yields === 'wool' ? 'shear' : 'pluck'} ${c.name} and come away with ${n} ${itemDef(yields).name.toLowerCase()}. (QL ${wool.ql.toFixed(1)}) It will grow back.`, 'event');
     },
   },
   {
@@ -426,6 +431,38 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (name === null || !name.trim()) return;
       c.name = name.trim().slice(0, 24);
       g.logMsg(`It answers to ${c.name} now.`, 'info');
+    },
+  },
+  {
+    id: 'milk_creature',
+    label: 'Milk it',
+    verb: 'milking',
+    skill: 'farming',
+    stamina: 0.02,
+    baseTime: 6,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && !!SPECIES[c.species].milk && c.mode !== 'wild' && c.mode !== 'stored';
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
+      if (!g.inventory.has('bucket')) return 'You need an empty bucket.';
+      if (c.fleece < 0.4) return `${c.name} has nothing to give yet.`;
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      const bucket = g.inventory.find('bucket');
+      if (!c || !bucket || c.fleece < 0.4) return;
+      g.inventory.remove(bucket.uid, 1);
+      // What it has been fed on is what comes out of it.
+      const ql = Math.max(1, Math.min(100, 20 + c.fleece * 40 + c.hunger * 30));
+      g.inventory.add('milk_bucket', { ql });
+      c.fleece = 0;
+      g.gainSkill('farming', 0.3);
+      g.logMsg(`You milk ${c.name} into the bucket. (QL ${ql.toFixed(1)})`, 'event');
     },
   },
   // ---- The saddle: tack fitted, and a rider up. ----

@@ -38,7 +38,7 @@ export const RELICS: RelicDef[] = [
 ];
 
 /** Ground worth turning over: soil and sand, not bare rock or standing water. */
-const DIGGABLE: ReadonlySet<number> = new Set<number>([
+export const DIGGABLE: ReadonlySet<number> = new Set<number>([
   TileType.Grass,
   TileType.Dirt,
   TileType.PackedDirt,

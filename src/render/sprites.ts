@@ -879,6 +879,13 @@ export function drawAnvil(ctx: CanvasRenderingContext2D, sx: number, sy: number,
   ctx.restore();
 }
 
+/** The same colour taken down or brought up, for a far leg or a lit back. */
+function shade(hex: string, by: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v: number): number => Math.max(0, Math.min(255, Math.round(by < 0 ? v * (1 + by) : v + (255 - v) * by)));
+  return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
 export interface CreaturePose {
   facing: number;
   phase: number;
@@ -909,6 +916,10 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   else if (pose.species === 'roxxen') drawRoxxenBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'orse') drawOrseBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'rowl') drawRowlBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'vesp') drawVespBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'lume') drawLumeBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species && BEASTS[pose.species]) drawBeastBody(ctx, sx, sy, zoom, pose, BEASTS[pose.species]);
+  else if (pose.species && BIRDS[pose.species]) drawBirdBody(ctx, sx, sy, zoom, pose, BIRDS[pose.species]);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
@@ -2097,6 +2108,451 @@ function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+/**
+ * The eighteen newer wildermon are not drawn one at a time. Three kits cover
+ * the lot: a thing on four legs, a thing standing on two, and a thing with no
+ * bones in it at all. What tells a Shaggan from a Dowse is the numbers handed
+ * to the kit — how long the legs are, how deep the barrel, what is carried on
+ * the head — which is enough to know one across a field, and a great deal
+ * less to keep than eighteen bodies would be.
+ */
+interface BeastShape {
+  /** Half-width and half-height of the barrel. */
+  body: [number, number];
+  /** How high its belly rides off the ground. */
+  ride: number;
+  /** Legs: how long they swing, how thick they are, how wide they stand. */
+  leg: number;
+  legW: number;
+  span: number;
+  /** Head: how big, and where its middle sits from the middle of the barrel. */
+  head: number;
+  neck: [number, number];
+  /** Snout out past the head; nothing for a blunt face. */
+  muzzle?: number;
+  ear?: 'round' | 'point' | 'long' | 'flop';
+  horn?: 'curl' | 'sweep' | 'nub';
+  tail?: 'tuft' | 'flat' | 'brush' | 'stub';
+  /** A raised shoulder, for the ones built to push. */
+  hump?: number;
+  /** Tufts of hair hanging off the barrel. */
+  shag?: number;
+  /** A throat pouch under the jaw. */
+  pouch?: number;
+  /** An udder that fills, for the ones that are milked. */
+  udder?: boolean;
+  whisker?: boolean;
+  /** Moss growing along the back. */
+  moss?: boolean;
+  /** How quickly the legs go over. */
+  gait?: number;
+}
+
+const BEASTS: Record<string, BeastShape> = {
+  bogga: { body: [10, 5.5], ride: 3.5, leg: 4, legW: 2.6, span: 7, head: 4, neck: [11, 0.5], muzzle: 2.4, ear: 'round', tail: 'flat', gait: 0.9 },
+  holla: { body: [11, 7], ride: 5, leg: 6, legW: 3.2, span: 8, head: 4.6, neck: [12, -1], muzzle: 2.6, ear: 'round', tail: 'stub', pouch: 4, gait: 0.8 },
+  dowse: { body: [7.5, 4.4], ride: 2.6, leg: 3.2, legW: 2, span: 5, head: 3.4, neck: [8.5, 0.6], muzzle: 2.8, ear: 'round', tail: 'stub', whisker: true, gait: 1.3 },
+  sappa: { body: [9, 5.4], ride: 5, leg: 6, legW: 2.4, span: 6.5, head: 4, neck: [10, -1.4], muzzle: 2, ear: 'long', tail: 'brush', moss: true, gait: 1.1 },
+  cobbe: { body: [10, 6], ride: 4, leg: 5, legW: 3.6, span: 7.5, head: 4.4, neck: [11, 0], muzzle: 2.2, ear: 'point', tail: 'stub', hump: 4.5, gait: 0.85 },
+  tinka: { body: [6, 4], ride: 3.4, leg: 4, legW: 1.8, span: 4.2, head: 3.6, neck: [6.8, -2.2], muzzle: 1.6, ear: 'point', tail: 'brush', whisker: true, gait: 1.5 },
+  middun: { body: [9, 4.6], ride: 3, leg: 3.6, legW: 2.2, span: 6.4, head: 3.4, neck: [10, 0.4], muzzle: 3.6, ear: 'round', tail: 'brush', gait: 1.1 },
+  bura: { body: [12, 7], ride: 6.5, leg: 7.5, legW: 3.4, span: 9, head: 4.6, neck: [13.5, -2], muzzle: 2.6, ear: 'long', tail: 'tuft', gait: 0.75 },
+  gorral: { body: [9, 5], ride: 6.5, leg: 7.5, legW: 2.2, span: 6.5, head: 3.8, neck: [10.5, -2.6], muzzle: 2.2, ear: 'point', horn: 'curl', tail: 'stub', shag: 2, gait: 1.25 },
+  wadd: { body: [11, 4.8], ride: 2.8, leg: 3.4, legW: 2.4, span: 7.5, head: 3.8, neck: [11.5, 0.4], muzzle: 2.4, ear: 'round', tail: 'flat', gait: 1.2 },
+  shaggan: { body: [14, 8.5], ride: 5.5, leg: 6.5, legW: 4.4, span: 10, head: 5.4, neck: [15, 0.5], muzzle: 2.6, horn: 'sweep', tail: 'tuft', hump: 6, shag: 5, gait: 0.6 },
+  cudda: { body: [11.5, 7], ride: 5.5, leg: 6.5, legW: 3, span: 8, head: 4.4, neck: [12.5, -1], muzzle: 2.6, ear: 'long', horn: 'nub', tail: 'tuft', udder: true, gait: 0.8 },
+  snout: { body: [9, 5], ride: 3.4, leg: 4, legW: 2.6, span: 6.4, head: 3.6, neck: [9.8, 0.2], muzzle: 4.2, ear: 'flop', tail: 'stub', whisker: true, gait: 1.05 },
+};
+
+/** A wildermon on four legs, built to the numbers above. Feet at (sx, sy). */
+function drawBeastBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, s: BeastShape): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const [hide, pale] = pose.colors;
+  const gait = s.gait ?? 1;
+  const bob = pose.moving ? Math.abs(Math.sin(pose.phase * gait)) * (0.5 + s.ride * 0.08) : 0;
+  const [bw, bh] = s.body;
+  const by = -(s.ride + bh) - bob;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, bw * 1.25, bw * 0.48, 0, 0, TAU);
+  ctx.fill();
+  // Four legs, the near pair a shade darker so the far pair reads as behind.
+  ctx.lineCap = 'round';
+  ctx.lineWidth = s.legW;
+  const hip = by + bh * 0.5;
+  for (const [lx, ph, near] of [
+    [-s.span, 0, 0],
+    [s.span - 1.4, Math.PI, 0],
+    [-s.span + 1.6, Math.PI, 1],
+    [s.span, 0, 1],
+  ] as Array<[number, number, number]>) {
+    const step = pose.moving ? Math.sin(pose.phase * gait + ph) * (s.leg * 0.28) : 0;
+    ctx.strokeStyle = near ? hide : shade(hide, -0.22);
+    ctx.beginPath();
+    ctx.moveTo(lx, hip);
+    ctx.lineTo(lx + step, -0.8);
+    ctx.stroke();
+  }
+  // Tail, before the barrel so it hangs off the back of it.
+  const tail = s.tail;
+  if (tail) {
+    const tx = -bw * 0.92;
+    if (tail === 'flat') {
+      ctx.fillStyle = shade(hide, -0.12);
+      ctx.beginPath();
+      ctx.moveTo(tx, by - bh * 0.1);
+      ctx.quadraticCurveTo(tx - bw * 0.9, by + bh * 0.4, tx - bw * 1.05, by + bh * 0.95);
+      ctx.quadraticCurveTo(tx - bw * 0.45, by + bh * 0.75, tx, by + bh * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    } else if (tail === 'stub') {
+      ctx.fillStyle = hide;
+      ctx.beginPath();
+      ctx.ellipse(tx - 1, by - bh * 0.2, 2.2, 1.8, 0.5, 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = hide;
+      ctx.lineWidth = tail === 'brush' ? 2.2 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(tx, by - bh * 0.3);
+      ctx.quadraticCurveTo(tx - bw * 0.35, by + bh * 0.2, tx - bw * 0.28, by + bh * 1.1);
+      ctx.stroke();
+      ctx.fillStyle = pale;
+      ctx.beginPath();
+      ctx.ellipse(tx - bw * 0.28, by + bh * 1.3, 1.3, 2.1, 0, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // The barrel, with a pale belly under it and a shoulder over it.
+  ctx.fillStyle = hide;
+  ctx.beginPath();
+  ctx.ellipse(0, by, bw, bh, 0, 0, TAU);
+  ctx.fill();
+  if (s.hump) {
+    ctx.beginPath();
+    ctx.ellipse(bw * 0.4, by - bh * 0.6, s.hump, s.hump * 0.66, -0.18, 0, TAU);
+    ctx.fill();
+  }
+  if (s.shag) {
+    // Hanging hair: the longer it is the less of the legs you see.
+    ctx.fillStyle = shade(hide, 0.08);
+    for (let i = -3; i <= 3; i++) {
+      const hx = (i / 3) * bw * 0.85;
+      ctx.beginPath();
+      ctx.ellipse(hx, by + bh * 0.6 + s.shag * 0.4, bw * 0.17, s.shag, (i / 3) * 0.2, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // The pale underside, kept low and short so it reads as a belly rather
+  // than a patch painted on the flank.
+  ctx.fillStyle = pale;
+  ctx.beginPath();
+  ctx.ellipse(-bw * 0.04, by + bh * 0.52, bw * 0.68, bh * 0.32, 0, 0, TAU);
+  ctx.fill();
+  if (s.udder) {
+    // Fills as the milk comes in, and hangs slack once it has been taken.
+    const full = 0.5 + (pose.fleece ?? 0) * 0.9;
+    ctx.fillStyle = '#e8bfae';
+    ctx.beginPath();
+    ctx.ellipse(-bw * 0.2, by + bh * 0.95, 2.6 * full, 2.2 * full, 0, 0, TAU);
+    ctx.fill();
+  }
+  if (s.moss) {
+    ctx.fillStyle = '#6f8a4a';
+    for (let i = -2; i <= 2; i++) {
+      const mx = (i / 2) * bw * 0.7;
+      ctx.beginPath();
+      ctx.ellipse(mx, by - bh * 0.8 - Math.abs(i) * 0.3, bw * 0.2, 1.6, (i / 2) * 0.3, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // Head, muzzle and whatever is on it.
+  const hx = s.neck[0];
+  const hy = by + s.neck[1];
+  ctx.fillStyle = hide;
+  ctx.beginPath();
+  ctx.ellipse(hx, hy, s.head, s.head * 0.86, 0.1, 0, TAU);
+  ctx.fill();
+  if (s.pouch) {
+    ctx.fillStyle = shade(pale, -0.08);
+    ctx.beginPath();
+    ctx.ellipse(hx - 0.5, hy + s.head * 0.75, s.pouch, s.pouch * 0.82, 0, 0, TAU);
+    ctx.fill();
+  }
+  if (s.ear) {
+    ctx.fillStyle = shade(hide, -0.1);
+    const ex = hx - s.head * 0.45;
+    const ey = hy - s.head * 0.8;
+    if (s.ear === 'round') {
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, s.head * 0.38, s.head * 0.36, 0, 0, TAU);
+      ctx.fill();
+    } else if (s.ear === 'point') {
+      ctx.beginPath();
+      ctx.moveTo(ex - s.head * 0.3, ey + s.head * 0.3);
+      ctx.lineTo(ex + s.head * 0.12, ey - s.head * 0.75);
+      ctx.lineTo(ex + s.head * 0.42, ey + s.head * 0.24);
+      ctx.closePath();
+      ctx.fill();
+    } else if (s.ear === 'long') {
+      ctx.beginPath();
+      ctx.ellipse(ex, ey - s.head * 0.3, s.head * 0.2, s.head * 0.72, 0.2, 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(ex, ey + s.head * 0.5, s.head * 0.24, s.head * 0.64, -0.35, 0, TAU);
+      ctx.fill();
+    }
+  }
+  if (s.muzzle) {
+    ctx.fillStyle = shade(hide, 0.1);
+    ctx.beginPath();
+    ctx.ellipse(hx + s.head * 0.85, hy + s.head * 0.22, s.muzzle, s.muzzle * 0.62, 0.08, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#3a2c24';
+    ctx.beginPath();
+    ctx.ellipse(hx + s.head * 0.85 + s.muzzle * 0.8, hy + s.head * 0.22, 0.7, 0.6, 0, 0, TAU);
+    ctx.fill();
+  }
+  if (s.whisker) {
+    ctx.strokeStyle = 'rgba(240,235,225,0.75)';
+    ctx.lineWidth = 0.45;
+    for (const w of [-0.8, 0, 0.8]) {
+      ctx.beginPath();
+      ctx.moveTo(hx + s.head * 0.8, hy + s.head * 0.2);
+      ctx.lineTo(hx + s.head * 0.8 + (s.muzzle ?? 2) * 2.1, hy + s.head * 0.2 + w * 2.4);
+      ctx.stroke();
+    }
+  }
+  if (s.horn) {
+    ctx.strokeStyle = '#e6ddc8';
+    ctx.lineWidth = s.horn === 'sweep' ? 2.2 : 1.6;
+    ctx.lineCap = 'round';
+    for (const up of [-1, 1]) {
+      const ox = hx - s.head * 0.2;
+      const oy = hy - s.head * 0.8 + up * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      if (s.horn === 'curl') {
+        ctx.bezierCurveTo(ox - s.head * 1.2, oy - s.head * 0.9, ox - s.head * 2, oy + s.head * 0.4, ox - s.head * 0.9, oy + s.head * 0.9 + up);
+      } else if (s.horn === 'sweep') {
+        ctx.quadraticCurveTo(hx + s.head * 1.1, oy - s.head * 0.7 + up * 0.8, hx + s.head * 2.2, oy + s.head * 0.2 + up * 1.6);
+      } else {
+        ctx.lineTo(ox - s.head * 0.15, oy - s.head * 0.5);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = '#1c1712';
+  ctx.beginPath();
+  ctx.arc(hx + s.head * 0.4, hy - s.head * 0.2, Math.max(0.7, s.head * 0.17), 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+interface BirdShape {
+  body: [number, number];
+  ride: number;
+  leg: number;
+  neck: number;
+  beak: 'shear' | 'hook' | 'stub';
+  /** Feathers standing up off the crown. */
+  crest?: number;
+  /** Long feathers trailing behind, which is what a Quill is kept for. */
+  plume?: number;
+  eye?: number;
+  gait?: number;
+}
+
+const BIRDS: Record<string, BirdShape> = {
+  sedra: { body: [5.5, 4.6], ride: 9, leg: 10, neck: 9, beak: 'shear', gait: 1 },
+  warda: { body: [6, 6], ride: 7.5, leg: 8.5, neck: 7, beak: 'hook', crest: 3, eye: 1.5, gait: 0.9 },
+  quill: { body: [8, 7], ride: 4.5, leg: 5, neck: 4.5, beak: 'stub', plume: 9, gait: 1.3 },
+};
+
+/** A wildermon that stands on two legs, built to the numbers above. */
+function drawBirdBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, s: BirdShape): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  const [coat, front] = pose.colors;
+  const gait = s.gait ?? 1;
+  const bob = pose.moving ? Math.abs(Math.sin(pose.phase * gait)) * 1.1 : 0;
+  const [bw, bh] = s.body;
+  const by = -(s.ride + bh) - bob;
+  ctx.fillStyle = 'rgba(0,0,0,0.26)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, bw * 1.1, bw * 0.44, 0, 0, TAU);
+  ctx.fill();
+  // Two legs with a backward knee, and a splayed foot on each.
+  ctx.strokeStyle = '#c8975a';
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  for (const [lx, ph] of [
+    [-1.6, 0],
+    [1.6, Math.PI],
+  ] as Array<[number, number]>) {
+    const step = pose.moving ? Math.sin(pose.phase * gait + ph) * 2.2 : 0;
+    ctx.beginPath();
+    ctx.moveTo(lx, by + bh * 0.6);
+    ctx.quadraticCurveTo(lx - 1.2, by + bh * 0.6 + s.leg * 0.55, lx + step, -0.8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(lx + step - 1.8, -0.6);
+    ctx.lineTo(lx + step + 2.2, -0.6);
+    ctx.stroke();
+  }
+  if (s.plume) {
+    // The long wing feathers, which grow back as fast as they are taken.
+    const grown = 0.35 + (pose.fleece ?? 1) * 0.65;
+    ctx.fillStyle = front;
+    for (const a of [-0.35, -0.1, 0.15]) {
+      ctx.beginPath();
+      ctx.ellipse(-bw * 0.9 - s.plume * grown * 0.4, by + a * 5, s.plume * grown * 0.5, 1.5, a + 0.25, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // Body: an egg standing a little back on itself.
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(0, by, bw, bh, -0.1, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = front;
+  ctx.beginPath();
+  ctx.ellipse(bw * 0.24, by + bh * 0.12, bw * 0.62, bh * 0.72, -0.05, 0, TAU);
+  ctx.fill();
+  // A wing folded against the near side.
+  ctx.fillStyle = shade(coat, -0.12);
+  ctx.beginPath();
+  ctx.ellipse(-bw * 0.12, by + bh * 0.05, bw * 0.6, bh * 0.5, -0.22, 0, TAU);
+  ctx.fill();
+  // Neck and head.
+  const hy = by - bh - s.neck;
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = Math.max(2, bw * 0.34);
+  ctx.beginPath();
+  ctx.moveTo(bw * 0.1, by - bh * 0.4);
+  ctx.quadraticCurveTo(bw * 0.7, by - bh - s.neck * 0.55, bw * 0.5, hy + 1);
+  ctx.stroke();
+  const hx = bw * 0.5;
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(hx, hy, bw * 0.46, bw * 0.42, 0.1, 0, TAU);
+  ctx.fill();
+  if (s.crest) {
+    ctx.strokeStyle = front;
+    ctx.lineWidth = 1;
+    for (const a of [-0.5, -0.15, 0.2]) {
+      ctx.beginPath();
+      ctx.moveTo(hx - 1, hy - bw * 0.3);
+      ctx.lineTo(hx - 1 - Math.sin(a) * s.crest, hy - bw * 0.3 - Math.cos(a) * s.crest);
+      ctx.stroke();
+    }
+  }
+  // The bill, which is the whole of what each of them is for.
+  ctx.fillStyle = '#d8a54a';
+  const bx = hx + bw * 0.4;
+  if (s.beak === 'shear') {
+    ctx.beginPath();
+    ctx.moveTo(bx, hy - 1.2);
+    ctx.lineTo(bx + 11, hy - 0.2);
+    ctx.lineTo(bx, hy + 1.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(90,60,20,0.5)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(bx, hy + 0.2);
+    ctx.lineTo(bx + 10.4, hy - 0.1);
+    ctx.stroke();
+  } else if (s.beak === 'hook') {
+    ctx.beginPath();
+    ctx.moveTo(bx - 0.6, hy - 1.6);
+    ctx.quadraticCurveTo(bx + 5.4, hy - 1.4, bx + 4.6, hy + 2.4);
+    ctx.quadraticCurveTo(bx + 2.6, hy + 0.6, bx - 0.6, hy + 1.2);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(bx - 0.4, hy - 1.4);
+    ctx.lineTo(bx + 4.4, hy + 0.2);
+    ctx.lineTo(bx - 0.4, hy + 1.6);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#181410';
+  ctx.beginPath();
+  ctx.arc(hx + bw * 0.16, hy - bw * 0.1, s.eye ?? 0.95, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath();
+  ctx.arc(hx + bw * 0.22, hy - bw * 0.2, (s.eye ?? 0.95) * 0.34, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A Vesp: not one creature so much as a cloud of them, all going at once. */
+function drawVespBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  const [band, dark] = pose.colors;
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 8, 3.2, 0, 0, TAU);
+  ctx.fill();
+  const churn = pose.moving ? 1.6 : 0.7;
+  for (let i = 0; i < 14; i++) {
+    // Each of them keeps its own orbit, so the swarm boils rather than spins.
+    const a = (i / 14) * TAU + pose.phase * churn * (0.6 + (i % 4) * 0.22);
+    const r = 4 + (i % 5) * 2.1;
+    const bx = Math.cos(a) * r;
+    const byy = -11 + Math.sin(a * 1.4 + i) * (r * 0.6);
+    ctx.fillStyle = i % 3 ? band : dark;
+    ctx.beginPath();
+    ctx.ellipse(bx, byy, 1.7, 1.25, a, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(bx - 0.5, byy - 1.2, 1.5, 0.6, a * 0.4, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** A Lume: a cold light drifting a foot off the ground, and very little else. */
+function drawLumeBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  const [pale, bright] = pose.colors;
+  const drift = Math.sin(pose.phase * 0.5) * 1.6;
+  const cy = -11 + drift;
+  const glow = ctx.createRadialGradient(0, cy, 0.5, 0, cy, 13);
+  glow.addColorStop(0, bright);
+  glow.addColorStop(0.35, `${pale}cc`);
+  glow.addColorStop(1, 'rgba(230,240,220,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(0, cy, 13, 12, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = bright;
+  ctx.beginPath();
+  ctx.ellipse(0, cy, 4.4, 4.8, 0, 0, TAU);
+  ctx.fill();
+  // A few slow trailing motes that say which way it is drifting.
+  ctx.fillStyle = `${pale}aa`;
+  for (let i = 0; i < 4; i++) {
+    const a = pose.phase * 0.3 + (i / 4) * TAU;
+    ctx.beginPath();
+    ctx.ellipse(Math.cos(a) * 7, cy + Math.sin(a) * 5.5, 1.1, 1.1, 0, 0, TAU);
+    ctx.fill();
   }
   ctx.restore();
 }

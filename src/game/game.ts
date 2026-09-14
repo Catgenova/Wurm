@@ -1,14 +1,15 @@
 import { generateWorld } from '../world/generate';
-import { TileType } from '../world/tiles';
+import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
+import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, type ActionDef, type Target } from './actions';
-import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building } from './building';
+import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
 import { CRATE_DEFS, crateCentre, crateName, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, teamOf, vehicleOf, type PlacedFurniture } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
@@ -140,6 +141,11 @@ const PROSPECT_MARK_TIME = 120;
 const MAX_LOG = 400;
 /** Seconds between ground decay passes while playing. */
 const DECAY_STEP = 5;
+/** Ground a sprout will take, which is the same ground a tree grows on. */
+/** How far a prospector moves on before reading the ground again. */
+const PROSPECT_STRIDE = 4;
+
+const PLANTABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
 
 /** Central simulation state: the world, the player and everything they do. */
 export class Game {
@@ -383,7 +389,8 @@ export class Game {
     const up = this.mounted();
     if (!up || level !== 0) return null;
     if (!this.world.inBounds(x1, y1) || !this.world.isPassable(x1, y1)) return null;
-    if (this.world.heightAt(x1 + 0.5, y1 + 0.5) < -SWIM_DEPTH) return null;
+    // Only the web-footed sort will take a rider into deep water.
+    if (!this.creatures.species(up).swims && this.world.heightAt(x1 + 0.5, y1 + 0.5) < -SWIM_DEPTH) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
     return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) ? 0 : null;
   };
@@ -1372,11 +1379,49 @@ export class Game {
     return 0.012 + (f.ql / 100) * 0.055;
   }
 
+  /** Comb a hive draws in a second for each swarm keeping it. */
+  hiveRate(f: PlacedFurniture): number {
+    return 0.004 + (f.ql / 100) * 0.012;
+  }
+
+  /**
+   * Swarms kept on the deed. A Vesp is not put to work like the other
+   * wildermon: all it does is live here, and a hive within reach of where it
+   * lives fills itself. Three of them is as much as one hive can hold with.
+   */
+  private swarms(): number {
+    let n = 0;
+    for (const c of this.creatures.list.values()) {
+      if (c.mode !== 'deed' && c.mode !== 'active') continue;
+      if (!this.creatures.species(c).hives || !this.onDeed(c.x, c.y)) continue;
+      if (++n >= 3) break;
+    }
+    return n;
+  }
+
+  /** Three parts honey to one of wax, which is about what a comb is. */
+  private fillHive(f: PlacedFurniture, swarms: number, dt: number): void {
+    let comb = (f.comb ?? 0) + this.hiveRate(f) * swarms * dt;
+    let made = 0;
+    while (comb >= 1 && hiveRoom(f) > 0) {
+      comb -= 1;
+      const id = this.rand() < 0.25 ? 'wax' : 'honey';
+      const ql = Math.min(100, Math.max(1, f.ql * (0.7 + this.rand() * 0.6)));
+      this.furnitureAdd(f, { uid: this.inventory.nextUid++, id, ql, dmg: 0, count: 1 });
+      made++;
+    }
+    f.comb = comb;
+    if (made) this.events.emit('crate');
+  }
+
   /**
    * Everything placed that works by itself: ovens burning down, wells filling,
    * rubbish rotting where it was thrown, and a cart following you about.
    */
   private runPlaceables(dt: number, moved: number): void {
+    // Counted the first time a hive with room in it asks, and not at all
+    // when there is no hive on the deed.
+    let swarms = -1;
     for (const f of this.furniture.values()) {
       const def = furnitureDef(f.kind);
       if (def.hearth && f.lit) {
@@ -1388,6 +1433,10 @@ export class Game {
           this.logMsg('The oven burns down and goes cold.', 'event');
           this.events.emit('world', f.x, f.y);
         }
+      }
+      if (def.hive && hiveRoom(f) > 0 && this.onDeed(f.x, f.y)) {
+        if (swarms < 0) swarms = this.swarms();
+        if (swarms > 0) this.fillHive(f, swarms, dt);
       }
       if (def.well) {
         const before = f.litres ?? 0;
@@ -1450,7 +1499,10 @@ export class Game {
       worst = Math.min(worst, 0.6 + 0.4 * c.hunger);
     }
     const mean = sum / team.length;
-    return Math.min(MAX_VEHICLE_SPEED, mean * (0.75 + 0.25 * team.length) * worst * footing(this.teamClimb(f)));
+    // Every beast adds its own share of the pull; the ones bred for it add more.
+    let pull = 0.75;
+    for (const c of team) pull += this.creatures.species(c).pull ?? 0.25;
+    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)));
   }
 
   /** What a team knows about hills between them, which is what a slope asks. */
@@ -1489,7 +1541,8 @@ export class Game {
    * what the climbing it earns on bad ground is for.
    */
   mountStep(c: Creature): number {
-    return MAX_STEP + (c.skills[HAUL_SKILL] ?? 0) * CLIMB_PITCH * 2;
+    const sure = this.creatures.species(c).pitch ?? 1;
+    return MAX_STEP + (c.skills[HAUL_SKILL] ?? 0) * CLIMB_PITCH * 2 * sure;
   }
 
   /** Get up on a saddled wildermon. */
@@ -1515,6 +1568,183 @@ export class Game {
     this.player.speedMul = 1;
     this.player.stop();
     this.events.emit('creature');
+  }
+
+  // ---- What the errand workers need to know about the world. ----
+
+  /** A barrel on the deed with room in it for more water. */
+  thirstyVessel(): PlacedFurniture | undefined {
+    for (const f of this.furniture.values()) {
+      const def = furnitureDef(f.kind);
+      if (!def.liquid || !this.onDeed(f.x, f.y)) continue;
+      if ((f.litres ?? 0) >= def.liquid) continue;
+      if (f.liquid && f.liquid !== 'water') continue;
+      return f;
+    }
+    return undefined;
+  }
+
+  /** Pour a measure into a vessel, which is what a bucket does at either end. */
+  pourInto(f: PlacedFurniture, litres: number, liquid: LiquidKind): void {
+    const cap = furnitureDef(f.kind).liquid ?? 0;
+    f.liquid = liquid;
+    f.litres = Math.min(cap, (f.litres ?? 0) + litres);
+    this.events.emit('crate');
+    this.events.emit('world', f.x, f.y);
+  }
+
+  /** Somewhere within reach worth dipping into: a well, or open water. */
+  waterSource(fromX: number, fromY: number, range: number, near: (x: number, y: number) => boolean): { x: number; y: number; well?: PlacedFurniture } | undefined {
+    for (const f of this.furniture.values()) {
+      if (!furnitureDef(f.kind).well || (f.litres ?? 0) < 1 || !this.onDeed(f.x, f.y)) continue;
+      const [cx, cy] = furnitureCentre(f);
+      return { x: cx, y: cy, well: f };
+    }
+    const r = Math.ceil(range);
+    let best: { x: number; y: number } | undefined;
+    let bestD = Infinity;
+    for (let y = Math.floor(fromY) - r; y <= Math.floor(fromY) + r; y++) {
+      for (let x = Math.floor(fromX) - r; x <= Math.floor(fromX) + r; x++) {
+        if (!this.world.inBounds(x, y) || !this.world.hasWater(x, y) || !near(x, y)) continue;
+        const d = Math.hypot(x + 0.5 - fromX, y + 0.5 - fromY);
+        if (d < bestD) {
+          bestD = d;
+          best = { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Take a measure out of a well, as a bucket would. */
+  drawFromWell(f: PlacedFurniture, litres: number): void {
+    f.litres = Math.max(0, (f.litres ?? 0) - litres);
+    this.events.emit('crate');
+  }
+
+  /** An unfinished wall within reach that wants something, and what it wants. */
+  wallNeeding(near: (x: number, y: number) => boolean, holding?: string): { wall: Wall; item: string; x: number; y: number } | undefined {
+    for (const wall of this.buildings.walls.values()) {
+      if (wall.level !== 0 || isDone(wall)) continue;
+      if (!near(wall.x, wall.y)) continue;
+      const wants = Object.entries(wall.needed).filter(([, n]) => n > 0);
+      if (!wants.length) continue;
+      const pick = holding ? wants.find(([id]) => id === holding) : undefined;
+      const [item] = pick ?? wants[0];
+      return { wall, item, x: wall.x, y: wall.y };
+    }
+    return undefined;
+  }
+
+  /** Fit one piece into a planned wall, the way a builder does by hand. */
+  fitIntoWall(wall: Wall, item: string): void {
+    if ((wall.needed[item] ?? 0) <= 0) return;
+    wall.needed[item] -= 1;
+    this.events.emit('world', wall.x, wall.y);
+  }
+
+  /** The most knocked-about thing in the deed's stores, and where it is kept. */
+  damagedInStores(): { store: DeedStore; item: Item } | undefined {
+    let best: { store: DeedStore; item: Item } | undefined;
+    for (const store of this.deedStores()) {
+      for (const item of store.items) {
+        if (item.dmg <= 1) continue;
+        if (!best || item.dmg > best.item.dmg) best = { store, item };
+      }
+    }
+    return best;
+  }
+
+  /** Ground a sprout would take: open, dry and nothing standing on it. */
+  plantableTile(x: number, y: number): boolean {
+    if (!this.world.inBounds(x, y) || this.world.hasWater(x, y)) return false;
+    if (this.buildings.buildingAt(x, y) || this.isToken(x, y)) return false;
+    if (this.cratesOnTile(x, y).length || this.furnitureOnTile(x, y).length) return false;
+    return PLANTABLE.has(this.world.getTile(x, y));
+  }
+
+  /**
+   * Somewhere in range worth putting a tree, kept clear of its neighbours and
+   * as near the planter as the ground allows. A worker that walks half a deed
+   * to put one sprout in never gets to the second.
+   */
+  plantingSpot(cx: number, cy: number, range: number, near: (x: number, y: number) => boolean, fromX = cx, fromY = cy): { x: number; y: number } | undefined {
+    const r = Math.ceil(range);
+    let best: { x: number; y: number } | undefined;
+    let bestD = Infinity;
+    for (let i = 0; i < 60; i++) {
+      const x = Math.round(cx + (this.rand() * 2 - 1) * r);
+      const y = Math.round(cy + (this.rand() * 2 - 1) * r);
+      if (!near(x, y) || !this.plantableTile(x, y)) continue;
+      const d = Math.hypot(x - fromX, y - fromY);
+      if (d >= bestD) continue;
+      let crowded = false;
+      for (let dy = -1; dy <= 1 && !crowded; dy++) for (let dx = -1; dx <= 1; dx++) if (this.world.getTile(x + dx, y + dy) === TileType.Tree) crowded = true;
+      if (crowded) continue;
+      bestD = d;
+      best = { x, y };
+    }
+    return best;
+  }
+
+  /** Put a sprout in the ground, as the player's own planting would. */
+  plantSprout(x: number, y: number, species: string | undefined): void {
+    if (!this.plantableTile(x, y)) return;
+    const i = Math.max(0, TREE_DEFS.findIndex((d) => d.name === species));
+    this.world.setTile(x, y, TileType.Tree, packTreeData(i, 0));
+  }
+
+  /**
+   * A tile in range worth reading, for a prospector to walk out to: the
+   * nearest ground a stride or more from where it is standing, so it works
+   * its way across the country rather than across it and back.
+   */
+  unreadGround(cx: number, cy: number, range: number, near: (x: number, y: number) => boolean, fromX = cx, fromY = cy): { x: number; y: number } | undefined {
+    const r = Math.ceil(range);
+    let best: { x: number; y: number } | undefined;
+    let bestD = Infinity;
+    for (let i = 0; i < 60; i++) {
+      const x = Math.round(cx + (this.rand() * 2 - 1) * r);
+      const y = Math.round(cy + (this.rand() * 2 - 1) * r);
+      if (!near(x, y) || !this.world.inBounds(x, y) || this.world.hasWater(x, y)) continue;
+      if (!this.world.isPassable(x, y)) continue;
+      const d = Math.hypot(x - fromX, y - fromY);
+      if (d < PROSPECT_STRIDE || d >= bestD) continue;
+      bestD = d;
+      best = { x, y };
+    }
+    return best;
+  }
+
+  /** Read the ground around a point and light up any metal under it. */
+  readGround(by: Creature, x: number, y: number, radius: number): void {
+    const found: number[] = [];
+    const names = new Set<string>();
+    for (let ty = y - radius; ty <= y + radius; ty++) {
+      for (let tx = x - radius; tx <= x + radius; tx++) {
+        if (!this.world.inBounds(tx, ty)) continue;
+        const ore = oreAt(this.world, tx, ty);
+        if (!ore) continue;
+        found.push(ty * this.world.w + tx);
+        names.add(ore.name.toLowerCase());
+      }
+    }
+    if (!found.length) return;
+    this.markProspected(found);
+    if (this.time - by.noRoomAt < 30) return;
+    by.noRoomAt = this.time;
+    this.logMsg(`${by.name} scratches at the ground and stands over ${[...names].join(' and ')}.`, 'event');
+  }
+
+  /** Something rotting on the ground in reach, for whatever eats such things. */
+  rottingNear(near: (x: number, y: number) => boolean): { x: number; y: number; uid: number } | undefined {
+    for (const [key, pile] of this.ground) {
+      const [x, y] = key.split(',').map(Number);
+      if (!near(x, y)) continue;
+      const item = pile.find((it) => it.id === 'corpse' || it.dmg >= 40);
+      if (item) return { x, y, uid: item.uid };
+    }
+    return undefined;
   }
 
   /**
@@ -1927,6 +2157,30 @@ export class Game {
   }
 
   private storeCache: { at: number; stamp: number; stores: DeedStore[] } | null = null;
+
+  /** Load something onto a pack beast's back; false when it will not fit. */
+  pannierAdd(c: Creature, item: Item): boolean {
+    const cap = this.creatures.species(c).pannier ?? 0;
+    const used = c.pannier.reduce((n, it) => n + it.count, 0);
+    if (!cap || used + item.count > cap) return false;
+    const def = ITEM_DEFS[item.id];
+    const stack = def?.stackable ? c.pannier.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    if (stack) {
+      stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
+      stack.count += item.count;
+    } else c.pannier.push(item);
+    this.events.emit('crate');
+    return true;
+  }
+
+  /** Take something back off a pack beast. */
+  pannierTake(c: Creature, uid: number): Item | null {
+    const i = c.pannier.findIndex((it) => it.uid === uid);
+    if (i < 0) return null;
+    const [item] = c.pannier.splice(i, 1);
+    this.events.emit('crate');
+    return item;
+  }
 
   /** Put something away; false when it would not fit. */
   furnitureAdd(f: PlacedFurniture, item: Item): boolean {

@@ -160,7 +160,11 @@ export class Vision {
     // people in it whether or not you are standing in the middle of it.
     for (const c of g.creatures.list.values()) {
       if (c.mode === 'wild' || c.mode === 'stored') continue;
-      this.cast(next, c.x, c.y, COMPANION_SIGHT, mark);
+      const def = g.creatures.species(c);
+      // A watcher is worth a hill; a Lume carries its own daylight about with
+      // it, so what it lights is lit whatever the hour.
+      const range = def.glow ? Math.max(def.glow, COMPANION_SIGHT * (1 - NIGHT_LOSS * g.darkness())) : (def.sight ?? COMPANION_SIGHT) * (1 - NIGHT_LOSS * g.darkness() * 0.5);
+      this.cast(next, c.x, c.y, Math.max(3, range), mark);
     }
     const deed = g.deed;
     if (deed) {

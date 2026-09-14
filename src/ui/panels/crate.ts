@@ -24,6 +24,7 @@ export class CratePanel {
   private footer: HTMLDivElement;
   private crateId: number | null = null;
   private furnitureId: number | null = null;
+  private creatureId: number | null = null;
 
   constructor(
     private readonly win: UIWindow,
@@ -73,6 +74,21 @@ export class CratePanel {
         take: (uid) => this.game.crateTake(crate, uid),
         refuses: (item) => (crateUnits(crate) + item.count > CRATE_DEFS[crate.kind].capacity ? `The ${crateName(crate).toLowerCase()} is full.` : null),
         add: (item) => this.game.crateAdd(crate, item),
+      };
+    }
+    const beast = this.creatureId !== null ? this.game.creatures.get(this.creatureId) : undefined;
+    if (beast) {
+      const cap = this.game.creatures.species(beast).pannier ?? 0;
+      const units = (): number => beast.pannier.reduce((n, it) => n + it.count, 0);
+      return {
+        title: `${beast.name}'s panniers`,
+        items: beast.pannier,
+        capacity: cap,
+        centre: [beast.x, beast.y],
+        what: 'panniers',
+        take: (uid) => this.game.pannierTake(beast, uid),
+        refuses: (item) => (units() + item.count > cap ? `${beast.name} is loaded as it is.` : null),
+        add: (item) => this.game.pannierAdd(beast, item),
       };
     }
     const piece = this.furnitureId !== null ? this.game.furniture.get(this.furnitureId) : undefined;
@@ -146,6 +162,7 @@ export class CratePanel {
   open(id: number): void {
     this.crateId = id;
     this.furnitureId = null;
+    this.creatureId = null;
     this.render();
     this.win.open();
   }
@@ -153,6 +170,16 @@ export class CratePanel {
   openFurniture(id: number): void {
     this.furnitureId = id;
     this.crateId = null;
+    this.creatureId = null;
+    this.render();
+    this.win.open();
+  }
+
+  /** The panniers on a pack beast's back, seen through the same window. */
+  openPannier(id: number): void {
+    this.creatureId = id;
+    this.crateId = null;
+    this.furnitureId = null;
     this.render();
     this.win.open();
   }

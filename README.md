@@ -373,6 +373,28 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Eighteen more wildermon.** Most of them are kept for a job: the **Bogga**
+  cuts peat and tar out of the marshes; the **Sedra**, a long-necked wader,
+  shears reeds at the water's edge; the **Holla** carries water in its throat
+  from the shore or a well and pours it into your barrels; the **Dowse**, which
+  will not live where there is no metal under it, reads the ground and marks
+  what is down there; the **Sappa** plants sprouts where the axe has been; the
+  **Cobbe** carries the hod, taking brick, mortar and timber out of your stores
+  and fitting it into whatever wall you have planned; the **Tinka** mends the
+  damaged gear in your stores; the **Middun** eats what is rotting on the
+  ground and turns it into compost; and the **Snout**, at taming 50, smells out
+  buried relics and marks where to dig. Four are backs and traces: the **Bura**
+  carries 200 things in panniers of its own, the **Gorral** is a cliff-goat
+  that takes a saddle up ground an Orse turns away from, the **Wadd** is the
+  one mount that will swim deep water with a rider on it, and the **Shaggan**
+  is slower in the traces than anything else and stronger than all of them.
+  The rest are eyes and produce: the **Warda** sees eighteen tiles for you
+  wherever it stands; the **Quill** is plucked rather than shorn, for feathers;
+  the **Cudda** is milked into an empty bucket, and a bucket of milk presses
+  into three cheeses; the **Vesp** is a swarm that fills a **hive** on your
+  deed with honey and beeswax, and two wax and a length of yarn draw a pair of
+  candles; and the **Lume**, found only after dark, carries its own daylight
+  about with it.
 - **Farming.** Till grass or dirt into a field with a rake, sow seeds gathered
   while foraging and botanizing, and grow thirteen crops across vegetables,
   starches, spices and fibre. Each crop runs through four stages with its own
