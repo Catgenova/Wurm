@@ -86,24 +86,47 @@ async function main(): Promise<void> {
     const cy = Math.floor(me.y);
     await supabase().rpc('rpc_move', { p_world: id, p_x: cx + 0.5, p_y: cy + 0.5, p_level: 0 });
     const before = back.getHeight(cx, cy);
-    const asked = await island.act('dig', { x: cx, y: cy, cx, cy }, 1);
-    check('asked to dig', asked.started || !!asked.why, asked.started ? 'started' : `refused: ${asked.why}`);
+    /*
+     * Six goes, not one.
+     *
+     * A fresh body digs at skill 1 with an issued shovel, which comes off
+     * about three times in five — so a test that asks for one go and insists
+     * on a hole is a test that cries wolf two runs in five. Six goes puts the
+     * odds of *none* of them landing at about one in two hundred, and the loop
+     * below stops at the first one that does.
+     */
+    const asked = await island.act('dig', { x: cx, y: cy, cx, cy }, 6);
+    check('asked to dig', asked.started, asked.started ? 'started' : `refused: ${asked.why}`);
 
     if (asked.started) {
-      // Nothing is running to finish it, so wait it out and then nudge.
-      for (let i = 0; i < 20 && ground.length === 0; i++) {
+      // Nothing is running to finish it, so wait it out and nudge.
+      for (let i = 0; i < 60 && ground.length === 0; i++) {
         await sleep(1000);
         await supabase().rpc('rpc_sweep');
       }
       await island.refreshPack();
-      const { data: rows } = await supabase().from('tile_change').select('*').eq('world_id', id);
+      const { data: rows } = await supabase().from('tile_change').select('*').eq('world_id', id).order('n');
       const { data: evs } = await supabase().from('event').select('*').eq('world_id', id).order('n');
       const lines = (evs ?? []).map((e) => (e as { text: string }).text);
-      check('the hole got dug', (rows ?? []).length > 0 || lines.some((l) => /dig/i.test(l)),
-        `${(rows ?? []).length} tile change(s), height ${before} → ${back.getHeight(cx, cy)}`);
-      check('the island told us about it', lines.length > 0, lines.slice(-2).join(' | '));
+      const changes = (rows ?? []) as Array<{ corners: number[] }>;
+
+      // The island's own reckoning of the corner, not this machine's copy of
+      // it: whether the hole exists and whether we were told about it are two
+      // different questions, and the first must not depend on the second.
+      const after = changes[0]?.corners?.[0];
+      check('the hole got dug', changes.length > 0 && typeof after === 'number' && after < before,
+        changes.length ? `height ${before} → ${after} on the island's own reckoning` : 'no tile changed at all');
+      check('the island told us about it', lines.some((l) => /dig/i.test(l)), lines.slice(-2).join(' | '));
       check('Realtime carried the change', ground.length > 0,
         ground.length ? `${ground.length} tile(s) arrived on the channel` : 'nothing arrived on the channel');
+      check('and our own copy of the land moved with it', back.getHeight(cx, cy) < before,
+        `${before} → ${back.getHeight(cx, cy)} here`);
+
+      // Everything a client reads it reads through a policy; the one on
+      // `player` used to read itself and so refused every row.
+      const { data: people, error: peopleErr } = await supabase().from('player').select('*').eq('world_id', id);
+      check('we can read the people on the island', !peopleErr && (people ?? []).length > 0,
+        peopleErr ? peopleErr.message : `${(people ?? []).length} body`);
     }
 
     const { data: pack } = await supabase().from('item').select('*').eq('world_id', id).eq('holder_uid', uid);

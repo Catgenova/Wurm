@@ -81,6 +81,19 @@ last two exist: whether anonymous sign-in is switched on, whether Realtime is
 publishing, whether the policies behave the same behind PostgREST as behind
 psql, and whether eight megabytes of island survives the trip.
 
+## A convention worth keeping
+
+Any migration that adds a function must end with:
+
+```sql
+select private.lock_doors();
+```
+
+PostgREST publishes every function in `public`, and the sweep that takes
+execute away from everybody can only reach the functions that exist when it
+runs. It lived at the bottom of one migration once, which meant every function
+added afterwards was quietly a public endpoint.
+
 ## Applying it
 
 The migrations are plain SQL, in order, named the way the CLI expects. Either

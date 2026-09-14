@@ -109,21 +109,31 @@ select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text,
 select '13. read the island:        ' || (select count(*) from land_tile)::text || ' rows of land';
 select '14. read my pack:           ' || (select count(*) from item)::text || ' things — mine, plus whatever lies on the ground';
 select '15. read skills:            ' || (select count(*) from skill)::text || ' of them, and every one mine';
+/*
+ * Reading the people, which the local suite never did.
+ *
+ * `player_read` used to answer "are we on the same island?" by selecting from
+ * `player` inside a policy on `player`, and Postgres refuses the whole query
+ * as infinite recursion. Everything above passed anyway, because nothing here
+ * had ever asked a client to read a body — so the first thing to find out was
+ * a live island, which is the wrong place to find it out.
+ */
+select '16. read the people:        ' || (select count(*) from player)::text || ' on this island with me';
 do $$ begin
-  begin perform land_set_height((select id from world limit 1), 0, 0, 9999); raise notice '16. call land_set_height:   ALLOWED';
-  exception when others then raise notice '16. call land_set_height:   refused — %', sqlerrm; end;
-  begin update land_corner set heights = heights; raise notice '17. write the land direct:  ALLOWED';
-  exception when others then raise notice '17. write the land direct:  refused — %', sqlerrm; end;
+  begin perform land_set_height((select id from world limit 1), 0, 0, 9999); raise notice '17. call land_set_height:   ALLOWED';
+  exception when others then raise notice '17. call land_set_height:   refused — %', sqlerrm; end;
+  begin update land_corner set heights = heights; raise notice '18. write the land direct:  ALLOWED';
+  exception when others then raise notice '18. write the land direct:  refused — %', sqlerrm; end;
   begin insert into item (world_id, holder, holder_uid, def, ql)
         values ((select id from world limit 1), 'player', auth.uid(), 'gold_lump', 100);
-        raise notice '18. mint myself gold:       ALLOWED';
-  exception when others then raise notice '18. mint myself gold:       refused — %', sqlerrm; end;
-  begin update skill set value = 100; raise notice '19. set my skills to 100:   ALLOWED';
-  exception when others then raise notice '19. set my skills to 100:   refused — %', sqlerrm; end;
-  begin update player set x = 0, y = 0; raise notice '20. teleport myself:        ALLOWED';
-  exception when others then raise notice '20. teleport myself:        refused — %', sqlerrm; end;
-  begin perform settle((select id from world limit 1), auth.uid()); raise notice '21. call settle myself:     ALLOWED';
-  exception when others then raise notice '21. call settle myself:     refused — %', sqlerrm; end;
+        raise notice '19. mint myself gold:       ALLOWED';
+  exception when others then raise notice '19. mint myself gold:       refused — %', sqlerrm; end;
+  begin update skill set value = 100; raise notice '20. set my skills to 100:   ALLOWED';
+  exception when others then raise notice '20. set my skills to 100:   refused — %', sqlerrm; end;
+  begin update player set x = 0, y = 0; raise notice '21. teleport myself:        ALLOWED';
+  exception when others then raise notice '21. teleport myself:        refused — %', sqlerrm; end;
+  begin perform settle((select id from world limit 1), auth.uid()); raise notice '22. call settle myself:     ALLOWED';
+  exception when others then raise notice '22. call settle myself:     refused — %', sqlerrm; end;
 end $$;
 reset role;
 \echo ''
