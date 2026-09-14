@@ -36,6 +36,8 @@ import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
 import { PLANTABLE } from '../src/game/game';
 import { RARITIES } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
+import { SLAB_VARIANTS } from '../src/world/tiles';
+import { WORMY, RICH_WORMS } from '../src/game/actions';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -190,6 +192,14 @@ out.push(`alter table item_def add column if not exists drink real;`);
  * things it will hold. Both were only ever read by the browser until a pair
  * of hands down here wanted to examine a shovel and put it in a satchel. */
 out.push(`alter table item_def add column if not exists description text;`);
+/* Ground with anything living in it, and the damp ground that is full of them. */
+out.push(`alter table tile_def add column if not exists wormy boolean not null default false;`);
+out.push(`alter table tile_def add column if not exists rich_worms boolean not null default false;`);
+/* The four stones a slab is cut from, kept in the tile's data byte the way a
+ * rock tile keeps its seam. */
+out.push(`create table if not exists slab_def (
+  id int primary key, name text not null, item text not null
+);`);
 out.push(`alter table item_def add column if not exists holds real;`);
 /* Rarity and colour, which are half of what a thing is called. */
 out.push(`create table if not exists rarity_def (
@@ -270,6 +280,8 @@ out.push(`create table if not exists rock_def (
 /* What stands on a tile, and what it is worth felling. A tile's `data` byte
  * holds the species in its low four bits and the age in the next two. */
 out.push(`create table if not exists tree_def (id int primary key, name text not null, logs int not null);`);
+/* What it bears, for whoever is standing under it in season. */
+out.push(`alter table tree_def add column if not exists fruit text;`);
 out.push(`create table if not exists bush_def (id int primary key, name text not null);`);
 /* Weighted tables, shared by foraging people and foraging creatures. */
 out.push(`create table if not exists loot_table (
@@ -349,7 +361,7 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def;');
 out.push('');
 
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
@@ -538,7 +550,13 @@ for (const b of BAITS) {
 for (const c of CROP_LIST) {
   out.push(`insert into crop_def values (${q(c.id)}, ${q(c.name)}, ${q(c.seed)}, ${q(c.produce)}, ${q(c.stageSeconds)});`);
 }
-TREE_DEFS.forEach((t, i) => out.push(`insert into tree_def values (${q(i)}, ${q(t.name)}, ${q(t.logs)});`));
+TREE_DEFS.forEach((t, i) => {
+  out.push(`insert into tree_def values (${q(i)}, ${q(t.name)}, ${q(t.logs)});`);
+  if (t.fruit) out.push(`update tree_def set fruit = ${q(t.fruit)} where id = ${q(i)};`);
+});
+SLAB_VARIANTS.forEach((v, i) => out.push(`insert into slab_def values (${q(i)}, ${q(v.name)}, ${q(v.item)});`));
+for (const id of WORMY) out.push(`update tile_def set wormy = true where id = ${q(id)};`);
+for (const id of RICH_WORMS) out.push(`update tile_def set rich_worms = true where id = ${q(id)};`);
 BUSH_DEFS.forEach((b, i) => out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`));
 for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE]] as Array<[string, Array<[string, number]>]>) {
   for (const [item, weight] of table) out.push(`insert into loot_table values (${q(id)}, ${q(item)}, ${q(weight)});`);

@@ -171,8 +171,8 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
 export const MINE_COLLAPSE = 0.01;
 
 /** Ground with anything living in it, and the damp ground that is full of them. */
-const WORMY = new Set<TileType>([TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Marsh, TileType.Moss]);
-const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
+export const WORMY = new Set<TileType>([TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Marsh, TileType.Moss]);
+export const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
 
 /** How often a deliberate chip at a corner actually takes it down: one in four. */
 export const CHIP_CHANCE = 0.25;

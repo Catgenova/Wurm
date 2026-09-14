@@ -41,13 +41,14 @@ simplification rather than a problem:
 | **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
 | **8** | and to what is lying about: pick one up, sweep the lot, put one down, look at a thing or a tile, set a thing aside and take it back, call something by a name |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
-| **1** | setting a wildermon to work the deed, which is nineteen trades and a crate to fill |
+| **1** | setting a wildermon to work the deed, which is twenty trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
+| **11** | and shaping it: flatten a tile, drop dirt on a named corner, lay and lift cut slabs, cut grass and reeds, pick fruit and sprouts, plant a tree, turn the ground over for worms, read it for metal |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **74** | known, listed, and honestly refused |
+| **63** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -65,14 +66,41 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), the three deed trades
-that want something this island has not got yet — `water` wants barrels that
-hold liquid, `prospect` wants the marks a prospector writes on a map and
-`seek` wants archaeology — sowing a field from a worker's own cheeks,
-breeding and pairing, riding and the traces, trapping,
-the ledger, the journal, flattening and levelling, paving with cut slabs,
-prospecting, deed upgrades and disbanding, and the ease a hot oven
-lends to cooking.
+not the recovery, would make the island unplayable), the two deed trades that
+want something this island has not got yet — `water` wants barrels that hold
+liquid and `seek` wants archaeology — sowing a field from a worker's own
+cheeks, breeding and pairing, riding and the traces, trapping, the ledger, the
+journal, bags, ovens and lanterns, deed upgrades and disbanding, and the ease
+a hot oven lends to cooking.
+
+### A hash on something that never changes is not a hash
+
+A prospector picks where to read next by throwing sixty guesses inside its
+range and walking to the furthest. The browser rolls them; out here everything
+is hashed off the creature and the leg it is on, because a row settled twice
+has to land in the same place both times.
+
+A deed worker never touches its leg. Nothing in the round trip needs one — the
+phases carry the state, and `leg` belongs to the wild walk. So the hash was
+constant, the sixty guesses were the same sixty guesses every round, and a
+dowse set to read the ground took forty readings of one patch of grass and
+learned a great deal about it. A reading *is* a leg, so it counts as one now.
+
+The suite said `40 readings, 0 tiles lit`, which is the sort of sentence a
+boolean assertion would have turned into a silent pass.
+
+### Examining a tile inside a building
+
+`building_at` hands back the building's *number*. The examine text declared a
+`building` row variable and assigned it straight in, which Postgres refuses the
+moment it is handed one — so examining any tile under a roof raised, and every
+tile outside one worked perfectly, because `building_at` answers null out there
+and null goes into a row variable without complaint.
+
+It went out live. The suite examined the ground by the token, which is exactly
+the case that cannot fail, and nothing asked about the one tile that would have
+said "It belongs to Mead Hall". The fix is forward, in the next migration, and
+the measurement that would have caught it now runs first in the section.
 
 ### The island could put things down and nobody could pick them up
 

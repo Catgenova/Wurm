@@ -121,6 +121,7 @@ async function main(): Promise<void> {
      * forward, the second asks again. Something within sight will have moved,
      * because the only thing that makes this island move is being looked at.
      */
+    const { data: was0 } = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
     const { data: first, error: mobErr } = await supabase().rpc('rpc_creatures', { p_world: id, p_range: 60 });
     const mob = (first ?? []) as Array<{ id: number; species: string; x: number; y: number; hunting?: boolean }>;
     check('the island stocked itself with wildlife', !mobErr && mob.length > 0,
@@ -165,31 +166,23 @@ async function main(): Promise<void> {
       legErr?.message ?? 'the person it is hunting, the beast it is fighting, and what hurt it last');
 
     /*
-     * The ground. Everything the island puts down has been out of reach of
-     * the person standing on it until now, so this drops one of the starting
-     * kit and picks it back up through the front door.
+     * Working the ground. Flattening and prospecting both want a tool the
+     * starting kit has, so these two go through the front door for real;
+     * examining a tile takes no time at all and answers at once.
      */
-    const mine = await supabase().from('item').select('id,def,count').eq('world_id', id).eq('holder_uid', uid).limit(1);
-    const one = (mine.data ?? [])[0] as { id: number; def: string; count: number } | undefined;
-    if (one) {
-      const put = await island.act('drop', { kind: 'item', uid: one.id, count: 1 }, 1);
-      const { data: onGround } = await supabase().from('item').select('id,def').eq('world_id', id).eq('holder', 'ground');
-      const lying = ((onGround ?? []) as Array<{ id: number; def: string }>).find((it) => it.def === one.def);
-      check('we can put something down', put.started && !!lying,
-        put.why ?? (lying ? `a ${one.def} is lying on the ground` : 'nothing reached the ground'));
-      if (lying) {
-        const here = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
-        const got = await island.act('pick_up',
-          { kind: 'ground', x: Math.floor(here.data?.x ?? 0), y: Math.floor(here.data?.y ?? 0), uid: lying.id }, 1);
-        const { count: left } = await supabase().from('item').select('*', { count: 'exact', head: true })
-          .eq('world_id', id).eq('holder', 'ground').eq('id', lying.id);
-        check('and pick it up again', got.started && left === 0,
-          got.why ?? (left === 0 ? 'it is back in the pack' : 'it is still on the grass'));
-      }
-      const look = await island.act('examine_item', { kind: 'item', uid: one.id }, 1);
-      check('and a thing says what it is when we look at it', look.started && !!look.done,
-        look.why ?? 'it answered at once, as an instant action should');
-    }
+    const spot = { kind: 'tile', x: Math.floor(was0?.x ?? 0), y: Math.floor(was0?.y ?? 0) };
+    const look = await island.act('examine', spot, 1);
+    check('we can look at the ground we are standing on', look.started && !!look.done,
+      look.why ?? 'it answered at once');
+    const read = await island.act('prospect', spot, 1);
+    check('and read it for metal', read.started, read.why ?? 'started');
+    const { data: slabs, error: slabErr } = await supabase().from('slab_def').select('id,item');
+    check('the four stones a slab is cut from are on the project',
+      !slabErr && (slabs ?? []).length === 4,
+      slabErr ? slabErr.message : `${(slabs ?? []).length}: ${((slabs ?? []) as Array<{ item: string }>).map((v) => v.item).join(', ')}`);
+    const { data: fruiting, error: fruitErr } = await supabase().from('tree_def').select('name,fruit').not('fruit', 'is', null);
+    check('and the trees that bear anything', !fruitErr && (fruiting ?? []).length > 0,
+      fruitErr ? fruitErr.message : ((fruiting ?? []) as Array<{ name: string; fruit: string }>).map((t) => `${t.name.toLowerCase()} → ${t.fruit}`).join(', '));
 
     /*
      * The furnaces. Neither can be built with a starting kit, so what reaches
@@ -326,8 +319,16 @@ async function main(): Promise<void> {
     check('asked to dig', asked.started, asked.started ? 'started' : `refused: ${asked.why}`);
 
     if (asked.started) {
-      // Nothing is running to finish it, so wait it out and nudge.
-      for (let i = 0; i < 60 && ground.length === 0; i++) {
+      /*
+       * Nothing is running to finish it, so wait it out and nudge.
+       *
+       * Counted from where the channel already stood rather than from zero:
+       * anything earlier in this run that moved a tile — putting something
+       * down, picking it up — arrives here too, and a loop that stops at the
+       * first tile change of any kind stops before the digging has begun.
+       */
+      const groundWas = ground.length;
+      for (let i = 0; i < 60 && ground.length === groundWas; i++) {
         await sleep(1000);
         await supabase().rpc('rpc_sweep');
       }
@@ -345,8 +346,9 @@ async function main(): Promise<void> {
         changes.length ? `height ${before} → ${after} on the island's own reckoning` : 'no tile changed at all');
       check('the island told us about it', lines.some((l) => /dig/i.test(l)), lines.slice(-2).join(' | '));
       check('the channel is listening', island.channelState === 'listening', island.channelState);
-      check('Realtime carried the change', ground.length > 0,
-        ground.length ? `${ground.length} tile(s) arrived on the channel` : `nothing arrived (channel: ${island.channelState})`);
+      check('Realtime carried the change', ground.length > groundWas,
+        ground.length > groundWas ? `${ground.length - groundWas} tile(s) arrived on the channel`
+                                  : `nothing arrived (channel: ${island.channelState})`);
       check('and our own copy of the land moved with it', back.getHeight(cx, cy) < before,
         `${before} → ${back.getHeight(cx, cy)} here`);
 
@@ -355,6 +357,45 @@ async function main(): Promise<void> {
       const { data: people, error: peopleErr } = await supabase().from('player').select('*').eq('world_id', id);
       check('we can read the people on the island', !peopleErr && (people ?? []).length > 0,
         peopleErr ? peopleErr.message : `${(people ?? []).length} body`);
+    }
+
+
+    /*
+     * The ground. Everything the island puts down has been out of reach of the
+     * person standing on it until now, so this looks at one of the starting
+     * kit, drops it, and picks it back up through the front door.
+     *
+     * After the digging rather than before it: dropping a thing moves a tile,
+     * and a tile that moves arrives on the same channel the dig is waiting on.
+     */
+    const mine = await supabase().from('item').select('id,def,count').eq('world_id', id).eq('holder_uid', uid).limit(1);
+    const one = (mine.data ?? [])[0] as { id: number; def: string; count: number } | undefined;
+    if (one) {
+      const look = await island.act('examine_item', { kind: 'item', uid: one.id }, 1);
+      check('a thing says what it is when we look at it', look.started && !!look.done,
+        look.why ?? 'it answered at once, as an instant action should');
+      const put = await island.act('drop', { kind: 'item', uid: one.id, count: 1 }, 1);
+      const { data: onGround } = await supabase().from('item').select('id,def').eq('world_id', id).eq('holder', 'ground');
+      const lying = ((onGround ?? []) as Array<{ id: number; def: string }>).find((it) => it.def === one.def);
+      check('we can put something down', put.started && !!lying,
+        put.why ?? (lying ? `a ${one.def} is lying on the ground` : 'nothing reached the ground'));
+      if (lying) {
+        const here = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
+        const got = await island.act('pick_up',
+          { kind: 'ground', x: Math.floor(here.data?.x ?? 0), y: Math.floor(here.data?.y ?? 0), uid: lying.id }, 1);
+        // Picking a thing up takes a second of somebody's time, so it has to
+        // be waited out and nudged like any other job with a clock on it.
+        let left = 1;
+        for (let i = 0; i < 20 && left > 0; i++) {
+          await sleep(1000);
+          await supabase().rpc('rpc_sweep');
+          const { count } = await supabase().from('item').select('*', { count: 'exact', head: true })
+            .eq('world_id', id).eq('holder', 'ground').eq('id', lying.id);
+          left = count ?? 0;
+        }
+        check('and pick it up again', got.started && left === 0,
+          got.why ?? (left === 0 ? 'it is back in the pack' : 'it is still on the grass'));
+      }
     }
 
     const { data: pack } = await supabase().from('item').select('*').eq('world_id', id).eq('holder_uid', uid);

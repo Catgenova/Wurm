@@ -1808,6 +1808,201 @@ select act_perform(:'world2', :'ivar', 'name_thing',
   ('{"kind":"crate","id":' || (select id from crate where world_id = :'world2' and deed) || ',"name":"Planks"}')::jsonb) \g /dev/null
 select '325. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
      || ' — and it now answers to ' || (select coalesce(name, crate_name(c)) from crate c where c.world_id = :'world2' and c.deed);
-select '326. the eight that arrived with this commit: '
-     || (select string_agg(id, ', ' order by id) from action_def where hands_action(id))
+select '326. the eight a pair of hands brought: '
+     || (select string_agg(id, ', ' order by id) from action_def where hands_action(id));
+
+\echo ''
+\echo '--- working the ground, and what grows out of it'
+-- The tile a building stands on, which is the case the last commit could not
+-- examine: `building_at` hands back a number and it was being read as a row.
+select bt.x as inx, bt.y as iny from building_tile bt where bt.world_id = :'world2' order by bt.x, bt.y limit 1 \gset
+select '327. examining the floor of a building: ' || examine_tile_text(:'world2', :'inx', :'iny');
+
+-- A tile with one corner standing a metre proud of the rest.
+update player set x = 9.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+select land_set_tile(:'world2', 10, 9, 1), land_set_height(:'world2', 10, 9, 103),
+       land_set_dirt(:'world2', 10, 9, 20) \g /dev/null
+select '328. the tile at 10,9 stands ' || tile_slope(:'world2', 10, 9)
+     || ' out of true, and flattening it: ' || coalesce(act_refusal(:'world2', :'ivar', 'flatten',
+        '{"kind":"tile","x":10,"y":9}'::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..8 loop
+    exit when act_refusal(w, me, 'flatten', '{"kind":"tile","x":10,"y":9}'::jsonb) is not null;
+    perform act_perform(w, me, 'flatten', '{"kind":"tile","x":10,"y":9}'::jsonb);
+  end loop;
+end $$;
+select '329. ' || (select string_agg(distinct text, ' | ') from event where uid = :'ivar' and kind = 'event')
+     || ' — the tile is now ' || tile_slope(:'world2', 10, 9) || ' out of true';
+
+-- Dirt, dropped on a named corner rather than under your own feet.
+delete from event where uid = :'ivar';
+select give(:'world2', :'ivar', 'dirt', 3, 20) \g /dev/null
+select land_height(:'world2', 11, 9) as was_h \gset
+select act_perform(:'world2', :'ivar', 'drop_dirt', '{"kind":"tile","x":10,"y":9,"cx":11,"cy":9}'::jsonb) \g /dev/null
+select '330. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — the corner went from ' || :'was_h' || ' to ' || land_height(:'world2', 11, 9);
+
+\echo ''
+\echo '--- paving with cut slabs, and taking it up again'
+select land_set_tile(:'world2', 9, 10, 2) \g /dev/null
+select '331. slabs on packed earth with nothing to lay: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'pave_slabs', '{"kind":"tile","x":9,"y":10}'::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'marble_slab', 2, 70) \g /dev/null
+select give(:'world2', :'ivar', 'trowel', 1, 40) \g /dev/null
+select '332. with a marble slab and a trowel: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'pave_slabs', '{"kind":"tile","x":9,"y":10}'::jsonb), 'allowed')
+     || ' | on bare grass: ' || coalesce(act_refusal(:'world2', :'ivar', 'pave_slabs',
+        '{"kind":"tile","x":9,"y":9}'::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..8 loop
+    exit when land_tile(w, 9, 10) = 21;
+    perform act_perform(w, me, 'pave_slabs', '{"kind":"tile","x":9,"y":10}'::jsonb);
+  end loop;
+end $$;
+select '333. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — the tile is paved, and what is in its data byte says '
+     || lower((select name from slab_def where id = land_data(:'world2', 9, 10)))
+     || ', which is how a slab tile remembers the stone it was cut from';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'remove_paving', '{"kind":"tile","x":9,"y":10}'::jsonb) \g /dev/null
+select '334. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and it is back to ' || (select name from tile_def where id = land_tile(:'world2', 9, 10));
+
+\echo ''
+\echo '--- grass, reeds, fruit and worms'
+select land_set_tile(:'world2', 9, 9, 0), land_set_tile(:'world2', 8, 9, 19) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'cut_grass', '{"kind":"tile","x":9,"y":9}'::jsonb) \g /dev/null
+select '335. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and going back for more: ' || coalesce(act_refusal(:'world2', :'ivar', 'cut_grass',
+        '{"kind":"tile","x":9,"y":9}'::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'carving_knife', 1, 40) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'cut_reeds', '{"kind":"tile","x":8,"y":9}'::jsonb) \g /dev/null
+select '336. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+
+-- An apple tree, young and then old, which is the whole of what bearing means.
+select land_set_tile(:'world2', 10, 10, 16), land_set_data(:'world2', 10, 10, 6) \g /dev/null
+update player set x = 10.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+select '337. a sapling apple: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_fruit',
+       '{"kind":"tile","x":10,"y":10}'::jsonb), 'allowed');
+select land_set_data(:'world2', 10, 10, 6 | (2 << 4)) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_fruit', '{"kind":"tile","x":10,"y":10}'::jsonb) \g /dev/null
+select '338. an old one: ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and again straight away: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_fruit',
+        '{"kind":"tile","x":10,"y":10}'::jsonb), 'allowed');
+
+-- A sprout off it, planted somewhere else, which is how an orchard happens.
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'forestry', 60)
+  on conflict (world_id, uid, id) do update set value = 60;
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..10 loop
+    exit when pack_count(w, me, 'sprout') > 0;
+    perform act_perform(w, me, 'pick_sprout', '{"kind":"tile","x":10,"y":10}'::jsonb);
+  end loop;
+end $$;
+select '339. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — in the pack: ' || coalesce((select count || ' ' || lower(extra) || ' sprout' from item
+          where world_id = :'world2' and holder_uid = :'ivar' and def = 'sprout' limit 1), 'none');
+select land_set_tile(:'world2', 11, 9, 0) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'plant', '{"kind":"tile","x":11,"y":9}'::jsonb) \g /dev/null
+select '340. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — 11,9 now holds an ' || lower((select name from tree_def where id = tree_species(land_data(:'world2', 11, 9))))
+     || ' tree at age ' || tree_age(land_data(:'world2', 11, 9))
+     || ', which is where a planted one starts and a felled one never gets back to';
+
+-- Worms, which is what a marsh is full of and a gravel path is not.
+select land_set_tile(:'world2', 9, 11, 7), land_set_tile(:'world2', 8, 10, 3) \g /dev/null
+update player set x = 9.5, y = 10.5 where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..6 loop perform act_perform(w, me, 'dig_worms', '{"kind":"tile","x":9,"y":11}'::jsonb); end loop;
+end $$;
+select '341. six spadefuls of marsh: ' || pack_count(:'world2', :'ivar', 'worm') || ' worms'
+     || ' — and turning over the sand at 8,10: ' || coalesce(act_refusal(:'world2', :'ivar', 'dig_worms',
+        '{"kind":"tile","x":8,"y":10}'::jsonb), 'allowed');
+
+\echo ''
+\echo '--- reading the ground for metal'
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'prospecting', 40)
+  on conflict (world_id, uid, id) do update set value = 40;
+select '342. at prospecting 40 a prospector reads ' || prospect_radius(40) || ' tiles about them'
+     || ', and at 1, ' || prospect_radius(1);
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'prospect', '{"kind":"tile","x":9,"y":10}'::jsonb) \g /dev/null
+select '343. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+select '344. and what is now lit for him: ' ||
+       (select count(*) from generate_series(0, 15) x cross join generate_series(0, 15) y
+        where is_prospected(:'world2', :'ivar', x, y)) || ' tiles — for Hild, who has not looked: '
+     || (select count(*) from generate_series(0, 15) x cross join generate_series(0, 15) y
+         where is_prospected(:'world2', :'hild', x, y));
+select '345. the eleven the ground brought: '
+     || (select string_agg(id, ', ' order by id) from action_def where ground_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- and a beast that does the reading for you'
+-- Nothing else on the deed, and a seam of bare rock to find.
+delete from creature where world_id = :'world2' and mode in ('deed', 'wild');
+update player set stats = jsonb_set(stats, '{prospected}', 'null'::jsonb)
+  where world_id = :'world2' and uid = :'ivar';
+select '346. lit for Ivar before anybody looks: '
+     || (select count(*) from generate_series(0, 15) x cross join generate_series(0, 15) y
+         where is_prospected(:'world2', :'ivar', x, y)) || ' tiles';
+select creature_spawn(:'world2', 'dowse', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as reader \gset
+select '347. a dowse set to read the ground, ranging ' || work_range((select c from creature c where c.id = :'reader'))
+     || ' tiles — and setting one on through the front door is now: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed',
+        ('{"kind":"creature","id":' || (select creature_spawn(:'world2', 'dowse', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar')) || '}')::jsonb), 'allowed');
+update creature set phase = 'idle', until = now() - interval '900 seconds',
+    leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
+    settled_at = now() - interval '900 seconds' where id = :'reader';
+delete from event where uid = :'ivar';
+select worker_settle(:'world2', :'reader') as read_rounds \gset
+select '348. a quarter of an hour of it: ' || :'read_rounds' || ' readings, and it is out at '
+     || (select floor(to_x) || ',' || floor(to_y) from creature where id = :'reader')
+     || ' on leg ' || (select leg from creature where id = :'reader')
+     || ' — a reading is a leg, and a leg is what the next spot is hashed from';
+/*
+ * The reading itself, measured separately from the walk.
+ *
+ * There is exactly one tile of bare metal on this island and the dowse ranges
+ * nine tiles round the token, so whether forty readings happen to cover that
+ * one square is a question about luck rather than about the port. Stood on it,
+ * what it does is the thing worth measuring.
+ */
+-- Read in its own statement: folded into the sentence below it, the count
+-- would be taken from the snapshot the reading has not landed in yet.
+delete from event where uid = :'ivar';
+select read_ground(:'world2', :'reader', 5, 5, 2) as seam \gset
+select '349. stood on the seam at 5,5: ' || :'seam'
+     || ' tile of metal found, now lit for its keeper: '
+     || (select count(*) from generate_series(0, 15) x cross join generate_series(0, 15) y
+         where is_prospected(:'world2', :'ivar', x, y))
+     || ' — and it said: ' || coalesce((select text from event where uid = :'ivar' and kind = 'event'
+          order by n desc limit 1), 'nothing');
+select '350. of the twenty-two trades a wildermon may be set to, this island now knows '
+     || (select count(*) from (values ('forage'), ('botanize'), ('woodcut'), ('farm'), ('mine'), ('sand'),
+                                      ('clay'), ('quarry'), ('stoke'), ('fetch'), ('guard'), ('hunt'),
+                                      ('peat'), ('reed'), ('water'), ('prospect'), ('plant'), ('hod'),
+                                      ('mend'), ('compost'), ('seek'), ('fish')) v(k) where worker_job_ported(v.k))
+     || ' — and the two it does not: '
+     || (select string_agg(v.k, ', ' order by v.k) from (values ('water'), ('seek')) v(k)
+         where not worker_job_ported(v.k));
