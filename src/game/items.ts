@@ -264,6 +264,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   corn: { name: 'Corn', category: 'food', weight: 0.2, stackable: true, food: 0.11 },
   cotton: { name: 'Cotton', category: 'material', weight: 0.1, stackable: true, decay: 30 },
   wemp: { name: 'Wemp fibre', category: 'material', weight: 0.1, stackable: true, decay: 30 },
+  snare: { name: 'Snare', category: 'misc', weight: 1.2, decay: 5, description: 'A noose of rope on a bent shaft. Set it out in the country, bait it, and come back to whatever came to the bait.' },
+  deadfall: { name: 'Deadfall', category: 'misc', weight: 12, decay: 4, description: 'A weighted board on a trigger. It holds very nearly anything that walks, and it is a great deal of work to build.' },
   cover: { name: 'Healing cover', category: 'tool', weight: 0.2, stackable: true, decay: 12, description: 'Herbs worked into cotton. Laid on the wound it suits, it stops the bleeding, keeps the dirt out and closes it twice as fast as cloth.' },
   dye: { name: 'Dye', category: 'material', weight: 0.8, stackable: true, decay: 5, description: 'A pot of colour, struck with lye so it bites and holds. One pot does one thing.' },
   banner: { name: 'Banner', category: 'misc', weight: 4, decay: 5, description: 'Cloth on a staff. Plant it on the deed and fly your colour over it.' },

@@ -11,7 +11,7 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
 import { Emitter, type GameEvents, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
@@ -21,6 +21,7 @@ import { affinityOf, affinityTime, AFFINITY_BONUS, clockLeft, REST_CAP, REST_MUL
 import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
+import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
 import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, stepsCrossed, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
@@ -96,6 +97,8 @@ export interface GameInit {
   kilns?: PlacedKiln[];
   furniture?: PlacedFurniture[];
   posts?: PlacedPost[];
+  traps?: PlacedTrap[];
+  nextTrapId?: number;
   tally?: Record<string, number>;
   ticked?: string[];
   anvils?: PlacedAnvil[];
@@ -193,6 +196,7 @@ export class Game {
     furniture: new TileIndex<PlacedFurniture>(),
     anvils: new TileIndex<PlacedAnvil>(),
     posts: new TileIndex<PlacedPost>(),
+    traps: new TileIndex<PlacedTrap>(),
   };
   readonly buildings: Buildings;
   /** What can be seen from where you are, and what is only remembered. */
@@ -201,6 +205,8 @@ export class Game {
   deed: Deed | null = null;
   /** Work posts by id; each stands on one subtile off the deed. */
   readonly posts = new Map<number, PlacedPost>();
+  readonly traps = new Map<number, PlacedTrap>();
+  nextTrapId = 1;
   private nextPostId = 1;
   /**
    * A running count of things done: felled trees, landed fish, brews set
@@ -345,6 +351,12 @@ export class Game {
       this.placed.posts.add(p);
       if (p.id >= this.nextPostId) this.nextPostId = p.id + 1;
     }
+    for (const t of init.traps ?? []) {
+      this.traps.set(t.id, t);
+      this.placed.traps.add(t);
+      if (t.id >= this.nextTrapId) this.nextTrapId = t.id + 1;
+    }
+    if (init.nextTrapId) this.nextTrapId = Math.max(this.nextTrapId, init.nextTrapId);
     for (const s of init.smelters ?? []) {
       this.smelters.set(s.id, s);
       if (s.id >= this.nextSmelterId) this.nextSmelterId = s.id + 1;
@@ -833,6 +845,7 @@ export class Game {
     if (this.kilns.size) this.runKilns(seconds);
     if (this.furniture.size) this.runPlaceables(seconds, 0);
     if (this.posts.size) this.runPosts(seconds);
+    if (this.traps.size) this.runTraps(seconds);
     if (this.crops.size) this.growCrops();
     if (this.ground.size) this.applyDecay(seconds);
     const s = this.player.stats;
@@ -1047,6 +1060,7 @@ export class Game {
     if (this.kilns.size) this.runKilns(dt);
     if (this.furniture.size) this.runPlaceables(dt, moved);
     if (this.posts.size) this.runPosts(dt);
+    if (this.traps.size) this.runTraps(dt);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
@@ -1335,6 +1349,10 @@ export class Game {
       const p = this.posts.get(target.id);
       return p ? { x: p.x, y: p.y } : null;
     }
+    if (target.kind === 'trap') {
+      const t = this.traps.get(target.id);
+      return t ? { x: t.x, y: t.y } : null;
+    }
     return { x: target.x, y: target.y };
   }
 
@@ -1483,6 +1501,118 @@ export class Game {
       }
     }
     return false;
+  }
+
+  // ---- Traps: what you catch while you are somewhere else. ----
+
+  addTrap(kind: TrapKind, x: number, y: number, sx: number, sy: number, ql: number, material?: string): PlacedTrap {
+    const t: PlacedTrap = { id: this.nextTrapId++, x, y, sx, sy, kind, ql, dmg: 0, bait: null, caught: null, checkAt: this.time + CHECK_EVERY, material };
+    this.traps.set(t.id, t);
+    this.placed.traps.add(t);
+    return t;
+  }
+
+  removeTrap(id: number): void {
+    const t = this.traps.get(id);
+    if (!t) return;
+    this.placed.traps.remove(t);
+    this.traps.delete(id);
+  }
+
+  trapAt(x: number, y: number, sx: number, sy: number): PlacedTrap | undefined {
+    for (const t of this.placed.traps.at(x, y)) if (t.sx === sx && t.sy === sy) return t;
+    return undefined;
+  }
+
+  trapsOnTile(x: number, y: number): readonly PlacedTrap[] {
+    return this.placed.traps.at(x, y);
+  }
+
+  /** Why a trap cannot be set here, or null. */
+  trapPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+    if (!this.world.inBounds(x, y)) return 'Not there.';
+    if (this.onDeed(x, y)) return 'Nothing wild comes inside your own borders. Set it out in the country.';
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A trap needs dry ground it can be covered on.';
+    if (this.buildings.buildingAt(x, y)) return 'Not inside a building.';
+    if (this.occupiedSubtile(x, y, sx, sy)) return 'Something is already there.';
+    return null;
+  }
+
+  /** Let whatever is in it go, and say so. */
+  springTrap(t: PlacedTrap, why: string): void {
+    const c = t.caught !== null ? this.creatures.get(t.caught) : undefined;
+    t.caught = null;
+    t.bait = null;
+    if (c) {
+      c.trapped = null;
+      c.state = 'flee';
+      c.until = this.time + 4;
+      this.logMsg(why, 'event');
+    }
+    this.events.emit('world', t.x, t.y);
+  }
+
+  /**
+   * Traps, on the clock. They rot where they stand like everything else left
+   * out, and every so often a baited one is rolled against whatever wild
+   * thing is within reach of the smell of it.
+   */
+  private runTraps(dt: number): void {
+    for (const t of [...this.traps.values()]) {
+      t.dmg = Math.min(100, t.dmg + dt * trapDecayRate(t));
+      if (t.dmg >= 100) {
+        if (t.caught !== null) this.springTrap(t, `The ${trapName(t).toLowerCase()} rots through and whatever was in it walks away.`);
+        this.removeTrap(t.id);
+        this.logMsg(`A ${trapName(t).toLowerCase()} has rotted through out in the country.`, 'system');
+        continue;
+      }
+      if (t.caught !== null || !t.bait || this.time < t.checkAt) continue;
+      t.checkAt = this.time + CHECK_EVERY;
+      this.rollTrap(t);
+    }
+  }
+
+  /** One roll of one trap against the country round it. */
+  private rollTrap(t: PlacedTrap): void {
+    const bait = t.bait;
+    if (!bait) return;
+    const [cx, cy] = trapCentre(t);
+    const reach = TRAPS[t.kind].reach;
+    const holds = trapHolds(t);
+    let best: Creature | null = null;
+    let bestChance = 0;
+    for (const c of this.creatures.list.values()) {
+      if (c.mode !== 'wild' || c.trapped !== null) continue;
+      if (Math.hypot(c.x - cx, c.y - cy) > reach) continue;
+      const s = this.creatures.species(c);
+      if (!isBaitFor(s, bait.id)) continue;
+      // Anything warier than the trap will hold simply takes the bait and goes.
+      if (s.tameLevel > holds) {
+        if (this.rand() < 0.3) {
+          t.bait = null;
+          this.logMsg(`Something took the bait out of your ${trapName(t).toLowerCase()} and was gone. It was too much trap for.`, 'system');
+          return;
+        }
+        continue;
+      }
+      const chance = catchChance(t, c);
+      if (chance > bestChance) {
+        best = c;
+        bestChance = chance;
+      }
+    }
+    if (!best || this.rand() >= bestChance) return;
+    best.trapped = t.id;
+    best.state = 'idle';
+    best.enemy = null;
+    const [tx, ty] = trapCentre(t);
+    best.x = tx;
+    best.y = ty;
+    t.caught = best.id;
+    t.bait = null;
+    this.note('caught');
+    this.logMsg(`Your ${trapName(t).toLowerCase()} has sprung. There is a ${this.creatures.species(best).name.toLowerCase()} in it.`, 'event');
+    this.events.emit('world', t.x, t.y);
   }
 
   // ---- Work posts: a settlement's worth of orders on a stake, for an hour. ----

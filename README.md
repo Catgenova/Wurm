@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Sixty-two goals in seven chapters — Ashore, The
+- **A journal of goals.** Sixty-four goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -498,6 +498,18 @@ rebuilds and commits the result.
   rope**. Rope is a real input rather than a curiosity: a bridle takes one
   for the reins, a rowing boat two, a sailing boat eight and two hawsers of
   standing rigging, and a well a hawser to hang its bucket on.
+- **Traps.** The other way of taking a wild thing: set it, bait it, walk
+  away, and whatever came to the bait is waiting when you come back —
+  **alive**, with the blood it was born with still in it. A **snare** (a
+  rope and two shafts) holds to about taming 20; a **deadfall** (three
+  planks, two shafts, two ropes, six nails and a mallet) to about 60.
+  Traps go outside your own borders — nothing wild comes inside them —
+  and the bait menu says which sorts would come to each thing in your pack.
+  Anything warier than the trap will hold takes the bait and goes. Timid
+  creatures, the ones you cannot walk up to, are half again as likely to
+  walk in; hunters much less so. Traps rot where they stand and whatever is
+  in one walks away when it goes over. Getting the catch out is still
+  taming: the skill wall stands whether the animal is held or not.
 - **Traits, genders and animal husbandry.** Every wildermon is born **male**
   or **female** and carries **three traits**, drawn from four tiers —
   **common**, **rare**, **supreme**, **fantastic** — whose worth climbs steeply

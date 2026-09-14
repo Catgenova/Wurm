@@ -26,6 +26,7 @@ import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from
 import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
+import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
@@ -353,6 +354,8 @@ export class UI {
     if (anvilHere) return { title: `${anvilName(anvilHere)} (QL ${anvilHere.ql.toFixed(0)})`, entries: this.anvilEntries(anvilHere) };
     const postHere = pick.post !== undefined ? this.game.posts.get(pick.post) : undefined;
     if (postHere) return { title: `${postName(postHere)} (${postState(postHere)})`, entries: this.postEntries(postHere) };
+    const trapHere = pick.trap !== undefined ? this.game.traps.get(pick.trap) : undefined;
+    if (trapHere) return { title: `${trapName(trapHere)} (${trapState(trapHere, this.game)})`, entries: this.trapEntries(trapHere) };
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
@@ -395,6 +398,24 @@ export class UI {
           hint: reason ?? undefined,
           disabled: !!reason,
           onSelect: () => this.game.requestAction(postDef, pt),
+        });
+      }
+    }
+    // Setting a carried trap on the spot under the cursor.
+    const trapSet = ACTION_BY_ID.get('set_trap');
+    const trapItems = this.game.inventory.items.filter((it) => it.id === 'snare' || it.id === 'deadfall');
+    if (trapSet && trapItems.length) {
+      const [tx0, ty0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+      for (const it of trapItems) {
+        const tt: Target = { ...target, sx: tx0, sy: ty0, itemUid: it.uid };
+        const reason = trapSet.check?.(tt, this.game) ?? null;
+        const kind = TRAPS[it.id as 'snare' | 'deadfall'];
+        entries.push({
+          label: `Set ${itemName(it).toLowerCase()} here (spot ${tx0 + 1},${ty0 + 1})`,
+          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall', it.ql) / 60)} min · holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`,
+          hint: reason ?? undefined,
+          disabled: !!reason,
+          onSelect: () => this.game.requestAction(trapSet, tt),
         });
       }
     }
@@ -789,6 +810,52 @@ export class UI {
       if (!def || !def.applies(pt, g)) continue;
       const reason = def.check?.(pt, g) ?? null;
       entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, pt) });
+    }
+    return entries;
+  }
+
+  /** Baiting a trap, taking what is in it, letting it go, and taking it up. */
+  private trapEntries(t: PlacedTrap): MenuItem[] {
+    const g = this.game;
+    const tt: Target = { kind: 'trap', id: t.id };
+    const entries: MenuItem[] = [];
+    const def = trapDef(t);
+    entries.push({ label: `QL ${t.ql.toFixed(0)} · holds to taming ${trapHolds(t)} · reaches ${def.reach} tiles`, disabled: true });
+    const held = t.caught !== null ? g.creatures.get(t.caught) : undefined;
+    if (held) {
+      const s = SPECIES[held.species];
+      entries.push({ label: `A ${s?.name.toLowerCase() ?? 'thing'} is held in it`, note: `taming ${s?.tameLevel ?? 1} to handle`, disabled: true });
+    }
+    const bait = ACTION_BY_ID.get('bait_trap');
+    if (bait && bait.applies(tt, g)) {
+      const choices = baitInPack(g);
+      const reason = bait.check?.(tt, g) ?? null;
+      entries.push({
+        label: t.bait ? `Change the bait (${itemName(t.bait).toLowerCase()})` : 'Bait it',
+        disabled: !!reason,
+        hint: reason ?? undefined,
+        children: choices.length
+          ? choices.slice(0, 12).map((it) => {
+              const comers = Object.values(SPECIES).filter((sp) => isBaitFor(sp, it.id) && sp.tameLevel <= trapHolds(t));
+              return {
+                label: itemName(it),
+                note: comers.length ? comers.map((sp) => sp.name).slice(0, 4).join(', ') : 'nothing this will hold',
+                onSelect: () => {
+                  // Put the chosen one at the front so the action picks it up.
+                  const idx = g.inventory.items.indexOf(it);
+                  if (idx > 0) g.inventory.items.splice(0, 0, ...g.inventory.items.splice(idx, 1));
+                  g.requestAction(bait, tt);
+                },
+              };
+            })
+          : undefined,
+      });
+    }
+    for (const id of ['take_catch', 'free_catch', 'pick_up_trap']) {
+      const a = ACTION_BY_ID.get(id);
+      if (!a || !a.applies(tt, g)) continue;
+      const reason = a.check?.(tt, g) ?? null;
+      entries.push({ label: a.labelFor?.(tt, g) ?? a.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(a, tt) });
     }
     return entries;
   }

@@ -22,6 +22,7 @@ import { ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVar
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
+import { trapCentre, type PlacedTrap } from '../game/traps';
 import { ageDef } from '../game/creatures';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
@@ -33,7 +34,7 @@ import { dyeOf } from '../game/dyestuffs';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
-import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost } from './sprites';
+import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -55,6 +56,8 @@ export interface Pick {
   anvil?: number;
   /** A work post under the cursor, when one is. */
   post?: number;
+  /** A trap under the cursor, when one is. */
+  trap?: number;
   /** A kiln under the cursor, when one is. */
   kiln?: number;
   /** A piece of furniture under the cursor, when one is. */
@@ -62,7 +65,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post';
+  kind: 'tree' | 'bush' | 'player' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap';
   x: number;
   y: number;
   sx: number;
@@ -76,6 +79,7 @@ interface Entity {
   piece?: PlacedFurniture;
   anvil?: PlacedAnvil;
   post?: PlacedPost;
+  trap?: PlacedTrap;
   /**
    * Pixels to draw above where it sorts. A driver sits on the cart, so the
    * figure belongs above it on screen while still sorting as though it stood
@@ -100,6 +104,7 @@ interface HitRect {
   furniture?: number;
   anvil?: number;
   post?: number;
+  trap?: number;
 }
 
 const VOID_COLOR = '#12395f';
@@ -176,6 +181,7 @@ export class Renderer {
   private furnitureHits: HitRect[] = [];
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
+  private trapHits: HitRect[] = [];
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -290,6 +296,7 @@ export class Renderer {
     this.furnitureHits.length = 0;
     this.anvilHits.length = 0;
     this.postHits.length = 0;
+    this.trapHits.length = 0;
     this.drawnTiles = 0;
 
     for (let d = dLo; d <= dHi; d++) {
@@ -439,6 +446,12 @@ export class Renderer {
           for (const po of this.game.postsOnTile(x, y)) {
             const [wx, wy] = postCentre(po);
             this.ents.push({ kind: 'post', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, post: po });
+          }
+        }
+        if (this.game.traps.size) {
+          for (const tr of this.game.trapsOnTile(x, y)) {
+            const [wx, wy] = trapCentre(tr);
+            this.ents.push({ kind: 'trap', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, trap: tr });
           }
         }
         if (this.game.campfires.size) {
@@ -658,6 +671,11 @@ export class Renderer {
       if (ent.kind === 'post' && ent.post) {
         drawWorkPost(ctx, ent.sx, ent.sy, zoom, postLeft(ent.post) / postLife(ent.post.ql), ent.post.worker !== null);
         this.postHits.push({ x: ent.x, y: ent.y, left: ent.sx - 9 * zoom, top: ent.sy - 30 * zoom, w: 18 * zoom, h: 32 * zoom, post: ent.post.id });
+        continue;
+      }
+      if (ent.kind === 'trap' && ent.trap) {
+        drawTrap(ctx, ent.sx, ent.sy, zoom, ent.trap.kind, !!ent.trap.bait, ent.trap.caught !== null);
+        this.trapHits.push({ x: ent.x, y: ent.y, left: ent.sx - 8 * zoom, top: ent.sy - 12 * zoom, w: 16 * zoom, h: 14 * zoom, trap: ent.trap.id });
         continue;
       }
       if (ent.kind === 'campfire' && ent.fire) {
@@ -1393,6 +1411,10 @@ export class Renderer {
     for (let i = this.postHits.length - 1; i >= 0; i--) {
       const h = this.postHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), post: h.post };
+    }
+    for (let i = this.trapHits.length - 1; i >= 0; i--) {
+      const h = this.trapHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), trap: h.trap };
     }
     for (let i = this.anvilHits.length - 1; i >= 0; i--) {
       const h = this.anvilHits[i];

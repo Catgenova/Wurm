@@ -6,6 +6,7 @@ import { MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
 import { WOUND_KINDS } from './wounds';
+import { TRAPS } from './traps';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
 
 /**
@@ -320,6 +321,26 @@ const COVER_RECIPES: Recipe[] = Object.values(WOUND_KINDS).map((k) => ({
 }));
 
 RECIPES.push(...COVER_RECIPES);
+
+/** The two traps, built out of the same book the game reads them from. */
+const TRAP_RECIPES: Recipe[] = Object.values(TRAPS).map((d) => ({
+  id: `make_${d.id}`,
+  category: 'Woodwork' as RecipeCategory,
+  result: d.id,
+  inputs: d.bill.map(([item, count]) => ({ item, count })),
+  tool: d.id === 'deadfall' ? 'mallet' : undefined,
+  skill: 'carpentry',
+  material: 'wood' as MaterialKind,
+  label: `Build a ${d.name.toLowerCase()}`,
+  verb: `building a ${d.name.toLowerCase()}`,
+  baseTime: d.time,
+  stamina: 0.03,
+  difficulty: d.difficulty,
+  done: d.note,
+  fail: `The trigger will not sit and the whole thing falls in on itself.`,
+}));
+
+RECIPES.push(...TRAP_RECIPES);
 
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];

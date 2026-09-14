@@ -21,6 +21,7 @@ import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
 import { HUSBANDRY_ACTIONS } from './husbandry';
 import { DYE_ACTIONS } from './dyes';
+import { TRAP_ACTIONS } from './traps';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { FloorKind, Side, WallType } from './building';
@@ -61,6 +62,7 @@ export type Target =
   | { kind: 'furniture'; id: number; itemUid?: number; count?: number; brew?: string }
   | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
   | { kind: 'post'; id: number; creatureId?: number }
+  | { kind: 'trap'; id: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
@@ -1236,6 +1238,7 @@ export const ACTIONS: ActionDef[] = [
   ...CREATURE_ACTIONS,
   ...HUSBANDRY_ACTIONS,
   ...DYE_ACTIONS,
+  ...TRAP_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...FIRST_AID_ACTIONS,
   ...PLACEABLE_ACTIONS,

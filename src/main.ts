@@ -8,6 +8,7 @@ import { MATERIALS } from './game/materials';
 import { TRAITS } from './game/traits';
 import { DYES } from './game/dyestuffs';
 import { WOUND_KINDS } from './game/wounds';
+import { TRAPS } from './game/traps';
 import { SPECIES } from './game/creatures';
 import { TITLES } from './game/titles';
 import { itemName } from './game/items';
@@ -62,10 +63,10 @@ camera.focus(player.x, player.y, game.playerHeight(), null);
 declare global {
   interface Window {
     /** Console handle for poking at the running game. */
-    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; SPECIES: typeof SPECIES; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
+    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; TRAPS: typeof TRAPS; SPECIES: typeof SPECIES; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
   }
 }
-window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, SPECIES, itemName, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
+window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, SPECIES, itemName, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {
   // A press that closed an open menu is spent, unless it is asking for a new menu.

@@ -7,6 +7,7 @@ import type { PlacedSmelter } from './smelter';
 import type { PlacedKiln } from './kiln';
 import type { PlacedFurniture } from './furniture';
 import type { PlacedPost } from './posts';
+import type { PlacedTrap } from './traps';
 import type { Boon } from './boons';
 import type { Wound } from './wounds';
 import type { Crop } from './farming';
@@ -205,6 +206,8 @@ interface SaveData {
   kilns?: PlacedKiln[];
   furniture?: PlacedFurniture[];
   posts?: PlacedPost[];
+  traps?: PlacedTrap[];
+  nextTrapId?: number;
   tally?: Record<string, number>;
   ticked?: string[];
   anvils?: PlacedAnvil[];
@@ -255,6 +258,8 @@ function meta(game: Game): SaveMeta {
     kilns: [...game.kilns.values()],
     furniture: [...game.furniture.values()],
     posts: [...game.posts.values()],
+    traps: [...game.traps.values()],
+    nextTrapId: game.nextTrapId,
     tally: { ...game.tally },
     ticked: [...game.ticked],
     anvils: [...game.anvils.values()],
@@ -480,6 +485,8 @@ function finish(world: World, m: SaveMeta): Game {
     kilns: m.kilns,
     furniture: m.furniture,
     posts: m.posts,
+    traps: m.traps,
+    nextTrapId: m.nextTrapId,
     tally: m.tally,
     ticked: m.ticked,
     anvils: m.anvils,

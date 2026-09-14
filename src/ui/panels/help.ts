@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: sixty-two goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: sixty-four goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -776,6 +776,23 @@ export function buildHelp(win: UIWindow): void {
     it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <h3>Traps</h3>
+    <p>Everything taken so far has been taken by hand: you stand in front of a wild thing with a berry
+    out and hope. A <b>trap</b> is the other way. Set it, bait it, walk away, and whatever came to the
+    bait while you were somewhere else is waiting when you come back &mdash; <b>alive</b>, and with
+    whatever blood it was born with still in it, which is the point now that blood is worth something.</p>
+    <p>A <b>snare</b> is a noose of rope on a bent shaft: one rope and two shafts, and it holds anything
+    up to about <b>taming 20</b>. A <b>deadfall</b> is a weighted board on a trigger &mdash; three
+    planks, two shafts, two ropes and six nails, with a mallet &mdash; and it holds to about <b>taming
+    60</b>. Build quality moves both a little. Set one on any spot of a tile <b>outside your own
+    borders</b> (nothing wild comes inside them), then <b>bait it</b> from your pack: the menu says
+    which sorts would come to each thing you are carrying. Anything warier than the trap will hold
+    simply takes the bait and goes.</p>
+    <p>A trap rots where it stands, twenty minutes to an hour and a half for a snare and up to four
+    hours for a good deadfall, and whatever is in it walks away when it goes over. A <b>timid</b>
+    creature &mdash; the very thing you cannot walk up to &mdash; is half again as likely to walk into
+    one, and a hunter much less so. Getting the catch out is still <b>taming</b>: the skill wall stands
+    whether the animal is held or not, and a beast that thrashes has to be tried again.</p>
     <h3>Blood, the brush and breeding</h3>
     <p>Every wildermon is born <b>male</b> or <b>female</b> and carries <b>three traits</b>, and the
     traits are the whole difference between one Roxxen and the next. A trait sits in one of four tiers

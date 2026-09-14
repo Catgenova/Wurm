@@ -1335,6 +1335,8 @@ export interface Creature {
   ridden: boolean;
   /** The hour it was born, which is all that age is. */
   born: number;
+  /** The trap holding it, if it has walked into one. It does nothing at all while it is held. */
+  trapped: number | null;
   /**
    * The work post it takes its orders from, if any. A worker with one treats
    * that post exactly as another treats the settlement token — until the post
@@ -1366,6 +1368,7 @@ export interface CreatureJSON {
   tacked?: boolean;
   pannier?: Item[];
   post?: number | null;
+  trapped?: number | null;
   born?: number;
   sex?: Sex;
   traits?: string[];
@@ -1523,6 +1526,7 @@ export class Creatures {
       ridden: false,
       pannier: [],
       post: null,
+      trapped: null,
       born: 0,
     };
     // Blood decides what it can take, so the ceiling is read off the traits it
@@ -1720,6 +1724,14 @@ export class Creatures {
       }
       this.ticked.thought++;
       const def = this.body(game, c, elapsed);
+      // Held in a trap: it breathes, it heals, it gets hungry. It does not
+      // wander off, and it does not fight.
+      if (c.trapped !== null) {
+        c.enemy = null;
+        c.moving = false;
+        this.place(c);
+        continue;
+      }
       // A beast in the traces, or under a rider, goes where it is taken. It
       // heals and grows its fleece like any other; it just does no thinking.
       if (c.hitchedTo !== null || c.ridden) {
@@ -1797,7 +1809,7 @@ export class Creatures {
     const py = game.player.y;
     // Away and unwatched: put it back on the books.
     for (const c of [...this.list.values()]) {
-      if (c.mode !== 'wild') continue;
+      if (c.mode !== 'wild' || c.trapped !== null) continue;
       if (c.enemy !== null || c.attackedBy !== null) continue;
       const d = Math.max(Math.abs(c.x - px), Math.abs(c.y - py));
       if (d <= CULL_RANGE || game.vision.isWatched(c.x, c.y)) continue;
@@ -3345,6 +3357,7 @@ export class Creatures {
         tacked: c.tacked,
         pannier: c.pannier,
         post: c.post,
+        trapped: c.trapped,
         born: c.born,
         sex: c.sex,
         traits: c.traits,
@@ -3363,7 +3376,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

@@ -836,6 +836,81 @@ export function drawKiln(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
  * it is, and the marker hangs the right way up only while somebody is working
  * out of it.
  */
+/**
+ * A trap on the ground. A snare is a bent shaft with a loop of rope pegged
+ * open at the foot of it; a deadfall is a board propped on a stick over the
+ * bait. Either one is drawn sprung when there is something in it.
+ */
+export function drawTrap(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, baited: boolean, sprung: boolean): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 6, 2.6, 0, 0, TAU);
+  ctx.fill();
+  const wood = '#6b543a';
+  const dark = '#4a3a28';
+  if (kind === 'deadfall') {
+    // A board, propped at an angle on a stick, or lying flat once it has gone.
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1;
+    if (!sprung) {
+      ctx.beginPath();
+      ctx.moveTo(3, 0);
+      ctx.lineTo(3, -6);
+      ctx.stroke();
+    }
+    ctx.fillStyle = wood;
+    ctx.beginPath();
+    if (sprung) {
+      ctx.moveTo(-6, -1.4);
+      ctx.lineTo(6, -1.4);
+      ctx.lineTo(6, 0.4);
+      ctx.lineTo(-6, 0.4);
+    } else {
+      ctx.moveTo(-6, -1);
+      ctx.lineTo(5, -7);
+      ctx.lineTo(6, -5.6);
+      ctx.lineTo(-5, 0.4);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.fillRect(-6, sprung ? 0.2 : -0.4, 12, 0.7);
+  } else {
+    // A shaft bent over, with a noose off the head of it.
+    ctx.strokeStyle = wood;
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-3, 0);
+    if (sprung) ctx.quadraticCurveTo(-3.4, -8, -2, -10);
+    else ctx.quadraticCurveTo(-2, -8, 3, -7);
+    ctx.stroke();
+    ctx.strokeStyle = '#cfc3a4';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    if (sprung) ctx.ellipse(-2, -6, 1.1, 1.8, 0, 0, TAU);
+    else ctx.ellipse(3, -2.2, 3.4, 1.5, 0, 0, TAU);
+    ctx.stroke();
+    if (!sprung) {
+      ctx.beginPath();
+      ctx.moveTo(3, -7);
+      ctx.lineTo(3, -3.7);
+      ctx.stroke();
+    }
+  }
+  // A crumb of bait in the middle of it, so a set trap reads as set.
+  if (baited && !sprung) {
+    ctx.fillStyle = '#c06a4a';
+    ctx.beginPath();
+    ctx.ellipse(kind === 'deadfall' ? 0 : 3, -0.6, 1.1, 0.8, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function drawWorkPost(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, left: number, worked: boolean): void {
   ctx.save();
   ctx.translate(sx, sy);
