@@ -1563,3 +1563,170 @@ select '293. ten minutes of a middun: ' || :'composted' || ' rounds, '
      || ' carcasses left, and ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'compost'), '0')
      || ' of compost in the crate — the best thing that ever happened to a field';
 \echo ''
+\echo '--- something that does not wait to be asked'
+/*
+ * Everything else wild swept off the island first. Twenty sections have been
+ * spawning things to hit, butcher and tame, and a guard that goes for the
+ * nearest of them is unreadable if there are thirty of them.
+ */
+delete from creature where world_id = :'world2' and mode = 'wild';
+update player set x = 2.5, y = 0.5 where world_id = :'world2' and uid = :'hild';
+update player set x = 2.5, y = 9.5, wounds = '[]'::jsonb,
+    stats = jsonb_set(jsonb_set(stats, '{health}', '1'), '{hurtSettled}', to_jsonb(now()))
+  where world_id = :'world2' and uid = :'ivar';
+
+-- Stood still at a measured distance rather than wherever the walk took it.
+select creature_spawn(:'world2', 'ulva', 10.5, 9.5, 'wild', now() - interval '3 hours') as stalker \gset
+select creature_spawn(:'world2', 'goblin', 10.5, 9.5, 'wild', now() - interval '3 hours') as gob \gset
+update creature set from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now(),
+    until = now() + interval '1 hour', settled_at = now() - interval '1 second', hunting = null
+  where world_id = :'world2' and id in (:'stalker', :'gob');
+select creature_settle(:'world2', :'stalker'), creature_settle(:'world2', :'gob') \g /dev/null
+select '294. eight tiles off, an ulva '
+     || case when (select hunting from creature where id = :'stalker') is null then 'has not noticed him' else 'has his scent' end
+     || ' and a goblin ' || case when (select hunting from creature where id = :'gob') is null then 'has not either' else 'has' end
+     || ' — a monster sees eleven tiles where everything else sees seven';
+
+delete from creature where world_id = :'world2' and id = :'gob';
+delete from event where uid = :'ivar';
+update creature set from_x = 8.5, from_y = 9.5, to_x = 8.5, to_y = 9.5, leg_at = now(), leg_ends = now(),
+    until = now() + interval '1 hour', settled_at = now() - interval '1 second'
+  where world_id = :'world2' and id = :'stalker';
+select creature_settle(:'world2', :'stalker') \g /dev/null
+select '295. six tiles off: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar'), 'nothing said')
+     || ' — and it is now hunting ' || case when (select hunting from creature where id = :'stalker') = :'ivar' then 'him' else 'nobody' end;
+
+-- One settle with the clock caught up: the leg it takes is aimed.
+update creature set until = now(), settled_at = now() - interval '1 second'
+  where world_id = :'world2' and id = :'stalker';
+select creature_settle(:'world2', :'stalker') \g /dev/null
+select '296. and it comes: a leg from ' || (select round(from_x::numeric, 1) || ',' || round(from_y::numeric, 1) from creature where id = :'stalker')
+     || ' to ' || (select round(to_x::numeric, 1) || ',' || round(to_y::numeric, 1) from creature where id = :'stalker')
+     || ' taking ' || (select round(extract(epoch from (leg_ends - leg_at))::numeric, 1) from creature where id = :'stalker')
+     || ' seconds — it stops a pace short of him rather than on him';
+
+-- Beside him, and ten seconds of standing there.
+delete from event where uid = :'ivar';
+update creature set from_x = 3.5, from_y = 9.5, to_x = 3.5, to_y = 9.5, leg_at = now(), leg_ends = now(),
+    until = now() - interval '10 seconds', settled_at = now() - interval '10 seconds'
+  where world_id = :'world2' and id = :'stalker';
+select creature_settle(:'world2', :'stalker') \g /dev/null
+select '297. ten seconds of it: ' || (select count(*) from event where uid = :'ivar' and text like '%is on you%')
+     || ' blows, health down to ' || (select round(((stats->>'health')::numeric), 3) from player where uid = :'ivar')
+     || ', and he is carrying ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'nothing');
+
+-- And an hour of it, which is the whole point: see the head of the migration.
+delete from event where uid = :'ivar';
+update player set x = 2.5, y = 9.5, wounds = '[]'::jsonb,
+    stats = jsonb_set(jsonb_set(stats, '{health}', '1'), '{hurtSettled}', to_jsonb(now()))
+  where world_id = :'world2' and uid = :'ivar';
+update creature set from_x = 3.5, from_y = 9.5, to_x = 3.5, to_y = 9.5, leg_at = now(), leg_ends = now(),
+    until = now() - interval '1 hour', settled_at = now() - interval '1 hour'
+  where world_id = :'world2' and id = :'stalker';
+select creature_settle(:'world2', :'stalker') \g /dev/null
+select '298. an hour with the tab shut: ' || (select count(*) from event where uid = :'ivar' and text like '%is on you%')
+     || ' blows, not two and a half thousand — an hour of absence is not an hour of being chased';
+
+-- Far enough away and it thinks better of it — and a monster does not.
+update player set x = 1.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+select creature_spawn(:'world2', 'goblin', 15.5, 9.5, 'wild', now() - interval '3 hours') as gob2 \gset
+update creature set hunting = :'ivar', from_x = 15.5, from_y = 9.5, to_x = 15.5, to_y = 9.5,
+    leg_at = now(), leg_ends = now(), until = now() + interval '1 hour', settled_at = now() - interval '1 second'
+  where world_id = :'world2' and id in (:'stalker', :'gob2');
+select creature_settle(:'world2', :'stalker'), creature_settle(:'world2', :'gob2') \g /dev/null
+select '299. fourteen tiles of open ground later the ulva '
+     || case when (select hunting from creature where id = :'stalker') is null then 'has given him up' else 'is still coming' end
+     || ', and the goblin '
+     || case when (select hunting from creature where id = :'gob2') is null then 'has given him up too' else 'has not: a monster follows better than twice as far' end;
+
+\echo ''
+\echo '--- a guard on the border, and a hunter in the country'
+delete from creature where world_id = :'world2' and mode = 'wild';
+delete from item where world_id = :'world2' and holder = 'ground' and def = 'corpse';
+select '300. of the twenty-two trades a wildermon may be set to, this island now knows '
+     || (select count(*) from (values ('forage'), ('botanize'), ('woodcut'), ('farm'), ('mine'), ('sand'),
+                                      ('clay'), ('quarry'), ('stoke'), ('fetch'), ('guard'), ('hunt'),
+                                      ('peat'), ('reed'), ('water'), ('prospect'), ('plant'), ('hod'),
+                                      ('mend'), ('compost'), ('seek'), ('fish')) v(k) where worker_job_ported(v.k))
+     || ' — and nothing wild is left standing on the deed: '
+     || (select count(*) from creature where world_id = :'world2' and mode = 'wild');
+
+select creature_spawn(:'world2', 'ulva', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as warden \gset
+select creature_spawn(:'world2', 'rabba', 9.5, 7.5, 'wild', now() - interval '2 hours') as trespass \gset
+update creature set from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now(),
+    until = now() + interval '1 hour', settled_at = now() - interval '1 second'
+  where world_id = :'world2' and id = :'trespass';
+update creature set phase = 'idle', until = now() - interval '300 seconds',
+    leg_at = now() - interval '300 seconds', leg_ends = now() - interval '300 seconds',
+    settled_at = now() - interval '300 seconds' where id = :'warden';
+select '301. a rabba four tiles off, well inside a border thirteen tiles out, and an ulva set to watch it — what it knows: '
+     || (select round((skills->>'body_strength')::numeric, 2) from creature where id = :'warden') || ' of keeping watch';
+select worker_settle(:'world2', :'warden') as watched \gset
+select '302. five minutes of it: ' || :'watched' || ' killed, the rabba is '
+     || case when exists (select 1 from creature where id = :'trespass') then 'still there' else 'gone' end
+     || ', there is a corpse at ' || coalesce((select gx || ',' || gy from item where world_id = :'world2' and holder = 'ground' and def = 'corpse' limit 1), 'nowhere')
+     || ', and the ulva is up to ' || (select round((skills->>'body_strength')::numeric, 2) from creature where id = :'warden');
+
+-- A hunter does the same and then does what every other worker does with it.
+delete from creature where world_id = :'world2' and mode = 'wild';
+delete from item where world_id = :'world2' and holder = 'ground' and def = 'corpse';
+delete from creature where world_id = :'world2' and id = :'warden';
+delete from item where world_id = :'world2' and holder = 'crate' and def = 'corpse';
+select creature_spawn(:'world2', 'rowl', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as hunter \gset
+select creature_spawn(:'world2', 'rabba', 11.5, 7.5, 'wild', now() - interval '2 hours') as quarry \gset
+select creature_spawn(:'world2', 'rabba', 3.5, 11.5, 'wild', now() - interval '2 hours') as quarry2 \gset
+update creature set from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now(),
+    until = now() + interval '1 hour', settled_at = now() - interval '1 second'
+  where world_id = :'world2' and id in (:'quarry', :'quarry2');
+update creature set phase = 'idle', until = now() - interval '900 seconds',
+    leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
+    settled_at = now() - interval '900 seconds' where id = :'hunter';
+select '303. a rowl set to hunt, ranging ' || work_range((select c from creature c where c.id = :'hunter'))
+     || ' tiles from the token, with two rabbas out in it';
+select worker_settle(:'world2', :'hunter') as hunted \gset
+select '304. a quarter of an hour of it: ' || :'hunted' || ' pulled down, '
+     || (select count(*) from creature where world_id = :'world2' and mode = 'wild') || ' left walking, '
+     || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'corpse'), '0')
+     || ' carcasses in the crate and ' || (select count(*) from item where world_id = :'world2' and holder = 'ground' and def = 'corpse')
+     || ' still in the grass — the carcass is the load, and it goes in the crate like sand or stone';
+select '305. and what it learned by it: fighting ' || (select round((skills->>'fighting')::numeric, 2) from creature where id = :'hunter')
+     || ', from the one it started with';
+
+-- A worker with no trade in fighting at all, and what its stance makes of company.
+-- Nobody freshly mauled: the ulva up the page left both of them reading as
+-- struck at seconds ago, and a defensive worker answers for its keeper too.
+delete from creature where world_id = :'world2' and mode = 'wild';
+update player set stats = stats - 'hurtBy' - 'hurtAt' where world_id = :'world2';
+select creature_spawn(:'world2', 'holla', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as digger \gset
+select creature_spawn(:'world2', 'rabba', 6.5, 7.5, 'wild', now() - interval '2 hours') as company \gset
+update creature set from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now(),
+    until = now() + interval '1 hour', settled_at = now() - interval '1 second'
+  where world_id = :'world2' and id = :'company';
+update creature set stance = 'passive' where id = :'digger';
+select '306. a passive holla, with a rabba at its elbow: ' ||
+       case when (select id from fight_target(:'world2', :'digger')) is null then 'it carries on digging' else 'it goes for it' end;
+update creature set stance = 'defensive' where id = :'digger';
+select '307. defensive, and nothing has struck at anybody: ' ||
+       case when (select id from fight_target(:'world2', :'digger')) is null then 'it carries on digging' else 'it goes for it' end;
+update creature set hurt_at = now() - interval '2 seconds', hurt_by = :'company' where id = :'digger';
+select '308. defensive, and the rabba bit it two seconds ago: ' ||
+       case when (select id from fight_target(:'world2', :'digger')) is null then 'it carries on digging' else 'it breaks off and goes for it' end;
+update creature set hurt_at = now() - interval '30 seconds' where id = :'digger';
+select '309. and thirty seconds later, which is long enough to have forgotten: ' ||
+       case when (select id from fight_target(:'world2', :'digger')) is null then 'it carries on digging' else 'it is still going for it' end;
+update creature set stance = 'aggressive', hurt_at = null, hurt_by = null where id = :'digger';
+select '310. aggressive, which needs no reason at all: ' ||
+       case when (select id from fight_target(:'world2', :'digger')) is null then 'it carries on digging' else 'it goes for it' end;
+
+-- And through the front door, which is where a keeper actually sets one on.
+-- The deed has work for five at level five and eight have been put on it over
+-- the last ten sections, so it is paid off first.
+delete from creature where world_id = :'world2' and mode = 'deed';
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select creature_spawn(:'world2', 'ulva', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar') as recruit \gset
+select creature_spawn(:'world2', 'rowl', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar') as tracker \gset
+select '311. setting an ulva to keep watch: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed',
+       ('{"kind":"creature","id":' || :'recruit' || '}')::jsonb), 'allowed')
+     || ' | and a rowl to hunt: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed',
+       ('{"kind":"creature","id":' || :'tracker' || '}')::jsonb), 'allowed')
+     || ' — which up to this commit were both "Nobody has taught this island what that looks like yet."';

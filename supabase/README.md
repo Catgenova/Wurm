@@ -40,7 +40,7 @@ simplification rather than a problem:
 | **11** | firing: a kiln built, packed, lit and unpacked, and the smelter's own queue — ore in, lumps and anvils out |
 | **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
-| **1** | setting a wildermon to work the deed, which is seventeen trades and a crate to fill |
+| **1** | setting a wildermon to work the deed, which is nineteen trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
@@ -64,17 +64,62 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), creatures coming at you
-unprompted (a hunter closing on sight is creature AI rather than fighting),
-the five deed trades that want something this island has not got yet —
-guarding and hunting want the aggression loop, and of the errands `water`
-wants barrels that hold liquid, `prospect` wants the marks a prospector writes
-on a map and `seek` wants archaeology — sowing a field from a worker's own
-cheeks,
+not the recovery, would make the island unplayable), the three deed trades
+that want something this island has not got yet — `water` wants barrels that
+hold liquid, `prospect` wants the marks a prospector writes on a map and
+`seek` wants archaeology — sowing a field from a worker's own cheeks,
 breeding and pairing, riding and the traces, trapping,
-the ledger, the journal, flattening and levelling, paving with cut slabs, planting
-trees, prospecting, deed upgrades and disbanding, and the ease a hot oven
+the ledger, the journal, flattening and levelling, paving with cut slabs,
+prospecting, deed upgrades and disbanding, and the ease a hot oven
 lends to cooking.
+
+### Time only passes for a hunter while you are there to be hunted
+
+Everything else that settles lazily settles from a timestamp and needs nothing
+else. A fire knows how long it has been burning; a crop knows when it was
+sown; a creature's walk is a hash of its own leg number. A hunt needs a second
+thing, and that thing is *you* — and the island has no record of where you
+were between two looks, only where you are at the moment of each.
+
+So a hunter cannot have been closing on a path nobody wrote down. Shut the tab
+with a wolf on you and an hour later there is still a wolf on you, not a
+corpse: `hunt_window` is ten seconds, seven blows, and the rest of that hour
+it spent alone doing what it does when nobody is about.
+
+What the elapsed seconds buy instead is a leg, aimed. The wild walk is legs to
+nowhere in particular; a hunt is the same walk with the destination decided
+rather than hashed, from where it stands to a pace short of your feet, taking
+as long as the distance and its speed say. That falls out of the model rather
+than fighting it, and it means somebody watching sees the thing coming at them
+instead of arriving.
+
+The one place this needed something the model did not already have is going
+round a corner. The browser walks a creature a frame at a time and asks three
+questions at every step — the way it wants to go, then the x of it alone, then
+the y — which is what lets a thing follow you round the side of a house rather
+than standing at the wall. A leg out here is a great many of those steps at
+once, so `chase_leg` asks the same three questions of the whole leg. Without
+it a hunter found the first thing it could not walk through and gave up, and
+the suite said so: a rowl set to hunt landed fifty-five blows and killed
+nothing, because the nearest rabba was across a pond and it spent a quarter of
+an hour turning round.
+
+### A fight is a round trip whose work is somebody else
+
+A gatherer walks out to a tile, works it, and carries a load home. A guard
+walks out to a *creature*, works it — one blow is one turn of the phase
+machine — and walks out to it again wherever it has got to in the meantime. A
+hunter does the same and then does what a gatherer does: the carcass is the
+load, and it goes in the crate like sand or stone.
+
+So neither of them needed a loop of their own. What they needed was a `work_x`
+that moves, and one more thing every other worker got for free with it: a
+stance that means something. Passive carries on working whatever happens;
+defensive wants to have been given a reason, and a reason is a blow at it or
+at somebody on the island in the last eight seconds; aggressive needs no
+reason at all. Three sorts of creature, one question, one function —
+`fight_target` — which is why a holla with a shovel and an ulva on the border
+break off on exactly the same terms.
 
 ### The rulebook was never readable
 

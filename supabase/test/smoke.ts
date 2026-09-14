@@ -122,7 +122,7 @@ async function main(): Promise<void> {
      * because the only thing that makes this island move is being looked at.
      */
     const { data: first, error: mobErr } = await supabase().rpc('rpc_creatures', { p_world: id, p_range: 60 });
-    const mob = (first ?? []) as Array<{ id: number; species: string; x: number; y: number }>;
+    const mob = (first ?? []) as Array<{ id: number; species: string; x: number; y: number; hunting?: boolean }>;
     check('the island stocked itself with wildlife', !mobErr && mob.length > 0,
       mobErr ? mobErr.message : `${mob.length} within sixty tiles`);
     if (mob.length) {
@@ -139,7 +139,30 @@ async function main(): Promise<void> {
       const noBait = await island.act('tame', { kind: 'creature', id: wild.id }, 1);
       check('taming one with an empty hand is refused in its own words',
         !noBait.started && /(take|tamed|taming|close)/i.test(noBait.why ?? ''), noBait.why ?? 'IT STARTED');
+      check('and a client is told which of it has our scent',
+        mob.every((c) => 'hunting' in c),
+        `${mob.filter((c) => c.hunting).length} of ${mob.length} are coming for us`);
     }
+
+    /*
+     * The aggression loop. Nothing out here can make a goblin come at us to
+     * order — that wants one inside eleven tiles of wherever we happen to be
+     * standing — so what reaches this far is the shape of it: the numbers a
+     * hunt reads, and the columns it is kept in.
+     */
+    const { data: hunters, error: huntErr } = await supabase()
+      .from('species_def').select('id,hunter,monster,notice').in('id', ['ulva', 'goblin', 'dragon']);
+    const byHunter = new Map(((hunters ?? []) as Array<{ id: string; hunter: boolean; monster: boolean; notice: number | null }>)
+      .map((h) => [h.id, h]));
+    check('what hunts, and how far off it sees you, is on the project',
+      !huntErr && byHunter.size === 3 && byHunter.get('ulva')!.hunter
+        && (byHunter.get('dragon')!.notice ?? 0) > (byHunter.get('goblin')!.notice ?? 0),
+      huntErr ? huntErr.message : byHunter.size
+        ? `an ulva sees the seven everything else does, a goblin ${byHunter.get('goblin')!.notice}, a dragon ${byHunter.get('dragon')!.notice}`
+        : 'no rows came back at all');
+    const { error: legErr } = await supabase().from('creature').select('id,hunting,enemy,hurt_by').eq('world_id', id).limit(1);
+    check('a creature carries what it is set on', !legErr,
+      legErr?.message ?? 'the person it is hunting, the beast it is fighting, and what hurt it last');
 
     /*
      * The furnaces. Neither can be built with a starting kit, so what reaches

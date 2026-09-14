@@ -37385,3 +37385,965 @@ begin
 end $$;
 
 select private.lock_doors();
+
+-- ======================================================================
+-- 20260914222000_aggression.sql
+-- ======================================================================
+
+-- Creatures that come at you unprompted.
+--
+-- ## Time only passes for a hunter while you are there to be hunted
+--
+-- Everything else that settles lazily settles from a timestamp and needs
+-- nothing else: a fire knows how long it has been burning, a crop knows when
+-- it was sown. A hunt needs a second thing, and that thing is you — and the
+-- island has no record of where you were between two looks, only where you
+-- are at the moment of each. So a hunter cannot have been closing on a path
+-- nobody wrote down, and an hour of absence is not an hour of being chased.
+--
+-- What the elapsed seconds buy, then, is the ground it covers toward where
+-- you *are*, and the blows that land once it arrives — and no more of them
+-- than could have fallen between two looks, because the rest of that hour it
+-- spent alone. `hunt_window` is that clamp, and it is the whole of the
+-- difference between this and the browser's frame loop.
+--
+-- ## A hunting leg is a leg, aimed
+--
+-- The wild walk is legs to nowhere in particular. A hunt is the same walk
+-- with the destination decided rather than hashed: from where it stands to a
+-- pace short of your feet, taking as long as the distance and its speed say.
+-- That falls out of the model rather than fighting it, and it means somebody
+-- watching sees the thing coming at them rather than arriving.
+
+alter table creature add column if not exists hunting uuid;
+/**
+ * The creature it is fighting, and who last hurt it.
+ *
+ * The browser keeps one `enemy` field and puts -1 in it for the player. A
+ * sentinel is a thing you have to remember, so here they are two columns with
+ * their own names: `hunting` is the person it has the scent of, `enemy` is
+ * the beast it is set on. Nothing is ever both.
+ */
+alter table creature add column if not exists enemy int;
+alter table creature add column if not exists hurt_by int;
+
+/** How far off it takes your scent, unless its own kind says further. */
+create or replace function hunt_sight() returns double precision language sql immutable as $$ select 7 $$;
+/** And how far off it loses interest. A monster follows more than twice as far. */
+create or replace function hunt_give_up() returns double precision language sql immutable as $$ select 13 $$;
+/** Close enough to be bitten. */
+create or replace function hunt_reach() returns double precision language sql immutable as $$ select 1.1 $$;
+/** The gap between one blow and the next. */
+create or replace function hunt_blow() returns double precision language sql immutable as $$ select 1.4 $$;
+/**
+ * How much of the gap between two looks a hunter is allowed to have spent on
+ * you: ten seconds, which is seven blows. Shut the tab with a wolf on you and
+ * you come back to a wolf on you, not to a corpse.
+ */
+create or replace function hunt_window() returns double precision language sql immutable as $$ select 10 $$;
+
+/** Whoever is nearest, which on an island this size is whoever it goes for. */
+create or replace function nearest_player(p_world uuid, p_x double precision, p_y double precision)
+  returns table (uid uuid, x double precision, y double precision, d double precision)
+  language sql stable as $$
+  select pl.uid, pl.x, pl.y, sqrt((pl.x - p_x) ^ 2 + (pl.y - p_y) ^ 2)
+  from player pl where pl.world_id = p_world
+  order by (pl.x - p_x) ^ 2 + (pl.y - p_y) ^ 2
+  limit 1
+$$;
+
+/** Who hit you last, and when: what a worker reads before it breaks off. */
+create or replace function mark_attacker(p_world uuid, p_uid uuid, p_id int) returns void
+  language sql as $$
+  update player set stats = jsonb_set(jsonb_set(stats, '{hurtBy}', to_jsonb(p_id)),
+                                      '{hurtAt}', to_jsonb(now()))
+  where world_id = p_world and uid = p_uid
+$$;
+
+/**
+ * A leg toward a point, sliding along whatever is in the way.
+ *
+ * The browser walks a creature a frame at a time and asks three questions at
+ * every step: the way it wants to go, then the same move with only the x of
+ * it, then only the y. That is what lets a thing follow you round the corner
+ * of a house rather than standing at the wall wondering. A leg out here is a
+ * great many of those steps at once, so it asks the same three questions of
+ * the whole leg, and gives up only when all three are shut.
+ */
+create or replace function chase_leg(p_world uuid, p_fx double precision, p_fy double precision,
+    p_tx double precision, p_ty double precision)
+  returns table (x double precision, y double precision) language plpgsql stable as $$
+begin
+  if line_clear(p_world, p_fx, p_fy, p_tx, p_ty) then x := p_tx; y := p_ty; return next; return; end if;
+  if p_tx <> p_fx and line_clear(p_world, p_fx, p_fy, p_tx, p_fy) then
+    x := p_tx; y := p_fy; return next; return;
+  end if;
+  if p_ty <> p_fy and line_clear(p_world, p_fx, p_fy, p_fx, p_ty) then
+    x := p_fx; y := p_ty; return next; return;
+  end if;
+  return;
+end $$;
+
+/**
+ * A hunter closing on whoever is in front of it.
+ *
+ * Handed the creature mid-settle and handed it back changed, so that the one
+ * write at the end of `creature_settle` is still the only write. It gives up
+ * when you get far enough away or when it has been badly enough hurt to think
+ * better of it — and a monster is far harder to shake and far slower to
+ * decide it has had enough.
+ */
+create or replace function hunt_settle(p_world uuid, c creature, d species_def, a age_def)
+  returns creature language plpgsql as $$
+declare p record; v_dist double precision; v_pace double precision; v_guard int := 0;
+        v_cx double precision; v_cy double precision; v_secs double precision;
+        v_ax double precision; v_ay double precision; v_step record;
+begin
+  v_cx := creature_x(c); v_cy := creature_y(c);
+  select * into p from nearest_player(p_world, v_cx, v_cy);
+  if not found then c.hunting := null; return c; end if;
+
+  if c.hunting is not null then
+    if p.d > (case when d.monster then hunt_give_up() * 2.2 else hunt_give_up() end)
+       or c.health < max_health(c) * (case when d.monster then 0.08 else 0.3 end) then
+      c.hunting := null;
+      return c;
+    end if;
+    c.hunting := p.uid;
+  else
+    -- Nothing comes for you across ground it cannot stand on.
+    if p.d > coalesce(d.notice, hunt_sight()) then return c; end if;
+    if not creature_tile_ok(p_world, floor(p.x)::int, floor(p.y)::int) then return c; end if;
+    c.hunting := p.uid;
+    perform tell(p_world, p.uid, 'A ' || lower(d.name) || ' has your scent.', 'error');
+  end if;
+
+  -- Only the last few seconds of the gap were spent on you. See the head of
+  -- the file: before that you were not there to be hunted.
+  if c.until < now() - make_interval(secs => hunt_window()) then
+    c.from_x := v_cx; c.from_y := v_cy; c.to_x := v_cx; c.to_y := v_cy;
+    c.until := now() - make_interval(secs => hunt_window());
+    c.leg_at := c.until; c.leg_ends := c.until;
+  end if;
+
+  v_pace := d.speed * a.speed * trait_mul(c.traits, 'speed') * 1.15;
+  while c.until <= now() and v_guard < 12 loop
+    v_guard := v_guard + 1;
+    v_dist := sqrt((p.x - c.to_x) ^ 2 + (p.y - c.to_y) ^ 2);
+    if v_dist > hunt_reach() then
+      -- A leg that ends a pace short of your feet, round whatever is between.
+      v_ax := c.to_x + (p.x - c.to_x) * (v_dist - 1) / v_dist;
+      v_ay := c.to_y + (p.y - c.to_y) * (v_dist - 1) / v_dist;
+      select * into v_step from chase_leg(p_world, c.to_x, c.to_y, v_ax, v_ay);
+      if v_step.x is null then
+        -- Nothing open at all: the browser's chase ends here too.
+        c.hunting := null;
+        exit;
+      end if;
+      c.from_x := c.to_x; c.from_y := c.to_y;
+      c.to_x := v_step.x; c.to_y := v_step.y;
+      v_secs := greatest(0.2, sqrt((c.to_x - c.from_x) ^ 2 + (c.to_y - c.from_y) ^ 2)
+                              / greatest(0.1, v_pace));
+      c.leg_at := c.until;
+      c.leg_ends := c.leg_at + make_interval(secs => v_secs);
+      c.until := c.leg_ends;
+    else
+      perform mark_attacker(p_world, p.uid, c.id);
+      perform hurt_player(p_world, p.uid, attack_of(c) * 0.012,
+        'The ' || lower(d.name) || ' is on you', coalesce(d.wound, 'bite'));
+      c.until := c.until + make_interval(secs => hunt_blow());
+    end if;
+  end loop;
+  return c;
+end $$;
+
+/**
+ * The wild branch, now with a second thing it might be doing.
+ *
+ * A hunter that has your scent is not wandering, so the random walk is the
+ * else of the hunt rather than something the hunt interrupts.
+ */
+create or replace function creature_settle(p_world uuid, p_id int) returns boolean
+  language plpgsql as $$
+declare c creature; d species_def; a age_def; elapsed double precision; top double precision;
+        guard int := 0; n int; i int; nx double precision; ny double precision;
+        dist double precision; secs double precision; pace double precision; ok boolean;
+        home record;
+begin
+  select * into c from creature where world_id = p_world and id = p_id for update;
+  if not found then return false; end if;
+  select * into d from species_def where id = c.species;
+  a := age_row(c.born);
+  elapsed := extract(epoch from (now() - c.settled_at));
+  if elapsed <= 0 then return false; end if;
+
+  -- The body: hunger falling, wounds closing, fleece coming back, and a
+  -- brushing wearing off. None of it needs a step; it is all just elapsed time.
+  top := max_health(c);
+  c.hunger := greatest(0, c.hunger - elapsed * hunger_rate(c.mode) * trait_mul(c.traits, 'appetite'));
+  if c.health > top then
+    c.health := top;
+  elsif c.health < top and (c.hurt_at is null or now() - c.hurt_at > interval '6 seconds') then
+    c.health := least(top, c.health + elapsed * case when c.mode = 'wild' then 0.25 else 0.6 end);
+  end if;
+  if d.fleece is not null and a.growth > 0 and c.fleece < 1 then
+    c.fleece := least(1, c.fleece + elapsed * d.fleece * a.growth * trait_mul(c.traits, 'grow'));
+  end if;
+  c.care := greatest(0, c.care - elapsed / (3 * 3600));
+
+  if c.mode = 'wild' then
+    if d.hunter then c := hunt_settle(p_world, c, d, a); else c.hunting := null; end if;
+  else
+    c.hunting := null;
+  end if;
+
+  if c.mode = 'wild' and c.hunting is null then
+    pace := d.speed * a.speed * trait_mul(c.traits, 'speed') * 0.7;
+    while c.until <= now() and guard < 40 loop
+      guard := guard + 1;
+      n := c.leg + 1;
+      ok := false;
+      for i in 0..7 loop
+        nx := c.to_x + (hash_tile(p_id, n, 7001 + i) * 2 - 1) * 4;
+        ny := c.to_y + (hash_tile(p_id, n, 9001 + i) * 2 - 1) * 4;
+        if creature_tile_ok(p_world, floor(nx)::int, floor(ny)::int)
+           and line_clear(p_world, c.to_x, c.to_y, nx, ny) then ok := true; exit; end if;
+      end loop;
+      c.leg := n;
+      if not ok then
+        -- Hemmed in: stand where it is and look again in a moment.
+        c.from_x := c.to_x; c.from_y := c.to_y;
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + interval '2 seconds';
+        continue;
+      end if;
+      -- It feeds itself on the way. The browser walks it to a forage bed,
+      -- grazes for a few seconds and tops the belly up; out here the leg that
+      -- ends on ground worth grazing is the same thing without the detail.
+      if c.hunger < 0.5 and coalesce((select forage from tile_def
+            where id = land_tile(p_world, floor(nx)::int, floor(ny)::int)), false) then
+        c.hunger := least(1, c.hunger + 0.5);
+      end if;
+      dist := sqrt((nx - c.to_x) ^ 2 + (ny - c.to_y) ^ 2);
+      secs := greatest(0.2, dist / greatest(0.1, pace));
+      c.from_x := c.to_x; c.from_y := c.to_y;
+      c.to_x := nx; c.to_y := ny;
+      c.leg_at := c.until;
+      c.leg_ends := c.leg_at + make_interval(secs => secs);
+      c.until := c.leg_ends + make_interval(secs => 1 + hash_tile(p_id, n, 11001) * 5);
+    end loop;
+    -- Forty legs is as far back as anybody can be bothered to walk. Past that
+    -- it is where it got to and the clock catches up with it, which is all
+    -- anybody arriving could tell anyway.
+    if c.until <= now() then
+      c.from_x := c.to_x; c.from_y := c.to_y;
+      c.leg_at := now(); c.leg_ends := now();
+      c.until := now() + make_interval(secs => 1 + hash_tile(p_id, c.leg, 11001) * 5);
+    end if;
+  elsif c.mode = 'active' and c.keeper is not null then
+    -- A companion is wherever its keeper is; following is not a walk of its own.
+    select p.x, p.y into home from player p where p.world_id = p_world and p.uid = c.keeper;
+    if found then
+      c.from_x := home.x; c.from_y := home.y; c.to_x := home.x; c.to_y := home.y;
+      c.leg_at := now(); c.leg_ends := now(); c.until := now();
+    end if;
+  elsif c.mode = 'stored' then
+    -- Kept at the token: it stands by the token.
+    select dd.x + 0.5 as x, dd.y + 1.5 as y into home from deed dd where dd.world_id = p_world;
+    if found then
+      c.from_x := home.x; c.from_y := home.y; c.to_x := home.x; c.to_y := home.y;
+      c.leg_at := now(); c.leg_ends := now(); c.until := now();
+    end if;
+  end if;
+
+  update creature set
+      from_x = c.from_x, from_y = c.from_y, to_x = c.to_x, to_y = c.to_y,
+      leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, leg = c.leg,
+      health = c.health, hunger = c.hunger, fleece = c.fleece, care = c.care,
+      hunting = c.hunting, settled_at = now()
+    where world_id = p_world and id = p_id;
+  return true;
+end $$;
+
+/** What is alive around you, with the ones that have your scent saying so. */
+create or replace function rpc_creatures(p_world uuid, p_range double precision default 40)
+  returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); p player;
+begin
+  if me is null then raise exception 'not signed in'; end if;
+  select * into p from player where world_id = p_world and uid = me;
+  if not found then raise exception 'you are not on this island'; end if;
+  perform creature_sweep(p_world, p.x, p.y, p_range);
+  return coalesce((select jsonb_agg(jsonb_build_object(
+      'id', c.id, 'species', c.species, 'name', c.name, 'variant', c.variant,
+      'mode', c.mode, 'stance', c.stance,
+      'x', creature_x(c), 'y', creature_y(c),
+      'fromX', c.from_x, 'fromY', c.from_y, 'toX', c.to_x, 'toY', c.to_y,
+      'legAt', c.leg_at, 'legEnds', c.leg_ends,
+      'health', c.health, 'max', max_health(c), 'hunger', c.hunger,
+      'sex', c.sex, 'age', age_of(c.born), 'traits', c.traits,
+      'hunting', c.hunting = me, 'mine', coalesce(c.keeper = me, false))
+      order by c.id)
+    from creature c
+    where c.world_id = p_world
+      and greatest(abs(creature_x(c) - p.x), abs(creature_y(c) - p.y)) <= p_range), '[]'::jsonb);
+end $$;
+
+select private.lock_doors();
+
+-- ======================================================================
+-- 20260914222100_trades.sql
+-- ======================================================================
+
+-- The two trades that fight for a living: a guard on the border, a hunter in
+-- the country round it.
+--
+-- ## A fight is a round trip whose work is somebody else
+--
+-- A gatherer walks out to a tile, works it, and carries a load home. A guard
+-- walks out to a *creature*, works it — one blow is one turn of the phase
+-- machine — and walks out to it again wherever it has got to. A hunter does
+-- the same and then does what a gatherer does: the carcass is the load, and
+-- it goes in the crate like sand or stone.
+--
+-- So neither of them needed a loop of their own. What they needed was a
+-- `work_x` that moves.
+
+/**
+ * Hurting a beast, with the thing that hurt it named.
+ *
+ * `hurt_creature` had the whole of this in it and took a player's uid, which
+ * was fine while a player was the only thing that could swing at anything.
+ * A guard changes that, so the body moved down here behind two points — what
+ * hit it and where from — and `hurt_creature` is the player's way in.
+ */
+create or replace function wound_beast(p_world uuid, p_id int, p_dmg double precision,
+    p_from_x double precision default null, p_from_y double precision default null,
+    p_teller uuid default null, p_by int default null) returns boolean
+  language plpgsql as $$
+declare c creature; d species_def; cx double precision; cy double precision;
+        v_len double precision; v_size double precision; v_killer creature;
+begin
+  perform creature_settle(p_world, p_id);
+  select * into c from creature where world_id = p_world and id = p_id for update;
+  if not found then return false; end if;
+  select * into d from species_def where id = c.species;
+  cx := creature_x(c); cy := creature_y(c);
+
+  update creature set health = c.health - p_dmg, hurt_at = now(), hurt_by = p_by,
+      coaxed = 0, coaxed_at = null,
+      from_x = cx, from_y = cy, to_x = cx, to_y = cy, leg_at = now(), leg_ends = now(),
+      settled_at = now()
+    where world_id = p_world and id = p_id;
+
+  if c.health - p_dmg > 0 then
+    if c.mode = 'wild' and d.timid and p_from_x is not null then
+      v_len := greatest(0.001, sqrt((cx - p_from_x) ^ 2 + (cy - p_from_y) ^ 2));
+      update creature set to_x = cx + ((cx - p_from_x) / v_len) * 5, to_y = cy + ((cy - p_from_y) / v_len) * 5,
+          leg_ends = now() + interval '3 seconds', until = now() + interval '3 seconds'
+        where world_id = p_world and id = p_id;
+    end if;
+    return false;
+  end if;
+
+  -- What the carcass is worth follows the size of the thing that left it.
+  v_size := (age_row(c.born)).yield;
+  delete from creature where world_id = p_world and id = p_id;
+  -- Nothing goes on fighting something that is no longer there.
+  update creature set enemy = null where world_id = p_world and enemy = p_id;
+  perform drop_on_ground(p_world, floor(cx)::int, floor(cy)::int, 'corpse',
+    (15 + random() * 35) * v_size, d.name);
+
+  -- A hunter marks where its kill went down and comes back for it.
+  if p_by is not null then
+    select * into v_killer from creature where world_id = p_world and id = p_by;
+    if found and v_killer.carrying is null
+       and (select gathers from species_def where id = v_killer.species) = 'hunt' then
+      update creature set work_x = floor(cx)::int, work_y = floor(cy)::int
+        where world_id = p_world and id = p_by;
+      perform worker_learn(p_world, p_by, 'fighting', 0.4);
+    end if;
+  end if;
+
+  if p_teller is not null then
+    if d.monster then
+      perform tell(p_world, p_teller, 'The ' || lower(d.name)
+        || ' goes down. Butcher it before it rots: there is a great deal on it.', 'system');
+    else
+      perform tell(p_world, p_teller, 'You kill the wild ' || lower(d.name)
+        || '. Its corpse lies where it fell.', 'event');
+    end if;
+  end if;
+  return true;
+end $$;
+
+/** A player's blow, which is where all of this came from. */
+create or replace function hurt_creature(p_world uuid, p_id int, p_dmg double precision,
+    p_by uuid default null) returns boolean
+  language plpgsql as $$
+declare px double precision; py double precision;
+begin
+  select p.x, p.y into px, py from player p where p.world_id = p_world and p.uid = p_by;
+  return wound_beast(p_world, p_id, p_dmg, px, py, p_by, null);
+end $$;
+
+/**
+ * One creature's blow at another.
+ *
+ * A hunter hits harder the more hunting it has done: half again at mastery.
+ * And only something that already knows how to fight learns anything by it —
+ * a guard trains its back, not its sword arm.
+ */
+create or replace function creature_attack(p_world uuid, p_attacker int, p_target int)
+  returns boolean language plpgsql as $$
+declare a creature; d species_def; v_dmg double precision;
+begin
+  select * into a from creature where world_id = p_world and id = p_attacker;
+  if not found then return false; end if;
+  select * into d from species_def where id = a.species;
+  v_dmg := d.attack * (1 + coalesce((a.skills->>'fighting')::double precision, 0) / 200)
+           * (0.7 + random() * 0.6);
+  if a.skills ? 'fighting' then perform worker_learn(p_world, p_attacker, 'fighting', 0.05); end if;
+  return wound_beast(p_world, p_target, v_dmg, creature_x(a), creature_y(a), null, p_attacker);
+end $$;
+
+/** The two trades whose work is a creature rather than a tile. */
+create or replace function fight_trade(p_kind text) returns boolean language sql immutable as $$
+  select p_kind in ('guard', 'hunt')
+$$;
+
+/** How far each of them ranges: a guard the border, a hunter what it has learned. */
+create or replace function fight_range(c creature, p_kind text, dd deed) returns double precision
+  language sql stable as $$
+  select case when p_kind = 'guard' then dd.radius + 1 else work_range(c) end
+$$;
+
+/** The nearest wild thing inside the range, measured from where the worker stands. */
+create or replace function wild_quarry(p_world uuid, p_cx double precision, p_cy double precision,
+    p_range double precision, p_from_x double precision, p_from_y double precision)
+  returns creature language sql stable as $$
+  select q.* from creature q
+  where q.world_id = p_world and q.mode = 'wild'
+    and greatest(abs(creature_x(q) - p_cx), abs(creature_y(q) - p_cy)) <= p_range
+  order by (creature_x(q) - p_from_x) ^ 2 + (creature_y(q) - p_from_y) ^ 2, q.id
+  limit 1
+$$;
+
+/**
+ * The nearest carcass lying inside the range.
+ *
+ * This kill or an older one left in the grass: the browser looks through the
+ * whole of what is on the ground rather than a box of tiles round the hunter,
+ * because the piles are few and the tiles are many.
+ */
+create or replace function carcass_near(p_world uuid, p_cx double precision, p_cy double precision,
+    p_range double precision, p_from_x double precision, p_from_y double precision)
+  returns item language sql stable as $$
+  select i.* from item i
+  where i.world_id = p_world and i.holder = 'ground' and i.def = 'corpse'
+    and greatest(abs(i.gx - p_cx), abs(i.gy - p_cy)) <= p_range
+  order by (i.gx + 0.5 - p_from_x) ^ 2 + (i.gy + 0.5 - p_from_y) ^ 2, i.id
+  limit 1
+$$;
+
+/** Take a carcass off the ground, the way a hunter takes it: in its teeth. */
+create or replace function take_from_ground(p_world uuid, p_x int, p_y int, p_def text)
+  returns jsonb language plpgsql as $$
+declare v_it item;
+begin
+  select * into v_it from item where world_id = p_world and holder = 'ground'
+    and gx = p_x and gy = p_y and def = p_def order by id limit 1;
+  if not found then return null; end if;
+  delete from item where id = v_it.id;
+  return jsonb_build_object('def', v_it.def, 'count', v_it.count, 'ql', v_it.ql, 'extra', v_it.extra);
+end $$;
+
+/** Close enough to strike. A hunter reaches a little further than a guard. */
+create or replace function fight_reach(p_kind text) returns double precision
+  language sql immutable as $$ select case when p_kind = 'hunt' then 1.1 else 1 end $$;
+/** And hits a little faster. */
+create or replace function fight_blow(p_kind text) returns double precision
+  language sql immutable as $$ select case when p_kind = 'hunt' then 1.1 else 1.2 end $$;
+/** Everything runs harder at something than it walks about. */
+create or replace function fight_pace(p_kind text) returns double precision
+  language sql immutable as $$ select case when p_kind = 'hunt' then 1.4 else 1.3 end $$;
+
+/**
+ * What a worker is going for, or nothing.
+ *
+ * Three rules in one place, because they are the same question asked by three
+ * sorts of creature: a guard takes anything wild that crosses the border, a
+ * hunter anything wild in the country it has learned, and everything else
+ * only what its stance tells it to. Passive carries on working whatever
+ * happens; defensive wants to have been given a reason, and a reason is a
+ * blow at it or at somebody on the island in the last eight seconds;
+ * aggressive needs no reason at all.
+ *
+ * What it is already set on wins, while that is still a wild thing inside the
+ * ground it is allowed to cover — with a few tiles of grace, so that a chase
+ * does not end on the border it started at.
+ */
+create or replace function fight_target(p_world uuid, p_id int) returns creature
+  language plpgsql stable as $$
+declare c creature; d species_def; dd deed; v_kind text; q creature;
+        v_rng double precision; v_cx double precision; v_cy double precision;
+begin
+  select * into c from creature where world_id = p_world and id = p_id;
+  if not found then return null; end if;
+  select * into dd from deed where world_id = p_world;
+  if not found then return null; end if;
+  select * into d from species_def where id = c.species;
+  v_kind := d.gathers;
+  v_cx := creature_x(c); v_cy := creature_y(c);
+  v_rng := fight_range(c, v_kind, dd);
+
+  if c.enemy is not null then
+    select * into q from creature where world_id = p_world and id = c.enemy;
+    if found and q.mode = 'wild'
+       and greatest(abs(creature_x(q) - dd.x), abs(creature_y(q) - dd.y)) <= v_rng + 4 then
+      return q;
+    end if;
+    return null;
+  end if;
+
+  if not fight_trade(v_kind) then
+    if c.stance = 'passive' then return null; end if;
+    -- A worker that answers for itself works to the border, not to its range.
+    v_rng := dd.radius + 1;
+    if c.stance = 'defensive' then
+      if not (c.hurt_at > now() - interval '8 seconds'
+              or exists (select 1 from player pl where pl.world_id = p_world
+                   and (pl.stats->>'hurtAt')::timestamptz > now() - interval '8 seconds')) then
+        return null;
+      end if;
+      select * into q from creature qq where qq.world_id = p_world and qq.mode = 'wild'
+        and greatest(abs(creature_x(qq) - dd.x), abs(creature_y(qq) - dd.y)) <= v_rng
+        and (c.hurt_by = qq.id
+             or exists (select 1 from player pl where pl.world_id = p_world
+                  and (pl.stats->>'hurtBy')::int = qq.id
+                  and (pl.stats->>'hurtAt')::timestamptz > now() - interval '8 seconds'))
+        order by (creature_x(qq) - v_cx) ^ 2 + (creature_y(qq) - v_cy) ^ 2, qq.id
+        limit 1;
+      if not found then return null; end if;
+      return q;
+    end if;
+  end if;
+
+  q := wild_quarry(p_world, dd.x, dd.y, v_rng, v_cx, v_cy);
+  if q.id is null then return null; end if;
+  return q;
+end $$;
+
+select private.lock_doors();
+
+-- ======================================================================
+-- 20260914222200_trade_work.sql
+-- ======================================================================
+
+-- What a worker does about company: the guard on the border, the hunter in
+-- the country, and every other trade breaking off when something starts it.
+
+/** Two more trades a wildermon may be set to, which makes nineteen of twenty-two. */
+create or replace function worker_job_ported(p_kind text) returns boolean
+  language sql immutable as $$
+  select p_kind in ('forage', 'botanize', 'woodcut', 'mine', 'quarry',
+                    'sand', 'clay', 'peat', 'reed', 'fish', 'farm', 'fetch',
+                    'hod', 'mend', 'stoke', 'plant', 'compost', 'guard', 'hunt')
+$$;
+
+create or replace function worker_settle(p_world uuid, p_id int) returns int
+  language plpgsql as $$
+declare c creature; d species_def; dd deed; cr crate; kind text; guard int := 0; done int := 0;
+        spot record; stand record; step record; pace double precision; dist double precision;
+        secs double precision; load jsonb; cx double precision; cy double precision;
+        ax double precision; ay double precision; v_foe creature; v_corpse item;
+        v_step record;
+begin
+  select * into c from creature where world_id = p_world and id = p_id for update;
+  if not found or c.mode <> 'deed' then return 0; end if;
+  select * into dd from deed where world_id = p_world;
+  if not found then
+    update creature set mode = 'wild', phase = 'idle', job = null where world_id = p_world and id = p_id;
+    return 0;
+  end if;
+  select * into d from species_def where id = c.species;
+  kind := d.gathers;
+  cr := deed_crate(p_world);
+  pace := d.speed * (age_row(c.born)).speed * trait_mul(c.traits, 'speed')
+          * (1 + greatest(1, task_skill(c)) / 500);
+
+  while c.until <= now() and guard < 120 loop
+    guard := guard + 1;
+    cx := c.to_x; cy := c.to_y;
+
+    /*
+     * Company first.
+     *
+     * Nothing works while something is coming at it, and the two trades that
+     * fight for a living are always looking for company. A worker breaks off
+     * between jobs rather than mid-load: what is already in its arms goes in
+     * the crate before it goes for anything, which is the one place this is
+     * tidier than the browser.
+     */
+    if c.phase = 'strike' then
+      update creature set from_x = c.from_x, from_y = c.from_y, to_x = c.to_x, to_y = c.to_y,
+          leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, phase = c.phase,
+          work_x = c.work_x, work_y = c.work_y, carrying = c.carrying, enemy = c.enemy,
+          settled_at = now()
+        where world_id = p_world and id = p_id;
+      if c.enemy is not null and creature_attack(p_world, p_id, c.enemy) then done := done + 1; end if;
+      select * into c from creature where world_id = p_world and id = p_id;
+      c.phase := 'idle';
+      c.leg_at := c.until; c.leg_ends := c.until;
+      continue;
+
+    elsif c.phase = 'stalk' then
+      -- Arrived where the carcass went down. If somebody else has had it, the
+      -- walk was wasted, which is what happens to a hunter now and then.
+      c.carrying := take_from_ground(p_world, c.work_x, c.work_y, 'corpse');
+      c.work_x := null; c.work_y := null;
+      c.phase := 'idle';
+      c.leg_at := c.until; c.leg_ends := c.until;
+      c.until := c.until + interval '0.5 seconds';
+      continue;
+    end if;
+
+    if fight_trade(kind) and c.phase = 'idle' and c.carrying is not null and cr.id is not null then
+      ax := crate_centre_x(cr); ay := crate_centre_y(cr);
+      dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+      c.from_x := cx; c.from_y := cy; c.to_x := ax; c.to_y := ay;
+      c.leg_at := c.until;
+      c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+      c.until := c.leg_ends;
+      c.phase := 'home';
+      continue;
+    end if;
+
+    if c.phase = 'idle' and c.carrying is null
+       and (fight_trade(kind) or c.enemy is not null or c.stance <> 'passive') then
+      v_foe := fight_target(p_world, p_id);
+      if v_foe.id is null then
+        c.enemy := null;
+      else
+        if c.enemy is distinct from v_foe.id then
+          -- It has just seen it. A guard trains its back by keeping watch; a
+          -- hunter learns the country by hunting it.
+          if fight_trade(kind) then
+            perform worker_learn(p_world, p_id,
+              case when kind = 'hunt' then 'fighting' else 'body_strength' end,
+              case when kind = 'hunt' then 0.08 else 0.1 end);
+          end if;
+          c.enemy := v_foe.id;
+        end if;
+        ax := creature_x(v_foe); ay := creature_y(v_foe);
+        dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+        if dist <= fight_reach(kind) then
+          c.phase := 'strike';
+          c.leg_at := c.until; c.leg_ends := c.until;
+          c.until := c.until + make_interval(secs => fight_blow(kind));
+        else
+          select * into v_step from chase_leg(p_world, cx, cy,
+            cx + (ax - cx) * (dist - 1) / dist, cy + (ay - cy) * (dist - 1) / dist);
+          if v_step.x is null then
+            -- Nothing open at all: the browser gives up here too.
+            c.enemy := null;
+            c.until := c.until + interval '2 seconds';
+          else
+            c.from_x := cx; c.from_y := cy;
+            c.to_x := v_step.x; c.to_y := v_step.y;
+            c.leg_at := c.until;
+            c.leg_ends := c.leg_at + make_interval(secs =>
+              greatest(0.2, sqrt((c.to_x - cx) ^ 2 + (c.to_y - cy) ^ 2)
+                            / greatest(0.1, pace * fight_pace(kind))));
+            c.until := c.leg_ends;
+          end if;
+        end if;
+        continue;
+      end if;
+    end if;
+
+    if kind = 'hunt' and c.phase = 'idle' and c.carrying is null then
+      if c.work_x is not null and not exists (select 1 from item i
+           where i.world_id = p_world and i.holder = 'ground'
+             and i.gx = c.work_x and i.gy = c.work_y and i.def = 'corpse') then
+        c.work_x := null; c.work_y := null;
+      end if;
+      if c.work_x is null then
+        v_corpse := carcass_near(p_world, dd.x, dd.y, work_range(c), cx, cy);
+        if v_corpse.id is not null then c.work_x := v_corpse.gx; c.work_y := v_corpse.gy; end if;
+      end if;
+      if c.work_x is not null then
+        ax := c.work_x + 0.5; ay := c.work_y + 0.5;
+        dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+        c.from_x := cx; c.from_y := cy; c.to_x := ax; c.to_y := ay;
+        c.leg_at := c.until;
+        c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+        c.until := c.leg_ends;
+        c.phase := 'stalk';
+        continue;
+      end if;
+    end if;
+
+    if worker_errand(kind) then
+      -- Everything an errand asks about is on the row, so the row goes down
+      -- before it is asked.
+      update creature set from_x = c.from_x, from_y = c.from_y, to_x = c.to_x, to_y = c.to_y,
+          leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, phase = c.phase,
+          work_x = c.work_x, work_y = c.work_y, carrying = c.carrying, fetching = c.fetching,
+          settled_at = now()
+        where world_id = p_world and id = p_id;
+
+      if c.phase = 'fetch' then
+        load := take_from_stores(p_world, c.fetching);
+        if load is null then
+          c.phase := 'idle';
+          c.leg_at := c.until; c.leg_ends := c.until;
+          c.until := now() + interval '4 seconds';
+          exit;
+        end if;
+        c.carrying := load;
+        c.fetching := null;
+        c.phase := 'idle';
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + interval '0.5 seconds';
+
+      elsif c.phase = 'out' then
+        c.phase := 'work';
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + make_interval(secs => work_duration(task_skill(c)) / trait_mul(c.traits, 'work'));
+
+      elsif c.phase = 'work' then
+        if errand_do(p_world, p_id) then done := done + 1; end if;
+        select * into c from creature where world_id = p_world and id = p_id;
+        c.phase := 'idle';
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + interval '1 second';
+
+      else
+        select * into step from errand_step(p_world, p_id);
+        if step.gx is null then
+          -- Nothing to run. Replaying an afternoon of that produces nothing.
+          c.from_x := cx; c.from_y := cy;
+          c.leg_at := now(); c.leg_ends := now();
+          c.until := now() + interval '4 seconds';
+          exit;
+        end if;
+        c.work_x := step.wx; c.work_y := step.wy;
+        c.fetching := step.want;
+        dist := sqrt((step.gx - cx) ^ 2 + (step.gy - cy) ^ 2);
+        c.from_x := cx; c.from_y := cy; c.to_x := step.gx; c.to_y := step.gy;
+        c.leg_at := c.until;
+        c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+        c.until := c.leg_ends;
+        c.phase := case when step.want is null then 'out' else 'fetch' end;
+      end if;
+      continue;
+    end if;
+
+    if c.phase = 'out' then
+      c.phase := 'work';
+      c.leg_at := c.until; c.leg_ends := c.until;
+      c.until := c.until + make_interval(secs => work_duration(task_skill(c)) / trait_mul(c.traits, 'work'));
+
+    elsif c.phase = 'work' then
+      update creature set from_x = cx, from_y = cy, to_x = cx, to_y = cy,
+          leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, phase = c.phase,
+          work_x = c.work_x, work_y = c.work_y, settled_at = now()
+        where world_id = p_world and id = p_id;
+      load := worker_do(p_world, p_id);
+      select * into c from creature where world_id = p_world and id = p_id;
+      done := done + 1;
+      c.carrying := load;
+      c.work_x := null; c.work_y := null;
+      if load is null or cr.id is null then
+        c.phase := 'idle';
+        c.leg_at := c.until; c.leg_ends := c.until;
+        c.until := c.until + interval '1 second';
+      else
+        ax := crate_centre_x(cr); ay := crate_centre_y(cr);
+        dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+        secs := greatest(0.2, dist / greatest(0.1, pace));
+        c.from_x := cx; c.from_y := cy; c.to_x := ax; c.to_y := ay;
+        c.leg_at := c.until; c.leg_ends := c.leg_at + make_interval(secs => secs);
+        c.until := c.leg_ends;
+        c.phase := 'home';
+      end if;
+
+    elsif c.phase = 'home' then
+      if c.carrying is not null and crate_add(p_world, cr.id, c.carrying->>'def',
+          (c.carrying->>'count')::int, (c.carrying->>'ql')::double precision, c.carrying->>'extra') then
+        c.carrying := null;
+      end if;
+      c.phase := 'idle';
+      c.leg_at := c.until; c.leg_ends := c.until;
+      c.until := c.until + interval '1 second';
+
+    else
+      select * into spot from find_work_tile(p_world, dd.x, dd.y, work_range(c), kind, c);
+      if spot.x is null then
+        c.from_x := cx; c.from_y := cy;
+        c.to_x := dd.x + 0.5 + (hash_tile(p_id, guard, 601) * 2 - 1) * 3;
+        c.to_y := dd.y + 0.5 + (hash_tile(p_id, guard, 701) * 2 - 1) * 3;
+        if not creature_tile_ok(p_world, floor(c.to_x)::int, floor(c.to_y)::int) then
+          c.to_x := cx; c.to_y := cy;
+        end if;
+        dist := sqrt((c.to_x - cx) ^ 2 + (c.to_y - cy) ^ 2);
+        c.leg_at := now();
+        c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+        c.until := c.leg_ends + interval '4 seconds';
+        exit;
+      else
+        if kind in ('woodcut', 'fish') then
+          select * into stand from beside_tile(p_world, spot.x, spot.y);
+          if stand.x is null then
+            c.until := c.until + interval '4 seconds';
+            continue;
+          end if;
+          ax := stand.x + 0.5; ay := stand.y + 0.5;
+        else
+          ax := spot.x + 0.5; ay := spot.y + 0.5;
+        end if;
+        c.work_x := spot.x; c.work_y := spot.y;
+        dist := sqrt((ax - cx) ^ 2 + (ay - cy) ^ 2);
+        c.from_x := cx; c.from_y := cy; c.to_x := ax; c.to_y := ay;
+        c.leg_at := c.until;
+        c.leg_ends := c.leg_at + make_interval(secs => greatest(0.2, dist / greatest(0.1, pace)));
+        c.until := c.leg_ends;
+        c.phase := 'out';
+      end if;
+    end if;
+  end loop;
+
+  if c.until <= now() then
+    c.from_x := c.to_x; c.from_y := c.to_y;
+    c.leg_at := now(); c.leg_ends := now(); c.until := now() + interval '1 second';
+  end if;
+
+  update creature set from_x = c.from_x, from_y = c.from_y, to_x = c.to_x, to_y = c.to_y,
+      leg_at = c.leg_at, leg_ends = c.leg_ends, until = c.until, phase = c.phase,
+      work_x = c.work_x, work_y = c.work_y, carrying = c.carrying, fetching = c.fetching,
+      enemy = c.enemy, settled_at = now()
+    where world_id = p_world and id = p_id;
+  return done;
+end $$;
+
+/** And what a Middun brings home, which is the best thing that happens to a field. */
+create or replace function worker_do(p_world uuid, p_id int) returns jsonb
+  language plpgsql as $$
+declare c creature; d species_def; kind text; skill_id text; skill double precision;
+        wx int; wy int; here int; data int; tree tree_def; rock rock_def; logs int;
+        made_ql double precision; got text; careful double precision; chance double precision;
+        cr crop; yld int[]; depth double precision;
+begin
+  select * into c from creature where world_id = p_world and id = p_id;
+  if not found or c.work_x is null then return null; end if;
+  select * into d from species_def where id = c.species;
+  kind := d.gathers;
+  select g.skill into skill_id from gather_def g where g.id = kind;
+  skill := task_skill(c);
+  wx := c.work_x; wy := c.work_y;
+  here := land_tile(p_world, wx, wy);
+  careful := trait_mul(c.traits, 'yield');
+  perform worker_learn(p_world, p_id, skill_id, 0.225);
+  made_ql := least(100, greatest(1, skill * (0.6 + random() * 0.8) + 1) * careful);
+
+  if kind = 'woodcut' then
+    if here <> tile_id('Tree') then return null; end if;
+    data := land_data(p_world, wx, wy);
+    select * into tree from tree_def where id = tree_species(data);
+    logs := tree.logs + case when tree_age(data) = 2 then 1 else 0 end;
+    perform land_set_tile(p_world, wx, wy, tile_id('Grass'));
+    perform land_set_data(p_world, wx, wy, 0);
+    perform land_announce(p_world, wx, wy);
+    -- It can only carry one at a time; the rest of the tree waits at the stump.
+    if logs > 1 then
+      perform drop_on_ground(p_world, wx, wy, 'log', made_ql, tree.name, logs - 1);
+    end if;
+    return jsonb_build_object('def', 'log', 'count', 1, 'ql', made_ql, 'extra', tree.name);
+
+  elsif kind in ('mine', 'quarry') then
+    rock := bedrock_at(p_world, wx, wy);
+    got := case when kind = 'mine' and rock.ore then rock.yields else 'rock_shards' end;
+    made_ql := least(ore_max_ql((select seed from world where id = p_world), wx, wy), made_ql);
+    return jsonb_build_object('def', got, 'count', 1, 'ql', made_ql);
+
+  elsif kind in ('sand', 'clay') then
+    if land_dirt(p_world, wx, wy) <= 0 then return null; end if;
+    perform land_set_dirt(p_world, wx, wy, land_dirt(p_world, wx, wy) - 1);
+    return jsonb_build_object('def', kind, 'count', 1, 'ql', made_ql);
+
+  elsif kind = 'peat' then
+    perform mark_foraged(p_world, wx, wy, 'dig');
+    return jsonb_build_object('def', case when here = tile_id('Tar') then 'tar' else 'peat' end,
+      'count', 1, 'ql', made_ql);
+
+  elsif kind = 'reed' then
+    perform mark_foraged(p_world, wx, wy, 'reed');
+    return jsonb_build_object('def', 'reed', 'count', 1, 'ql', made_ql);
+
+  elsif kind = 'fish' then
+    depth := water_depth(p_world, wx, wy);
+    got := catch_fish(depth, skill, 0, null);
+    if got is null then return null; end if;
+    return jsonb_build_object('def', got, 'count', 1, 'ql', made_ql);
+
+  elsif kind = 'fetch' then
+    -- Whatever is lying there, carried home. A feller leaves two logs at every
+    -- stump it works; this is what tidies them away.
+    declare lying item;
+    begin
+      select * into lying from item where world_id = p_world and holder = 'ground'
+        and gx = wx and gy = wy order by id limit 1;
+      if not found then return null; end if;
+      delete from item where id = lying.id;
+      return jsonb_build_object('def', lying.def, 'count', lying.count,
+        'ql', lying.ql, 'extra', lying.extra);
+    end;
+
+  elsif kind = 'compost' then
+    -- Whatever it was, what comes back is compost, and the more of it the better.
+    declare rot item;
+    begin
+      select * into rot from item where world_id = p_world and holder = 'ground'
+        and gx = wx and gy = wy and (def = 'corpse' or dmg >= 40) order by id limit 1;
+      if not found then return null; end if;
+      delete from item where id = rot.id;
+      return jsonb_build_object('def', 'compost', 'count', greatest(1, round(rot.count / 2.0)::int),
+        'ql', least(100, 20 + skill * 0.6));
+    end;
+
+  elsif kind = 'farm' then
+    perform crop_settle(p_world, wx, wy);
+    select * into cr from crop where world_id = p_world and x = wx and y = wy;
+    if not found then return null; end if;
+    if cr.stage < crop_ripe() then
+      -- Not ripe: weed and water it, which is what makes the harvest worth having.
+      if cr.tended_now then return null; end if;
+      update crop set tended = tended + 1, tended_now = true,
+          ql = least(100, ql + greatest(1, skill * 0.2))
+        where world_id = p_world and x = wx and y = wy;
+      return null;
+    end if;
+    yld := crop_yield(cr.tended);
+    select produce into got from crop_def where id = cr.id;
+    delete from crop where world_id = p_world and x = wx and y = wy;
+    perform land_set_tile(p_world, wx, wy, tile_id('Field'));
+    perform land_announce(p_world, wx, wy);
+    -- The seed goes back in the ground's place; the produce goes home.
+    perform drop_on_ground(p_world, wx, wy, (select seed from crop_def where id = cr.id),
+      cr.ql, null, yld[2]);
+    return jsonb_build_object('def', got, 'count', yld[1], 'ql', cr.ql);
+
+  else
+    -- Foraging and botanizing: the same table a player rolls on, and the same
+    -- bed left picked clean behind it.
+    perform mark_foraged(p_world, wx, wy, kind);
+    chance := least(0.98, greatest(0.3, 0.6 + (skill / 100) * 0.38 - 5 / 150.0) * careful);
+    if random() < 0.2 or random() >= chance then return null; end if;
+    got := roll_table(kind, random());
+    if got is null then return null; end if;
+    return jsonb_build_object('def', got, 'count', 1, 'ql', made_ql);
+  end if;
+end $$;
+
+select private.lock_doors();
