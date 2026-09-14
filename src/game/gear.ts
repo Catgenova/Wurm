@@ -31,7 +31,7 @@ export const HIT_LOCATIONS: Array<[Slot, number]> = [
   ['feet', 0.12],
 ];
 
-export type ArmourClass = 'cloth' | 'leather' | 'chain' | 'plate';
+export type ArmourClass = 'cloth' | 'leather' | 'chain' | 'plate' | 'scale';
 
 export interface ArmourClassDef {
   id: ArmourClass;
@@ -49,6 +49,10 @@ export const ARMOUR_CLASSES: Record<ArmourClass, ArmourClassDef> = {
   leather: { id: 'leather', name: 'Leather', skill: 'leather_armour', soak: 0.3, burden: 0.05 },
   chain: { id: 'chain', name: 'Chain', skill: 'chain_armour', soak: 0.46, burden: 0.14 },
   plate: { id: 'plate', name: 'Plate', skill: 'plate_armour', soak: 0.62, burden: 0.26 },
+  // Dragon scale: what a dragon was wearing, riveted onto a leather backing.
+  // It turns more than plate and weighs less than chain, and there is exactly
+  // one way to get any.
+  scale: { id: 'scale', name: 'Scale', skill: 'plate_armour', soak: 0.74, burden: 0.11 },
 };
 
 export interface ArmourDef {
@@ -81,6 +85,11 @@ export const ARMOUR: ArmourDef[] = [
   armour('plate_arms', 'arms', 'plate'),
   armour('plate_legs', 'legs', 'plate'),
   armour('plate_boots', 'feet', 'plate'),
+  armour('scale_helm', 'head', 'scale'),
+  armour('scale_cuirass', 'chest', 'scale'),
+  armour('scale_sleeves', 'arms', 'scale'),
+  armour('scale_leggings', 'legs', 'scale'),
+  armour('scale_boots', 'feet', 'scale'),
 ];
 
 export const ARMOUR_BY_ID = new Map(ARMOUR.map((a) => [a.id, a]));
@@ -130,6 +139,9 @@ export const WEAPONS: WeaponDef[] = [
   weapon('short_bow', 'archery', 8, 2, { range: 6, ammo: 'arrow', twoHanded: true }),
   weapon('medium_bow', 'archery', 11, 2.6, { range: 9, ammo: 'arrow', twoHanded: true }),
   weapon('long_bow', 'archery', 15, 3.4, { range: 13, ammo: 'arrow', twoHanded: true }),
+  // Tusk on the belly, sinew on the back, and both taken off something that
+  // was trying to kill you. There is nothing further to shoot with.
+  weapon('composite_bow', 'archery', 21, 3.6, { range: 17, ammo: 'arrow', twoHanded: true }),
 ];
 
 export const WEAPON_BY_ID = new Map(WEAPONS.map((w) => [w.id, w]));

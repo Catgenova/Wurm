@@ -1200,6 +1200,221 @@ export interface CreaturePose {
 }
 
 /** Draws a wildermon of any species with its feet at (sx, sy), then its health bar and name. */
+/**
+ * The things that are not wildermon. Three of them stand on two legs and
+ * carry something; the fourth does not need to carry anything.
+ */
+interface MonsterShape {
+  /** Overall size, against a goblin at one. */
+  size: number;
+  /** Half-width and half-height of the torso. */
+  torso: [number, number];
+  head: number;
+  /** Tusks out of the lower jaw. */
+  tusk?: number;
+  /** What is in its hand: a notched blade, an axe, or a whole tree. */
+  arm: 'blade' | 'axe' | 'club';
+  /** How much it stoops. */
+  hunch: number;
+}
+
+const MONSTER_SHAPES: Record<string, MonsterShape> = {
+  goblin: { size: 0.78, torso: [4, 5], head: 3.4, arm: 'blade', hunch: 2.4 },
+  orc: { size: 1.15, torso: [6, 7], head: 4.2, tusk: 1.6, arm: 'axe', hunch: 1.2 },
+  ogre: { size: 1.75, torso: [9, 9.5], head: 5.4, tusk: 2.4, arm: 'club', hunch: 2 },
+};
+
+/** A thing on two legs with something in its hand. Feet at (sx, sy). */
+function drawMonsterBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, m: MonsterShape): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * m.size * (pose.facing < 0 ? -1 : 1), zoom * m.size);
+  const swing = pose.moving ? Math.sin(pose.phase) * 3 : 0;
+  const [tw, th] = m.torso;
+  const hip = -(th + 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, tw * 1.3, tw * 0.55, 0, 0, TAU);
+  ctx.fill();
+  // Legs: short, wide and bent.
+  ctx.fillStyle = pose.colors[0];
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * tw * 0.55 - 1.4, hip);
+    ctx.lineTo(side * tw * 0.55 + 1.4, hip);
+    ctx.lineTo(side * tw * 0.7 + 1.6 + side * swing * 0.3, -0.5);
+    ctx.lineTo(side * tw * 0.7 - 1.8 + side * swing * 0.3, -0.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Torso, leaning forward.
+  ctx.save();
+  ctx.rotate((-m.hunch * Math.PI) / 180);
+  ctx.fillStyle = pose.colors[0];
+  ctx.beginPath();
+  ctx.ellipse(0, hip - th * 0.8, tw, th, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pose.colors[1];
+  ctx.beginPath();
+  ctx.ellipse(tw * 0.25, hip - th * 0.55, tw * 0.6, th * 0.65, 0, 0, TAU);
+  ctx.fill();
+  // The arm and what is in it.
+  const shoulder = hip - th * 1.35;
+  ctx.strokeStyle = pose.colors[0];
+  ctx.lineWidth = tw * 0.42;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(tw * 0.5, shoulder);
+  ctx.lineTo(tw * 1.3, shoulder + th * 0.5 + swing);
+  ctx.stroke();
+  const hx = tw * 1.3;
+  const hy = shoulder + th * 0.5 + swing;
+  if (m.arm === 'club') {
+    ctx.strokeStyle = '#6b543a';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(hx - 1, hy + 5);
+    ctx.lineTo(hx + 3, hy - th * 1.5);
+    ctx.stroke();
+    ctx.fillStyle = '#5a4630';
+    ctx.beginPath();
+    ctx.ellipse(hx + 3.4, hy - th * 1.6, 3.4, 4.4, 0.3, 0, TAU);
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = '#8d8f92';
+    ctx.lineWidth = m.arm === 'axe' ? 2.2 : 1.3;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + 2);
+    ctx.lineTo(hx + 2, hy - th * 1.3);
+    ctx.stroke();
+    if (m.arm === 'axe') {
+      ctx.fillStyle = '#9a9ca0';
+      ctx.beginPath();
+      ctx.moveTo(hx + 2, hy - th * 1.3);
+      ctx.lineTo(hx + 7, hy - th * 1.15);
+      ctx.lineTo(hx + 2.6, hy - th * 0.8);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  // Head, jaw and eyes.
+  const headY = shoulder - m.head * 0.9;
+  ctx.fillStyle = pose.colors[0];
+  ctx.beginPath();
+  ctx.ellipse(tw * 0.25, headY, m.head, m.head * 0.9, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pose.colors[1];
+  ctx.beginPath();
+  ctx.ellipse(tw * 0.25 + m.head * 0.55, headY + m.head * 0.35, m.head * 0.5, m.head * 0.4, 0, 0, TAU);
+  ctx.fill();
+  if (m.tusk) {
+    ctx.fillStyle = '#e8e2cf';
+    for (const side of [-0.15, 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(tw * 0.25 + m.head * (0.35 + side), headY + m.head * 0.55);
+      ctx.lineTo(tw * 0.25 + m.head * (0.5 + side), headY - m.tusk);
+      ctx.lineTo(tw * 0.25 + m.head * (0.62 + side), headY + m.head * 0.55);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = '#e0574d';
+  ctx.beginPath();
+  ctx.ellipse(tw * 0.25 + m.head * 0.45, headY - m.head * 0.2, m.head * 0.16, m.head * 0.14, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
+/** The one thing on the island with wings. Feet at (sx, sy). */
+function drawDragonBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom * 2.1 * (pose.facing < 0 ? -1 : 1), zoom * 2.1);
+  const beat = Math.sin(pose.phase * 0.9) * 3;
+  ctx.fillStyle = 'rgba(0,0,0,0.34)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 15, 6, 0, 0, TAU);
+  ctx.fill();
+  // Wings behind, half spread.
+  ctx.fillStyle = pose.colors[1];
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(-1, -14);
+    ctx.quadraticCurveTo(-14 * side, -26 - beat, -20 * side, -12 - beat);
+    ctx.quadraticCurveTo(-10 * side, -14, -1, -10);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Tail, out behind and down.
+  ctx.strokeStyle = pose.colors[0];
+  ctx.lineWidth = 3.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-6, -9);
+  ctx.quadraticCurveTo(-20, -6, -26, -1);
+  ctx.stroke();
+  // Legs.
+  ctx.lineWidth = 3;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 4, -9);
+    ctx.lineTo(side * 5.5, -0.5);
+    ctx.stroke();
+  }
+  // Barrel.
+  ctx.fillStyle = pose.colors[0];
+  ctx.beginPath();
+  ctx.ellipse(0, -11, 11, 6.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = pose.colors[1];
+  ctx.beginPath();
+  ctx.ellipse(2, -8.5, 8, 3.6, 0, 0, TAU);
+  ctx.fill();
+  // Neck and head, carried high.
+  ctx.strokeStyle = pose.colors[0];
+  ctx.lineWidth = 4.4;
+  ctx.beginPath();
+  ctx.moveTo(7, -13);
+  ctx.quadraticCurveTo(15, -20, 17, -26);
+  ctx.stroke();
+  ctx.fillStyle = pose.colors[0];
+  ctx.beginPath();
+  ctx.ellipse(18.5, -27.5, 5, 3.4, -0.35, 0, TAU);
+  ctx.fill();
+  // Jaw, horns and an eye that is looking at you.
+  ctx.fillStyle = pose.colors[1];
+  ctx.beginPath();
+  ctx.moveTo(17, -26);
+  ctx.lineTo(24.5, -27.5);
+  ctx.lineTo(17.5, -24.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = pose.colors[1];
+  ctx.lineWidth = 1.1;
+  for (const o of [0, 1.6]) {
+    ctx.beginPath();
+    ctx.moveTo(16.5 - o * 0.4, -29.4);
+    ctx.lineTo(13 - o, -33.4);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#ffd76a';
+  ctx.beginPath();
+  ctx.ellipse(19.6, -28.8, 1.1, 0.9, 0, 0, TAU);
+  ctx.fill();
+  // Plates along the spine.
+  ctx.fillStyle = pose.colors[1];
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * 4 - 1.6, -16.5);
+    ctx.lineTo(i * 4, -20.5);
+    ctx.lineTo(i * 4 + 1.6, -16.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   // Age is drawn rather than written: a yearling is two thirds the size of
   // its parents and an old one has put weight on.
@@ -1220,6 +1435,8 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   else if (pose.species === 'rowl') drawRowlBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'vesp') drawVespBody(ctx, sx, sy, zoom, pose);
   else if (pose.species === 'lume') drawLumeBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species === 'dragon') drawDragonBody(ctx, sx, sy, zoom, pose);
+  else if (pose.species && MONSTER_SHAPES[pose.species]) drawMonsterBody(ctx, sx, sy, zoom, pose, MONSTER_SHAPES[pose.species]);
   else if (pose.species && BEASTS[pose.species]) drawBeastBody(ctx, sx, sy, zoom, pose, BEASTS[pose.species]);
   else if (pose.species && BIRDS[pose.species]) drawBirdBody(ctx, sx, sy, zoom, pose, BIRDS[pose.species]);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);

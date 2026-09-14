@@ -1778,7 +1778,8 @@ export class Game {
       if (c.mode !== 'wild' || c.trapped !== null) continue;
       if (Math.hypot(c.x - cx, c.y - cy) > reach) continue;
       const s = this.creatures.species(c);
-      if (!isBaitFor(s, bait.id)) continue;
+      // Nothing that is not a wildermon walks into a noose for a berry.
+      if (s.monster || !isBaitFor(s, bait.id)) continue;
       // Anything warier than the trap will hold simply takes the bait and goes.
       if (s.tameLevel > holds) {
         if (this.rand() < 0.3) {

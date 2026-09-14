@@ -54,7 +54,7 @@ export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', bot
 /** The plain form, for "it will forage" rather than "it will foraging". */
 export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig', fish: 'fish the water round the deed and carry the catch home' };
 const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [], fish: [] };
-export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather';
+export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather' | 'tusk' | 'sinew' | 'scale' | 'hoard';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
 export const STANCES: Stance[] = ['passive', 'defensive', 'aggressive'];
@@ -154,6 +154,14 @@ export interface SpeciesDef {
    * things bite.
    */
   wound?: WoundKind;
+  /**
+   * Not a wildermon at all. A monster cannot be tamed, trapped, bred, brushed
+   * or kept; it comes at you on sight from a long way off, it hits far harder
+   * than anything else that walks, and it is worth killing for what is on it.
+   */
+  monster?: boolean;
+  /** How far off it notices you, in tiles; a monster sees a long way. */
+  notice?: number;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -1037,9 +1045,149 @@ export const SPECIES: Record<string, SpeciesDef> = {
     glow: 8,
     nocturnal: true,
   },
+
+  // ---- The things that are not wildermon ----
+  //
+  // Nothing below this line can be tamed, trapped, bred or brushed. They are
+  // rare, they notice you from further off than anything else, they hit hard
+  // enough to matter, and every one of them is carrying something you cannot
+  // get any other way.
+  goblin: {
+    id: 'goblin',
+    monster: true,
+    notice: 11,
+    wound: 'cut',
+    name: 'Goblin',
+    description: 'Knee-high, green-grey and entirely malice, in a jerkin of somebody else\u2019s leather with a notched blade it did not make. The commonest of the bad things, and the only one a careful beginner survives meeting.',
+    health: 40,
+    attack: 14,
+    speed: 2.3,
+    tameLevel: 999,
+    tameChance: 0,
+    diet: [],
+    baitHint: 'nothing you would offer it',
+    timid: false,
+    gathers: null,
+    workRange: 0,
+    variants: [
+      ['#6f7f52', '#c3cf9e'],
+      ['#5d6d48', '#aab98a'],
+      ['#7c8a5e', '#d0daa9'],
+    ],
+    butcher: { meat: 2, leather: 3, bone: 4, sinew: 2 },
+    tameFail: 'spits at your hand',
+    leaves: 'slinks off into the undergrowth',
+    hunter: true,
+    defensive: true,
+    defaultStance: 'aggressive',
+  },
+  orc: {
+    id: 'orc',
+    monster: true,
+    notice: 13,
+    wound: 'cut',
+    name: 'Orc',
+    description: 'A head taller than you, grey-skinned, tusked, and carrying iron it took the trouble to sharpen. Orcs come down out of the high ground in ones and twos and they do not run from anything.',
+    health: 95,
+    attack: 22,
+    speed: 2.5,
+    tameLevel: 999,
+    tameChance: 0,
+    diet: [],
+    baitHint: 'nothing you would offer it',
+    timid: false,
+    gathers: null,
+    workRange: 0,
+    variants: [
+      ['#5f6a63', '#b3bcb2'],
+      ['#4d5851', '#9aa49b'],
+      ['#6d7a6f', '#c2cbc0'],
+    ],
+    butcher: { meat: 5, leather: 6, bone: 7, sinew: 4, tusk: 2 },
+    tameFail: 'laughs at you',
+    leaves: 'turns and walks away without hurrying',
+    hunter: true,
+    defensive: true,
+    defaultStance: 'aggressive',
+  },
+  ogre: {
+    id: 'ogre',
+    monster: true,
+    notice: 12,
+    wound: 'crush',
+    name: 'Ogre',
+    description: 'Three times your weight and most of it shoulder, with a tree in one fist and very little behind the eyes. It is slow, it is stupid, and if it gets a hand on you none of that matters.',
+    health: 170,
+    attack: 34,
+    speed: 1.8,
+    tameLevel: 999,
+    tameChance: 0,
+    diet: [],
+    baitHint: 'nothing you would offer it',
+    timid: false,
+    gathers: null,
+    workRange: 0,
+    variants: [
+      ['#8a7358', '#d8c4a4'],
+      ['#6f5c47', '#bda88a'],
+      ['#9a8464', '#e4d3b3'],
+    ],
+    butcher: { meat: 14, leather: 10, bone: 14, sinew: 8, tusk: 4, gland: 2 },
+    tameFail: 'looks at the {food}, then at you',
+    leaves: 'lumbers off, flattening everything in its way',
+    hunter: true,
+    defensive: true,
+    defaultStance: 'aggressive',
+  },
+  dragon: {
+    id: 'dragon',
+    monster: true,
+    notice: 20,
+    wound: 'burn',
+    name: 'Dragon',
+    description: 'There is one. Nobody agrees where, everybody agrees it is real, and the few who have seen it and come back describe the same thing: scales like roof slates, a smell of hot metal, and the ground going by underneath very fast.',
+    health: 700,
+    attack: 70,
+    speed: 2.9,
+    tameLevel: 999,
+    tameChance: 0,
+    diet: [],
+    baitHint: 'nothing in the world',
+    timid: false,
+    gathers: null,
+    workRange: 0,
+    variants: [
+      ['#7a3b3b', '#d98a4a'],
+      ['#3b4f7a', '#5a9ad9'],
+      ['#3f6b46', '#7fd07f'],
+      ['#4a3f5f', '#a98ad9'],
+    ],
+    butcher: { meat: 40, leather: 24, bone: 30, sinew: 20, scale: 24, gland: 6, hoard: 1 },
+    tameFail: 'does not appear to have noticed',
+    leaves: 'is simply not there any more',
+    hunter: true,
+    defensive: true,
+    glow: 5,
+    defaultStance: 'aggressive',
+  },
 };
 
 /** Which species roam wild, by weight. */
+/**
+ * The bad things, and how often one of the wild's slots turns out to be one.
+ * A goblin is a bad afternoon; a dragon is something almost nobody sees.
+ */
+const MONSTERS: Array<[string, number]> = [
+  ['goblin', 60],
+  ['orc', 26],
+  ['ogre', 12],
+  ['dragon', 2],
+];
+/** The share of everything that stands up out there that is a monster. */
+const MONSTER_SHARE = 0.022;
+/** How many of each may be walking about at once, across the whole island. */
+const MONSTER_CAP: Record<string, number> = { goblin: 6, orc: 3, ogre: 2, dragon: 1 };
+
 const WILD_SPECIES: Array<[string, number]> = [
   ['rabba', 27],
   ['vola', 23],
@@ -1661,8 +1809,8 @@ export class Creatures {
       if (!this.tileOk(game, x, y)) continue;
       if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
       if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
-      const id = species ?? rollTable(WILD_SPECIES, game.rand());
-      if (!this.suits(game, SPECIES[id], x, y)) continue;
+      const id = species ?? (game.rand() < MONSTER_SHARE ? this.pickMonster(game, x, y) : rollTable(WILD_SPECIES, game.rand()));
+      if (!id || !this.suits(game, SPECIES[id], x, y)) continue;
       // Born at some point in the past, so the country is not all yearlings.
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand, game.time - game.rand() * OLD_AT * 1.6);
       placed++;
@@ -1852,12 +2000,34 @@ export class Creatures {
       // would be put away again on the next pass.
       const d = Math.max(Math.abs(x + 0.5 - px), Math.abs(y + 0.5 - py));
       if (d < 30 || d > LIVE_RANGE) continue;
-      const id = rollTable(WILD_SPECIES, game.rand());
-      if (!this.suits(game, SPECIES[id], x, y)) continue;
+      // Now and again what stands up out there is not a wildermon at all.
+      const id = game.rand() < MONSTER_SHARE ? this.pickMonster(game, x, y) : rollTable(WILD_SPECIES, game.rand());
+      if (!id || !this.suits(game, SPECIES[id], x, y)) continue;
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand, game.time - game.rand() * OLD_AT * 1.6);
       return true;
     }
     return false;
+  }
+
+  /**
+   * Which of the bad things, if any. Each sort is capped across the island and
+   * the big ones keep away from anywhere anybody lives: nothing walks out of
+   * the trees onto your deed.
+   */
+  private pickMonster(game: Game, x: number, y: number): string | null {
+    const alive: Record<string, number> = {};
+    for (const c of this.list.values()) if (c.mode === 'wild') alive[c.species] = (alive[c.species] ?? 0) + 1;
+    const room = MONSTERS.filter(([id]) => (alive[id] ?? 0) < (MONSTER_CAP[id] ?? 1));
+    if (!room.length) return null;
+    const id = rollTable(room, game.rand());
+    // A settlement keeps the worst of it at arm's length. The bigger the
+    // thing, the further out it wants to be.
+    const deed = game.deed;
+    if (deed) {
+      const want = id === 'dragon' ? 90 : id === 'ogre' ? 55 : id === 'orc' ? 40 : 26;
+      if (Math.hypot(x - deed.x, y - deed.y) < want) return null;
+    }
+    return id;
   }
 
   /**
@@ -2981,12 +3151,13 @@ export class Creatures {
     const p = game.player;
     const d = Math.hypot(p.x - c.x, p.y - c.y);
     const hunting = c.enemy === PLAYER_ATTACKER;
-    if (hunting && (d > HUNT_GIVE_UP || c.health < maxHealth(c, def) * 0.3)) {
+    const giveUp = def.monster ? HUNT_GIVE_UP * 2.2 : HUNT_GIVE_UP;
+    if (hunting && (d > giveUp || c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3))) {
       c.enemy = null;
       return false;
     }
     if (!hunting) {
-      if (d > HUNT_SIGHT || game.time < c.searchAt) return false;
+      if (d > (def.notice ?? HUNT_SIGHT) || game.time < c.searchAt) return false;
       c.searchAt = game.time + 2;
       if (!this.tileOk(game, Math.floor(p.x), Math.floor(p.y))) return false;
       c.enemy = PLAYER_ATTACKER;
@@ -3305,6 +3476,11 @@ export class Creatures {
     this.list.delete(t.id);
     for (const o of this.list.values()) if (o.enemy === t.id) o.enemy = null;
     const def = this.species(t);
+    // Killing one of the bad things is worth writing down.
+    if (def.monster && killer === 'player') {
+      game.note(`slew:${def.id}`);
+      game.logMsg(`The ${def.name.toLowerCase()} goes down. Butcher it before it rots: there is a great deal on it.`, 'system');
+    }
     const x = Math.floor(t.x);
     const y = Math.floor(t.y);
     // What the carcass is worth follows the size of the thing that left it.

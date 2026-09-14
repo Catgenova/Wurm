@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Seventy-one goals in seven chapters — Ashore, The
+- **A journal of goals.** Seventy-eight goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -534,6 +534,28 @@ rebuilds and commits the result.
   walk away, and it fishes on its own — holds eight, gives four or five to
   a baiting, and kept baited is worth about twenty-five fish an hour for no
   work at all.
+- **The things that are not wildermon.** Four of them, and none can be
+  tamed, trapped, bred or brushed. A **goblin** (40 health, hits for 14) is
+  knee-high and entirely malice; an **orc** (95, 22) is a head taller than
+  you and carries sharpened iron; an **ogre** (170, 34) is three times your
+  weight and most of it shoulder; and somewhere out there is the **dragon**
+  (700, 70). They notice you from eleven to twenty tiles off — further than
+  anything else pays you any attention — come straight at you, and do not
+  give up easily. They are about one thing in fifty that stands up out in
+  the country, weighted heavily to goblins, capped across the island (six
+  goblins, three orcs, two ogres, **one dragon**), and the bigger the thing
+  the further it keeps from anywhere anybody lives: no dragon within ninety
+  tiles of your token. An orc takes an unarmoured player from full to a
+  fifth in four seconds.
+  What they are worth is the other side of it. Butchering gives **tusk** and
+  **sinew** off an orc or ogre, and off a dragon twenty-four **dragon
+  scales** and a **hoard** — a double handful of lumps of the four deep
+  metals and the two precious ones, the only place they turn up together.
+  Tusk and sinew lay up a **composite bow**: seventeen tiles and 21 damage
+  against the long bow's thirteen and 15. Dragon scale riveted to leather
+  makes **scale armour**, a fifth class above plate — it turns 74% of a blow
+  where plate turns 62, and burdens you less than chain. A full suit takes
+  twenty-six scales, rather more than one dragon carries.
 - **Traps.** The other way of taking a wild thing: set it, bait it, walk
   away, and whatever came to the bait is waiting when you come back —
   **alive**, with the blood it was born with still in it. A **snare** (a

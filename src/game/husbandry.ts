@@ -93,11 +93,12 @@ export const HUSBANDRY_ACTIONS: ActionDef[] = [
     repeat: true,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.mode !== 'wild';
+      return !!c && c.mode !== 'wild' && !SPECIES[c.species]?.monster;
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return 'It is gone.';
+      if (SPECIES[c.species]?.monster) return 'Not that. Not ever.';
       if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
       if (!g.inventory.has('brush')) return 'You need a brush.';
       if (c.care >= 0.995) return `${c.name} has been brushed to a shine already.`;

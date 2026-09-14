@@ -68,6 +68,10 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!c) return;
       const def = SPECIES[c.species];
       if (c.mode === 'wild') {
+        if (def.monster) {
+          g.logMsg(`A ${def.name.toLowerCase()}: ${def.description} It has ${Math.ceil(c.health)} of ${maxHealth(c, def)} in it and hits for ${attackOf(c, def).toFixed(0)}. It cannot be tamed. Kill it and butcher it, or keep well clear.`, 'error');
+          return;
+        }
         g.logMsg(`A wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}. You would have to tame it to learn more.`, 'event');
         return;
       }
@@ -84,11 +88,15 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     skill: 'taming',
     stamina: 0.03,
     baseTime: 3.5,
-    applies: (t, g) => creatureOf(g, t)?.mode === 'wild',
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return c?.mode === 'wild' && !SPECIES[c.species]?.monster;
+    },
     check: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return 'It is gone.';
       const def = SPECIES[c.species];
+      if (def.monster) return `A ${def.name.toLowerCase()} is not a wildermon. There is nothing to be done with it but kill it.`;
       if (g.skills.get('taming') < def.tameLevel) return `You need taming ${def.tameLevel} to try.`;
       if (!bait(g, c)) return `${def.name}s take ${dietText(c)}. Bring some.`;
       if (g.creatures.active() && !g.deed) return 'You already have a companion and no settlement to keep another.';

@@ -15,7 +15,17 @@ export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
   ['bone', 'bone'],
   ['gland', 'gland'],
   ['feather', 'feather'],
+  ['tusk', 'tusk'],
+  ['sinew', 'sinew'],
+  ['scale', 'dragon_scale'],
 ];
+
+/**
+ * A hoard is not a part of the body. What a dragon has been sleeping on comes
+ * out of the carcass with it, and it is the only place on the island four of
+ * these lumps turn up together.
+ */
+export const HOARD_METALS = ['adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump', 'gold_lump', 'silver_lump'];
 
 /**
  * How much of a carcass is worth keeping. Bare hands manage about a third; a
@@ -65,6 +75,20 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
       const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
       const ql = g.productQl('butchering', knife ? knife.ql : 0) * (0.6 + item.ql / 250);
       const taken: string[] = [];
+      // What it was sleeping on, which is not a part of it at all.
+      const hoard = def.butcher.hoard ?? 0;
+      if (hoard > 0) {
+        const lumps: string[] = [];
+        for (let i = 0; i < Math.round(hoard * (4 + share * 6)); i++) {
+          const id = HOARD_METALS[Math.floor(g.rand() * HOARD_METALS.length)];
+          g.inventory.add(id, { ql: Math.max(20, Math.min(100, 40 + g.rand() * 55)) });
+          lumps.push(itemDef(id).name.toLowerCase());
+        }
+        if (lumps.length) {
+          g.note('hoard');
+          g.logMsg(`Something rattles as the belly opens: ${lumps.length} lumps of what it had been sleeping on. ${[...new Set(lumps)].join(', ')}.`, 'event');
+        }
+      }
       for (const [part, id] of BUTCHER_PARTS) {
         const base = def.butcher[part] ?? 0;
         if (!base) continue;

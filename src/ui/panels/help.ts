@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: seventy-one goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: seventy-eight goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -825,6 +825,28 @@ export function buildHelp(win: UIWindow): void {
     it will not go.</p>
     <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
     can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <h3>The things that are not wildermon</h3>
+    <p>Most of what walks this island can be tamed. Four things cannot. A <b>goblin</b> is knee-high and
+    entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>
+    is three times your weight and most of it shoulder; and somewhere out there is the <b>dragon</b>.
+    They notice you from eleven to twenty tiles off &mdash; further than anything else pays you any
+    attention at all &mdash; they come straight at you, and they do not give up easily.</p>
+    <p>They are <b>rare</b>: about one thing in fifty that stands up out in the country, and weighted
+    heavily towards goblins. Only so many of each are alive at once (six goblins, three orcs, two ogres
+    and <b>one dragon</b>), and the bigger the thing the further it keeps from anywhere anybody lives
+    &mdash; a dragon will not be found within ninety tiles of your token. None of them can be tamed,
+    trapped, bred or brushed. There is nothing to be done with one but kill it, and nothing to be gained
+    by meeting one in your shirt: an orc takes an unarmoured player from full to a fifth in four
+    seconds, and a goblin is the only one of the four a beginner survives.</p>
+    <p>What they are worth is on the other side of that. Butchering one gives what a wildermon gives and
+    then some: <b>tusk</b> and <b>sinew</b> off an orc or an ogre, and off a dragon twenty-four
+    <b>dragon scales</b> and a <b>hoard</b> &mdash; a double handful of lumps of the four deep metals
+    and the two precious ones, which is the only place on the island they turn up together.</p>
+    <p>Tusk and sinew make a <b>composite bow</b>: two tusks, four sinew, two shafts and a rope, at
+    bowyery 46. It throws an arrow <b>seventeen</b> tiles for 21 damage, where the best wooden bow
+    throws thirteen for 15. Dragon scale riveted to leather makes <b>scale armour</b>, a fifth class
+    above plate: it turns <b>74%</b> of a blow where plate turns 62, and it burdens you less than chain.
+    A full suit takes twenty-six scales, which is rather more than one dragon carries.</p>
     <h3>Traps</h3>
     <p>Everything taken so far has been taken by hand: you stand in front of a wild thing with a berry
     out and hope. A <b>trap</b> is the other way. Set it, bait it, walk away, and whatever came to the
