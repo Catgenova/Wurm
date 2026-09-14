@@ -225,7 +225,10 @@ function helpText(): string {
     <b>oak</b>, and nothing else will do.</p>
     <p><b>The fourteen metals.</b> <b>Copper</b> is what everything starts in and is soft with it.
     <b>Tin</b>, <b>zinc</b>, <b>lead</b> and <b>pewter</b> are stock for alloys and nothing you would
-    want to swing. <b>Bronze</b> and <b>brass</b> are the first real step up. <b>Silver</b> hardly
+    want to swing. <b>Iron</b> is the working metal of the island: harder than copper at everything,
+    and the one thing it asks in return is that you do not leave it out in the rain. <b>Steel</b>,
+    which is iron with coal beaten through it, keeps an edge twice as long and does not mind the
+    weather. <b>Bronze</b> and <b>brass</b> are the first alloys worth a crucible. <b>Silver</b> hardly
     tarnishes and bites anything that carries its own light half again as hard, which is what a
     <b>Lume</b> or an <b>Embra</b> is. <b>Gold</b> never decays, weighs twice what copper does and is
     good for nothing else. The four out of the deep seams are what a lifetime of mining is for:
@@ -337,7 +340,8 @@ function helpText(): string {
     smelter. Draw the lumps off when they are done.</p>
     <p>Lumps of the same metal gather into one larger lump whose quality is the average of what went in,
     weighted by size, so a poor lump drags a good stack down. At a hot smelter you can also mix
-    <b>alloys</b> &mdash; bronze, brass, pewter and electrum &mdash; and their quality comes from the
+    <b>alloys</b> &mdash; bronze, brass, pewter, electrum and <b>steel</b>, which is three iron lumps
+    and a coal &mdash; and their quality comes from the
     metal you put in rather than from your hands; skill only decides how little is lost in the pouring.</p>
     <p>Sand fired in a smelter makes <b>moulds</b>: an anvil mould, a pan mould, heads for rakes,
     shovels, hatchets, pickaxes and knives, a sword blade and a helm. A mould wears every time it is
@@ -1006,8 +1010,9 @@ function helpText(): string {
     standing next to the container, and it has to be willing to hold what you are giving it &mdash; a
     bulk bin will not take a tool, a barrel takes no solids, a full crate is full. It says which when
     it will not go.</p>
-    <p>Grass tells you what it holds: berries among the tufts mean it can be foraged, flowers mean it
-    can be botanized, and grazed-bare grass has been picked over and needs time to recover.</p>
+    <p>Ground that has been picked over needs time to recover, and says so when you try it again:
+    a spot you have already foraged or botanized today will tell you it is picked clean rather than
+    letting you waste the effort.</p>
     <p><b>A practised eye goes over the same ground more than once.</b> Foraging and botanizing take
     <b>one more pass over the tile for every twenty points</b> of the skill: one pass below twenty, two
     at twenty, three at <b>forty</b>, and six at a hundred. Each pass is its own chance of a find and
@@ -1137,10 +1142,11 @@ function helpText(): string {
     what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; gravel,
     cobblestone and slabs all want a hard, flat bed, and will not be laid on loose earth or on grass.
     Breaking paving up with a pickaxe leaves bare dirt, so repaving means packing it again.</p>
-    <p>Eleven metals lie in the rock, and each seam needs a certain <b>mining</b> skill before it can be
-    worked at all: copper and coal from the very start, then tin at 10, zinc at 20, lead at 30, silver
-    at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90. The rarer
-    the metal, the harder it is to find as well as to work. Coal burns longer than a log, so a campfire
+    <p>Twelve metals lie in the rock, and each seam needs a certain <b>mining</b> skill before it can be
+    worked at all: copper and coal from the very start, then <b>iron</b> at 5, tin at 10, zinc at 20,
+    lead at 30, silver at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and
+    seryll at 90. <b>Iron is over half of every seam on the island</b> and everything else shares what
+    is left, which is why iron is the metal you build with and the rest are the ones you hoard. Coal burns longer than a log, so a campfire
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about one swing in a hundred a slab

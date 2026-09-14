@@ -72,6 +72,8 @@ const WOOD_PROPS: Record<string, Props> = {
  */
 const METAL_PROPS: Record<string, Props> = {
   copper: { difficulty: 0, weight: 1, wear: 1, decay: 1, edge: 0.85, soak: 0.9, bite: 0.9, hold: 1, note: 'The metal everything starts in. Soft, plentiful, forgiving.' },
+  iron: { difficulty: 2, weight: 1.1, wear: 0.75, decay: 1.35, edge: 1.12, soak: 1.12, bite: 1.1, hold: 1, note: 'What the island is really built on. Harder than copper at everything, and it rusts if you leave it out.' },
+  steel: { difficulty: 5, weight: 1.05, wear: 0.5, decay: 0.95, edge: 1.28, soak: 1.22, bite: 1.24, hold: 1, note: 'Iron with coal beaten through it. Keeps an edge twice as long and shrugs off the weather.' },
   tin: { difficulty: -2, weight: 0.85, wear: 1.5, decay: 1.1, edge: 0.5, soak: 0.55, bite: 0.6, hold: 1, note: 'Too soft to be anything but stock for an alloy.' },
   zinc: { difficulty: -1, weight: 0.9, wear: 1.4, decay: 1.05, edge: 0.55, soak: 0.6, bite: 0.65, hold: 1, note: 'Brittle. It goes into brass and not into anything you swing.' },
   lead: { difficulty: -3, weight: 1.95, wear: 1.6, decay: 0.7, edge: 0.45, soak: 0.72, bite: 0.5, hold: 1, note: 'Heavy and soft. A lead tool bends the first time you lean on it.' },

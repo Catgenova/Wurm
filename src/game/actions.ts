@@ -1323,10 +1323,26 @@ export const ACTIONS: ActionDef[] = [
           freed++;
         }
       }
+      // The settlement's own crate goes with the settlement. It used to be
+      // quietly demoted to an ordinary crate and left standing, so founding
+      // again put a second one beside the new token and the old one sat there
+      // for good. Whatever was in it is tipped out where it stood rather than
+      // vanishing with it.
+      const crate = g.deedCrate();
+      let tipped = 0;
+      if (crate) {
+        for (const it of [...crate.items]) {
+          g.dropOnGround(crate.x, crate.y, it);
+          tipped += 1;
+        }
+        crate.items.length = 0;
+        g.removeCrate(crate.id);
+      }
       for (const c of g.crates.values()) c.deed = false;
       g.deed = null;
       g.inventory.add('deed_stake', { ql: 50 });
-      g.logMsg(`You disband ${name}. You pull up the stake and pack it away.${freed ? ` ${freed} wildermon run off into the wild.` : ''}`, 'system');
+      const spilt = tipped ? ` The deed crate comes up with it and ${tipped === 1 ? 'what was in it lies' : 'what was in it lies'} on the ground where it stood.` : ' The deed crate comes up with it.';
+      g.logMsg(`You disband ${name}. You pull up the stake and pack it away.${crate ? spilt : ''}${freed ? ` ${freed} wildermon run off into the wild.` : ''}`, 'system');
     },
   },
   {

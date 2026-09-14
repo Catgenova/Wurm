@@ -15,9 +15,6 @@
 /** How far the top of a tree leans at full strength, as a share of its height. */
 export const SWAY_MAX = 0.13;
 
-/** How much of that a tuft of grass gets: less, being shorter and stiffer. */
-export const GRASS_SWAY = 0.55;
-
 /**
  * Which way and how far a thing at this spot is leaning, -1 to 1 before the
  * wind's strength is counted.

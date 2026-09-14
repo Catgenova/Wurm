@@ -134,6 +134,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   mortar: { name: 'Mortar', category: 'material', weight: 2, stackable: true, decay: 40 },
   // Ore comes out of the seam; the smelter turns it into lumps.
   copper_ore: { name: 'Copper ore', category: 'material', weight: 2, stackable: true, decay: 2 },
+  iron_ore: { name: 'Iron ore', category: 'material', weight: 2, stackable: true, decay: 2 },
   tin_ore: { name: 'Tin ore', category: 'material', weight: 2, stackable: true, decay: 2 },
   zinc_ore: { name: 'Zinc ore', category: 'material', weight: 2, stackable: true, decay: 2 },
   lead_ore: { name: 'Lead ore', category: 'material', weight: 2, stackable: true, decay: 2 },
@@ -144,6 +145,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   mithril_ore: { name: 'Mithril ore', category: 'material', weight: 2, stackable: true, decay: 2 },
   seryll_ore: { name: 'Seryll ore', category: 'material', weight: 2, stackable: true, decay: 2 },
   copper_lump: { name: 'Copper lump', category: 'material', weight: 1, stackable: true, decay: 2 },
+  iron_lump: { name: 'Iron lump', category: 'material', weight: 1, stackable: true, decay: 3 },
   coal: { name: 'Coal', category: 'material', weight: 1, stackable: true, decay: 3, description: 'Burns long and hot. A campfire will take it happily.' },
   tin_lump: { name: 'Tin lump', category: 'material', weight: 1, stackable: true, decay: 2 },
   zinc_lump: { name: 'Zinc lump', category: 'material', weight: 1, stackable: true, decay: 2 },
@@ -156,6 +158,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   seryll_lump: { name: 'Seryll lump', category: 'material', weight: 0.7, stackable: true, decay: 0.5, description: 'The rarest metal in the rock, and the hardest won.' },
   // Alloys, mixed in a smelter.
   bronze_lump: { name: 'Bronze lump', category: 'material', weight: 1, stackable: true, decay: 1 },
+  steel_lump: { name: 'Steel lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   brass_lump: { name: 'Brass lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   pewter_lump: { name: 'Pewter lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   electrum_lump: { name: 'Electrum lump', category: 'material', weight: 1, stackable: true, decay: 1 },

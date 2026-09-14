@@ -26,7 +26,7 @@ export interface MaterialDef {
 }
 
 export const MATERIALS: Record<Material, MaterialDef> = {
-  metal: { id: 'metal', name: 'metal', tools: ['file', 'whetstone'], stock: ['copper_lump', 'tin_lump', 'zinc_lump', 'lead_lump', 'silver_lump', 'gold_lump', 'bronze_lump', 'brass_lump', 'pewter_lump', 'electrum_lump', 'adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump'], skill: 'blacksmithing' },
+  metal: { id: 'metal', name: 'metal', tools: ['file', 'whetstone'], stock: ['copper_lump', 'iron_lump', 'steel_lump', 'tin_lump', 'zinc_lump', 'lead_lump', 'silver_lump', 'gold_lump', 'bronze_lump', 'brass_lump', 'pewter_lump', 'electrum_lump', 'adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump'], skill: 'blacksmithing' },
   wood: { id: 'wood', name: 'wood', tools: ['carving_knife', 'file'], stock: ['plank', 'shaft'], skill: 'carpentry' },
   cloth: { id: 'cloth', name: 'cloth', tools: ['needle'], stock: ['cloth'], skill: 'tailoring' },
   leather: { id: 'leather', name: 'leather', tools: ['awl', 'needle'], stock: ['leather'], skill: 'leatherworking' },

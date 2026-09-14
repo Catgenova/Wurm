@@ -214,6 +214,7 @@ export const ROCK_VARIANTS: RockVariantDef[] = [
   { name: 'Sandstone', color: [198, 172, 124], yields: 'sandstone_shards' },
   // Metal, in order of the skill it takes to work.
   { name: 'Copper vein', color: [162, 116, 74], yields: 'copper_ore', level: 1 },
+  { name: 'Iron vein', color: [124, 82, 74], yields: 'iron_ore', level: 5 },
   { name: 'Coal seam', color: [58, 56, 58], yields: 'coal', level: 1 },
   { name: 'Tin vein', color: [178, 180, 174], yields: 'tin_ore', level: 10 },
   { name: 'Zinc vein', color: [154, 166, 172], yields: 'zinc_ore', level: 20 },

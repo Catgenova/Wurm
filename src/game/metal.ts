@@ -28,6 +28,7 @@ const metal = (id: string, name: string, level: number, work: number, ore: strin
 
 export const METALS: MetalDef[] = [
   metal('copper', 'Copper', 1, 1),
+  metal('iron', 'Iron', 5, 1.25),
   metal('tin', 'Tin', 10, 0.9),
   metal('zinc', 'Zinc', 20, 1),
   metal('lead', 'Lead', 30, 0.85),
@@ -42,6 +43,7 @@ export const METALS: MetalDef[] = [
   metal('brass', 'Brass', 0, 1.1, null),
   metal('pewter', 'Pewter', 0, 0.9, null),
   metal('electrum', 'Electrum', 0, 1.3, null),
+  metal('steel', 'Steel', 0, 1.7, null),
 ];
 
 export const METAL_BY_ID = new Map(METALS.map((m) => [m.id, m]));

@@ -44,8 +44,8 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 import { FLOAT_COLOURS, Floaters } from './floaters';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { GRASS_SWAY, SWAY_MAX, swayAt } from './sway';
-import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, GRASS_VARIANTS, grassSprite, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
+import { SWAY_MAX, swayAt } from './sway';
+import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -246,6 +246,15 @@ export class Renderer {
   private lastVision = -1;
   private pts = new Float64Array(8);
   private cornerBuf = [0, 0, 0, 0];
+  /**
+   * Corners for working out a colour, kept apart from the ones the draw loop
+   * is holding. They used to share a buffer, and since a tile asks its
+   * neighbours for their colours to blend the seam, the loop would find a
+   * neighbour's heights where its own had been — so a tree stood at the wrong
+   * height for a frame whenever a colour had to be worked out again, which is
+   * every time the fog moves.
+   */
+  private colorBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
   private waterPoly = new Float64Array(16);
   /** Every water polygon drawn this frame, so a wake can be kept on the water. */
@@ -395,7 +404,7 @@ export class Renderer {
   private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number]): string {
     const w = this.game.world;
     const def = TILE_DEFS[type];
-    const c = w.corners(x, y, this.cornerBuf);
+    const c = w.corners(x, y, this.colorBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
     const gy = (c[2] + c[3] - (c[0] + c[1])) / 2 / UNITS_PER_TILE;
     const len = Math.hypot(gx, gy, 1);
@@ -608,7 +617,6 @@ export class Renderer {
       dy: (du + dv) * HALF_H * zoom,
       alpha: 0.45 * (1 - sunUp) * (1 - this.game.darkness()),
     };
-    const grassDetail = zoom >= 0.75;
     // Blended seams are a close-up nicety; from high up the tiles are too small to tell.
     const blend = zoom >= 0.5;
     // Grain is only worth drawing once a tile is big enough to hold it, and
@@ -721,19 +729,6 @@ export class Renderer {
           fogPath.lineTo(pts[6], pts[7]);
           fogPath.closePath();
           continue;
-        }
-        // Nothing grows on a cliff face, so nothing is drawn on one either.
-        const steep = bareRock(Math.hypot((c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE, (c[2] + c[3] - (c[0] + c[1])) / 2 / UNITS_PER_TILE)) > 0.45;
-        if (t === TileType.Grass && grassDetail && !wet && !steep) {
-          // Tufts show what the tile still has to give: berries to forage, flowers to botanize.
-          const state = (this.game.isForaged(x, y, 'forage') ? 0 : 1) | (this.game.isForaged(x, y, 'botanize') ? 0 : 2);
-          const spr = grassSprite(state, (x * 7 + y * 13 + ((x ^ y) & 3)) % GRASS_VARIANTS);
-          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          const gy = baseY + hh - avg * hs;
-          // A tuft is shoved rather than sheared: at a couple of pixels it
-          // reads as sway, and there are hundreds of them on a screen.
-          const shove = swayAt(x, y, this.time, this.lean.force) * SWAY_MAX * GRASS_SWAY * spr.h * zoom;
-          ctx.drawImage(spr.canvas, baseX - spr.ax * zoom + this.lean.x * shove, gy - spr.ay * zoom + this.lean.y * shove * 0.3, spr.w * zoom, spr.h * zoom);
         }
         if (t === TileType.Tree || t === TileType.Bush) {
           const data = world.getData(x, y);

@@ -30,21 +30,29 @@ export function hashTile(x: number, y: number, salt: number): number {
  * How common each seam is, rarest first. A tile rolls against these in order,
  * so the metals that need the most skill are the ones you almost never see.
  */
-const ORE_CHANCE: Array<[kind: number, upTo: number]> = [
-  [14, 0.0004], // seryll
-  [13, 0.001], // mithril
-  [12, 0.002], // glimmersteel
-  [11, 0.0035], // adamantine
-  [10, 0.006], // gold
-  [9, 0.01], // silver
-  [8, 0.016], // lead
-  [7, 0.024], // zinc
-  [6, 0.034], // tin
-  [5, 0.052], // coal
-  [4, 0.076], // copper
+const ORE_LADDER: Array<[yields: string, upTo: number]> = [
+  ['seryll_ore', 0.0004],
+  ['mithril_ore', 0.001],
+  ['glimmersteel_ore', 0.002],
+  ['adamantine_ore', 0.0035],
+  ['gold_ore', 0.006],
+  ['silver_ore', 0.01],
+  ['lead_ore', 0.016],
+  ['zinc_ore', 0.024],
+  ['tin_ore', 0.034],
+  ['coal', 0.052],
+  ['copper_ore', 0.076],
+  // Iron is over half of everything that carries metal, which is what makes it
+  // the metal you actually build with rather than the one you hoard.
+  ['iron_ore', 0.16],
 ];
+
+/** Keyed by what the seam gives up, so inserting a metal cannot shuffle the ladder. */
+const ORE_CHANCE: Array<[kind: number, upTo: number]> = ORE_LADDER.map(([yields, upTo]) => [ROCK_VARIANTS.findIndex((r) => r.yields === yields), upTo]);
+
 /** The ladder as fractions of all ore, so its shape survives any density. */
-const ORE_SHARE: Array<[kind: number, upTo: number]> = ORE_CHANCE.map(([k, upTo]) => [k, upTo / 0.076]);
+const ORE_TOP = ORE_CHANCE[ORE_CHANCE.length - 1][1];
+const ORE_SHARE: Array<[kind: number, upTo: number]> = ORE_CHANCE.map(([k, upTo]) => [k, upTo / ORE_TOP]);
 
 /**
  * How much of the ground carries metal. Two thirds of the map is sea, and ore
