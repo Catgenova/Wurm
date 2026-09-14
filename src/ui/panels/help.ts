@@ -348,6 +348,20 @@ export function buildHelp(win: UIWindow): void {
     <p>A <b>small cart</b> holds 100 things and, once you <b>take hold of it</b>, follows you wherever
     you go until you <b>let go</b>. Load it at the mine and walk home. Only one cart at a time, and it
     will not follow you into water or up anything it cannot roll over.</p>
+    <h3>Boats</h3>
+    <p>Two hulls, both a carpenter's work. A <b>rowing boat</b> is 20 planks, 6 timbers, 2 shafts and 30
+    nails; she carries <b>300 things</b>, wants <b>two deep</b> of water under her and is rowed, so your
+    <b>body strength</b> is the engine. A <b>sailing boat</b> is 40 planks, 14 timbers, 3 shafts, 6 cloth
+    for the sail, 4 ribbons and 70 nails; she carries <b>1500</b>, wants <b>four deep</b>, and the wind
+    does the work, so it is <b>body control</b> that decides how much of it you waste.</p>
+    <p><b>Launch</b> her by setting her down on water deep enough while you stand on the bank &mdash; she
+    will not go on land and will not go in a puddle. <b>Climb aboard</b> from the shore and she moves
+    with you, over any water with depth enough and over nothing else: no beaching, no dragging her over
+    a sandbar. <b>Step ashore</b> puts you on the nearest dry ground, and refuses if there is none within
+    reach, so bring her in before you get out.</p>
+    <p>What a boat is really for, besides the coast itself, is the water under it. A line cast over the
+    side of a boat in thirty feet of water reaches everything that swims &mdash; pike and sturgeon
+    included &mdash; which no bank on a shelving shore will ever do.</p>
     <h3>Large carts and wagons</h3>
     <p>A small cart is a barrow you pull yourself. The two that follow are <b>driven</b>: a wildermon
     goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the

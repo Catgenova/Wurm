@@ -266,6 +266,17 @@ rebuilds and commits the result.
   in it thirty times faster than open ground, and Put away never chooses it —
   throwing something out has to be asked for. A small cart holds 100 things
   and follows you about once you take hold of the shafts, until you let go.
+- **Boats.** Two hulls a carpenter builds. A **rowing boat** — 20 planks, 6
+  timbers, 2 shafts, 30 nails — carries 300 things, wants two deep of water
+  under her and is rowed, so body strength is the engine. A **sailing boat** —
+  40 planks, 14 timbers, 3 shafts, 6 cloth, 4 ribbons, 70 nails — carries
+  1500, wants four deep, and the wind does the work, so body control decides
+  how much of it you waste. Launch one by setting her down on water deep
+  enough while you stand on the bank; she moves with you over any water with
+  depth enough and over nothing else — no beaching, no sandbars — and stepping
+  ashore puts you on the nearest dry ground or refuses if there is none.
+  Besides opening the coast, a boat is the only way to put a line over
+  thirty feet of water, which is where the pike and the sturgeon are.
 - **Large carts and wagons, and something in the traces.** Two vehicles that
   are driven rather than pulled by hand, built to a wheelwright's bill: large
   wheels (planks, shafts, a metal ribbon and nails), big axles cast in a mould

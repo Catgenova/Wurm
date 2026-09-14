@@ -582,7 +582,7 @@ export class Renderer {
    */
   private driverSeat(): number {
     const f = this.game.driving();
-    if (f) return furnitureDef(f.kind).vehicle?.seat ?? 0;
+    if (f) return furnitureDef(f.kind).vehicle?.seat ?? furnitureDef(f.kind).boat?.seat ?? 0;
     const up = this.game.mounted();
     return up ? SPECIES[up.species]?.mount ?? 0 : 0;
   }

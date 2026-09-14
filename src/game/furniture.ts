@@ -36,6 +36,8 @@ export interface FurnitureDef {
   cart?: boolean;
   /** A wheeled thing a team is hitched to and a driver sits on. */
   vehicle?: VehicleDef;
+  /** A hull that floats, and is pushed along by whoever is sitting in it. */
+  boat?: BoatDef;
   /** Litres of one liquid it holds, and nothing else. */
   liquid?: number;
   /** Draws its own water, up to this many litres. */
@@ -68,6 +70,23 @@ export interface VehicleDef {
   needs: number;
   /** How high off the ground the seat is in pixels, for drawing the driver. */
   seat: number;
+}
+
+/**
+ * What it takes to float. A boat goes on water and nowhere else: it is
+ * launched into it, it will not cross dry land, and the one aboard has to
+ * find a shore again before getting out. Nothing is hitched to it; the pace
+ * is the hull's and the arms or the wind behind it.
+ */
+export interface BoatDef {
+  /** Tiles a second at a fair effort. */
+  speed: number;
+  /** Height units of water it needs under it. */
+  draught: number;
+  /** How high the deck sits, for drawing whoever is in it. */
+  seat: number;
+  /** True when the wind does the work, so the body behind it matters less. */
+  sail?: boolean;
 }
 
 const piece = (
@@ -124,6 +143,11 @@ export const FURNITURE: FurnitureDef[] = [
   // hitched into.
   piece('large_cart', 'Large cart', 3, 2, [['plank', 20], ['timber', 6], ['large_wheel', 2], ['big_axle', 1], ['ribbon', 8], ['yoke', 2], ['nail', 40]], 30, 40, 'You build a large cart: box body, seat over the axle and a yoke to each side.', 1000, { skill: 'carpentry', vehicle: { yokes: 2, needs: 1, seat: 15 } }),
   piece('wagon', 'Wagon', 4, 3, [['plank', 40], ['timber', 12], ['large_wheel', 4], ['big_axle', 2], ['ribbon', 16], ['yoke', 4], ['nail', 80]], 45, 75, 'You build a wagon: four wheels under a long bed, a driver\'s box at the front and four yokes ahead of it.', 10000, { skill: 'carpentry', vehicle: { yokes: 4, needs: 4, seat: 19 } }),
+  // The two that float. Built on the bank and launched into water with a
+  // couple of feet under it; they carry their load and their crew and will
+  // not be dragged up a beach.
+  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 20], ['timber', 6], ['shaft', 2], ['nail', 30]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
+  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 40], ['timber', 14], ['shaft', 3], ['cloth', 6], ['ribbon', 4], ['nail', 70]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
   // Barrels hold liquid and nothing else, in three sizes.
   piece('small_barrel', 'Small barrel', 1, 1, [['plank', 3], ['shaft', 1], ['nail', 6]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
   piece('large_barrel', 'Large barrel', 2, 2, [['plank', 14], ['shaft', 4], ['nail', 26]], 26, 20, 'You raise a great barrel, as tall as you are and twice as wide.', undefined, { liquid: 250 }),
@@ -209,6 +233,11 @@ export function furnitureAnchor(kind: string, sx: number, sy: number): [number, 
 /** The vehicle a piece is, if it is one. */
 export const vehicleOf = (f: { kind: string }): VehicleDef | undefined => furnitureDef(f.kind).vehicle;
 export const isVehicle = (f: { kind: string }): boolean => !!furnitureDef(f.kind).vehicle;
+/** The boat a piece is, if it is one. */
+export const boatOf = (f: { kind: string }): BoatDef | undefined => furnitureDef(f.kind).boat;
+export const isBoat = (f: { kind: string }): boolean => !!furnitureDef(f.kind).boat;
+/** Anything that is boarded and steered: wheels or hull. */
+export const isDriveable = (f: { kind: string }): boolean => isVehicle(f) || isBoat(f);
 /** Wildermon hitched to it, which is an empty list for everything else. */
 export const teamOf = (f: PlacedFurniture): number[] => f.team ?? [];
 

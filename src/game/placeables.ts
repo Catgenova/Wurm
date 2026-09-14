@@ -8,7 +8,8 @@ import {
   furnitureDef,
   furnitureName,
   holdsLiquid,
-  isVehicle,
+  isBoat,
+  isDriveable,
   isWell,
   liquidCapacity,
   litresIn,
@@ -249,14 +250,18 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     verb: 'climbing aboard',
     stamina: 0.01,
     baseTime: 1.5,
+    labelFor: (t, g) => (isBoat(pieceOf(g, t) ?? { kind: '' }) ? 'Climb aboard' : 'Take the reins'),
     applies: (t, g) => {
       const f = pieceOf(g, t);
-      return !!f && isVehicle(f) && !f.driven;
+      return !!f && isDriveable(f) && !f.driven;
     },
     check: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
       if (!nearPiece(g, f)) return 'Stand beside it first.';
+      if (g.driving()) return 'You are already driving something.';
+      // A hull asks nothing but that she is still floating.
+      if (isBoat(f)) return g.launchSpot(f.kind, f.x, f.y) ? null : 'She is aground. Push her off first.';
       const v = vehicleOf(f);
       const team = teamOf(f).length;
       if (v && team < v.needs) {
@@ -264,13 +269,21 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
           ? `Nothing is in the yokes. ${furnitureName(f)} needs ${v.needs} to move.`
           : `Only ${team} of ${v.yokes} yokes are filled. It needs ${v.needs}.`;
       }
-      if (g.driving()) return 'You are already driving something.';
       return null;
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return;
       f.driven = true;
+      if (isBoat(f)) {
+        const boat = furnitureDef(f.kind).boat;
+        g.logMsg(
+          `You push off and climb into the ${furnitureName(f).toLowerCase()}. ${boat?.sail ? 'The sail fills and she comes round.' : 'You ship the oars and take a stroke.'}`,
+          'event',
+        );
+        g.events.emit('world', f.x, f.y);
+        return;
+      }
       const team = g.team(f).map((c) => c.name);
       g.logMsg(`You climb onto the ${furnitureName(f).toLowerCase()} and take the reins. ${team.join(' and ')} lean into the traces.`, 'event');
       g.events.emit('world', f.x, f.y);
@@ -283,10 +296,28 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     instant: true,
     stamina: 0,
     baseTime: 0,
+    labelFor: (t, g) => (isBoat(pieceOf(g, t) ?? { kind: '' }) ? 'Step ashore' : 'Get down'),
     applies: (t, g) => !!pieceOf(g, t)?.driven,
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      if (isBoat(f) && !shoreNear(g)) return 'There is no shore within reach. Bring her in first, or swim for it.';
+      return null;
+    },
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return;
+      if (isBoat(f)) {
+        const shore = shoreNear(g);
+        g.leaveVehicle(f);
+        if (shore) {
+          g.player.x = shore.x + 0.5;
+          g.player.y = shore.y + 0.5;
+          g.player.stop();
+        }
+        g.logMsg(`You bring the ${furnitureName(f).toLowerCase()} alongside and step ashore.`, 'event');
+        return;
+      }
       g.leaveVehicle(f);
       g.logMsg(`You climb down off the ${furnitureName(f).toLowerCase()}.`, 'event');
     },
@@ -510,6 +541,27 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
 ];
 
 export const PLACEABLE_ACTION_BY_ID = new Map(PLACEABLE_ACTIONS.map((a) => [a.id, a]));
+
+/** Dry land within stepping distance of the boat, if there is any. */
+export function shoreNear(g: Game, range = 2): { x: number; y: number } | null {
+  const px = g.player.tileX;
+  const py = g.player.tileY;
+  let best: { x: number; y: number } | null = null;
+  let bestD = Infinity;
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      const x = px + dx;
+      const y = py + dy;
+      if (!g.world.inBounds(x, y) || !g.world.isPassable(x, y) || g.world.hasWater(x, y)) continue;
+      const d = Math.hypot(dx, dy);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
 
 /** The liquid a bucket filled here would come up with, and where from. */
 export function sourceFor(g: Game): { from: PlacedFurniture | null; liquid: LiquidKind } | null {

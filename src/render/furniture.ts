@@ -67,6 +67,8 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   wagon: 34,
   small_barrel: 16,
   large_barrel: 38,
+  rowing_boat: 16,
+  sailing_boat: 40,
 };
 
 /**
@@ -536,6 +538,44 @@ const DRAW: Record<string, Draw> = {
       }
     }
   },
+  rowing_boat: (ctx, W, D, h) => {
+    hull(ctx, W, D, h, WOODS.pale);
+    // Two oars shipped along the thwarts.
+    ctx.strokeStyle = WOODS.dark.top;
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.6, -h * 0.5 + s * D * 0.3);
+      ctx.lineTo(W * 0.55, -h * 0.55 + s * D * 0.3);
+      ctx.stroke();
+    }
+  },
+  sailing_boat: (ctx, W, D, h) => {
+    hull(ctx, W, D, h * 0.45, WOODS.oak);
+    // A mast with the sail bent on, leaning the way she is going.
+    const mh = h * 0.95;
+    ctx.strokeStyle = WOODS.dark.top;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.45);
+    ctx.lineTo(0, -mh);
+    ctx.stroke();
+    ctx.fillStyle = LINEN.top;
+    ctx.beginPath();
+    ctx.moveTo(0.6, -mh + 1);
+    ctx.quadraticCurveTo(W * 0.62, -mh * 0.72, W * 0.34, -h * 0.46);
+    ctx.lineTo(0.6, -h * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = LINEN.right;
+    ctx.beginPath();
+    ctx.moveTo(0.6, -mh + 1);
+    ctx.quadraticCurveTo(W * 0.3, -mh * 0.7, W * 0.16, -h * 0.46);
+    ctx.lineTo(0.6, -h * 0.46);
+    ctx.closePath();
+    ctx.fill();
+  },
   hive: (ctx, W, D, h) => {
     // Four shallow boxes stacked, a flat lid on top and a landing board at
     // the mouth, with the swarm going in and out of it.
@@ -560,6 +600,43 @@ const DRAW: Record<string, Draw> = {
     }
   },
 };
+
+/**
+ * A hull seen from above and a little to one side: a pointed thing sitting in
+ * the water with its sheer showing.
+ */
+function hull(ctx: CanvasRenderingContext2D, W: number, D: number, h: number, wood: Wood): void {
+  // The water it displaces.
+  ctx.fillStyle = 'rgba(30,60,90,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, W * 1.05, D * 1.05, 0, 0, TAU);
+  ctx.fill();
+  // The deck, drawn as a long rhombus with the bow and stern drawn out.
+  ctx.fillStyle = wood.top;
+  ctx.beginPath();
+  ctx.moveTo(W * 1.02, -h * 0.5 - D * 0.05);
+  ctx.quadraticCurveTo(W * 0.3, -h * 0.5 + D * 0.85, -W * 0.86, -h * 0.5 + D * 0.18);
+  ctx.quadraticCurveTo(-W * 0.5, -h * 0.5 - D * 0.8, W * 1.02, -h * 0.5 - D * 0.05);
+  ctx.closePath();
+  ctx.fill();
+  // The side below the sheer.
+  ctx.fillStyle = wood.right;
+  ctx.beginPath();
+  ctx.moveTo(W * 1.02, -h * 0.5 - D * 0.05);
+  ctx.quadraticCurveTo(W * 0.3, -h * 0.5 + D * 0.85, -W * 0.86, -h * 0.5 + D * 0.18);
+  ctx.lineTo(-W * 0.86, D * 0.18);
+  ctx.quadraticCurveTo(W * 0.3, D * 0.85, W * 1.02, -D * 0.05);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = wood.left;
+  ctx.beginPath();
+  ctx.moveTo(-W * 0.86, -h * 0.5 + D * 0.18);
+  ctx.quadraticCurveTo(-W * 0.5, -h * 0.5 - D * 0.8, W * 1.02, -h * 0.5 - D * 0.05);
+  ctx.lineTo(W * 1.02, -D * 0.05);
+  ctx.quadraticCurveTo(-W * 0.5, -D * 0.8, -W * 0.86, D * 0.18);
+  ctx.closePath();
+  ctx.fill();
+}
 
 /** A spoked wheel on its edge, seen from the side. */
 function wheel(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number): void {

@@ -9,7 +9,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, CALL_WINDOW, Creatures, HAUL_SKILL, type Creature, type CreatureJSON, type Stance } from './creatures';
 import type { Station } from './recipes';
@@ -412,8 +412,45 @@ export class Game {
     return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) ? 0 : null;
   };
 
+  /**
+   * The rule for being afloat. A hull goes where there is water enough under
+   * it and nowhere else: no beaching, no dragging it over a sandbar, and
+   * nothing indoors.
+   */
+  readonly sailRule = (_x0: number, _y0: number, level: number, x1: number, y1: number): number | null => {
+    const boat = this.afloat();
+    if (!boat || level !== 0) return null;
+    const def = furnitureDef(boat.kind).boat;
+    if (!def || !this.world.inBounds(x1, y1)) return null;
+    return -this.world.centerHeight(x1, y1) >= def.draught ? 0 : null;
+  };
+
+  /** The boat the player is sitting in, if any. */
+  afloat(): PlacedFurniture | undefined {
+    const f = this.driving();
+    return f && isBoat(f) ? f : undefined;
+  }
+
+  /** How fast the hull goes: the build, the arms behind it, and the load off it. */
+  boatSpeed(f: PlacedFurniture): number {
+    const def = furnitureDef(f.kind).boat;
+    if (!def) return 0;
+    // Oars are worked by the body; a sail is worked by the weather, and the
+    // best you can do is not get in its way.
+    const body = def.sail ? 0.9 + this.skills.get('body_control') / 320 : 0.6 + this.skills.get('body_strength') / 150;
+    const hull = 0.75 + f.ql / 220;
+    return def.speed * body * hull;
+  }
+
+  /** Water deep enough to float this hull, near where the player is standing. */
+  launchSpot(kind: string, x: number, y: number): boolean {
+    const def = furnitureDef(kind).boat;
+    return !!def && this.world.inBounds(x, y) && -this.world.centerHeight(x, y) >= def.draught;
+  }
+
   /** How the player may move right now, and how many storeys they may cross. */
   movement(): { rule: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null; levels: number } {
+    if (this.afloat()) return { rule: this.sailRule, levels: 1 };
     if (this.driving()) return { rule: this.driveRule, levels: 1 };
     if (this.mounted()) return { rule: this.rideRule, levels: 1 };
     return { rule: this.stepRule, levels: MAX_LEVELS };
@@ -791,7 +828,8 @@ export class Game {
     // on your own feet at your own.
     const driven = this.driving();
     const up = this.mounted();
-    p.speedMul = driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
+    const boat = this.afloat();
+    p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
     const { rule } = this.movement();
     const moved = p.update(dt, this.world, rule);
     if (up) this.carryRider(up, dt, moved);
@@ -1669,6 +1707,7 @@ export class Game {
       }
       if (f.hitched) this.dragCart(f);
       if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt, moved);
+      if (def.boat && f.driven) this.floatBoat(f);
     }
   }
 
@@ -2075,6 +2114,25 @@ export class Game {
    * being driven sits wherever the player does — they are on the seat — and
    * the team walks a length ahead of it, spread across the yokes.
    */
+  /** Keep the hull under whoever is sitting in it. */
+  private floatBoat(f: PlacedFurniture): void {
+    const def = furnitureDef(f.kind);
+    const x = Math.floor(this.player.x);
+    const y = Math.floor(this.player.y);
+    if (!this.launchSpot(f.kind, x, y)) return;
+    const [sx, sy] = subtileOf(x, y, this.player.x, this.player.y);
+    const [ax, ay] = furnitureAnchor(f.kind, sx - Math.floor(def.w / 2), sy - Math.floor(def.h / 2));
+    if (f.x === x && f.y === y && f.sx === ax && f.sy === ay) return;
+    const from = { x: f.x, y: f.y };
+    f.x = x;
+    f.y = y;
+    f.sx = ax;
+    f.sy = ay;
+    this.placed.furniture.moved(f, from.x, from.y);
+    this.events.emit('world', from.x, from.y);
+    this.events.emit('world', f.x, f.y);
+  }
+
   private haulVehicle(f: PlacedFurniture, dt: number, moved: number): void {
     const team = this.team(f);
     // Anything that died or was let go in the meantime leaves its yoke empty.
@@ -2282,6 +2340,14 @@ export class Game {
   furniturePlaceReason(kind: string, x: number, y: number, sx: number, sy: number): string | null {
     const def = furnitureDef(kind);
     const [ax, ay] = furnitureAnchor(kind, sx, sy);
+    if (def.boat) {
+      // A hull goes in the water and nowhere else, and you have to be able to
+      // reach the water you are putting it in.
+      if (!this.launchSpot(kind, x, y)) return `There is not ${def.boat.draught} deep of water there. Launch her off a bank with some depth to it.`;
+      if (Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y) > 4) return 'Stand at the water you mean to launch her into.';
+      for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already in the water there.';
+      return null;
+    }
     if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'Furniture needs dry, solid ground.';
     if (this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
     if (this.isToken(x, y)) return 'Not on the token.';

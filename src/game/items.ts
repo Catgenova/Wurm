@@ -317,6 +317,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   cart: { name: 'Small cart', category: 'misc', weight: 26, decay: 4, description: 'Two wheels and a pair of shafts. Take hold of it and it follows you about, carrying 100 things you do not have to.' },
   large_cart: { name: 'Large cart', category: 'misc', weight: 180, decay: 4, description: 'A two-wheeled cart with a box body and a seat over the axle. It holds 1000 things of any weight, and nothing under a hitched wildermon will move it.' },
   wagon: { name: 'Wagon', category: 'misc', weight: 420, decay: 4, description: 'Four wheels, two axles and a bed you could sleep a family on. It holds 10000 things of any weight, and it does not roll until all four yokes have a wildermon in them.' },
+  rowing_boat: { name: 'Rowing boat', category: 'misc', weight: 210, decay: 4, description: 'A clinker hull with a pair of oars in her. Launch her into two deep of water, climb aboard and row. Carries 300 things and you.' },
+  sailing_boat: { name: 'Sailing boat', category: 'misc', weight: 620, decay: 4, description: 'A decked hull with a mast, a sail and a rudder. Four deep of water under her, and she goes where the coast goes. Carries 1500 things.' },
   small_barrel: { name: 'Small barrel', category: 'misc', weight: 7, decay: 4, description: 'Holds 30 litres of one liquid, and nothing solid at all.' },
   large_barrel: { name: 'Large barrel', category: 'misc', weight: 34, decay: 4, description: 'Holds 250 litres of one liquid. It takes a while to fill and longer to empty.' },
 };
