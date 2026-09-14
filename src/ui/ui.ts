@@ -5,6 +5,7 @@ import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { BUILD_ACTION_BY_ID, materialName } from '../game/buildActions';
 import {
   describeNeeds,
+  FENCE_TYPES,
   FLOOR_KIND_NAMES,
   floorBill,
   floorKind,
@@ -866,6 +867,33 @@ export class UI {
     };
     const b = bld.buildingAt(x, y);
     if (!b) {
+      // No building here: a fence or a half wall still goes on any border,
+      // and the border is decided by which edge of the tile was clicked.
+      const side = nearestSide(x, y, pick.wx, pick.wy);
+      const withSide: Target = { ...base, side };
+      const standing = bld.wall(0, x, y, side);
+      if (standing) {
+        const what = WALL_TYPE_BY_ID.get(standing.type)?.name ?? 'Fence';
+        if (!isDone(standing)) entries.push(item(act('build_wall'), withSide, `Build ${what.toLowerCase()} (${SIDE_NAMES[side]}) · needs ${describeNeeds(standing, materialName)}`));
+        entries.push(item(act('remove_wall'), withSide, `Remove ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
+      } else {
+        const fence = act('plan_fence');
+        const probe = fence.check?.({ ...withSide, wallType: 'fence', material: 'log' }, g) ?? null;
+        if (probe) entries.push({ label: `Plan fence (${SIDE_NAMES[side]})`, hint: probe, disabled: true });
+        else {
+          entries.push({
+            label: `Plan fence (${SIDE_NAMES[side]})`,
+            children: FENCE_TYPES.map((wt) => ({
+              label: wt.name,
+              children: MATERIALS.map((m) => ({
+                label: m.name,
+                note: describeNeeds(wallBill(m.id, wt.id), materialName),
+                onSelect: () => g.requestAction(fence, { ...withSide, wallType: wt.id, material: m.id }),
+              })),
+            })),
+          });
+        }
+      }
       if (!g.deed || !g.onDeed(x, y)) return entries;
       const nb = bld.neighbourBuilding(x, y);
       if (nb) entries.push(item(act('add_to_building'), base, `Add to ${nb.name}`));

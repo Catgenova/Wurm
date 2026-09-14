@@ -208,6 +208,14 @@ export function buildHelp(win: UIWindow): void {
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
     join into ridges and hips.</p>
+    <p><b>Fences, gates and half walls</b> are the same work at a fraction of the cost, and they do not
+    need a building around them: point at the edge of any tile &mdash; on your deed or a mile from it,
+    on packed ground or in the long grass &mdash; and choose <b>Plan fence</b>. A log fence is two logs
+    where a log wall is four; a half wall is half of one. Both stop anything alive at that border,
+    yourself included, which is how a paddock holds a Roxxen; a <b>fence gate</b> is the one kind you
+    can walk through. Feed them materials with <b>Build fence</b> exactly as you would a wall, and take
+    them down again from the same menu. Nothing rests on waist-high work: a storey cannot be planned
+    over a run of fence or half wall, so if you want a floor above, the wall below has to be a wall.</p>
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
     into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Nails, furniture and storage</h3>

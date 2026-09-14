@@ -111,7 +111,14 @@ rebuilds and commits the result.
   footprint, plan walls on tile borders (solid, window, bay, door, double door)
   in twelve materials, feed them materials to build, lay floors with the paving
   skill, and plan another storey only once every wall below is built. Walls
-  block movement; doors let you through. Staircases and ladders on an upper
+  block movement; doors let you through.
+- **Fences, gates and half walls.** The same twelve materials at a fraction of
+  the cost — a log fence is two logs where a log wall is four — and they go on
+  a bare tile border anywhere, with no building, no deed and no packed ground
+  needed. A fence or a half wall stops anything alive at that border, player
+  and wildermon alike, which is what makes a paddock a paddock; a **fence
+  gate** is the one thing in the list you can walk through. Nothing rests on
+  waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
 - **Materials and crafting.** Planks and timbers from logs with a saw,
@@ -549,7 +556,7 @@ first, then runs the timer; moving interrupts it.
 - Caves and mine entrances.
 - Day/night cycle and weather.
 - Creatures and combat.
-- Tile borders (fences, walls) and buildings.
+- Multi-tile gates wide enough to take a wagon through.
 - Multiplayer server and persistence beyond the browser.
 
 Wurm Online is a trademark of Code Club AB. This is a fan project and is not

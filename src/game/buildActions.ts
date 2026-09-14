@@ -1,5 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import {
+  borderOf,
   describeNeeds,
   FLOOR_KIND_NAMES,
   floorKind,
@@ -47,6 +48,13 @@ function consumeUnit(g: Game, bill: Bill): string | null {
 
 const buildingOf = (g: Game, t: TileTarget): Building | undefined => g.buildings.buildingAt(t.x, t.y);
 const topLevel = (b: Building): number => workLevel(b);
+/** The storey wall work happens on: a building's working one, or the ground. */
+const wallLevel = (g: Game, t: TileTarget): number => {
+  const b = buildingOf(g, t);
+  return b ? topLevel(b) : 0;
+};
+/** The wall or fence on the side of a tile that is being worked on. */
+const wallAt = (g: Game, t: TileTarget) => (t.side ? g.buildings.wall(wallLevel(g, t), t.x, t.y, t.side) : undefined);
 const material = (id: string | undefined): MaterialDef | undefined => (id ? MATERIAL_BY_ID.get(id) : undefined);
 
 /** Building work. These are hidden from the generic menu; the UI composes them with sides and materials. */
@@ -156,6 +164,40 @@ export const BUILD_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'plan_fence',
+    label: 'Plan fence',
+    verb: 'planning a fence',
+    hidden: true,
+    stamina: 0.02,
+    baseTime: 2,
+    applies: (t, g) => isTile(t) && !buildingOf(g, t),
+    check: (t, g) => {
+      if (!isTile(t) || !t.side || !t.wallType || !t.material) return 'Choose a side, a kind and a material.';
+      const type = WALL_TYPE_BY_ID.get(t.wallType);
+      if (!type?.standalone) return 'Only fences and half walls stand on their own.';
+      const mat = material(t.material);
+      const tool = mat ? needTool(g, mat.tool) : 'Choose a material.';
+      if (tool) return tool;
+      if (buildingOf(g, t)) return 'That is part of a building: plan a wall instead.';
+      const border = borderOf(t.x, t.y, t.side);
+      // The border is shared, so the tile on the other side of it has a say.
+      const [ax, ay] = t.side === 'n' ? [t.x, t.y - 1] : t.side === 's' ? [t.x, t.y + 1] : t.side === 'w' ? [t.x - 1, t.y] : [t.x + 1, t.y];
+      if (g.buildings.buildingAt(ax, ay)) return 'A building stands on the other side of that border.';
+      if (!g.world.inBounds(ax, ay)) return 'That border is the edge of the world.';
+      if (g.world.hasWater(t.x, t.y) || g.world.hasWater(ax, ay)) return 'Fences do not stand in water.';
+      if (!g.world.isPassable(t.x, t.y) || !g.world.isPassable(ax, ay)) return 'There is no room for posts there.';
+      if (g.buildings.wallOnBorder(0, border)) return 'There is already something on that border.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (!isTile(t) || !t.side || !t.wallType || !t.material) return;
+      const wall = g.buildings.setFence(t.x, t.y, t.side, t.wallType, t.material);
+      const type = WALL_TYPE_BY_ID.get(t.wallType)?.name.toLowerCase() ?? 'fence';
+      g.logMsg(`You mark out a ${material(t.material)?.name.toLowerCase()} ${type} on the ${SIDE_NAMES[t.side]} border. It needs ${needsText(wall)}.`, 'event');
+      g.events.emit('world', t.x, t.y);
+    },
+  },
+  {
     id: 'build_wall',
     label: 'Build wall',
     verb: 'building',
@@ -163,11 +205,10 @@ export const BUILD_ACTIONS: ActionDef[] = [
     repeat: true,
     stamina: 0.03,
     baseTime: 5,
-    applies: (t, g) => isTile(t) && !!buildingOf(g, t),
+    applies: (t, g) => isTile(t) && (!!buildingOf(g, t) || !!wallAt(g, t)),
     check: (t, g) => {
       if (!isTile(t) || !t.side) return 'Choose a side.';
-      const b = buildingOf(g, t);
-      const wall = b && g.buildings.wall(topLevel(b), t.x, t.y, t.side);
+      const wall = wallAt(g, t);
       if (!wall) return 'There is no wall planned there.';
       if (isDone(wall)) return 'That wall is finished.';
       const mat = material(wall.material);
@@ -178,8 +219,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side) return false;
-      const b = buildingOf(g, t);
-      const wall = b && g.buildings.wall(topLevel(b), t.x, t.y, t.side);
+      const wall = wallAt(g, t);
       if (!wall || isDone(wall)) return false;
       const mat = material(wall.material);
       const used = consumeUnit(g, wall);
@@ -187,7 +227,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       g.gainSkill(mat.skill, 0.4);
       g.events.emit('world', t.x, t.y);
       if (isDone(wall)) {
-        g.logMsg(`You finish the ${mat.name.toLowerCase()} wall.`, 'event');
+        const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() : 'wall';
+        g.logMsg(`You finish the ${mat.name.toLowerCase()} ${what}.`, 'event');
         return false;
       }
       g.logMsg(`You fit ${materialName(used, 1)} into the wall. Still needed: ${needsText(wall)}.`, 'event');
@@ -201,20 +242,18 @@ export const BUILD_ACTIONS: ActionDef[] = [
     hidden: true,
     stamina: 0.04,
     baseTime: 4,
-    applies: (t, g) => isTile(t) && !!buildingOf(g, t),
+    applies: (t, g) => isTile(t) && (!!buildingOf(g, t) || !!wallAt(g, t)),
     check: (t, g) => {
       if (!isTile(t) || !t.side) return 'Choose a side.';
-      const b = buildingOf(g, t);
-      if (!b) return 'No building here.';
-      if (!g.buildings.wall(topLevel(b), t.x, t.y, t.side)) return 'There is no wall there.';
-      return null;
+      return wallAt(g, t) ? null : 'There is no wall there.';
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side) return;
-      const b = buildingOf(g, t);
-      if (!b) return;
-      g.buildings.removeWall(topLevel(b), t.x, t.y, t.side);
-      g.logMsg(`You take down the wall on the ${SIDE_NAMES[t.side]} side.`, 'event');
+      const wall = wallAt(g, t);
+      if (!wall) return;
+      const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? (WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() ?? 'fence') : 'wall';
+      g.buildings.removeWall(wallLevel(g, t), t.x, t.y, t.side);
+      g.logMsg(`You take down the ${what} on the ${SIDE_NAMES[t.side]} side.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },
@@ -234,6 +273,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!b) return 'No building here.';
       if (b.levels >= MAX_LEVELS) return `Buildings cannot be taller than ${MAX_LEVELS} storeys.`;
       if (g.buildings.hasRoof(b)) return 'Take the roof off first.';
+      if (g.buildings.hasLowWall(b, b.levels - 1)) return 'Nothing rests on a fence or a half wall. The storey below needs walls all round.';
       if (!g.buildings.levelComplete(b, b.levels - 1)) return 'All walls of the storey below must be built first.';
       return null;
     },

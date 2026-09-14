@@ -4,7 +4,7 @@
  * planned first, then built by feeding them materials one unit at a time.
  */
 
-export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door';
+export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'fence' | 'fence_gate' | 'half_wall';
 
 export interface WallTypeDef {
   id: WallType;
@@ -12,6 +12,17 @@ export interface WallTypeDef {
   /** Material multiplier relative to a solid wall. */
   factor: number;
   passable: boolean;
+  /** How much of a storey it stands, for drawing; 1 is a full wall. */
+  height?: number;
+  /**
+   * Waist-high work: it stops anything alive at the border and nothing rests
+   * on it, so no storey can be raised over a run of it.
+   */
+  low?: boolean;
+  /** Posts and rails rather than a face, for drawing. */
+  railed?: boolean;
+  /** Offered on any border, building or no building. */
+  standalone?: boolean;
 }
 
 export const WALL_TYPES: WallTypeDef[] = [
@@ -20,8 +31,17 @@ export const WALL_TYPES: WallTypeDef[] = [
   { id: 'bay', name: 'Bay window', factor: 1.25, passable: false },
   { id: 'door', name: 'Door', factor: 0.75, passable: true },
   { id: 'double_door', name: 'Double door', factor: 1, passable: true },
+  // Waist-high, and cheap because there is so much less of them. A gate is
+  // the one thing in the list you can walk through.
+  { id: 'fence', name: 'Fence', factor: 0.3, passable: false, height: 0.42, low: true, railed: true, standalone: true },
+  { id: 'fence_gate', name: 'Fence gate', factor: 0.4, passable: true, height: 0.42, low: true, railed: true, standalone: true },
+  { id: 'half_wall', name: 'Half wall', factor: 0.5, passable: false, height: 0.5, low: true, standalone: true },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
+/** Whether a wall type is waist-high work that nothing can be built over. */
+export const isLowWall = (type: WallType): boolean => !!WALL_TYPE_BY_ID.get(type)?.low;
+/** The types that can go on any border, with or without a building around them. */
+export const FENCE_TYPES = WALL_TYPES.filter((w) => w.standalone);
 
 export type RGB = readonly [number, number, number];
 
@@ -233,10 +253,39 @@ export class Buildings {
   }
 
   setWall(b: Building, level: number, x: number, y: number, side: Side, type: WallType, material: string): Wall {
+    return this.planWall(b.id, level, x, y, side, type, material);
+  }
+
+  /**
+   * A fence or a half wall on a bare border. It goes in the same place a wall
+   * does — the border is the thing walls live on — and belongs to no building,
+   * which is what building 0 means.
+   */
+  setFence(x: number, y: number, side: Side, type: WallType, material: string): Wall {
+    return this.planWall(0, 0, x, y, side, type, material);
+  }
+
+  private planWall(building: number, level: number, x: number, y: number, side: Side, type: WallType, material: string): Wall {
     const border = borderOf(x, y, side);
-    const wall: Wall = { building: b.id, level, x: border.x, y: border.y, dir: border.dir, type, material, ...wallBill(material, type) };
+    const wall: Wall = { building, level, x: border.x, y: border.y, dir: border.dir, type, material, ...wallBill(material, type) };
     this.walls.set(wallKey(level, border), wall);
     return wall;
+  }
+
+  /**
+   * Whether a storey of a building carries anything waist-high — its own, or a
+   * fence that was already standing on one of its borders when the footprint
+   * was laid out around it. Either way there is nothing up there to build on.
+   */
+  hasLowWall(b: Building, level: number): boolean {
+    for (const w of this.walls.values()) if (w.building === b.id && w.level === level && isLowWall(w.type)) return true;
+    if (level === 0) {
+      for (const border of this.exteriorBorders(b)) {
+        const w = this.wallOnBorder(level, border);
+        if (w && isLowWall(w.type)) return true;
+      }
+    }
+    return false;
   }
 
   removeWall(level: number, x: number, y: number, side: Side): void {

@@ -10,6 +10,7 @@ import {
   progressOf,
   ROOF_RISE,
   WALL_HEIGHT,
+  WALL_TYPE_BY_ID,
   workLevel,
   type Border,
   type FloorTile,
@@ -356,7 +357,7 @@ export class Renderer {
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
             this.ents.push({ kind: t === TileType.Tree ? 'tree' : 'bush', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
           }
-          if (this.game.buildings.list.size) this.drawStructures(x, y, rot, d > playerDepth);
+          if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, rot, d > playerDepth);
           fogPath.moveTo(pts[0], pts[1]);
           fogPath.lineTo(pts[2], pts[3]);
           fogPath.lineTo(pts[4], pts[5]);
@@ -450,7 +451,7 @@ export class Renderer {
             });
           }
         }
-        if (this.game.buildings.list.size) this.drawStructures(x, y, rot, d > playerDepth);
+        if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, rot, d > playerDepth);
       }
 
       if (d === playerDepth) {
@@ -686,7 +687,7 @@ export class Renderer {
         backB = borderOf(x, y, 'w');
     }
     const playerLevel = this.game.player.level;
-    const maxLevels = building ? building.levels : this.maxLevelsAround(x, y);
+    const maxLevels = building ? building.levels : Math.max(1, this.maxLevelsAround(x, y));
     const { cutaway, viewLevel } = this.game.settings;
     // Floors, stairs and ladders for each storey, walls of each storey, then the roof one level up.
     for (let level = 0; level <= maxLevels; level++) {
@@ -957,8 +958,9 @@ export class Renderer {
     const mat = MATERIAL_BY_ID.get(wall.material);
     if (!mat) return;
     const [ax, ay, bx, by] = borderPoints(border);
+    const kind = WALL_TYPE_BY_ID.get(wall.type);
     const h0 = base + wall.level * WALL_HEIGHT;
-    const h1 = h0 + WALL_HEIGHT;
+    const h1 = h0 + WALL_HEIGHT * (kind?.height ?? 1);
     // A point on the wall face: t along the border, k up the height.
     const px = (t: number, k: number): number => cam.worldToScreenX(ax + (bx - ax) * t, ay + (by - ay) * t);
     const py = (t: number, k: number): number => cam.worldToScreenY(ax + (bx - ax) * t, ay + (by - ay) * t, h0 + (h1 - h0) * k);
@@ -989,6 +991,35 @@ export class Renderer {
         quad(0, 1, 0, progress);
         ctx.fillStyle = rgb(mat.color, lit, 0.85);
         ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+    if (kind?.railed) {
+      // Posts at the ends and the middle, two rails between them, and a gate
+      // leaf hung in the gap when there is one.
+      ctx.fillStyle = rgb(mat.color, lit);
+      ctx.strokeStyle = rgb(mat.trim, lit);
+      for (const t of [0.03, 0.5, 0.97]) {
+        quad(Math.max(0, t - 0.05), Math.min(1, t + 0.05), 0, 1);
+        ctx.fill();
+        ctx.stroke();
+      }
+      for (const [k0, k1] of [[0.32, 0.46], [0.72, 0.86]] as Array<[number, number]>) {
+        quad(0, 1, k0, k1);
+        ctx.fillStyle = rgb(mat.color, lit * 0.94);
+        ctx.fill();
+        ctx.stroke();
+      }
+      if (wall.type === 'fence_gate') {
+        quad(0.08, 0.46, 0.06, 0.94);
+        ctx.fillStyle = rgb(mat.floor, lit, 0.85);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px(0.1, 0.1), py(0.1, 0.1));
+        ctx.lineTo(px(0.44, 0.9), py(0.44, 0.9));
+        ctx.stroke();
       }
       ctx.globalAlpha = 1;
       return;
