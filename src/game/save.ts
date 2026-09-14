@@ -6,6 +6,7 @@ import type { PlacedCampfire } from './campfire';
 import type { PlacedSmelter } from './smelter';
 import type { PlacedKiln } from './kiln';
 import type { PlacedFurniture } from './furniture';
+import type { PlacedPost } from './posts';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -201,6 +202,7 @@ interface SaveData {
   smelters?: PlacedSmelter[];
   kilns?: PlacedKiln[];
   furniture?: PlacedFurniture[];
+  posts?: PlacedPost[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   crate?: { x: number; y: number; items: Item[] } | null;
@@ -248,6 +250,7 @@ function meta(game: Game): SaveMeta {
     smelters: [...game.smelters.values()],
     kilns: [...game.kilns.values()],
     furniture: [...game.furniture.values()],
+    posts: [...game.posts.values()],
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
   };
@@ -470,6 +473,7 @@ function finish(world: World, m: SaveMeta): Game {
     smelters: m.smelters,
     kilns: m.kilns,
     furniture: m.furniture,
+    posts: m.posts,
     anvils: m.anvils,
     crops: m.crops,
     crate: m.crate ?? null,

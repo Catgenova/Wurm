@@ -815,6 +815,60 @@ export function drawKiln(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
 }
 
 /** An anvil on its block, coloured by the metal it was cast from. */
+/**
+ * A work post: a pointed stake with a crossbar nailed near the top and a
+ * strip of metal tacked to it for a marker. It leans further the more rotten
+ * it is, and the marker hangs the right way up only while somebody is working
+ * out of it.
+ */
+export function drawWorkPost(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, left: number, worked: boolean): void {
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(zoom, zoom);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 5.5, 2.4, 0, 0, TAU);
+  ctx.fill();
+  // Standing straight when new and leaning badly by the end.
+  ctx.rotate((1 - Math.max(0, Math.min(1, left))) * 0.3);
+  const h = 26;
+  ctx.strokeStyle = '#8a6a44';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(0, -1);
+  ctx.lineTo(0, -h);
+  ctx.stroke();
+  ctx.strokeStyle = '#6d5234';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-6, -h + 6);
+  ctx.lineTo(6, -h + 6);
+  ctx.stroke();
+  // The ribbon: bright while it is being worked, dull and furled when not.
+  ctx.fillStyle = worked ? '#d8b03c' : '#8e8478';
+  ctx.beginPath();
+  if (worked) {
+    ctx.moveTo(1, -h + 1);
+    ctx.lineTo(9, -h + 4.5);
+    ctx.lineTo(1, -h + 8);
+  } else {
+    ctx.moveTo(1, -h + 2);
+    ctx.lineTo(5, -h + 4);
+    ctx.lineTo(1, -h + 6);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // A nail head apiece where the crossbar is fixed.
+  ctx.fillStyle = '#4a463f';
+  for (const nx of [-4.5, 4.5]) {
+    ctx.beginPath();
+    ctx.arc(nx, -h + 6, 0.8, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function drawAnvil(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, face: string, shade: string): void {
   ctx.save();
   ctx.translate(sx, sy);

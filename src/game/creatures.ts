@@ -1116,6 +1116,24 @@ export function taskSkill(c: Creature, species: SpeciesDef): number {
 export function workRangeOf(c: Creature, species: SpeciesDef): number {
   return species.workRange + rangeSteps(taskSkill(c, species)) * (species.rangePerStep ?? RANGE_PER_STEP);
 }
+
+/**
+ * Where a worker takes its orders from: a settlement, or a work post standing
+ * in for one. A deed lets a worker range as far as it has earned; a post is a
+ * work site rather than a settlement, and holds it to the post's own reach
+ * however much the creature has learned.
+ */
+export interface WorkSite {
+  x: number;
+  y: number;
+  radius: number;
+  /** Set when the site is a post rather than the settlement. */
+  post?: number;
+}
+
+/** How far this worker ranges from this site. */
+export const siteRange = (c: Creature, species: SpeciesDef, site: WorkSite): number =>
+  site.post !== undefined ? Math.min(workRangeOf(c, species), site.radius) : workRangeOf(c, species);
 /** Fresh task skills for a species. */
 const startSkills = (species: SpeciesDef): Record<string, number> => {
   const id = workSkill(species);
@@ -1190,6 +1208,12 @@ export interface Creature {
   pannier: Item[];
   /** Set while the player is up on its back. */
   ridden: boolean;
+  /**
+   * The work post it takes its orders from, if any. A worker with one treats
+   * that post exactly as another treats the settlement token — until the post
+   * rots through under it.
+   */
+  post: number | null;
 }
 
 export type FarmJob = 'sow' | 'tend' | 'harvest';
@@ -1214,6 +1238,7 @@ export interface CreatureJSON {
   skills?: Record<string, number>;
   tacked?: boolean;
   pannier?: Item[];
+  post?: number | null;
 }
 
 /**
@@ -1356,6 +1381,7 @@ export class Creatures {
       tacked: false,
       ridden: false,
       pannier: [],
+      post: null,
     };
   }
 
@@ -1383,7 +1409,17 @@ export class Creatures {
     return [...this.list.values()].filter((c) => c.mode === 'stored');
   }
 
+  /**
+   * The wildermon working the settlement itself. One set to a work post is at
+   * work too, but not on the deed's books: it costs no settlement slot, which
+   * is most of what a post is for.
+   */
   workers(): Creature[] {
+    return [...this.list.values()].filter((c) => c.mode === 'deed' && c.post === null);
+  }
+
+  /** Everything at work anywhere, posts included. */
+  working(): Creature[] {
     return [...this.list.values()].filter((c) => c.mode === 'deed');
   }
 
@@ -2154,9 +2190,9 @@ export class Creatures {
    * worker has earned, walk to it, do one unit of it — and each returns true
    * while it has work in hand, so the ordinary worker loop leaves it alone.
    */
-  private errandStep(game: Game, c: Creature, dt: number, kind: GatherKind, deed: { x: number; y: number; radius: number }): boolean {
+  private errandStep(game: Game, c: Creature, dt: number, kind: GatherKind, deed: WorkSite): boolean {
     const def = this.species(c);
-    const range = workRangeOf(c, def);
+    const range = siteRange(c, def, deed);
     const goto = (tx: number, ty: number, reach = 1.3): boolean => {
       if (Math.hypot(tx - c.x, ty - c.y) <= reach) return true;
       if (this.stepToward(game, c, tx, ty, dt) === 'blocked') {
@@ -2342,9 +2378,9 @@ export class Creatures {
 
   /** Nothing else to do: walk the border, and look again in a moment. */
 
-  private stokeStep(game: Game, c: Creature, dt: number): boolean {
+  private stokeStep(game: Game, c: Creature, dt: number, site: WorkSite): boolean {
     const def = this.species(c);
-    const hearth = this.coldHearth(game, c, workRangeOf(c, def));
+    const hearth = this.coldHearth(game, c, siteRange(c, def, site));
     if (!hearth) return false;
     // Nothing to carry: go to whichever store has wood in it and take a piece.
     const store = game.deedStores().find((st) => st.items.some((it: Item) => isFuel(it.id)));
@@ -2412,7 +2448,7 @@ export class Creatures {
    * them or at their keeper; passive ones carry on working whatever happens.
    * Returns true when the creature is dealing with it rather than working.
    */
-  private defendDeed(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): boolean {
+  private defendDeed(game: Game, c: Creature, dt: number, deed: WorkSite): boolean {
     if (c.stance === 'passive') {
       c.enemy = null;
       return false;
@@ -2465,9 +2501,9 @@ export class Creatures {
    * What it pulls down it goes back for, and carries home like any other load,
    * because a carcass left in the grass is meat nobody eats.
    */
-  private packHunt(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): boolean {
+  private packHunt(game: Game, c: Creature, dt: number, deed: WorkSite): boolean {
     const def = this.species(c);
-    const range = workRangeOf(c, def);
+    const range = siteRange(c, def, deed);
     if (c.enemy !== null) {
       const e = this.list.get(c.enemy);
       const gone = !e || e.mode !== 'wild' || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 4;
@@ -2552,7 +2588,7 @@ export class Creatures {
     return true;
   }
 
-  private guardStep(game: Game, c: Creature, dt: number, deed: { x: number; y: number; radius: number }): void {
+  private guardStep(game: Game, c: Creature, dt: number, deed: WorkSite): void {
     const range = deed.radius + 1;
     if (c.enemy !== null) {
       const e = this.list.get(c.enemy);
@@ -2614,7 +2650,7 @@ export class Creatures {
     if (creatureLevel(c) > before) game.logMsg(`${c.name} reaches level ${creatureLevel(c)}.`, 'skill');
     const def = this.species(c);
     if (c.mode === 'deed' && id === workSkill(def) && rangeSteps(c.skills[id]) > beforeSteps) {
-      game.logMsg(`${c.name} knows the land better and will now work up to ${workRangeOf(c, def)} tiles from the token.`, 'skill');
+      game.logMsg(`${c.name} knows the land better and will now work up to ${workRangeOf(c, def)} tiles from where it is set to work.`, 'skill');
     }
     return gain;
   }
@@ -2761,7 +2797,8 @@ export class Creatures {
 
   private updateWorker(c: Creature, dt: number, game: Game): void {
     c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed);
-    const deed = game.deed;
+    // A post stands in for the token: the same loop, a different middle.
+    const deed = game.workSite(c);
     if (!deed) {
       c.mode = 'wild';
       return;
@@ -2776,7 +2813,7 @@ export class Creatures {
       return;
     }
     if (kind === 'stoke' && !c.carrying && c.state !== 'forage') {
-      if (this.stokeStep(game, c, dt)) return;
+      if (this.stokeStep(game, c, dt, deed)) return;
     }
     if (kind === 'hunt' && !c.carrying && c.state !== 'forage') {
       if (this.packHunt(game, c, dt, deed)) return;
@@ -2869,7 +2906,7 @@ export class Creatures {
     // An errand worker never walks out to a tile to work it, so it does not
     // join the search below: when its errand has nothing in it, it waits.
     if (kind && !ERRAND_JOBS.has(kind)) {
-      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, workRangeOf(c, def), kind, c);
+      const t = this.findForageTile(game, deed.x + 0.5, deed.y + 0.5, siteRange(c, def, deed), kind, c);
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
         const spot = kind === 'woodcut' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
@@ -2897,9 +2934,13 @@ export class Creatures {
    * load out on the ground.
    */
   private storeFor(game: Game, c: Creature, item: Item): DeedStore | null {
-    const stores = game.deedStores().filter((s) => s.room(item));
+    // A worker out on a post fills whatever stands beside the post before it
+    // walks the load all the way home; a worker on the deed fills the
+    // settlement's own crate first, as it always has.
+    const near = game.postStores(c).filter((s) => s.room(item));
+    const stores = near.length ? near : game.deedStores().filter((s) => s.room(item));
     if (!stores.length) return null;
-    const own = stores.find((s) => s.deed);
+    const own = near.length ? undefined : stores.find((s) => s.deed);
     if (own) return own;
     let best = stores[0];
     let bestD = Infinity;
@@ -3040,6 +3081,7 @@ export class Creatures {
         skills: c.skills,
         tacked: c.tacked,
         pannier: c.pannier,
+        post: c.post,
       })),
     };
   }
@@ -3051,7 +3093,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

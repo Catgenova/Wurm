@@ -266,6 +266,28 @@ export function buildHelp(win: UIWindow): void {
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <h3>Work posts</h3>
+    <p>A <b>work post</b> is a settlement's worth of orders on a stake. Build one from <b>2 planks, 2
+    shafts, 4 nails and a metal ribbon</b> with a mallet, then right-click a spot on any tile
+    <b>outside your own borders</b> and drive it in &mdash; inside them the token already gives the
+    orders, so it refuses.</p>
+    <p>Set <b>one</b> wildermon to it from the post's own menu and it works out of the post exactly as it
+    would work out of a settlement: the same job, the same wage of skill, only measured from the post
+    instead of the token. A post is a work site rather than a settlement, so it holds its creature on a
+    short rein &mdash; <b>8 tiles round a rough post and 20 round the best</b>, however much the creature
+    itself has learned. Anything with room in it standing inside that circle is where the loads go, so a
+    crate beside the post makes a camp that keeps itself; leave the post bare and everything is carried
+    all the way home.</p>
+    <p>Nothing holds a post up and it <b>rots where it stands</b>: about <b>half an hour</b> for the
+    roughest and <b>three hours</b> for the best that can be made, leaning further as it goes, with one
+    word of warning near the end. When it falls over, whoever was working out of it <b>comes back to
+    you</b> if you are walking alone, and <b>goes to the token</b> if you already have a companion at
+    your side. You can also pull a post up before it goes, and what comes up is as worn as it had
+    become.</p>
+    <p>A wildermon on a post is <b>not</b> on the settlement's books, so it costs none of the working
+    slots your deed level allows. That, and the fact you can put one down anywhere, is what a post is
+    for: a logging camp in a far wood, a digger on a clay bank, a Snout turned loose over an old ruin
+    &mdash; for as long as a stake in wet ground lasts.</p>
     <h3>Bulk, rubbish, and something to pull it in</h3>
     <p>Three more things to put things in, each for a job a chest does badly.</p>
     <p>A <b>bulk storage bin</b> holds <b>400</b> of anything that stacks &mdash; bricks, ore, planks,

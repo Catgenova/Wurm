@@ -225,7 +225,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.mode === 'stored');
+      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.mode === 'stored' || c.post !== null);
     },
     check: (t, g) => {
       if (!g.deed) return 'You have no settlement to assign it to.';
@@ -240,6 +240,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       const d = g.deed;
       if (!c || !d) return;
+      g.clearPost(c);
       if (c.mode === 'stored') {
         c.x = d.x + 0.5;
         c.y = d.y + 1.5;
@@ -268,6 +269,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
+      g.clearPost(c);
       const current = g.creatures.active();
       if (current) {
         current.mode = 'stored';
@@ -299,6 +301,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c || !g.deed) return;
+      g.clearPost(c);
       const crate = g.deedCrate();
       if (c.carrying && !(crate && g.crateAdd(crate, c.carrying))) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
       c.carrying = null;

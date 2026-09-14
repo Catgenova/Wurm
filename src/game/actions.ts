@@ -2,6 +2,7 @@ import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bu
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
+import { POST_ACTIONS } from './posts';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
@@ -53,6 +54,7 @@ export type Target =
   | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
   | { kind: 'furniture'; id: number; itemUid?: number; count?: number }
   | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
+  | { kind: 'post'; id: number; creatureId?: number }
   | { kind: 'item'; uid: number; count?: number }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
@@ -1123,6 +1125,7 @@ export const ACTIONS: ActionDef[] = [
   ...GEAR_ACTIONS,
   ...IMPROVE_ACTIONS,
   ...ANVIL_ACTIONS,
+  ...POST_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,
   {

@@ -18,6 +18,7 @@ import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item } from './it
 import { BASE_SPEED, groundStep, MAX_STEP, Player, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { matOf, rollEase, workingQl } from './materials';
+import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { Skills, SKILL_DEFS } from './skills';
 import { TileIndex } from './tileindex';
 import { Vision } from './vision';
@@ -90,6 +91,7 @@ export interface GameInit {
   smelters?: PlacedSmelter[];
   kilns?: PlacedKiln[];
   furniture?: PlacedFurniture[];
+  posts?: PlacedPost[];
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null> };
@@ -184,12 +186,16 @@ export class Game {
     kilns: new TileIndex<PlacedKiln>(),
     furniture: new TileIndex<PlacedFurniture>(),
     anvils: new TileIndex<PlacedAnvil>(),
+    posts: new TileIndex<PlacedPost>(),
   };
   readonly buildings: Buildings;
   /** What can be seen from where you are, and what is only remembered. */
   readonly vision: Vision;
   readonly creatures: Creatures;
   deed: Deed | null = null;
+  /** Work posts by id; each stands on one subtile off the deed. */
+  readonly posts = new Map<number, PlacedPost>();
+  private nextPostId = 1;
   /** Placed crates by id; each sits on one subtile. */
   readonly crates = new Map<number, PlacedCrate>();
   nextCrateId = 1;
@@ -281,6 +287,11 @@ export class Game {
     for (const f of init.furniture ?? []) {
       this.furniture.set(f.id, f);
       if (f.id >= this.nextFurnitureId) this.nextFurnitureId = f.id + 1;
+    }
+    for (const p of init.posts ?? []) {
+      this.posts.set(p.id, p);
+      this.placed.posts.add(p);
+      if (p.id >= this.nextPostId) this.nextPostId = p.id + 1;
     }
     for (const s of init.smelters ?? []) {
       this.smelters.set(s.id, s);
@@ -668,6 +679,7 @@ export class Game {
     if (this.smelters.size) this.runSmelters(seconds);
     if (this.kilns.size) this.runKilns(seconds);
     if (this.furniture.size) this.runPlaceables(seconds, 0);
+    if (this.posts.size) this.runPosts(seconds);
     if (this.crops.size) this.growCrops();
     if (this.ground.size) this.applyDecay(seconds);
     const s = this.player.stats;
@@ -777,6 +789,7 @@ export class Game {
     if (this.smelters.size) this.runSmelters(dt);
     if (this.kilns.size) this.runKilns(dt);
     if (this.furniture.size) this.runPlaceables(dt, moved);
+    if (this.posts.size) this.runPosts(dt);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
 
@@ -1052,6 +1065,10 @@ export class Game {
       const a = this.anvils.get(target.id);
       return a ? { x: a.x, y: a.y } : null;
     }
+    if (target.kind === 'post') {
+      const p = this.posts.get(target.id);
+      return p ? { x: p.x, y: p.y } : null;
+    }
     return { x: target.x, y: target.y };
   }
 
@@ -1200,6 +1217,117 @@ export class Game {
       }
     }
     return false;
+  }
+
+  // ---- Work posts: a settlement's worth of orders on a stake, for an hour. ----
+
+  addPost(x: number, y: number, sx: number, sy: number, ql: number, material?: string): PlacedPost {
+    const p: PlacedPost = { id: this.nextPostId++, x, y, sx, sy, ql, dmg: 0, worker: null, material };
+    this.posts.set(p.id, p);
+    this.placed.posts.add(p);
+    return p;
+  }
+
+  postAt(x: number, y: number, sx: number, sy: number): PlacedPost | undefined {
+    for (const p of this.placed.posts.at(x, y)) if (p.sx === sx && p.sy === sy) return p;
+    return undefined;
+  }
+
+  postsOnTile(x: number, y: number): readonly PlacedPost[] {
+    return this.placed.posts.at(x, y);
+  }
+
+  /** The post a worker is set to, if it is set to one that is still standing. */
+  postOf(c: Creature): PlacedPost | undefined {
+    return c.post !== null ? this.posts.get(c.post) : undefined;
+  }
+
+  /**
+   * Where a wildermon works: the post it is set to, or the settlement. The
+   * shape is the same either way, which is what lets one worker loop serve
+   * both — only a post keeps its creature on a short rein, and a deed does
+   * not.
+   */
+  workSite(c: Creature): { x: number; y: number; radius: number; post?: number } | null {
+    const p = this.postOf(c);
+    return p ? postSite(p) : this.deed;
+  }
+
+  /** Why a post cannot go in here, or null. */
+  postPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
+    if (!this.world.inBounds(x, y)) return 'Not there.';
+    if (this.onDeed(x, y)) return 'A post is for work away from home. Inside your own borders the token already gives the orders.';
+    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A post needs dry, open ground.';
+    if (this.world.slope(x, y) > 25) return 'The ground is too steep to drive a post into.';
+    if (this.buildings.buildingAt(x, y)) return 'Not inside a building.';
+    if (this.occupiedSubtile(x, y, sx, sy)) return 'Something is already standing there.';
+    return null;
+  }
+
+  /**
+   * Take a worker off its post and send it where it belongs: to your side if
+   * you are walking alone, to the settlement's keeping if you are not, and
+   * back to the wild if you have neither.
+   */
+  leavePost(p: PlacedPost, why: string): void {
+    const c = p.worker !== null ? this.creatures.get(p.worker) : undefined;
+    p.worker = null;
+    if (!c) return;
+    c.post = null;
+    c.state = 'idle';
+    c.until = this.time;
+    c.enemy = null;
+    if (!this.creatures.active()) {
+      c.mode = 'active';
+      this.logMsg(`The post ${why}. ${c.name} comes looking for you.`, 'system');
+    } else if (this.deed) {
+      // Whatever it was holding goes into the settlement's own crate.
+      const crate = this.deedCrate();
+      if (c.carrying && crate && this.crateAdd(crate, c.carrying)) c.carrying = null;
+      else if (c.carrying) this.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
+      c.carrying = null;
+      c.mode = 'stored';
+      c.x = this.deed.x + 0.5;
+      c.y = this.deed.y + 1.5;
+      this.logMsg(`The post ${why}. ${c.name} goes back to the token of ${this.deed.name}.`, 'system');
+    } else {
+      c.mode = 'wild';
+      this.logMsg(`The post ${why}, and with no settlement to go to and you already spoken for, ${c.name} wanders off.`, 'error');
+    }
+    this.events.emit('creature');
+  }
+
+  /** Take a creature off whatever post it is on, quietly, when it is re-ordered. */
+  clearPost(c: Creature): void {
+    const p = this.postOf(c);
+    if (p) p.worker = null;
+    c.post = null;
+  }
+
+  removePost(id: number, why = 'is gone'): void {
+    const p = this.posts.get(id);
+    if (!p) return;
+    this.leavePost(p, why);
+    this.placed.posts.remove(p);
+    this.posts.delete(id);
+    this.events.emit('world', p.x, p.y);
+  }
+
+  /**
+   * Posts rotting where they stand. Nothing holds one up and nothing can be
+   * done about it: the only question is whether the work got done first.
+   */
+  private runPosts(dt: number): void {
+    for (const p of [...this.posts.values()]) {
+      const before = p.dmg;
+      p.dmg = Math.min(100, p.dmg + postDecayRate(p.ql) * dt);
+      // One word of warning, once, when it is nearly through.
+      if (before < 85 && p.dmg >= 85 && p.worker !== null) {
+        const [cx, cy] = postCentre(p);
+        this.logMsg(`The ${postName(p).toLowerCase()} at ${Math.floor(cx)}, ${Math.floor(cy)} is leaning badly and has not long left.`, 'error');
+      }
+      if (p.dmg >= 100) this.removePost(p.id, 'rots through and falls over');
+    }
   }
 
   addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false, material?: string): PlacedCrate {
@@ -2127,6 +2255,39 @@ export class Game {
    * about the deed crate and nothing else. A trash crate is never offered,
    * since nothing a worker carries is meant for it.
    */
+  /** One crate, as a place a worker can put something down. */
+  private crateStore(c: PlacedCrate): DeedStore {
+    const cap = crateCapacity(c);
+    return {
+      x: c.x,
+      y: c.y,
+      centre: crateCentre(c),
+      items: c.items,
+      name: crateName(c),
+      deed: !!c.deed,
+      room: (item) => crateUnits(c) + item.count <= cap,
+      add: (item) => this.crateAdd(c, item),
+      changed: () => this.events.emit('crate'),
+    };
+  }
+
+  /** One piece of furniture, the same way; undefined for the ones that hold nothing. */
+  private furnitureStore(f: PlacedFurniture): DeedStore | undefined {
+    const def = furnitureDef(f.kind);
+    if (!def.capacity || def.trash) return undefined;
+    return {
+      x: f.x,
+      y: f.y,
+      centre: furnitureCentre(f),
+      items: f.items,
+      name: def.name,
+      deed: false,
+      room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= furnitureCapacity(f),
+      add: (item) => this.furnitureAdd(f, item),
+      changed: () => this.events.emit('crate'),
+    };
+  }
+
   deedStores(): DeedStore[] {
     // A field worker asks this for every tile it looks at, so build the list
     // once a tick. The entries hold the crates and pieces themselves, so what
@@ -2134,37 +2295,32 @@ export class Game {
     const stamp = this.crates.size * 1000 + this.furniture.size;
     if (this.storeCache && this.storeCache.at === this.time && this.storeCache.stamp === stamp) return this.storeCache.stores;
     const out: DeedStore[] = [];
-    for (const c of this.crates.values()) {
-      if (!this.onDeed(c.x, c.y)) continue;
-      const cap = crateCapacity(c);
-      out.push({
-        x: c.x,
-        y: c.y,
-        centre: crateCentre(c),
-        items: c.items,
-        name: crateName(c),
-        deed: !!c.deed,
-        room: (item) => crateUnits(c) + item.count <= cap,
-        add: (item) => this.crateAdd(c, item),
-        changed: () => this.events.emit('crate'),
-      });
-    }
+    for (const c of this.crates.values()) if (this.onDeed(c.x, c.y)) out.push(this.crateStore(c));
     for (const f of this.furniture.values()) {
-      const def = furnitureDef(f.kind);
-      if (!def.capacity || def.trash || !this.onDeed(f.x, f.y)) continue;
-      out.push({
-        x: f.x,
-        y: f.y,
-        centre: furnitureCentre(f),
-        items: f.items,
-        name: def.name,
-        deed: false,
-        room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= furnitureCapacity(f),
-        add: (item) => this.furnitureAdd(f, item),
-        changed: () => this.events.emit('crate'),
-      });
+      if (!this.onDeed(f.x, f.y)) continue;
+      const store = this.furnitureStore(f);
+      if (store) out.push(store);
     }
     this.storeCache = { at: this.time, stamp, stores: out };
+    return out;
+  }
+
+  /**
+   * Anything within reach of a worker's post that will hold what it is
+   * carrying. Put a crate beside the post and a logging camp keeps itself;
+   * leave the post bare and the loads go all the way home.
+   */
+  postStores(c: Creature): DeedStore[] {
+    const p = this.postOf(c);
+    if (!p) return [];
+    const [cx, cy] = postCentre(p);
+    const reach = postRadius(p.ql);
+    const out: DeedStore[] = [];
+    this.placed.crates.around(cx, cy, reach, (crate) => out.push(this.crateStore(crate)));
+    this.placed.furniture.around(cx, cy, reach, (f) => {
+      const store = this.furnitureStore(f);
+      if (store) out.push(store);
+    });
     return out;
   }
 
@@ -2256,6 +2412,7 @@ export class Game {
     for (const k of this.placed.kilns.at(x, y)) if (kilnCovers(k, sx, sy)) return true;
     for (const f of this.placed.furniture.at(x, y)) if (furnitureCovers(f, sx, sy)) return true;
     for (const a of this.placed.anvils.at(x, y)) if (anvilCovers(a, sx, sy)) return true;
+    for (const p of this.placed.posts.at(x, y)) if (p.sx === sx && p.sy === sy) return true;
     return false;
   }
 

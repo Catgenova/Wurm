@@ -228,6 +228,23 @@ rebuilds and commits the result.
   and a better one: the brickwork holds its heat, so what would have burnt
   over a flame comes out right and comes out finer. It leaves ashes like any
   other fire.
+- **Work posts.** A settlement's worth of orders on a stake: 2 planks, 2
+  shafts, 4 nails and a metal ribbon with a mallet, driven into any spot on
+  open ground **outside** your own borders. One wildermon may be set to it and
+  works out of it exactly as it would out of a settlement — the same job, the
+  same skill gained — only measured from the post. A post is a work site
+  rather than a settlement, so it keeps its creature on a short rein: 8 tiles
+  round a rough one and 20 round the best, whatever the creature has learned.
+  Anything with room in it inside that circle takes the loads, so a crate
+  beside the post makes a camp that keeps itself. Nothing holds a post up and
+  it rots where it stands — about half an hour at quality 1 and three hours at
+  quality 100, leaning further as it goes — and when it falls the wildermon
+  comes back to your side if you are walking alone, or goes to the token if you
+  already have a companion. A creature on a post is not on the settlement's
+  books and costs none of the working slots your deed level allows, which is
+  most of what a post is for: a logging camp in a far wood, a digger on a clay
+  bank, a Snout turned loose over an old ruin, for as long as a stake in wet
+  ground lasts.
 - **Bulk, rubbish and a cart.** A bulk storage bin holds 400 of anything that
   stacks and refuses everything that does not. A trash crate rots what is put
   in it thirty times faster than open ground, and Put away never chooses it —

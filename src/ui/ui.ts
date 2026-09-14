@@ -19,12 +19,13 @@ import {
   workLevel,
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
-import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES } from '../game/creatures';
+import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
 import { itemDef, itemName, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
+import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
 import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
@@ -346,6 +347,8 @@ export class UI {
     if (kilnHere) return { title: `Kiln (${kilnState(kilnHere)})`, entries: this.kilnEntries(kilnHere) };
     const anvilHere = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
     if (anvilHere) return { title: `${anvilName(anvilHere)} (QL ${anvilHere.ql.toFixed(0)})`, entries: this.anvilEntries(anvilHere) };
+    const postHere = pick.post !== undefined ? this.game.posts.get(pick.post) : undefined;
+    if (postHere) return { title: `${postName(postHere)} (${postState(postHere)})`, entries: this.postEntries(postHere) };
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
@@ -372,6 +375,23 @@ export class UI {
         const pt: Target = { ...target, sx: sx0, sy: sy0, itemUid: it.uid };
         const reason = placeDef.check?.(pt, this.game) ?? null;
         entries.push({ label: `Place ${itemName(it).toLowerCase()} here (spot ${sx0 + 1},${sy0 + 1})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => this.game.requestAction(placeDef, pt) });
+      }
+    }
+    // Driving a carried work post into the spot under the cursor.
+    const postDef = ACTION_BY_ID.get('place_post');
+    const postItems = this.game.inventory.items.filter((it) => it.id === 'work_post');
+    if (postDef && postItems.length) {
+      const [px0, py0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+      for (const it of postItems) {
+        const pt: Target = { ...target, sx: px0, sy: py0, itemUid: it.uid };
+        const reason = postDef.check?.(pt, this.game) ?? null;
+        entries.push({
+          label: `Drive ${itemName(it).toLowerCase()} in here (spot ${px0 + 1},${py0 + 1})`,
+          note: reason ? undefined : `${Math.round(postLife(it.ql) / 60)} min · reaches ${postRadius(it.ql)} tiles`,
+          hint: reason ?? undefined,
+          disabled: !!reason,
+          onSelect: () => this.game.requestAction(postDef, pt),
+        });
       }
     }
     // Setting carried furniture down on the block of subtiles under the cursor.
@@ -706,6 +726,51 @@ export class UI {
   }
 
   /** Beating a filled mould out on an anvil. */
+  /** Setting a wildermon to a post, calling it off, and pulling the post up. */
+  private postEntries(p: PlacedPost): MenuItem[] {
+    const g = this.game;
+    const pt: Target = { kind: 'post', id: p.id };
+    const entries: MenuItem[] = [];
+    const worker = p.worker !== null ? g.creatures.get(p.worker) : undefined;
+    const reach = postRadius(p.ql);
+    entries.push({ label: `QL ${p.ql.toFixed(0)} · reaches ${reach} tiles · ${postState(p)}`, disabled: true });
+    if (worker) {
+      const def = SPECIES[worker.species];
+      entries.push({ label: `${worker.name} works out of it`, note: def.gathers ? GATHER_VERB[def.gathers] : 'no job', disabled: true });
+    } else {
+      const assign = ACTION_BY_ID.get('assign_post');
+      const candidates = postCandidates(g);
+      if (assign) {
+        entries.push({
+          label: 'Set a wildermon to it',
+          disabled: !candidates.length,
+          hint: candidates.length ? undefined : 'You have no wildermon free to set to it.',
+          children: candidates.length
+            ? candidates.map((c) => {
+                const ct: Target = { kind: 'post', id: p.id, creatureId: c.id };
+                const reason = assign.check?.(ct, g) ?? null;
+                const def = SPECIES[c.species];
+                return {
+                  label: c.name,
+                  note: def.gathers ? GATHER_DO[def.gathers].split(' and ')[0] : 'no job',
+                  hint: reason ?? undefined,
+                  disabled: !!reason,
+                  onSelect: () => g.requestAction(assign, ct),
+                };
+              })
+            : undefined,
+        });
+      }
+    }
+    for (const id of ['unassign_post', 'pick_up_post']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def || !def.applies(pt, g)) continue;
+      const reason = def.check?.(pt, g) ?? null;
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, pt) });
+    }
+    return entries;
+  }
+
   private anvilEntries(a: PlacedAnvil): MenuItem[] {
     const g = this.game;
     const at: Target = { kind: 'anvil', id: a.id };
