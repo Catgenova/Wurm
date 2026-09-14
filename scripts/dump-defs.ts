@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { ITEM_DEFS } from '../src/game/items';
-import { TILE_DEFS } from '../src/world/tiles';
+import { TILE_DEFS, ROCK_VARIANTS } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -73,6 +73,17 @@ out.push(`create table if not exists recipe (
  * where its centre is and therefore whether you are standing near enough to
  * use it. A hearth is anything with a fire in it.
  */
+/*
+ * The rock under the island, in the order it is stored in.
+ *
+ * The index is the storage, not the ladder — a tile's rock is written down as
+ * a number, so this list may only ever be appended to. `level` is the ladder:
+ * what mining a seam takes.
+ */
+out.push(`create table if not exists rock_def (
+  id int primary key, name text not null, yields text not null,
+  level real not null default 1, ore boolean not null default false
+);`);
 out.push(`create table if not exists furniture_def (
   id text primary key, name text not null, w int not null, h int not null,
   capacity real, hearth boolean not null default false, altar boolean not null default false
@@ -98,8 +109,9 @@ begin
   execute 'alter table recipe_input enable row level security';
   execute 'alter table recipe_gives enable row level security';
   execute 'alter table furniture_def enable row level security';
+  execute 'alter table rock_def enable row level security';
 end $rls$;`);
-for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def']) {
+for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def', 'rock_def']) {
   out.push(`drop policy if exists ${t}_read on ${t};`);
   out.push(`create policy ${t}_read on ${t} for select to anon, authenticated using (true);`);
   out.push(`grant select on ${t} to anon, authenticated;`);
@@ -174,7 +186,11 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def;`);
+ROCK_VARIANTS.forEach((r, i) => {
+  const rock = r as unknown as A;
+  out.push(`insert into rock_def values (${q(i)}, ${q(rock.name)}, ${q(rock.yields)}, ${q(rock.level ?? 1)}, ${q(String(rock.yields).endsWith('_ore'))});`);
+});
 for (const f of FURNITURE as unknown as A[]) {
   out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);
 }

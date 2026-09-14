@@ -320,3 +320,54 @@ select '48. and once anything looks at it, that is written down: lit=' || lit::t
      || ', ashes ' || floor(ash) || ' — and baking is refused again: '
      || coalesce(act_refusal(:'world2', :'ivar', 'bake_potato', '{"kind":"item"}'), 'STILL ALLOWED') from placed where id = :'fire';
 \echo ''
+\echo '--- working the ground: rock, soil and what is laid over them'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 5.5, y = 5.5 where uid = :'ivar';
+
+-- A corner dug right down to the rock, which is what turns a tile to rock.
+do $$
+declare w uuid := (select id from world order by name limit 1);
+begin
+  perform land_set_dirt(w, 5, 5, 0); perform land_set_dirt(w, 6, 5, 0);
+  perform land_set_dirt(w, 6, 6, 0); perform land_set_dirt(w, 5, 6, 0);
+  perform land_set_height(w, 5, 5, 40); perform land_set_height(w, 6, 5, 40);
+  perform land_set_height(w, 6, 6, 40); perform land_set_height(w, 5, 6, 40);
+  perform land_set_rock(w, 5, 5, 15);   -- an iron vein
+  perform reconcile(w, 5, 5);
+end $$;
+select '49. every corner cut to the rock: the tile is now ' || (select name from tile_def where id = land_tile(:'world2',5,5))
+     || ', showing ' || (select name from rock_def where id = land_rock(:'world2',5,5))
+     || ' at up to QL ' || ore_max_ql((select seed from world where id = :'world2'), 5, 5);
+select '50. mining it at digging-level skill: ' || coalesce(act_refusal(:'world2', :'ivar', 'mine', '{"kind":"tile","x":5,"y":5,"cx":5,"cy":5}'), 'allowed');
+update skill set value = 30 where uid = :'ivar' and id = 'mining';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'mining', 30 where not exists (select 1 from skill where uid = :'ivar' and id = 'mining');
+select '51. and with mining at 30: ' || coalesce(act_refusal(:'world2', :'ivar', 'mine', '{"kind":"tile","x":5,"y":5,"cx":5,"cy":5}'), 'allowed');
+select rpc_act(:'world2', 'mine', '{"kind":"tile","x":5,"y":5,"cx":5,"cy":5}', 8) \g /dev/null
+update player set act_started = act_started - interval '900 seconds', act_ends = act_ends - interval '900 seconds' where uid = :'ivar';
+select coalesce(settle(:'world2', :'ivar')::text, '0') as mined \gset
+select '52. eight swings: ' || :'mined' || ' settled, and the pack holds '
+     || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'iron_ore') || ' iron ore at QL '
+     || coalesce((select round(ql::numeric,1)::text from item where holder_uid = :'ivar' and def = 'iron_ore' limit 1), '-')
+     || ' (the seam holds at most ' || ore_max_ql((select seed from world where id = :'world2'), 5, 5) || ')';
+select '    told: ' || coalesce(string_agg(text, ' | ' order by n), 'nothing') from event where uid = :'ivar' and kind = 'event' and text not like 'You start%';
+
+-- And the soil side of it.
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 9.5, y = 9.5 where uid = :'ivar';
+do $$ declare w uuid := (select id from world order by name limit 1);
+begin perform land_set_tile(w, 9, 9, 0); end $$;
+select '53. grass at 9,9 — pack it: ' || coalesce(act_refusal(:'world2', :'ivar', 'pack', '{"kind":"tile","x":9,"y":9}'), 'allowed');
+select rpc_act(:'world2', 'pack', '{"kind":"tile","x":9,"y":9}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '54. it is now ' || (select name from tile_def where id = land_tile(:'world2',9,9))
+     || '; paving it with gravel: ' || coalesce(act_refusal(:'world2', :'ivar', 'pave_gravel', '{"kind":"tile","x":9,"y":9}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'rock_shards', 40, 2);
+select rpc_act(:'world2', 'pave_gravel', '{"kind":"tile","x":9,"y":9}', 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '55. with shards in hand it becomes ' || (select name from tile_def where id = land_tile(:'world2',9,9))
+     || ', shards left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'rock_shards')
+     || ' — and cultivating gravel: ' || coalesce(act_refusal(:'world2', :'ivar', 'cultivate', '{"kind":"tile","x":9,"y":9}'), 'ALLOWED');
+\echo ''

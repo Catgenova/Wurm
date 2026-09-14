@@ -34,8 +34,8 @@ simplification rather than a problem:
 |---|---|
 | **205** | recipes — every one of them, through one performer |
 | **14** | things set down on the ground: campfires, smelters, furniture |
-| **1** | digging |
-| **154** | known, listed, and honestly refused |
+| **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
+| **146** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -54,8 +54,19 @@ being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the ledger, the journal,
-kilns and what they fire, smelting jobs themselves, and the ease a hot oven
-lends to cooking.
+kilns and what they fire, smelting jobs themselves, flattening and levelling,
+paving with cut slabs, and the ease a hot oven lends to cooking.
+
+### The ore hash is the ore hash
+
+What is under a tile, and the best quality it will give up, were decided when
+the island was rolled in the browser — by a hash of the tile and the seed. The
+port reproduces it exactly rather than approximately, because anything else
+would be an island handing out different metal from the one it was made with.
+JavaScript does it in unsigned 32-bit arithmetic with `>>> 0` and `Math.imul`,
+neither of which Postgres has, so every step is taken in `bigint` and folded
+back with `% 4294967296`. Checked against the TypeScript to twelve decimal
+places, including the far corner of a thousand-tile island.
 
 ### Fires burn on the wall clock
 
