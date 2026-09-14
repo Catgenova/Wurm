@@ -464,3 +464,43 @@ select '73. the field is ' || (select name from tile_def where id = land_tile(:'
      || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint') || ' mint and '
      || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint_seed') || ' seeds';
 \echo ''
+\echo '--- a line in the water'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_queue = '[]', x = 2.5, y = 2.5 where uid = :'ivar';
+-- A shelf of water: shallow at 3,2 and a drop-off at 4,2.
+do $$
+declare w uuid := (select id from world order by name limit 1); i int;
+begin
+  for i in 2..6 loop
+    perform land_set_height(w, i, 2, -4); perform land_set_height(w, i, 3, -4);
+  end loop;
+  perform land_set_height(w, 4, 2, -20); perform land_set_height(w, 5, 2, -20);
+  perform land_set_height(w, 4, 3, -20); perform land_set_height(w, 5, 3, -20);
+  perform land_set_height(w, 2, 2, 10); perform land_set_height(w, 2, 3, 10);
+end $$;
+select '74. water off the bank: ' || round(water_depth(:'world2', 3, 2)) || ' deep at 3,2 and '
+     || round(water_depth(:'world2', 4, 2)) || ' at the drop-off';
+select '75. with no rod: ' || coalesce(act_refusal(:'world2', :'ivar', 'fish', '{"kind":"tile","x":3,"y":2}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'fishing_rod', 45, 1);
+select '76. rod in hand, line in the shallows: ' || coalesce(act_refusal(:'world2', :'ivar', 'fish', '{"kind":"tile","x":3,"y":2}'), 'allowed')
+     || ' — and what runs there: ' || (select string_agg(name, ', ' order by depth) from fish_here(water_depth(:'world2',3,2), skill_of(:'world2',:'ivar','fishing')));
+update skill set value = 40 where uid = :'ivar' and id = 'fishing';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'fishing', 40 where not exists (select 1 from skill where uid = :'ivar' and id = 'fishing');
+select '77. at fishing 40 over the drop-off: ' || (select string_agg(name, ', ' order by depth) from fish_here(water_depth(:'world2',4,2), 40))
+     || ' — a beginner over the same water would land ' || (select string_agg(name, ', ' order by depth) from fish_here(water_depth(:'world2',4,2), 1));
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'worm', 30, 5);
+select '78. the bait it would choose: ' || coalesce(bait_for(:'world2', :'ivar', water_depth(:'world2',4,2), 40), 'none worth using');
+select rpc_act(:'world2', 'fish', '{"kind":"tile","x":3,"y":2}', 6) \g /dev/null
+update player set act_started = act_started - interval '900 seconds', act_ends = act_ends - interval '900 seconds' where uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '79. six casts: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said');
+select '80. in the creel: ' || coalesce((select string_agg(d, ', ' order by d) from (
+         select def || ' ×' || sum(count) as d from item
+         where holder_uid = :'ivar' and def in (select id from fish_def) group by def) q), 'nothing')
+     || ', worms left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'worm');
+-- A bait's pull, over enough draws to see it.
+select '81. a thousand draws over the drop-off, bare hook vs a live minnow:';
+select '    bare:  ' || string_agg(f || ' ' || n, ', ' order by n desc) from (select pick_fish(20, 60, null, random()) f, count(*) n from generate_series(1,1000) group by 1) q;
+select '    minnow on it: ' || string_agg(f || ' ' || n, ', ' order by n desc) from (select pick_fish(20, 60, 'minnow', random()) f, count(*) n from generate_series(1,1000) group by 1) q;
+\echo ''

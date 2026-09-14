@@ -37,7 +37,8 @@ simplification rather than a problem:
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
-| **137** | known, listed, and honestly refused |
+| **2** | fishing: a rod off the bank, a net walked round |
+| **135** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -57,8 +58,18 @@ being refused because your hands are full.
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), the ledger, the journal,
 kilns and what they fire, smelting jobs themselves, flattening and levelling,
-paving with cut slabs, fishing, planting trees, prospecting, and the ease a hot
-oven lends to cooking.
+paving with cut slabs, planting trees, prospecting, and the ease a hot oven
+lends to cooking.
+
+### Nothing a player owns may point at generated data
+
+`crop.id` had a foreign key into `crop_def`, which reads like good hygiene and
+is a trap: the definition tables are reloaded wholesale by `npm run defs`, and
+a table cannot be truncated while anything references it. Regenerating after
+adding a crop would have meant failing outright, or truncating the players'
+fields along with the rulebook. The generated file drops such keys itself,
+before the truncate, because a separate migration sorts wherever its timestamp
+puts it and this has to happen first every time.
 
 ### Crops grow while nobody is watching
 

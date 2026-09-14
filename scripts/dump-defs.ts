@@ -19,6 +19,7 @@ import { RECIPES } from '../src/game/recipes';
 import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
+import { FISH, BAITS } from '../src/game/fishing';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -100,6 +101,17 @@ out.push(`create table if not exists crop_def (
   id text primary key, name text not null, seed text not null, produce text not null,
   stage_seconds real not null
 );`);
+/* What swims where, and what brings it up. `depth` is the water it will not be
+ * found in less than; `level` the skill before one comes up at all. */
+out.push(`create table if not exists fish_def (
+  id text primary key, name text not null, depth real not null, level real not null, weight real not null
+);`);
+out.push(`create table if not exists bait_def (id text primary key, note text not null);`);
+/* Ordered: a bait's first favourite bites hardest. */
+out.push(`create table if not exists bait_favours (
+  bait text not null references bait_def on delete cascade,
+  rank int not null, fish text not null, primary key (bait, rank)
+);`);
 out.push(`create table if not exists furniture_def (
   id text primary key, name text not null, w int not null, h int not null,
   capacity real, hearth boolean not null default false, altar boolean not null default false
@@ -130,13 +142,32 @@ begin
   execute 'alter table bush_def enable row level security';
   execute 'alter table loot_table enable row level security';
   execute 'alter table crop_def enable row level security';
+  execute 'alter table fish_def enable row level security';
+  execute 'alter table bait_def enable row level security';
+  execute 'alter table bait_favours enable row level security';
 end $rls$;`);
-for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def', 'rock_def', 'tree_def', 'bush_def', 'loot_table', 'crop_def']) {
+for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furniture_def', 'rock_def', 'tree_def', 'bush_def', 'loot_table', 'crop_def', 'fish_def', 'bait_def', 'bait_favours']) {
   out.push(`drop policy if exists ${t}_read on ${t};`);
   out.push(`create policy ${t}_read on ${t} for select to anon, authenticated using (true);`);
   out.push(`grant select on ${t} to anon, authenticated;`);
   out.push(`revoke insert, update, delete on ${t} from anon, authenticated;`);
 }
+/*
+ * Player data may not point at generated data — and this makes sure of it.
+ *
+ * `crop.id` referenced `crop_def`, which reads like good hygiene and is a
+ * trap: these tables are reloaded wholesale, and a table cannot be truncated
+ * while anything references it. Regenerating after adding a crop would have
+ * meant failing outright, or truncating the players' fields along with the
+ * rulebook.
+ *
+ * The generated file drops such keys itself rather than relying on a separate
+ * migration, because a separate one sorts wherever its timestamp puts it and
+ * this has to happen first, every time, on a fresh database as much as an old
+ * one.
+ */
+out.push('');
+out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
 out.push('truncate item_def, tile_def, skill_def, material_def;');
 out.push('');
@@ -206,7 +237,12 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def;`);
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def;`);
+for (const f of FISH) out.push(`insert into fish_def values (${q(f.id)}, ${q(f.name)}, ${q(f.depth)}, ${q(f.level)}, ${q(f.weight)});`);
+for (const b of BAITS) {
+  out.push(`insert into bait_def values (${q(b.id)}, ${q(b.note)});`);
+  b.favours.forEach((fish, rank) => out.push(`insert into bait_favours values (${q(b.id)}, ${q(rank)}, ${q(fish)});`));
+}
 for (const c of CROP_LIST) {
   out.push(`insert into crop_def values (${q(c.id)}, ${q(c.name)}, ${q(c.seed)}, ${q(c.produce)}, ${q(c.stageSeconds)});`);
 }

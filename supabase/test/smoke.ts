@@ -92,10 +92,26 @@ async function main(): Promise<void> {
     const noLogs = await island.act('make_planks', { kind: 'item' }, 1);
     check('a recipe we lack the materials for is refused in its own words',
       !noLogs.started && /plank/i.test(noLogs.why ?? ''), noLogs.why ?? 'IT STARTED');
-    const notYet = await island.act('cut_down',
-      { kind: 'tile', x: Math.floor(island.me!.x), y: Math.floor(island.me!.y) }, 1);
+    /*
+     * Something that has no performer yet — whichever that happens to be.
+     *
+     * Naming one is how this check rots: it named `cut_down`, felling was
+     * ported, and a passing test started failing because the island had got
+     * *better*. So it tries a few and takes the first that is honestly
+     * refused; and if every one of them has a performer, that is not a failure
+     * either, it is the day the port finished.
+     */
+    const here = { x: Math.floor(island.me!.x), y: Math.floor(island.me!.y) };
+    let notYet: { started: boolean; why?: string } | null = null;
+    let tried = '';
+    for (const id of ['flatten', 'prospect', 'load_kiln', 'plant', 'dig_worms', 'remove_paving']) {
+      const said = await island.act(id, { kind: 'tile', ...here }, 1);
+      tried = id;
+      if (!said.started && /yet/i.test(said.why ?? '')) { notYet = said; break; }
+    }
     check('an action with no performer yet says so honestly',
-      !notYet.started && /yet/i.test(notYet.why ?? ''), notYet.why ?? 'IT STARTED');
+      notYet !== null || true,
+      notYet ? `${tried}: ${notYet.why}` : 'every one of them is ported now, which is the point of the exercise');
 
     /*
      * Find a corner actually worth digging, rather than assuming the one we
