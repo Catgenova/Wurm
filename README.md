@@ -121,7 +121,7 @@ rebuilds and commits the result.
   waist-high work, so a storey cannot be raised over a run of it. Staircases and ladders on an upper
   storey take you up and down, and roofs go on once the top storey's walls are
   finished, shaping themselves into hips and ridges from their neighbours.
-- **A journal of goals.** Fifty-seven goals in seven chapters — Ashore, The
+- **A journal of goals.** Fifty-nine goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
   felling your first tree to landing one of every fish, brewing all four,
   making something fantastic and taking a trade to 99. Nothing is required and
@@ -458,6 +458,17 @@ rebuilds and commits the result.
   hidden); workers gain skill at half a player's pace, work at half a player's
   speed, improve the quality and pace of their work as they level, and range
   10 tiles further from the token for every 10 levels of their task skill.
+- **Dye.** Eight dyestuffs boiled out of things that grow, each with a
+  bucket of lye to bite the colour in and hold it: **woad** (blue, from
+  blueberries), **madder** (red, raspberries), **scarlet** (strawberries),
+  **cochineal** (crimson, lingonberries), **oak gall** (black, acorns),
+  **weld** (yellow, sage), **verdigris** (green, mint) and **umber**
+  (brown, nut husks). One pot colours one thing, and cloth and leather take
+  dye where metal will not — armour of those two sorts, cloth, sacks,
+  satchels, backpacks, a saddle, a bridle, a **banner**, and a sailing
+  boat's sail. A dyed chest or leg piece is worn where it shows: the figure
+  on screen walks about in it, and a planted banner flies your colour over
+  the deed. Boil it out in lye to change your mind.
 - **Titles and knacks.** Every trade hands out a **title** at 50, 70, 90 and
   99 — Joiner, Carpenter, Master Carpenter, Legendary Carpenter — and you
   wear one at a time, picked in the Skills window and shown beside your

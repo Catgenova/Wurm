@@ -111,7 +111,7 @@ export function buildHelp(win: UIWindow): void {
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: fifty-seven goals in seven chapters, from felling your first tree to
+    (<kbd>J</kbd>) is that list: fifty-nine goals in seven chapters, from felling your first tree to
     taking a trade to 99. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
@@ -538,6 +538,23 @@ export function buildHelp(win: UIWindow): void {
     everything that trade teaches you from then on, it never wears off, and a trade holds <b>five</b> of
     them: half again on every gain, for good. They stack with a night's rest and with what you have
     eaten, and the Skills window shows how many each trade has.</p>
+    <h3>Dye</h3>
+    <p>Everything made here comes out the colour of what it was made from: cloth the grey-white of the
+    wool, leather the brown of the hide. A <b>dye</b> changes that, and it is the first thing in the
+    game that is yours rather than the island's.</p>
+    <p>A dye is boiled out of something that grows with a bucket of <b>lye</b> to bite the colour in and
+    hold it &mdash; without the lye it washes straight out. Eight of them: <b>woad</b> (blue, from
+    blueberries), <b>madder</b> (red, raspberries), <b>scarlet</b> (strawberries), <b>cochineal</b>
+    (crimson, lingonberries), <b>oak gall</b> (black, acorns), <b>weld</b> (yellow, sage),
+    <b>verdigris</b> (green, mint) and <b>umber</b> (brown, nut husks), in that order of difficulty
+    &mdash; umber is very hard to get wrong and scarlet costs twice what it looks like it should. One
+    boil gives two pots and hands the bucket back.</p>
+    <p>One pot colours one thing. Cloth and leather take dye and metal does not, so that is armour of
+    those two sorts, cloth itself, sacks, satchels, backpacks, a saddle, a bridle, a <b>banner</b> and a
+    <b>sailing boat</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
+    about in it. A banner is cloth on a staff &mdash; four cloth, two shafts, a rope and six nails
+    &mdash; planted anywhere, and it flies whatever colour you dyed it. Boil it out again in lye if you
+    change your mind.</p>
     <h3>Rope</h3>
     <p>Wemp is grown in a field, cut for <b>fibre</b>, and the fibre goes two ways. Spun on a spindle it
     is coarse yarn; laid up on a <b>rope tool</b> (a plank and a shaft, carved) it is <b>rope</b> &mdash;

@@ -4,6 +4,7 @@ import { itemDef, rollRarity, RARITY_WORD } from './items';
 import { FURNITURE } from './furniture';
 import { MOULDS } from './metal';
 import { FISH } from './fishing';
+import { DYES } from './dyes';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
 
 /**
@@ -60,6 +61,12 @@ export interface Recipe {
   material?: MaterialKind;
   /** The one wood it may be made from, for the things that are that fussy. */
   wood?: string;
+  /**
+   * A fixed qualifier stamped on the product instead of the material it was
+   * made from: the dyestuff on a pot of dye, which is what tells eight
+   * colours apart when they are all one item.
+   */
+  extra?: string;
   /** Things handed back when it succeeds, such as the bucket the lye was in. */
   returns?: Array<[string, number]>;
   /**
@@ -261,6 +268,33 @@ const FISH_RECIPES: Recipe[] = FISH.map((f) => ({
 
 RECIPES.push(...FISH_RECIPES);
 
+/**
+ * Every dye is boiled the same way: a quantity of something that grows, a
+ * bucket of lye to bite it into the fibre, and a long simmer. The dyestuff
+ * is written on the pot, so one item id carries all eight colours.
+ */
+const DYE_RECIPES: Recipe[] = DYES.map((d) => ({
+  id: `make_${d.id}`,
+  category: 'Alchemy' as RecipeCategory,
+  result: 'dye',
+  count: 2,
+  inputs: [{ item: d.from, count: d.count }, { item: 'lye_bucket' }],
+  skill: 'alchemy',
+  returns: [['bucket', 1]] as Array<[string, number]>,
+  salvage: [['bucket', 1]] as Array<[string, number]>,
+  label: `Boil ${d.name.toLowerCase()}`,
+  verb: `boiling ${d.name.toLowerCase()}`,
+  baseTime: 12,
+  stamina: 0.04,
+  difficulty: d.difficulty,
+  extra: d.name,
+  done: `${d.note} Two pots of it, and the bucket is empty.`,
+  fail: 'The colour breaks in the pot and goes out grey and streaky. The lot is wasted.',
+  consumeOnFail: true,
+}));
+
+RECIPES.push(...DYE_RECIPES);
+
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
@@ -453,7 +487,7 @@ export function recipeAction(r: Recipe): ActionDef {
       const fromInputs = r.qlFromInputs ? inputQl(g, r) : 0;
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item))) return;
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
-      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql, extra: mat });
+      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql, extra: r.extra ?? mat });
       // Now and again a thing comes off the bench better than the hands that
       // made it had any right to produce. Nothing brings it on.
       const rare = rollRarity(g.rand);

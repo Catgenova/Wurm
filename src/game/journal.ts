@@ -118,6 +118,8 @@ export const JOURNAL: Chapter[] = [
       { id: 'fivetrades', text: 'Take five trades past 30', met: (g) => [...g.skills.values.values()].filter((v) => v >= 30).length >= 5 },
       { id: 'fantastic', text: 'Make something fantastic', hint: 'One thing in ten thousand', met: did('fantastic') },
       { id: 'hundred', text: 'Take a trade to 99', hint: 'Nobody has ever needed to', met: (g) => [...g.skills.values.values()].some((v) => v >= 99) },
+      { id: 'dye', text: 'Boil a pot of dye', hint: 'Something that grows, and a bucket of lye', met: did('dyed') },
+      { id: 'colours', text: 'Fly your colour over the deed', hint: 'A dyed banner, planted', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'banner' && !!f.dye) },
       { id: 'title', text: 'Earn a title', hint: 'Any trade at 50', met: (g) => g.player.titles.length > 0 },
       { id: 'master', text: 'Earn a master title', hint: 'Any trade at 90', met: (g) => g.player.titles.some((t) => t.endsWith(':90') || t.endsWith(':99')) },
       { id: 'knack', text: 'Find a knack for something', hint: 'Every ten points of a trade leaves one', met: did('knack') },

@@ -1,4 +1,6 @@
 import { matOfItem, workingQl } from './materials';
+import { dyeWord } from './dyestuffs';
+
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
 
 export interface ItemDef {
@@ -262,6 +264,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   corn: { name: 'Corn', category: 'food', weight: 0.2, stackable: true, food: 0.11 },
   cotton: { name: 'Cotton', category: 'material', weight: 0.1, stackable: true, decay: 30 },
   wemp: { name: 'Wemp fibre', category: 'material', weight: 0.1, stackable: true, decay: 30 },
+  dye: { name: 'Dye', category: 'material', weight: 0.8, stackable: true, decay: 5, description: 'A pot of colour, struck with lye so it bites and holds. One pot does one thing.' },
+  banner: { name: 'Banner', category: 'misc', weight: 4, decay: 5, description: 'Cloth on a staff. Plant it on the deed and fly your colour over it.' },
   rope: { name: 'Rope', category: 'material', weight: 0.6, stackable: true, decay: 6, description: 'Wemp laid up into three strands on a rope tool. Everything that has to hold, hold fast or haul is roped.' },
   thick_rope: { name: 'Thick rope', category: 'material', weight: 2.4, stackable: true, decay: 4, description: 'Three ropes laid up again into a hawser. It moors a hull, hangs a bucket down a shaft and carries a span of bridge.' },
   onion: { name: 'Onion', category: 'food', weight: 0.15, stackable: true, food: 0.06 },
@@ -346,6 +350,8 @@ export interface Item {
   rare?: number;
   /** What is in it, for the things that hold things. */
   inside?: Item[];
+  /** The colour it has been dyed, for the things that take a dye. */
+  dye?: string;
 }
 
 /**
@@ -447,7 +453,7 @@ export function bagAdd(bag: Item, item: Item): boolean {
   if (bagRefuses(bag, item)) return false;
   if (!bag.inside) bag.inside = [];
   const def = ITEM_DEFS[item.id];
-  const stack = def?.stackable ? bag.inside.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare) : undefined;
+  const stack = def?.stackable ? bag.inside.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye) : undefined;
   if (stack) {
     stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
     stack.count += item.count;
@@ -466,7 +472,11 @@ export function bagTake(bag: Item, uid: number): Item | null {
 export function itemName(item: Item): string {
   const def = itemDef(item.id);
   const rare = rarityOf(item).name;
-  const base = rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} ${def.name.toLowerCase()}` : def.name;
+  // Colour comes first, then rarity, then the thing itself: a Blue supreme
+  // cloth tunic reads the way somebody would actually say it.
+  const colour = dyeWord(item.dye);
+  const words = [colour, rare].filter(Boolean).join(' ');
+  const base = words ? `${words.charAt(0).toUpperCase()}${words.slice(1)} ${def.name.toLowerCase()}` : def.name;
   let name = item.extra ? `${base} (${item.extra.toLowerCase()})` : base;
   if (def.charges) name += ` (${item.charges ?? 0}/${def.charges})`;
   return name;
@@ -500,7 +510,7 @@ export class Inventory {
     const def = itemDef(item.id);
     if (item.uid >= this.nextUid) this.nextUid = item.uid + 1;
     if (def.stackable) {
-      const existing = this.items.find((it) => it.id === item.id && it.extra === item.extra && it.uid !== item.uid);
+      const existing = this.items.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye && it.uid !== item.uid);
       if (existing) {
         existing.ql = (existing.ql * existing.count + item.ql * item.count) / (existing.count + item.count);
         existing.count += item.count;

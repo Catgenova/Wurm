@@ -69,6 +69,7 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   large_barrel: 38,
   rowing_boat: 16,
   sailing_boat: 40,
+  banner: 26,
 };
 
 /**
@@ -171,7 +172,12 @@ function barrelShape(ctx: CanvasRenderingContext2D, W: number, D: number, h: num
   }
 }
 
-type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean) => void;
+/** A colour a piece has been dyed: the lit face and the shaded one. */
+export interface Tint {
+  colour: string;
+  shade: string;
+}
+type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean, tint?: Tint) => void;
 
 const DRAW: Record<string, Draw> = {
   stool: (ctx, W, D, h) => {
@@ -551,7 +557,7 @@ const DRAW: Record<string, Draw> = {
       ctx.stroke();
     }
   },
-  sailing_boat: (ctx, W, D, h) => {
+  sailing_boat: (ctx, W, D, h, _lit, tint) => {
     hull(ctx, W, D, h * 0.45, WOODS.oak);
     // A mast with the sail bent on, leaning the way she is going.
     const mh = h * 0.95;
@@ -561,18 +567,51 @@ const DRAW: Record<string, Draw> = {
     ctx.moveTo(0, -h * 0.45);
     ctx.lineTo(0, -mh);
     ctx.stroke();
-    ctx.fillStyle = LINEN.top;
+    ctx.fillStyle = tint?.colour ?? LINEN.top;
     ctx.beginPath();
     ctx.moveTo(0.6, -mh + 1);
     ctx.quadraticCurveTo(W * 0.62, -mh * 0.72, W * 0.34, -h * 0.46);
     ctx.lineTo(0.6, -h * 0.46);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = LINEN.right;
+    ctx.fillStyle = tint?.shade ?? LINEN.right;
     ctx.beginPath();
     ctx.moveTo(0.6, -mh + 1);
     ctx.quadraticCurveTo(W * 0.3, -mh * 0.7, W * 0.16, -h * 0.46);
     ctx.lineTo(0.6, -h * 0.46);
+    ctx.closePath();
+    ctx.fill();
+  },
+  banner: (ctx, W, D, h, _lit, tint) => {
+    // A staff out of the ground with a long cloth hanging off a crosspiece.
+    ctx.strokeStyle = WOODS.dark.top;
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-0.5, -h + 1.5);
+    ctx.lineTo(W * 1.05, -h + 1.5);
+    ctx.stroke();
+    const top = tint?.colour ?? LINEN.top;
+    const shade = tint?.shade ?? LINEN.right;
+    // Two panels, so there is a lit side and a shaded one and it reads as cloth.
+    ctx.fillStyle = top;
+    ctx.beginPath();
+    ctx.moveTo(0, -h + 2);
+    ctx.lineTo(W, -h + 2);
+    ctx.lineTo(W, -h * 0.3);
+    ctx.quadraticCurveTo(W * 0.5, -h * 0.2, 0, -h * 0.32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.55, -h + 2);
+    ctx.lineTo(W, -h + 2);
+    ctx.lineTo(W, -h * 0.3);
+    ctx.quadraticCurveTo(W * 0.77, -h * 0.24, W * 0.55, -h * 0.27);
     ctx.closePath();
     ctx.fill();
   },
@@ -663,7 +702,7 @@ function wheel(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, 
 }
 
 /** Draw one piece with its floor contact at (sx, sy). */
-export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false): void {
+export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint): void {
   const [W, D] = furnitureSpan(kind);
   const h = FURNITURE_HEIGHT[kind] ?? 14;
   ctx.save();
@@ -673,6 +712,6 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
   ctx.beginPath();
   ctx.ellipse(0, 0, W * 0.95, D * 0.95, 0, 0, TAU);
   ctx.fill();
-  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit);
+  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit, tint);
   ctx.restore();
 }

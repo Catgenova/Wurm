@@ -2659,6 +2659,9 @@ export interface PlayerPose {
   working: boolean;
   /** Sitting on a seat with the reins in both hands rather than walking. */
   driving?: boolean;
+  /** The colour of what is on the chest and the legs, when either has been dyed. */
+  tunic?: string;
+  trousers?: string;
 }
 
 const SKIN = '#e6c29a';
@@ -2673,18 +2676,20 @@ const BELT = '#33241a';
  * on the reins, and no shadow, because what is under it is the cart.
  */
 function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose): void {
+  const tunic = pose.tunic ?? TUNIC;
+  const trousers = pose.trousers ?? TROUSERS;
   const jolt = pose.moving ? Math.sin(pose.phase * 0.9) * 0.6 : 0;
   // thighs forward, shins down
-  ctx.fillStyle = TROUSERS;
+  ctx.fillStyle = trousers;
   ctx.fillRect(-1, -8 + jolt, 8, 3);
   ctx.fillRect(5.5, -8 + jolt, 3, 7);
   // body
-  ctx.fillStyle = TUNIC;
+  ctx.fillStyle = tunic;
   ctx.fillRect(-4.5, -20 + jolt, 9, 13);
   ctx.fillStyle = BELT;
   ctx.fillRect(-4.5, -9.5 + jolt, 9, 1.6);
   // arms out to the reins
-  ctx.fillStyle = TUNIC;
+  ctx.fillStyle = tunic;
   ctx.fillRect(2, -18 + jolt, 6, 2.4);
   ctx.fillStyle = SKIN;
   ctx.fillRect(7.5, -18.2 + jolt, 2.4, 2.4);
@@ -2711,6 +2716,8 @@ function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose): void {
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
+  const tunic = pose.tunic ?? TUNIC;
+  const trousers = pose.trousers ?? TROUSERS;
   ctx.save();
   ctx.translate(sx, sy);
   ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
@@ -2719,7 +2726,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     ctx.beginPath();
     ctx.ellipse(0, 0, 12, 4.5, 0, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = TUNIC;
+    ctx.fillStyle = tunic;
     ctx.fillRect(-6, -8, 12, 7);
     ctx.fillStyle = SKIN;
     ctx.beginPath();
@@ -2745,17 +2752,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
   ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
   ctx.fill();
   // legs
-  ctx.fillStyle = TROUSERS;
+  ctx.fillStyle = trousers;
   ctx.fillRect(-3.5, -12 + swing * 2, 3, 12 - swing * 2);
   ctx.fillRect(0.5, -12 - swing * 2, 3, 12 + swing * 2);
   // body
-  ctx.fillStyle = TUNIC;
+  ctx.fillStyle = tunic;
   ctx.fillRect(-4.5, -26 - bob, 9, 14);
   ctx.fillStyle = BELT;
   ctx.fillRect(-4.5, -14.5 - bob, 9, 1.6);
   // arms
   const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
-  ctx.fillStyle = TUNIC;
+  ctx.fillStyle = tunic;
   ctx.fillRect(-7, -25 - bob + armSwing, 2.5, 8);
   ctx.fillRect(4.5, -25 - bob - armSwing, 2.5, 8);
   ctx.fillStyle = SKIN;

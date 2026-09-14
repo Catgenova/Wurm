@@ -133,6 +133,7 @@ export const FURNITURE: FurnitureDef[] = [
   piece('loom', 'Loom', 2, 2, [['plank', 8], ['timber', 4], ['shaft', 6], ['nail', 24]], 22, 18, 'You build a loom and thread the warp.'),
   // Masonry, not carpentry: these two are laid in brick and mortar.
   piece('oven', 'Oven', 2, 2, [['stone_brick', 10], ['mortar', 4]], 24, 18, 'You lay the courses, turn an arch over the mouth and leave it to set. An oven.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
+  piece('banner', 'Banner', 1, 1, [['cloth', 4], ['shaft', 2], ['rope', 1], ['nail', 6]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
   piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: bulk, rubbish, and something to pull it in.
   piece('bulk_bin', 'Bulk storage bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a hundred bricks go into.', 400, { bulk: true }),
@@ -190,6 +191,8 @@ export interface PlacedFurniture {
   ferment?: number;
   /** The wood it was built of, for the pieces a carpenter builds. */
   material?: string;
+  /** The colour it was dyed, for a banner and for a sail. */
+  dye?: string;
 }
 
 /** The two liquids worth keeping a barrel for. */
@@ -316,6 +319,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.itemUid);
       if (!item || !isFurniture(item.id) || !g.inventory.remove(item.uid, 1)) return;
       const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra);
+      if (item.dye) f.dye = item.dye;
       g.logMsg(`You set the ${furnitureName(f).toLowerCase()} down.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
@@ -342,7 +346,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length) return;
       g.removeFurniture(f.id);
-      g.inventory.add(f.kind, { ql: f.ql, extra: f.material });
+      const back = g.inventory.add(f.kind, { ql: f.ql, extra: f.material });
+      if (f.dye) back.dye = f.dye;
       g.logMsg(`You pick the ${furnitureName(f).toLowerCase()} up.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
