@@ -579,7 +579,7 @@ declare w uuid := (select id from world limit 1); i int; j int;
 begin
   for j in 6..9 loop for i in 5..9 loop perform land_set_height(w, i, j, 100); end loop; end loop;
 end $$;
-select '82. before anybody has claimed anything: ' || coalesce(plan_reason(:'world2', 6, 7), 'allowed');
+select '82. before anybody has claimed anything: ' || coalesce(plan_reason(:'world2', :'ivar', 6, 7), 'allowed');
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'deed_stake', 50, 1)
   returning id as stake \gset
 select '83. planting the stake: ' || coalesce(act_refusal(:'world2', :'ivar', 'found_settlement',
@@ -590,9 +590,9 @@ select settle(:'world2', :'ivar') \g /dev/null
 select '84. ' || (select name || ' stands at ' || x || ',' || y || ', ' || (radius * 2 + 1) || ' tiles across' from deed where world_id = :'world2')
      || ' — and the stake is gone: ' || (select count(*) from item where holder_uid = :'ivar' and def = 'deed_stake')
      || ' | a second stake: ' || coalesce(act_refusal(:'world2', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');
-select '85. on the token itself: ' || coalesce(plan_reason(:'world2', 5, 7), 'allowed')
-     || ' | outside the border: ' || coalesce(plan_reason(:'world2', 14, 14), 'allowed')
-     || ' | on grass inside it: ' || coalesce(plan_reason(:'world2', 6, 7), 'allowed');
+select '85. on the token itself: ' || coalesce(plan_reason(:'world2', :'ivar', 5, 7), 'allowed')
+     || ' | outside the border: ' || coalesce(plan_reason(:'world2', :'ivar', 14, 14), 'allowed')
+     || ' | on grass inside it: ' || coalesce(plan_reason(:'world2', :'ivar', 6, 7), 'allowed');
 
 update player set x = 6.5, y = 7.5 where uid = :'ivar';
 select land_set_tile(:'world2', 6, 7, tile_id('Packed dirt')), land_set_tile(:'world2', 7, 7, tile_id('Packed dirt')) \g /dev/null
@@ -4766,3 +4766,15 @@ select '673. and from four hundred tiles away, still '
 select '674. ivar works ' || worker_cap(:'big', :'ivar') || ' wildermon and hild '
      || worker_cap(:'big', :'hild') || ', each off their own level — and ivar has '
      || workers_on_deed(:'big', :'ivar') || ' on the books, not hild''s';
+
+-- And the door that was standing open: `plan_reason` refused with the words
+-- "You may only build on your own deed" while asking whether the tile was on
+-- *a* deed. With one settlement to the island those were the same question.
+select '675. hild plans a building inside ivar''s border: '
+     || coalesce(plan_reason(:'big', :'hild',
+          (select d.x + 1 from deed d where d.world_id = :'big' and d.founded_by = :'ivar'),
+          (select d.y from deed d where d.world_id = :'big' and d.founded_by = :'ivar')), 'ALLOWED')
+     || ' — and ivar, on the same tile: '
+     || coalesce(plan_reason(:'big', :'ivar',
+          (select d.x + 1 from deed d where d.world_id = :'big' and d.founded_by = :'ivar'),
+          (select d.y from deed d where d.world_id = :'big' and d.founded_by = :'ivar')), 'allowed');
