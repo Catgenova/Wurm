@@ -1308,7 +1308,15 @@ export const ACTIONS: ActionDef[] = [
     check: (_t, g) => {
       // Somebody else's settlement is not yours to disband, and on an island
       // the browser now holds theirs as well as ours.
-      if (g.deed && g.deed.mine === false) return `${g.deed.name} already stands here. Found yours somewhere else.`;
+      /*
+       * Somebody else's border, which used to arrive as `g.deed` because an
+       * island held one settlement and everybody was handed it. It is a
+       * neighbour now, and the refusal can say whose.
+       */
+      const near = g.deedAt(g.player.tileX, g.player.tileY);
+      if (near) {
+        return `${near.name}${near.holder ? `, which is ${near.holder}'s,` : ''} already reaches here. Found yours further out.`;
+      }
       if (g.deed) return 'You already hold a settlement. Disband it first.';
       const x = g.player.tileX;
       const y = g.player.tileY;

@@ -1165,7 +1165,7 @@ select '195. setting the ulva to watch: ' || coalesce(act_refusal(:'world2', :'i
 select '196. something wild: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || (select id from creature where world_id = :'world2' and mode = 'wild' order by id limit 1) || '}')::jsonb), 'allowed');
 select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'forager' || '}')::jsonb) \g /dev/null
 select '197. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
-select '198. on the books now: ' || workers_on_deed(:'world2') || ' of ' || worker_cap(:'world2')
+select '198. on the books now: ' || workers_on_deed(:'world2', :'ivar') || ' of ' || worker_cap(:'world2', :'ivar')
      || ' at deed level ' || (select level from deed where world_id = :'world2')
      || ' — so a second: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'feller' || '}')::jsonb), 'allowed');
 update deed set level = 3, radius = deed_radius(3) where world_id = :'world2';
@@ -2570,21 +2570,21 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
 update deed set level = 1, radius = deed_radius(1) where world_id = :'world2';
 update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
 select '397. Stonehaven at level 1 reaches ' || (select radius from deed where world_id = :'world2')
-     || ' tiles and works ' || worker_cap(:'world2') || ' wildermon — and level 5 would reach '
+     || ' tiles and works ' || worker_cap(:'world2', :'ivar') || ' wildermon — and level 5 would reach '
      || deed_radius(5) || ' with 5';
 select '398. what level 2 wants: ' || (select string_agg(label || ' (' ||
        case when met then 'standing' else 'wanted' end || ')', ', ' order by label)
-       from upgrade_wants(:'world2', 2))
-     || ' — so: ' || coalesce(upgrade_reason(:'world2'), 'allowed');
+       from upgrade_wants(:'world2', :'ivar', 2))
+     || ' — so: ' || coalesce(upgrade_reason(:'world2', :'ivar'), 'allowed');
 -- A campfire on the deed is the one thing level 2 is short of.
 delete from placed where world_id = :'world2' and kind = 'campfire';
-select '399. with no campfire: ' || coalesce(upgrade_reason(:'world2'), 'allowed');
+select '399. with no campfire: ' || coalesce(upgrade_reason(:'world2', :'ivar'), 'allowed');
 insert into placed (world_id, kind, x, y, sx, sy, cx, cy, fuel)
 values (:'world2', 'campfire', 5, 8, 0, 0, 5.5, 8.5, 120);
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'upgrade_deed', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
 select '400. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
-select '401. and on to 3: ' || coalesce(upgrade_reason(:'world2'), 'allowed');
+select '401. and on to 3: ' || coalesce(upgrade_reason(:'world2', :'ivar'), 'allowed');
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'rename_deed', '{"kind":"tile","x":5,"y":7,"name":"Ironhearth"}'::jsonb) \g /dev/null
 select '402. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
@@ -2821,8 +2821,8 @@ select '428. a snout is the twenty-second trade: '
      || ' of twenty-two, which is all of them';
 insert into deed (world_id, name, x, y, radius, level, founded_by)
 values (:'world2', 'Lastfound', 8, 11, deed_radius(3), 3, :'ivar')
-on conflict (world_id) do update set name = 'Lastfound', x = 8, y = 11, radius = deed_radius(3), level = 3;
-select place_deed_crate(:'world2') \g /dev/null
+on conflict (world_id, founded_by) do update set name = 'Lastfound', x = 8, y = 11, radius = deed_radius(3), level = 3;
+select place_deed_crate(:'world2', :'ivar') \g /dev/null
 delete from creature where world_id = :'world2' and mode in ('deed', 'stored', 'wild');
 do $$
 declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
@@ -4711,3 +4711,58 @@ select '666. and at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || '
 
 select '667. a day on this island runs ' || round((day_seconds() / 60)::numeric) || ' minutes, dawn at '
      || round(dawn_hour()::numeric) || ' — so a session sees the sun move, if anything is telling it to';
+
+\echo '--- a settlement each'
+-- `deed` was keyed on the island and nothing else, so `select * from deed
+-- where world_id = p_world` was a complete sentence and thirty functions wrote
+-- it. Three complaints came out of that one key: a stranger's homestead
+-- burning a hole in your fog, because the browser lights *your* settlement
+-- whatever the hour and was handed theirs; a journal ticking "plant a stake
+-- and found a settlement" off somebody else's stake; and no way to plant your
+-- own, because the island already held its one.
+--
+-- Done on the big island because two settlements will not fit on a sixteen
+-- tile one: a border reaches five tiles from its token at level one, and they
+-- may not overlap.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select rpc_join(:'big', 'Ivar') \g /dev/null
+update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count)
+values (:'big', 'player', :'ivar', 'deed_stake', 50, 1) \g /dev/null
+select '668. ivar plants his stake on the big island: '
+     || coalesce(deed_refusal(:'big', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');
+select act_perform(:'big', :'ivar', 'found_settlement', '{"kind":"item","name":"Ivarholm"}') \g /dev/null
+
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select rpc_join(:'big', 'Hild') \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count)
+values (:'big', 'player', :'hild', 'deed_stake', 50, 1) \g /dev/null
+-- Standing inside ivar's border.
+update player set x = 2042.5, y = 2041.5 where world_id = :'big' and uid = :'hild' \g /dev/null
+select '669. hild tries to found inside ivar''s border: '
+     || coalesce(deed_refusal(:'big', :'hild', 'found_settlement', '{"kind":"item"}'), 'ALLOWED');
+-- And well clear of it.
+update player set x = 2070.5, y = 2070.5 where world_id = :'big' and uid = :'hild' \g /dev/null
+select '670. and well clear of it: '
+     || coalesce(deed_refusal(:'big', :'hild', 'found_settlement', '{"kind":"item"}'), 'allowed');
+select act_perform(:'big', :'hild', 'found_settlement', '{"kind":"item","name":"Hildstead"}') \g /dev/null
+select '671. so the island holds ' || (select count(*) from deed where world_id = :'big')
+     || ' settlements: ' || (select string_agg(name, ' and ' order by founded_at) from deed where world_id = :'big');
+
+-- What each of them is handed. `deed` is yours or nothing; `deeds` is whose
+-- ground you are near enough to be standing on, and lights nothing.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '672. ivar, at his own token, is told about '
+     || coalesce((rpc_ground(:'big', 40))->'deed'->>'name', 'no settlement of his own')
+     || ' as his, and ' || jsonb_array_length((rpc_ground(:'big', 40))->'deeds')
+     || ' of anybody else''s within forty tiles';
+update player set x = 2400.5, y = 2400.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+select '673. and from four hundred tiles away, still '
+     || coalesce((rpc_ground(:'big', 40))->'deed'->>'name', 'nothing')
+     || ' as his and ' || jsonb_array_length((rpc_ground(:'big', 40))->'deeds')
+     || ' of hild''s — which is what used to cut a hole in somebody''s fog';
+
+-- And the things hung off a settlement are hung off the right one.
+select '674. ivar works ' || worker_cap(:'big', :'ivar') || ' wildermon and hild '
+     || worker_cap(:'big', :'hild') || ', each off their own level — and ivar has '
+     || workers_on_deed(:'big', :'ivar') || ' on the books, not hild''s';

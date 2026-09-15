@@ -1758,15 +1758,32 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * Your border, and your neighbours'.
+   *
+   * Theirs is drawn in the same line at half the weight, because knowing you
+   * are standing in somebody's yard is the difference between "this game will
+   * not let me build" and "this is not my land". It is only ever drawn for a
+   * settlement near enough to be standing in — the island does not send the
+   * distant ones — and it lights nothing: the fog is worked out from your own
+   * eyes and your own settlement, and that is the whole reason these two are
+   * kept apart.
+   */
   private drawDeedBorder(ctx: CanvasRenderingContext2D): void {
+    for (const d of this.game.neighbourDeeds) this.deedRing(ctx, d, 0.45);
     const deed = this.game.deed;
-    if (!deed) return;
+    if (deed) this.deedRing(ctx, deed, 1);
+  }
+
+  private deedRing(ctx: CanvasRenderingContext2D, deed: { x: number; y: number; radius: number }, weight: number): void {
     const w = this.game.world;
     const cam = this.camera;
     const x0 = deed.x - deed.radius;
     const y0 = deed.y - deed.radius;
     const x1 = deed.x + deed.radius + 1;
     const y1 = deed.y + deed.radius + 1;
+    ctx.save();
+    ctx.globalAlpha = weight;
     ctx.beginPath();
     const pt = (x: number, y: number, first: boolean): void => {
       const sx = cam.worldToScreenX(x, y);
@@ -1786,6 +1803,7 @@ export class Renderer {
     ctx.strokeStyle = DEED_COLOR;
     ctx.stroke();
     ctx.lineWidth = 1;
+    ctx.restore();
   }
 
   /** Water surface at height 0, clipped to the part of the tile that lies below it. Built in view space. */

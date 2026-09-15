@@ -862,6 +862,22 @@ export class Game {
     return this.world.heightAt(this.player.x, this.player.y) + this.player.visualLevel * 30;
   }
 
+  /**
+   * Whose border you are standing in, when it is not your own.
+   *
+   * Drawn, and used to say why the ground will not take a building — never to
+   * light anything, which is the whole distinction this pair exists for.
+   */
+  neighbourDeeds: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null }> = [];
+
+  /** The neighbour whose settlement covers this tile, if one does. */
+  deedAt(x: number, y: number): { name: string; holder: string | null } | null {
+    for (const d of this.neighbourDeeds) {
+      if (Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius) return d;
+    }
+    return null;
+  }
+
   onDeed(x: number, y: number): boolean {
     const d = this.deed;
     return !!d && Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius;
@@ -3799,13 +3815,14 @@ export class Game {
       });
     }
     /*
-     * The settlement, which is the island's and not this machine's.
+     * Your settlement, which is the island's word on it and not this machine's.
      *
      * `deed` decides what may be built where and what a worker will carry, and
      * the browser's copy was whatever it founded itself — which on an island is
-     * nothing, ever. Somebody else's shows too: a token in the ground and a
-     * square of land with an owner are things you can see from outside them.
+     * nothing, ever. It is yours or it is nothing: other people's come in
+     * beside it and are drawn, and light nothing.
      */
+    this.neighbourDeeds = ground.deeds ?? [];
     const d = ground.deed;
     const was = this.deed;
     this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine } : null;
@@ -4450,4 +4467,16 @@ export interface IslandGround {
   placed: IslandPlaced[];
   crates: IslandCrate[];
   deed: { name: string; x: number; y: number; radius: number; level: number; mine: boolean } | null;
+  /**
+   * Other people's settlements, and only those near enough to be standing in.
+   *
+   * Separate from `deed` because the browser does two quite different things
+   * with the two. `deed` is yours: `vision.ts` lights it whatever the hour and
+   * however far off, `journal.ts` counts it as a stake you planted, `onDeed`
+   * decides what you may build. None of that is true of somebody else's, and
+   * handing theirs over as `deed` — which is what an island with one
+   * settlement in it did — lit their homestead in your fog and ticked their
+   * work off in your journal.
+   */
+  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null }>;
 }
