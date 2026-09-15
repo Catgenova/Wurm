@@ -4808,3 +4808,16 @@ select '678. ivar''s building, to hild: '
      || ' — and to ivar: '
      || coalesce(build_refusal(:'big', :'ivar', 'rename_building',
           '{"kind":"tile","x":2300,"y":2305,"name":"Ivarhall"}'::jsonb), 'allowed');
+
+-- A token hemmed in on all five of the spots the crate used to look at. Built
+-- rather than hoped for: a crate on each, so every one is refused.
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+insert into crate (world_id, id, kind, x, y, sx, sy) values
+  (:'big', 9101, 'plank', 2071, 2070, 1, 1), (:'big', 9102, 'plank', 2070, 2071, 1, 1),
+  (:'big', 9103, 'plank', 2069, 2070, 1, 1), (:'big', 9104, 'plank', 2070, 2069, 1, 1),
+  (:'big', 9105, 'plank', 2071, 2071, 1, 1) \g /dev/null
+delete from crate where world_id = :'big' and deed and id = 2 \g /dev/null
+select coalesce(place_deed_crate(:'big', :'hild')::text, 'nowhere') as penned \gset
+select '679. a token with all five of its old spots taken still gets a crate: ' || :'penned'
+     || ' — at ' || coalesce((select x || ',' || y from crate where world_id = :'big' and id = :'penned'::int), 'nowhere')
+     || ', where the token is 2070,2070';
