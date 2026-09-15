@@ -126,11 +126,25 @@ for (let y0 = 0; y0 <= size; y0 += BATCH) {
 process.stdout.write('\n');
 
 if (sb) {
-  // Open. After this `rpc_put_land` refuses, which is what makes the land
-  // settled rather than something anybody can still edit.
-  const { error } = await sb.rpc('rpc_ready', { p_world: worldId });
-  if (error) throw new Error(`the island would not open: ${error.message}`);
-  opened = true;
+  /*
+   * Open. After this `rpc_put_land` refuses, which is what makes the land
+   * settled rather than something anybody can still edit.
+   *
+   * Tried more than once, because this is the one call where giving up costs
+   * something: the land is already up, and the island was founded by *this*
+   * anonymous session, so a later run cannot come back and finish it. A first
+   * attempt at the big island timed out here with all 130 MB already handed
+   * over, and the whole minute was thrown away for the want of a second go.
+   */
+  let why = '';
+  for (let go = 1; go <= 3 && !opened; go++) {
+    const { error } = await sb.rpc('rpc_ready', { p_world: worldId });
+    if (!error) { opened = true; break; }
+    why = error.message;
+    console.error(`  opening it did not take (${why}); going again (${go} of 3)`);
+    await new Promise((done) => setTimeout(done, go * 3000));
+  }
+  if (!opened) throw new Error(`the island would not open: ${why}`);
 }
 console.log(`${(bytes / 1048576).toFixed(0)} MB of land in ${((Date.now() - started) / 1000).toFixed(0)}s`);
 console.log(dry

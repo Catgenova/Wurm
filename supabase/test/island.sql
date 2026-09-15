@@ -3530,10 +3530,11 @@ update land_tile set tiles = decode(repeat('00', 4096), 'hex'), data = decode(re
 -- each one detoasting an eight kilobyte scanline to read two bytes.
 select rpc_ready(:'big') \g /dev/null
 select '557b. opening it put out ' || (select count(*) from creature where world_id = :'big')
-     || ' wild things in ' || (select count(*) from world_stocked where world_id = :'big')
-     || ' blocks of country; the other ' || ((select ceil(size / 256.0) * ceil(size / 256.0) from world where id = :'big')::int
+     || ' wild things in the one block of country people come ashore in; the other '
+     || ((select ceil(size / 256.0) * ceil(size / 256.0) from world where id = :'big')::int
         - (select count(*) from world_stocked where world_id = :'big'))
-     || ' fill in as somebody walks into them';
+     || ' fill in as somebody walks into them — nine of them at once is five to thirteen seconds, '
+     || 'and PostgREST allows eight';
 
 select rpc_join(:'big', 'Alice') \g /dev/null
 select '558. coming ashore on it hands over ' || length(rpc_join(:'big', 'Alice')::text)

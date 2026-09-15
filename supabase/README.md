@@ -1155,8 +1155,18 @@ square — gets its animals the first time somebody comes within a block of it,
 and the row in `world_stocked` that says so is what stops it happening twice:
 two people walking into the same empty country both try to claim it, one wins
 the primary key, and the loser does nothing rather than doubling the animals.
-`rpc_move` is where it happens, written so that the usual case (nine blocks
-already out) is one index probe and nothing else.
+`rpc_move` is where it happens, written so that the usual case — the block you
+are standing in is already out — is one index probe and nothing else.
+
+One block, and not the nine it started as. A block costs half a second to a
+second and a half, because an eight kilobyte scanline is detoasted for every
+dart thrown and a block over water throws all of them and keeps almost nothing.
+Nine is five to thirteen seconds; PostgREST allows eight, and opening the big
+island died on its last line with all 130 MB of its land already up. One block
+is two hundred and fifty-six tiles across and somebody standing in it can see
+about thirty, so the edge of what is stocked is never near the edge of what is
+visible — and `rpc_move` runs twice a second, so crossing into new country puts
+it out before anybody has taken two steps into it.
 
 The density is unchanged, so a small island gets exactly the sixty-four it
 always got, in one block, with the same thirty-two darts. What changed is that
