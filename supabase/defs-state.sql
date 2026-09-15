@@ -2438,6 +2438,9 @@ create or replace function chunk_size() returns double precision language sql im
 create or replace function found_max() returns double precision language sql immutable as $fn$ select 512::double precision $fn$;
 create or replace function peace_reach() returns double precision language sql immutable as $fn$ select 24::double precision $fn$;
 create or replace function fog_bytes() returns double precision language sql immutable as $fn$ select 262144::double precision $fn$;
+create or replace function wild_reach() returns double precision language sql immutable as $fn$ select 1.5::double precision $fn$;
+create or replace function wild_rest() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function wild_rest_spread() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
 create or replace function hunger_rate() returns double precision language sql immutable as $fn$ select 0.0004::double precision $fn$;
 create or replace function thirst_rate() returns double precision language sql immutable as $fn$ select 0.0006::double precision $fn$;
 create or replace function wind_rest() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;

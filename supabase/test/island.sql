@@ -4572,3 +4572,57 @@ select '654. which is the same three the bar would draw: in hand '
      || ', queued ' || (select jsonb_array_length(act_queue) from player where world_id = :'world2' and uid = :'ivar')
      || ' — so ' || (select jsonb_array_length(act_queue) + 1 from player where world_id = :'world2' and uid = :'ivar')
      || ' of ' || queue_capacity(:'world2', :'ivar') || ', which is what the log line says too';
+
+\echo ''
+\echo '--- a wild thing that stands still long enough to be crept up on'
+/*
+ * "Reduce significantly wild wildermon movement. Especially with them jumping
+ * around due to the server movement, its almost impossible to tame them as
+ * theyre always too far away."
+ *
+ * It picked a spot up to four tiles off, walked it, stood for one to six
+ * seconds, and went again — fifty-odd tiles of wandering a minute, without
+ * pause. A faithful port of the browser's own numbers, and those were written
+ * for a game where clicking a creature reached it at once. On an island you
+ * ask and then your feet carry you there.
+ */
+-- On the beach everybody washes up on, which is ground a thing can walk.
+select spawn_x + 0.5 as gx, spawn_y + 0.5 as gy from world where id = :'world2' \gset
+select creature_spawn(:'world2', 'rabba', :'gx', :'gy', 'wild', now()) as grazer \gset
+update creature set until = now(), settled_at = now(), leg = 0,
+       from_x = :'gx', from_y = :'gy', to_x = :'gx', to_y = :'gy'
+  where world_id = :'world2' and id = :'grazer' \g /dev/null
+-- A minute of nobody watching, worked forward the moment somebody does.
+update creature set until = now() - interval '60 seconds', settled_at = now() - interval '60 seconds'
+  where world_id = :'world2' and id = :'grazer' \g /dev/null
+select creature_settle(:'world2', :'grazer') \g /dev/null
+select '655. a minute of grazing: ' || (select leg from creature where world_id = :'world2' and id = :'grazer')
+     || ' legs walked, and it is ' || (select round(sqrt((to_x - :'gx') ^ 2 + (to_y - :'gy') ^ 2)::numeric, 1)
+                                       from creature where world_id = :'world2' and id = :'grazer')
+     || ' tiles from where it started — it used to walk a leg every three seconds and think nothing of five';
+select '656. the numbers behind that: it drifts ' || wild_reach() || ' tiles at a time and stands '
+     || wild_rest() || ' to ' || (wild_rest() + wild_rest_spread()) || ' seconds between';
+
+/*
+ * And a leg a browser can draw without agreeing what time it is.
+ *
+ * The other half of the jumping, and it would still have been there with a
+ * beast standing perfectly still: `rpc_creatures` handed over the two instants
+ * and the browser parsed them against its own clock, so a phone a few seconds
+ * out pinned every leg at one end and re-pinned it with the next answer. The
+ * action bar learnt this already and takes seconds; the wildlife never did.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set x = :'gx', y = :'gy' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select coalesce((select jsonb_pretty(v) from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
+                 where (v->>'id')::int = :'grazer'), 'not in sight') as legsays \gset
+select '657. what the island says about the leg it is on: '
+     || coalesce((select 'for ' || round((v->>'legFor')::numeric, 2) || 's with '
+                       || round((v->>'legLeft')::numeric, 2) || 's of it left'
+                  from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
+                  where (v->>'id')::int = :'grazer'), 'not in sight')
+     || ' — seconds, so nothing has to agree about when';
+select '658. and not a word about when: '
+     || case when (select count(*) from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
+                   where v ? 'legAt' or v ? 'legEnds') = 0
+             then 'no instants travel at all' else 'IT STILL SENDS INSTANTS' end;

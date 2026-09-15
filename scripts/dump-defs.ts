@@ -21,7 +21,7 @@ import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
-import { COAX_LAPSE, OLD_AT, YOUNG_FOR } from '../src/game/creatures';
+import { COAX_LAPSE, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD } from '../src/game/creatures';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
 import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
@@ -792,6 +792,8 @@ for (const [fn, v] of [
    * hunger reset to full on every client reset", because the browser was
    * moving its own copy and a refresh read one that had never moved.
    */
+  /* And how far a wild thing drifts, and how long it stands between. */
+  ['wild_reach', WILD_REACH], ['wild_rest', WILD_REST], ['wild_rest_spread', WILD_REST_SPREAD],
   ['hunger_rate', HUNGER_RATE], ['thirst_rate', THIRST_RATE],
   ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],
   ['wind_starving', WIND_STARVING], ['heal_rate', HEAL_RATE], ['heal_fed', HEAL_FED],

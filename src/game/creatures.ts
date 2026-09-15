@@ -51,6 +51,26 @@ export type GatherKind =
   | 'compost'
   | 'seek'
   | 'fish';
+/**
+ * How far a wild thing will drift from where it stands, and how long it stands.
+ *
+ * It used to pick a spot up to four tiles off, walk it, stand for one to six
+ * seconds, and go again — fifty-odd tiles of wandering a minute, for ever.
+ * That was written for a game where clicking a creature reached it instantly.
+ * On an island you ask, and then your feet have to carry you there, and a
+ * thing that has moved five tiles by the time you arrive cannot be tamed at
+ * all. Reported exactly so: "its almost impossible to tame them as theyre
+ * always too far away".
+ *
+ * A step and a half, and half a minute of standing about, is about a tenth of
+ * the ground and still plainly alive — a beast grazing rather than a beast on
+ * its way somewhere. It also happens to be most of the cure for the jumping:
+ * a poll two seconds apart nearly always finds a thing that has not moved.
+ */
+export const WILD_REACH = 1.5;
+export const WILD_REST = 8;
+export const WILD_REST_SPREAD = 22;
+
 export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing' };
 export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
@@ -1433,8 +1453,16 @@ export interface IslandCreature {
   fromY?: number;
   toX?: number;
   toY?: number;
-  legAt?: string | null;
-  legEnds?: string | null;
+  /**
+   * How long the leg is and how much of it is left, in seconds.
+   *
+   * Seconds rather than the two instants, for the same reason the action bar
+   * takes seconds: a browser whose clock is out by even a few seconds would
+   * otherwise pin every leg at one end and re-pin it on the next answer, which
+   * is a thing jumping about rather than a thing walking.
+   */
+  legFor?: number | null;
+  legLeft?: number | null;
   health: number;
   max?: number;
   hunger?: number;
@@ -1783,6 +1811,7 @@ export class Creatures {
    * the range we asked about, or is dead, and either way it is not here.
    */
   sawAll(rows: IslandCreature[]): void {
+    const now = Date.now();
     const seen = new Set<number>();
     for (const r of rows) {
       seen.add(r.id);
@@ -1801,17 +1830,27 @@ export class Creatures {
       c.sex = (r.sex as Sex) ?? c.sex;
       c.traits = r.traits ?? c.traits;
       c.enemy = r.hunting ? 0 : null;
-      // The leg it is on, with the island's own clock on both ends. Walked in
-      // `walkLegs` a frame at a time.
+      /*
+       * The leg it is on, put on this machine's clock as it arrives.
+       *
+       * The island says how long the leg is and how much of it is left; both
+       * ends are worked out from `now` here. Nothing has to agree about the
+       * time, which is the whole point — the two instants used to travel
+       * instead, and a phone a few seconds out pinned every leg at one end and
+       * then re-pinned it with the next answer.
+       */
       c.legFromX = r.fromX ?? r.x;
       c.legFromY = r.fromY ?? r.y;
       c.legToX = r.toX ?? r.x;
       c.legToY = r.toY ?? r.y;
-      const at = r.legAt ? Date.parse(r.legAt) : 0;
-      const ends = r.legEnds ? Date.parse(r.legEnds) : 0;
-      c.legAt = at;
-      c.legEnds = Math.max(ends, at);
-      if (!Number.isFinite(c.legAt) || !c.legAt) {
+      const span = (r.legFor ?? 0) * 1000;
+      const left = Math.max(0, r.legLeft ?? 0) * 1000;
+      if (span > 0) {
+        c.legEnds = now + left;
+        c.legAt = c.legEnds - span;
+      } else {
+        c.legAt = 0;
+        c.legEnds = 0;
         c.x = r.x;
         c.y = r.y;
       }
@@ -3308,11 +3347,11 @@ export class Creatures {
     if (c.state === 'wander') {
       if (this.stepToward(game, c, c.tx, c.ty, dt, 0.7) !== 'moving') {
         c.state = 'idle';
-        c.until = game.time + 1 + game.rand() * 5;
+        c.until = game.time + WILD_REST + game.rand() * WILD_REST_SPREAD;
       }
       return;
     }
-    if (game.time >= c.until) this.wanderTarget(game, c, 4);
+    if (game.time >= c.until) this.wanderTarget(game, c, WILD_REACH);
   }
 
   /**
