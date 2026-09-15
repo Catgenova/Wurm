@@ -161,7 +161,7 @@ async function main(): Promise<void> {
     check('the island is honest about what it cannot do yet', !portErr,
       portErr ? portErr.message
         : noHands.length ? `${noHands.length} without a performer: ${noHands.slice(0, 6).join(', ')}`
-          : 'every action in the game has a performer, which is the point of the exercise');
+          : 'nothing: every action in the game has a performer, which was the point of the exercise');
 
     /*
      * The wildlife, which the island stocked for itself the moment the land
@@ -292,6 +292,30 @@ async function main(): Promise<void> {
     const alt = mould as { name: string; weight: number } | null;
     check('and a thing the browser only had a fallback for has a row', !!alt,
       alt ? `altar: "${alt.name}", ${alt.weight} kg` : 'still nothing');
+
+    /*
+     * And the last ten, which want a ravine, a bed, a herd and a barrel and so
+     * cannot be played from out here either. The rulebook, and the refusals.
+     */
+    const { data: decks, error: deckErr } = await supabase().from('bridge_def').select('id,name,span,carts');
+    const spans = (decks ?? []) as Array<{ name: string; span: number; carts: boolean }>;
+    check('the three kinds of bridge are on the project', !deckErr && spans.length === 3,
+      deckErr ? deckErr.message
+        : spans.map((b) => `${b.name.toLowerCase()} spans ${b.span}${b.carts ? ', carts cross' : ', foot only'}`).join(', '));
+    const { data: brews, error: brewErr } = await supabase().from('brew_def').select('id,name,input,seconds');
+    check('and what a barrel of water becomes', !brewErr && (brews ?? []).length === 4,
+      brewErr ? brewErr.message
+        : ((brews ?? []) as Array<{ name: string; input: string; seconds: number }>)
+            .map((b) => `${b.name.toLowerCase()} out of ${b.input} in ${Math.round(b.seconds / 60)}m`).join(', '));
+    const noSpan = await island.act('build_bridge', { kind: 'bridge', id: 1 }, 1);
+    check('working on a bridge that is not there is refused in its own words',
+      !noSpan.started && /gone/i.test(noSpan.why ?? ''), noSpan.why ?? 'IT STARTED');
+    const noBed = await island.act('sleep', { kind: 'furniture', id: 1 }, 1);
+    check('and sleeping in a bed that is not there', !noBed.started && /bed/i.test(noBed.why ?? ''),
+      noBed.why ?? 'IT STARTED');
+    const noHerd = await island.act('pair_creature', { kind: 'creature', id: 999999 }, 1);
+    check('and putting a wildermon to a mate it has not got',
+      !noHerd.started && /(gone|settlement)/i.test(noHerd.why ?? ''), noHerd.why ?? 'IT STARTED');
 
     const { data: slabs, error: slabErr } = await supabase().from('slab_def').select('id,item');
     check('the four stones a slab is cut from are on the project',

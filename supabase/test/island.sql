@@ -2676,9 +2676,17 @@ select '442. traps left standing: ' || (select count(*) from placed where world_
      || ' — and the six that came with them: '
      || (select string_agg(id, ', ' order by id) from action_def where trap_action(id))
      || ', of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
-select '443. and asked outright what it still cannot do: ' || (select count(*) from rpc_unported())
-     || ' of them, the first eight being ' ||
-       (select string_agg(u, ', ') from (select u from rpc_unported() u limit 8) s)
+/*
+ * And the answer to that question is now nothing at all — which is what took
+ * this measurement down the first time it was true, because `string_agg` over
+ * no rows is null and a null in a sentence is a null all the way out. The
+ * nineteenth time that has happened, and the last.
+ */
+select '443. and asked outright what it still cannot do: ' ||
+       coalesce((select nullif(count(*), 0)::text || ' of them, the first eight being '
+                 || (select string_agg(u, ', ') from (select u from rpc_unported() u limit 8) s)
+                 from rpc_unported()),
+                'nothing. Three hundred and seventy-three of three hundred and seventy-three')
      || ' — which is the question the live suite used to answer by trying six and'
      || ' filling its own head with the jobs that started';
 
@@ -3039,4 +3047,247 @@ select '493. what the path is worth, the same body either way: a rabba would tru
      || ' of the fifteen steps are called on rather than simply true, the rest being true all the time';
 select '494. the five that came with it: '
      || (select string_agg(id, ', ' order by id) from action_def where faith_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- a bridge, a bed, a herd, a pot of dye and a barrel of ale'
+delete from placed where world_id = :'world2' and kind = 'furniture';
+delete from creature where world_id = :'world2';
+delete from bridge where world_id = :'world2';
+select '495. the three kinds: ' || (select string_agg(name || ' — spans ' || span || ', '
+       || skill || ' ' || difficulty || ', ' || case when carts then 'carts cross' else 'foot only' end
+       || ', and one tile of it takes ' || (select string_agg(count || ' ' || item, ', ' order by item)
+          from bridge_bill b2 where b2.kind = b.id), ' | ' order by difficulty)
+       from bridge_def b);
+/*
+ * A ravine to bridge. Banks at tiles 2 and 7, four tiles of gap between them,
+ * and sixteen height units of nothing underneath — which is well past the
+ * three a gap has to be before it counts as one.
+ */
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1); i int; j int;
+begin
+  for i in 1..9 loop
+    for j in 12..15 loop
+      perform land_set_height(w, i, j, 40);
+      perform land_set_dirt(w, i, j, 10);
+    end loop;
+  end loop;
+  for i in 3..7 loop
+    for j in 12..15 loop
+      perform land_set_height(w, i, j, 8);
+    end loop;
+  end loop;
+  for i in 1..9 loop
+    for j in 12..15 loop
+      perform land_set_tile(w, i, j, tile_id('Grass'));
+    end loop;
+  end loop;
+end $$;
+update player set x = 2.5, y = 13.5 where world_id = :'world2' and uid = :'ivar';
+select '496. a rope bridge to the next tile along: '
+     || coalesce(bridge_reason(:'world2', 'rope', 2, 13, 3, 13), 'allowed')
+     || ' — and one that goes across a corner: '
+     || coalesce(bridge_reason(:'world2', 'rope', 2, 13, 7, 14), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'plan_bridge', '{"kind":"tile","x":7,"y":13,"material":"wood"}'::jsonb) \g /dev/null
+select id as span_bridge from bridge where world_id = :'world2' order by id desc limit 1 \gset
+select '497. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '498. as it stands: ' || bridge_state(:'world2', :'span_bridge')
+     || ' — with nothing in the pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'build_bridge',
+        ('{"kind":"bridge","id":' || :'span_bridge' || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'mallet', 1, 50) \g /dev/null
+select give(:'world2', :'ivar', 'timber', 40, 40) \g /dev/null
+select give(:'world2', :'ivar', 'plank', 60, 40) \g /dev/null
+select give(:'world2', :'ivar', 'nail', 120, 40) \g /dev/null
+update player set x = 3.5, y = 13.5 where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'build_bridge',
+  ('{"kind":"bridge","id":' || :'span_bridge' || '}')::jsonb) \g /dev/null
+select '499. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+-- The whole deck, one unit of one thing at a time, from wherever the open span is.
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111';
+        b bigint := (select id from bridge where world_id = w order by id desc limit 1);
+        s record; i int;
+begin
+  for i in 1..200 loop
+    select * into s from bridge_span sp where sp.world_id = w and sp.bridge = b
+      and not span_done(sp.needed) order by sp.n limit 1;
+    exit when not found;
+    update player set x = s.x + 0.5, y = s.y + 0.5 where world_id = w and uid = me;
+    exit when act_refusal(w, me, 'build_bridge', jsonb_build_object('kind','bridge','id',b)) is not null;
+    perform act_perform(w, me, 'build_bridge', jsonb_build_object('kind','bridge','id',b));
+  end loop;
+end $$;
+select '500. ' || (select text from event where uid = :'ivar' and kind = 'system' order by n desc limit 1)
+     || ' — ' || bridge_state(:'world2', :'span_bridge');
+update player set x = 2.5, y = 13.5 where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'demolish_bridge',
+  ('{"kind":"bridge","id":' || :'span_bridge' || '}')::jsonb) \g /dev/null
+select '501. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and there are ' || (select count(*) from bridge where world_id = :'world2')
+     || ' bridges left on the island';
+
+-- A bed, and the night that goes past whether anybody is awake for it.
+select give(:'world2', :'ivar', 'bed', 1, 60, 'Oak') \g /dev/null
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'bed' order by id desc limit 1) || ',"x":5,"y":7,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as bed from placed where world_id = :'world2' and sub = 'bed' order by id desc limit 1 \gset
+-- Noon, by moving the island's memory rather than waiting for it.
+update world set epoch = now() - make_interval(secs => 12 / 24.0 * day_seconds())
+  where id = :'world2';
+select '502. at ' || world_clock(:'world2') || ': ' || coalesce(act_refusal(:'world2', :'ivar', 'sleep',
+       ('{"kind":"furniture","id":' || :'bed' || '}')::jsonb), 'allowed');
+update world set epoch = now() - make_interval(secs => 22 / 24.0 * day_seconds())
+  where id = :'world2';
+select give(:'world2', :'ivar', 'plank', 1, 40) as fresh \gset
+update item set made_at = now() where id = :'fresh';
+insert into crop (world_id, x, y, id, stage, stage_at, ql, tended)
+  values (:'world2', 12, 12, 'wheat', 0, now(), 40, 0)
+  on conflict (world_id, x, y) do update set stage = 0, stage_at = now();
+update player set favour = 0, favour_at = now(), prayed_at = now(), rested = 0, rested_at = now(),
+    stats = jsonb_set(jsonb_set(stats, '{health}', '0.5'), '{hunger}', '0.9')
+  where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'sleep', ('{"kind":"furniture","id":' || :'bed' || '}')::jsonb) \g /dev/null
+select '503. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+/*
+ * And the night happened to everything else as well — not by being walked
+ * forward, but by every one of them being told it was longer ago than it was.
+ * The wheat has to be *looked at* before it shows, which is the whole of how
+ * this island has worked since the first campfire.
+ */
+select crop_settle(:'world2', 12, 12) \g /dev/null
+select '504. sown at bedtime, and nobody watched it: the wheat is at stage '
+     || (select stage from crop where world_id = :'world2' and x = 12 and y = 12)
+     || ' of ' || crop_ripe() || ' at ' || (select stage_seconds from crop_def where id = 'wheat')
+     || ' seconds a stage, a plank made at bedtime is ' || round((extract(epoch from (now() -
+        (select made_at from item where id = :'fresh'))) / 60)::numeric) || ' minutes old, '
+     || 'and favour has come back to ' || round(favour_settle(:'world2', :'ivar')::numeric, 1)
+     || ' — all of it out of one night that took no time at all';
+select '505. what a night is worth: ' || round(rest_left((select p from player p
+       where p.world_id = :'world2' and p.uid = :'ivar'))::numeric) || ' seconds of rest, '
+     || 'while which everything teaches you ' || round(rest_bonus(:'world2', :'ivar')::numeric)
+     || ' times as much — and the bed is now home: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'set_home',
+        ('{"kind":"furniture","id":' || :'bed' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'set_home', ('{"kind":"furniture","id":' || :'bed' || '}')::jsonb) \g /dev/null
+select '506. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and asking twice: ' || coalesce(act_refusal(:'world2', :'ivar', 'set_home',
+        ('{"kind":"furniture","id":' || :'bed' || '}')::jsonb), 'allowed');
+
+-- A herd. Two of them, put together, and what comes of it twelve minutes later.
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'animal_husbandry', 70)
+  on conflict (world_id, uid, id) do update set value = 70;
+select creature_spawn(:'world2', 'shaggan', 5.6, 7.6, 'deed', now() - interval '3 hours') as ewe \gset
+select creature_spawn(:'world2', 'shaggan', 5.7, 7.7, 'deed', now() - interval '3 hours') as ram \gset
+update creature set sex = 'female', keeper = :'ivar', hunger = 1, care = 0.8,
+    traits = array['biddable', 'bright'], from_x = to_x, from_y = to_y,
+    leg_at = now(), leg_ends = now(), settled_at = now(), name = 'Snow' where id = :'ewe';
+update creature set sex = 'male', keeper = :'ivar', hunger = 1, care = 0.8,
+    traits = array['broad_backed'], from_x = to_x, from_y = to_y,
+    leg_at = now(), leg_ends = now(), settled_at = now(), name = 'Horn' where id = :'ram';
+select '507. with no settlement to put the young one in: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'pair_creature',
+        ('{"kind":"creature","id":' || :'ewe' || '}')::jsonb), 'allowed');
+insert into deed (world_id, name, x, y, radius, level, founded_by)
+  values (:'world2', 'Lambfold', 5, 7, 5, 1, :'ivar');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111';
+        c int := (select id from creature where world_id = w and sex = 'female' order by id desc limit 1);
+        i int;
+begin
+  -- A pairing can be refused by the pair themselves; that is a roll, so it is
+  -- tried until it takes or the rest between tries says no.
+  for i in 1..12 loop
+    exit when (select due from creature where world_id = w and id = c) is not null;
+    update creature set bred_at = null where world_id = w;
+    exit when act_refusal(w, me, 'pair_creature', jsonb_build_object('kind','creature','id',c)) is not null;
+    perform act_perform(w, me, 'pair_creature', jsonb_build_object('kind','creature','id',c));
+  end loop;
+end $$;
+select '508. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+/*
+ * Blood does not read itself: a common trait is plain to anybody, a rare one
+ * takes fifteen husbandry, and a fantastic one sixty. The same beast reads
+ * differently to two different people, which is the whole of the mechanism.
+ */
+select '509. at husbandry 70: ' || blood_read(:'world2', :'ivar',
+       (select c from creature c where c.id = :'ewe'));
+select '510. and at husbandry 1, the same beast: ' || blood_read(:'world2', :'hild',
+       (select c from creature c where c.id = :'ewe'));
+-- The hour comes whether anybody is there for it.
+update creature set due = now() - interval '1 second' where id = :'ewe';
+delete from event where uid = :'ivar';
+select herd_settle(:'world2') as dropped \gset
+select '511. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — ' || :'dropped' || ' hour came, and the herd is now '
+     || (select count(*) from creature where world_id = :'world2' and mode <> 'wild') || ' strong';
+
+-- Colour, and a barrel left alone.
+select give(:'world2', :'ivar', 'satchel', 1, 50) as bag \gset
+select '512. with no pot in the pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'dye_item',
+       ('{"kind":"item","uid":' || :'bag' || '}')::jsonb), 'allowed')
+     || ' — and a hatchet, which will take nothing: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'dye_item',
+        ('{"kind":"item","uid":' || (select give(:'world2', :'ivar', 'hatchet', 1, 40)) || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'dye', 1, 60, (select name from dye_def order by id limit 1)) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'dye_item', ('{"kind":"item","uid":' || :'bag' || '}')::jsonb) \g /dev/null
+select '513. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and it is called ' || (select item_name(i) from item i where i.id = :'bag');
+delete from item where world_id = :'world2' and holder_uid = :'ivar'
+  and def in ('lye_bucket', 'bucket');
+select '514. boiling it out with nothing to boil it in: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'strip_dye',
+        ('{"kind":"item","uid":' || :'bag' || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'lye_bucket', 1, 45) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'strip_dye', ('{"kind":"item","uid":' || :'bag' || '}')::jsonb) \g /dev/null
+select '515. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and the lye goes with it: ' ||
+       (select count(*) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'lye_bucket')
+     || ' bucket of lye left and ' ||
+       (select count(*) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'bucket')
+     || ' plain one back';
+select '516. what a barrel of water becomes: ' || (select string_agg(name || ' — ' || count || ' '
+       || input || ' in ' || litres || ' litres, ' || round(seconds / 60) || ' minutes at brewing '
+       || difficulty, ' | ' order by seconds) from brew_def);
+select give(:'world2', :'ivar', 'barrel', 1, 50, 'Oak') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'barrel' order by id desc limit 1) || ',"x":5,"y":8,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as tun2 from placed where world_id = :'world2' and sub = 'barrel' order by id desc limit 1 \gset
+select '517. a dry barrel: ' || coalesce(act_refusal(:'world2', :'ivar', 'start_brew',
+       ('{"kind":"furniture","id":' || :'tun2' || ',"brew":"ale"}')::jsonb), 'allowed');
+update placed set litres = 20, liquid = 'water', since = now() where id = :'tun2';
+select '518. water but no wheat: ' || coalesce(act_refusal(:'world2', :'ivar', 'start_brew',
+       ('{"kind":"furniture","id":' || :'tun2' || ',"brew":"ale"}')::jsonb), 'allowed');
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'brewing', 90)
+  on conflict (world_id, uid, id) do update set value = 90;
+select give(:'world2', :'ivar', 'wheat', 12, 55) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'start_brew',
+  ('{"kind":"furniture","id":' || :'tun2' || ',"brew":"ale"}')::jsonb) \g /dev/null
+select '519. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and it is ' || (select case when is_working(p) then 'still working, '
+        || round(ferment_left(p) / 60) || ' minutes to go' else 'ready' end
+        from placed p where p.id = :'tun2');
+select '520. and a barrel that is working: ' || coalesce(act_refusal(:'world2', :'ivar', 'start_brew',
+       ('{"kind":"furniture","id":' || :'tun2' || ',"brew":"ale"}')::jsonb), 'allowed');
+update placed set since = now() - interval '20 minutes' where id = :'tun2';
+select '521. twenty minutes later: ' || (select case when is_working(p) then 'still working'
+       else 'ale, ' || round(placed_litres(p)) || ' litres of it at QL ' || round(p.ql::numeric) end
+       from placed p where p.id = :'tun2')
+     || ' — and a brew is a well running the other way: one column, one timestamp, no machinery';
+select '522. the last ten: '
+     || (select string_agg(id, ', ' order by id) from action_def where last_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));

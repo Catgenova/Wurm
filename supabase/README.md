@@ -52,11 +52,16 @@ simplification rather than a problem:
 | **6** | traps: a snare set, baited, emptied and lifted; a creel sunk and turned out; and whatever is in one let go |
 | **11** | a saddle and a set of traces: tack fitted and stripped, a rider up and down, a beast into the yokes and out, the shafts of a cart taken up and let go, a seat boarded and left, and the whole team unhitched at once |
 | **5** | an altar and the three paths: a prayer knelt, six things favour buys, a sitting, a path chosen once, and six abilities called on |
+| **3** | bridges: thrown across, decked a plank at a time, and pulled down for half of what went into them |
+| **2** | a bed: a night slept through, and a place to wake |
+| **2** | a herd: two of them put together, and the blood read off one of them |
+| **2** | colour: a pot worked through something, and boiled back out of it |
+| **1** | a barrel of water left alone until it is ale |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **10** | known, listed, and honestly refused |
+| **0** | left. Every action in the game has a performer behind it |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -64,6 +69,11 @@ does not exist, and the difference matters to whoever is looking at the menu:
 down on this island yet" invites patience. So every action in the game is in
 `action_def` — generated from the same TypeScript the browser reads — and
 `act_ported()` says which have a performer behind them.
+
+It now says all of them. `rpc_unported()` returns no rows, and the refusal it
+existed to explain is unreachable — kept anyway, because the honest answer to
+"why not?" is worth more than the two lines it costs, and because the next
+thing added to the browser will need it again.
 
 Of the 204 recipes, 147 need no station and were playable from the start; the
 other 58 want a lit campfire (18), a hot smelter (34), a spindle (3) or a loom
@@ -73,13 +83,93 @@ Jobs queue behind one another as they do in the game — three deep, and one
 deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
-Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), sowing a field from a
-worker's own cheeks, breeding and pairing, bridges, dyeing, brewing, the
-ledger, the journal, sleeping the night through, making a home of somewhere,
-and the ease a hot oven lends to cooking. Every trade a wildermon may be set to
-is one this island knows, and `rpc_unported()` will read you the rest of the
-list to your face.
+Not yet ported at all, and now a short list: stamina (deliberately — half of
+it, with the cost but not the recovery, would make the island unplayable),
+sowing a field from a worker's own cheeks, the ledger, the journal, and the
+ease a hot oven lends to cooking. None of those is an action; they are things
+that happen around the actions, and every one of them is a decision rather
+than an omission.
+
+### You cannot make the island wait, so you make it have been longer
+
+Every other thing in this port settles *forward*: something happened at a
+moment, time has passed, work out how much of it. Sleeping asks for the
+opposite. The browser adds ten hours to its clock and then walks every
+subsystem forward by hand, because it owns a clock and has a loop to run.
+
+There is no clock here to move. `now()` is Postgres's and will not be argued
+with, and the hour of the island's day is `now() - world.epoch`. So sleeping
+does not move the world forward: it moves the world's **memory back**. Every
+timestamp this island settles from — when a fire was last looked at, when a
+crop last came on, when a trap was last rolled, when somebody last prayed — is
+pushed backwards by the length of the night, and the epoch with them. Nothing
+is walked forward at all. The next person to look at any of it finds that the
+night happened, because from where they are standing it did.
+
+  - sown at bedtime, and nobody watched it: the wheat is at stage 3 of 3 at
+    130 seconds a stage, a plank made at bedtime is 9 minutes old, and favour
+    has come back to 2.0 — all out of one night that took no time at all.
+
+Two things are deliberately *not* pushed back, and both would be bugs.
+`creature.born` stays put, so a night ages a yearling rather than leaving it
+exactly as young as it was. And `player.moved_at` stays put, because `rpc_move`
+believes a claimed position in proportion to how long it has been since you
+last said where you were — a night's memory shifted there is a night's worth of
+travel allowed in one step. The ceiling clamps that gap at ten seconds, so it
+was never actually reachable; relying on a clamp somewhere else to save a
+mistake here is not a reason to make it.
+
+One thing is a named departure rather than a port. The browser burns a night's
+banked rest only while you are actually working — standing about does not spend
+it. Nothing here knows whether you are working, and building something that did
+would mean a loop, so rest runs out on the wall clock from the moment you wake.
+A night is worth the same amount; it simply cannot be hoarded by idling.
+
+And `set_home` records where you would wake and nothing reads it, which is not
+the same kind of gap: there is no death on this island for a player, so there
+is nothing to wake *from*. The column is the whole of the action.
+
+### A brew is a well running the other way, and a bridge is a horizontal wall
+
+Neither needed any machinery, which after eleven families is the more
+interesting result.
+
+A well fills at a rate to a ceiling. A barrel of ale counts a clock down to
+nought and then stops being a thing that is working and starts being a thing
+you can draw off — same settling, same single timestamp, opposite sign, and the
+`since` it counts from is the one `placed` has carried since the first
+campfire. One column.
+
+A wall is a bill of materials that comes down one unit at a time as somebody
+works at it. So is a tile of bridge deck. The only thing a bridge has that a
+wall has not is that there are several of them in a row and they are built in
+order, so `bridge_span` is the wall table with an index on it and `bridge` is
+the pair of banks.
+
+### A pregnancy is the first settling that makes a new row
+
+Everything else that settles changes something already there: a fire has less
+fuel, a well has more water, a trap has something in it. A dam in young settles
+into a *creature that did not exist before*, and she does it whether or not her
+keeper is standing there when the hour comes — so `herd_settle` runs at the top
+of the dispatcher, where somebody is always about to do something.
+
+What the young one carries is decided at the moment of pairing rather than at
+the moment of birth: `unborn` is written then and read back at the hour. That
+is the browser's arrangement and it is the right one. The blood is the blood of
+the two of them as they were when they were put together, not as they are
+twelve minutes later.
+
+### Ninth and tenth, in one function
+
+`born` is a column of `creature`. So is `traits`. Both were locals in
+`give_birth`, inside an `update creature` — which makes them not locals at all.
+`care` was the eighth, in `pair_them`, the same afternoon.
+
+The rule has not changed since the first one: alias every table, prefix every
+local. What this pass proved is that knowing the rule is not the same as
+applying it, and the moment to apply it is while writing rather than while
+reading a stack trace. Ten instances, and every one of them cost a run.
 
 ### Eighteen things the game can make and had no name for
 

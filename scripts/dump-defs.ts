@@ -43,6 +43,13 @@ import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
+import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
+import { BREWS } from '../src/game/brewing';
+import { DYEABLE_ITEMS } from '../src/game/dyes';
+import { PAIR_RANGE, GROOM_CAP, TIER_LEVEL } from '../src/game/husbandry';
+import { BREED_REST, GESTATION } from '../src/game/creatures';
+import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
+import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 
@@ -256,6 +263,26 @@ out.push(`create table if not exists boat_def (
 );`);
 /* What has to be fitted before anything can be ridden. */
 out.push(`create table if not exists tack_def (ord int primary key, item text not null);`);
+/* A run of deck between two banks, and what one tile of it takes. */
+out.push(`create table if not exists bridge_def (
+  id text primary key, name text not null, span int not null, tool text not null,
+  skill text not null, difficulty real not null, carts boolean not null, note text not null
+);`);
+out.push(`create table if not exists bridge_bill (
+  kind text not null, item text not null, count int not null, primary key (kind, item)
+);`);
+/* Something to sleep in, and how much of a night it is worth. */
+out.push(`alter table furniture_def add column if not exists bed real;`);
+/* What a barrel of water becomes if you leave it alone. */
+out.push(`create table if not exists brew_def (
+  id text primary key, name text not null, input text not null, count int not null,
+  litres real not null, seconds real not null, difficulty real not null, done text not null
+);`);
+/* What will take a dye: anything woven or tanned, and the things made of them. */
+out.push(`create table if not exists dyeable_item (id text primary key);`);
+out.push(`create table if not exists dyeable_class (cls text primary key);`);
+/* The husbandry it takes to read a trait off an animal. */
+out.push(`alter table tier_odds add column if not exists level real not null default 0;`);
 /*
  * What a prayer buys, and the three ways of looking at the island.
  *
@@ -545,7 +572,8 @@ out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step;`);
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step,
+  bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -648,6 +676,16 @@ for (const a of Object.values(AGES)) {
 // The two loose numbers, as functions rather than a row with no table to be in.
 out.push(`create or replace function monster_share() returns double precision language sql immutable as $fn$ select ${q(MONSTER_SHARE)}::double precision $fn$;`);
 out.push(`create or replace function trait_slots() returns int language sql immutable as $fn$ select ${q(TRAIT_SLOTS)} $fn$;`);
+/* A gap worth bridging, two banks that will carry one deck, and a pair that
+ * will stand close enough to be put together. */
+for (const [fn, v] of [
+  ['clearance', CLEARANCE], ['end_slop', END_SLOP], ['pair_range', PAIR_RANGE],
+  ['groom_cap', GROOM_CAP], ['breed_rest', BREED_REST], ['gestation', GESTATION],
+  ['rest_cap', REST_CAP], ['rest_mult', REST_MULT], ['rest_per_second', REST_PER_SECOND],
+  ['dawn_hour', DAWN], ['day_seconds', DAY_SECONDS],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
 /* What a prayer is worth and what it takes; what a sitting is worth and how often. */
 for (const [fn, v] of [
   ['favour_trickle', FAVOUR_TRICKLE], ['prayer_favour', PRAYER_FAVOUR], ['prayer_rest', PRAYER_REST],
@@ -708,6 +746,7 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.bulk) out.push(`update furniture_def set bulk = true where id = ${q(f.id)};`);
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);
   if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);
+  if (f.bed !== undefined) out.push(`update furniture_def set bed = ${q(f.bed)} where id = ${q(f.id)};`);
   if (f.cart) out.push(`update furniture_def set cart = true where id = ${q(f.id)};`);
   const v = f.vehicle as A | undefined;
   if (v) out.push(`insert into vehicle_def values (${q(f.id)}, ${q(v.yokes)}, ${q(v.needs)}, ${q(v.seat)});`);
@@ -717,6 +756,20 @@ for (const f of FURNITURE as unknown as A[]) {
 TACK.forEach((id, ord) => out.push(`insert into tack_def values (${q(ord)}, ${q(id)});`));
 for (const c of CASTS) {
   out.push(`insert into cast_def values (${q(c.id)}, ${q(c.name)}, ${q(c.cost)}, ${q(c.level)}, ${q(c.on)}, ${q(c.note)});`);
+}
+for (const b of Object.values(BRIDGES)) {
+  out.push(`insert into bridge_def values (` + [q(b.id), q(b.name), q(b.span), q(b.tool),
+    q(b.skill), q(b.difficulty), q(b.carts), q(b.note)].join(', ') + `);`);
+  for (const [item, n] of b.bill) out.push(`insert into bridge_bill values (${q(b.id)}, ${q(item)}, ${q(n)});`);
+}
+for (const b of BREWS) {
+  out.push(`insert into brew_def values (` + [q(b.id), q(b.name), q(b.input), q(b.count),
+    q(b.litres), q(b.time), q(b.difficulty), q(b.done)].join(', ') + `);`);
+}
+for (const id of [...DYEABLE_ITEMS].sort()) out.push(`insert into dyeable_item values (${q(id)});`);
+for (const cls of ['cloth', 'leather']) out.push(`insert into dyeable_class values (${q(cls)});`);
+for (const [tier, level] of Object.entries(TIER_LEVEL)) {
+  out.push(`update tier_odds set level = ${q(level)} where tier = ${q(tier)};`);
 }
 for (const path of PATH_LIST) {
   out.push(`insert into path_def values (${q(path.id)}, ${q(path.name)}, ${q(path.note)});`);
