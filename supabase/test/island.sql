@@ -4661,3 +4661,14 @@ select '662. somebody who came ashore before the suffix moved is still '
 select set_config('request.jwt.claims', json_build_object('sub', :'newcomer')::text, false) \g /dev/null
 select '663. and somebody who comes ashore today is '
      || coalesce(rpc_my_name(), 'NAMELESS');
+
+\echo '--- how long a body lasts'
+-- Forty-two minutes and twenty-eight, which is what these were, is a faithful
+-- port of numbers written for a browser tab open for ten minutes at a time. An
+-- island session is an afternoon, and a body that goes from full to empty
+-- inside one makes eating and drinking the thing you are doing rather than
+-- something you see to. Said in hours here, because that is the unit the
+-- decision was actually made in and a rate per second hides it.
+select '664. a full stomach lasts ' || round((1 / hunger_rate() / 3600)::numeric, 1)
+     || ' hours and a full throat ' || round((1 / thirst_rate() / 3600)::numeric, 1)
+     || ' — thirst still running ahead of hunger by the half it always did';

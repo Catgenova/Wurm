@@ -18,9 +18,22 @@
  * gets hungry while somebody is watching is not a body.
  */
 
-/** Hunger and thirst, per real second. Empty from full in 42 and 28 minutes. */
-export const HUNGER_RATE = 0.0004;
-export const THIRST_RATE = 0.0006;
+/**
+ * Hunger and thirst, per real second. Empty from full in five and a half
+ * hours, and in three and three quarters.
+ *
+ * They were forty-two minutes and twenty-eight, which is a faithful port of
+ * numbers written for a browser tab somebody opened for ten minutes at a
+ * time. On an island a session is an afternoon, and at that rate a body went
+ * from full to empty inside one — so eating and drinking stopped being
+ * something you saw to and became the thing you were doing.
+ *
+ * Eight times slower, both of them, so thirst still runs ahead of hunger by
+ * the half it always did. Long enough that a good session costs you half a
+ * stomach and you drink once in it, rather than tending a pair of bars.
+ */
+export const HUNGER_RATE = 0.00005;
+export const THIRST_RATE = 0.000075;
 
 /** Wind coming back: standing still, and on the move. */
 export const WIND_REST = 0.05;
