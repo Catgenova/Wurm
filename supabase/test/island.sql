@@ -42,7 +42,7 @@ from player where uid = :'ivar';
 select rpc_join(:'world', 'Ivar') \g /dev/null
 select '2. Ivar knocks again: bodies on the island ' || (select count(*) from player)
      || ', tools in his pack ' || (select count(*) from item where holder_uid = :'ivar')
-     || ' — a second kit would have made it eighteen';
+     || ' — a second kit would have made it twenty-four';
 
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 select rpc_join(:'world', 'Hild') \g /dev/null
@@ -2323,3 +2323,139 @@ select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text,
 select '396. the five that hold things: '
      || (select string_agg(id, ', ' order by id) from action_def where holding_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- a settlement grows by being built up'
+update deed set level = 1, radius = deed_radius(1) where world_id = :'world2';
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select '397. Stonehaven at level 1 reaches ' || (select radius from deed where world_id = :'world2')
+     || ' tiles and works ' || worker_cap(:'world2') || ' wildermon — and level 5 would reach '
+     || deed_radius(5) || ' with 5';
+select '398. what level 2 wants: ' || (select string_agg(label || ' (' ||
+       case when met then 'standing' else 'wanted' end || ')', ', ' order by label)
+       from upgrade_wants(:'world2', 2))
+     || ' — so: ' || coalesce(upgrade_reason(:'world2'), 'allowed');
+-- A campfire on the deed is the one thing level 2 is short of.
+delete from placed where world_id = :'world2' and kind = 'campfire';
+select '399. with no campfire: ' || coalesce(upgrade_reason(:'world2'), 'allowed');
+insert into placed (world_id, kind, x, y, sx, sy, cx, cy, fuel)
+values (:'world2', 'campfire', 5, 8, 0, 0, 5.5, 8.5, 120);
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'upgrade_deed', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
+select '400. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '401. and on to 3: ' || coalesce(upgrade_reason(:'world2'), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'rename_deed', '{"kind":"tile","x":5,"y":7,"name":"Ironhearth"}'::jsonb) \g /dev/null
+select '402. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and with no name at all: ' || coalesce(act_refusal(:'world2', :'ivar', 'rename_deed',
+        '{"kind":"tile","x":5,"y":7,"name":"  "}'::jsonb), 'allowed');
+
+\echo ''
+\echo '--- a work post, which rots where it stands'
+delete from creature where world_id = :'world2' and mode in ('deed', 'stored', 'wild');
+delete from placed where world_id = :'world2' and kind = 'post';
+select '403. a rough post stands ' || round(post_life(1) / 60) || ' minutes and reaches '
+     || post_radius(1) || ' tiles; the best that can be made stands ' || round(post_life(100) / 60)
+     || ' and reaches ' || post_radius(100);
+select give(:'world2', :'ivar', 'work_post', 1, 30, 'Pine') \g /dev/null
+select id as post_item from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'work_post'
+  order by id desc limit 1 \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'place_post',
+  ('{"kind":"tile","x":9,"y":7,"sx":1,"sy":1,"uid":' || :'post_item' || '}')::jsonb) \g /dev/null
+select id as post from placed where world_id = :'world2' and kind = 'post' order by id desc limit 1 \gset
+select '404. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+update player set x = 9.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+-- Something for it to clear away, out by the post rather than by the token.
+select drop_on_ground(:'world2', 9, 8, 'corpse', 30, 'Rabba'),
+       drop_on_ground(:'world2', 10, 7, 'corpse', 30, 'Rabba') \g /dev/null
+select creature_spawn(:'world2', 'middun', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar') as posted \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'assign_post',
+  ('{"kind":"post","id":' || :'post' || ',"creature":' || :'posted' || '}')::jsonb) \g /dev/null
+select '405. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '406. it takes its orders from ' || (select coalesce(post::text, 'the token') from creature where id = :'posted')
+     || ', and the site it works out of is ' || (select x || ',' || y || ' within ' || radius || ' tiles'
+        from work_site(:'world2', (select c from creature c where c.id = :'posted')))
+     || ' — a post holds it to the post''s reach however much it has learned';
+-- Ten minutes of it, out of the post rather than the token.
+update creature set phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where id = :'posted';
+select worker_settle(:'world2', :'posted') as posted_work \gset
+select '407. ten minutes out of the post: ' || :'posted_work' || ' rounds of work — '
+     || (select count(*) from item where world_id = :'world2' and holder = 'ground' and def = 'corpse')
+     || ' carcasses left by the post, and it is at '
+     || (select floor(to_x) || ',' || floor(to_y) from creature where id = :'posted')
+     || ', which is ' || (select greatest(abs(floor(to_x) - 9), abs(floor(to_y) - 7))
+        from creature where id = :'posted') || ' tiles from the post';
+
+-- And the post goes over, which is the part no other settling does.
+select '408. as it stands: ' || post_state((select p from placed p where p.id = :'post'));
+update placed set dmg = 0, since = now() - interval '40 minutes' where id = :'post';
+select round(post_dmg((select p from placed p where p.id = :'post'))::numeric) as half \gset
+select '409. forty minutes into a seventy-four minute post: ' || :'half'
+     || ' gone, and it is still standing — a post settles to a number like everything else';
+update placed set dmg = 0, since = now() - interval '2 hours' where id = :'post';
+delete from event where uid = :'ivar';
+select post_sweep(:'world2') as fallen \gset
+select '410. two hours nobody watched: ' || :'fallen' || ' post went over, '
+     || (select count(*) from placed where world_id = :'world2' and kind = 'post') || ' left standing'
+     || ' — and ' || coalesce((select text from event where uid = :'ivar' order by n desc limit 1),
+          'nobody was told, which would be a bug');
+select '411. and the middun: it takes its orders from '
+     || (select coalesce(post::text, 'the token') from creature where id = :'posted')
+     || ', standing at ' || (select floor(to_x) || ',' || floor(to_y) from creature where id = :'posted')
+     || ' — which is the token, where it came home to';
+
+\echo ''
+\echo '--- and giving the whole thing up'
+select give(:'world2', :'ivar', 'work_post', 1, 60, 'Oak') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_post',
+  ('{"kind":"tile","x":9,"y":7,"sx":2,"sy":2,"uid":' || (select id from item where world_id = :'world2'
+     and holder_uid = :'ivar' and def = 'work_post' order by id desc limit 1) || '}')::jsonb) \g /dev/null
+select id as post2 from placed where world_id = :'world2' and kind = 'post' order by id desc limit 1 \gset
+update placed set dmg = 50, since = now() where id = :'post2';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_up_post', ('{"kind":"post","id":' || :'post2' || '}')::jsonb) \g /dev/null
+select '412. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — it went in at QL 60 and comes up at '
+     || (select round(ql::numeric, 1) from item where world_id = :'world2' and holder_uid = :'ivar'
+         and def = 'work_post' order by id desc limit 1) || ', half rotten';
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select '413. on the deed before it goes: ' || (select count(*) from creature where world_id = :'world2'
+       and mode in ('deed', 'stored')) || ' kept, and ' || (select coalesce(sum(count), 0) from item
+       where world_id = :'world2' and holder = 'crate') || ' things in the settlement crate';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'disband_deed', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
+select '414. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '415. after: ' || (select count(*) from deed where world_id = :'world2') || ' settlement, '
+     || (select count(*) from crate where world_id = :'world2' and deed) || ' deed crate, and '
+     || (select count(*) from creature where world_id = :'world2' and mode = 'wild') || ' running wild'
+     || ' — founding again: ' || coalesce(act_refusal(:'world2', :'ivar', 'found_settlement',
+        ('{"kind":"item","uid":' || (select give(:'world2', :'ivar', 'deed_stake', 1, 50)) || '}')::jsonb), 'allowed');
+select '416. the seven the settlement brought: '
+     || (select string_agg(id, ', ' order by id) from action_def where settlement_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- and a thing made of nothing in particular'
+/*
+ * The live smoke test found this by looking at the first thing in the pack,
+ * which is something this file had never done: every examine here was of a
+ * thing it had put there itself, with a material on it. The kit had a `knife`
+ * in it that does not exist in this game, and a null in a concatenation is a
+ * null all the way out, so the action died on a not-null constraint rather
+ * than saying a word.
+ */
+select '417. things in the kit with no definition behind them: '
+     || (select count(*) from item i left join item_def d on d.id = i.def where d.id is null)
+     || ' — and the kit itself is ' || (select count(*) from item where world_id = :'world2'
+          and holder_uid = :'hild' and holder = 'player' and issued) || ' issued tools plus a stake';
+select give(:'world2', :'ivar', 'bucket', 1, 42) \g /dev/null
+select '418. examining a bucket, which is made of nothing in particular: '
+     || examine_item_text(:'world2', :'ivar', (select i from item i where i.world_id = :'world2'
+          and i.holder_uid = :'ivar' and i.def = 'bucket' and i.extra is null order by i.id desc limit 1));
+select '419. and one with a material on it: '
+     || examine_item_text(:'world2', :'ivar', (select i from item i where i.world_id = :'world2'
+          and i.holder_uid = :'ivar' and i.extra is not null order by i.id desc limit 1));

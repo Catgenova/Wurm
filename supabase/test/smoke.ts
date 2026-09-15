@@ -366,10 +366,9 @@ async function main(): Promise<void> {
      * about why. Asked here, a full head is one honest failure that names
      * what is in it.
      */
-    const { data: busy } = await supabase().from('player').select('act_queue').eq('world_id', id).eq('uid', uid).single();
-    const queued = ((busy?.act_queue ?? []) as unknown[]).length;
-    check('nothing is left queued in our head', queued === 0,
-      queued ? `${queued} job(s) still waiting — something timed was started and not settled` : 'empty');
+    const left = await drain(id, uid);
+    check('everything we started has finished', left === 0,
+      left === 0 ? 'the head is empty' : 'jobs still waiting after thirty seconds of sweeping');
     check('there is somewhere on this island worth digging', found,
       found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
     await supabase().rpc('rpc_move', { p_world: id, p_x: cx + 0.5, p_y: cy + 0.5, p_level: 0 });
