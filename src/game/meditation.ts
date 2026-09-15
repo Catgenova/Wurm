@@ -1,5 +1,6 @@
 import type { ActionDef } from './actions';
 import type { Game } from './game';
+import { world } from './pace';
 
 /**
  * Meditation, and the three paths.
@@ -80,7 +81,7 @@ export const PATH_LIST = Object.values(PATHS);
 /** The path may be chosen once this much meditation is behind you. */
 export const CHOOSE_AT = 5;
 /** How long between sittings that are worth anything. */
-export const SIT_REST = 12 * 60;
+export const SIT_REST = world(12 * 60);
 
 /** How many steps of their path somebody has behind them. */
 export function stepsOf(path: PathId | null, meditation: number): number {

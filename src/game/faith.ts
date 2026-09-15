@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture';
 import { itemName, type Item } from './items';
+import { world, worldRate } from './pace';
 
 /**
  * An altar, and what it is worth to have one.
@@ -20,12 +21,19 @@ import { itemName, type Item } from './items';
 
 export const FAITH = 'prayer';
 
-/** Favour comes back on its own, slowly, up to what your faith carries. */
-export const FAVOUR_TRICKLE = 0.004;
+/**
+ * Favour comes back on its own, slowly, up to what your faith carries.
+ *
+ * A rate rather than a duration, so it is *divided* by the world's pace: leave
+ * it alone and the well fills just as fast as it always did, and nothing has
+ * been slowed at all. The one place a multiplication would have been exactly
+ * backwards.
+ */
+export const FAVOUR_TRICKLE = worldRate(0.004);
 /** What a prayer at an altar is worth, before the hour and the stone are counted. */
 export const PRAYER_FAVOUR = 22;
 /** How long between prayers that are worth anything: most of an island day. */
-export const PRAYER_REST = 16 * 60;
+export const PRAYER_REST = world(16 * 60);
 /** The most favour anybody holds, whatever their faith. */
 export const FAVOUR_CEILING = 120;
 

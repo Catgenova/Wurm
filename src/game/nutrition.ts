@@ -1,3 +1,4 @@
+import { world } from './pace';
 /**
  * What is actually in a meal.
  *
@@ -34,7 +35,7 @@ export const NUTRIENT_NOTES: Record<Nutrient, string> = {
 export const emptyNutrition = (): Record<Nutrient, number> => ({ starch: 0, flesh: 0, fat: 0, greens: 0 });
 
 /** Seconds a full measure takes to fall away to nothing. */
-export const NUTRIENT_HOURS = 50 * 60;
+export const NUTRIENT_HOURS = world(50 * 60);
 export const NUTRIENT_DECAY = 1 / NUTRIENT_HOURS;
 
 /** The most of hunger and thirst that eating well holds off. */

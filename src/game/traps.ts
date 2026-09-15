@@ -5,6 +5,7 @@ import { isBaitFor, SPECIES, type Creature } from './creatures';
 import { itemDef, itemName, type Item } from './items';
 import { BAIT_BY_ID, isBait } from './fishing';
 import { matOf } from './materials';
+import { world } from './pace';
 
 /**
  * Traps.
@@ -57,8 +58,8 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
     holds: 20,
     reach: 7,
     odds: 0.3,
-    lifeMin: 20 * 60,
-    lifeMax: 90 * 60,
+    lifeMin: world(20 * 60),
+    lifeMax: world(90 * 60),
     note: 'A noose of rope on a bent shaft. It takes the small and the trusting; anything with weight in it walks off wearing the rope.',
   },
   creel: {
@@ -70,8 +71,8 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
     holds: 0,
     reach: 0,
     odds: 0.34,
-    lifeMin: 40 * 60,
-    lifeMax: 3 * 60 * 60,
+    lifeMin: world(40 * 60),
+    lifeMax: world(3 * 60 * 60),
     water: true,
     hold: 8,
     note: 'A woven basket with a throat turned inward, so what swims in stays in. It sits in the water and works while you are elsewhere.',
@@ -85,8 +86,8 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
     holds: 60,
     reach: 10,
     odds: 0.22,
-    lifeMin: 45 * 60,
-    lifeMax: 4 * 60 * 60,
+    lifeMin: world(45 * 60),
+    lifeMax: world(4 * 60 * 60),
     note: 'A weighted board on a trigger, propped over the bait. It will hold very nearly anything that walks, and it is a day’s work to build one.',
   },
 };

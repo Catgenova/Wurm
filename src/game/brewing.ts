@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { furnitureName, holdsLiquid, litresIn, type LiquidKind, type PlacedFurniture } from './furniture';
 import type { Game } from './game';
 import { itemDef } from './items';
+import { world } from './pace';
 
 /**
  * Brewing. Fill a barrel with water, tip in what you have grown or gathered,
@@ -27,10 +28,10 @@ export interface BrewDef {
 }
 
 export const BREWS: BrewDef[] = [
-  { id: 'ale', name: 'Ale', input: 'wheat', count: 12, litres: 15, time: 15 * 60, difficulty: 12, done: 'You mash the wheat into the water and leave it to work. It will be ale.' },
-  { id: 'cider', name: 'Cider', input: 'apple', count: 20, litres: 15, time: 30 * 60, difficulty: 18, done: 'You break the apples into the water and bung the barrel. It will be cider.' },
-  { id: 'mead', name: 'Mead', input: 'honey', count: 12, litres: 15, time: 40 * 60, difficulty: 24, done: 'You stir the honey through until it goes. It will be mead, in its own time.' },
-  { id: 'wine', name: 'Wine', input: 'cherry', count: 30, litres: 15, time: 45 * 60, difficulty: 30, done: 'You crush the cherries into the water and seal it. It will be wine.' },
+  { id: 'ale', name: 'Ale', input: 'wheat', count: 12, litres: 15, time: world(15 * 60), difficulty: 12, done: 'You mash the wheat into the water and leave it to work. It will be ale.' },
+  { id: 'cider', name: 'Cider', input: 'apple', count: 20, litres: 15, time: world(30 * 60), difficulty: 18, done: 'You break the apples into the water and bung the barrel. It will be cider.' },
+  { id: 'mead', name: 'Mead', input: 'honey', count: 12, litres: 15, time: world(40 * 60), difficulty: 24, done: 'You stir the honey through until it goes. It will be mead, in its own time.' },
+  { id: 'wine', name: 'Wine', input: 'cherry', count: 30, litres: 15, time: world(45 * 60), difficulty: 30, done: 'You crush the cherries into the water and seal it. It will be wine.' },
 ];
 
 export const BREW_BY_ID = new Map(BREWS.map((b) => [b.id, b]));

@@ -21,6 +21,7 @@ import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
+import { COAX_LAPSE, OLD_AT, YOUNG_FOR } from '../src/game/creatures';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
 import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
@@ -53,7 +54,7 @@ import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
-import { ACTION_FLOOR, ACTION_PACE, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT } from '../src/game/pace';
+import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -732,6 +733,29 @@ for (const [fn, v] of [
    * is no longer thirty seconds; this is what notices.
    */
   ['mining_seconds', MINING_SECONDS], ['mining_weight', MINING_WEIGHT],
+  /*
+   * And the world's own clock, which is the same idea against a second
+   * yardstick: cotton takes five minutes a stage, and everything the world
+   * does on its own keeps the ratio to that it always had.
+   *
+   * `world_pace` is not read by anything down here — every world duration is
+   * scaled where it is *defined*, so what arrives in `crop_def` and the rest
+   * is already paced. It is emitted so the suite can say out loud what the
+   * pace is and check that cotton is still the thing it was worked out from.
+   */
+  ['world_pace', WORLD_PACE], ['cotton_seconds', COTTON_SECONDS], ['cotton_weight', COTTON_WEIGHT],
+  /*
+   * How long a beast is young, when it turns old, and how long a run of
+   * offerings is worth anything.
+   *
+   * These *were* in the migrations as `interval '1 hour'`, `interval '6 hours'`
+   * and `interval '90 seconds'` — the same three numbers as the TypeScript,
+   * written down a second time. Nothing noticed until the world's clock moved
+   * and only one copy went with it, which would have left the browser calling
+   * a beast grown at two and a half hours while the database still called it
+   * young. Generated now, like everything else that is a number.
+   */
+  ['young_for', YOUNG_FOR], ['old_at', OLD_AT], ['coax_lapse', COAX_LAPSE],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

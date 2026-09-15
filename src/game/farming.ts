@@ -2,6 +2,7 @@ import { TileType, TILE_DEFS } from '../world/tiles';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemDef, itemName } from './items';
+import { world } from './pace';
 
 /**
  * Farming: rake a field out of grass or dirt, sow a seed, tend it through
@@ -39,7 +40,9 @@ const crop = (id: string, name: string, produce: string, kind: CropKind, look: C
   produce,
   kind,
   look,
-  stageSeconds,
+  // Every crop's stage at the world's pace, in the one place all thirteen
+  // pass through. Cotton is the yardstick: five minutes a stage.
+  stageSeconds: world(stageSeconds),
   colors,
 });
 

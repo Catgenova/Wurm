@@ -14,6 +14,7 @@ import { BUCKET_LITRES, furnitureCentre } from './furniture';
 import type { WoundKind } from './wounds';
 import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel } from './traits';
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
+import { world } from './pace';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -1335,12 +1336,12 @@ const startSkills = (species: SpeciesDef): Record<string, number> => {
  */
 export type Age = 'young' | 'grown' | 'old';
 /** Seconds of real time spent young, and the hour it turns old. */
-export const YOUNG_FOR = 60 * 60;
-export const OLD_AT = 6 * 60 * 60;
+export const YOUNG_FOR = world(60 * 60);
+export const OLD_AT = world(6 * 60 * 60);
 /** How long a dam carries: half an island day. */
-export const GESTATION = 12 * 60;
+export const GESTATION = world(12 * 60);
 /** How long after a covering either parent will look at another. */
-export const BREED_REST = 20 * 60;
+export const BREED_REST = world(20 * 60);
 
 export interface AgeDef {
   id: Age;
@@ -1587,7 +1588,7 @@ const PER_REGION = 1;
  */
 export const COAX_STEP = 0.03;
 export const COAX_CAP = 0.12;
-export const COAX_LAPSE = 90;
+export const COAX_LAPSE = world(90);
 
 /** What a run of offerings is worth to the next one, 0 when the run has lapsed. */
 export const coaxBonus = (c: Creature, time: number): number =>

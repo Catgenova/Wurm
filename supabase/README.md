@@ -1175,6 +1175,42 @@ Kent — and that an island somebody joins now has wildlife in it even if nobody
 ever called `rpc_ready` on it, which is why a dozen measurements in the suite
 read differently from before.
 
+## Two clocks, and the four numbers that were written down twice
+
+Jobs have a pace — mining is thirty seconds and everything else is weighed
+against it — and now the world has one too: a stage of cotton is five minutes,
+and crops, brews, firing, smelting, traps, fuel, lights, pregnancies and the
+length of a day all keep the ratio to that they always had.
+
+Almost none of that is SQL. World durations are scaled where they are
+*defined*, in TypeScript, so the definition dump carries them down here already
+paced — `crop_def.stage_seconds`, `brew_def.seconds`, `pottery_def.seconds`,
+`trap_def.life_*`, `gestation()`, `day_seconds()` and the rest arrive with the
+new numbers in them and nothing here had to change.
+
+What did have to change is the four places where a number had been written down
+twice. They had agreed for as long as nobody moved either copy:
+
+| Here | And also in | What it is |
+| --- | --- | --- |
+| `interval '1 hour'` | `YOUNG_FOR` | how long a beast is young |
+| `interval '6 hours'` | `OLD_AT` | when it turns old |
+| `interval '90 seconds'` | `COAX_LAPSE` | how long a run of offerings holds |
+| `% 1440 / 1440` | `DAY_SECONDS` | the hour of the island's day |
+
+Moving the world's clock moved the TypeScript copy and left these behind. The
+first three would have had the browser calling a beast grown at two and a half
+hours while this database still called it young — not a timer being wrong, two
+islands disagreeing about the same animal. The fourth is worse: `hour_of_day`
+would have said it was the small hours while the browser said noon, and
+everything that turns on the time of day splits in half — what is out hunting,
+whether a lantern is worth lighting, how far anybody can see, whether a night
+of fighting teaches you anything.
+
+All four are generated now and read from one place. The fourth was found
+because a browser test hard-coded 1440 as well and started measuring midday in
+the dark; the test was wrong in exactly the way that pointed at the code.
+
 ## Testing
 
 `npm run db:test` drops the schema, rebuilds it from the migrations and runs

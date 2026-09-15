@@ -3585,3 +3585,29 @@ select '568. a spread of jobs, for the feel of it: '
   from action_def a where a.id in ('forage', 'dig', 'mine', 'make_large_cart', 'make_wagon');
 select '569. and a worker over the same task takes ' || round(work_duration(20))
      || ' seconds at skill 20, which is twice what a hand of that skill would';
+
+\echo ''
+\echo '--- and how long the world takes'
+-- Actions have a pace and so does everything the world does on its own. Cotton
+-- is that second yardstick: five minutes a stage, and every other world timer
+-- keeps the ratio to it that it always had.
+select '570. the world runs at ' || world_pace() || ' seconds to the unit, against the '
+     || action_pace() || ' a job runs at';
+select '571. the yardstick: a stage of cotton is '
+     || (select stage_seconds from crop_def where id = 'cotton') || ' seconds, and it is meant to be '
+     || cotton_seconds() || ' — ' || case when (select stage_seconds from crop_def where id = 'cotton') = cotton_seconds()
+                                          then 'they agree' else 'THEY HAVE DRIFTED' end;
+select '572. a day is now ' || round(day_seconds() / 60) || ' minutes, of which '
+     || round(day_seconds() * 10 / 24 / 60) || ' are dark';
+select '573. every crop, sown to ripe: ' || string_agg(c.name || ' ' || round(c.stage_seconds * 3 / 60) || 'm',
+       ', ' order by c.stage_seconds, c.id) from crop_def c;
+select '574. and the rest of the world: carrying ' || round(gestation() / 60) || 'm, and again after '
+     || round(breed_rest() / 60) || 'm; a prayer is worth something again after ' || round(prayer_rest() / 60)
+     || 'm; ale works for ' || (select round(seconds / 60) from brew_def where id = 'ale') || 'm';
+-- What matters is that the two clocks keep step with each other in game days,
+-- which is the thing a rebase is for.
+select '575. corn is ' || round((select stage_seconds * 3 from crop_def where id = 'corn') / mining_seconds())
+     || ' swings of a pickaxe of waiting, against 56 before either clock moved and 15 after only the '
+     || 'jobs did — the two paces are 3.75 and 2.5, so that ratio does not come all the way back. '
+     || 'What does come back exactly is the day: ' || round((select stage_seconds * 3 from crop_def where id = 'corn')
+        / day_seconds() * 100) || ' hundredths of one, which is what it always was';

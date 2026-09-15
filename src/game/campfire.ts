@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
+import { world } from './pace';
 
 /**
  * Campfires: the first thing you build on the ground rather than carry. A fire
@@ -48,7 +49,7 @@ export const hasAshes = (h: Hearth): boolean => Math.floor(h.ash ?? 0) >= 1;
 /** A campfire covers two subtiles each way, so four of the sixteen on a tile. */
 export const FIRE_SUBTILES = 2;
 /** Most fuel a fire holds, an hour of burning. */
-export const FIRE_CAPACITY = 3600;
+export const FIRE_CAPACITY = world(3600);
 /** Shafts laid as the fire is built, and the fuel they are worth. */
 export const FIRE_COST = 2;
 const FIRE_LAID_FUEL = 120;

@@ -3,6 +3,7 @@ import { FIRE_CAPACITY, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campf
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
+import { world } from './pace';
 
 /**
  * A kiln: four subtiles of stone brick with a firebox under them. Clay is
@@ -51,10 +52,10 @@ export interface PotteryDef {
 }
 
 export const POTTERY: PotteryDef[] = [
-  { unfired: 'unfired_clay_brick', fired: 'clay_brick', seconds: 22 },
-  { unfired: 'unfired_clay_bowl', fired: 'clay_bowl', seconds: 30 },
-  { unfired: 'unfired_clay_pot', fired: 'clay_pot', seconds: 40 },
-  { unfired: 'unfired_clay_jar', fired: 'clay_jar', seconds: 34 },
+  { unfired: 'unfired_clay_brick', fired: 'clay_brick', seconds: world(22) },
+  { unfired: 'unfired_clay_bowl', fired: 'clay_bowl', seconds: world(30) },
+  { unfired: 'unfired_clay_pot', fired: 'clay_pot', seconds: world(40) },
+  { unfired: 'unfired_clay_jar', fired: 'clay_jar', seconds: world(34) },
 ];
 
 export const POTTERY_BY_UNFIRED = new Map(POTTERY.map((p) => [p.unfired, p]));

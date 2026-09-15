@@ -1,5 +1,6 @@
 import { ITEM_DEFS, itemDef } from './items';
 import { SKILL_DEFS } from './skills';
+import { world } from './pace';
 
 /**
  * Two things that make the work go into you faster than it otherwise would.
@@ -32,7 +33,7 @@ export const REST_PER_SECOND = 0.5;
 
 /** What a dish's knack is worth, and how long the best of them carries it. */
 export const BOON_BONUS = 0.5;
-export const BOON_SECONDS = 20 * 60;
+export const BOON_SECONDS = world(20 * 60);
 
 /** The trades a dish can favour: the ones you work at, not the ones you are. */
 export const BOON_SKILLS: string[] = SKILL_DEFS.filter((d) => d.group !== 'Characteristics').map((d) => d.id);

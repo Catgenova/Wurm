@@ -1,3 +1,4 @@
+import { world } from './pace';
 /**
  * Light after dark.
  *
@@ -22,7 +23,7 @@ export interface LightSource {
 }
 
 /** Seconds of burning in one candle, at a lantern made perfectly. */
-export const CANDLE_BURN = 22 * 60;
+export const CANDLE_BURN = world(22 * 60);
 
 /**
  * How long a candle lasts in this lantern. A well-made lantern keeps the
@@ -44,7 +45,7 @@ export const lanternReach = (lanternQl: number): number => 5 + Math.round(Math.m
  * scrap of cloth in the first hour of a new island, which is exactly when the
  * dark is worst.
  */
-export const TORCH_BURN = 5 * 60;
+export const TORCH_BURN = world(5 * 60);
 /** How long this torch burns: a well-wound one holds its pitch. */
 export const torchBurn = (ql: number): number => TORCH_BURN * (0.7 + Math.max(1, Math.min(100, ql)) / 140);
 /** How far a torch throws: three at the roughest, five at the best. */

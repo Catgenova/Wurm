@@ -3,6 +3,7 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { matOf } from './materials';
 import { SPECIES, workRangeOf, GATHER_DO, type Creature } from './creatures';
+import { world } from './pace';
 
 /**
  * A work post: a stake driven into open ground with a crossbar nailed to it
@@ -32,7 +33,7 @@ export interface PlacedPost {
 }
 
 /** Half an hour at the roughest, three hours at the finest. */
-export const POST_LIFE_MIN = 30 * 60;
+export const POST_LIFE_MIN = world(30 * 60);
 export const POST_LIFE_MAX = 3 * 60 * 60;
 const clampQl = (ql: number): number => Math.max(1, Math.min(100, ql));
 

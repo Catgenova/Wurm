@@ -148,9 +148,37 @@ Postgres prices a job the same way, through `act_duration`, which reads an
 `action_pace()` generated from that same constant. Neither side has a number of
 its own to drift with, and the suite checks the two agree.
 
-The world's own clock is a separate thing and was not re-paced: how fast a crop
-comes on, how long a kiln burns, how long a brew works. A field ripens in rather
-fewer swings of a pickaxe than it used to.
+### And how long the world takes
+
+The world has a pace of its own, on the same principle and against a second
+yardstick: **a stage of cotton takes five minutes**, and everything the world
+does while nobody is watching keeps the ratio to that it always had. Crops,
+brews, firing, smelting, traps, fuel, candles and torches, how long a beast
+carries and how long before it will again, how quickly favour comes back — and
+the length of a day, which is the most visible of them: **an hour of real time
+to the day now, with twenty-five minutes of dark in it** rather than ten.
+
+The day had to move with the rest or the point would be lost. A crop that took
+a third of a day to ripen would have taken most of one, and every "twice a day"
+thing in the game would quietly have become once. It also keeps the lights
+honest: a torch was five minutes against a ten-minute night, and it is twelve
+and a half against a twenty-five minute one — the same half a night it always
+was.
+
+The two paces differ (3.75 for jobs, 2.5 for the world), so a field is not
+quite as many swings of a pickaxe of waiting as it was before either moved. In
+days it is exactly what it always was, which is the relationship worth keeping.
+
+Where `ACTION_PACE` is applied in the one function each side turns a weight
+into a clock, `WORLD_PACE` is applied where each duration is **defined** — a
+crop stage, a kiln, a candle and a pregnancy have no code in common, and the
+one place they do share is the table they are written in. Scaling there also
+means the definition dump carries them to Postgres already paced, with no
+second multiplication at the far end to keep in step.
+
+What did *not* move: how fast anything walks, how often a blow lands, and the
+rest banked from a night in a bed, which is spent in working time rather than
+in world time.
 
 ## What is in the game
 

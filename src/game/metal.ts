@@ -1,3 +1,4 @@
+import { world } from './pace';
 /**
  * Metal, from the seam to the finished tool. Ore is mined, smelted into lumps,
  * lumps are mixed into alloys, sand is fired into moulds, and a mould filled
@@ -124,11 +125,12 @@ export const mouldUsesLeft = (ql: number, dmg: number): number => Math.max(0, Ma
 export function smeltSeconds(metalId: string, oreQl: number, smelterQl: number): number {
   const m = METAL_BY_ID.get(metalId);
   const work = m?.work ?? 1;
-  return Math.max(4, 18 * work * (0.6 + oreQl / 90) * (1.4 - smelterQl / 160));
+  return world(Math.max(4, 18 * work * (0.6 + oreQl / 90) * (1.4 - smelterQl / 160)));
 }
 
 /** Seconds for a filled anvil mould to cool into an anvil. */
-export const castSeconds = (metalId: string, ql: number): number => Math.max(20, 70 * (METAL_BY_ID.get(metalId)?.work ?? 1) * (0.7 + ql / 130));
+export const castSeconds = (metalId: string, ql: number): number =>
+  world(Math.max(20, 70 * (METAL_BY_ID.get(metalId)?.work ?? 1) * (0.7 + ql / 130)));
 
 /** Tool heads that become a tool once fitted to a shaft. */
 export const HEAD_TO_TOOL: Record<string, string> = {

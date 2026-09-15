@@ -22,7 +22,7 @@ import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
-import { ACTION_FLOOR, ACTION_PACE } from './pace';
+import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { ALL_GOALS } from './journal';
@@ -167,12 +167,24 @@ export const WORLD_SIZE = 1024;
  * saved island sixteen times bigger is not a change anybody asked for.
  */
 export const ISLAND_SIZE = 4096;
-/** A day and a night, in seconds: one game hour to the real minute. */
-export const DAY_SECONDS = 1440;
+/**
+ * A day and a night, in seconds.
+ *
+ * At the world's pace, which is the most visible thing about slowing that
+ * clock: an hour of real time to the day now, and twenty-five minutes of dark
+ * in it rather than ten. It has to move with everything else or the whole
+ * point is lost — a crop that took a third of a day to ripen would take most
+ * of one, and every "twice a day" thing in the game would quietly become once.
+ *
+ * It also keeps the lights honest. A torch was five minutes against a
+ * ten-minute night; it is twelve and a half against a twenty-five minute one,
+ * which is the same half a night it always was.
+ */
+export const DAY_SECONDS = world(1440);
 /** When the sun comes up and goes down, in game hours. */
 export const DAWN = 6;
 export const DUSK = 20;
-const FORAGE_COOLDOWN = 180;
+const FORAGE_COOLDOWN = world(180);
 /**
  * How dark it has to be before a fight teaches you anything about noticing.
  * Dusk is not night: a scuffle at seven in the evening is still fought by eye.

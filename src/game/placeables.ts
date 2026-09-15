@@ -22,6 +22,7 @@ import {
 } from './furniture';
 import type { Game } from './game';
 import { itemDef, type Item } from './items';
+import { world } from './pace';
 
 /**
  * The placed things that do something of their own: an oven that burns, a well
@@ -30,7 +31,7 @@ import { itemDef, type Item } from './items';
  */
 
 /** Most fuel an oven holds: it is bigger than a campfire and burns longer. */
-export const OVEN_CAPACITY = 7200;
+export const OVEN_CAPACITY = world(7200);
 
 type FurnitureTarget = Extract<Target, { kind: 'furniture' }>;
 const pieceOf = (g: Game, t: Target): PlacedFurniture | undefined => (t.kind === 'furniture' ? g.furniture.get((t as FurnitureTarget).id) : undefined);
