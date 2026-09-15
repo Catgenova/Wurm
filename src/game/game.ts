@@ -71,6 +71,16 @@ export interface Deed {
   level?: number;
   /** Standing orders for every wildermon kept here. */
   stance?: Stance;
+  /**
+   * Whether this one is yours.
+   *
+   * On an island somebody else's settlement is a thing you can see and walk
+   * around and may not build on — so the browser has to hold it, and has to
+   * know the difference. False here means the token in the ground belongs to
+   * somebody else; absent means the single-player game, where it is always
+   * yours because there is only you.
+   */
+  mine?: boolean;
 }
 
 export const DEED_RADIUS = 5;
@@ -3608,6 +3618,108 @@ export class Game {
     this.world.reconcileAround(cx, cy);
   }
 
+  /**
+   * Everything the island has on the ground here, in one word.
+   *
+   * The browser never asked. `placed` has been there since the island was
+   * built and nothing under `src/` ever read it, so on a live island every
+   * campfire, smelter, kiln, anvil, work post, trap and stick of furniture
+   * anybody had ever set down was in Postgres and invisible — and so was every
+   * crate, and so was the settlement. "Placed campfire doesn't show": it was
+   * there, and nothing had ever been told to look.
+   *
+   * Replaces rather than merges, like the wildlife: what is not in the answer
+   * is out of the range we asked about or gone, and either way it is not here.
+   * Ids are the island's, which is what makes replacing safe — the same fire
+   * comes back as the same fire.
+   */
+  sawGround(ground: IslandGround): void {
+    this.crates.clear();
+    this.campfires.clear();
+    this.smelters.clear();
+    this.kilns.clear();
+    this.furniture.clear();
+    this.anvils.clear();
+    this.posts.clear();
+    this.traps.clear();
+    this.placed.posts.reset([]);
+    this.placed.traps.reset([]);
+    for (const r of ground.placed ?? []) {
+      const at = { id: r.id, x: r.x, y: r.y, sx: r.sx, sy: r.sy };
+      if (r.kind === 'campfire' || r.kind === 'fire') {
+        this.campfires.set(r.id, { ...at, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0 });
+      } else if (r.kind === 'smelter') {
+        this.smelters.set(r.id, {
+          ...at, ql: r.ql ?? 20, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
+          jobs: (r.state?.jobs ?? []) as PlacedSmelter['jobs'],
+          output: (r.state?.output ?? []) as Item[],
+        });
+      } else if (r.kind === 'kiln') {
+        this.kilns.set(r.id, {
+          ...at, ql: r.ql ?? 20, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
+          jobs: (r.state?.jobs ?? []) as PlacedKiln['jobs'],
+          output: (r.state?.output ?? []) as Item[],
+        });
+      } else if (r.kind === 'anvil') {
+        this.anvils.set(r.id, { ...at, ql: r.ql ?? 20, metal: r.material ?? 'iron' });
+      } else if (r.kind === 'post') {
+        const p: PlacedPost = { ...at, ql: r.ql ?? 20, dmg: r.dmg ?? 0, worker: null, name: r.name ?? undefined, material: r.material ?? undefined };
+        this.posts.set(r.id, p);
+        this.placed.posts.add(p);
+      } else if (r.kind === 'trap') {
+        const t: PlacedTrap = {
+          ...at, kind: (r.sub ?? 'deadfall') as PlacedTrap['kind'], ql: r.ql ?? 20, dmg: r.dmg ?? 0,
+          bait: r.bait ? { uid: -r.id, id: r.bait, ql: r.bait_ql ?? 1, dmg: 0, count: 1 } : null,
+          caught: r.caught ?? null, checkAt: this.time, name: r.name ?? undefined,
+          material: r.material ?? undefined,
+        };
+        this.traps.set(r.id, t);
+        this.placed.traps.add(t);
+      } else if (r.kind === 'furniture') {
+        this.furniture.set(r.id, {
+          ...at, kind: r.sub ?? 'chest', ql: r.ql ?? 20, items: [],
+          name: r.name ?? undefined,
+          fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
+          litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
+          ferment: r.ferment ?? undefined,
+        });
+      }
+    }
+    for (const c of ground.crates ?? []) {
+      this.crates.set(c.id, {
+        id: c.id, x: c.x, y: c.y, sx: c.sx, sy: c.sy,
+        kind: c.kind as PlacedCrate['kind'], items: [],
+        name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
+      });
+    }
+    /*
+     * The settlement, which is the island's and not this machine's.
+     *
+     * `deed` decides what may be built where and what a worker will carry, and
+     * the browser's copy was whatever it founded itself — which on an island is
+     * nothing, ever. Somebody else's shows too: a token in the ground and a
+     * square of land with an owner are things you can see from outside them.
+     */
+    const d = ground.deed;
+    const was = this.deed;
+    this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine } : null;
+    // Only when it is actually different: this runs every few seconds, and a
+    // settlement that has not moved is not news to anybody.
+    if ((was?.name ?? null) !== (d?.name ?? null) || was?.x !== d?.x || was?.y !== d?.y
+        || was?.radius !== d?.radius || was?.level !== d?.level) {
+      if (d) this.events.emit('world', d.x, d.y);
+      else if (was) this.events.emit('world', was.x, was.y);
+    }
+    this.placed.crates.reset(this.crates.values());
+    this.placed.campfires.reset(this.campfires.values());
+    this.placed.smelters.reset(this.smelters.values());
+    this.placed.kilns.reset(this.kilns.values());
+    this.placed.furniture.reset(this.furniture.values());
+    this.placed.anvils.reset(this.anvils.values());
+    this.events.emit('crate');
+    this.events.emit('smelter');
+  }
+
   /** Light up the ore a prospector just read, for a while. */
   markProspected(tiles: number[]): void {
     this.prospected = tiles.length ? { tiles: new Set(tiles), until: this.time + PROSPECT_MARK_TIME } : null;
@@ -4181,4 +4293,55 @@ export class Game {
         this.logMsg(`Unknown command: /${name}`, 'error');
     }
   }
+}
+
+/**
+ * A thing the island says is on the ground, as the row comes off `placed`.
+ *
+ * The row itself, less the columns that are nobody's business — so a column
+ * the island learns later arrives here without anybody having to widen a list.
+ */
+export interface IslandPlaced {
+  id: number;
+  kind: string;
+  sub: string | null;
+  x: number;
+  y: number;
+  sx: number;
+  sy: number;
+  ql: number | null;
+  fuel: number | null;
+  ash: number | null;
+  lit: boolean | null;
+  dmg: number | null;
+  name: string | null;
+  material: string | null;
+  litres: number | null;
+  liquid: string | null;
+  ferment: number | null;
+  bait: string | null;
+  bait_ql: number | null;
+  caught: number | null;
+  state: { jobs?: unknown[]; output?: unknown[] } | null;
+  mine: boolean;
+}
+
+/** A crate, likewise. */
+export interface IslandCrate {
+  id: number;
+  kind: string;
+  x: number;
+  y: number;
+  sx: number;
+  sy: number;
+  material: string | null;
+  name: string | null;
+  deed: boolean;
+}
+
+/** Everything on the ground within sight, as one answer. */
+export interface IslandGround {
+  placed: IslandPlaced[];
+  crates: IslandCrate[];
+  deed: { name: string; x: number; y: number; radius: number; level: number; mine: boolean } | null;
 }

@@ -196,6 +196,13 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   };
 
   /*
+   * And everything standing on the ground, which had the same bug for the same
+   * reason: the island keeps it and nothing here ever looked. A campfire laid
+   * on a live island was a row in `placed` and a blank patch of grass.
+   */
+  island.hooks.built = (ground) => game.sawGround(ground);
+
+  /*
    * The rest of you, which the browser had no way of hearing about.
    *
    * Each of these was a separate-looking bug with one cause: the island owns

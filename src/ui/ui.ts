@@ -499,6 +499,7 @@ export class UI {
     if (bridgeHere) return { title: `${bridgeName(bridgeHere)} (${bridgeState(bridgeHere)})`, entries: this.bridgeEntries(bridgeHere) };
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
+    entries.push(...this.settlementEntry(pick));
     if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
     // Laying a campfire on the block of subtiles under the cursor.
     const fireDef = ACTION_BY_ID.get('build_campfire');
@@ -1329,6 +1330,45 @@ export class UI {
   }
 
   /** "Give it a name", for anything that will take one. */
+  /**
+   * Founding a settlement, on the ground rather than in a pocket.
+   *
+   * The action hangs off the stake, so the only way to it was to open the
+   * inventory and right-click the thing — which on a phone, with no right
+   * button and a window to go and find, is a way of hiding it. Reported as
+   * "cant place a deed despite having a stake".
+   *
+   * On the tile you are standing on, because that is where the token goes: the
+   * island founds it at your feet whatever you clicked, and an entry on some
+   * other tile would be an offer it was not going to keep.
+   */
+  private settlementEntry(pick: Pick): MenuItem[] {
+    const g = this.game;
+    if (pick.x !== g.player.tileX || pick.y !== g.player.tileY) return [];
+    const stake = g.inventory.items.find((it) => it.id === 'deed_stake');
+    const def = ACTION_BY_ID.get('found_settlement');
+    if (!stake || !def) return [];
+    const t: Target = { kind: 'item', uid: stake.uid };
+    const reason = def.check?.(t, g) ?? null;
+    return [{
+      label: 'Found a settlement here',
+      note: reason ? undefined : 'Drives the stake where you stand',
+      hint: reason ?? undefined,
+      disabled: !!reason,
+      onSelect: () => {
+        const said = g.hooks.prompt('Name your settlement', 'Homestead');
+        if (said === null || !said.trim()) {
+          g.write('You decide not to found a settlement just yet.', 'info');
+          return;
+        }
+        // The name rides in with the target: on an island the half of the
+        // action that would have asked for it runs over there, where there is
+        // nobody to ask.
+        g.requestAction(def, { ...t, name: said.trim().slice(0, 32) } as Target);
+      },
+    }];
+  }
+
   private nameEntry(t: Target): MenuItem[] {
     const def = ACTION_BY_ID.get('name_thing');
     if (!def || !def.applies(t, this.game)) return [];

@@ -11,6 +11,7 @@
  * came back against what went out, and then gives the island up again — CI
  * should not silt the database up a little more every commit.
  */
+import type { IslandGround } from '../../src/game/game';
 import { Island } from '../../src/net/island';
 import { generateAtlasWorld } from '../../src/world/atlas-world';
 import { TILE_DEFS } from '../../src/world/tiles';
@@ -568,6 +569,29 @@ async function main(): Promise<void> {
     const twice = await island.act('found_settlement', { kind: 'item', name: 'Twice' }, 1);
     check('and will not have a second', !twice.started && /already/i.test(twice.why ?? ''),
       twice.why ?? 'IT WENT THROUGH');
+
+    /*
+     * And whether the browser can see any of it.
+     *
+     * "Placed campfire doesn't show." Nothing under `src/` had ever read
+     * `placed`, so on a live island every fire, kiln, anvil, post, trap and
+     * stick of furniture anybody had put down was a row in Postgres and a
+     * blank patch of grass — and so was every crate, and so was the settlement
+     * that had just gone in the ground.
+     */
+    let onGround: IslandGround | null = null;
+    island.hooks.built = (g) => { onGround = g; };
+    await island.refreshGround(1e9);
+    const seen = onGround as IslandGround | null;
+    check('the island says what is standing on the ground here',
+      !!seen && Array.isArray(seen.placed) && Array.isArray(seen.crates),
+      seen ? `${seen.placed.length} things and ${seen.crates.length} crates within ${40} tiles` : 'it said nothing at all');
+    check('and the settlement it has just kept is one of them',
+      seen?.deed?.name === 'Smoke' && seen?.deed?.mine === true,
+      seen?.deed ? `${seen.deed.name}, ${seen.deed.radius * 2 + 1} tiles across, ours: ${seen.deed.mine}` : 'no settlement in the answer');
+    check('and the settlement crate stands beside it',
+      (seen?.crates ?? []).some((c) => c.deed),
+      `${(seen?.crates ?? []).length} crates, ${(seen?.crates ?? []).filter((c) => c.deed).length} of them the settlement's`);
 
     /*
      * Find a corner actually worth digging, rather than assuming the one we

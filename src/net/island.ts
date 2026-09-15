@@ -4,7 +4,8 @@ import { blankWorld, layChange, rowsOf, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
-import { BODY_EVERY, FOG_EVERY, FOUND_MAX, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
+import type { IslandGround } from '../game/game';
+import { BODY_EVERY, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
 
 /**
@@ -170,6 +171,16 @@ export interface IslandHooks {
    * had asked for.
    */
   mobs?: (rows: IslandCreature[]) => void;
+  /**
+   * Everything the island has set down on the ground near us.
+   *
+   * `placed` has been there since the island was built and nothing under
+   * `src/` ever read it, so on a live island every campfire, smelter, kiln,
+   * anvil, work post, trap and stick of furniture anybody had set down was in
+   * Postgres and invisible — and so was every crate, and so was the
+   * settlement. Reported as "placed campfire doesn't show": it was there.
+   */
+  built?: (ground: IslandGround) => void;
   /** Getting an island down takes a moment; this says how it is going. */
   progress?: (done: number, total: number, what: string) => void;
   /**
@@ -215,6 +226,7 @@ export class Island {
   private atlas: Atlas | null = null;
   private lastMove = 0;
   private lastMobs = 0;
+  private lastGround = 0;
   private lastSaid = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
   private seenChange = 0;
@@ -792,6 +804,22 @@ export class Island {
     this.hooks.mobs(rowsIn<IslandCreature>(data));
   }
 
+  /**
+   * What is on the ground here: everything set down, every crate, the deed.
+   *
+   * One call rather than a subscription to each of three tables, for the same
+   * reason the wildlife is one call: the fires have to be worked out on
+   * reading — a lit thing has burned the seconds since anybody last touched it
+   * — so a row straight off the table would be stale in a way no client could
+   * correct for.
+   */
+  async refreshGround(now: number): Promise<void> {
+    if (!this.info || !this.hooks.built || now - this.lastGround < GROUND_EVERY) return;
+    this.lastGround = now;
+    const { data } = await supabase().rpc('rpc_ground', { p_world: this.info.id, p_range: GROUND_RANGE });
+    if (data) this.hooks.built(data as IslandGround);
+  }
+
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
     const { data } = await supabase().from('player').select('*')
@@ -832,6 +860,7 @@ export class Island {
     if (!this.info) return;
     void this.reconcile(now);
     void this.refreshMobs(now);
+    void this.refreshGround(now);
     void this.keepFog(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
 

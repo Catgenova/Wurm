@@ -219,3 +219,15 @@ export const FOG_BYTES = 262144;
  * what catches the last half minute.
  */
 export const FOG_EVERY = 45;
+
+/**
+ * How often the browser asks what is on the ground around it.
+ *
+ * Slower than the wildlife, which is moving, and faster than the heartbeat,
+ * because a fire burning down and a kiln working through its load are things
+ * you watch. The answer is usually a handful of rows and often none.
+ */
+export const GROUND_EVERY = 3;
+
+/** And how far out, which is past anything a screen shows. */
+export const GROUND_RANGE = 40;

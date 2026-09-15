@@ -4046,3 +4046,68 @@ reset role;
 select '635. and the door itself: rpc_fog(uuid,text) to an account '
      || case when has_function_privilege('authenticated', 'rpc_fog(uuid,text)', 'execute') then 'yes' else 'NO' end
      || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_fog(uuid,text)', 'execute') then 'YES' else 'no' end;
+
+\echo ''
+\echo '--- what is standing on the ground'
+/*
+ * Everything the island has set down, which the browser never asked for.
+ *
+ * "Placed campfire doesn't show." It was there — the row was in `placed` and
+ * the log had said so — and nothing under `src/` had ever read that table. So
+ * on a live island every campfire, smelter, kiln, anvil, work post, trap and
+ * stick of furniture anybody had put down was in Postgres and invisible, and
+ * so was every crate, and so was the settlement.
+ *
+ * The same shape as the wildlife, which had the same bug for the same reason,
+ * and it answers the same way: one call, everything within sight, with the
+ * fires worked out on reading rather than as they were last written down.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select coalesce(jsonb_array_length((rpc_ground(:'world2', 60))->'placed')::text, '0') as things \gset
+select '636. everything ivar can see on the ground: ' || :'things' || ' things, of which '
+     || coalesce((select string_agg(kind || ' ×' || n, ', ' order by kind) from (
+          select v->>'kind' as kind, count(*) as n
+          from jsonb_array_elements((rpc_ground(:'world2', 60))->'placed') v group by 1) k), 'nothing');
+select '637. and a campfire comes with what is true of it now: '
+     || coalesce((select jsonb_pretty(v)::text from jsonb_array_elements((rpc_ground(:'world2', 60))->'placed') v
+                  where v->>'kind' = 'campfire' limit 1), 'no campfire in sight');
+/*
+ * A fire burning while nobody is there.
+ *
+ * `fuel` on the row is what was in it when `since` was stamped, so a row read
+ * straight off the table is stale by however long it has been since anybody
+ * touched it. A browser cannot correct for that — it does not know the rate —
+ * which is the whole reason this is a function and not a subscription.
+ */
+select set_config('wurm.w', :'world2', false) \g /dev/null
+do $$
+declare v_id bigint; v_said double precision; v_row double precision;
+        w uuid := current_setting('wurm.w')::uuid;
+begin
+  update placed set fuel = 600, lit = true, since = now() - interval '200 seconds'
+    where world_id = w and kind = 'campfire'
+    returning id, fuel into v_id, v_row;
+  select (v->>'fuel')::double precision into v_said
+    from jsonb_array_elements((rpc_ground(w, 60))->'placed') v
+    where (v->>'id')::bigint = v_id;
+  raise notice '638. a fire left burning for two hundred seconds: the row still says % and the island says %, which is the burning nobody watched',
+    round(v_row), round(v_said);
+end $$;
+select '639. and the crates and the settlement come with it: '
+     || jsonb_array_length((rpc_ground(:'world2', 60))->'crates') || ' crates, settlement '
+     || coalesce(((rpc_ground(:'world2', 60))->'deed'->>'name'), 'none')
+     || ', ours: ' || coalesce(((rpc_ground(:'world2', 60))->'deed'->>'mine'), 'n/a');
+select '640. and asking about a patch of ground nobody is near: '
+     || jsonb_array_length((rpc_ground(:'world2', 0.5))->'placed') || ' things within half a tile';
+do $$ begin
+  perform rpc_ground((select id from world where name = 'Rockhaven'), 40);
+  raise notice '641. and the ground of an island he is not on: ALLOWED';
+exception when others then raise notice '641. and the ground of an island he is not on: refused — %', sqlerrm; end $$;
+
+-- And the settlement refusal, which used to claim somebody else's was yours.
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '642. hild asks to found a settlement where ivar holds one: '
+     || coalesce(deed_refusal(:'world2', :'hild', 'found_settlement', '{"kind":"item"}'), 'allowed');
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '643. and ivar, who holds it, is told it is his to disband: '
+     || coalesce(deed_refusal(:'world2', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');

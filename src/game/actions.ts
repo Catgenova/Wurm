@@ -1266,6 +1266,9 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 4,
     applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'deed_stake',
     check: (_t, g) => {
+      // Somebody else's settlement is not yours to disband, and on an island
+      // the browser now holds theirs as well as ours.
+      if (g.deed && g.deed.mine === false) return `${g.deed.name} already stands here. Found yours somewhere else.`;
       if (g.deed) return 'You already hold a settlement. Disband it first.';
       const x = g.player.tileX;
       const y = g.player.tileY;
@@ -1277,7 +1280,9 @@ export const ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      const name = g.hooks.prompt('Name your settlement', 'Homestead');
+      // Asked for before the ask on an island, where this half never runs and
+      // the name has to ride in with the target; asked for here otherwise.
+      const name = (t as { name?: string }).name ?? g.hooks.prompt('Name your settlement', 'Homestead');
       if (name === null || !name.trim()) {
         g.logMsg('You decide not to found a settlement just yet.', 'info');
         return;
