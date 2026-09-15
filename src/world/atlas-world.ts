@@ -54,7 +54,7 @@ export interface AtlasConfig {
  * chart carries its own mountains now, and this is surface texture on rock.
  */
 export const ATLAS_CONFIG: AtlasConfig = {
-  land: 603,
+  land: 597,
   ridge: 85,
   depth: 205,
   sea: 0,

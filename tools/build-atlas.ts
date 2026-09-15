@@ -421,6 +421,12 @@ const rng = mulberry32(20260915);
 const warp = new Noise2D(rng);
 const rough = new Noise2D(rng);
 const roll = new Noise2D(rng);
+/**
+ * The river's wander. Taken last out of the stream on purpose: a `Noise2D`
+ * drawn earlier would shift every field after it and redraw the whole
+ * archipelago for the sake of one meander.
+ */
+const wind = new Noise2D(rng);
 
 /**
  * Hill country: ridged fractal noise in 0..1, with valleys between spurs
@@ -618,7 +624,17 @@ for (let y = 0; y < N; y++) {
      * there, which is exactly what applying it last means.
      */
     const ground = Math.max(body, m);
-    const dr = toPath(u, v, RIVER, riv);
+    /*
+     * The river is measured against a warped copy of the ground rather than
+     * the ground itself, which is what makes it meander. Written straight from
+     * waypoint to waypoint it arrived as a ruled line — worst of all through
+     * the gorge, where a slot cut dead straight through a cliff reads as a
+     * canal somebody dug. Warping the point before measuring bends the whole
+     * course, at every scale at once, without any waypoint having to move.
+     */
+    const ru = u + wind.fbm(u * 17 + 5, v * 17 - 11, 3) * 0.0075;
+    const rv = v + wind.fbm(u * 17 - 9, v * 17 + 4, 3) * 0.0075;
+    const dr = toPath(ru, rv, RIVER, riv);
     // Its bed: low at both mouths, up over the watershed in between, so the
     // interior drains north through the gorge and south to the bay.
     const bed = RIVER_MOUTH + (RIVER_CREST - RIVER_MOUTH) * Math.sin(Math.PI * riv[1]);
@@ -630,10 +646,22 @@ for (let y = 0; y < N; y++) {
     // How far the ground takes to climb out of the sea. Gentle where the
     // relief is low, which is every beach and the whole of the bay shore;
     // short where it is high, which is where the reference draws sea cliffs.
+    /*
+     * How far the ground takes to climb out of the sea. Gentle where the
+     * relief is low and short where it is high, so a lowland coast gets a
+     * strand and a tableland gets a sea cliff.
+     *
+     * The gentle end was 4.6 texels, which put the shore band — everything the
+     * classifier calls sand, being ground under six with water in sight —
+     * inside about eight tiles of the water. That is a waterline, not a beach,
+     * and on a plate drawn at four tiles to the cell it very nearly is not
+     * there at all. At 8.4 the strand is twenty-odd tiles of it, which is what
+     * the reference draws round the bay.
+     */
     const steep = clamp(relief / 240, 0, 1);
-    const ramp = mix(4.6, 0.9, steep) * T;
+    const ramp = mix(8.4, 0.9, steep) * T;
     const rise = smooth(0, ramp, dShore[i]);
-    const base = H.shelf * smooth(0, 3.2 * T, dShore[i]);
+    const base = H.shelf * smooth(0, 5.0 * T, dShore[i]);
     // A slow roll over the lowlands so that flat is never quite flat.
     const lump = roll.fbm(u * 14 + 5, v * 14 + 2, 4) * 13;
     height[i] = Math.max(0.5, base + relief * rise + lump * smooth(0, 4 * T, dShore[i]));
