@@ -371,14 +371,19 @@ if (!island) {
   setTimeout(() => void saveGame(game), 3000);
   setInterval(() => void saveGame(game), 20000);
 }
-// Three ways out of a page, and the last of them is the only one a phone
-// reliably gives you.
-// An island in Postgres is already written down; there is nothing here to
-// lose and nothing to put away on the way out.
-if (!island) {
-  window.addEventListener('beforeunload', () => saveOnExit(game));
-  window.addEventListener('pagehide', () => saveOnExit(game));
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) saveOnExit(game);
-  });
-}
+/*
+ * Three ways out of a page, and the last of them is the only one a phone
+ * reliably gives you.
+ *
+ * Almost everything about an island body is already written down in Postgres
+ * and there is nothing to put away on the way out. The fog of war is the
+ * exception: only the tab knows what its camera has covered, so it is handed
+ * over on a slow beat while playing and once more here, which is what catches
+ * the last three quarters of a minute of walking.
+ */
+const onExit = island ? (): void => island.fogOnExit() : (): void => saveOnExit(game);
+window.addEventListener('beforeunload', onExit);
+window.addEventListener('pagehide', onExit);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) onExit();
+});

@@ -704,6 +704,30 @@ async function main(): Promise<void> {
        * A second `Island`, joined from scratch, is the only thing that can
        * tell — the first one has the change in memory whatever it does.
        */
+      /*
+       * And where we have been, which used to live in the tab and nowhere else.
+       *
+       * Marked by hand rather than walked: vision is the renderer's and there
+       * is no renderer out here, but what is being asked is whether the island
+       * keeps a fog and hands it back — not how the camera fills one in.
+       */
+      const mine = island.world!;
+      const spot: Array<[number, number]> = [];
+      for (let y = Math.floor(me.y) - 3; y <= Math.floor(me.y) + 3; y++) {
+        for (let x = Math.floor(me.x) - 3; x <= Math.floor(me.x) + 3; x++) {
+          if (mine.inBounds(x, y)) {
+            mine.markSeen(x, y);
+            spot.push([x, y]);
+          }
+        }
+      }
+      await island.saveFog();
+      const { data: kept } = await supabase().from('fog').select('seen')
+        .eq('world_id', id).eq('uid', uid).maybeSingle();
+      const fog = (kept as { seen?: string } | null)?.seen ?? '';
+      check('the island keeps where we have been', fog.length > 0,
+        fog.length ? `${fog.length} characters for ${spot.length} tiles` : 'nothing was kept');
+
       const second = new Island({
         say: () => {}, ground: () => {}, people: () => {}, pack: () => {},
         chart: async () => readAtlas(),
@@ -712,6 +736,16 @@ async function main(): Promise<void> {
       const arrived = second.world?.getHeight(cx, cy);
       check('somebody arriving afterwards sees the hole too', arrived !== undefined && arrived < before,
         `${before} before the dig, ${arrived} to somebody who has only just got here`);
+      /*
+       * The same body coming back to the same island — a refresh, in other
+       * words, which is exactly what was reported: "every time the browser
+       * resets, the previously discovered fog of war resets to black."
+       */
+      const lit = spot.filter(([x, y]) => second.world?.isKnown(x, y)).length;
+      const dark = second.world?.isKnown(Math.floor(me.x) + 20, Math.floor(me.y) + 20) ?? true;
+      check('and the map of where we had been is not black again',
+        lit === spot.length && !dark,
+        `${lit} of ${spot.length} tiles came back, and ground we never walked is still dark`);
       await second.leave();
 
       /*

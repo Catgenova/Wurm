@@ -2,9 +2,10 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { World } from '../world/world';
 import { blankWorld, layChange, rowsOf, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
-import { supabase, signIn } from './supabase';
+import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
-import { BODY_EVERY, FOUND_MAX, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
+import { BODY_EVERY, FOG_EVERY, FOUND_MAX, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
+import { packFog, unpackFog } from './fogpack';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -243,6 +244,16 @@ export class Island {
   private static topics = 0;
   private lastBody = 0;
   private lastReconcile = 0;
+  /** When the fog of war last went over, so it goes rarely and not per step. */
+  private lastFog = 0;
+  /**
+   * The signed-in token, kept rather than asked for.
+   *
+   * `getSession` is a promise, and the one moment this is needed — the page
+   * going away — has no time for one. Refreshed wherever the channel refreshes
+   * its own copy, which is every join and every walk into new country.
+   */
+  private token = '';
   /** Our pack, kept by row rather than refetched whole on anybody's crafting. */
   private pack = new Map<number, ItemRow>();
   /**
@@ -378,8 +389,108 @@ export class Island {
     await this.catchUp();
     this.hooks.progress?.(3, 3, 'catching up');
     world.groundTouched = false;
+    await this.restoreFog();
     await this.watch(worldId);
     this.armBeat(HEARTBEAT);
+  }
+
+  /**
+   * Where this body has already been, which the island keeps for it.
+   *
+   * It was in `localStorage` and only there — the single-player answer, never
+   * changed when the island became the game. A refresh, another phone, or a
+   * browser tidying up its site data, and a 4096 island is black again with
+   * somebody standing in the middle of it. Of everything that is yours, the
+   * map of where you have walked was the one thing that lived in the tab.
+   *
+   * A fog that will not come back is not a reason to refuse to come ashore, so
+   * nothing here throws: the worst of it is a black map and an afternoon's
+   * walking to light it again.
+   */
+  private async restoreFog(): Promise<void> {
+    const w = this.world;
+    if (!this.info || !w) return;
+    try {
+      const { data } = await supabase().from('fog').select('seen')
+        .eq('world_id', this.info.id).eq('uid', this.uid).maybeSingle();
+      const packed = (data as { seen?: string } | null)?.seen;
+      if (!packed) return;
+      const tiles = unpackFog(w, packed);
+      if (tiles < 0) {
+        this.hooks.say('The island could not make out where you have been; the map starts dark.', 'error');
+        return;
+      }
+      // Restored rather than newly seen: nothing has changed since the island
+      // was told, so there is nothing to tell it back.
+      w.fogTouched = false;
+    } catch {
+      // Offline, or a keeper that has never heard of fog. The map starts dark,
+      // which is what it did before any of this and is survivable.
+    }
+  }
+
+  /**
+   * Hand the fog over, rarely, and only when there is new ground in it.
+   *
+   * Walking writes it constantly and none of it matters until the tab is shut,
+   * so this is slow on purpose and skipped entirely while nothing new has been
+   * looked at. `lastFog` is left alone when there is nothing to send, so
+   * stepping over the ridge after an hour indoors is not made to wait another
+   * three quarters of a minute.
+   */
+  private async keepFog(now: number): Promise<void> {
+    if (!this.world?.fogTouched || now - this.lastFog < FOG_EVERY) return;
+    this.lastFog = now;
+    await this.saveFog();
+  }
+
+  /** The same, now, whoever is asking. */
+  async saveFog(): Promise<void> {
+    const w = this.world;
+    if (!this.info || !w) return;
+    w.fogTouched = false;
+    const packed = packFog(w);
+    if (!packed) return;
+    const { error } = await supabase().rpc('rpc_fog', { p_world: this.info.id, p_seen: packed });
+    // Refused or unreachable: put the flag back so the next round tries again
+    // rather than waiting for somebody to walk somewhere new.
+    if (error) w.fogTouched = true;
+  }
+
+  /**
+   * The same, on the way out of the page, where an ordinary request is a race
+   * with the tab closing.
+   *
+   * `keepalive` is what that is for: the browser promises to finish the
+   * request even though the page that asked is gone. It is a raw call rather
+   * than the client's own, because the client has no way to ask for it — and
+   * without this the last three quarters of a minute of walking is lost on
+   * every refresh, which is a smaller version of the thing being fixed.
+   *
+   * Nothing is awaited and nothing is reported: there is no page left to tell.
+   */
+  fogOnExit(): void {
+    const w = this.world;
+    if (!this.info || !w || !w.fogTouched) return;
+    const packed = packFog(w);
+    if (!packed) return;
+    w.fogTouched = false;
+    if (!this.token) return;
+    try {
+      void fetch(`${PROJECT.url}/rest/v1/rpc/rpc_fog`, {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'content-type': 'application/json',
+          apikey: PROJECT.key,
+          authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({ p_world: this.info.id, p_seen: packed }),
+      });
+    } catch {
+      // A browser without `keepalive`, or one already halfway gone. The
+      // periodic hand-over above has the rest of it.
+    }
   }
 
   /**
@@ -615,7 +726,10 @@ export class Island {
     try {
       const { data } = await sb.auth.getSession();
       const token = data.session?.access_token;
-      if (token) (sb.realtime as unknown as { setAuth: (t: string) => void }).setAuth(token);
+      if (token) {
+        this.token = token;
+        (sb.realtime as unknown as { setAuth: (t: string) => void }).setAuth(token);
+      }
     } catch {
       // An older or newer client may not want telling; the status below says
       // whether it mattered.
@@ -718,6 +832,7 @@ export class Island {
     if (!this.info) return;
     void this.reconcile(now);
     void this.refreshMobs(now);
+    void this.keepFog(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
 
     /*
@@ -805,6 +920,8 @@ export class Island {
   async leave(): Promise<void> {
     if (this.beat) clearTimeout(this.beat);
     this.beat = null;
+    // Where we have been, before the world it was worked out on goes.
+    if (this.world?.fogTouched) await this.saveFog();
     const sb = supabase();
     if (this.channel) await sb.removeChannel(this.channel);
     this.channel = null;

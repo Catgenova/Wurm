@@ -3997,3 +3997,52 @@ select '626. ivar stops and hild does not: ivar is doing '
 select '627. and stopping is a door an account may knock on: rpc_cancel(uuid) '
      || case when has_function_privilege('authenticated', 'rpc_cancel(uuid)', 'execute') then 'yes' else 'NO' end
      || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_cancel(uuid)', 'execute') then 'YES' else 'no' end;
+
+\echo ''
+\echo '--- where somebody has been'
+/*
+ * The fog of war, which lived in the tab and nowhere else.
+ *
+ * It is the one thing a browser hands over that the island does not check, and
+ * that is worth stating rather than leaving to look like a hole: the browser
+ * works the whole island out from its seed, so there is nothing in a map it
+ * does not already have, and lifting your own fog was always a line in the
+ * console. It is a note about where *you* have been, and only the tab that
+ * pointed the camera knows. So the rules here are about whose it is and how
+ * much of it there may be, not about whether it is true.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select coalesce((rpc_fog(:'world2', 'AAECAwQFBgcICQ=='))::text, 'null') as kept \gset
+select '628. ivar hands over where he has been: ' || :'kept';
+select '629. and the island keeps it: ' || coalesce((select seen from fog where world_id = :'world2' and uid = :'ivar'), 'nothing')
+     || ', written ' || coalesce((select case when at > now() - interval '1 minute' then 'just now' else at::text end
+                                  from fog where world_id = :'world2' and uid = :'ivar'), 'never');
+do $$ begin
+  perform rpc_fog((select id from world where name = 'Rockhaven'), 'AAEC');
+  raise notice '630. and hands some to an island he is not on: ALLOWED';
+exception when others then raise notice '630. and hands some to an island he is not on: refused — %', sqlerrm; end $$;
+do $$
+declare w uuid := (select world_id from player where uid = '11111111-1111-1111-1111-111111111111' limit 1);
+begin
+  perform rpc_fog(w, repeat('A', (fog_bytes() + 1)::int));
+  raise notice '631. and hands over more than an island keeps: ALLOWED';
+exception when others then raise notice '631. and hands over more than an island keeps: refused — %', sqlerrm; end $$;
+select coalesce((rpc_fog(:'world2', ''))::text, 'null') as wiped \gset
+select '632. handing over nothing puts the map back to black: ' || :'wiped'
+     || ', ' || (select count(*) from fog where world_id = :'world2' and uid = :'ivar') || ' rows left';
+select rpc_fog(:'world2', 'AAECAwQFBgcICQ==') \g /dev/null
+
+-- Yours and nobody else's. `player` is readable by everybody on an island;
+-- where somebody has walked is not a thing to hand to whoever is hunting them.
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '633. hild looks for ivar''s map: ' || (select count(*) from fog where uid = :'ivar') || ' rows'
+     || ', and for her own: ' || (select count(*) from fog where uid = :'hild') || ' rows';
+do $$ begin
+  update fog set seen = 'AAAA' where uid = '11111111-1111-1111-1111-111111111111';
+  raise notice '634. and writes over it directly: ALLOWED';
+exception when others then raise notice '634. and writes over it directly: refused — %', sqlerrm; end $$;
+reset role;
+select '635. and the door itself: rpc_fog(uuid,text) to an account '
+     || case when has_function_privilege('authenticated', 'rpc_fog(uuid,text)', 'execute') then 'yes' else 'NO' end
+     || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_fog(uuid,text)', 'execute') then 'YES' else 'no' end;

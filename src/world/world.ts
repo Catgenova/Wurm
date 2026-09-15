@@ -62,6 +62,33 @@ export class World {
    */
   groundTouched = true;
   fogTouched = true;
+  /**
+   * Squares whose remembered picture still has to be taken from the ground.
+   *
+   * A fog restored from the island says where somebody has been and nothing
+   * about what they saw there, which is right — this browser builds the whole
+   * island from its seed and has replayed every change anybody made, so the
+   * ground is known without being told. But the remembered map is read out of
+   * `mem`, and `mem` is empty until something writes it.
+   *
+   * Filling it at the join would mean working out every square anybody has
+   * ever walked over before they can see anything, which on a well-travelled
+   * island is the whole map and three minutes of it — exactly the cost
+   * `streamFrom` exists to avoid. So it is filled a square at a time, the
+   * first time the remembered map is read there, which is the moment it is
+   * actually wanted. One byte a square: four kilobytes for a 4096 island.
+   *
+   * Opening the map does read all of it, so a restored fog costs about ten
+   * milliseconds a square there, once — the map has always had to work a
+   * square out to draw a height, and what is new is only that a refresh no
+   * longer arrives with it already done. `supabase/test/fog.ts` keeps that
+   * number in sight so it cannot quietly get worse.
+   *
+   * Null once every square has been filled, which is also the fast path for
+   * every world that never restored a fog at all.
+   */
+  private refill: Uint8Array | null = null;
+  private refilling = 0;
   /** The seed this world was made from, so rock kinds stay consistent. */
   seed = 0;
   /**
@@ -427,6 +454,75 @@ export class World {
   }
 
   /**
+   * Ground somebody has walked before, with no picture of what they saw.
+   *
+   * The other half of `remember`, for a fog that was worked out in another
+   * sitting and kept somewhere else. It sets what is known and leaves the
+   * remembered picture to `fillMemory` below, which takes it off the ground
+   * itself when the map is looked at.
+   */
+  markSeen(x: number, y: number): void {
+    if (!this.inBounds(x, y)) return;
+    const i = y * this.w + x;
+    if (this.seen[i] === 1) return;
+    this.seen[i] = 1;
+    this.fogTouched = true;
+    const b = this.knownBox;
+    if (b.x1 < 0) {
+      b.x0 = x;
+      b.x1 = x;
+      b.y0 = y;
+      b.y1 = y;
+    } else {
+      if (x < b.x0) b.x0 = x;
+      if (x > b.x1) b.x1 = x;
+      if (y < b.y0) b.y0 = y;
+      if (y > b.y1) b.y1 = y;
+    }
+    // A world held whole has its ground already and can be remembered on the
+    // spot; only a streamed one has to wait for the square to exist.
+    if (!this.ready) {
+      this.mem[i] = this.tiles[i];
+      this.memData[i] = this.data[i];
+      return;
+    }
+    if (!this.refill) this.refill = new Uint8Array(this.across * this.down);
+    const c = ((y / CHUNK) | 0) * this.across + ((x / CHUNK) | 0);
+    if (!this.refill[c]) {
+      this.refill[c] = 1;
+      this.refilling += 1;
+    }
+  }
+
+  /** Take a square's remembered picture off the ground, once, the first time it is read. */
+  private fillMemory(x: number, y: number): void {
+    const r = this.refill;
+    if (!r) return;
+    const cx = (x / CHUNK) | 0;
+    const cy = (y / CHUNK) | 0;
+    const c = cy * this.across + cx;
+    if (!r[c]) return;
+    r[c] = 0;
+    this.refilling -= 1;
+    if (this.refilling <= 0) this.refill = null;
+    this.ensure(x, y);
+    const x0 = cx * CHUNK;
+    const y0 = cy * CHUNK;
+    const x1 = Math.min(this.w, x0 + CHUNK);
+    const y1 = Math.min(this.h, y0 + CHUNK);
+    for (let ty = y0; ty < y1; ty++) {
+      const row = ty * this.w;
+      for (let tx = x0; tx < x1; tx++) {
+        const i = row + tx;
+        if (this.seen[i] === 1) {
+          this.mem[i] = this.tiles[i];
+          this.memData[i] = this.data[i];
+        }
+      }
+    }
+  }
+
+  /**
    * Mark the whole map as looked at, for a world that predates any fog.
    *
    * Refused for a streamed world, and that refusal is the point: it would
@@ -449,10 +545,15 @@ export class World {
 
   /** The tile as a given viewer has it: what is there, or what was last seen. */
   viewTile(x: number, y: number, live: boolean): TileType {
+    // Ground that came back with a restored fog has no remembered picture yet;
+    // this is where it is taken off the ground, and the check costs a null
+    // test on every world that never restored one.
+    if (!live && this.refill) this.fillMemory(x, y);
     return (live ? this.tiles[y * this.w + x] : this.mem[y * this.w + x]) as TileType;
   }
 
   viewData(x: number, y: number, live: boolean): number {
+    if (!live && this.refill) this.fillMemory(x, y);
     return live ? this.data[y * this.w + x] : this.memData[y * this.w + x];
   }
 

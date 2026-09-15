@@ -144,6 +144,15 @@ jobs:
           npx esbuild supabase/test/replay.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/replay.mjs --log-level=error
           node node_modules/.cache/replay.mjs
+      - name: Where somebody has been survives the trip, and costs nothing to bring back
+        run: |
+          # The fog of war lived in `localStorage` and nowhere else, so a
+          # refresh put a body in the middle of a black 4096 island. It is the
+          # island's to keep now — and a join must not have to work out every
+          # square anybody ever walked over in order to take it back.
+          npx esbuild supabase/test/fog.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/fog.mjs --log-level=error
+          node node_modules/.cache/fog.mjs
       - name: The island handed over is the island come back to
         run: |
           # Founding uploads what was rolled; joining works the ground out from

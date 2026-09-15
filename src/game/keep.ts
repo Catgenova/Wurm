@@ -197,3 +197,25 @@ export const CALLS_A_MINUTE = 240;
  * only, never across a gap the sampling jumped.
  */
 export const WALK_SAMPLES = 64;
+
+/**
+ * The most fog of war the island will keep for one body, in bytes.
+ *
+ * What has been seen is a bit a tile, run-length encoded over the box the
+ * exploring falls inside, so an island somebody has walked a road across costs
+ * a few kilobytes and one somebody has combed costs tens. A quarter of a
+ * megabyte is far past either, and it is here so that the one thing a browser
+ * writes by the yard cannot be used as free storage: past this the island says
+ * no rather than keeping whatever it is handed.
+ */
+export const FOG_BYTES = 262144;
+
+/**
+ * How often the browser hands its fog of war over, at most.
+ *
+ * Walking writes it constantly, and none of it matters until the tab is shut —
+ * so this is slow on purpose, and skipped entirely when no new ground has been
+ * looked at since the last time. It also goes once on the way out, which is
+ * what catches the last half minute.
+ */
+export const FOG_EVERY = 45;
