@@ -1039,10 +1039,28 @@ island; nothing at all once there are two.
 `account.html` is where a username and a password are set up. The trick that
 makes it small is that **the username is the login**:
 
-    alice  ->  alice@players.wurm.invalid
+    alice  ->  alice@catgenova.github.io
 
-`.invalid` is reserved by RFC 2606 and can never be delegated to anybody, so
-the address is guaranteed to reach no one, forever. Two things fall out of it:
+That is the host this game is served from. `*.github.io` is a DNS wildcard so
+it resolves, which satisfies an Auth that wants to know whether a domain
+exists; it publishes no MX record, so mail addressed there is refused by the
+internet rather than delivered to somebody.
+
+The suffix was `@players.wurm.invalid` to begin with, on the sound-looking
+grounds that RFC 2606 reserves `.invalid` and the address can therefore never
+reach anybody. It reaches nobody so thoroughly that Auth will not take it:
+GoTrue keeps a list of barred host suffixes — `.invalid`, `.test`, `.local`,
+`.localhost`, `.example` — in its own source rather than in any project's
+settings, so every account made under it failed with "Email address is
+invalid" and there was no switch anybody could throw. `name_domains()` holds
+both suffixes now, the current one first: that first is the only one ever
+handed out, and the whole list is read, so an account made under the old one
+still opens and a name held under it does not read as free.
+`20260915200000_names.sql` is the change, and the live smoke test grows an
+anonymous body into a named account so that a suffix Auth refuses fails in CI
+rather than on somebody's phone.
+
+Two things fall out of the trick, whichever suffix it wears:
 
 * **Signing up is the reservation.** The index that makes a name yours is the
   unique one Auth already keeps over its own addresses, so there is no window
@@ -1062,7 +1080,8 @@ check in the browser is a courtesy to the honest rather than a control. The
 settings that make them controls are in the project's own Auth configuration
 and nowhere a migration can reach; `20260915025000_accounts.sql` names all
 three, including the one without which none of this works (`Confirm email` has
-to be off, because an address at `.invalid` can never answer a mail).
+to be off, because nothing will ever answer a mail sent to a name at a host
+that keeps no mailbox).
 
 The breach check is the Pwned Passwords range API by k-anonymity: SHA-1 the
 password, send the **first five hex characters** of the digest and nothing
