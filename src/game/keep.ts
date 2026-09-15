@@ -83,3 +83,20 @@ export const TICK_PLAYERS = 200;
 
 /** Calls one person may make in a minute before the island stops listening. */
 export const CALLS_A_MINUTE = 240;
+
+/**
+ * How finely the island reads the ground under a claimed walk.
+ *
+ * `rpc_move` checked how far somebody said they had got against how fast they
+ * could possibly have gone, and nothing else — so a modified client could walk
+ * through a tree and up a sheer cliff at a perfectly legal pace. It samples
+ * the line now, two to a tile, and pulls the body up at the first tile it
+ * could not have entered.
+ *
+ * Capped, because a client that has been asleep may honestly claim sixty tiles
+ * and reading sixty tiles of ground on every move call is not a thing a move
+ * call can afford. Past the cap the line is read coarsely, which can only ever
+ * let something through — the climb is checked between neighbouring tiles
+ * only, never across a gap the sampling jumped.
+ */
+export const WALK_SAMPLES = 64;

@@ -55,7 +55,8 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
-import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, IDLE_LOGOUT, ISLAND_KEEP, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS } from '../src/game/keep';
+import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, IDLE_LOGOUT, ISLAND_KEEP, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
+import { CLIMB_PER_LEVEL } from '../src/game/player';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -766,9 +767,12 @@ for (const [fn, v] of [
    * Real seconds rather than world seconds — a crop ripening answers to
    * `WORLD_PACE`, a database tidying up after itself does not.
    */
+  /* What a level of climbing adds to the steepest step a body can take. */
+  ['climb_per_level', CLIMB_PER_LEVEL],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
   ['change_keep', CHANGE_KEEP], ['island_keep', ISLAND_KEEP],
   ['tick_worlds', TICK_WORLDS], ['tick_players', TICK_PLAYERS], ['calls_a_minute', CALLS_A_MINUTE],
+  ['walk_samples', WALK_SAMPLES],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

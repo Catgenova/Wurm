@@ -52,7 +52,7 @@ console.log(`  ${sent} rows handed over and the island opened`);
 const back = blankWorld(SIZE, 1234);
 let laid = 0;
 for (let y = 0; y <= world.h; y += 64) {
-  const raw = psql(`select rpc_land('${id}', ${y}, ${Math.min(world.h, y + 63)})::text`);
+  const raw = psql(`select land_window('${id}', ${y}, ${Math.min(world.h, y + 63)})::text`);
   laid += layRows(back, JSON.parse(raw));
 }
 console.log(`  ${laid} rows read back`);

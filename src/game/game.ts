@@ -20,7 +20,7 @@ import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
-import { BASE_SPEED, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
@@ -1431,7 +1431,7 @@ export class Game {
 
   /** Steepest step the player can take, which climbing raises. */
   climbStep(): number {
-    return MAX_STEP + this.skills.get('climbing') * 0.4;
+    return MAX_STEP + this.skills.get('climbing') * CLIMB_PER_LEVEL;
   }
 
   /** Raise a skill and announce it. Returns the gain. */

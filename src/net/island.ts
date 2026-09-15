@@ -213,8 +213,9 @@ export class Island {
    *
    * Postgres keeps its own copy and stays the authority: it is what the rules
    * are checked against, and what settles it when generation and history
-   * disagree. `rpc_land` is still there to be asked. It is simply not asked
-   * for sixteen million tiles at the door.
+   * disagree. It is still there to be read, as `land_window` — by the owner,
+   * from psql. It was `rpc_land` until the `rpc_` prefix handed every account
+   * a grant to pull a hundred and thirty-eight megabytes of it in a loop.
    */
   async join(worldId: string, name: string): Promise<void> {
     this.uid = await signIn();

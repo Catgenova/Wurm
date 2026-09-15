@@ -19,6 +19,17 @@ export interface Stats {
 
 /** Steepest climb allowed between two adjacent tile centres, in height units. */
 export const MAX_STEP = 32;
+
+/**
+ * What a level of climbing adds to that.
+ *
+ * It was written inline in `Game.climbStep` and nowhere else, which was fine
+ * while nothing else needed it. The island checks the ground under a claimed
+ * walk now, so it needs the same allowance — and a number that lives in two
+ * places is the one thing this repository will not have.
+ */
+export const CLIMB_PER_LEVEL = 0.4;
+
 /** Water deeper than this (in height units below the surface) means swimming. */
 export const SWIM_DEPTH = 4;
 /** Share of walking speed kept in deep water before any swimming skill. */

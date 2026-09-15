@@ -165,7 +165,7 @@ select '23. land handed over, then opened: ' || rpc_ready(:'made')::text;
 select '24. read back row 3: heights say ' || (r->>'y') || ' at corner 0 = ' || land_height(:'made', 0, 3)
      || ' (0x0100 + 3 = 259), soil ' || land_dirt(:'made', 0, 3) || ', tile ' || land_tile(:'made', 0, 3)
      || ', rock ' || land_rock(:'made', 0, 3)
-from jsonb_array_elements(rpc_land(:'made', 3, 3)) r;
+from jsonb_array_elements(land_window(:'made', 3, 3)) r;
 do $$
 declare w uuid := (select id from world where name = 'Rockhaven');
 begin
@@ -3545,7 +3545,7 @@ select '559. the land it did not send: ' || round(((select size from world where
        * (((select size from world where id = :'big') + 1) * 3 + (select size from world where id = :'big') * 3)
        * 4.0 / 3 / 1048576) || ' MB, which is what every join used to be';
 select '560. and the land is still here to be asked: a band of four rows is '
-     || length(rpc_land(:'big', 0, 3)::text) || ' bytes of it, off '
+     || length(land_window(:'big', 0, 3)::text) || ' bytes of it, off '
      || (select length(heights) from land_corner where world_id = :'big' and y = 0) || ' bytes a row of corners';
 
 -- Walking into country nobody has been in puts the wildlife out there.
@@ -3683,3 +3683,97 @@ select '586. and she comes back: away is now '
      || ', and she was told "'
      || coalesce((select text from event where world_id = :'world2' and uid = :'hild' and kind = 'system'
                   order by n desc limit 1), 'nothing') || '"';
+
+\echo ''
+\echo '--- doors that were open'
+-- An island somebody else founded and Ivar has never set foot on.
+insert into world (name, seed, size, spawn_x, spawn_y, ready)
+  values ('Faraway', 99, 64, 32, 32, true) returning id as faraway \gset
+insert into land_corner (world_id, y, heights, dirt)
+  select :'faraway', g, repeat('\000', 65 * 2)::bytea, repeat('\000', 65)::bytea from generate_series(0, 64) g;
+insert into land_tile (world_id, y, tiles, data, rock)
+  select :'faraway', g, repeat('\000', 64)::bytea, repeat('\000', 64)::bytea, repeat('\000', 64)::bytea
+  from generate_series(0, 63) g;
+insert into item (world_id, holder, gx, gy, def, ql) values (:'faraway', 'ground', 5, 5, 'dirt', 20);
+insert into placed (world_id, kind, x, y, cx, cy) values (:'faraway', 'fire', 6, 6, 6.5, 6.5);
+insert into tile_change (world_id, x, y, tile, data, corners) values (:'faraway', 7, 7, 2, 0, '{0,0,0,0}');
+
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '587. an island Ivar has never been to: he can see '
+     || (select count(*) from item where world_id = :'faraway' and holder = 'ground') || ' of its ground things, '
+     || (select count(*) from placed where world_id = :'faraway') || ' of its fires and '
+     || (select count(*) from tile_change where world_id = :'faraway') || ' of its dug tiles'
+     || ' — all three were the whole service before';
+select '588. and the land itself is still open on purpose: '
+     || (select count(*) from land_tile where world_id = :'faraway') || ' rows, because it is a pure function of a seed anybody is handed';
+do $$ begin
+  begin perform land_window((select id from world where name = 'Faraway'), 0, 8);
+    raise notice '589. pull the land down wholesale: ALLOWED';
+  exception when others then raise notice '589. pull the land down wholesale: refused — %', sqlerrm; end;
+end $$;
+reset role;
+select '590. and rpc_land itself is '
+     || case when exists (select 1 from pg_proc where proname = 'rpc_land' and pronamespace = 'public'::regnamespace)
+             then 'STILL THERE' else 'gone; land_window has the body and no grant' end;
+
+-- The ground under a claimed walk, read on a flat empty island where the only
+-- thing in the way is the thing put there.
+insert into player (world_id, uid, name, x, y, stats)
+  values (:'faraway', :'ivar', 'Ivar', 5.5, 5.5, '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb)
+  on conflict (world_id, uid) do update set x = 5.5, y = 5.5, away = false;
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '591. four tiles of flat open ground: he gets '
+     || round(walk_share(:'faraway', :'ivar', 0, 5.5, 5.5, 9.5, 5.5)::numeric * 100) || '% of the way';
+select land_set_tile(:'faraway', 7, 5, 16) \g /dev/null
+select '592. with a tree grown in the middle of it: '
+     || round(walk_share(:'faraway', :'ivar', 0, 5.5, 5.5, 9.5, 5.5)::numeric * 100)
+     || '% — pulled up at the trunk, which is the one tile nothing stands on';
+select land_set_tile(:'faraway', 7, 5, 0) \g /dev/null
+select land_set_height(:'faraway', 9, 5, 3000), land_set_height(:'faraway', 9, 6, 3000),
+       land_set_height(:'faraway', 10, 5, 3000), land_set_height(:'faraway', 10, 6, 3000) \g /dev/null
+select '593. and with a cliff instead: tile 8 is ' || round(centre_height(:'faraway', 8, 5))
+     || ' units up from tile 7, against a step of '
+     || round(max_step() + skill_of(:'faraway', :'ivar', 'climbing') * climb_per_level())
+     || ' — he gets ' || round(walk_share(:'faraway', :'ivar', 0, 5.5, 5.5, 9.5, 5.5)::numeric * 100) || '%';
+update player set moved_at = now() - interval '10 seconds' where world_id = :'faraway' and uid = :'ivar';
+select '594. and through rpc_move, which is where it counts: ' || (rpc_move(:'faraway', 9.5, 5.5, 0))::text;
+select land_set_height(:'faraway', 9, 5, 0), land_set_height(:'faraway', 9, 6, 0),
+       land_set_height(:'faraway', 10, 5, 0), land_set_height(:'faraway', 10, 6, 0) \g /dev/null
+update player set moved_at = now() - interval '10 seconds' where world_id = :'faraway' and uid = :'ivar';
+select '595. the cliff levelled, the same walk again: ' || (rpc_move(:'faraway', 9.5, 5.5, 0))::text;
+
+-- Counting the callers.
+delete from caller where uid = :'ivar';
+select '596. a minute of asking: the island keeps listening for '
+     || (select count(*) from generate_series(1, (calls_a_minute() + 20)::int) g
+         where not too_fast(:'ivar')) || ' of ' || (calls_a_minute() + 20)::int
+     || ' calls, which is the ' || calls_a_minute() || ' it is meant to be';
+delete from caller where uid = :'ivar';
+
+-- Giving an island up.
+update world set made_by = :'ivar' where id = :'world2';
+update player set seen_at = now(), away = false where world_id = :'world2' and uid = :'hild';
+do $$ begin
+  begin perform rpc_abandon((select id from world where name <> 'Rockhaven' and name <> 'Faraway' order by made_at limit 1));
+    raise notice '597. give up an island with Hild still on it: ALLOWED';
+  exception when others then raise notice '597. give up an island with Hild still on it: refused — %', sqlerrm; end;
+end $$;
+select '598. and the one foreign key with nothing behind it now has: '
+     || (select count(*) from pg_indexes where tablename = 'item' and indexdef like '%(placed)%')
+     || ' index on item(placed)';
+
+-- And what reading the ground costs where the ground is biggest. A move call
+-- is at most one a second per person, so this is the budget that decides
+-- whether the check can stay.
+do $$
+declare t0 timestamptz; s double precision; ms double precision;
+        w uuid := (select id from world where size = 4096 order by made_at desc limit 1);
+begin
+  if w is null then raise notice '599. no 4096 island to read'; return; end if;
+  t0 := clock_timestamp();
+  s := walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5);
+  ms := extract(milliseconds from (clock_timestamp() - t0));
+  raise notice '599. the ground under a thirty-tile walk on the 4096 island: % per cent of it walkable, read in % ms',
+    round(s::numeric * 100), round(ms::numeric, 1);
+end $$;
