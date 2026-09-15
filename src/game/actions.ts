@@ -1304,22 +1304,40 @@ export const ACTIONS: ActionDef[] = [
     verb: 'founding a settlement',
     stamina: 0.05,
     baseTime: 4,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'deed_stake',
-    check: (_t, g) => {
-      // Somebody else's settlement is not yours to disband, and on an island
-      // the browser now holds theirs as well as ours.
+    /*
+     * On the tile, as well as on the stake.
+     *
+     * Reported as "still unable to place a deed stake", and it was not a
+     * refusal at all: "there's no menu option at all, grey or otherwise". The
+     * entry was only ever offered on the tile you are standing on — which is
+     * right about where the token goes, and is the one tile on a phone that a
+     * thumb cannot hit, because your own body is drawn over it.
+     *
+     * `range: 0` means the tile you are standing on, and `requestAction`
+     * already knows how to walk somewhere before it acts. So the offer can be
+     * made anywhere: pick a spot, your feet take you there, and the token goes
+     * in where you end up — which is what the island was always going to do,
+     * since it founds at the player's position and takes the stake out of the
+     * pack without looking at what was clicked.
+     */
+    range: 0,
+    applies: (t, g) => (t.kind === 'item' && g.inventory.get(t.uid)?.id === 'deed_stake')
+      || (t.kind === 'tile' && g.inventory.items.some((it) => it.id === 'deed_stake')),
+    check: (t, g) => {
+      // The spot the token would go in: the tile picked, or the one underfoot
+      // when the stake itself was the thing clicked.
+      const x = t.kind === 'tile' ? t.x : g.player.tileX;
+      const y = t.kind === 'tile' ? t.y : g.player.tileY;
       /*
        * Somebody else's border, which used to arrive as `g.deed` because an
        * island held one settlement and everybody was handed it. It is a
        * neighbour now, and the refusal can say whose.
        */
-      const near = g.deedAt(g.player.tileX, g.player.tileY);
+      const near = g.deedAt(x, y);
       if (near) {
-        return `${near.name}${near.holder ? `, which is ${near.holder}'s,` : ''} already reaches here. Found yours further out.`;
+        return `${near.name}${near.holder ? `, which is ${near.holder}'s,` : ''} already reaches there. Found yours further out.`;
       }
       if (g.deed) return 'You already hold a settlement. Disband it first.';
-      const x = g.player.tileX;
-      const y = g.player.tileY;
       const w = g.world;
       if (x - DEED_RADIUS < 0 || y - DEED_RADIUS < 0 || x + DEED_RADIUS >= w.w || y + DEED_RADIUS >= w.h) return 'Too close to the edge of the world.';
       if (w.hasWater(x, y)) return 'The token must stand on dry land.';
@@ -1327,13 +1345,16 @@ export const ACTIONS: ActionDef[] = [
       return null;
     },
     perform: (t, g) => {
-      if (t.kind !== 'item') return;
+      // The stake is taken out of the pack whichever way the job was asked
+      // for: the island does the same, and never looks at what was clicked.
+      const stake = t.kind === 'item' ? g.inventory.get(t.uid) : g.inventory.items.find((it) => it.id === 'deed_stake');
+      if (!stake || stake.id !== 'deed_stake') return;
       // The name rides in on the target, put there by `requestAction` before
       // any of this — on an island this half runs over there, where there is
       // nobody to ask.
       const name = (t as { name?: string }).name ?? '';
       if (!name.trim()) return;
-      if (!g.inventory.remove(t.uid, 1)) return;
+      if (!g.inventory.remove(stake.uid, 1)) return;
       g.deed = { name: name.trim().slice(0, 32), x: g.player.tileX, y: g.player.tileY, radius: DEED_RADIUS, level: 1 };
       g.placeDeedCrate();
       g.logMsg(`You found the settlement of ${g.deed.name}. The land ${DEED_RADIUS * 2 + 1} tiles across around the token is yours to build on. A deed crate stands beside the token.`, 'system');

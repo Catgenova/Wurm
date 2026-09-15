@@ -1344,15 +1344,24 @@ export class UI {
    */
   private settlementEntry(pick: Pick): MenuItem[] {
     const g = this.game;
-    if (pick.x !== g.player.tileX || pick.y !== g.player.tileY) return [];
     const stake = g.inventory.items.find((it) => it.id === 'deed_stake');
     const def = ACTION_BY_ID.get('found_settlement');
     if (!stake || !def) return [];
-    const t: Target = { kind: 'item', uid: stake.uid };
+    /*
+     * Offered wherever you pick, rather than only underfoot.
+     *
+     * It used to return nothing at all unless the tile you clicked was the one
+     * you were standing on — right about where the token goes, and useless on
+     * a phone, where that tile is underneath your own body and a thumb cannot
+     * reach it. There was no entry, greyed or otherwise, and nothing to say
+     * why. The action walks you there first now.
+     */
+    const t: Target = { kind: 'tile', x: pick.x, y: pick.y, cx: pick.x, cy: pick.y };
+    const here = pick.x === g.player.tileX && pick.y === g.player.tileY;
     const reason = def.check?.(t, g) ?? null;
     return [{
       label: 'Found a settlement here',
-      note: reason ? undefined : 'Drives the stake where you stand',
+      note: reason ? undefined : here ? 'Drives the stake where you stand' : 'Walks you there, then drives the stake in',
       hint: reason ?? undefined,
       disabled: !!reason,
       // The name is asked for by `requestAction`, which every other way of
