@@ -1161,6 +1161,7 @@ export class Renderer {
             // Dyed cloth or leather on the chest and legs is worn where it shows.
             tunic: dyeOf(this.game.worn('chest'))?.colour,
             trousers: dyeOf(this.game.worn('legs'))?.colour,
+            look: player.look,
           }),
         );
         continue;
@@ -1178,6 +1179,7 @@ export class Renderer {
             driving: false,
             tunic: peer.tunic,
             trousers: peer.trousers,
+            look: peer.look,
           }),
         );
         // Somebody else is only somebody else if you can tell which one.

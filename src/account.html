@@ -13,7 +13,7 @@
     <!-- Edit src/account.html, not the generated account.html at the repository root. -->
     <main class="card">
       <h1>Wildermon</h1>
-      <p class="lede">
+      <p class="lede" id="lede">
         A name and a password. That is the whole of it — there is no e-mail address to
         give, and nothing will ever be sent to you.
       </p>
@@ -49,6 +49,18 @@
       </form>
 
       <p id="say" class="say" role="status" aria-live="polite"></p>
+
+      <!-- Step two. Hidden until there is an account to hang a face on. -->
+      <section id="maker" hidden>
+        <div class="maker">
+          <div class="mirror">
+            <canvas id="me" width="240" height="380" aria-label="How you will look"></canvas>
+            <button type="button" id="roll">Roll me one</button>
+          </div>
+          <div id="choices" class="choices"></div>
+        </div>
+        <button id="ashore" type="button">Step ashore</button>
+      </section>
 
       <p class="fine" id="warn">
         Because there is no address to send anything to, there is no way to send you a

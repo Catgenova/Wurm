@@ -1,8 +1,10 @@
 import {
   PASSWORD_MIN, Unchecked, breachCount, breachWord, createAccount, foldName,
-  nameEmail, nameFree, nameTrouble, passwordTrouble, passwordVerdict, signInAs,
-  signOut, whoAmI,
+  myLook, nameEmail, nameFree, nameTrouble, passwordTrouble, passwordVerdict,
+  setLook, signInAs, signOut, whoAmI,
 } from './net/accounts';
+import { LOOK_TABLES, cleanLook, randomLook, type Look } from './game/look';
+import { drawHeadshot, drawPortrait } from './render/sprites';
 
 /**
  * The landing page: a username, a password, and a way back in.
@@ -33,6 +35,12 @@ const tabNew = $<HTMLButtonElement>('tab-new');
 const tabBack = $<HTMLButtonElement>('tab-back');
 const peek = $<HTMLButtonElement>('peek');
 const alone = $<HTMLAnchorElement>('alone');
+const lede = $<HTMLParagraphElement>('lede');
+const maker = $<HTMLElement>('maker');
+const mirror = $<HTMLCanvasElement>('me');
+const choices = $<HTMLElement>('choices');
+const roll = $<HTMLButtonElement>('roll');
+const ashore = $<HTMLButtonElement>('ashore');
 
 const NAME_HELP = 'Three to twenty characters: a letter first, then letters, numbers, underscore or hyphen. It is what everybody on the island will see over your head.';
 const PW_HELP_NEW = `${PASSWORD_MIN} characters at the very least, and checked against the list of passwords already known to have leaked. Neither it nor its full fingerprint leaves this page.`;
@@ -193,7 +201,7 @@ async function attempt(): Promise<void> {
       if (!pw) { say('And the password.', 'bad'); pwBox.focus(); return; }
       say('Looking you up…');
       await signInAs(name, pw);
-      return settle(name, 'Welcome back.');
+      return await onward('Welcome back.');
     }
 
     say('Checking the password against the breach list…');
@@ -220,7 +228,7 @@ async function attempt(): Promise<void> {
         'bad',
       );
     }
-    settle(made.name, `You are ${made.name} now.`);
+    await onward(`You are ${made.name} now.`);
   } catch (e) {
     if (e instanceof Unchecked) {
       /**
@@ -238,19 +246,187 @@ async function attempt(): Promise<void> {
   }
 }
 
-/** Signed in. Say who, and hold the door open rather than leaping through it. */
-function settle(name: string, line: string): void {
+/** Signed in and done with. Say who, and hold the door open rather than leaping through it. */
+function settle(line: string): void {
+  lede.textContent = LEDE_ACCOUNT;
+  card.classList.remove('making');
   card.classList.add('settled');
+  maker.hidden = true;
   say(`${line} Taking you to the island…`, 'good');
   window.setTimeout(() => { location.href = toGame; }, 900);
 }
+
+/**
+ * Signed in, and whether that is the end of it.
+ *
+ * An account with no face goes to the creator rather than to the island: it is
+ * the second half of setting one up, not a thing to go and find later. An
+ * account that has one goes straight through — being asked about your hair
+ * every time you sign in would be a worse page than one that never asked.
+ */
+async function onward(line: string): Promise<void> {
+  let had: Look | null = null;
+  try {
+    had = await myLook();
+  } catch {
+    had = null;
+  }
+  if (had) {
+    look = had;
+    return settle(line);
+  }
+  say(`${line} Now, who are you?`, 'good');
+  toMaker(randomLook());
+}
+
+/* ---- Step two: who you are ---------------------------------------------- */
+
+/** What is being chosen, at this moment. */
+let look: Look = randomLook();
+/** The thumbnails, so that changing skin or hair colour redraws all of them. */
+const thumbs: Array<{ canvas: HTMLCanvasElement; of: (l: Look) => Look }> = [];
+/** Every row's buttons, so the selected one can be marked without rebuilding. */
+const marks: Array<{ kind: keyof Look; id: string; button: HTMLButtonElement; label: HTMLElement }> = [];
+
+const TITLES: Record<keyof Look, string> = {
+  gender: 'Build', skin: 'Skin', hair: 'Hair', hairColour: 'Hair colour',
+  eyes: 'Eyes', beard: 'Beard', shirt: 'Shirt', trousers: 'Trousers',
+};
+
+/**
+ * Three kinds of button for three kinds of choice.
+ *
+ * A colour is shown as the colour — a name for it is a word you have to
+ * imagine. A shape (a haircut, a beard) is shown as a head wearing it, drawn
+ * with `drawHeadshot`, which is the same `head()` the island draws: a
+ * thumbnail that came from anywhere else is a thumbnail that can lie about
+ * what you are choosing. Only the build, which is neither a colour nor a
+ * silhouette you could tell at 46 pixels, is a word.
+ */
+function buildChoices(): void {
+  choices.textContent = '';
+  thumbs.length = 0;
+  marks.length = 0;
+  for (const [key, table] of Object.entries(LOOK_TABLES) as Array<[keyof Look, Array<{ id: string; name: string; colour?: string }>]>) {
+    const block = document.createElement('div');
+    block.className = 'choice';
+    const head = document.createElement('h2');
+    head.textContent = TITLES[key];
+    const chosen = document.createElement('span');
+    head.append(chosen);
+    const row = document.createElement('div');
+    row.className = 'row';
+    block.append(head, row);
+    for (const option of table) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.title = option.name;
+      button.dataset.kind = key;
+      button.dataset.id = option.id;
+      if (option.colour) {
+        button.className = 'pick swatch';
+        button.style.background = option.colour;
+      } else if (key === 'hair' || key === 'beard') {
+        button.className = 'pick face';
+        const canvas = document.createElement('canvas');
+        canvas.width = 44;
+        canvas.height = 44;
+        button.append(canvas);
+        thumbs.push({ canvas, of: (l) => ({ ...l, [key]: option.id, ...(key === 'hair' ? {} : { hair: 'crop' }) }) });
+      } else {
+        button.className = 'pick word';
+        button.textContent = option.name;
+      }
+      button.addEventListener('click', () => {
+        look = cleanLook({ ...look, [key]: option.id });
+        redraw();
+      });
+      marks.push({ kind: key, id: option.id, button, label: chosen });
+      row.append(button);
+    }
+    choices.append(block);
+  }
+}
+
+/** The mirror, the thumbnails and the ticks, all from the one look. */
+function redraw(): void {
+  for (const m of marks) {
+    const on = look[m.kind] === m.id;
+    m.button.classList.toggle('on', on);
+    if (on) {
+      const table = LOOK_TABLES[m.kind] as Array<{ id: string; name: string }>;
+      m.label.textContent = table.find((o) => o.id === m.id)?.name ?? '';
+    }
+  }
+  for (const t of thumbs) {
+    const ctx = t.canvas.getContext('2d');
+    if (!ctx) continue;
+    ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
+    drawHeadshot(ctx, 0, 0, t.canvas.width, t.of(look));
+  }
+}
+
+/**
+ * The mirror walks.
+ *
+ * Standing still is easier to draw and worse to choose from: a walk is how you
+ * will actually see yourself, and it is the only way to find out that the
+ * ponytail moves and the long beard does not.
+ */
+let walking = 0;
+function mirrorFrame(now: number): void {
+  const ctx = mirror.getContext('2d');
+  if (ctx && !maker.hidden) {
+    ctx.clearRect(0, 0, mirror.width, mirror.height);
+    drawPortrait(ctx, 0, 0, mirror.width, mirror.height, look, now / 110);
+  }
+  walking = requestAnimationFrame(mirrorFrame);
+}
+
+const LEDE_ACCOUNT = lede.textContent ?? '';
+const LEDE_MAKER = 'Skin, hair, eyes, build and what you washed ashore in. None of it is fixed — you can come back and change any of it whenever you like.';
+
+function toMaker(start: Look): void {
+  lede.textContent = LEDE_MAKER;
+  look = cleanLook(start);
+  card.classList.remove('settled');
+  card.classList.add('making');
+  maker.hidden = false;
+  if (!marks.length) buildChoices();
+  redraw();
+  if (!walking) walking = requestAnimationFrame(mirrorFrame);
+}
+
+roll.addEventListener('click', () => {
+  look = randomLook();
+  redraw();
+});
+
+ashore.addEventListener('click', () => {
+  void (async () => {
+    ashore.disabled = true;
+    say('Writing you down…');
+    try {
+      // What comes back is what was stored. The keeper clamps every field
+      // against its own tables, so drawing anything else here would be a
+      // mirror showing a face nobody else would ever see.
+      look = await setLook(look);
+      settle('That is you.');
+    } catch (e) {
+      say(e instanceof Error ? e.message : 'The island keeper would not take that face.', 'bad');
+      ashore.disabled = false;
+    }
+  })();
+});
 
 /**
  * Somebody who is already signed in does not need the form.
  *
  * `whoAmI` asks the island keeper rather than reading the name out of the
  * stored session, so what is shown here is what the database would say about
- * this browser and not what this browser would like to be true.
+ * this browser and not what this browser would like to be true. An account
+ * that has never chosen a face goes straight to the second step, because it
+ * has not finished being set up.
  */
 async function onArrival(): Promise<void> {
   let name: string | null = null;
@@ -260,6 +436,18 @@ async function onArrival(): Promise<void> {
     name = null;
   }
   if (!name) return;
+  let had: Look | null = null;
+  try {
+    had = await myLook();
+  } catch {
+    had = null;
+  }
+  if (!had) {
+    say(`Signed in as ${name}. Now, who are you?`, 'good');
+    toMaker(randomLook());
+    return;
+  }
+  look = had;
   card.classList.add('settled');
   say(`Signed in as ${name}.`, 'good');
   const row = document.createElement('p');
@@ -267,6 +455,15 @@ async function onArrival(): Promise<void> {
   const on = document.createElement('a');
   on.href = toGame;
   on.textContent = 'On to the island';
+  const again = document.createElement('a');
+  again.href = '#';
+  again.id = 'again';
+  again.textContent = 'change how you look';
+  again.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    say(`Signed in as ${name}.`, 'good');
+    toMaker(had ?? randomLook());
+  });
   const out = document.createElement('a');
   out.href = '#';
   out.textContent = 'sign out';
@@ -274,7 +471,8 @@ async function onArrival(): Promise<void> {
     ev.preventDefault();
     void signOut().then(() => location.reload());
   });
-  row.append(on, document.createTextNode(' — or '), out, document.createTextNode(' and be somebody else.'));
+  row.append(on, document.createTextNode(' — or '), again, document.createTextNode(', or '), out,
+             document.createTextNode(' and be somebody else.'));
   card.insertBefore(row, said.nextSibling);
 }
 
@@ -293,7 +491,12 @@ declare global {
       nameEmail: typeof nameEmail;
       foldName: typeof foldName;
       Unchecked: typeof Unchecked;
+      LOOK_TABLES: typeof LOOK_TABLES;
+      cleanLook: typeof cleanLook;
+      randomLook: typeof randomLook;
+      /** What the creator is showing at this moment. */
+      look: () => Look;
     };
   }
 }
-window.wurmAccount = { nameTrouble, passwordTrouble, passwordVerdict, breachCount, breachWord, nameEmail, foldName, Unchecked };
+window.wurmAccount = { nameTrouble, passwordTrouble, passwordVerdict, breachCount, breachWord, nameEmail, foldName, Unchecked, LOOK_TABLES, cleanLook, randomLook, look: () => look };

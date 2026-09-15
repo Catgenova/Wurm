@@ -1,4 +1,8 @@
 import { mulberry32 } from '../world/noise';
+import {
+  BUILDS, DEFAULT_LOOK, darken, eyeColour, hairColour, shirtColour, skinColour, trouserColour,
+  type Gender, type Look,
+} from '../game/look';
 import { BUSH_DEFS, TREE_DEFS } from '../world/tiles';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
@@ -3040,36 +3044,341 @@ export interface PlayerPose {
   /** The colour of what is on the chest and the legs, when either has been dyed. */
   tunic?: string;
   trousers?: string;
+  /** Who this is: skin, hair, eyes, build and the clothes they came ashore in. */
+  look?: Look;
 }
 
-const SKIN = '#e6c29a';
-const HAIR = '#5a3a1e';
-const TUNIC = '#8d6b3e';
-const TROUSERS = '#4b3b2c';
 const BELT = '#33241a';
 
-/** Draws the character with its feet at (sx, sy). */
+/**
+ * The colours and the build a pose comes to.
+ *
+ * Dyed cloth beats the clothes you were made in, and that order is the right
+ * way round: the shirt in a look is what you washed ashore wearing, and a
+ * tunic you dyed madder is what you are wearing now.
+ */
+interface Worn {
+  look: Look;
+  skin: string;
+  shade: string;
+  hair: string;
+  hairShade: string;
+  eye: string;
+  tunic: string;
+  trousers: string;
+  build: (typeof BUILDS)[Gender];
+}
+
+function wornOf(pose: PlayerPose): Worn {
+  const look = pose.look ?? DEFAULT_LOOK;
+  const skin = skinColour(look);
+  const hair = hairColour(look);
+  return {
+    look,
+    skin,
+    shade: darken(skin, 0.18),
+    hair,
+    hairShade: darken(hair, 0.3),
+    eye: eyeColour(look),
+    tunic: pose.tunic ?? shirtColour(look),
+    trousers: pose.trousers ?? trouserColour(look),
+    build: BUILDS[look.gender] ?? BUILDS.neither,
+  };
+}
+
+/* ---- Hair ------------------------------------------------------------- */
+
+/**
+ * Twenty haircuts on a head nine pixels across.
+ *
+ * Nothing about hair survives that scale except its outline, so each of these
+ * is a silhouette: how far down the sides it comes, what happens behind the
+ * neck, and whether anything stands up. Drawn in the head's own space, centre
+ * at the origin, radius `r`, and facing **right** — the figure as a whole is
+ * mirrored by the caller when it turns, so there is only ever one side to
+ * draw.
+ *
+ * Two passes rather than one. A ponytail, a mane and an afro all sit *behind*
+ * the skull, and painting them after it would put the hair over the face; so
+ * `hairBehind` runs before the head goes down and `hairOver` after it. The
+ * split is what makes long hair possible at all without a second sprite.
+ */
+function hairBehind(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
+  const id = w.look.hair;
+  ctx.fillStyle = w.hairShade;
+  const rope = (x: number, y: number, len: number, wide: number): void => {
+    ctx.fillRect(x - wide / 2, y, wide, len);
+  };
+  switch (id) {
+    case 'afro':
+      ctx.fillStyle = w.hair;
+      ctx.beginPath();
+      ctx.arc(-0.35 * r, -0.4 * r, r * 1.55, 0, TAU);
+      ctx.fill();
+      break;
+    case 'long':
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.15, -r * 0.4);
+      ctx.quadraticCurveTo(-r * 1.6, r * 1.6, -r * 0.5, r * 2.4);
+      ctx.lineTo(r * 0.5, r * 2.2);
+      ctx.quadraticCurveTo(r * 0.6, r * 0.2, r * 0.2, -r * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'waves':
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.1, -r * 0.5);
+      ctx.quadraticCurveTo(-r * 1.5, r * 0.7, -r * 0.7, r * 1.3);
+      ctx.lineTo(r * 0.7, r * 1.2);
+      ctx.quadraticCurveTo(r * 0.9, r * 0.2, r * 0.3, -r * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'ponytail':
+      rope(-r * 1.25, -r * 0.5, r * 2.2, r * 0.7);
+      ctx.beginPath();
+      ctx.arc(-r * 1.25, r * 1.7, r * 0.42, 0, TAU);
+      ctx.fill();
+      break;
+    case 'braid':
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.ellipse(-r * 1.2, -r * 0.3 + i * r * 0.62, r * 0.36, r * 0.34, 0, 0, TAU);
+        ctx.fill();
+      }
+      break;
+    case 'braids':
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.95, r * 0.35 + i * r * 0.55, r * 0.3, r * 0.3, 0, 0, TAU);
+        ctx.fill();
+      }
+      break;
+    case 'locs':
+      for (let i = 0; i < 5; i++) rope(-r * 1.1 + i * r * 0.5, -r * 0.6, r * 2 - i * r * 0.18, r * 0.3);
+      break;
+    case 'bun':
+      ctx.beginPath();
+      ctx.arc(-r * 0.95, -r * 0.5, r * 0.62, 0, TAU);
+      ctx.fill();
+      break;
+    case 'topknot':
+      rope(-r * 0.1, -r * 1.75, r * 1.1, r * 0.34);
+      ctx.beginPath();
+      ctx.arc(-r * 0.1, -r * 1.7, r * 0.5, 0, TAU);
+      ctx.fill();
+      break;
+    default:
+      break;
+  }
+}
+
+function hairOver(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
+  const id = w.look.hair;
+  if (id === 'bald') return;
+  ctx.fillStyle = w.hair;
+  /** A cap over the skull: from `a` to `b` in turns of π, closed across the front. */
+  const cap = (grow: number, from: number, to: number, front: number): void => {
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.2, r * grow, Math.PI * from, Math.PI * to);
+    ctx.lineTo(r * front, -r * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  };
+  switch (id) {
+    case 'crop':
+      cap(1.02, 1.05, 1.98, 0.8);
+      break;
+    case 'short':
+      cap(1.06, 1, 2, 0.85);
+      break;
+    case 'bowl':
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.3, r * 1.1, Math.PI, TAU);
+      ctx.rect(-r * 1.1, -r * 0.3, r * 2.2, r * 0.28);
+      ctx.fill();
+      break;
+    case 'side':
+      cap(1.06, 1, 2, 0.85);
+      ctx.fillStyle = w.hairShade;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.5, -r * 1.2);
+      ctx.quadraticCurveTo(r * 0.6, -r * 1.3, r * 1, -r * 0.35);
+      ctx.lineTo(r * 0.45, -r * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'swept':
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.15, -r * 0.1);
+      ctx.quadraticCurveTo(-r * 1.1, -r * 1.7, r * 0.2, -r * 1.35);
+      ctx.quadraticCurveTo(r * 1.05, -r * 1.1, r * 0.95, -r * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'fringe':
+      cap(1.06, 1, 2, 0.85);
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.5, -r * 1.2);
+      ctx.lineTo(r * 1.05, -r * 1.1);
+      ctx.lineTo(r * 0.95, -r * 0.1);
+      ctx.lineTo(-r * 0.5, -r * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'curls':
+      for (const [cx, cy] of [[-0.85, -0.5], [-0.5, -1.05], [0.05, -1.25], [0.6, -1.05], [0.95, -0.5]]) {
+        ctx.beginPath();
+        ctx.arc(cx * r, cy * r, r * 0.46, 0, TAU);
+        ctx.fill();
+      }
+      break;
+    case 'afro':
+      cap(1.12, 1, 2, 0.9);
+      break;
+    case 'waves':
+    case 'long':
+      cap(1.08, 1, 2, 0.88);
+      break;
+    case 'ponytail':
+    case 'bun':
+    case 'topknot':
+      cap(1.04, 1, 2, 0.86);
+      break;
+    case 'braid':
+      cap(1.06, 1, 2, 0.86);
+      break;
+    case 'braids':
+      cap(1.06, 1, 2, 0.86);
+      // The near braid, in front of the cheek. Its twin is behind the skull.
+      ctx.fillStyle = w.hairShade;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(r * 0.92, r * 0.35 + i * r * 0.55, r * 0.3, r * 0.3, 0, 0, TAU);
+        ctx.fill();
+      }
+      break;
+    case 'locs':
+      cap(1.06, 1, 2, 0.86);
+      break;
+    case 'ridge':
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.75, -r * 0.95);
+      ctx.lineTo(-r * 0.5, -r * 1.85);
+      ctx.lineTo(r * 0.25, -r * 2);
+      ctx.lineTo(r * 0.7, -r * 1.1);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'undercut':
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.2, r * 1.06, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.lineTo(r * 0.7, -r * 0.62);
+      ctx.lineTo(-r * 0.7, -r * 0.62);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'tonsure':
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.2, r * 1.06, Math.PI * 1.02, Math.PI * 1.98);
+      ctx.arc(0, -r * 0.2, r * 0.62, Math.PI * 1.98, Math.PI * 1.02, true);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    default:
+      cap(1.06, 1, 2, 0.85);
+      break;
+  }
+}
+
+/** Whatever is on the chin, if anything is. */
+function beard(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
+  const id = w.look.beard;
+  if (id === 'none') return;
+  ctx.fillStyle = id === 'stubble' ? darken(w.hair, -0.05) : w.hair;
+  ctx.globalAlpha = id === 'stubble' ? 0.45 : 1;
+  switch (id) {
+    case 'stubble':
+      ctx.beginPath();
+      ctx.arc(r * 0.15, r * 0.35, r * 0.85, Math.PI * 1.85, Math.PI * 0.95);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'moustache':
+      ctx.fillRect(r * 0.3, r * 0.12, r * 0.75, r * 0.22);
+      break;
+    case 'goatee':
+      ctx.fillRect(r * 0.3, r * 0.12, r * 0.6, r * 0.2);
+      ctx.beginPath();
+      ctx.ellipse(r * 0.45, r * 0.72, r * 0.26, r * 0.36, 0, 0, TAU);
+      ctx.fill();
+      break;
+    case 'short':
+      ctx.beginPath();
+      ctx.arc(r * 0.1, r * 0.3, r * 0.92, Math.PI * 1.8, Math.PI * 0.9);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'full':
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.75, -r * 0.1);
+      ctx.quadraticCurveTo(-r * 0.4, r * 1.5, r * 0.45, r * 1.45);
+      ctx.quadraticCurveTo(r * 1.15, r * 1.1, r * 1.02, -r * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'long':
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.75, -r * 0.1);
+      ctx.quadraticCurveTo(-r * 0.45, r * 2.6, r * 0.35, r * 2.7);
+      ctx.quadraticCurveTo(r * 1.2, r * 1.4, r * 1.02, -r * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    default:
+      break;
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** A head at (cx, cy): hair behind, skull, eye, hair over, beard. */
+function head(ctx: CanvasRenderingContext2D, w: Worn, cx: number, cy: number, r: number): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  hairBehind(ctx, w, r);
+  ctx.fillStyle = w.skin;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, TAU);
+  ctx.fill();
+  // One eye, because the figure is always three-quarters away from you and the
+  // far one would be a pixel of noise on the silhouette.
+  ctx.fillStyle = w.eye;
+  ctx.fillRect(r * 0.35, -r * 0.33, r * 0.28, r * 0.28);
+  hairOver(ctx, w, r);
+  beard(ctx, w, r);
+  ctx.restore();
+}
+
 /**
  * The same figure, sat down: knees forward over the footboard, both hands out
  * on the reins, and no shadow, because what is under it is the cart.
  */
-function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose): void {
-  const tunic = pose.tunic ?? TUNIC;
-  const trousers = pose.trousers ?? TROUSERS;
+function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose, w: Worn): void {
   const jolt = pose.moving ? Math.sin(pose.phase * 0.9) * 0.6 : 0;
+  const chest = 4.5 * w.build.shoulder;
   // thighs forward, shins down
-  ctx.fillStyle = trousers;
+  ctx.fillStyle = w.trousers;
   ctx.fillRect(-1, -8 + jolt, 8, 3);
   ctx.fillRect(5.5, -8 + jolt, 3, 7);
   // body
-  ctx.fillStyle = tunic;
-  ctx.fillRect(-4.5, -20 + jolt, 9, 13);
+  ctx.fillStyle = w.tunic;
+  ctx.fillRect(-chest, -20 + jolt, chest * 2, 13);
   ctx.fillStyle = BELT;
-  ctx.fillRect(-4.5, -9.5 + jolt, 9, 1.6);
+  ctx.fillRect(-chest, -9.5 + jolt, chest * 2, 1.6);
   // arms out to the reins
-  ctx.fillStyle = tunic;
+  ctx.fillStyle = w.tunic;
   ctx.fillRect(2, -18 + jolt, 6, 2.4);
-  ctx.fillStyle = SKIN;
+  ctx.fillStyle = w.skin;
   ctx.fillRect(7.5, -18.2 + jolt, 2.4, 2.4);
   // reins, running off to the team
   ctx.strokeStyle = '#4a3524';
@@ -3078,24 +3387,13 @@ function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose): void {
   ctx.moveTo(9, -17 + jolt);
   ctx.lineTo(15, -12 + jolt);
   ctx.stroke();
-  // head
-  ctx.fillStyle = SKIN;
-  ctx.beginPath();
-  ctx.arc(0, -24.5 + jolt, 4.6, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = HAIR;
-  ctx.beginPath();
-  ctx.arc(0, -25.5 + jolt, 4.7, Math.PI * 1.05, Math.PI * 1.95);
-  ctx.lineTo(3.8, -24.5 + jolt);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#2a1a10';
-  ctx.fillRect(1.6, -25.5 + jolt, 1.2, 1.2);
+  head(ctx, w, 0, -24.5 + jolt, 4.6);
 }
 
+/** Draws the character with its feet at (sx, sy). */
 export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
-  const tunic = pose.tunic ?? TUNIC;
-  const trousers = pose.trousers ?? TROUSERS;
+  const w = wornOf(pose);
+  const b = w.build;
   ctx.save();
   ctx.translate(sx, sy);
   ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
@@ -3104,60 +3402,101 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     ctx.beginPath();
     ctx.ellipse(0, 0, 12, 4.5, 0, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = tunic;
+    ctx.fillStyle = w.tunic;
     ctx.fillRect(-6, -8, 12, 7);
-    ctx.fillStyle = SKIN;
-    ctx.beginPath();
-    ctx.arc(0, -12, 5.5, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = HAIR;
-    ctx.beginPath();
-    ctx.arc(0, -13, 5.5, Math.PI, TAU);
-    ctx.fill();
+    head(ctx, w, 0, -12, 5.5);
     ctx.restore();
     return;
   }
   if (pose.driving) {
-    drawDriver(ctx, pose);
+    drawDriver(ctx, pose, w);
     ctx.restore();
     return;
   }
   const swing = pose.moving ? Math.sin(pose.phase) : 0;
   const bob = pose.moving ? Math.abs(Math.cos(pose.phase)) * 1.2 : 0;
+  const chest = 4.5 * b.shoulder;
+  const waist = 4.5 * b.waist;
+  const hip = 3.5 * b.hip;
   // The shadow marks the one subtile the character stands on.
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
   ctx.fill();
   // legs
-  ctx.fillStyle = trousers;
-  ctx.fillRect(-3.5, -12 + swing * 2, 3, 12 - swing * 2);
-  ctx.fillRect(0.5, -12 - swing * 2, 3, 12 + swing * 2);
-  // body
-  ctx.fillStyle = tunic;
-  ctx.fillRect(-4.5, -26 - bob, 9, 14);
-  ctx.fillStyle = BELT;
-  ctx.fillRect(-4.5, -14.5 - bob, 9, 1.6);
-  // arms
-  const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
-  ctx.fillStyle = tunic;
-  ctx.fillRect(-7, -25 - bob + armSwing, 2.5, 8);
-  ctx.fillRect(4.5, -25 - bob - armSwing, 2.5, 8);
-  ctx.fillStyle = SKIN;
-  ctx.fillRect(-7, -17 - bob + armSwing, 2.5, 2.5);
-  ctx.fillRect(4.5, -17 - bob - armSwing, 2.5, 2.5);
-  // head
-  ctx.fillStyle = SKIN;
+  ctx.fillStyle = w.trousers;
+  ctx.fillRect(-hip, -12 + swing * 2, hip - 0.5, 12 - swing * 2);
+  ctx.fillRect(0.5, -12 - swing * 2, hip - 0.5, 12 + swing * 2);
+  // body: shoulders at the top, waist at the belt, so a build is a taper
+  // rather than a wider rectangle.
+  ctx.fillStyle = w.tunic;
   ctx.beginPath();
-  ctx.arc(0, -31 - bob, 4.6, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = HAIR;
-  ctx.beginPath();
-  ctx.arc(0, -32 - bob, 4.7, Math.PI * 1.05, Math.PI * 1.95);
-  ctx.lineTo(3.8, -31 - bob);
+  ctx.moveTo(-chest, -26 - bob);
+  ctx.lineTo(chest, -26 - bob);
+  ctx.lineTo(waist, -12 - bob);
+  ctx.lineTo(-waist, -12 - bob);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#2a1a10';
-  ctx.fillRect(1.6, -32 - bob, 1.2, 1.2);
+  ctx.fillStyle = BELT;
+  ctx.fillRect(-waist - 0.2, -14.5 - bob, waist * 2 + 0.4, 1.6);
+  // arms
+  const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
+  ctx.fillStyle = w.tunic;
+  // The sleeves overlap the chest by a hair. The body is a taper now rather
+  // than a rectangle, so an arm that starts exactly at the shoulder line
+  // leaves a sliver of background down the side of everybody in the game.
+  ctx.fillRect(-chest - 2.5, -25 - bob + armSwing, 3.3, 8);
+  ctx.fillRect(chest - 0.8, -25 - bob - armSwing, 3.3, 8);
+  ctx.fillStyle = w.skin;
+  ctx.fillRect(-chest - 2.5, -17 - bob + armSwing, 2.5, 2.5);
+  ctx.fillRect(chest, -17 - bob - armSwing, 2.5, 2.5);
+  head(ctx, w, 0, -31 - bob, 4.6);
+  ctx.restore();
+}
+
+/**
+ * Just the head, filling the box.
+ *
+ * Choosing a haircut off a whole body means judging nine pixels of it; the
+ * same head at four times the size is the difference between twenty choices
+ * and twenty thumbnails that all look the same. Same `head()` as the figure,
+ * so a thumbnail cannot drift from the body it is promising.
+ */
+export function drawHeadshot(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, look: Look): void {
+  const w = wornOf({ phase: 0, moving: false, facing: 1, swimming: false, working: false, look });
+  const r = size / 6.6;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, size, size);
+  ctx.clip();
+  // A ground of its own. Without it black hair on a dark card is twenty
+  // identical squares, which is the one thing a row of thumbnails must not be.
+  ctx.fillStyle = '#4b5460';
+  ctx.fillRect(x, y, size, size);
+  // Shoulders, so a head is not a balloon and long hair has something to fall
+  // on — small, because the head is what is being chosen.
+  ctx.fillStyle = w.tunic;
+  ctx.beginPath();
+  ctx.ellipse(x + size / 2, y + size * 1.24, size * 0.36, size * 0.3, 0, 0, TAU);
+  ctx.fill();
+  head(ctx, w, x + size / 2, y + size * 0.5, r);
+  ctx.restore();
+}
+
+/**
+ * The same figure, standing still and big, for the creator to draw into a
+ * square of its own. It is `drawPlayer` and not a second drawing of a person:
+ * a preview that is its own code is a preview that can lie to you, and the
+ * whole point of choosing a face is seeing the one you will get.
+ */
+export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, look: Look, phase = 0): void {
+  const zoom = Math.min(w / 26, h / 42);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  drawPlayer(ctx, x + w / 2, y + h - h * 0.08, zoom, {
+    phase, moving: false, facing: 1, swimming: false, working: false, look,
+  });
   ctx.restore();
 }

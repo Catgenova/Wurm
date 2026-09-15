@@ -52,6 +52,7 @@ import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
+import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -574,6 +575,35 @@ out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, 
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
+
+/*
+ * Every choice the character creator offers.
+ *
+ * Ten skin tones, twenty haircuts, fourteen hair colours, eight eyes, seven
+ * beards, sixteen cloths and three builds — all of it numbers, so all of it
+ * lives in `src/game/look.ts` and arrives here rather than being written twice.
+ *
+ * `fallback` is the row `look_clean()` falls to when a look asks for something
+ * that is not in the table, and it is generated from `DEFAULT_LOOK` for the
+ * same reason as the rest: a default hardcoded in SQL is a default that drifts
+ * from the one the browser draws.
+ *
+ * The table itself is created in `20260915033000_looks.sql` as well as here,
+ * because that one is stamped by hand and this one by the wall clock, and the
+ * two clocks cross. Both say `if not exists`; neither cares which won.
+ */
+out.push(`create table if not exists look_option (
+  kind text not null, id text not null, ord int not null, name text not null,
+  colour text, fallback boolean not null default false, primary key (kind, id)
+);`);
+out.push('truncate look_option;');
+for (const [kind, table] of Object.entries(LOOK_TABLES)) {
+  table.forEach((o, n) => {
+    const colour = (o as { colour?: string }).colour ?? null;
+    const isDefault = DEFAULT_LOOK[kind as keyof typeof DEFAULT_LOOK] === o.id;
+    out.push(`insert into look_option values (${q(kind)}, ${q(o.id)}, ${n}, ${q(o.name)}, ${q(colour)}, ${q(isDefault)});`);
+  });
+}
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [

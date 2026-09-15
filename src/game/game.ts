@@ -21,6 +21,7 @@ import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { randomLook, type Look } from './look';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { ALL_GOALS } from './journal';
@@ -114,7 +115,7 @@ export interface GameInit {
   marks?: Marker[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
   /** What knacks were called before they were called knacks. */
-  affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null> };
+  affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -410,6 +411,10 @@ export class Game {
   static create(seed: number, size = WORLD_SIZE): Game {
     const gen = generateWorld(seed, size);
     const game = new Game({ seed, world: gen.world, spawn: gen.spawn });
+    // Somebody, rather than the same somebody every time. An account replaces
+    // this with whatever was chosen on the landing page; a browser that has
+    // never seen one still gets a face of its own.
+    game.player.look = randomLook();
     game.giveStarterKit();
     // A new island is stocked on the books; what is near the player takes a
     // body on the first streaming pass, and the rest waits to be walked to.

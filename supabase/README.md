@@ -1087,6 +1087,46 @@ A `uid` column means the rows are about people, and people's rows are answered
 for by their own policies. Measurement 543 asks as a stranger, which is the
 only way that class of thing is ever found.
 
+## A face, and where it is kept
+
+Between making an account and stepping ashore there is a second step: skin,
+hair, eyes, build, beard and the clothes you washed ashore in. Eight short
+strings, and every one of them an id out of `look_option`.
+
+Ids and not colours, because of where a look goes. It leaves a stranger's
+browser, sits in this database, and arrives on everybody else's machine as an
+argument to `ctx.fillStyle`. A free-text colour on that path is a hole with a
+view of the whole island. `look_clean()` replaces anything that is not in the
+table, so the worst a crafted look can do is come out looking ordinary — and
+it is total, never raising and never returning half a face, because a body with
+half an appearance is a state nothing downstream knows how to be in.
+
+`src/game/look.ts` clamps the same way and that clamp is worth nothing: it runs
+on the client. This one is the control.
+
+The face lives in two places on purpose. `account.look` is what you chose, and
+it follows you between islands; `player.look` is the body on this island, which
+is what everybody else reads through `player_read`. `rpc_set_look` writes both,
+including every body you already have ashore — a look you change and then have
+to travel to collect is a look that is wrong everywhere you are not standing.
+A body with no account behind it gets `look_random()`, because nobody should be
+the default figure.
+
+### Two things it turned up
+
+`look_option` is created twice — once by hand in `20260915033000_looks.sql` and
+once by the generated definitions — because those two are stamped by different
+clocks and the clocks cross. Both say `if not exists`, so neither cares which
+landed first, and nothing calls `look_clean()` in between.
+
+And `look_random()` draws from `gen_random_uuid()` rather than `random()`. The
+suite seeds `random()` once at the top so that a roll reading differently from
+last time means the rules changed. Every join now rolls a face; drawing those
+from the seeded stream shifted every dig, swing and cast that came after it —
+a hundred and forty-six measurements moved and not one of them was about faces.
+Postgres's uuid source is its own, so the sequence the island is measured with
+is left alone. Only measurement 277 changed: 68 rulebook tables became 69.
+
 ## Testing
 
 `npm run db:test` drops the schema, rebuilds it from the migrations and runs

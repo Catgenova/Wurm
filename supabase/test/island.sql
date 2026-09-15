@@ -3436,3 +3436,65 @@ select set_config('request.jwt.claims', json_build_object('sub', null)::text, fa
 select '543. a stranger reads the roll of names: ' || (select count(*) from account)
      || ' of the ' || :really || ' there are';
 reset role;
+
+\echo ''
+\echo '--- a face, and where it is kept'
+-- Eight short strings, chosen on the landing page between making an account
+-- and stepping ashore. What is measured here is that none of them can be
+-- anything but an entry in a table we wrote: a look goes from a stranger's
+-- browser through this database into `fillStyle` on everybody else's machine,
+-- and that path is no place for a free-text colour.
+select '544. what the creator offers: ' || string_agg(kind || ' ' || n, ', ' order by kind)
+  from (select kind, count(*) as n from look_option group by kind) k;
+select '545. and every kind has one to fall back on: '
+     || (select count(*) from look_option where fallback) || ' of '
+     || (select count(distinct kind) from look_option);
+
+select '546. a look full of rubbish: '
+     || look_clean('{"skin":"green","hair":"<script>alert(1)</script>","eyes":"blue","shirt":"woad","gender":"woman"}'::jsonb)::text;
+select '547. and one that is empty: ' || look_clean('{}'::jsonb)::text;
+select '548. a random face is a real one: '
+     || (select count(*) from jsonb_each_text(look_random()) f
+         where exists (select 1 from look_option o where o.kind = f.key and o.id = f.value))
+     || ' of its ' || (select count(*) from jsonb_each_text(look_random())) || ' fields are in the tables';
+
+-- Alice comes ashore, and then changes her mind about her hair.
+select set_config('request.jwt.claims', json_build_object('sub', :'alice')::text, false) \g /dev/null
+select rpc_join(:'world', 'Alice') \g /dev/null
+select '549. alice comes ashore with no face chosen: ' || (select (look ->> 'hair') is not null
+       from player where uid = :'alice') || ' — she has one anyway, because nobody is the default figure';
+select rpc_set_look('{"gender":"woman","skin":"deep","hair":"braids","hairColour":"black","eyes":"green","beard":"none","shirt":"woad","trousers":"bark"}'::jsonb) \g /dev/null
+select '550. she chooses: ' || (select look ->> 'hair' from account where uid = :'alice')
+     || ', ' || (select look ->> 'skin' from account where uid = :'alice')
+     || ' — and the body already ashore has it too: '
+     || (select look ->> 'hair' from player where uid = :'alice');
+-- A look is a whole face rather than a patch, so what is not named goes back
+-- to the fallback along with what was named and is not real. The creator
+-- always sends all eight; this is what happens to anything that does not.
+select rpc_set_look('{"hair":"there is no such haircut","skin":"#ff0000","eyes":"amber"}'::jsonb) \g /dev/null
+select '551. three fields, one of them a colour and one a haircut nobody has: '
+     || (select look::text from account where uid = :'alice')
+     || ' — a look is a whole face, not a patch';
+
+-- And somebody on the island can see it, which is the whole point of storing
+-- it on the body rather than only on the account.
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '552. hild looks at alice: ' || coalesce((select p.look ->> 'eyes' || ' eyes, '
+       || (p.look ->> 'skin') || ' skin' from player p where p.uid = :'alice'), 'nothing to see');
+reset role;
+
+-- A body with nobody behind it still gets a face of its own.
+select set_config('request.jwt.claims', json_build_object('sub', :'ghost')::text, false) \g /dev/null
+select rpc_join(:'world', 'Nobody') \g /dev/null
+select '553. an account with no name comes ashore: ' || (select look::text from player where uid = :'ghost');
+do $$ begin
+  perform rpc_set_look('{"hair":"bald"}'::jsonb);
+  raise notice '554. and tries to choose a face:   ALLOWED';
+exception when others then raise notice '554. and tries to choose a face:   refused — %', sqlerrm; end $$;
+
+select set_config('request.jwt.claims', json_build_object('sub', null)::text, false) \g /dev/null
+do $$ begin
+  perform rpc_set_look('{"hair":"bald"}'::jsonb);
+  raise notice '555. nobody at all chooses a face: ALLOWED';
+exception when others then raise notice '555. nobody at all chooses a face: refused — %', sqlerrm; end $$;

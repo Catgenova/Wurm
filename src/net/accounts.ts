@@ -1,3 +1,4 @@
+import { cleanLook, type Look } from '../game/look';
 import { supabase } from './supabase';
 
 /**
@@ -272,4 +273,30 @@ export async function whoAmI(): Promise<string | null> {
 /** Put the account down. The single-player game is still there without one. */
 export async function signOut(): Promise<void> {
   await supabase().auth.signOut();
+}
+
+/**
+ * The face on the account, or null if nobody has chosen one yet.
+ *
+ * Null is the whole reason this exists: it is what sends a new account to the
+ * creator and lets somebody coming back walk straight past it.
+ */
+export async function myLook(): Promise<Look | null> {
+  const { data, error } = await supabase().rpc('rpc_my_look');
+  if (error || data === null || data === undefined) return null;
+  return cleanLook(data);
+}
+
+/**
+ * Choose one.
+ *
+ * What comes back is what was stored, not what was sent: the island keeper
+ * clamps every field against its own tables, so this returns the *cleaned*
+ * look and the page draws that. Anything else and the mirror would be showing
+ * a face nobody else would ever see.
+ */
+export async function setLook(look: Look): Promise<Look> {
+  const { data, error } = await supabase().rpc('rpc_set_look', { p_look: look });
+  if (error) throw new Error(`The island keeper would not take that face: ${error.message}`);
+  return cleanLook(data);
 }

@@ -50,6 +50,8 @@ export interface PlayerRow {
   x: number;
   y: number;
   level: number;
+  /** Skin, hair, eyes and clothes, as ids out of `look_option`. */
+  look?: unknown;
   act: string | null;
   act_ends: string | null;
   [key: string]: unknown;

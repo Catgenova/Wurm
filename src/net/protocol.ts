@@ -1,3 +1,4 @@
+import type { Look } from '../game/look';
 import type { Target } from '../game/actions';
 
 /**
@@ -64,6 +65,12 @@ export interface PeerState {
   /** Dyed cloth, so people are told apart by more than a name over their head. */
   tunic?: string;
   trousers?: string;
+  /**
+   * Who they are to look at. Sent as the eight ids rather than as colours, so
+   * that what arrives from somebody else's machine and goes into `fillStyle`
+   * on this one cannot be anything but an entry in a table we wrote.
+   */
+  look?: Look;
 }
 
 /**

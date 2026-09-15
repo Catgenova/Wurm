@@ -8,6 +8,7 @@ import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
 import { groundRoll, TILE_DEFS } from '../world/tiles';
 import type { World } from '../world/world';
+import { cleanLook, DEFAULT_LOOK, type Look } from './look';
 
 export interface Stats {
   health: number;
@@ -29,6 +30,14 @@ export class Player {
   x: number;
   y: number;
   name = 'Wanderer';
+  /**
+   * Skin, hair, eyes, build and the clothes washed ashore in.
+   *
+   * On the body rather than in a settings file, because it travels: it is
+   * saved with the game, sent to everybody else on an island, and read back
+   * off `player.look` when you come ashore somewhere you have been before.
+   */
+  look: Look = DEFAULT_LOOK;
   /** Last movement direction in world space; the renderer turns it into a screen facing. */
   dirX = 1;
   dirY = 0;
@@ -277,6 +286,8 @@ export interface PlayerSave {
   satAt?: number;
   usedAt?: Record<string, number>;
   belt?: Array<BeltPin | null>;
+  /** Absent in every save written before there was a creator; those get the default. */
+  look?: Look;
 }
 
 export function writePlayer(p: Player): PlayerSave {
@@ -284,6 +295,7 @@ export function writePlayer(p: Player): PlayerSave {
     x: p.x,
     y: p.y,
     name: p.name,
+    look: p.look,
     stats: p.stats,
     level: p.level,
     equipped: p.equipped,
@@ -326,5 +338,8 @@ export function readPlayer(p: Player, saved: PlayerSave): void {
   p.way = saved.way ?? null;
   p.satAt = saved.satAt ?? -1e9;
   p.usedAt = saved.usedAt ?? {};
+  // Cleaned rather than trusted: a save is a file on somebody's own machine,
+  // and this is the same value that ends up in `fillStyle`.
+  if (saved.look) p.look = cleanLook(saved.look);
   if (saved.belt) for (let i = 0; i < BELT_MAX; i += 1) p.belt[i] = saved.belt[i] ?? null;
 }

@@ -1,4 +1,5 @@
 import { Game, WORLD_SIZE } from '../game/game';
+import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateWorld } from '../world/generate';
@@ -89,7 +90,14 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     seed: info.seed,
     world,
     spawn: { x: info.spawn_x, y: info.spawn_y },
-    player: { x: me.x, y: me.y, name: me.name, stats: (me.stats as Game['player']['stats']) ?? { health: 1, stamina: 1, hunger: 1, thirst: 1 } },
+    player: {
+      x: me.x, y: me.y, name: me.name,
+      // The island's copy, not this browser's: the face you chose is kept with
+      // the account and handed back at the join, so a new machine comes ashore
+      // looking like you rather than like a stranger.
+      look: cleanLook(me.look),
+      stats: (me.stats as Game['player']['stats']) ?? { health: 1, stamina: 1, hunger: 1, thirst: 1 },
+    },
     time: island.time(),
   });
 
@@ -110,7 +118,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   island.hooks.people = (people: PlayerRow[]) => {
     for (const p of people) {
       if (p.uid === island.uid) continue;
-      game.roster.saw({ id: hashId(p.uid), name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1, level: p.level, moving: false, swimming: false, working: !!p.act });
+      game.roster.saw({ id: hashId(p.uid), name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1, level: p.level, moving: false, swimming: false, working: !!p.act, look: cleanLook(p.look) });
     }
   };
   for (const [text, kind] of log) game.write(text, kind as Parameters<Game['write']>[1]);

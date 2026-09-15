@@ -36,6 +36,24 @@ before you choose one.
 An account is an addition, not a toll. Settings (`O`) links to the page, and
 the single-player island in your browser has never needed one.
 
+### Who you are
+
+Between making the account and stepping ashore comes the second half of setting
+one up: **build, skin, twenty haircuts, hair colour, eyes, beard, shirt and
+trousers**, with a mirror beside them that walks. The mirror is `drawPlayer` —
+the same function the island draws you with, not a second drawing of a person —
+so the figure you are choosing is the figure you get. Haircuts and beards are
+chosen from thumbnails of a head wearing them rather than from a list of names,
+because a haircut is a silhouette and a name for one is a word you have to
+imagine.
+
+A look is eight short ids, never colours: it travels from your browser through
+the database into `ctx.fillStyle` on everybody else's machine, and the island
+keeper clamps every field against its own tables on the way past. The face is
+kept with the account, so it follows you to every island, and it can be changed
+whenever you like. A browser with no account still gets a face — a random one,
+because nobody should be the default figure.
+
 ### Deploying
 
 GitHub Pages serves the `main` branch from the repository root, so the built
@@ -993,9 +1011,10 @@ index.html, account.html, assets/
 src/
   index.html         the real HTML entry
   main.ts            wires input, game, renderer and UI into the frame loop
-  account.html       the landing page: a username and a password
+  account.html       the landing page: a username, a password and a face
   account.ts         its behaviour; account.css its own small stylesheet
   net/accounts.ts    name rules, the breach check, signing up and back in
+  game/look.ts       skin, hair, eyes, build and cloth — the only place they live
   engine/            canvas sizing, input, loop, camera (no game knowledge)
   render/iso.ts      projection constants and world <-> iso math
   render/renderer.ts terrain quads, water, entities, picking, overlays

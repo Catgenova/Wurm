@@ -195,3 +195,117 @@ a { color: var(--ui-accent); }
 
 /* Whoever is signed in already does not need a form. */
 .card.settled form, .card.settled .tabs, .card.settled #warn { display: none; }
+
+/* ---- Step two: the face -------------------------------------------------
+ *
+ * The card grows for it. A sign-up is two fields and wants to be narrow; a
+ * character creator is a mirror and eight rows of choices and wants not to be.
+ */
+.card.making { max-width: 760px; }
+.card.making form, .card.making .tabs { display: none; }
+
+.maker {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.mirror {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  position: sticky;
+  top: 8px;
+}
+
+#me {
+  width: 200px;
+  height: 320px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: linear-gradient(#1b2f22, #2c3c26 60%, #3b4429);
+}
+
+#roll, #ashore {
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: rgba(60, 50, 30, 0.7);
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+#roll { width: 200px; }
+
+#ashore {
+  width: 100%;
+  margin-top: 16px;
+  padding: 11px;
+  border-color: var(--ui-border-light);
+  background: linear-gradient(rgba(90, 74, 44, 0.95), rgba(62, 51, 31, 0.95));
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+#roll:hover, #ashore:hover:not(:disabled) { border-color: var(--ui-accent); color: #fff; }
+#ashore:disabled { opacity: 0.55; cursor: progress; }
+
+/*
+ * No box of its own to scroll.
+ *
+ * A fixed-height scroller cut the last row in half and looked like a bug
+ * rather than a scroller. The page scrolls instead and the mirror is sticky,
+ * which keeps the thing you are judging on screen while you go down the list —
+ * which was the only reason for the box.
+ */
+.choices {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.choice { margin-bottom: 14px; }
+
+.choice > h2 {
+  margin: 0 0 6px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.choice > h2 span {
+  margin-left: 8px;
+  color: var(--ui-text);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.row { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.pick {
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.pick:hover { border-color: var(--ui-border-light); }
+.pick.on { border-color: var(--ui-accent); box-shadow: 0 0 0 1px var(--ui-accent); }
+
+.pick.swatch { width: 30px; height: 30px; }
+.pick.face { width: 46px; height: 46px; }
+.pick.word { padding: 6px 12px; line-height: 1.2; }
+
+@media (max-width: 640px) {
+  .maker { flex-direction: column; align-items: stretch; }
+  .mirror { position: static; }
+  #me, #roll { width: 100%; }
+}
