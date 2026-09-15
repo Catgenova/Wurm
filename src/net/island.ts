@@ -155,12 +155,18 @@ export interface IslandHooks {
    * join handed over and never moved again. It rides the heartbeat, which was
    * making the round trip anyway.
    */
+  /*
+   * Every field is "what the island said about this", and a field it did not
+   * mention is left alone. `rpc_settle` mentions all of them; `rpc_act`'s
+   * answer to a queued job mentions the queue and nothing else, and must not
+   * put out a prospector's marks on its way past.
+   */
   mine?: (what: {
-    queue: string[];
-    cap: number | null;
-    stats: Record<string, number> | null;
-    skills: Record<string, number> | null;
-    marks: { tiles: number[]; secs: number } | null;
+    queue?: string[];
+    cap?: number | null;
+    stats?: Record<string, number> | null;
+    skills?: Record<string, number> | null;
+    marks?: { tiles: number[]; secs: number } | null;
   }) => void;
   /**
    * Everything wild within sight, as the island has it.
@@ -205,6 +211,8 @@ export interface ActResult {
   ends?: string;
   inHand?: number;
   capacity?: number;
+  /** What is lined up behind the job in hand, when this ask put something there. */
+  queue?: string[];
 }
 
 export class Island {
@@ -912,6 +920,18 @@ export class Island {
     if (result.started && !result.done && result.seconds) {
       this.goes = times;
       this.hooks.doing?.({ act: action, total: result.seconds, secs: result.seconds, left: times, goes: times, queued: 0 });
+    }
+    /*
+     * A job that went into the queue rather than into your hands.
+     *
+     * The bar heard about the queue only from `rpc_settle`, which runs on the
+     * heartbeat and when a job comes due — never when one is added. So the
+     * count sat one behind and topping it up kept it there: "2 of 3" for ever
+     * while the third was plainly in hand. The island says the list in its
+     * answer now, and this is where the bar takes it.
+     */
+    if (result.queued && result.queue) {
+      this.hooks.mine?.({ queue: result.queue, cap: result.capacity ?? null });
     }
     if (result.ends) this.armBeat((new Date(result.ends).getTime() - Date.now()) / 1000 + 0.25);
     return result;

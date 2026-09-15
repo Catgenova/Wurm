@@ -222,7 +222,10 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * log line that had just said a skill went up.
    */
   island.hooks.mine = (what) => {
-    game.showQueue(what.queue, what.cap);
+    // Each of these only when the island said something about it: the answer to
+    // a queued job carries the queue and nothing else, and a prospector's marks
+    // must not go out because a different question was asked.
+    if (what.queue) game.showQueue(what.queue, what.cap ?? null);
     if (what.stats) {
       const s = game.player.stats as unknown as Record<string, number>;
       for (const k of ['health', 'stamina', 'hunger', 'thirst']) {
@@ -234,7 +237,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       for (const [id, value] of Object.entries(what.skills)) game.skills.values.set(id, value);
       game.events.emit('skill', '', 0);
     }
-    game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
+    if (what.marks !== undefined) game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
   };
 
   island.hooks.doing = (what) => {

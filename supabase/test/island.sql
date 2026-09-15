@@ -4539,3 +4539,36 @@ select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text,
 select coalesce(((rpc_settle())->'stats'->>'hunger'), 'nothing') as beat \gset
 select '651. and the heartbeat every browser makes anyway settles it: rpc_settle says hunger '
      || round(:'beat'::numeric, 4) || ', which the browser draws as it is told';
+
+\echo ''
+\echo '--- what the ask says it did'
+/*
+ * "On the action queue it never changes from 2/3 to 3/3 despite all 3 slots
+ * filled."
+ *
+ * It never did. The bar draws `act_queue` plus the job in hand, which is
+ * right — but it only ever *heard* about `act_queue` from `rpc_settle`, which
+ * runs on the heartbeat and when a job comes due, and never when one is added.
+ * So the picture was the state as of the last settle: ask for a third while
+ * two are running and it says "2 of 3"; the job in hand finishes, a settle
+ * happens, one comes off the queue, and it says "2 of 3" again.
+ *
+ * The answer to an ask is where a browser should hear what the ask did.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set act = null, act_target = null, act_started = null, act_ends = null,
+       act_left = null, act_queue = '[]', stats = jsonb_set(stats, '{stamina}', '1'), body_at = now()
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item where holder_uid = :'ivar' and def = 'log' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'world2', 'player', :'ivar', 'log', 30, 30, 'Pine') \g /dev/null
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'started', 'no') as a1 \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))::text, 'null') as a2 \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))::text, 'null') as a3 \gset
+select '652. one in hand and two asked for behind it — the second ask says: ' || :'a2';
+select '653. and the third: ' || :'a3';
+select '654. which is the same three the bar would draw: in hand '
+     || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
+     || ', queued ' || (select jsonb_array_length(act_queue) from player where world_id = :'world2' and uid = :'ivar')
+     || ' — so ' || (select jsonb_array_length(act_queue) + 1 from player where world_id = :'world2' and uid = :'ivar')
+     || ' of ' || queue_capacity(:'world2', :'ivar') || ', which is what the log line says too';
