@@ -414,7 +414,7 @@ export class Game {
     // A new island is stocked on the books; what is near the player takes a
     // body on the first streaming pass, and the rest waits to be walked to.
     game.creatures.stockIsland(game);
-    game.logMsg('Welcome to Wurm Iso. You wash ashore on an untouched island with a few tools and your wits.', 'system');
+    game.logMsg('Welcome to Wildermon. You wash ashore on an untouched island with a few tools and your wits.', 'system');
     game.logMsg('Left-click to walk — it is the only thing that moves you. Right-click a tile for actions. WASD or the arrows push the view about, scroll to zoom. Settings (O) has a Keys tab if you would rather they did something else. Press F1 for help.', 'system');
     return game;
   }

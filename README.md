@@ -1,4 +1,4 @@
-# Wurm Iso
+# Wildermon
 
 A browser remake of Wurm Online as a 2.5D isometric game. The whole page is one
 canvas; every piece of UI is an HTML overlay floating above it.
