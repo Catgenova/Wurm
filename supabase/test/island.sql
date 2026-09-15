@@ -2851,3 +2851,53 @@ select '466. a rowing boat dragged up a hillside that stands '
 select '467. the eleven that came with the reins: '
      || (select string_agg(id, ', ' order by id) from action_def where ride_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- and what a thing has to be empty of before it will come up'
+update player set x = 14.5, y = 12.5 where world_id = :'world2' and uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'hitch_creature',
+  ('{"kind":"creature","id":' || :'horse2' || '}')::jsonb) \g /dev/null
+select '468. with one in the yokes: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
+       ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb), 'allowed');
+/*
+ * And from the seat of it — which needs the yokes emptied by hand, because
+ * `Get down off it first.` is unreachable through a wheeled vehicle. Nobody
+ * can board one without a team in front of it, and the browser asks about the
+ * team before it asks about the driver, so the only thing that ever reaches
+ * this line is a hull. Ported in the browser's order and reached here the only
+ * way there is.
+ */
+select act_perform(:'world2', :'ivar', 'board_vehicle', ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb) \g /dev/null
+update creature set hitched_to = null where world_id = :'world2' and hitched_to = :'wain';
+select '469. and from the seat of it: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
+       ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'leave_vehicle', ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb) \g /dev/null
+update player set x = 9.5, y = 12.5 where world_id = :'world2' and uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pull_cart', ('{"kind":"furniture","id":' || :'cart' || '}')::jsonb) \g /dev/null
+select '470. and a cart by the shafts: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
+       ('{"kind":"furniture","id":' || :'cart' || '}')::jsonb), 'allowed');
+/*
+ * The two that were here all along, and were worse than a missing refusal:
+ * `item.placed` cascades, so lifting a chest with anything in it took the
+ * contents with it, and lifting a barrel poured the water away in silence.
+ */
+select give(:'world2', :'ivar', 'chest', 1, 50, 'Oak') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'chest' order by id desc limit 1) || ',"x":9,"y":12,"sx":3,"sy":3}')::jsonb) \g /dev/null
+select id as chest from placed where world_id = :'world2' and sub = 'chest' order by id desc limit 1 \gset
+insert into item (world_id, holder, placed, def, ql, count)
+  values (:'world2', 'furniture', :'chest', 'nail', 40, 20);
+select '471. a chest with twenty nails in it: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'pick_up_furniture', ('{"kind":"furniture","id":' || :'chest' || '}')::jsonb), 'allowed')
+     || ' — and the nails are still there: '
+     || (select coalesce(sum(count), 0) from item where holder = 'furniture' and placed = :'chest');
+select give(:'world2', :'ivar', 'barrel', 1, 50, 'Oak') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'barrel' order by id desc limit 1) || ',"x":9,"y":12,"sx":1,"sy":3}')::jsonb) \g /dev/null
+select id as tun from placed where world_id = :'world2' and sub = 'barrel' order by id desc limit 1 \gset
+update placed set litres = 30, liquid = 'water', since = now() where id = :'tun';
+select '472. and a barrel with ' || round(placed_litres((select p from placed p where p.id = :'tun'))::numeric)
+     || ' litres of water in it: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
+        ('{"kind":"furniture","id":' || :'tun' || '}')::jsonb), 'allowed');

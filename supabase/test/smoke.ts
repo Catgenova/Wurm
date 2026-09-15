@@ -54,6 +54,22 @@ async function drain(id: string, uid: string, tries = 30): Promise<number> {
   }
   return -1;
 }
+
+/**
+ * Walk somewhere, a step at a time.
+ *
+ * `rpc_move` believes about five tiles a call, so anywhere further than that
+ * takes several — which is the ceiling doing exactly what it is for.
+ */
+async function walkTo(id: string, x: number, y: number, tries = 10): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    const { data } = await supabase().rpc('rpc_move', { p_world: id, p_x: x, p_y: y, p_level: 0 });
+    const at = data as { x: number; y: number } | null;
+    if (at && Math.hypot(at.x - x, at.y - y) < 0.25) return true;
+    await sleep(1000);
+  }
+  return false;
+}
 const say = (s: string): void => console.log(s);
 
 let failures = 0;
@@ -239,9 +255,9 @@ async function main(): Promise<void> {
      * can walk anywhere on this island, so it is worth one round trip.
      */
     const afoot = island.me!;
-    const { data: walked, error: walkErr } = await supabase().rpc('rpc_move',
+    const { data: stepped, error: walkErr } = await supabase().rpc('rpc_move',
       { p_world: id, p_x: afoot.x + 0.5, p_y: afoot.y + 0.5, p_level: 0 });
-    const got = walked as { x: number; y: number; pulled: boolean } | null;
+    const got = stepped as { x: number; y: number; pulled: boolean } | null;
     check('and we may still walk half a tile on our own legs',
       !walkErr && !!got && !got.pulled,
       walkErr ? walkErr.message : got ? `${got.x.toFixed(1)}, ${got.y.toFixed(1)}${got.pulled ? ' — pulled back' : ''}` : 'nothing came back');
@@ -372,6 +388,36 @@ async function main(): Promise<void> {
      * founded through the front door, read back off the project, and the
      * refusal worth having is the second one.
      */
+    /*
+     * And first, ground the token will actually stand on.
+     *
+     * The same lesson the digging below already learned, not applied here
+     * until a live run taught it twice: a spawn can be under a tree or at the
+     * water line, and `The token needs a clear tile.` is the rules being
+     * right. Islands are rolled fresh every run, so anything that leans on
+     * where a random one puts you cries wolf on a schedule of its own.
+     */
+    const at = island.me!;
+    let sx = Math.floor(at.x);
+    let sy = Math.floor(at.y);
+    for (let r = 0; r <= 12; r++) {
+      let done = false;
+      for (let dy = -r; dy <= r && !done; dy++) {
+        for (let dx = -r; dx <= r && !done; dx++) {
+          const x = Math.floor(at.x) + dx;
+          const y = Math.floor(at.y) + dy;
+          if (x - 5 < 0 || y - 5 < 0 || x + 5 >= back.w || y + 5 >= back.h) continue;
+          if (back.getTile(x, y) === undefined || TILE_DEFS[back.getTile(x, y)]?.blocks) continue;
+          const wet = Math.min(back.getHeight(x, y), back.getHeight(x + 1, y),
+            back.getHeight(x + 1, y + 1), back.getHeight(x, y + 1)) < 0;
+          if (wet) continue;
+          sx = x; sy = y; done = true;
+        }
+      }
+      if (done) break;
+    }
+    const walked = await walkTo(id, sx + 0.5, sy + 0.5);
+    check('there is somewhere on this island worth a settlement', walked, `${sx},${sy}`);
     const founded = await island.act('found_settlement', { kind: 'item', name: 'Smoke' }, 1);
     check('the stake in the kit founds a settlement', founded.started || founded.done === true,
       founded.why ?? 'the token is in the ground');
@@ -394,7 +440,15 @@ async function main(): Promise<void> {
      * every time here, so a test that leans on where a random one puts you is
      * a test that cries wolf on a schedule of its own choosing.
      */
-    const me = island.me!;
+    /*
+     * Where the island says we are, not where the client last thought. The
+     * settlement above walked us somewhere, and a dig aimed from a stale idea
+     * of where we stand is refused for being too far away — true, and nothing
+     * whatever to do with digging.
+     */
+    const { data: standing } = await supabase().from('player').select('x,y')
+      .eq('world_id', id).eq('uid', uid).single();
+    const me = (standing ?? island.me!) as { x: number; y: number };
     let cx = Math.floor(me.x);
     let cy = Math.floor(me.y);
     let found = false;
@@ -423,7 +477,7 @@ async function main(): Promise<void> {
       left === 0 ? 'the head is empty' : 'jobs still waiting after thirty seconds of sweeping');
     check('there is somewhere on this island worth digging', found,
       found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
-    await supabase().rpc('rpc_move', { p_world: id, p_x: cx + 0.5, p_y: cy + 0.5, p_level: 0 });
+    await walkTo(id, cx + 0.5, cy + 0.5);
     const before = back.getHeight(cx, cy);
     /*
      * Six goes, not one.

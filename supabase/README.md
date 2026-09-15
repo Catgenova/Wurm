@@ -80,6 +80,25 @@ ease a hot oven lends to cooking. Every trade a wildermon may be set to is one
 this island knows, and `rpc_unported()` will read you the rest of the list to
 your face.
 
+### Lifting a chest took what was in it
+
+The browser refuses to pick a piece of furniture up for six reasons and this
+island knew one of them. Three of the missing ones were the traces' fault —
+until an hour ago nothing could be hitched to a cart — but two had been here
+since furniture arrived, and they were worse than a missing refusal. `item.placed`
+cascades, so lifting a chest with anything in it *deleted the contents*, and
+lifting a barrel poured the water away without a word.
+
+Found by reading the whole of `pick_up_furniture` while porting `unhitch_team`,
+not by anything failing. Nothing in the suite had ever tried to pick up a full
+chest, because nothing in the suite had any reason to. That is the argument for
+reading the whole of an action rather than the branch you came for.
+
+One of the three is unreachable, and that is faithful too: `Get down off it
+first.` cannot be reached through a wheeled vehicle, because nobody can board
+one without a team in front of it and the team is asked about first. Only a
+hull ever reaches that line.
+
 ### A ridden thing is the ninth that will not sit still, and the only one that settles from a place
 
 Every other thing on this island that moves unwatched moves because a clock
