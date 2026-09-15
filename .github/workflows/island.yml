@@ -129,6 +129,15 @@ jobs:
           npx esbuild supabase/test/landtrip.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/landtrip.mjs --log-level=error
           node node_modules/.cache/landtrip.mjs
+      - name: The island's history lays onto land worked out as it goes
+        run: |
+          # The load-bearing half of a join, and the one the client cannot be
+          # made to do without a network: replaying `tile_change` over a world
+          # that is generated square by square as something asks for it. Get it
+          # wrong and a tree felled an hour ago stands again.
+          npx esbuild supabase/test/replay.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/replay.mjs --log-level=error
+          node node_modules/.cache/replay.mjs
       - name: The island handed over is the island come back to
         run: |
           # Founding uploads what was rolled; joining works the ground out from

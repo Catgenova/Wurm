@@ -1,7 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { World } from '../world/world';
-import type { TileType } from '../world/tiles';
-import { blankWorld, rowsOf } from './landpack';
+import { blankWorld, layChange, rowsOf, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
@@ -44,6 +43,53 @@ const UPLOAD_BATCH = 32;
  * which costs nothing and is allowed to be wrong for a moment.
  */
 const MOVE_EVERY = 1.0;
+
+/**
+ * An answer, read as the rows it was meant to be.
+ *
+ * `?? []` covers an answer of `null` and nothing else, and an answer that is
+ * not a list arrives here more often than it looks: a function whose signature
+ * has moved on, an error object from PostgREST, a proxy putting its own page
+ * in the way. Every one of those used to reach a `for … of` and throw, and a
+ * throw out of an animation frame stops the frames. No rows is the right
+ * reading of anything that is not rows — the island is still the authority,
+ * and a browser that falls over is no use to it.
+ */
+const rowsIn = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
+
+/**
+ * Who is holding a share of a topic that has to be shared.
+ *
+ * One `Island` per page is the only thing that ever ships, and then this is a
+ * map with one entry in it. Two happen in a test that joins again to see what
+ * somebody arriving now would see — and because `supabase-js` hands back one
+ * channel object per name, the second one leaving would otherwise take the
+ * first one's bodies down with it, which is a false negative that looks
+ * exactly like the bug such a test is there to catch.
+ */
+const shares = new Map<string, { channel: RealtimeChannel; users: number }>();
+
+/** Take a share of a shared topic, making the channel if nobody has yet. */
+function hold(topic: string, make: () => RealtimeChannel): RealtimeChannel {
+  const had = shares.get(topic);
+  if (had) {
+    had.users += 1;
+    return had.channel;
+  }
+  const channel = make();
+  shares.set(topic, { channel, users: 1 });
+  return channel;
+}
+
+/** Give a share back, and close the channel when the last one goes. */
+async function drop(topic: string): Promise<void> {
+  const had = shares.get(topic);
+  if (!had) return;
+  had.users -= 1;
+  if (had.users > 0) return;
+  shares.delete(topic);
+  await supabase().removeChannel(had.channel);
+}
 
 export interface WorldRow {
   id: string;
@@ -189,6 +235,12 @@ export class Island {
   private beat: ReturnType<typeof setTimeout> | null = null;
   /** The block of country the channel is listening to, as `rx,ry`. */
   private block = '';
+  /** The island's shared topic we are holding a share of, if any. */
+  private bodiesTopic = '';
+  /** Bodies go on a topic everybody on the island agrees on. */
+  private bodies: RealtimeChannel | null = null;
+  /** Numbers the row topics, so no two subscriptions are ever the same name. */
+  private static topics = 0;
   private lastBody = 0;
   private lastReconcile = 0;
   /** Our pack, kept by row rather than refetched whole on anybody's crafting. */
@@ -307,11 +359,25 @@ export class Island {
      * history a join reads is bounded by how many tiles have ever been touched
      * and not by how many times anybody touched them.
      */
+    /*
+     * The world goes in *before* the replay, not after.
+     *
+     * `applyChange` starts `const w = this.world; if (!w) return;` — so with
+     * the assignment below the loop, every change the replay read was thrown
+     * away in silence. Not one of them has ever been applied at a join since
+     * the land stopped travelling. Realtime worked, which is why nothing
+     * noticed: the changes that arrive *while* you are here land fine, and it
+     * is only the ones from before you arrived that vanish. A tree felled an
+     * hour ago stands again on the next refresh, and the island tells you
+     * there is nothing there to cut down.
+     *
+     * The cursor I removed yesterday was a second lid on the same box.
+     */
+    this.world = world;
     this.seenChange = 0;
     await this.catchUp();
     this.hooks.progress?.(3, 3, 'catching up');
     world.groundTouched = false;
-    this.world = world;
     await this.watch(worldId);
     this.armBeat(HEARTBEAT);
   }
@@ -330,7 +396,7 @@ export class Island {
     if (!this.info) return;
     const { data } = await supabase().from('tile_change').select('*')
       .eq('world_id', this.info.id).gt('n', this.seenChange).order('n');
-    const rows = (data ?? []) as Array<{ n: number; x: number; y: number; tile: number; data: number; corners: number[] }>;
+    const rows = rowsIn<{ n: number; x: number; y: number; tile: number; data: number; corners: number[] }>(data);
     for (const c of rows) this.applyChange(c);
     if (rows.length) this.seenChange = Math.max(this.seenChange, rows[rows.length - 1].n);
   }
@@ -376,11 +442,11 @@ export class Island {
         marks?: { tiles?: number[]; secs?: number } | null;
       };
       this.hooks.mine?.({
-        queue: said.queue ?? [],
+        queue: rowsIn<string>(said.queue),
         cap: said.cap ?? null,
         stats: said.stats ?? null,
         skills: said.skills ?? null,
-        marks: said.marks?.tiles ? { tiles: said.marks.tiles, secs: said.marks.secs ?? 0 } : null,
+        marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
       });
       if (!said.act) this.goes = undefined;
       this.hooks.doing?.({
@@ -430,21 +496,14 @@ export class Island {
    * moving the cursor past a row that arrived here would step over every dig
    * in the rest of the island. `catchUp` owns it.
    */
-  private applyChange(c: { n: number; x: number; y: number; tile: number; data: number; corners: number[]; world_id?: string }): void {
+  private applyChange(c: TileChange & { n: number; world_id?: string }): void {
     const w = this.world;
-    if (!w || !w.inBounds(c.x, c.y)) return;
+    if (!w) return;
     // A block number is a block number on every island, and Realtime takes one
     // filter per subscription. Row level security already refuses rows from an
     // island we are not on; this is the belt behind the braces.
     if (c.world_id && this.info && c.world_id !== this.info.id) return;
-    const k = c.corners;
-    if (Array.isArray(k) && k.length === 4) {
-      w.setHeight(c.x, c.y, k[0]);
-      w.setHeight(c.x + 1, c.y, k[1]);
-      w.setHeight(c.x + 1, c.y + 1, k[2]);
-      w.setHeight(c.x, c.y + 1, k[3]);
-    }
-    w.setTile(c.x, c.y, c.tile as TileType, c.data);
+    if (!layChange(w, c)) return;
     this.hooks.ground(c.x, c.y);
   }
 
@@ -475,12 +534,35 @@ export class Island {
    */
   private async watch(worldId: string): Promise<void> {
     const sb = supabase();
-    this.channel?.unsubscribe();
+    /*
+     * A new name every time, and the old channel thrown away rather than
+     * merely hushed.
+     *
+     * `supabase-js` keeps its channels in a list and hands back the one it
+     * already has for a name, so a topic written down and used twice is one
+     * object used twice. That is three bugs wearing a coat. Asking it to
+     * listen to `postgres_changes` after it has subscribed throws outright —
+     * which is what took the live run down, when a second `Island` in the page
+     * asked for the island's one topic. Where it does not throw it accumulates
+     * instead: walking into a new block bound nine more tile filters onto the
+     * nine already there, until the server's idea of the bindings and the
+     * client's stopped matching and the whole channel was dropped. And
+     * `subscribe()` is a quiet no-op on a channel that has not finished
+     * leaving, so re-listening under the same name could simply never answer.
+     *
+     * None of it can happen to a name that has never been used, and rows do
+     * not need an agreed name: every client filters them for itself.
+     * `removeChannel` is the one that tears the old one down and takes it out
+     * of the list, which `unsubscribe` on its own does not.
+     */
+    const stale = this.channel;
+    this.channel = null;
+    if (stale) void sb.removeChannel(stale);
     const on = `world_id=eq.${worldId}`;
     const here = this.me ?? { x: 0, y: 0 };
     const blocks = this.blocksAround(here.x, here.y);
     this.block = `${Math.floor(here.x / REGION)},${Math.floor(here.y / REGION)}`;
-    let listening = sb.channel(`island:${worldId}`, { config: { broadcast: { self: false } } });
+    let listening = sb.channel(`rows:${worldId}:${(Island.topics += 1)}`, { config: { broadcast: { self: false } } });
     for (const b of blocks) {
       listening = listening.on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'tile_change', filter: `region=eq.${b}` },
@@ -502,13 +584,31 @@ export class Island {
             else this.pack.delete(it.id);
           }
           this.hooks.pack([...this.pack.values()]);
-        })
-      .on('broadcast', { event: 'body' }, (m) => {
+        });
+
+    /*
+     * Bodies, on the one name everybody on the island agrees on.
+     *
+     * This is the opposite case to the rows above and for the same reason:
+     * Broadcast only reaches people listening to the same topic, so it *has*
+     * to be shared, and the block we are standing in has nothing to do with
+     * it. Taken once at the join and held until we leave.
+     */
+    if (!this.bodies) {
+      this.bodiesTopic = `island:${worldId}`;
+      this.bodies = hold(this.bodiesTopic, () =>
+        sb.channel(this.bodiesTopic, { config: { broadcast: { self: false } } }));
+      this.bodies.on('broadcast', { event: 'body' }, (m) => {
+        // A channel shared with another `Island` in the same page goes on
+        // carrying bodies after we have left it; they are not ours any more.
+        if (!this.bodies) return;
         const b = (m as { payload?: PlayerRow }).payload;
         if (!b?.uid || b.uid === this.uid) return;
         this.people.set(b.uid, { ...(this.people.get(b.uid) ?? b), ...b });
         this.hooks.people([...this.people.values()]);
       });
+      this.bodies.subscribe();
+    }
 
     // Realtime authorises against the signed-in user's token; make sure it has
     // the current one rather than whatever it started life with.
@@ -575,7 +675,7 @@ export class Island {
     if (!this.info || !this.hooks.mobs || now - this.lastMobs < MOBS_EVERY) return;
     this.lastMobs = now;
     const { data } = await supabase().rpc('rpc_creatures', { p_world: this.info.id, p_range: MOBS_RANGE });
-    this.hooks.mobs((data ?? []) as IslandCreature[]);
+    this.hooks.mobs(rowsIn<IslandCreature>(data));
   }
 
   async refreshPeople(): Promise<void> {
@@ -583,7 +683,7 @@ export class Island {
     const { data } = await supabase().from('player').select('*')
       .eq('world_id', this.info.id).eq('away', false);
     this.people.clear();
-    for (const p of (data ?? []) as PlayerRow[]) {
+    for (const p of rowsIn<PlayerRow>(data)) {
       this.people.set(p.uid, p);
       if (p.uid === this.uid) this.me = p;
     }
@@ -603,7 +703,7 @@ export class Island {
     const { data } = await supabase().from('item').select('*')
       .eq('world_id', this.info.id).eq('holder', 'player').eq('holder_uid', this.uid);
     this.pack.clear();
-    for (const it of (data ?? []) as ItemRow[]) this.pack.set(it.id, it);
+    for (const it of rowsIn<ItemRow>(data)) this.pack.set(it.id, it);
     this.hooks.pack([...this.pack.values()]);
   }
 
@@ -630,9 +730,9 @@ export class Island {
      * subscriber every second — the single largest thing on the bill, and it
      * was people walking rather than people digging.
      */
-    if (said !== this.lastSaid && now - this.lastBody >= BODY_EVERY && this.channel) {
+    if (said !== this.lastSaid && now - this.lastBody >= BODY_EVERY && this.bodies) {
       this.lastBody = now;
-      void this.channel.send({
+      void this.bodies.send({
         type: 'broadcast', event: 'body',
         payload: { uid: this.uid, name: this.me?.name ?? '', x, y, level, look: this.me?.look, act: this.me?.act ?? null },
       });
@@ -682,7 +782,11 @@ export class Island {
   async leave(): Promise<void> {
     if (this.beat) clearTimeout(this.beat);
     this.beat = null;
-    await this.channel?.unsubscribe();
+    const sb = supabase();
+    if (this.channel) await sb.removeChannel(this.channel);
     this.channel = null;
+    this.bodies = null;
+    await drop(this.bodiesTopic);
+    this.bodiesTopic = '';
   }
 }

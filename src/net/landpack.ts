@@ -16,6 +16,48 @@ import { World } from '../world/world';
  */
 const LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
+/**
+ * One tile the island says changed, as the row comes off `tile_change`.
+ *
+ * The same shape whether it arrives in a join's replay or a moment later on
+ * the channel, because it is the same row read two ways.
+ */
+export interface TileChange {
+  x: number;
+  y: number;
+  tile: number;
+  data: number;
+  /** The square's four corner heights, clockwise from its own corner. */
+  corners: number[];
+}
+
+/**
+ * Lay a change onto the land.
+ *
+ * Out here rather than inside the client because it is the load-bearing half
+ * of a join and the client cannot be made to do one without a network. What it
+ * has to survive is the world being *worked out as it goes*: a change on a
+ * square nobody has generated yet must not be laid under ground that arrives
+ * afterwards and wipes it. It is not: `setHeight` and `setTile` both call
+ * `ensure` first, so the square is worked out from the seed and then written
+ * over, in that order, and the square is marked done and never made twice.
+ *
+ * Says whether the tile is inside the island at all, so a caller can tell a
+ * change it dropped from one it applied.
+ */
+export function layChange(world: World, c: TileChange): boolean {
+  if (!world.inBounds(c.x, c.y)) return false;
+  const k = c.corners;
+  if (Array.isArray(k) && k.length === 4) {
+    world.setHeight(c.x, c.y, k[0]);
+    world.setHeight(c.x + 1, c.y, k[1]);
+    world.setHeight(c.x + 1, c.y + 1, k[2]);
+    world.setHeight(c.x, c.y + 1, k[3]);
+  }
+  world.setTile(c.x, c.y, c.tile as Parameters<World['setTile']>[2], c.data);
+  return true;
+}
+
 export interface LandRow {
   y: number;
   heights: string;

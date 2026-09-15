@@ -191,12 +191,42 @@ export class World {
   }
 
   /**
-   * One square, worked out and laid into the full arrays.
+   * Whether a corner on this square's edge belongs to a square already made.
    *
-   * The corner planes are one wider than the tile planes, so a square writes
-   * the corners on its far edges as well — the same values its neighbour will
-   * write when its turn comes, which is why the overlap costs nothing and
-   * needs no bookkeeping.
+   * The corner planes are one wider than the tile planes, so every square
+   * writes the corners along its far edges too — the same corners its
+   * neighbours write. While the only thing writing them was the generator that
+   * overlap cost nothing, because both sides wrote the same number.
+   *
+   * It stopped being free the moment a join started replaying the island's
+   * history onto the land. A dig writes four corners; two of them may sit on
+   * the edge of the next square along. If that square is worked out *later* —
+   * because somebody dug there later, or simply walked that way — it lays the
+   * generated ground back over them, and the hole gets a seam down one side.
+   *
+   * So a corner is written by the first square that reaches it and left alone
+   * by the rest: whoever got there first may have been written over since, and
+   * what is on the ground now is the island's answer, not the seed's. Up to
+   * four squares touch a corner, hence the pair of candidates each way.
+   */
+  private cornerTaken(gx: number, gy: number, cx: number, cy: number): boolean {
+    const r = this.ready;
+    if (!r) return false;
+    const i0 = gx % CHUNK === 0 ? gx / CHUNK - 1 : (gx / CHUNK) | 0;
+    const j0 = gy % CHUNK === 0 ? gy / CHUNK - 1 : (gy / CHUNK) | 0;
+    for (let j = j0; j <= j0 + 1; j++) {
+      if (j < 0 || j >= this.down) continue;
+      for (let i = i0; i <= i0 + 1; i++) {
+        if (i < 0 || i >= this.across) continue;
+        if (i === cx && j === cy) continue;
+        if (r[j * this.across + i] === 1) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * One square, worked out and laid into the full arrays.
    */
   private grow(cx: number, cy: number): void {
     const source = this.source;
@@ -214,7 +244,11 @@ export class World {
     for (let y = 0; y <= h; y++) {
       const from = y * (w + 1);
       const to = (y0 + y) * this.cw + x0;
+      const edge = y === 0 || y === h;
       for (let x = 0; x <= w; x++) {
+        // Only the corners along the four edges are anybody else's, and only
+        // those are worth asking about.
+        if ((edge || x === 0 || x === w) && this.cornerTaken(x0 + x, y0 + y, cx, cy)) continue;
         const v = win.heights[from + x];
         this.heights[to + x] = v;
         this.dirt[to + x] = win.dirt[from + x];
