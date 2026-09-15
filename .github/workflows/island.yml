@@ -71,6 +71,30 @@ jobs:
             exit 1
           fi
           echo "no migrations removed"
+      - name: No migration has been added out of order
+        run: |
+          # Append-only is not only about editing: a migration added *before*
+          # one the project has already run is one the CLI will refuse to push
+          # ("Found local migration files to be inserted before the last
+          # migration on remote database"). The generated definitions carry a
+          # wall-clock stamp and the hand-written ones carry one chosen by
+          # hand, so the two can cross. Caught here, it is a rename away from
+          # fixed; caught at the project, it is a failed deploy.
+          last=$(git ls-tree -r --name-only HEAD~1 -- supabase/migrations/ \
+                 | xargs -r -n1 basename | sort | tail -1)
+          added=$(git diff --diff-filter=A --name-only HEAD~1 HEAD -- supabase/migrations/ \
+                  | xargs -r -n1 basename | sort)
+          bad=""
+          for m in $added; do
+            [ -z "$last" ] && break
+            if [ "$m" \< "$last" ]; then bad="$bad $m"; fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::These migrations sort before '$last', which the project may already have run:$bad"
+            echo "::error::Rename them to a later timestamp before they reach the project."
+            exit 1
+          fi
+          echo "nothing added out of order (latest before this commit: ${last:-none})"
       - name: The definitions are still what the TypeScript says
         run: |
           npm run defs
@@ -112,7 +136,14 @@ jobs:
           supabase link --project-ref "$PROJECT_REF"
           # What is about to change, before it changes.
           supabase migration list --linked
-          supabase db push
+          # `--include-all` because a migration can be *added* out of order
+          # even though none is ever edited or renamed: the generated
+          # definitions are stamped with the wall clock and the hand-written
+          # ones are stamped by hand, and the two clocks are not the same
+          # clock. The guard in `rules` is what makes this safe — it refuses a
+          # commit that adds a migration sorting before one already in the
+          # tree, so anything the CLI would slot in early has been checked.
+          supabase db push --include-all
           supabase migration list --linked
 
   smoke:

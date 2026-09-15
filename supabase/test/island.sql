@@ -2901,3 +2901,142 @@ update placed set litres = 30, liquid = 'water', since = now() where id = :'tun'
 select '472. and a barrel with ' || round(placed_litres((select p from placed p where p.id = :'tun'))::numeric)
      || ' litres of water in it: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
         ('{"kind":"furniture","id":' || :'tun' || '}')::jsonb), 'allowed');
+
+\echo ''
+\echo '--- an altar, and three ways of looking at all this'
+delete from placed where world_id = :'world2' and kind = 'furniture';
+delete from creature where world_id = :'world2';
+delete from deed where world_id = :'world2';
+update player set x = 5.5, y = 7.5, favour = 0, favour_at = now(), prayed_at = null,
+    sat_at = null, way = null, used_at = '{}'::jsonb, wounds = '[]'::jsonb
+  where world_id = :'world2' and uid = :'ivar';
+delete from skill where world_id = :'world2' and uid = :'ivar' and id in ('prayer', 'meditation');
+select '473. what a prayer buys: ' || (select string_agg(name || ' (' || cost || ' favour at prayer '
+       || level || ', on ' || on_what || ')', ', ' order by level) from cast_def);
+select '474. and the three ways: ' || (select string_agg(d.name || ' — ' ||
+       (select string_agg(s.name, ', ' order by s.n) from path_step s where s.path = d.id),
+       ' | ' order by d.id) from path_def d);
+select '475. nothing to kneel at: ' || coalesce(act_refusal(:'world2', :'ivar', 'pray',
+       '{"kind":"furniture","id":0}'::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'altar', 1, 70) \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'altar' order by id desc limit 1) || ',"x":5,"y":7,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as altar from placed where world_id = :'world2' and sub = 'altar' order by id desc limit 1 \gset
+-- A second one, unplaced, so there is something to look at as well as kneel at.
+select give(:'world2', :'ivar', 'altar', 1, 70) \g /dev/null
+/*
+ * An altar is one of eighteen things this game can make and had no definition
+ * for — seventeen moulds and this. The browser calls it `altar` and gives it a
+ * kilo, because `itemDef` hands back a fallback for anything it has not heard
+ * of; down here a missing row was a null, and a null in a sentence is a null
+ * all the way out. The rows are generated now, from the browser's own fallback.
+ */
+select '476. eighteen things with no definition behind them, now: '
+     || (select count(*) from (select r.result as id from recipe r left join item_def d
+         on d.id = r.result where d.id is null union select i.item from recipe_input i
+         left join item_def d2 on d2.id = i.item where d2.id is null) z)
+     || ' — and a spare altar in the pack says: '
+     || coalesce(examine_item_text(:'world2', :'ivar', (select i from item i
+        where i.world_id = :'world2' and i.holder_uid = :'ivar' and i.def = 'altar'
+        order by i.id desc limit 1)), 'nothing at all');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pray', ('{"kind":"furniture","id":' || :'altar' || '}')::jsonb) \g /dev/null
+select '477. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — a QL 70 altar at ' || round(hour_of_day(:'world2')::numeric, 1) || ' o''clock is worth '
+     || round(prayer_worth(70, hour_of_day(:'world2'), 0)::numeric, 1)
+     || ', where dawn would be worth ' || round(prayer_worth(70, 6, 0)::numeric, 1);
+select '478. and again today: ' || coalesce(act_refusal(:'world2', :'ivar', 'pray',
+       ('{"kind":"furniture","id":' || :'altar' || '}')::jsonb), 'allowed');
+-- Favour is a well: a rate, a ceiling, and a note of when anybody last looked.
+update player set favour = 4, favour_at = now() - interval '1 hour'
+  where world_id = :'world2' and uid = :'ivar';
+select '479. four favour and an hour nobody looked: ' || round(favour_settle(:'world2', :'ivar')::numeric, 1)
+     || ' — it fills at ' || favour_trickle() || ' a second up to '
+     || round(favour_cap(skill_of(:'world2', :'ivar', 'prayer'))::numeric, 1)
+     || ', which is what this much faith carries';
+select '480. calling for something beyond us: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast',
+       '{"kind":"item","spell":"bounty"}'::jsonb), 'allowed');
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'prayer', 40)
+  on conflict (world_id, uid, id) do update set value = 40;
+update player set favour = 100, favour_at = now() where world_id = :'world2' and uid = :'ivar';
+select id as issued from item where world_id = :'world2' and holder_uid = :'ivar' and issued limit 1 \gset
+select '481. the circle on something we washed ashore with: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'cast', ('{"kind":"item","spell":"cunning","uid":' || :'issued' || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'hatchet', 1, 50, 'Steel') as made \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'cast',
+  ('{"kind":"item","spell":"cunning","uid":' || :'made' || '}')::jsonb) \g /dev/null
+select '482. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — a steel hatchet at QL 50 was worth ' || round(tool_worth(50, 0, 'Steel', null, 0)::numeric, 1)
+     || ' to work with and is now worth ' || round(tool_worth(50, 0, 'Steel', null, 1)::numeric, 1);
+update item set bless = 3 where id = :'made';
+update player set favour = 100, favour_at = now() where world_id = :'world2' and uid = :'ivar';
+select '483. and a fourth time: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast',
+       ('{"kind":"item","spell":"cunning","uid":' || :'made' || '}')::jsonb), 'allowed')
+     || ' — mending a thing with nothing wrong with it: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'cast',
+        ('{"kind":"item","spell":"mend","uid":' || :'made' || '}')::jsonb), 'allowed');
+
+-- The rug, and what comes of sitting on it.
+select '484. sitting with nothing to sit on: ' || coalesce(act_refusal(:'world2', :'ivar', 'meditate',
+       '{"kind":"tile","x":5,"y":7}'::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'rug', 1, 40) \g /dev/null
+select '485. where you sit is most of it: ' || (select said from sitting_worth(:'world2', :'ivar'))
+     || ' — worth ' || round((select gain from sitting_worth(:'world2', :'ivar'))::numeric, 2);
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'meditate', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
+select '486. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — and again today: ' || coalesce(act_refusal(:'world2', :'ivar', 'meditate',
+        '{"kind":"tile","x":5,"y":7}'::jsonb), 'allowed');
+select '487. choosing before it is clear: ' || coalesce(act_refusal(:'world2', :'ivar', 'choose_path',
+       '{"kind":"tile","material":"love"}'::jsonb), 'allowed');
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 5)
+  on conflict (world_id, uid, id) do update set value = 5;
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'choose_path', '{"kind":"tile","material":"love"}'::jsonb) \g /dev/null
+select '488. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '489. and choosing again: ' || coalesce(act_refusal(:'world2', :'ivar', 'choose_path',
+       '{"kind":"tile","material":"power"}'::jsonb), 'allowed');
+-- Sitting until the path opens out. Each step announces itself as it arrives.
+update player set sat_at = null where world_id = :'world2' and uid = :'ivar';
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 11.6)
+  on conflict (world_id, uid, id) do update set value = 11.6;
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'meditate', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
+select '490. ' || coalesce((select string_agg(text, ' | ' order by n) from event
+       where uid = :'ivar' and kind = 'system'), 'nothing opened out');
+select '491. calling on something nobody taught us: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'use_ability', '{"kind":"tile","material":"fury"}'::jsonb), 'allowed');
+update player set stats = jsonb_set(jsonb_set(stats, '{hunger}', '0.2'), '{thirst}', '0.1')
+  where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'use_ability', '{"kind":"tile","material":"refresh"}'::jsonb) \g /dev/null
+select '492. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — hunger ' || (select round((stats->>'hunger')::numeric, 1) from player
+        where world_id = :'world2' and uid = :'ivar')
+     || ', and again: ' || coalesce(act_refusal(:'world2', :'ivar', 'use_ability',
+        '{"kind":"tile","material":"refresh"}'::jsonb), 'allowed');
+/*
+ * And what a path is worth where the island already does the arithmetic. Three
+ * of the fifteen steps are a row and nothing else — carrying weight, the reach
+ * of sight, and what armour turns — because none of the three is computed
+ * anywhere down here to multiply.
+ */
+select creature_spawn(:'world2', 'rabba', 5.7, 7.7, 'wild', now() - interval '1 day') as bun \gset
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 25)
+  on conflict (world_id, uid, id) do update set value = 25;
+select round((tame_chance(:'world2', :'ivar', (select c from creature c where c.id = :'bun')) * 100)::numeric)
+  as with_love \gset
+update player set way = null where world_id = :'world2' and uid = :'ivar';
+select round((tame_chance(:'world2', :'ivar', (select c from creature c where c.id = :'bun')) * 100)::numeric)
+  as without \gset
+update player set way = 'love' where world_id = :'world2' and uid = :'ivar';
+select '493. what the path is worth, the same body either way: a rabba would trust him '
+     || :'with_love' || ' times in a hundred with Gentle hand behind him and '
+     || :'without' || ' without it'
+     || ' — and ' || (select count(*) from path_step where ability is not null)
+     || ' of the fifteen steps are called on rather than simply true, the rest being true all the time';
+select '494. the five that came with it: '
+     || (select string_agg(id, ', ' order by id) from action_def where faith_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));

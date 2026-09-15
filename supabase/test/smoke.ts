@@ -262,6 +262,37 @@ async function main(): Promise<void> {
       !walkErr && !!got && !got.pulled,
       walkErr ? walkErr.message : got ? `${got.x.toFixed(1)}, ${got.y.toFixed(1)}${got.pulled ? ' — pulled back' : ''}` : 'nothing came back');
 
+    /*
+     * An altar and the three paths, which need a stone table and a rug and so
+     * cannot be played from out here. What reaches this far is the rulebook
+     * behind them and the two refusals in front.
+     */
+    const { data: casts, error: castErr } = await supabase().from('cast_def').select('id,name,cost,level');
+    const spells = (casts ?? []) as Array<{ name: string; cost: number; level: number }>;
+    check('what a prayer buys is on the project', !castErr && spells.length === 6,
+      castErr ? castErr.message : spells.map((c) => `${c.name} ${c.cost}@${c.level}`).join(', '));
+    const { data: steps, error: stepErr } = await supabase().from('path_step').select('path,n,at,ability');
+    const rungs = (steps ?? []) as Array<{ path: string; ability: string | null }>;
+    check('and the three ways of looking at it', !stepErr && rungs.length === 15,
+      stepErr ? stepErr.message
+        : `${new Set(rungs.map((w) => w.path)).size} paths, ${rungs.length} steps, ${rungs.filter((w) => w.ability).length} of them called on`);
+    const noAltar = await island.act('pray', { kind: 'furniture', id: 1 }, 1);
+    check('praying at an altar that is not there is refused in its own words',
+      !noAltar.started && /gone/i.test(noAltar.why ?? ''), noAltar.why ?? 'IT STARTED');
+    const noRug = await island.act('meditate', { kind: 'tile', ...here }, 1);
+    check('and sitting with nothing to sit on', !noRug.started && /rug/i.test(noRug.why ?? ''),
+      noRug.why ?? 'IT STARTED');
+
+    /*
+     * Eighteen things this game can make and had no definition for — seventeen
+     * moulds and an altar. The browser hands back a fallback for anything it
+     * has not heard of; down here a missing row was a null all the way out.
+     */
+    const { data: mould } = await supabase().from('item_def').select('id,name,weight').eq('id', 'altar').single();
+    const alt = mould as { name: string; weight: number } | null;
+    check('and a thing the browser only had a fallback for has a row', !!alt,
+      alt ? `altar: "${alt.name}", ${alt.weight} kg` : 'still nothing');
+
     const { data: slabs, error: slabErr } = await supabase().from('slab_def').select('id,item');
     check('the four stones a slab is cut from are on the project',
       !slabErr && (slabs ?? []).length === 4,

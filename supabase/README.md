@@ -51,11 +51,12 @@ simplification rather than a problem:
 | **3** | what the old people left in the ground: investigated, put back together, and a book worked through |
 | **6** | traps: a snare set, baited, emptied and lifted; a creel sunk and turned out; and whatever is in one let go |
 | **11** | a saddle and a set of traces: tack fitted and stripped, a rider up and down, a beast into the yokes and out, the shafts of a cart taken up and let go, a seat boarded and left, and the whole team unhitched at once |
+| **5** | an altar and the three paths: a prayer knelt, six things favour buys, a sitting, a path chosen once, and six abilities called on |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **15** | known, listed, and honestly refused |
+| **10** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -74,11 +75,81 @@ being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), sowing a field from a
-worker's own cheeks, breeding and pairing, faith and the paths, bridges,
-dyeing, brewing, the ledger, the journal, sleeping the night through, and the
-ease a hot oven lends to cooking. Every trade a wildermon may be set to is one
-this island knows, and `rpc_unported()` will read you the rest of the list to
-your face.
+worker's own cheeks, breeding and pairing, bridges, dyeing, brewing, the
+ledger, the journal, sleeping the night through, making a home of somewhere,
+and the ease a hot oven lends to cooking. Every trade a wildermon may be set to
+is one this island knows, and `rpc_unported()` will read you the rest of the
+list to your face.
+
+### Eighteen things the game can make and had no name for
+
+Seventeen moulds and an altar. The browser never notices, because `itemDef()`
+hands back `{ name: id, category: 'misc', weight: 1 }` for anything it has not
+heard of — so a mould is called `arrow_head_mould` on screen and weighs a kilo,
+which is wrong and harmless.
+
+Down here it is neither. A missing row is a null, and a null in a concatenation
+is a null all the way out: `item_name` of a mould was null, and the action that
+tried to say its name died on a not-null constraint rather than saying
+anything. That is exactly the bug the starting kit's `knife` caused, arriving
+for the eighteenth time.
+
+The fix is not another `coalesce` in another accessor. It is the row. The
+browser's own fallback is now generated for every recipe result and every
+recipe input that `ITEM_DEFS` has no entry for, so every lookup on this island
+finds something the way every lookup in the browser does — and if a
+nineteenth appears, it will be generated too rather than found by a crash.
+
+### Favour is a well, and a rest is not a thing that ticks
+
+Favour comes back on its own at four thousandths a second, up to what your
+faith will carry, and stops there. A rate, a ceiling, and a note of when
+anybody last looked: `favour_settle` does for a body exactly what `well_settle`
+does for a hole in the ground. It is the tenth thing on this island that will
+not sit still, and the easiest of them, because it only ever goes up.
+
+The rest of the faith and the paths needed no machinery at all, which is worth
+saying out loud after nine families that did. A prayer is worth nothing again
+for most of an island day; a sitting the same; every ability has its own wait.
+In the browser each of those is a number compared against a running clock,
+because there is a loop to run it. Down here they are timestamps, and "may I do
+this again" is `now() - prayed_at > prayer_rest()`. Nothing settles, nothing is
+rolled forward, and the whole of the mechanism is a column.
+
+### A path with no effect behind it is a path nobody walks
+
+`walks(path, n)` answers whether somebody has the nth step of a path behind
+them, and five of the passive effects are wired to it: what a wild thing will
+trust, how fast a field comes on, what a harvest gives, how quickly work
+teaches, and what a blow lands.
+
+Three are not, and are named rather than quietly skipped — carrying weight
+(`power 1`), the reach of sight (`knowledge 5`), and how much of a blow armour
+turns (`power 5`). None of the three is computed anywhere on this island: not
+half-computed, not approximated, absent. There is nothing to multiply.
+
+The field is the odd one of the five. A crop grows for whoever founded the
+ground it is in, not for whoever is looking at it, so `crop_settle` asks the
+*deed's founder* whether they walk love — the one effect of a path that belongs
+to somebody who is not here.
+
+### A migration can be appended out of order
+
+Append-only turned out to be two rules, and the repository only knew one of
+them. Nothing is ever edited or renamed, which CI has guarded from the start.
+But a migration can be *added* with a timestamp earlier than one the project
+has already run, and the CLI refuses that too: "Found local migration files to
+be inserted before the last migration on remote database."
+
+It happened because the two stamps come from two clocks. The generated
+definitions are named by the wall clock at the moment `npm run defs` runs; the
+hand-written ones are named by hand. Write the migrations first and generate
+the definitions after, and the generated one lands *behind* them.
+
+There is now a guard for it in `rules`, which is a rename away from fixed when
+it fires, where the same thing at the project is a failed deploy. The push
+carries `--include-all`, which is safe precisely because that guard has already
+refused anything the CLI would have to slot in early.
 
 ### Lifting a chest took what was in it
 

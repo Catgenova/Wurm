@@ -41,6 +41,8 @@ import { WORMY, RICH_WORMS } from '../src/game/actions';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
+import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
+import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 
@@ -254,6 +256,24 @@ out.push(`create table if not exists boat_def (
 );`);
 /* What has to be fitted before anything can be ridden. */
 out.push(`create table if not exists tack_def (ord int primary key, item text not null);`);
+/*
+ * What a prayer buys, and the three ways of looking at the island.
+ *
+ * A path's steps are a table rather than a list in a function because the
+ * only thing ever asked of them is "how many of these are behind you" and
+ * "which of them is called on by this name" — both of which are a `where`.
+ */
+out.push(`create table if not exists cast_def (
+  id text primary key, name text not null, cost real not null, level real not null,
+  on_what text not null, note text not null
+);`);
+out.push(`create table if not exists path_def (
+  id text primary key, name text not null, note text not null
+);`);
+out.push(`create table if not exists path_step (
+  path text not null, n int not null, at real not null, name text not null, note text not null,
+  ability text, rest real, said text, primary key (path, n)
+);`);
 /* Which full bucket carries which liquid, and which empty one it leaves. */
 out.push(`create table if not exists vessel_def (
   item text primary key, liquid text not null, empty text not null
@@ -426,6 +446,28 @@ out.push('');
 out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def;');
 out.push('');
 
+/*
+ * Eighteen things this game can make and has no definition for: seventeen
+ * moulds and the altar. The browser does not notice, because `itemDef()` hands
+ * back `{ name: id, category: 'misc', weight: 1 }` for anything it has never
+ * heard of — so a mould is called `arrow_head_mould` on screen and weighs a
+ * kilo, which is wrong and harmless.
+ *
+ * Down here it is neither. A missing row is a null, and a null in a
+ * concatenation is a null all the way out: `item_name` of a mould was null,
+ * and the action that tried to say its name died on a not-null constraint
+ * rather than saying anything at all. That is the same bug the starting kit's
+ * `knife` caused, and the fix is not another `coalesce` in another accessor —
+ * it is the row. The browser's own fallback, written down, so that every
+ * lookup on this island finds something the way every lookup in the browser
+ * does.
+ */
+const NAMED = new Set(Object.keys(ITEM_DEFS));
+const unnamed = new Set<string>();
+for (const r of RECIPES) {
+  if (!NAMED.has(r.result)) unnamed.add(r.result);
+  for (const i of r.inputs) if (i.item && !NAMED.has(i.item)) unnamed.add(i.item);
+}
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
   out.push(`insert into item_def values (${q(id)}, ${q(d.name)}, ${q(d.category)}, ${q(d.weight)}, ${q(!!d.stackable)}, ${q(d.decay)}, ${q(d.charges)});`);
 }
@@ -503,7 +545,7 @@ out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
-  vehicle_def, boat_def, tack_def;`);
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -522,6 +564,9 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.draught) out.push(`update species_def set draught = true where id = ${q(d.id)};`);
   if (d.swims) out.push(`update species_def set swims = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
+}
+for (const id of [...unnamed].sort()) {
+  out.push(`insert into item_def values (${q(id)}, ${q(id)}, 'misc', 1, false, null, null);`);
 }
 for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plantable values (${q(t)});`);
 /*
@@ -603,6 +648,14 @@ for (const a of Object.values(AGES)) {
 // The two loose numbers, as functions rather than a row with no table to be in.
 out.push(`create or replace function monster_share() returns double precision language sql immutable as $fn$ select ${q(MONSTER_SHARE)}::double precision $fn$;`);
 out.push(`create or replace function trait_slots() returns int language sql immutable as $fn$ select ${q(TRAIT_SLOTS)} $fn$;`);
+/* What a prayer is worth and what it takes; what a sitting is worth and how often. */
+for (const [fn, v] of [
+  ['favour_trickle', FAVOUR_TRICKLE], ['prayer_favour', PRAYER_FAVOUR], ['prayer_rest', PRAYER_REST],
+  ['favour_ceiling', FAVOUR_CEILING], ['bless_cap', BLESS_CAP], ['bless_step', BLESS_STEP],
+  ['choose_at', CHOOSE_AT], ['sit_rest', SIT_REST],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
 }
@@ -662,6 +715,15 @@ for (const f of FURNITURE as unknown as A[]) {
   if (b) out.push(`insert into boat_def values (${q(f.id)}, ${q(b.speed)}, ${q(b.draught)}, ${q(b.seat)}, ${q(!!b.sail)});`);
 }
 TACK.forEach((id, ord) => out.push(`insert into tack_def values (${q(ord)}, ${q(id)});`));
+for (const c of CASTS) {
+  out.push(`insert into cast_def values (${q(c.id)}, ${q(c.name)}, ${q(c.cost)}, ${q(c.level)}, ${q(c.on)}, ${q(c.note)});`);
+}
+for (const path of PATH_LIST) {
+  out.push(`insert into path_def values (${q(path.id)}, ${q(path.name)}, ${q(path.note)});`);
+  path.steps.forEach((step, n) => out.push(`insert into path_step values (` + [
+    q(path.id), q(n + 1), q(step.at), q(step.name), q(step.note),
+    q(step.ability?.id ?? null), q(step.ability?.rest ?? null), q(step.ability?.note ?? null)].join(', ') + `);`));
+}
 for (const r of RECIPES) {
   out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +
     [q(r.id), q(r.result), q(r.count ?? 1), q(r.tool), q(r.station), q(r.skill), q(r.label), q(r.verb),
