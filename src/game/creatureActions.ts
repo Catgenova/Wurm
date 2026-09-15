@@ -462,6 +462,11 @@ export const CREATURE_ACTIONS: ActionDef[] = [
   },
   {
     id: 'rename_creature',
+    asks: {
+      question: 'What should it answer to?',
+      fallback: (t, g) => creatureOf(g, t)?.name ?? '',
+      max: 24,
+    },
     label: 'Rename',
     verb: 'renaming',
     instant: true,
@@ -474,9 +479,9 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
-      const name = g.hooks.prompt('Name it', c.name);
-      if (name === null || !name.trim()) return;
-      c.name = name.trim().slice(0, 24);
+      const name = ((t as { name?: string }).name ?? '').trim();
+      if (!name) return;
+      c.name = name.slice(0, 24);
       g.logMsg(`It answers to ${c.name} now.`, 'info');
     },
   },
@@ -662,6 +667,19 @@ export const CREATURE_ACTIONS: ActionDef[] = [
   },
   {
     id: 'release_creature',
+    /*
+     * Asked before it happens rather than inside `perform`, which on an island
+     * is the island's half — so letting a supreme-blooded wildermon go asked
+     * nobody anything at all over there.
+     */
+    confirms: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return null;
+      const tier = bestTier(c.traits);
+      return tier === 'supreme' || tier === 'fantastic'
+        ? `${c.name} carries ${tier} blood: ${traitList(c.traits)}. Release it back into the wild? You will not get that back.`
+        : `Release ${c.name} back into the wild?`;
+    },
     label: 'Release',
     verb: 'releasing',
     instant: true,
@@ -674,13 +692,6 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
-      // Blood takes generations to build and a moment to walk away.
-      const tier = bestTier(c.traits);
-      const worth = tier === 'supreme' || tier === 'fantastic';
-      const ask = worth
-        ? `${c.name} carries ${tier} blood: ${traitList(c.traits)}. Release it back into the wild? You will not get that back.`
-        : `Release ${c.name} back into the wild?`;
-      if (!g.hooks.confirm(ask)) return;
       if (c.mode === 'stored' && g.deed) {
         c.x = g.deed.x + 0.5;
         c.y = g.deed.y + 1.5;

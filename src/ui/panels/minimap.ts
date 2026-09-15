@@ -139,9 +139,9 @@ export class MinimapPanel {
   }
 
   /** Ask for a name and pin it to a tile. An empty answer drops nothing. */
-  private drop(x: number, y: number): void {
+  private async drop(x: number, y: number): Promise<void> {
     if (!this.game.world.inBounds(x, y)) return;
-    const said = this.game.hooks.prompt(`Name this spot (${x}, ${y}):`, '');
+    const said = await this.game.hooks.prompt(`Name this spot (${x}, ${y}):`, '');
     if (said === null) return;
     this.game.addMark(x, y, said);
     this.listMarks();
@@ -176,12 +176,12 @@ export class MinimapPanel {
       const away = Math.round(Math.hypot(m.x - g.player.x, m.y - g.player.y));
       name.textContent = m.name;
       name.title = `(${m.x}, ${m.y}), ${away} tiles off. Click to rename.`;
-      name.addEventListener('click', () => {
-        const said = g.hooks.prompt('What is this spot called?', m.name);
+      name.addEventListener('click', () => void (async () => {
+        const said = await g.hooks.prompt('What is this spot called?', m.name);
         if (said === null) return;
         g.renameMark(m.id, said);
         this.listMarks();
-      });
+      })());
       const dist = document.createElement('span');
       dist.className = 'map-mark-away';
       dist.textContent = `${away}`;

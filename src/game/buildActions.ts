@@ -64,18 +64,19 @@ export const BUILD_ACTIONS: ActionDef[] = [
     label: 'Plan building',
     verb: 'planning a building',
     hidden: true,
+    asks: {
+      question: 'What is the building called?',
+      fallback: () => 'House',
+      declined: 'You put the mallet away without planning anything.',
+    },
     stamina: 0.02,
     baseTime: 3,
     applies: (t, g) => isTile(t) && !g.buildings.buildingAt(t.x, t.y),
     check: (t, g) => (isTile(t) ? (needTool(g, 'mallet') ?? g.planReason(t.x, t.y)) : null),
     perform: (t, g) => {
       if (!isTile(t)) return;
-      const name = g.hooks.prompt('Name the building', 'House');
-      if (name === null) {
-        g.logMsg('You put the mallet away without planning anything.', 'info');
-        return;
-      }
-      const b = g.buildings.create(name.trim().slice(0, 32) || 'House', t.x, t.y);
+      const name = ((t as { name?: string }).name ?? '').trim();
+      const b = g.buildings.create(name.slice(0, 32) || 'House', t.x, t.y);
       g.logMsg(`You plan ${b.name} here. Extend it onto neighbouring flat packed tiles, then plan walls on its borders.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -431,6 +432,10 @@ export const BUILD_ACTIONS: ActionDef[] = [
   },
   {
     id: 'rename_building',
+    asks: {
+      question: 'What should the building be called?',
+      fallback: (t, g) => (isTile(t) ? buildingOf(g, t)?.name ?? '' : ''),
+    },
     label: 'Rename building',
     verb: 'renaming',
     hidden: true,
@@ -442,9 +447,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!isTile(t)) return;
       const b = buildingOf(g, t);
       if (!b) return;
-      const name = g.hooks.prompt('Rename the building', b.name);
-      if (name === null || !name.trim()) return;
-      b.name = name.trim().slice(0, 32);
+      const name = ((t as { name?: string }).name ?? '').trim();
+      if (!name) return;
+      b.name = name.slice(0, 32);
       g.logMsg(`The building is now called ${b.name}.`, 'event');
     },
   },

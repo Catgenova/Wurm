@@ -37,6 +37,7 @@ import { PUFFS, PUFF_LIFE, PUFF_RISE, puffAge, puffOf } from './render/smoke';
 import { DUST_LIFE } from './render/dust';
 import { FLOAT_LIFE, FLOAT_RISE, Floaters, MERGE_WINDOW } from './render/floaters';
 import { HAZE_MAX, HAZE_REACH, skyAt, unknownInk } from './render/sky';
+import { Asker } from './ui/ask';
 import { UI } from './ui/ui';
 // Debug surface only. These come last on purpose: main is the entry point, so
 // the order of its imports is the order the module graph is evaluated in.
@@ -132,9 +133,19 @@ function turnView(step: number): void {
 
 const ui = new UI(game, renderer, uiRoot, canvasEl, { turn: turnView, keys });
 
+/*
+ * The game asks in its own words, on its own canvas.
+ *
+ * `window.prompt` and `window.confirm` are not dialogues on a phone: Chrome on
+ * Android suppresses them in more cases than it documents, and once anybody
+ * has dismissed one with "don't let this page create more dialogs" every later
+ * call answers null and false, silently, for the rest of the session. A player
+ * on the island got no box at all and a settlement called Homestead.
+ */
+const asker = new Asker(uiRoot);
 game.hooks = {
-  prompt: (question, fallback) => window.prompt(question, fallback),
-  confirm: (question) => window.confirm(question),
+  prompt: (question, fallback) => asker.name(question, fallback),
+  confirm: (question) => asker.sure(question),
 };
 
 const player = game.player;

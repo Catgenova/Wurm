@@ -38,6 +38,17 @@ function thingOf(g: Game, t: Target): { name?: string } | null {
 export const NAMING_ACTIONS: ActionDef[] = [
   {
     id: 'name_thing',
+    /*
+     * `allowEmpty`, because here an empty answer is an answer: it takes the
+     * name off again rather than being a refusal, which is what the rest of
+     * `perform` goes on to do with it.
+     */
+    asks: {
+      question: 'What is this called?',
+      fallback: (t, g) => nameOf(g, t) ?? '',
+      max: NAME_MAX,
+      allowEmpty: true,
+    },
     label: 'Give it a name',
     verb: 'naming it',
     instant: true,
@@ -49,9 +60,7 @@ export const NAMING_ACTIONS: ActionDef[] = [
       const thing = thingOf(g, t);
       if (!thing) return;
       const was = nameOf(g, t) ?? '';
-      const said = g.hooks.prompt('What is this called?', thing.name ?? '');
-      if (said === null) return;
-      const name = said.trim().slice(0, NAME_MAX);
+      const name = ((t as { name?: string }).name ?? '').trim().slice(0, NAME_MAX);
       if (!name) {
         // An empty answer takes the name off again rather than leaving a blank.
         if (thing.name) {

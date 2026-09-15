@@ -94,10 +94,19 @@ export const deedLevel = (d: Deed | null): number => Math.max(1, Math.min(MAX_DE
 export const deedRadiusAt = (level: number): number => DEED_RADIUS + (level - 1) * DEED_RADIUS_PER_LEVEL;
 export const deedWorkersAt = (level: number): number => DEED_WORKERS_AT_LEVEL_ONE + (level - 1);
 
-/** UI prompts the game needs; main.ts wires them to the browser. */
+/**
+ * UI questions the game needs; main.ts wires them to the interface.
+ *
+ * Both answer with a promise, because both used to be `window.prompt` and
+ * `window.confirm` and neither of those is a dialogue on a phone: Chrome on
+ * Android suppresses them in more cases than it documents, and once anybody
+ * has dismissed one with "don't let this page create more dialogs" every
+ * later call returns null and false, silently, for the rest of the session.
+ * What that looks like from the outside is a game that ignores you.
+ */
 export interface GameHooks {
-  prompt: (question: string, fallback: string) => string | null;
-  confirm: (question: string) => boolean;
+  prompt: (question: string, fallback: string) => Promise<string | null>;
+  confirm: (question: string) => Promise<boolean>;
 }
 
 export interface GameInit {
@@ -397,7 +406,7 @@ export class Game {
   readonly crops = new Map<string, Crop>();
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
-  hooks: GameHooks = { prompt: (_q, fallback) => fallback, confirm: () => true };
+  hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
   /** What the acting person is in the middle of, and what is behind it. */
   get action(): ActiveAction | null {
     return this.acting.action;
@@ -1052,6 +1061,25 @@ export class Game {
       return;
     }
     this.requestAction(aim.def, aim.target);
+  }
+
+  /** Ask for the name this action wants, then start it again carrying one. */
+  private async askName(def: ActionDef, target: Target, goes?: number): Promise<void> {
+    const asks = def.asks;
+    if (!asks) return;
+    const said = await this.hooks.prompt(asks.question, asks.fallback?.(target, this) ?? '');
+    const name = said === null ? null : said.trim().slice(0, asks.max ?? 32);
+    if (name === null || (!name && !asks.allowEmpty)) {
+      if (asks.declined) this.logMsg(asks.declined, 'info');
+      return;
+    }
+    this.requestAction(def, { ...target, name } as unknown as Target, goes);
+  }
+
+  /** Ask whether to go ahead, then start it again with the answer on it. */
+  private async askSure(def: ActionDef, target: Target, goes: number | undefined, question: string): Promise<void> {
+    if (!(await this.hooks.confirm(question))) return;
+    this.requestAction(def, { ...target, sure: true } as unknown as Target, goes);
   }
 
   /**
@@ -2170,6 +2198,30 @@ export class Game {
   }
 
   requestAction(def: ActionDef, target: Target, goes?: number): void {
+    /*
+     * A name, or a yes, before anything else.
+     *
+     * Asked here because this is the one door every way of starting an action
+     * goes through — the tile menu, the settlement panel, the toolbelt, the
+     * picker a thumb uses. It used to be asked inside `perform`, and on an
+     * island `perform` is the island's half: so the name was asked for by the
+     * single menu entry that knew about it and by nothing else, and the island
+     * was handed an action with no name on it. It made one up for a new
+     * settlement and refused to rename an old one, which is both halves of
+     * what was reported.
+     */
+    const asked = target as Target & { name?: string; sure?: boolean };
+    if (def.asks && typeof asked.name !== 'string') {
+      void this.askName(def, target, goes);
+      return;
+    }
+    if (def.confirms && asked.sure !== true) {
+      const question = def.confirms(target, this);
+      if (question) {
+        void this.askSure(def, target, goes, question);
+        return;
+      }
+    }
     if (this.ask) {
       /*
        * Walk there first, if it is not already within reach.

@@ -75,6 +75,31 @@ export type Target =
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
 
+/**
+ * A name an action cannot go anywhere without.
+ *
+ * Declared here rather than asked for inside `perform`, because on an island
+ * `perform` runs on the island — there is nobody over there to ask. Every
+ * action that needed a name used to ask for one in the one menu entry that
+ * knew about it, and every other way of starting the same action sent it
+ * without: the tile picker, the settlement panel, the toolbelt. The island
+ * then either made a name up (`Homestead`) or refused (`Choose a name.`),
+ * which is exactly what was reported from the island, both halves of it.
+ *
+ * `requestAction` is the one door every one of those paths goes through.
+ */
+export interface AsksName {
+  question: string;
+  /** What the box is filled with when it opens. */
+  fallback?(t: Target, g: Game): string;
+  /** Said in the log when nobody types one. */
+  declined?: string;
+  /** Longest name this one takes. */
+  max?: number;
+  /** An empty answer means something here, rather than being a refusal. */
+  allowEmpty?: boolean;
+}
+
 export interface ActionDef {
   id: string;
   label: string;
@@ -107,6 +132,16 @@ export interface ActionDef {
   applies(t: Target, g: Game): boolean;
   /** Returns a reason the action cannot be done right now, or null. */
   check?(t: Target, g: Game): string | null;
+  /** A name to be typed before this can start. Asked once, by `requestAction`. */
+  asks?: AsksName;
+  /**
+   * Something to be sure about first, in these words, or null if not.
+   *
+   * Same reason as `asks`: the confirmation used to live inside `perform`, so
+   * on an island — where `perform` is the island's half — disbanding a
+   * settlement asked nobody anything at all.
+   */
+  confirms?(t: Target, g: Game): string | null;
   /** Runs on completion. Return true to repeat. */
   perform(t: Target, g: Game): boolean | void;
 }
@@ -1260,6 +1295,11 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     id: 'found_settlement',
+    asks: {
+      question: 'What is your settlement called?',
+      fallback: () => 'Homestead',
+      declined: 'You decide not to found a settlement just yet.',
+    },
     label: 'Found settlement here',
     verb: 'founding a settlement',
     stamina: 0.05,
@@ -1280,13 +1320,11 @@ export const ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      // Asked for before the ask on an island, where this half never runs and
-      // the name has to ride in with the target; asked for here otherwise.
-      const name = (t as { name?: string }).name ?? g.hooks.prompt('Name your settlement', 'Homestead');
-      if (name === null || !name.trim()) {
-        g.logMsg('You decide not to found a settlement just yet.', 'info');
-        return;
-      }
+      // The name rides in on the target, put there by `requestAction` before
+      // any of this — on an island this half runs over there, where there is
+      // nobody to ask.
+      const name = (t as { name?: string }).name ?? '';
+      if (!name.trim()) return;
       if (!g.inventory.remove(t.uid, 1)) return;
       g.deed = { name: name.trim().slice(0, 32), x: g.player.tileX, y: g.player.tileY, radius: DEED_RADIUS, level: 1 };
       g.placeDeedCrate();
@@ -1296,22 +1334,29 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     id: 'rename_deed',
+    asks: {
+      question: 'What should the settlement be called?',
+      fallback: (_t, g) => g.deed?.name ?? '',
+    },
     label: 'Rename settlement',
     verb: 'renaming',
     instant: true,
     stamina: 0,
     baseTime: 0,
     applies: (t, g) => t.kind === 'tile' && g.isToken(t.x, t.y),
-    perform: (_t, g) => {
+    perform: (t, g) => {
       if (!g.deed) return;
-      const name = g.hooks.prompt('Rename the settlement', g.deed.name);
-      if (name === null || !name.trim()) return;
-      g.deed.name = name.trim().slice(0, 32);
+      const name = ((t as { name?: string }).name ?? '').trim();
+      if (!name) return;
+      g.deed.name = name.slice(0, 32);
       g.logMsg(`The settlement is now called ${g.deed.name}.`, 'system');
     },
   },
   {
     id: 'disband_deed',
+    confirms: (_t, g) => (g.deed
+      ? `Disband ${g.deed.name}? Its buildings and crates stay but nothing new can be built there, things left outside will rot at full speed, and any wildermon kept here run wild.`
+      : null),
     label: 'Disband settlement',
     verb: 'disbanding',
     instant: true,
@@ -1320,7 +1365,6 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => t.kind === 'tile' && g.isToken(t.x, t.y),
     perform: (_t, g) => {
       if (!g.deed) return;
-      if (!g.hooks.confirm(`Disband ${g.deed.name}? Its buildings and crates stay but nothing new can be built there, things left outside will rot at full speed, and any wildermon kept here run wild.`)) return;
       const name = g.deed.name;
       const d = g.deed;
       let freed = 0;

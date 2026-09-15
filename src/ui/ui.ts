@@ -769,10 +769,10 @@ export class UI {
         children: [
           {
             label: 'Rename it',
-            onSelect: () => {
-              const said = this.game.hooks.prompt('What is this spot called?', here.name);
+            onSelect: () => void (async () => {
+              const said = await this.game.hooks.prompt('What is this spot called?', here.name);
               if (said !== null) this.game.renameMark(here.id, said);
-            },
+            })(),
           },
           { label: 'Rub it off the map', onSelect: () => this.game.removeMark(here.id) },
           ...MARK_COLOURS.map((c) => ({
@@ -791,10 +791,10 @@ export class UI {
         children: MARK_COLOURS.map((c) => ({
           label: c.name,
           note: c.note,
-          onSelect: () => {
-            const said = this.game.hooks.prompt(`Name this spot (${pick.x}, ${pick.y}):`, '');
+          onSelect: () => void (async () => {
+            const said = await this.game.hooks.prompt(`Name this spot (${pick.x}, ${pick.y}):`, '');
             if (said !== null) this.game.addMark(pick.x, pick.y, said, c.id);
-          },
+          })(),
         })),
       });
     }
@@ -1355,17 +1355,11 @@ export class UI {
       note: reason ? undefined : 'Drives the stake where you stand',
       hint: reason ?? undefined,
       disabled: !!reason,
-      onSelect: () => {
-        const said = g.hooks.prompt('Name your settlement', 'Homestead');
-        if (said === null || !said.trim()) {
-          g.write('You decide not to found a settlement just yet.', 'info');
-          return;
-        }
-        // The name rides in with the target: on an island the half of the
-        // action that would have asked for it runs over there, where there is
-        // nobody to ask.
-        g.requestAction(def, { ...t, name: said.trim().slice(0, 32) } as Target);
-      },
+      // The name is asked for by `requestAction`, which every other way of
+      // starting this action also goes through — this entry used to be the
+      // only one that knew to ask, which is how the island came to be handed a
+      // settlement with no name on it and called it Homestead.
+      onSelect: () => g.requestAction(def, t),
     }];
   }
 
