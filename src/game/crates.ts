@@ -11,6 +11,13 @@ export type CrateKind = 'log' | 'plank';
 
 export interface PlacedCrate {
   id: number;
+  /**
+   * How full the island says it is, when `items` is not the whole story.
+   *
+   * A crate too far off to reach into comes over with its count and no
+   * contents, because a label does not need them and they are not free.
+   */
+  units?: number;
   /** What you have called it, when you have called it anything. */
   name?: string;
   x: number;
@@ -42,7 +49,17 @@ export const CRATE_DEFS: Record<CrateKind, CrateDef> = {
 export const SUBTILES = 4;
 
 export const crateKindOfItem = (itemId: string): CrateKind | null => (itemId === 'crate_log' ? 'log' : itemId === 'crate_plank' ? 'plank' : null);
-export const crateUnits = (c: PlacedCrate): number => c.items.reduce((n, it) => n + it.count, 0);
+/**
+ * How full it is.
+ *
+ * `units` when the island has said so and the contents have not travelled —
+ * which is every crate too far off to reach into. Counting `items` alone made
+ * every crate on an island read as empty, and the browser's own "the crate is
+ * full" was therefore never true: it waved a store through and the island
+ * refused it, with nothing said that anybody would connect to the crate.
+ */
+export const crateUnits = (c: PlacedCrate): number =>
+  c.items.length ? c.items.reduce((n, it) => n + it.count, 0) : c.units ?? 0;
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const crateCapacity = (c: PlacedCrate): number => Math.round(CRATE_DEFS[c.kind].capacity * matOf(c.material).hold);
 export const crateName = (c: PlacedCrate): string => {

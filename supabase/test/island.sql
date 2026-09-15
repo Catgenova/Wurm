@@ -4821,3 +4821,22 @@ select coalesce(place_deed_crate(:'big', :'hild')::text, 'nowhere') as penned \g
 select '679. a token with all five of its old spots taken still gets a crate: ' || :'penned'
      || ' — at ' || coalesce((select x || ',' || y from crate where world_id = :'big' and id = :'penned'::int), 'nowhere')
      || ', where the token is 2070,2070';
+
+-- What is in a crate, which the browser was never told: `rpc_ground` sent the
+-- crate and not its contents, so every crate on an island was drawn empty and
+-- the browser's own "the crate is full" counted an empty list.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set x = 2041.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'big', 'player', :'ivar', 'log', 40, 2, 'Oak') returning id as logs \gset
+select '679b. ivar puts two logs in his deed crate: '
+     || coalesce(act_refusal(:'big', :'ivar', 'store_in_crate',
+          ('{"kind":"item","uid":' || :'logs' || ',"count":2}')::jsonb), 'allowed');
+select act_perform(:'big', :'ivar', 'store_in_crate',
+  ('{"kind":"item","uid":' || :'logs' || ',"count":2}')::jsonb) \g /dev/null
+select (rpc_ground(:'big', 40)) as ground \gset
+select '680. the crate at ivar''s elbow holds '
+     || coalesce((select (v->>'units') || ' units and lists ' || jsonb_array_length(v->'things') || ' sorts'
+                  from jsonb_array_elements((:'ground'::jsonb)->'crates') v
+                  where (v->>'id')::int = 1), 'nothing at all')
+     || ' — and one twenty tiles off would list none of them';

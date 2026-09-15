@@ -649,6 +649,11 @@ async function main(): Promise<void> {
     const { data: standing } = await supabase().from('player').select('x,y')
       .eq('world_id', id).eq('uid', uid).single();
     const me = (standing ?? island.me!) as { x: number; y: number };
+    // Every tile with something standing on it, off the island's own answer.
+    const taken = new Set<string>([
+      ...(seen?.crates ?? []).map((c) => `${c.x},${c.y}`),
+      ...(seen?.placed ?? []).map((pl) => `${pl.x},${pl.y}`),
+    ]);
     let cx = Math.floor(me.x);
     let cy = Math.floor(me.y);
     let found = false;
@@ -660,6 +665,17 @@ async function main(): Promise<void> {
           if (x < 1 || y < 1 || x >= back.w || y >= back.h) continue;
           if (back.getDirt(x, y) <= 0 || back.getHeight(x, y) <= 0) continue;
           if (!TILE_DEFS[back.getTile(x, y)]?.digYield) continue;
+          /*
+           * And somewhere a body can actually stand.
+           *
+           * This looked at the soil and not at what was on top of it, so it
+           * could pick the tile the deed crate is standing on — which is a
+           * tile nothing can walk onto, so the walk below found no path, left
+           * the body where it was, and the dig was refused for being too far
+           * away. A true sentence about the wrong thing: the first run after
+           * the deed crate started being placed again failed here.
+           */
+          if (taken.has(`${x},${y}`)) continue;
           cx = x; cy = y; found = true;
         }
       }
@@ -677,7 +693,16 @@ async function main(): Promise<void> {
       left === 0 ? 'the head is empty' : 'jobs still waiting after thirty seconds of sweeping');
     check('there is somewhere on this island worth digging', found,
       found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
-    await walkTo(id, back, uid, cx + 0.5, cy + 0.5);
+    /*
+     * And the walk has to have happened.
+     *
+     * Its answer was thrown away, so a walk that found no path left the body
+     * where it stood and the next check failed with "you are too far away from
+     * that" — which reads as a fault in digging and is a fault in walking.
+     */
+    const reached = await walkTo(id, back, uid, cx + 0.5, cy + 0.5);
+    check('and the body can get to it', reached,
+      reached ? 'at the corner' : `no way onto ${cx},${cy} from where we stand`);
     const before = back.getHeight(cx, cy);
     /*
      * Six goes, not one.

@@ -3819,7 +3819,14 @@ export class Game {
     for (const c of ground.crates ?? []) {
       this.crates.set(c.id, {
         id: c.id, x: c.x, y: c.y, sx: c.sx, sy: c.sy,
-        kind: c.kind as PlacedCrate['kind'], items: [],
+        kind: c.kind as PlacedCrate['kind'],
+        // What the island says is in it. Empty for a crate too far off to
+        // reach into, which is why `units` rides along beside it.
+        items: (c.things ?? []).map((it) => ({
+          uid: it.id, id: it.def, ql: it.ql, dmg: it.dmg, count: it.count,
+          extra: it.extra ?? undefined,
+        })),
+        units: c.units,
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
       });
     }
@@ -4469,6 +4476,18 @@ export interface IslandCrate {
   material: string | null;
   name: string | null;
   deed: boolean;
+  /**
+   * What is in it, and how much of it.
+   *
+   * `units` comes for every crate in sight; `things` only for the ones near
+   * enough to reach into. The browser used to be told neither, so every crate
+   * on an island was drawn empty for ever — which is what "if I put things in
+   * the deed crate it automatically puts them back in my inventory" was: the
+   * thing went in, the crate never showed it, and the pack settled back to the
+   * island's truth a moment later.
+   */
+  units?: number;
+  things?: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null }>;
 }
 
 /** Everything on the ground within sight, as one answer. */
