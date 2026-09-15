@@ -4,7 +4,7 @@ import type { TileType } from '../world/tiles';
 import { blankWorld, rowsOf } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { supabase, signIn } from './supabase';
-import { HEARTBEAT } from '../game/keep';
+import { BODY_EVERY, HEARTBEAT, RECONCILE_EVERY, REGION } from '../game/keep';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -153,6 +153,12 @@ export class Island {
    * and a tab that was shut an hour ago.
    */
   private beat: ReturnType<typeof setTimeout> | null = null;
+  /** The block of country the channel is listening to, as `rx,ry`. */
+  private block = '';
+  private lastBody = 0;
+  private lastReconcile = 0;
+  /** Our pack, kept by row rather than refetched whole on anybody's crafting. */
+  private pack = new Map<number, ItemRow>();
 
   /**
    * Where everything the island says goes. Not readonly: the first few lines
@@ -237,18 +243,52 @@ export class Island {
     world.ensureBox(Math.floor(here.x) - 64, Math.floor(here.y) - 64, Math.floor(here.x) + 64, Math.floor(here.y) + 64);
     this.hooks.progress?.(2, 3, 'working out the ground');
 
-    // Everything dug since the land was laid down, in the order it happened.
-    // The same rows Realtime will carry from here on, so there is one way in
-    // and not a second, thinner one for catching up.
-    const { data: since } = await sb.from('tile_change').select('*').eq('world_id', worldId).order('n');
-    for (const c of (since ?? []) as Array<{ n: number; x: number; y: number; tile: number; data: number; corners: number[] }>) {
-      this.applyChange(c);
-    }
+    // Everything dug since we last looked, in the order it happened. The same
+    // rows Realtime will carry from here on, so there is one way in and not a
+    // second, thinner one for catching up — but from a cursor the island keeps
+    // for us, rather than from the beginning of the world every time.
+    this.seenChange = Number(got.you.seen_change ?? 0);
+    await this.catchUp();
     this.hooks.progress?.(3, 3, 'catching up');
     world.groundTouched = false;
     this.world = world;
     await this.watch(worldId);
     this.armBeat(HEARTBEAT);
+  }
+
+  /**
+   * Read the ground that changed while we were not listening, and move the
+   * cursor up to it.
+   *
+   * This is the truth and Realtime is the fast path. They carry the same rows
+   * the same way, so a message that never arrived — a channel that dropped, a
+   * block walked into between one subscription and the next — is caught here
+   * within twenty seconds rather than never. Applying a change twice is
+   * nothing: it sets the tile to what the tile already is.
+   */
+  private async catchUp(): Promise<void> {
+    if (!this.info) return;
+    const { data } = await supabase().from('tile_change').select('*')
+      .eq('world_id', this.info.id).gt('n', this.seenChange).order('n');
+    const rows = (data ?? []) as Array<{ n: number; x: number; y: number; tile: number; data: number; corners: number[] }>;
+    for (const c of rows) this.applyChange(c);
+    if (rows.length) this.seenChange = Math.max(this.seenChange, rows[rows.length - 1].n);
+  }
+
+  /** The nine blocks of country around a point, as Realtime filter values. */
+  private blocksAround(x: number, y: number): number[] {
+    const size = this.info?.size ?? 0;
+    const last = Math.max(0, Math.floor((size - 1) / REGION));
+    const rx = Math.floor(x / REGION);
+    const ry = Math.floor(y / REGION);
+    const out: number[] = [];
+    for (let j = ry - 1; j <= ry + 1; j++) {
+      for (let i = rx - 1; i <= rx + 1; i++) {
+        if (i < 0 || j < 0 || i > last || j > last) continue;
+        out.push(j * 1024 + i);
+      }
+    }
+    return out;
   }
 
   /**
@@ -267,7 +307,7 @@ export class Island {
   private async pulse(): Promise<void> {
     if (!this.info) return;
     try {
-      const { data } = await supabase().rpc('rpc_settle');
+      const { data } = await supabase().rpc('rpc_settle', { p_seen: this.seenChange });
       const said = (data ?? {}) as { settled?: number; act?: string | null; ends?: string | null };
       const due = said.ends ? (new Date(said.ends).getTime() - Date.now()) / 1000 : Infinity;
       // A quarter-second of slack, because a timer that fires a shade early
@@ -296,11 +336,22 @@ export class Island {
     return this.atlas;
   }
 
-  private applyChange(c: { n: number; x: number; y: number; tile: number; data: number; corners: number[] }): void {
+  /**
+   * A tile the island says changed.
+   *
+   * It does not touch the cursor. The cursor means "everything up to here has
+   * been read out of the table", and a Realtime row is not that — we may be
+   * listening to nine blocks of country out of two hundred and fifty-six, so
+   * moving the cursor past a row that arrived here would step over every dig
+   * in the rest of the island. `catchUp` owns it.
+   */
+  private applyChange(c: { n: number; x: number; y: number; tile: number; data: number; corners: number[]; world_id?: string }): void {
     const w = this.world;
     if (!w || !w.inBounds(c.x, c.y)) return;
-    if (c.n <= this.seenChange) return;
-    this.seenChange = c.n;
+    // A block number is a block number on every island, and Realtime takes one
+    // filter per subscription. Row level security already refuses rows from an
+    // island we are not on; this is the belt behind the braces.
+    if (c.world_id && this.info && c.world_id !== this.info.id) return;
     const k = c.corners;
     if (Array.isArray(k) && k.length === 4) {
       w.setHeight(c.x, c.y, k[0]);
@@ -313,40 +364,66 @@ export class Island {
   }
 
   /**
-   * Listen to the island.
+   * Listen to the island, and only to the part of it we are standing in.
    *
-   * Four streams, and each is the table it is about rather than a message
-   * invented for the purpose: ground that changed, lines meant for us, our own
-   * pack, and everybody's body. Nothing here is a protocol — it is the
-   * database saying what it just wrote, which means there is no wire format to
-   * keep in step with anything.
+   * Still the tables rather than messages invented for the purpose — there is
+   * no wire format here to keep in step with anything — but three of the four
+   * streams changed shape, and each for its own reason.
+   *
+   * **Ground** comes by block. One channel per island sent a 4096 map's worth
+   * of digging to everybody on it; nine blocks of 256 tiles is a square 768
+   * across, far past anything a screen can show and far short of Cornwall.
+   * Walking out of the square re-subscribes and reads the backlog of whatever
+   * is new, so nothing is missed by moving.
+   *
+   * **Our pack** is filtered to rows with our own uid on them, and applied row
+   * by row. It used to answer any item change anywhere on the island by
+   * downloading the whole pack again, which with N people crafting is N round
+   * trips per craft. A thing we put *down* stops matching the filter, so the
+   * reconcile below is what notices that.
+   *
+   * **Bodies** are not a table at all any more. `player` is written once a
+   * second by every walking body and was published, which is one billed
+   * message per subscriber per second per player; Broadcast never touches the
+   * write-ahead log. The roster is reconciled from the table every twenty
+   * seconds, which is what notices somebody arriving or leaving.
    */
   private async watch(worldId: string): Promise<void> {
     const sb = supabase();
     this.channel?.unsubscribe();
     const on = `world_id=eq.${worldId}`;
-    this.channel = sb
-      .channel(`island:${worldId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tile_change', filter: on },
-        (m) => this.applyChange(m.new as never))
+    const here = this.me ?? { x: 0, y: 0 };
+    const blocks = this.blocksAround(here.x, here.y);
+    this.block = `${Math.floor(here.x / REGION)},${Math.floor(here.y / REGION)}`;
+    let listening = sb.channel(`island:${worldId}`, { config: { broadcast: { self: false } } });
+    for (const b of blocks) {
+      listening = listening.on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'tile_change', filter: `region=eq.${b}` },
+        (m) => this.applyChange(m.new as never));
+    }
+    this.channel = listening
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event', filter: on },
         (m) => {
           const e = m.new as { text: string; kind: string; uid: string | null };
           if (e.uid && e.uid !== this.uid) return;
           this.hooks.say(e.text, e.kind);
         })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'player', filter: on },
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: `holder_uid=eq.${this.uid}` },
         (m) => {
-          const p = m.new as PlayerRow;
-          if (m.eventType === 'DELETE') this.people.delete((m.old as PlayerRow).uid);
-          else if (p?.uid) {
-            this.people.set(p.uid, p);
-            if (p.uid === this.uid) this.me = p;
+          if (m.eventType === 'DELETE') this.pack.delete((m.old as ItemRow).id);
+          else {
+            const it = m.new as ItemRow;
+            if (it.holder === 'player') this.pack.set(it.id, it);
+            else this.pack.delete(it.id);
           }
-          this.hooks.people([...this.people.values()]);
+          this.hooks.pack([...this.pack.values()]);
         })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: on },
-        () => void this.refreshPack());
+      .on('broadcast', { event: 'body' }, (m) => {
+        const b = (m as { payload?: PlayerRow }).payload;
+        if (!b?.uid || b.uid === this.uid) return;
+        this.people.set(b.uid, { ...(this.people.get(b.uid) ?? b), ...b });
+        this.hooks.people([...this.people.values()]);
+      });
 
     // Realtime authorises against the signed-in user's token; make sure it has
     // the current one rather than whatever it started life with.
@@ -384,9 +461,27 @@ export class Island {
     await this.refreshPack();
   }
 
+  /**
+   * Put the fast path back in step with the tables.
+   *
+   * Everything Realtime carries, read again the slow way: who is here, what we
+   * are carrying, and what ground has changed. It is cheap — three indexed
+   * reads that usually answer nothing new — and it is the only thing that
+   * notices a body that left, a thing we put down, or a channel that quietly
+   * stopped listening.
+   */
+  private async reconcile(now: number): Promise<void> {
+    if (!this.info || now - this.lastReconcile < RECONCILE_EVERY) return;
+    this.lastReconcile = now;
+    await this.refreshPeople();
+    await this.refreshPack();
+    await this.catchUp();
+  }
+
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
-    const { data } = await supabase().from('player').select('*').eq('world_id', this.info.id);
+    const { data } = await supabase().from('player').select('*')
+      .eq('world_id', this.info.id).eq('away', false);
     this.people.clear();
     for (const p of (data ?? []) as PlayerRow[]) {
       this.people.set(p.uid, p);
@@ -407,7 +502,9 @@ export class Island {
     if (!this.info) return;
     const { data } = await supabase().from('item').select('*')
       .eq('world_id', this.info.id).eq('holder', 'player').eq('holder_uid', this.uid);
-    this.hooks.pack((data ?? []) as ItemRow[]);
+    this.pack.clear();
+    for (const it of (data ?? []) as ItemRow[]) this.pack.set(it.id, it);
+    this.hooks.pack([...this.pack.values()]);
   }
 
   /**
@@ -419,12 +516,41 @@ export class Island {
    */
   async move(x: number, y: number, level: number, now: number): Promise<void> {
     if (!this.info) return;
+    void this.reconcile(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
+
+    /*
+     * Where the body is, five times a second, over Broadcast.
+     *
+     * This is a drawing message, not a fact: nobody's client can make anybody
+     * else's position true, and the island keeps the truth on the row below.
+     * It is here because the row used to be published, which made every
+     * walking body one write-ahead-log record and one billed message per
+     * subscriber every second — the single largest thing on the bill, and it
+     * was people walking rather than people digging.
+     */
+    if (said !== this.lastSaid && now - this.lastBody >= BODY_EVERY && this.channel) {
+      this.lastBody = now;
+      void this.channel.send({
+        type: 'broadcast', event: 'body',
+        payload: { uid: this.uid, name: this.me?.name ?? '', x, y, level, look: this.me?.look, act: this.me?.act ?? null },
+      });
+    }
+
     if (said === this.lastSaid) return;
     if (now - this.lastMove < MOVE_EVERY) return;
     this.lastMove = now;
     this.lastSaid = said;
     await supabase().rpc('rpc_move', { p_world: this.info.id, p_x: x, p_y: y, p_level: level });
+
+    // Walked out of the square of country the channel is listening to: take a
+    // new one, and read whatever was dug in the blocks that are new to us.
+    const block = `${Math.floor(x / REGION)},${Math.floor(y / REGION)}`;
+    if (block !== this.block) {
+      this.me = { ...(this.me as PlayerRow), x, y };
+      await this.watch(this.info.id);
+      await this.catchUp();
+    }
   }
 
   /** Ask to do something. What comes back is a refusal or a promise, never a result. */

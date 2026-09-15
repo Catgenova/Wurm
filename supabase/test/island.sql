@@ -3816,3 +3816,26 @@ select '604. an island founded two months ago that nobody came back to: '
              else 'given back to the sea, with its 36 MB of land' end;
 select '605. and the islands with people on them are all still here: '
      || (select string_agg(name, ', ' order by name) from world where id in (:'world2', :'faraway', :'big'));
+
+\echo ''
+\echo '--- what Realtime carries, and to whom'
+select '606. published to Realtime: ' || string_agg(tablename, ', ' order by tablename)
+     || ' — `player` is not among them, because a walking body wrote that row once a second '
+     || 'and every one of those was a billed message to everybody on the island'
+  from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public';
+select '607. an island of ' || w.size || ' is ' || (b * b) || ' blocks of ' || region_size()
+     || ' tiles; a client listens to the nine round it, which is '
+     || round((900.0 / (b * b))::numeric, 1) || ' per cent of the island instead of all of it'
+  from world w, lateral (select ceil(w.size / region_size())::int b) q where w.id = :'big';
+select '608. and every tile change says which block it happened in: tile 2000,2000 is block '
+     || region_of(2000, 2000) || ', tile 0,0 is block ' || region_of(0, 0)
+     || ', and they are not the same conversation';
+
+-- The cursor. A join used to read every tile change ever made on the island.
+update player set seen_change = (select max(n) - 1 from tile_change where world_id = :'faraway')
+  where world_id = :'faraway' and uid = :'ivar';
+select '609. coming back to an island with '
+     || (select count(*) from tile_change where world_id = :'faraway') || ' changes on it, having seen all but one: '
+     || (select count(*) from tile_change t, player p
+         where t.world_id = :'faraway' and p.world_id = :'faraway' and p.uid = :'ivar' and t.n > p.seen_change)
+     || ' row to read, not ' || (select count(*) from tile_change where world_id = :'faraway');

@@ -85,6 +85,37 @@ export const SWEEP_EVERY = 300;
 /** Rows one sweep will delete, per island, per kind. */
 export const SWEEP_ROWS = 5000;
 
+/* ---- What Realtime carries, and to whom ---------------------------------- */
+
+/**
+ * How big a block of country one Realtime channel covers.
+ *
+ * Every change went to one channel per island, `island:<id>`, so a 4096 map —
+ * two hundred and sixty-eight square kilometres of it — sent every player the
+ * sound of somebody digging ten kilometres away. Supabase bills one message
+ * sent plus one per receiving client, so that fanout is the single thing that
+ * makes a big island cost more to run than a small one.
+ *
+ * Blocked, it goes the other way: density per channel *falls* as the map
+ * grows, because people spread out. A client listens to the nine blocks around
+ * it, which at 256 is a square 768 tiles on a side — far past anything it can
+ * draw, and far short of Cornwall.
+ */
+export const REGION = 256;
+
+/** How often a body tells the island where it is, over Broadcast. */
+export const BODY_EVERY = 0.2;
+
+/**
+ * How often the browser reconciles with the tables.
+ *
+ * Realtime is the fast path and this is the truth: the same rows, read the
+ * same way, so a message that never arrived — a channel that dropped, a block
+ * walked into between subscriptions — is caught within twenty seconds instead
+ * of never. It is also what moves the tile-change cursor along.
+ */
+export const RECONCILE_EVERY = 20;
+
 /** An island nobody has stood on for a month goes back to the sea. */
 export const ISLAND_KEEP = 30 * 24 * 3600;
 

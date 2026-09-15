@@ -132,11 +132,21 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     }));
     game.events.emit('inventory');
   };
+  /*
+   * Everybody, in one word, rather than one at a time.
+   *
+   * `saw` adds and updates and never removes, so somebody who left stood there
+   * for ever. `sawAll` replaces the list — which is what this now is: the
+   * roster is reconciled from the table every twenty seconds, and Broadcast
+   * carries the walking in between.
+   */
   island.hooks.people = (people: PlayerRow[]) => {
-    for (const p of people) {
-      if (p.uid === island.uid) continue;
-      game.roster.saw({ id: hashId(p.uid), name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1, level: p.level, moving: false, swimming: false, working: !!p.act, look: cleanLook(p.look) });
-    }
+    game.roster.sawAll(people
+      .filter((p) => p.uid !== island.uid)
+      .map((p) => ({
+        id: hashId(p.uid), name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1,
+        level: p.level, moving: false, swimming: false, working: !!p.act, look: cleanLook(p.look),
+      })));
   };
   for (const [text, kind] of log) game.write(text, kind as Parameters<Game['write']>[1]);
   game.write(`You are on ${info.name}. Send somebody this page's address and they can join you.`, 'system');
