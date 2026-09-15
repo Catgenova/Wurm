@@ -41,7 +41,6 @@ import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED,
 import { Wakes } from './wake';
 import { Dust } from './dust';
 import type { Peer } from '../game/roster';
-import { FORAGE_TINT, TINT_SPAN } from './forage';
 import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 import { FLOAT_COLOURS, Floaters } from './floaters';
 import { SKILL_BY_ID } from '../game/skills';
@@ -655,7 +654,6 @@ export class Renderer {
     // once few enough tiles are on screen for it to be cheap.
     const grain = zoom >= 1.25;
     // Close enough to be picking things up rather than looking at the country.
-    const pickable = zoom >= 0.7;
     const player = this.game.player;
     const rot = cam.rotation;
     const tb = this.tileBuf;
@@ -740,30 +738,6 @@ export class Renderer {
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
         const t0 = world.viewTile(x, y, lit) as TileType;
         if (blend && !wet && !HARD_EDGED.has(t0)) this.blendEdges(ctx, rot, u, v, t0, lit, sun, pts);
-        // What the ground still has on it, said in colour rather than in
-        // models: a soft patch in the middle of the tile, inset so the seam
-        // between one ground and the next stays soft.
-        if (pickable && lit && !wet) {
-          const def = TILE_DEFS[t0];
-          if (def.forage || def.botanize) {
-            const state = (def.forage && !this.game.isForaged(x, y, 'forage') ? 1 : 0) | (def.botanize && !this.game.isForaged(x, y, 'botanize') ? 2 : 0);
-            const ink = FORAGE_TINT[state];
-            if (ink) {
-              const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
-              const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
-              ctx.fillStyle = ink;
-              ctx.beginPath();
-              for (let k = 0; k < 4; k++) {
-                const px = cx + (pts[k * 2] - cx) * TINT_SPAN;
-                const py = cy + (pts[k * 2 + 1] - cy) * TINT_SPAN;
-                if (k === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
-              }
-              ctx.closePath();
-              ctx.fill();
-            }
-          }
-        }
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
         if (wet) this.drawWater(u, v, x, y, c, fogged && !lit ? fogPath : undefined);

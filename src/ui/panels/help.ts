@@ -1054,11 +1054,12 @@ function helpText(): string {
     standing next to the container, and it has to be willing to hold what you are giving it &mdash; a
     bulk bin will not take a tool, a barrel takes no solids, a full crate is full. It says which when
     it will not go.</p>
-    <p>Ground that still holds something says so in its colour: a <b>warm patch</b> where there is
-    something to forage, a <b>cool one</b> where there is something to botanize, and a brighter one
-    where there is both. Pick it over and the patch goes; leave it a while and it comes back. Every
-    ground that grows anything shows it &mdash; grass, steppe, tundra, moss, marsh and lawn &mdash;
-    and sand, dirt and gravel never do, having nothing to give.</p>
+    <p>Ground does not advertise what it is holding. Grass is grass to look at, wherever it stands in
+    its cycle &mdash; click a tile, or press <b>T</b>, and the Tile window says whether there is
+    <b>something to pick</b> or <b>something to gather</b> on it. Pick it over and the line goes;
+    leave it a while and it comes back. Every ground that grows anything can hold something &mdash;
+    grass, steppe, tundra, moss, marsh and lawn &mdash; and sand, dirt and gravel never do, having
+    nothing to give.</p>
     <p><b>A practised eye goes over the same ground more than once.</b> Foraging and botanizing take
     <b>one more pass over the tile for every twenty points</b> of the skill: one pass below twenty, two
     at twenty, three at <b>forty</b>, and six at a hundred. Each pass is its own chance of a find and

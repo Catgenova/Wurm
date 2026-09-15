@@ -933,9 +933,14 @@ in world time.
   picked up. The deed crate is one of them. The player and creatures are
   drawn to a one-spot footprint on 96 px tiles so the land reads as the
   4 m squares it represents.
-- **Living grass.** Grass tiles carry tufts in four states with ten variants
-  each: berries when the tile can be foraged, flowers when it can be
-  botanized, both, or grazed bare after being picked over.
+- **Plain grass.** Grass is one tile that looks the same whatever it is
+  holding. It carried tufts once — berries where it could be foraged, flowers
+  where it could be botanized — and hundreds of them on a screen read as a
+  carpet with the trees and rocks lost in it; a soft patch of colour in place
+  of the tufts said the same thing more quietly and was still a tile telling
+  you about its contents. What a tile holds is a question you ask it: click it,
+  or press T, and the Tile window says whether there is something to pick or
+  something to gather.
 - **Items.** Click an item for its actions: eat, drink, fill, drop one or all,
   chisel, examine. Dropped items lie on the tile as a pile and can be picked up
   from that tile's menu. Anything left on the ground decays over real time,
