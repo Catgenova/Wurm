@@ -57,6 +57,7 @@ import { smeltSeconds } from './game/metal';
 import { needsIron } from './world/ore';
 import { tileUses } from './ui/tileinfo';
 import { startIsland } from './net/play';
+import type { Island } from './net/island';
 import { LOOK_TABLES, cleanLook, randomLook } from './game/look';
 import { WORLD_PACE } from './game/pace';
 import { CROPS } from './game/farming';
@@ -143,11 +144,11 @@ camera.focus(player.x, player.y, game.playerHeight(), null);
 declare global {
   interface Window {
     /** Console handle for poking at the running game. */
-    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; TRAPS: typeof TRAPS; BRIDGES: typeof BRIDGES; bridgeDone: typeof bridgeDone; BAITS: typeof BAITS; FISH_IDS: string[]; SPECIES: typeof SPECIES; WEAPON_BY_ID: typeof WEAPON_BY_ID; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; save: () => Promise<boolean> };
+    wurm: { game: Game; renderer: Renderer; camera: typeof camera; ACTIONS: typeof ACTIONS; RECIPES: typeof RECIPES; FURNITURE: typeof FURNITURE; MATERIALS: typeof MATERIALS; RELICS: typeof RELICS; TRAITS: typeof TRAITS; TITLES: typeof TITLES; DYES: typeof DYES; WOUND_KINDS: typeof WOUND_KINDS; TRAPS: typeof TRAPS; BRIDGES: typeof BRIDGES; bridgeDone: typeof bridgeDone; BAITS: typeof BAITS; FISH_IDS: string[]; SPECIES: typeof SPECIES; WEAPON_BY_ID: typeof WEAPON_BY_ID; itemName: typeof itemName; arch: { partsMissing: typeof partsMissing; piecesHeld: typeof piecesHeld }; ui: UI; island: Island | null; save: () => Promise<boolean> };
   }
 }
 Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt, windFrom, windWord, pointOfSail, sailWord, favourCap, prayerWorth, PATHS, sittingWorth, weaponDamage, loopsFor, BELT_MAX, coaxBonus, COAX_STEP, COAX_CAP, COAX_LAPSE, rollsAt, PER_ROLL, cropSprite, creatureLines, tameChance, knackLands, knackBonus, KNACK_ODDS, KNACK_CAP, KNACK_BONUS, KNACK_HOME, boonTime, boonOf, BOON_BONUS, tableMul, upkeepMul, fedness, balance, NUTRIENTS, ITEM_DEFS, TILE_DEFS, groundRoll, crateName, furnitureName, trapName, postName, lanternReach, candleBurn, lanternState, sunAt, skyWash, swayAt, SWAY_MAX, puffAge, puffOf, PUFFS, PUFF_LIFE, PUFF_RISE, DUST_LIFE, FLOAT_LIFE, FLOAT_RISE, MERGE_WINDOW, Floaters, skyAt, unknownInk, findPath, WATER_PALETTE, waterRgb, CROPS, DAY_SECONDS, TORCH_BURN, WORLD_PACE, drawPortrait, drawHeadshot, LOOK_TABLES, cleanLook, randomLook, HAZE_MAX, HAZE_REACH, ROCK_VARIANTS, METALS, smeltableIn, smeltSeconds, needsIron, creatureSkills, tileUses, HostSession, ClientSession, bodyOf, loopback, PROTOCOL, cleanName, cleanText, encode, decode, packLand, packWorld, unpack, loadGame });
-window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, BRIDGES, bridgeDone, BAITS, FISH_IDS: FISH.map((f) => f.id), SPECIES, WEAPON_BY_ID, itemName, arch: { partsMissing, piecesHeld }, ui, save: () => saveGame(game) };
+window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, BRIDGES, bridgeDone, BAITS, FISH_IDS: FISH.map((f) => f.id), SPECIES, WEAPON_BY_ID, itemName, arch: { partsMissing, piecesHeld }, ui, island, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {
   // A press that closed an open menu is spent, unless it is asking for a new menu.

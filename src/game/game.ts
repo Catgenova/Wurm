@@ -4,6 +4,7 @@ import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
+import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
@@ -1733,8 +1734,10 @@ export class Game {
     // hunger and thirst off: a body with something behind it goes longer.
     const keep = upkeepMul(p.nutrition);
     for (const k of NUTRIENTS) p.nutrition[k] = Math.max(0, p.nutrition[k] - dt * NUTRIENT_DECAY);
-    s.hunger = Math.max(0, s.hunger - dt * 0.0004 * keep);
-    s.thirst = Math.max(0, s.thirst - dt * 0.0006 * keep);
+    if (!this.bodyFromIsland) {
+      s.hunger = Math.max(0, s.hunger - dt * HUNGER_RATE * keep);
+      s.thirst = Math.max(0, s.thirst - dt * THIRST_RATE * keep);
+    }
 
     // What climbing and swimming have earned, and what the armour costs, before the next step.
     p.burden = this.burden();
@@ -1760,22 +1763,22 @@ export class Game {
         this.acting.swimClock = 0;
         this.gainSkill('swimming', 0.09);
       }
-      s.stamina = Math.max(0, s.stamina - dt * 0.03 * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
+      if (!this.bodyFromIsland) s.stamina = Math.max(0, s.stamina - dt * SWIM_WIND * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
       if (s.stamina <= 0) {
-        s.health = Math.max(0, s.health - dt * 0.05);
+        if (!this.bodyFromIsland) s.health = Math.max(0, s.health - dt * DROWN_RATE);
         if (this.time - this.acting.drownWarning > 4) {
           this.acting.drownWarning = this.time;
           this.logMsg('You are exhausted and swallowing water. Get to shore!', 'error');
         }
       }
-    } else if (!performing) {
+    } else if (!performing && !this.bodyFromIsland) {
       // Body stamina is what gets your wind back between jobs.
-      const wind = 1 + Math.max(0, this.skills.get('body_stamina') - CHAR_START) * 0.005;
-      const regen = (moved > 0 ? 0.012 : 0.05) * wind;
-      const starving = s.hunger <= 0 || s.thirst <= 0 ? 0.3 : 1;
+      const wind = 1 + Math.max(0, this.skills.get('body_stamina') - CHAR_START) * WIND_PER_LEVEL;
+      const regen = (moved > 0 ? WIND_WALK : WIND_REST) * wind;
+      const starving = s.hunger <= 0 || s.thirst <= 0 ? WIND_STARVING : 1;
       s.stamina = Math.min(1, s.stamina + dt * regen * starving);
       // Nothing knits while it is still open: see to the wound first.
-      if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1 && !this.bleeding()) s.health = Math.min(1, s.health + dt * 0.004);
+      if (s.hunger > HEAL_FED && s.thirst > HEAL_FED && s.health < 1 && !this.bleeding()) s.health = Math.min(1, s.health + dt * HEAL_RATE);
     }
     /*
      * A light burns only while it is lit; a dark lantern costs nothing to
@@ -2069,6 +2072,21 @@ export class Game {
   stop: (() => void) | null = null;
 
   /**
+   * Whether the body is the island's to keep, rather than this machine's.
+   *
+   * Hunger, thirst, wind and health fell all session and came back full on a
+   * refresh, because the browser was moving its own copy and the island — which
+   * is where the row actually lives — had never moved it at all. The island
+   * settles the body off a timestamp now, so this side stops moving it and
+   * draws what it is told.
+   *
+   * The rest of `update` stays: nutrition, lights burning down, wounds, the
+   * boat and the rider are still worked out here, and the two that matter are
+   * plainly marked below.
+   */
+  bodyFromIsland = false;
+
+  /**
    * A job somebody else is doing, shown here so that there is a clock on it.
    *
    * `ask` sends the whole of an action away, which is what makes the island
@@ -2155,7 +2173,7 @@ export class Game {
       def.perform(target, this);
       return;
     }
-    if (this.player.stats.stamina < 0.08) {
+    if (this.player.stats.stamina < EXHAUSTED) {
       this.logMsg('You are too exhausted to do that. Rest a moment.', 'error');
       return;
     }

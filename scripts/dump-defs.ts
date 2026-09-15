@@ -55,6 +55,7 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
+import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
@@ -783,6 +784,18 @@ for (const [fn, v] of [
   /* And the most fog of war the island keeps for one body, so the one thing
      a browser writes by the yard cannot become free storage. */
   ['fog_bytes', FOG_BYTES],
+  /*
+   * And what keeping a body alive costs.
+   *
+   * The island owned the player and owned everything about them except this,
+   * so nothing over there ever got hungry, tired or better — "thirst and
+   * hunger reset to full on every client reset", because the browser was
+   * moving its own copy and a refresh read one that had never moved.
+   */
+  ['hunger_rate', HUNGER_RATE], ['thirst_rate', THIRST_RATE],
+  ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],
+  ['wind_starving', WIND_STARVING], ['heal_rate', HEAL_RATE], ['heal_fed', HEAL_FED],
+  ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

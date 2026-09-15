@@ -32,6 +32,10 @@ end $$;
 select id as world from world \gset
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- coming ashore'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select rpc_join(:'world', 'Ivar') \g /dev/null
@@ -50,6 +54,10 @@ select '3. Hild knocks: bodies ' || (select count(*) from player)
      || ', and her pack is her own: ' || (select count(*) from item where holder_uid = :'hild') || ' tools';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what the island refuses, and why'
 select '4. a corner across the island:  ' || coalesce(act_refusal(:'world', :'ivar', 'dig', '{"x":2,"y":2,"cx":2,"cy":2}'), 'ALLOWED');
 select land_set_height(:'world', 8, 8, 0) \g /dev/null
@@ -63,6 +71,10 @@ insert into item (world_id, holder, holder_uid, def, ql, issued) values (:'world
 select '8. shovel back in hand:         ' || coalesce(act_refusal(:'world', :'ivar', 'dig', '{"x":8,"y":8,"cx":8,"cy":8}'), 'allowed, and about time');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- digging a hole, which takes as long as it takes'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select land_height(:'world', 8, 8) as h0, (select count(*) from item where holder_uid = :'ivar') as n0 \gset
@@ -83,6 +95,10 @@ select '    height ' || land_height(:'world', 8, 8) || ', dirt ' || land_dirt(:'
 select '    he was told: ' || string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('event','skill');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a queue of six, settled by a sweep for somebody who walked away'
 delete from event;
 select rpc_act(:'world', 'dig', '{"x":9,"y":9,"cx":9,"cy":9}', 6) \g /dev/null
@@ -94,6 +110,10 @@ select '    height at that corner ' || land_height(:'world', 9, 9) || ' from 100
      || ', and ' || (select count(*) from event where uid = :'ivar' and text like 'You dig up%') || ' of the six came off';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the numbers on things are the database''s to hand out'
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 select rpc_act(:'world', 'dig', '{"x":8,"y":8,"cx":8,"cy":8}', 3) \g /dev/null
@@ -103,6 +123,10 @@ select '12. Ivar and Hild both dug: ' || count(*) || ' things of dirt between th
      || count(distinct id) || ' distinct numbers, highest ' || max(id) from item where def = 'dirt';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what a client holding the publishable key can actually do'
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
@@ -139,6 +163,10 @@ reset role;
 \echo ''
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- founding an island and handing the land over'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select rpc_found('Rockhaven', 99, 8, 4, 4) as made \gset
@@ -181,6 +209,10 @@ begin
   exception when others then raise notice '26. Hild opening Ivar''s island:      refused — %', sqlerrm; end;
 end $$;
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- giving an island up, and what goes with it'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select id as rock from world where name = 'Rockhaven' \gset
@@ -207,6 +239,10 @@ begin
   exception when others then raise notice '29. Hild giving up an island that is not hers: refused — %', sqlerrm; end;
 end $$;
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- making things: two hundred and five actions, one performer'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select id as world2 from world limit 1 \gset
@@ -248,6 +284,10 @@ select '37. of ' || (select count(*) from action_def) || ' actions the island kn
      || (select count(*) from action_def where act_ported(id)) || ' can be done and '
      || (select count(*) from action_def where not act_ported(id)) || ' are honestly refused';
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- jobs held in your head'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -274,6 +314,10 @@ select '39. settled ' || :'swept' || ' goes; queue now ' || (select jsonb_array_
      || ', busy with ' || coalesce((select act from player where uid = :'ivar'), 'nothing')
      || ', and the pack holds ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'plank') || ' planks in all';
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a fire on the ground, and what it unlocks'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -320,6 +364,10 @@ select '48. and once anything looks at it, that is written down: lit=' || lit::t
      || ', ashes ' || floor(ash) || ' — and baking is refused again: '
      || coalesce(act_refusal(:'world2', :'ivar', 'bake_potato', '{"kind":"item"}'), 'STILL ALLOWED') from placed where id = :'fire';
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- working the ground: rock, soil and what is laid over them'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -371,6 +419,10 @@ select '55. with shards in hand it becomes ' || (select name from tile_def where
      || ', shards left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'rock_shards')
      || ' — and cultivating gravel: ' || coalesce(act_refusal(:'world2', :'ivar', 'cultivate', '{"kind":"tile","x":9,"y":9}'), 'ALLOWED');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- taking what the island grows'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -414,6 +466,10 @@ select '61. going back to the same spot: ' || coalesce(act_refusal(:'world2', :'
 update foraged set at = at - interval '200 seconds' where x = 12 and y = 12;
 select '62. and three minutes later: ' || coalesce(act_refusal(:'world2', :'ivar', 'forage', '{"kind":"tile","x":12,"y":12}'), 'allowed again');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a field, sown and left to itself'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -464,6 +520,10 @@ select '73. the field is ' || (select name from tile_def where id = land_tile(:'
      || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint') || ' mint and '
      || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'mint_seed') || ' seeds';
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a line in the water'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -504,6 +564,10 @@ select '81. a thousand draws over the drop-off, bare hook vs a live minnow:';
 select '    bare:  ' || string_agg(f || ' ' || n, ', ' order by n desc) from (select pick_fish(20, 60, null, random()) f, count(*) n from generate_series(1,1000) group by 1) q;
 select '    minnow on it: ' || string_agg(f || ' ' || n, ', ' order by n desc) from (select pick_fish(20, 60, 'minnow', random()) f, count(*) n from generate_series(1,1000) group by 1) q;
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a settlement, and a house on it'
 delete from event where uid = :'ivar';
 delete from item where holder_uid = :'ivar' and def in ('log', 'plank');
@@ -638,6 +702,10 @@ select '107. what is left standing: ' || (select levels || ' storey, ' || (selec
         || ' walls, ' || (select count(*) from floor_tile f where f.building = b.id) || ' floors' from building b where world_id = :'world2');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a fence, which is a wall with nothing around it'
 delete from event where uid = :'ivar';
 update player set x = 3.5, y = 7.5 where uid = :'ivar';
@@ -665,6 +733,10 @@ select '114. renaming the hall, which takes no time at all: done=' || coalesce((
      || ' — ' || (select name from building where world_id = :'world2')
      || ', said at once: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and what a client may do to a house that is not theirs'
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
@@ -688,6 +760,10 @@ select '120. and it is all still his: ' || (select name from building where worl
      || ', ' || (select count(*) from wall where world_id = :'world2') || ' walls, deed of '
      || (select name from deed where world_id = :'world2');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the things that are alive when nobody is looking'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -745,6 +821,10 @@ select '129. an hour alone: leg ' || leg || ' (forty is as far back as anyone wa
      || round(hunger::numeric, 2) from creature where id = :'cid';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- winning one over'
 update creature set from_x = 6.8, from_y = 7.4, to_x = 6.8, to_y = 7.4,
     leg_at = now(), leg_ends = now(), until = now() + interval '1 hour', settled_at = now(),
@@ -830,6 +910,10 @@ select '149. ' || (select text from event where uid = :'ivar' order by n desc li
 select '150. a monster is not a wildermon: ' || coalesce(act_refusal(:'world2', :'ivar', 'tame',
        ('{"kind":"creature","id":' || (select creature_spawn(:'world2', 'goblin', 6.9, 7.2, 'wild')) || '}')::jsonb), 'allowed');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and through the front door'
 delete from event where uid = :'ivar';
 select rpc_act(:'world2', 'examine_creature', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) as looked \gset
@@ -876,6 +960,10 @@ reset role;
 select '160. and it is all still Ivar''s: ' || (select count(*) from creature where keeper = :'ivar')
      || ' of them, and nothing is hurt: ' || (select count(*) from creature where health < 1);
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what it is made of, which until now it was not'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -895,6 +983,10 @@ select '163. the same sword in copper:     ' || round(weapon_damage(:'world2', :
 update item set extra = 'Steel' where id = :'sword';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a sword, a rabba, and what they do to each other'
 select '164. empty hands reach ' || melee_reach(:'world2', :'ivar') || ' tiles; taking the sword up: '
      || coalesce(act_refusal(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'sword' || '}')::jsonb), 'allowed');
@@ -938,6 +1030,10 @@ select act_perform(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","
 select '172. a crawler is a defensive sort: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and what it left on you'
 select '173. carrying: ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'nothing')
      || ' — health ' || (select round(((stats->>'health')::numeric), 3) from player where uid = :'ivar');
@@ -1009,6 +1105,10 @@ select '183. ' || (select string_agg(text, ' | ' order by n) from event where ui
      || ' which is where the island put him ashore';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a bow, and a carcass'
 update player set x = 8.5, y = 8.5, wounds = '[]', stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb where uid = :'ivar';
 select creature_spawn(:'world2', 'rabba', 13.5, 8.5, 'wild', now() - interval '2 hours') as far \gset
@@ -1045,6 +1145,10 @@ insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2
 select act_perform(:'world2', :'ivar', 'treat_creature', ('{"kind":"creature","id":' || :'woola' || '}')::jsonb) \g /dev/null
 select '192. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- put to work'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -1082,6 +1186,10 @@ select '202. the beds it went over are picked clean for now: '
      || (select count(*) from foraged where world_id = :'world2' and kind = 'forage') || ' of them';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a woodcutter, and one tile to one worker'
 -- A stand of oaks inside the deed for it to work.
 do $$
@@ -1127,6 +1235,10 @@ select '208. five more minutes against a full crate: it is holding '
 delete from item where world_id = :'world2' and holder = 'crate' and def = 'rock_shards';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and what a client may do to the stores'
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
@@ -1145,6 +1257,10 @@ end $$;
 reset role;
 select '213. and it is all still in the crate: ' || (select coalesce(sum(count), 0) from item where world_id = :'world2' and holder = 'crate');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- crates, and the beast that fills them'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -1191,6 +1307,10 @@ select '226. ' || (select text from event where uid = :'ivar' order by n desc li
      || ', crates in the pack: ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'crate_log');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and a magga, which tidies up'
 select '227. logs lying at the stumps: ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'ground' and def = 'log'), '0');
 select creature_spawn(:'world2', 'magga', 5.5, 8.5, 'stored', now() - interval '3 hours', :'ivar') as tidier \gset
@@ -1208,6 +1328,10 @@ select '229. fifteen minutes of it: ' || :'tidied' || ' rounds, ' ||
        coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'log'), '0')
      || ' of them in the deed crate';
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a kiln, and the queue it works through'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -1261,6 +1385,10 @@ select '242. bricks in the pack: ' || (select coalesce(sum(count),0) from item w
      || ', and the kiln is empty of finished work: ' || coalesce(act_refusal(:'world2', :'ivar', 'kiln_take_all', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and the smelter, which takes its time by the metal'
 select '243. copper takes ' || round(smelt_seconds('copper', 40, 50)) || ' seconds of heat, iron '
      || round(smelt_seconds('iron', 40, 50)) || ', seryll ' || round(smelt_seconds('seryll', 40, 50))
@@ -1307,6 +1435,10 @@ select '253. ' || (select text from event where uid = :'ivar' order by n desc li
      || ' — and it remembers what it was poured from: '
      || coalesce((select extra from item where holder_uid = :'ivar' and def = 'anvil' limit 1), 'nothing');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- bettering a thing, and mending it'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -1367,6 +1499,10 @@ select '263. ' || (select string_agg(text, ' | ' order by n) from event where ui
 select '264. nothing left to mend: ' || coalesce(item_refusal(:'world2', :'ivar', 'repair_item', ('{"kind":"item","uid":' || :'axe' || '}')::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a meal, and what is actually in it'
 delete from event where uid = :'ivar';
 select '265. hunger ' || (select round(((stats->>'hunger')::numeric), 2) from player where uid = :'ivar')
@@ -1392,6 +1528,10 @@ select '271. a second helping: ' || (select jsonb_array_length(boons) from playe
      || ' knack, not two — it runs longer rather than harder';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and something to drink'
 delete from event where uid = :'ivar';
 update player set stats = jsonb_set(stats, '{thirst}', '0.2') where uid = :'ivar';
@@ -1413,6 +1553,10 @@ select '276. and the bucket is: ' || coalesce(item_refusal(:'world2', :'ivar', '
      || ' — thirst ' || (select round(((stats->>'thirst')::numeric), 2) from player where uid = :'ivar')
      || ', and the four now read ' || (select nutrition::text from player where uid = :'ivar');
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the rulebook, as a client sees it'
 /*
  * This is the check that was missing, and the live run had to find it instead.
@@ -1448,6 +1592,10 @@ do $$ begin
 end $$;
 reset role;
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the errands: work done where it is found'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from event where uid = :'ivar';
@@ -1473,6 +1621,10 @@ select :'world2', 'crate', c.id, c.x, c.y, 'shovel', 60, 1, 55 from crate c wher
 select '283. in the stores: ' || (select string_agg(def || ' ×' || count, ', ' order by def) from item where world_id = :'world2' and holder = 'crate');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a stoker, which is why the furnaces are never cold'
 -- Every hearth cold and its clock stamped now, so what follows is measuring
 -- the stoker rather than whatever the earlier sections left burning.
@@ -1493,6 +1645,10 @@ select '285. ten minutes of it: ' || :'stoked' || ' loads carried, the kiln is '
      || ' — it takes the first thing in the crate that will catch, and the logs went in first';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a hod carrier, which builds the wall you planned and walked away from'
 -- A wall planned and left owing, the way they always are.
 insert into wall (world_id, level, dir, x, y, building, type, material, needed, total)
@@ -1510,6 +1666,10 @@ select '287. ten minutes of the hod: ' || :'hodded' || ' pieces fitted, and the 
                         from wall where world_id = :'world2' and dir = 'h' and x = 7 and y = 6);
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a mender, a planter, and something to do with a carcass'
 select '288. the worst thing in the stores: a shovel at ' ||
        (select round(dmg::numeric, 1) from item where world_id = :'world2' and holder = 'crate' and def = 'shovel')
@@ -1564,6 +1724,10 @@ select '293. ten minutes of a middun: ' || :'composted' || ' rounds, '
      || ' carcasses left, and ' || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'compost'), '0')
      || ' of compost in the crate — the best thing that ever happened to a field';
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- something that does not wait to be asked'
 /*
  * Everything else wild swept off the island first. Twenty sections have been
@@ -1641,6 +1805,10 @@ select '299. fourteen tiles of open ground later the ulva '
      || case when (select hunting from creature where id = :'gob2') is null then 'has given him up too' else 'has not: a monster follows better than twice as far' end;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a guard on the border, and a hunter in the country'
 delete from creature where world_id = :'world2' and mode = 'wild';
 delete from item where world_id = :'world2' and holder = 'ground' and def = 'corpse';
@@ -1733,6 +1901,10 @@ select '311. setting an ulva to keep watch: ' || coalesce(act_refusal(:'world2',
      || ' — which up to this commit were both "Nobody has taught this island what that looks like yet."';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the ground, which until now nobody could pick anything up off'
 -- The deed swept, so what is lying about is what this section put there.
 delete from item where world_id = :'world2' and holder = 'ground';
@@ -1780,6 +1952,10 @@ select '319. left lying about the deed: ' || (select count(*) from item where wo
        and holder = 'ground') || ' — the one out at 12,2, which is further than an arm';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and what a thing says about itself'
 insert into item (world_id, holder, holder_uid, def, ql, dmg, count, extra, rare)
 values (:'world2', 'player', :'ivar', 'hatchet', 63.5, 12, 1, 'Steel', 'supreme') returning id as prize \gset
@@ -1813,6 +1989,10 @@ select '326. the eight a pair of hands brought: '
      || (select string_agg(id, ', ' order by id) from action_def where hands_action(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- working the ground, and what grows out of it'
 -- The tile a building stands on, which is the case the last commit could not
 -- examine: `building_at` hands back a number and it was being read as a row.
@@ -1848,6 +2028,10 @@ select '330. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ' — the corner went from ' || :'was_h' || ' to ' || land_height(:'world2', 11, 9);
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- paving with cut slabs, and taking it up again'
 select land_set_tile(:'world2', 9, 10, 2) \g /dev/null
 select '331. slabs on packed earth with nothing to lay: ' || coalesce(act_refusal(:'world2', :'ivar',
@@ -1878,6 +2062,10 @@ select '334. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ' — and it is back to ' || (select name from tile_def where id = land_tile(:'world2', 9, 10));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- grass, reeds, fruit and worms'
 select land_set_tile(:'world2', 9, 9, 0), land_set_tile(:'world2', 8, 9, 19) \g /dev/null
 delete from event where uid = :'ivar';
@@ -1941,6 +2129,10 @@ select '341. six spadefuls of marsh: ' || pack_count(:'world2', :'ivar', 'worm')
         '{"kind":"tile","x":8,"y":10}'::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- reading the ground for metal'
 insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'prospecting', 40)
   on conflict (world_id, uid, id) do update set value = 40;
@@ -1959,6 +2151,10 @@ select '345. the eleven the ground brought: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and a beast that does the reading for you'
 -- Nothing else on the deed, and a seam of bare rock to find.
 delete from creature where world_id = :'world2' and mode in ('deed', 'wild');
@@ -2009,6 +2205,10 @@ select '350. of the twenty-two trades a wildermon may be set to, this island now
                   where not worker_job_ported(v.k)), 'none at all: that is every trade in the game');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- barrels, buckets, and a well that fills itself'
 update player set x = 5.5, y = 7.5,
     stats = jsonb_set(stats, '{thirst}', '0.3') where world_id = :'world2' and uid = :'ivar';
@@ -2036,6 +2236,10 @@ select '353. five minutes nobody watched: ' || :'five' || ' litres — and a day
 update placed set since = now() - interval '5 minutes' where id = :'well';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a bucket, filled and tipped out'
 select give(:'world2', :'ivar', 'bucket', 3, 50) \g /dev/null
 select id as bucket from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'bucket' order by id desc limit 1 \gset
@@ -2056,6 +2260,10 @@ select '356. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ' — and the empty bucket is back: ' || pack_count(:'world2', :'ivar', 'bucket') || ' of them';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- drinking out of it, and tipping it out'
 select '357. thirst before: ' || (select round((stats->>'thirst')::numeric, 2) from player where uid = :'ivar')
      || ', and drinking from the barrel: ' || coalesce(act_refusal(:'world2', :'ivar', 'drink_from_vessel',
@@ -2092,6 +2300,10 @@ select '362. ' || (select text from event where uid = :'ivar' and kind = 'event'
         ('{"kind":"item","uid":' || :'skin' || '}')::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and a holla, which carries the shore to your barrels'
 delete from creature where world_id = :'world2' and mode in ('deed', 'wild');
 update placed set litres = 0, liquid = null, since = now() where id = :'barrel';
@@ -2114,6 +2326,10 @@ select '365. the six the liquids brought: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- an oven, which is a fire with a roof on it'
 update player set x = 7.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
 select give(:'world2', :'ivar', 'oven', 1, 55) \g /dev/null
@@ -2144,6 +2360,10 @@ select act_perform(:'world2', :'ivar', 'put_out_oven', ('{"kind":"furniture","id
 select '371. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a lantern, and the candle that burns only while it is lit'
 select give(:'world2', :'ivar', 'lantern', 1, 60) \g /dev/null
 select id as lamp from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'lantern' limit 1 \gset
@@ -2182,6 +2402,10 @@ select '377. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ' — ' || lantern_state((select i from item i where i.id = :'lamp'));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- an anvil, and what is beaten out on it'
 select give(:'world2', :'ivar', 'anvil', 1, 70, 'Iron') \g /dev/null
 select id as anvil_item from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1 \gset
@@ -2235,6 +2459,10 @@ select '384. the ten the forge brought: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a satchel, and the whole reason bags waited three commits'
 update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
 delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' and def = 'plank';
@@ -2265,6 +2493,10 @@ select '389. ' || (select text from event where uid = :'ivar' and kind = 'event'
           and holder_uid = :'ivar' and holder = 'player' and def = 'plank');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a chest, a bulk bin, and a crate with a rotten bottom'
 delete from placed where world_id = :'world2' and kind = 'furniture'
   and sub in ('chest', 'bulk_bin', 'trash_crate');
@@ -2313,6 +2545,10 @@ select '394. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ' — the trash crate holds ' || furniture_units((select p from placed p where p.id = :'bin_trash'));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and who may read what is in them'
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
@@ -2326,6 +2562,10 @@ select '396. the five that hold things: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a settlement grows by being built up'
 update deed set level = 1, radius = deed_radius(1) where world_id = :'world2';
 update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
@@ -2352,6 +2592,10 @@ select '402. ' || (select text from event where uid = :'ivar' order by n desc li
         '{"kind":"tile","x":5,"y":7,"name":"  "}'::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a work post, which rots where it stands'
 delete from creature where world_id = :'world2' and mode in ('deed', 'stored', 'wild');
 delete from placed where world_id = :'world2' and kind = 'post';
@@ -2410,6 +2654,10 @@ select '411. and the middun: it takes its orders from '
      || ' — which is the token, where it came home to';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and giving the whole thing up'
 select give(:'world2', :'ivar', 'work_post', 1, 60, 'Oak') \g /dev/null
 select act_perform(:'world2', :'ivar', 'place_post',
@@ -2440,6 +2688,10 @@ select '416. the seven the settlement brought: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and a thing made of nothing in particular'
 /*
  * The live smoke test found this by looking at the first thing in the pack,
@@ -2462,6 +2714,10 @@ select '419. and one with a material on it: '
           and i.holder_uid = :'ivar' and i.extra is not null order by i.id desc limit 1));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what the old people left in the ground'
 update player set x = 8.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
 select land_set_tile(:'world2', 8, 10, 1) \g /dev/null
@@ -2552,6 +2808,10 @@ end $$;
 select '427. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and a nose that does the digging for you'
 select '428. a snout is the twenty-second trade: '
      || (select count(*) from (values ('forage'), ('botanize'), ('woodcut'), ('farm'), ('mine'), ('sand'),
@@ -2587,6 +2847,10 @@ select '430. the three that came with the relics: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what you catch while you are somewhere else'
 delete from placed where world_id = :'world2' and kind = 'trap';
 delete from creature where world_id = :'world2' and mode = 'wild';
@@ -2691,6 +2955,10 @@ select '443. and asked outright what it still cannot do: ' ||
      || ' filling its own head with the jobs that started';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a seat, a set of traces and the shafts of a cart'
 delete from placed where world_id = :'world2' and kind = 'furniture';
 delete from creature where world_id = :'world2';
@@ -2861,6 +3129,10 @@ select '467. the eleven that came with the reins: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and what a thing has to be empty of before it will come up'
 update player set x = 14.5, y = 12.5 where world_id = :'world2' and uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'hitch_creature',
@@ -2911,6 +3183,10 @@ select '472. and a barrel with ' || round(placed_litres((select p from placed p 
         ('{"kind":"furniture","id":' || :'tun' || '}')::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- an altar, and three ways of looking at all this'
 delete from placed where world_id = :'world2' and kind = 'furniture';
 delete from creature where world_id = :'world2';
@@ -3050,6 +3326,10 @@ select '494. the five that came with it: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a bridge, a bed, a herd, a pot of dye and a barrel of ale'
 delete from placed where world_id = :'world2' and kind = 'furniture';
 delete from creature where world_id = :'world2';
@@ -3293,6 +3573,10 @@ select '522. the last ten: '
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a torch, and the end of the tinderbox'
 delete from placed where world_id = :'world2' and kind = 'campfire';
 delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('torch', 'lantern');
@@ -3329,6 +3613,10 @@ select '528. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ' tinderboxes in this game, which is how many there always were';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a name you can prove'
 -- Until now every name in this file was a string somebody typed. An account is
 -- a name the database can check, and the check is not a column of its own: the
@@ -3438,6 +3726,10 @@ select '543. a stranger reads the roll of names: ' || (select count(*) from acco
 reset role;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a face, and where it is kept'
 -- Eight short strings, chosen on the landing page between making an account
 -- and stepping ashore. What is measured here is that none of them can be
@@ -3500,6 +3792,10 @@ do $$ begin
 exception when others then raise notice '555. nobody at all chooses a face: refused — %', sqlerrm; end $$;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the big island'
 -- Sixteen kilometres a side instead of one. What makes it affordable is not
 -- storage and not writes — both were always fine — but that the land stops
@@ -3563,6 +3859,10 @@ select '563. arriving two blocks over: ' || (select count(*) from world_stocked 
      || ' blocks out now, and ' || (select count(*) from creature where world_id = :'big') || ' wild things on the island';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- how long everything takes'
 -- `base_time` is a weight, not a clock. Mining is the yardstick: a beginner
 -- with a plain pickaxe spends thirty seconds on a face of rock, and every
@@ -3587,6 +3887,10 @@ select '569. and a worker over the same task takes ' || round(work_duration(20))
      || ' seconds at skill 20, which is twice what a hand of that skill would';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- and how long the world takes'
 -- Actions have a pace and so does everything the world does on its own. Cotton
 -- is that second yardstick: five minutes a stage, and every other world timer
@@ -3613,6 +3917,10 @@ select '575. corn is ' || round((select stage_seconds * 3 from crop_def where id
         / day_seconds() * 100) || ' hundredths of one, which is what it always was';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- a sprout under your own feet'
 -- A tree is the one tile on this island that nothing can stand on, and `plant`
 -- makes the ground into one. Asking nothing about where the planter stood let
@@ -3628,6 +3936,10 @@ select '577. one step to the side, the same tile and the same sprout: '
      || coalesce(act_refusal(:'world2', :'ivar', 'plant', '{"kind":"tile","x":11,"y":9}'::jsonb), 'allowed');
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the island''s own clock'
 -- Everything here settles off a timestamp, which works right up to the moment
 -- nobody calls. `settle` had three callers and the browser reached one of them
@@ -3685,6 +3997,10 @@ select '586. and she comes back: away is now '
                   order by n desc limit 1), 'nothing') || '"';
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- doors that were open'
 -- An island somebody else founded and Ivar has never set foot on.
 insert into world (name, seed, size, spawn_x, spawn_y, ready)
@@ -3784,6 +4100,10 @@ begin
 end $$;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the land, read in squares'
 select '610. a square of the 4096 island holds ' || length(tiles) || ' bytes of tiles and '
      || length(heights) || ' of corners, which is ' || chunk_size() || ' tiles to a side'
@@ -3868,6 +4188,10 @@ begin
 end $$;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- which island the front door opens on'
 -- Coming ashore used to need somebody to hand you a uuid. The keeper knows
 -- which island is the one now, in a row nothing with a browser can write.
@@ -3906,6 +4230,10 @@ end $$;
 reset role;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the landing beach'
 -- Wildlife never moved before the clock, so a goblin at the spawn was scenery.
 -- It comes for you now, and a fresh body can do nothing about it.
@@ -3935,6 +4263,10 @@ begin
 end $$;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- putting a job down'
 /*
  * Stopping, which until now was a thing the browser did to its own copy.
@@ -3999,6 +4331,10 @@ select '627. and stopping is a door an account may knock on: rpc_cancel(uuid) '
      || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_cancel(uuid)', 'execute') then 'YES' else 'no' end;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- where somebody has been'
 /*
  * The fog of war, which lived in the tab and nowhere else.
@@ -4048,6 +4384,10 @@ select '635. and the door itself: rpc_fog(uuid,text) to an account '
      || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_fog(uuid,text)', 'execute') then 'YES' else 'no' end;
 
 \echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what is standing on the ground'
 /*
  * Everything the island has set down, which the browser never asked for.
@@ -4111,3 +4451,91 @@ select '642. hild asks to found a settlement where ivar holds one: '
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select '643. and ivar, who holds it, is told it is his to disband: '
      || coalesce(deed_refusal(:'world2', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');
+
+\echo ''
+\echo '--- a body that gets hungry'
+/*
+ * The four numbers the island owned and never moved.
+ *
+ * "Thirst and hunger reset to full on every client reset." `stats` is written
+ * when you eat, drink, pray, sleep or die and at no other time — so nothing
+ * over here ever drained hunger or thirst, spent or gave back wind, or healed
+ * anybody, and `action_def.stamina` was a column no function read. The bars
+ * fell in the browser because the browser was moving its own copy; a refresh
+ * read this row, which had never moved since the day the body was made.
+ *
+ * It settles off a timestamp now, the way a fire does, because there is
+ * nowhere in Supabase to put a loop.
+ */
+update player set stats = '{"health":0.5,"stamina":0.5,"hunger":1,"thirst":1}'::jsonb,
+       act = null, act_target = null, act_started = null, act_ends = null, act_left = null,
+       body_at = now() - interval '120 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '644. two minutes of standing about: ' || (select 'hunger ' || round(((stats->>'hunger')::numeric), 4)
+     || ', thirst ' || round(((stats->>'thirst')::numeric), 4)
+     || ', wind ' || round(((stats->>'stamina')::numeric), 3)
+     || ', health ' || round(((stats->>'health')::numeric), 3)
+     from player where world_id = :'world2' and uid = :'ivar')
+     || ' — from a full stomach, half wind and half health';
+
+-- Wind comes back while your hands are empty and not while they are full.
+update player set stats = jsonb_set(stats, '{stamina}', '0.5'), act = 'dig',
+       act_started = now(), act_ends = now() + interval '60 seconds', act_left = 1,
+       body_at = now() - interval '60 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '645. a minute with a job in hand: wind ' || (select round(((stats->>'stamina')::numeric), 3)
+     from player where world_id = :'world2' and uid = :'ivar') || ', which is the half it started with';
+
+-- A wound knits only on a body that is fed and watered.
+update player set stats = '{"health":0.5,"stamina":1,"hunger":0.05,"thirst":0.05}'::jsonb,
+       act = null, act_ends = null, act_left = null, body_at = now() - interval '300 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '646. five minutes starving and parched: health ' || (select round(((stats->>'health')::numeric), 3)
+     from player where world_id = :'world2' and uid = :'ivar')
+     || ', and nothing knits on a body with nothing in it';
+
+-- And what a go of work takes out of you, which nothing here had ever charged.
+update player set stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb, body_at = now()
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select spend_wind(:'world2', :'ivar', 'mine') \g /dev/null
+select spend_wind(:'world2', :'ivar', 'mine') \g /dev/null
+select '647. two swings at a rock face: wind ' || (select round(((stats->>'stamina')::numeric), 3)
+     from player where world_id = :'world2' and uid = :'ivar')
+     || ' — mine costs ' || (select stamina from action_def where id = 'mine') || ' a go, less what a hardy body saves';
+
+update player set stats = jsonb_set(stats, '{stamina}', '0.02'), body_at = now()
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select '648. and asking for another with nothing left: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'mine', '{"kind":"tile","x":5,"y":5,"cx":5,"cy":5}'), 'allowed');
+select '649. while something that costs no wind is still allowed: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'examine',
+          (select jsonb_build_object('kind', 'tile', 'x', floor(x)::int, 'y', floor(y)::int)
+           from player where world_id = :'world2' and uid = :'ivar')), 'allowed');
+
+/*
+ * And a week away, which must not be a week of thirst.
+ *
+ * A shut tab is not a body standing in a field. At most `body_gap` seconds are
+ * ever charged at once, so somebody who comes back after a fortnight finds
+ * themselves where they left off rather than dead — which is also how the game
+ * has always behaved in a browser, where no time passes for a page that is not
+ * open.
+ */
+update player set stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb,
+       act = null, body_at = now() - interval '7 days'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '650. a week away: thirst ' || (select round(((stats->>'thirst')::numeric), 4)
+     from player where world_id = :'world2' and uid = :'ivar')
+     || ', which is ' || body_gap() || ' seconds of it and not ' || (7 * 24 * 3600) || '';
+
+-- The heartbeat is where a body that is only standing there lives.
+update player set stats = jsonb_set(stats, '{hunger}', '1'), body_at = now() - interval '100 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select coalesce(((rpc_settle())->'stats'->>'hunger'), 'nothing') as beat \gset
+select '651. and the heartbeat every browser makes anyway settles it: rpc_settle says hunger '
+     || round(:'beat'::numeric, 4) || ', which the browser draws as it is told';

@@ -589,6 +589,26 @@ async function main(): Promise<void> {
     check('and the settlement it has just kept is one of them',
       seen?.deed?.name === 'Smoke' && seen?.deed?.mine === true,
       seen?.deed ? `${seen.deed.name}, ${seen.deed.radius * 2 + 1} tiles across, ours: ${seen.deed.mine}` : 'no settlement in the answer');
+    /*
+     * And whether a body on the real island gets hungry.
+     *
+     * "Thirst and hunger reset to full on every client reset." `stats` was
+     * written when you ate, drank, prayed, slept or died and at no other time,
+     * so nothing over there ever drained anything — the bars fell in the
+     * browser and a refresh read a row that had never moved. Read twice with
+     * a wait between, off the island's own answer rather than this side's copy.
+     */
+    const thirstOf = async (): Promise<number> => {
+      const { data } = await supabase().rpc('rpc_settle');
+      return Number((data as { stats?: { thirst?: number } } | null)?.stats?.thirst ?? -1);
+    };
+    const drink0 = await thirstOf();
+    await sleep(6000);
+    const drink1 = await thirstOf();
+    check('a body on the island gets thirsty while it stands there',
+      drink0 > 0 && drink1 > 0 && drink1 < drink0,
+      `${drink0.toFixed(4)} then ${drink1.toFixed(4)} six seconds later`);
+
     check('and the settlement crate stands beside it',
       (seen?.crates ?? []).some((c) => c.deed),
       `${(seen?.crates ?? []).length} crates, ${(seen?.crates ?? []).filter((c) => c.deed).length} of them the settlement's`);

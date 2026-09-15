@@ -2438,6 +2438,17 @@ create or replace function chunk_size() returns double precision language sql im
 create or replace function found_max() returns double precision language sql immutable as $fn$ select 512::double precision $fn$;
 create or replace function peace_reach() returns double precision language sql immutable as $fn$ select 24::double precision $fn$;
 create or replace function fog_bytes() returns double precision language sql immutable as $fn$ select 262144::double precision $fn$;
+create or replace function hunger_rate() returns double precision language sql immutable as $fn$ select 0.0004::double precision $fn$;
+create or replace function thirst_rate() returns double precision language sql immutable as $fn$ select 0.0006::double precision $fn$;
+create or replace function wind_rest() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
+create or replace function wind_walk() returns double precision language sql immutable as $fn$ select 0.012::double precision $fn$;
+create or replace function wind_per_level() returns double precision language sql immutable as $fn$ select 0.005::double precision $fn$;
+create or replace function wind_starving() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
+create or replace function heal_rate() returns double precision language sql immutable as $fn$ select 0.004::double precision $fn$;
+create or replace function heal_fed() returns double precision language sql immutable as $fn$ select 0.2::double precision $fn$;
+create or replace function swim_wind() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
+create or replace function drown_rate() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
+create or replace function exhausted() returns double precision language sql immutable as $fn$ select 0.08::double precision $fn$;
 create or replace function favour_trickle() returns double precision language sql immutable as $fn$ select 0.0016::double precision $fn$;
 create or replace function prayer_favour() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
 create or replace function prayer_rest() returns double precision language sql immutable as $fn$ select 2400::double precision $fn$;

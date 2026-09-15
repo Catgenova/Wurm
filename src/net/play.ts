@@ -190,6 +190,15 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * actions — and leaves it drawing the legs the island hands over.
    */
   game.creatures.fromIsland = true;
+  /*
+   * And the body, which the island now keeps.
+   *
+   * Reported as "thirst and hunger reset to full on every client reset": the
+   * bars fell here all session and the island's row had never moved, so a
+   * refresh read the full mark it was made with. The island settles a body off
+   * a timestamp now, and this side stops moving what it does not own.
+   */
+  game.bodyFromIsland = true;
   island.hooks.mobs = (rows) => {
     game.creatures.sawAll(rows);
     game.events.emit('creature');
