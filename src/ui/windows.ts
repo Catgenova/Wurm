@@ -207,7 +207,7 @@ export class UIWindow {
     else this.open();
   }
 
-  /** Keep at least the title bar reachable inside the viewport; expanded windows track the viewport. */
+  /** Keep every window wholly inside the interface, on every screen. */
   clamp(): void {
     if (this.el.hidden) return;
     if (this.maximized) {
@@ -216,26 +216,34 @@ export class UIWindow {
     }
     const box = uiBox();
     const floor = uiFloor();
-    const narrow = this.el.closest('#ui')?.classList.contains('narrow') ?? false;
 
     /*
-     * On a narrow screen a window is kept wholly inside the interface, and
-     * never taller than the room there is. A desktop may hang one off the
-     * bottom edge on purpose — that is what dragging by the title is for —
-     * but a phone has no second screen to hang it onto.
+     * Nothing goes off the edge, and nothing is bigger than the room it is in.
+     *
+     * A window used to be allowed to hang over an edge with sixty pixels of
+     * itself left showing — or, at the bottom of a desktop, thirty — on the
+     * grounds that somebody might want one mostly out of the way and could
+     * always drag it back by the title bar. What it actually produced was the
+     * event window three quarters off the left of a phone, with its tabs and
+     * its "Find…" box out in the dark, and a drag handle you would have to
+     * reach past the screen to take hold of. A window you cannot get back is
+     * not tidied away, it is lost.
+     *
+     * Size first, because a window wider or taller than the interface cannot
+     * be put inside it however it is moved, and then the position against what
+     * that leaves. The same pass runs on every open, every drag, every resize
+     * and every turn of the phone, so a window saved from a wide screen and
+     * opened on a narrow one comes back in rather than off the side.
      */
-    if (narrow) {
-      const room = Math.max(70, box.h - floor - 12);
-      if (this.el.offsetHeight > room) this.el.style.height = `${room}px`;
-    }
-    const maxLeft = Math.max(0, box.w - 60);
-    const maxTop = narrow
-      ? Math.max(floor, box.h - this.el.offsetHeight - 6)
-      : Math.max(floor, box.h - 30);
-    const left = Math.min(maxLeft, Math.max(-this.el.offsetWidth + 60, this.el.offsetLeft));
-    const top = Math.min(maxTop, Math.max(floor, this.el.offsetTop));
-    this.el.style.left = `${left}px`;
-    this.el.style.top = `${top}px`;
+    const room = Math.max(70, box.h - floor - 12);
+    if (this.el.offsetHeight > room) this.el.style.height = `${room}px`;
+    const wide = Math.max(160, box.w - 12);
+    if (this.el.offsetWidth > wide) this.el.style.width = `${wide}px`;
+
+    const maxLeft = Math.max(0, box.w - this.el.offsetWidth);
+    const maxTop = Math.max(floor, box.h - this.el.offsetHeight);
+    this.el.style.left = `${Math.min(maxLeft, Math.max(0, this.el.offsetLeft))}px`;
+    this.el.style.top = `${Math.min(maxTop, Math.max(floor, this.el.offsetTop))}px`;
   }
 
   state(): SavedState {
