@@ -219,6 +219,20 @@ function inOurWords(message: string, address: string): string {
   if (m.includes('email address') && m.includes('invalid')) {
     return `The island keeper refused the address ${address}, which is what the name you typed becomes here. That is a domain Auth will not take, and it is not something a setting can allow — the suffix the island hands out has to change, and src/net/accounts.ts is where it is written.`;
   }
+  /*
+   * A limit on *sending mail* is not somebody being impatient, and saying
+   * "wait a minute" to a player on their first try is a lie that sends them
+   * round the same loop for ever.
+   *
+   * The island has no business sending mail at all: a username here has no
+   * mailbox behind it, which is the whole design. If Auth is trying, then
+   * "Confirm email" is on — and hosted Supabase's own mailer allows two an
+   * hour, so the second person to make an account is refused and told they
+   * have been trying too hard. Name the setting instead.
+   */
+  if (m.includes('rate limit') && (m.includes('email') || m.includes('security purposes'))) {
+    return 'The island keeper tried to send a confirmation mail, and it has run out of its allowance for the hour. It should not be sending any at all — a username here has no mailbox behind it. "Confirm email" is on in the project\'s Auth settings and needs to be off: Authentication → Sign In / Providers.';
+  }
   if (m.includes('rate limit') || m.includes('too many')) return 'That is a lot of tries in a short time. Wait a minute and go again.';
   if (m.includes('signups not allowed') || m.includes('signup is disabled')) return 'The island keeper is not taking new accounts at the moment.';
   return message;

@@ -16,7 +16,7 @@ import { Island } from '../../src/net/island';
 import { generateAtlasWorld } from '../../src/world/atlas-world';
 import { TILE_DEFS } from '../../src/world/tiles';
 import { supabase, signIn, PROJECT } from '../../src/net/supabase';
-import { nameEmail } from '../../src/net/accounts';
+import { createAccount, nameEmail } from '../../src/net/accounts';
 import { readAtlas } from '../../tools/atlas-node';
 import { ACTION_PACE } from '../../src/game/pace';
 import { pathOptions } from '../../src/game/player';
@@ -930,46 +930,67 @@ async function main(): Promise<void> {
   }
 
   /*
-   * The suffix a username wears, put to the real Auth.
+   * The two things about Auth that no local Postgres has an opinion about.
    *
    * Everything above runs as an anonymous body, and an anonymous body is the
-   * one route through Auth that never touches an e-mail address — so nothing
-   * here and nothing in the local suite could have caught the thing that shut
-   * the island. GoTrue refuses an address at `.invalid` outright, off a list
-   * of barred host suffixes in its own source that no project setting reaches,
-   * and one commit earlier the landing page became the only way ashore. A
-   * local Postgres will store any string at all in `auth.users`; only the real
-   * Auth can say whether it will take one.
+   * one route through Auth that never touches an e-mail address — so neither
+   * this file nor the local suite could catch either of the things that have
+   * shut the island. A local Postgres stores any string at all in
+   * `auth.users`; only the real Auth decides which ones it will take, and
+   * whether it insists on mailing them first.
    *
-   * Done by growing the anonymous body already signed in, rather than by
-   * signing up a second time: it is the path somebody who came ashore first
-   * actually takes, and it leaves behind no row this run was not leaving
-   * anyway.
-   *
-   * `rpc_my_name` is the other half. It reads the address back out of
-   * `auth.users` and cuts the suffix off it, so getting the name back proves
-   * both ends at once — that Auth accepted the address, and that the island
-   * still recognises the suffix it is written at.
+   * The settings endpoint is asked before anything else, because it answers
+   * both questions without sending a single mail. `mailer_autoconfirm` is
+   * "Confirm email", inverted: true means an account works the moment it is
+   * made. False means Auth tries to post a letter to a name that has no
+   * mailbox — and hosted Supabase allows two an hour, so the *first* person to
+   * try is told they have been trying too often. That is what it did.
    */
   {
-    const name = `smoke${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
-    const email = nameEmail(name);
-    const suffix = email.slice(name.length);
-    const { error: grew } = await supabase().auth.updateUser({ email, password: crypto.randomUUID() });
-    if (grew) {
-      check(`Auth takes an address at ${suffix}`, false, grew.message);
-      if (/email address/i.test(grew.message) && /invalid/i.test(grew.message)) {
-        say(`        ${suffix} is a suffix Auth will not take, and no setting lifts it.`);
-        say('        The suffix itself has to change: DOMAIN in src/net/accounts.ts,');
-        say('        and name_domains() on the island, which reads both.');
-      }
-    } else {
-      const { data: called } = await supabase().rpc('rpc_my_name');
-      check(`Auth takes an address at ${suffix}, and the name comes back out of it`,
-        called === name, `${String(called)} — the uid did not move`);
-      if (called !== name) {
-        say('        An address Auth accepted but did not apply is what "Confirm email" looks');
-        say('        like from here: turn it off in Authentication → Sign In / Providers.');
+    let settings: { mailer_autoconfirm?: boolean; disable_signup?: boolean } | null = null;
+    try {
+      const reply = await fetch(`${PROJECT.url}/auth/v1/settings`, { headers: { apikey: PROJECT.key } });
+      settings = reply.ok ? await reply.json() : null;
+    } catch { /* said below, as an unknown rather than a pass */ }
+
+    const autoconfirm = settings?.mailer_autoconfirm === true;
+    check('an account works the moment it is made', autoconfirm,
+      settings === null ? 'the settings endpoint did not answer' : `mailer_autoconfirm ${String(settings.mailer_autoconfirm)}`);
+    if (settings && !autoconfirm) {
+      say('        "Confirm email" is on. Every account made here is held for a mail that');
+      say('        will never be answered, because a username has no mailbox behind it —');
+      say('        and the allowance runs out after two, so the next person to try is told');
+      say('        they have been trying too often. Authentication → Sign In / Providers.');
+    }
+    check('and new accounts are being taken at all', settings?.disable_signup !== true,
+      `disable_signup ${String(settings?.disable_signup)}`);
+
+    /*
+     * And the suffix itself, made for real the way the landing page makes one.
+     *
+     * Only when Auth will not be mailing anybody: a signup that sends a letter
+     * spends an allowance of two an hour that belongs to whoever is trying to
+     * play, and this run has already spent it once by asking.
+     *
+     * Always the same name, so that the whole of CI's mark on `auth.users` is
+     * one row for ever. The first run makes it; every run after is told the
+     * name is taken, which is an answer only Auth can give *after* it has
+     * accepted the address — so either way the suffix is proven, and the one
+     * thing that is not a pass is being told the address itself is no good.
+     */
+    if (autoconfirm) {
+      const name = 'smokeaddress';
+      const suffix = nameEmail(name).slice(name.length);
+      await supabase().auth.signOut();
+      try {
+        const made = await createAccount(name, `wurm-smoke-${crypto.randomUUID()}`);
+        const { data: called } = await supabase().rpc('rpc_my_name');
+        check(`Auth takes an address at ${suffix}, and the name comes back out of it`,
+          !made.unconfirmed && called === name, `${String(called)}`);
+      } catch (e) {
+        const why = e instanceof Error ? e.message : String(e);
+        check(`Auth takes an address at ${suffix}`, /that name is taken/i.test(why),
+          /that name is taken/i.test(why) ? 'the address got as far as being a duplicate, which is past every check on it' : why);
       }
     }
   }
