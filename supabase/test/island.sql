@@ -3933,3 +3933,67 @@ begin
   raise notice '620. four hundred things put down on the beach and four hundred well past it: % hunters on the beach, % beyond it',
     beach, beyond;
 end $$;
+
+\echo ''
+\echo '--- putting a job down'
+/*
+ * Stopping, which until now was a thing the browser did to its own copy.
+ *
+ * The bar went out, the queue emptied on the screen, and over here the saw
+ * kept going to the end of everything that had been asked for. `rpc_act` had
+ * no opposite.
+ *
+ * Two things are being asked below and they pull against each other, which is
+ * why both are here: everything still in your hands goes, and everything
+ * already out of them stays.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where uid = :'ivar';
+update player set act = null, act_target = null, act_started = null, act_ends = null,
+       act_left = null, act_queue = '[]' where world_id = :'world2' and uid = :'ivar';
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'world2', 'player', :'ivar', 'log', 30, 40, 'Pine');
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 4))->>'started', 'no') as s1 \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'inHand', 'not queued') as s2 \gset
+select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'inHand', 'not queued') as s3 \gset
+select '621. four goes of sawing in hand with two more behind it: started ' || :'s1'
+     || ', then ' || :'s2' || ' and ' || :'s3' || ' in hand';
+select coalesce((rpc_cancel(:'world2'))::text, 'null') as put \gset
+select '622. and he puts it down: ' || :'put';
+select '623. nothing in hand and nothing in mind: ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
+     || ', ' || (select jsonb_array_length(act_queue) from player where world_id = :'world2' and uid = :'ivar') || ' queued, due '
+     || coalesce((select act_ends::text from player where world_id = :'world2' and uid = :'ivar'), 'never');
+
+-- And the other half: a go whose time was already up has happened, whether or
+-- not anybody had been round to write it down. Stopping is for what is still
+-- in your hands, not a way of taking back the last thirty seconds.
+select coalesce((select sum(count) from item where holder_uid = :'ivar' and def = 'plank')::text, '0') as p0 \gset
+select rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 3) \g /dev/null
+update player set act_started = now() - interval '11 seconds', act_ends = now() - interval '1 second'
+  where world_id = :'world2' and uid = :'ivar';
+select coalesce((rpc_cancel(:'world2'))::text, 'null') as late \gset
+select coalesce((select sum(count) from item where holder_uid = :'ivar' and def = 'plank')::text, '0') as p1 \gset
+select '624. one go of three comes due as he stops: ' || :'p0' || ' planks before and ' || :'p1'
+     || ' after, which is one log sawn and no more — the go that was due is kept, and he is left doing '
+     || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
+     || ', so the other two went with the stop (' || :'late' || ')';
+select coalesce((rpc_cancel(:'world2'))::text, 'null') as again \gset
+select '625. and stopping with empty hands is nothing at all: ' || :'again';
+
+-- It has no uid to be given, so there is no version of this that reaches
+-- anybody else's hands. Hild saws on while Ivar stops.
+update player set act = null, act_target = null, act_started = null, act_ends = null,
+       act_left = null, act_queue = '[]' where world_id = :'world2' and uid = :'hild';
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'world2', 'player', :'hild', 'log', 30, 9, 'Pine');
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 3) \g /dev/null
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 3) \g /dev/null
+select rpc_cancel(:'world2') \g /dev/null
+select '626. ivar stops and hild does not: ivar is doing '
+     || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
+     || ', hild is doing ' || coalesce((select act from player where world_id = :'world2' and uid = :'hild'), 'nothing');
+select '627. and stopping is a door an account may knock on: rpc_cancel(uuid) '
+     || case when has_function_privilege('authenticated', 'rpc_cancel(uuid)', 'execute') then 'yes' else 'NO' end
+     || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_cancel(uuid)', 'execute') then 'YES' else 'no' end;

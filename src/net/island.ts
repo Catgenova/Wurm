@@ -773,6 +773,29 @@ export class Island {
     return result;
   }
 
+  /**
+   * Put down whatever is in hand, and everything lined up behind it.
+   *
+   * The other half of `act`, and missing until somebody noticed what that
+   * meant: stopping was a thing the browser did to its own copy. The bar went
+   * out, the queue emptied on the screen, and over here the tree kept falling
+   * and the six jobs behind it ran through to the end.
+   *
+   * The island settles what is due before it drops anything, so this cannot be
+   * used to take back work already done — see the migration. Pulsing straight
+   * afterwards is what puts the screen back in step: otherwise the bar comes
+   * back for as long as it takes the next heartbeat to come round, which looks
+   * exactly like the bug this fixes.
+   */
+  async stop(): Promise<void> {
+    if (!this.info) return;
+    if (this.beat) clearTimeout(this.beat);
+    this.beat = null;
+    this.goes = undefined;
+    await supabase().rpc('rpc_cancel', { p_world: this.info.id });
+    await this.pulse();
+  }
+
   /** What time it is on the island, worked out rather than asked for. */
   time(): number {
     if (!this.info) return 0;

@@ -2002,7 +2002,19 @@ export class Game {
 
   cancelAction(silent = false): void {
     const a = this.action;
+    const lined = this.queue.length;
     this.clearQueue(silent || !a);
+    if (!a && !lined) return;
+    /*
+     * And wherever the job really is.
+     *
+     * Only when there was something to put down — `moveTo` cancels on every
+     * click of the ground, and a body walking across an empty field has no
+     * business telling the island anything. Not on a silent one either: the
+     * only silent cancel is dying, which is the island's own business on an
+     * island and has already happened by the time we hear about it.
+     */
+    if (!silent) this.stop?.();
     if (!a) return;
     this.action = null;
     if (!silent && a.state === 'performing') this.logMsg(`You stop ${a.def.verb}.`, 'info');
@@ -2034,6 +2046,17 @@ export class Game {
    * than a second copy of every action.
    */
   ask: ((def: ActionDef, target: Target, goes?: number) => void) | null = null;
+
+  /**
+   * And somewhere else to send the putting down.
+   *
+   * `ask` had no opposite, which meant stopping was the one thing this machine
+   * still decided for itself — and it decided it about a copy. Reported: "a
+   * player that stops a task locally doesn't stop it on the server, the task
+   * continues until completed." The bar went out here and the tree went on
+   * falling there.
+   */
+  stop: (() => void) | null = null;
 
   /**
    * A job somebody else is doing, shown here so that there is a clock on it.

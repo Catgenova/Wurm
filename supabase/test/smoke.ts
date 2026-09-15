@@ -715,6 +715,33 @@ async function main(): Promise<void> {
       await second.leave();
 
       /*
+       * And whether putting a job down puts it down *here*.
+       *
+       * Reported: "a player that stops a task locally doesn't stop it on the
+       * server, the task continues until completed." It did — the browser's
+       * stop cleared the bar, the job in hand and the queue behind it, all
+       * three of them its own copies, and `rpc_act` had no opposite.
+       *
+       * The row is read back off the table rather than trusted from the
+       * answer: whether the island stopped and whether it *said* it stopped
+       * are two different questions, and this is the one that was wrong.
+       */
+      await drain(id, uid);
+      const many = await island.act('dig', { x: cx, y: cy, cx, cy }, 8);
+      const { data: mid } = await supabase().from('player').select('act,act_left,act_queue')
+        .eq('world_id', id).eq('uid', uid).single();
+      const busy = mid as { act: string | null; act_left: number | null } | null;
+      check('eight goes of digging are in hand', many.started && busy?.act === 'dig',
+        `${busy?.act ?? 'nothing'}, ${busy?.act_left ?? 0} to go`);
+      await island.stop();
+      const { data: after } = await supabase().from('player').select('act,act_left,act_ends,act_queue')
+        .eq('world_id', id).eq('uid', uid).single();
+      const idle = after as { act: string | null; act_queue: unknown[] } | null;
+      check('and stopping stops it on the island, not only on the screen',
+        idle?.act === null && (idle?.act_queue ?? []).length === 0,
+        idle?.act ? `still ${idle.act} over there` : 'nothing in hand and nothing queued');
+
+      /*
        * And whether this island winds itself.
        *
        * Everything here settles off a timestamp, so `world_tick` on `pg_cron`
