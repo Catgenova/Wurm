@@ -162,6 +162,16 @@ jobs:
           npx esbuild supabase/test/agree.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/agree.mjs --log-level=error
           node node_modules/.cache/agree.mjs
+      - name: The ground is the one on the chart
+        run: |
+          # And that the ground both generators agree on is the ground that was
+          # drawn. They would agree just as contentedly on relief nobody asked
+          # for: `land` and `depth` are multipliers on the chart's own range,
+          # and if that range is not what they were written for, the shortfall
+          # is quietly made up by the ridged noise.
+          npx esbuild supabase/test/relief.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/relief.mjs --log-level=error
+          node node_modules/.cache/relief.mjs
 
   migrate:
     name: Push the migrations to the project

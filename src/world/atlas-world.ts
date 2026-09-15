@@ -52,6 +52,29 @@ export const ATLAS_CONFIG: AtlasConfig = {
   lakes: true,
 };
 
+/**
+ * Where the ground changes its mind about what it is, in dirt units above the
+ * water line, each with the amount the patch noise ragged-edges it by so that
+ * the line between two kinds of country is a fringe rather than a contour.
+ *
+ * These were three pairs of bare numbers inside the classifier. They are named
+ * out here because they are the other half of a question `ATLAS_CONFIG` only
+ * answers half of: `land` says how high the chart's ground gets, and these say
+ * how high it has to get before it is called a mountain. Neither number means
+ * anything without the other, and `supabase/test/relief.ts` reads both.
+ */
+export const BANDS = {
+  /** Above this, forest and rock rather than open ground. */
+  hill: 108,
+  hillVary: 18,
+  /** Above this, bare rock, and tundra where the region has it. */
+  alpine: 160,
+  alpineVary: 22,
+  /** Above this, snow. */
+  snow: 232,
+  snowVary: 12,
+} as const;
+
 export interface Atlas {
   n: number;
   elev: Float32Array;
@@ -295,15 +318,15 @@ export function generateAtlasWindow(
         if (m > 0.15 && r < 0.3 && slope < 12) t = TileType.Reed;
       } else if (slope > 52) {
         t = TileType.Rock;
-      } else if (avg > 232 + p * 12) {
+      } else if (avg > BANDS.snow + p * BANDS.snowVary) {
         t = R.snow ? TileType.Snow : TileType.Rock;
-      } else if (avg > 160 + p * 22) {
+      } else if (avg > BANDS.alpine + p * BANDS.alpineVary) {
         t = slope > 22 || !R.tundra ? TileType.Rock : TileType.Tundra;
         if (t === TileType.Tundra && r < 0.05) {
           t = TileType.Tree;
           d = packTreeData(speciesFor(reg, 1, avg, r2), variant);
         }
-      } else if (avg > 108 + p * 18) {
+      } else if (avg > BANDS.hill + p * BANDS.hillVary) {
         if (slope > 30) t = TileType.Rock;
         else if (m > 0.05 && r < 0.45 + m * 0.4) {
           t = TileType.Tree;
