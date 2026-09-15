@@ -19,6 +19,7 @@ import { supabase, signIn, PROJECT } from '../../src/net/supabase';
 import { createAccount, nameEmail } from '../../src/net/accounts';
 import { readAtlas } from '../../tools/atlas-node';
 import { ACTION_PACE } from '../../src/game/pace';
+import { WILD_REST, WILD_REST_SPREAD } from '../../src/game/creatures';
 import { pathOptions } from '../../src/game/player';
 import { findPath } from '../../src/world/pathfinding';
 import type { World } from '../../src/world/world';
@@ -253,17 +254,32 @@ async function main(): Promise<void> {
      * The wildlife, which the island stocked for itself the moment the land
      * was finished and which has been getting on with its life ever since.
      *
-     * Two calls a few seconds apart: the first walks everything near us
-     * forward, the second asks again. Something within sight will have moved,
-     * because the only thing that makes this island move is being looked at.
+     * Two calls apart: the first walks everything near us forward, the second
+     * asks again. Something within sight will have moved, because the only
+     * thing that makes this island move is being looked at.
+     *
+     * How far apart is not a guess and must not be a constant. It was four
+     * seconds, written when a wild thing walked a leg every one to six — and
+     * the last change slowed them to a leg every eight to thirty, because a
+     * beast that has crossed five tiles by the time you reach it cannot be
+     * tamed. Every creature here starts its first rest the moment the island
+     * is founded, so four seconds after that *nothing* has moved yet, and the
+     * check became a coin toss: it passed on one run and failed on the next
+     * with the same code both times.
+     *
+     * A third of the spread past the shortest rest, so a third of them are
+     * due and thirty-two all sitting still is out of the question — and so
+     * that re-pacing the wildlife again moves this with it rather than
+     * quietly turning it back into a dice roll.
      */
+    const WATCH = (WILD_REST + WILD_REST_SPREAD / 3) * 1000;
     const { data: was0 } = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
     const { data: first, error: mobErr } = await supabase().rpc('rpc_creatures', { p_world: id, p_range: 60 });
     const mob = (first ?? []) as Array<{ id: number; species: string; x: number; y: number; hunting?: boolean }>;
     check('the island stocked itself with wildlife', !mobErr && mob.length > 0,
       mobErr ? mobErr.message : `${mob.length} within sixty tiles`);
     if (mob.length) {
-      await new Promise((go) => setTimeout(go, 4000));
+      await new Promise((go) => setTimeout(go, WATCH));
       const { data: second } = await supabase().rpc('rpc_creatures', { p_world: id, p_range: 60 });
       const later = new Map(((second ?? []) as typeof mob).map((c) => [c.id, c]));
       const moved = mob.filter((c) => {
@@ -271,7 +287,7 @@ async function main(): Promise<void> {
         return then && (Math.abs(then.x - c.x) > 0.05 || Math.abs(then.y - c.y) > 0.05);
       });
       check('and it moves when it is looked at', moved.length > 0,
-        `${moved.length} of ${mob.length} are somewhere else four seconds later`);
+        `${moved.length} of ${mob.length} are somewhere else ${Math.round(WATCH / 1000)}s later`);
       const wild = mob[0];
       const noBait = await island.act('tame', { kind: 'creature', id: wild.id }, 1);
       check('taming one with an empty hand is refused in its own words',
