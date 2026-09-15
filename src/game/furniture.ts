@@ -171,6 +171,12 @@ export const STORES = FURNITURE.filter((f) => f.capacity).sort((a, b) => (b.capa
 
 export interface PlacedFurniture {
   id: number;
+  /**
+   * Whose this is, on an island. Absent in the game you play by yourself,
+   * where everything on the ground is yours because there is only you.
+   */
+  mine?: boolean;
+
   x: number;
   y: number;
   /** Top-left subtile of the block it covers. */

@@ -1474,6 +1474,12 @@ export interface IslandCreature {
 
 export interface Creature {
   id: number;
+  /**
+   * Whose this is, on an island. Absent in the game you play by yourself,
+   * where everything on the ground is yours because there is only you.
+   */
+  mine?: boolean;
+
   species: string;
   name: string;
   variant: number;
@@ -1830,6 +1836,8 @@ export class Creatures {
       c.sex = (r.sex as Sex) ?? c.sex;
       c.traits = r.traits ?? c.traits;
       c.enemy = r.hunting ? 0 : null;
+      // Whose it is, which the island says and the journal has to know.
+      c.mine = r.mine;
       /*
        * The leg it is on, put on this machine's clock as it arrives.
        *

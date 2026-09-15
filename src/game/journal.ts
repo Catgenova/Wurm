@@ -48,7 +48,7 @@ export const JOURNAL: Chapter[] = [
     goals: [
       { id: 'ore', text: 'Bring up your first ore', met: did('ore') },
       { id: 'smelt', text: 'Smelt it into a lump', met: skill('smelting', 2) },
-      { id: 'anvil', text: 'Cast an anvil and set it down', met: (g) => g.anvils.size > 0 },
+      { id: 'anvil', text: 'Cast an anvil and set it down', met: (g) => ours(g.anvils.values()).length > 0 },
       { id: 'smith', text: 'Beat something out on it', met: did('smithed') },
       { id: 'bronze', text: 'Mix a crucible of bronze', met: did('made:bronze_lump') },
       { id: 'moon', text: 'Work one of the four deep metals', hint: 'Adamantine, glimmersteel, mithril or seryll', met: did('moonmetal') },
@@ -75,27 +75,27 @@ export const JOURNAL: Chapter[] = [
     goals: [
       { id: 'rod', text: 'Splice a fishing rod', met: has('fishing_rod') },
       { id: 'perch', text: 'Land a perch', met: did('fish:perch') },
-      { id: 'boat', text: 'Launch a boat', met: (g) => [...g.furniture.values()].some((f) => isBoat(f)) },
+      { id: 'boat', text: 'Launch a boat', met: (g) => ours(g.furniture.values()).some((f) => isBoat(f)) },
       { id: 'allfish', text: 'Land one of every fish', hint: FISH.map((f) => f.name.toLowerCase()).join(', '), met: (g) => FISH.every((f) => (g.tally[`fish:${f.id}`] ?? 0) > 0) },
-      { id: 'sail', text: 'Build a sailing boat', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'sailing_boat') },
+      { id: 'sail', text: 'Build a sailing boat', met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'sailing_boat') },
     ],
   },
   {
     name: 'The wildermon',
     goals: [
       { id: 'tame', text: 'Tame your first wildermon', met: did('tamed') },
-      { id: 'work', text: 'Set one to work on your deed', met: (g) => g.creatures.working().length > 0 },
+      { id: 'work', text: 'Set one to work on your deed', met: (g) => g.creatures.working().filter((c) => c.mine !== false).length > 0 },
       { id: 'five', text: 'Keep five different sorts at once', met: (g) => kept(g) >= 5 },
       { id: 'ride', text: 'Saddle something and ride it', met: did('mounted') },
       { id: 'cart', text: 'Hitch a team to a large cart', met: did('hitched') },
-      { id: 'wagon', text: 'Fill all four yokes of a wagon', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'wagon' && (f.team?.length ?? 0) >= 4) },
-      { id: 'hive', text: 'Keep a hive and take honey from it', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'hive' && f.items.length > 0) },
+      { id: 'wagon', text: 'Fill all four yokes of a wagon', met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'wagon' && (f.team?.length ?? 0) >= 4) },
+      { id: 'hive', text: 'Keep a hive and take honey from it', met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'hive' && f.items.length > 0) },
       { id: 'post', text: 'Set a wildermon to a work post', met: did('posted') },
       { id: 'worms', text: 'Turn up a spadeful of worms', met: did('worms') },
       { id: 'sat', text: 'Sit and think about nothing', hint: 'A rug, and somewhere quiet', met: did('sat') },
       { id: 'path', text: 'Take a path', hint: 'Chosen once, at five meditation, and never again', met: (g) => !!g.player.way },
       { id: 'walked', text: 'Walk a path to its end', hint: 'Meditation 70', met: (g) => !!g.player.way && g.skills.get('meditation') >= 70 },
-      { id: 'altar', text: 'Raise an altar', hint: 'Brick, mortar, slab and a lump of gold', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'altar') },
+      { id: 'altar', text: 'Raise an altar', hint: 'Brick, mortar, slab and a lump of gold', met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'altar') },
       { id: 'prayed', text: 'Kneel at it', met: did('prayed') },
       { id: 'cunning', text: 'Work a circle of cunning into a tool', met: (g) => g.inventory.items.some((it) => (it.bless ?? 0) > 0) },
       { id: 'thrice', text: 'Take one tool to three circles', met: (g) => g.inventory.items.some((it) => (it.bless ?? 0) >= 3) },
@@ -118,7 +118,7 @@ export const JOURNAL: Chapter[] = [
       { id: 'groomfull', text: 'Brush one to a shine', hint: 'Care full to the top, which takes a few passes', met: did('groomfull') },
       { id: 'bred', text: 'Breed a wildermon of your own', hint: 'A male and a female of one sort, grown, fed and side by side', met: did('bred') },
       { id: 'goodblood', text: 'Breed one carrying supreme blood', met: did('goodblood') },
-      { id: 'fantastic_blood', text: 'Breed one carrying a fantastic trait', met: (g) => [...g.creatures.list.values()].some((c) => c.mode !== 'wild' && c.traits.some((t) => traitTier(t) === 'fantastic')) },
+      { id: 'fantastic_blood', text: 'Breed one carrying a fantastic trait', met: (g) => ours(g.creatures.list.values()).some((c) => c.mode !== 'wild' && c.traits.some((t) => traitTier(t) === 'fantastic')) },
       { id: 'husbandry', text: 'Take animal husbandry to 50', met: skill('animal_husbandry', 50) },
     ],
   },
@@ -145,7 +145,7 @@ export const JOURNAL: Chapter[] = [
       { id: 'covered', text: 'Lay the right herb on the right wound', hint: 'Thyme on a cut, sage on a burn', met: did('covered') },
       { id: 'cleaned', text: 'Scour a wound that has gone bad', hint: 'A bucket of lye', met: did('cleaned') },
       { id: 'dye', text: 'Boil a pot of dye', hint: 'Something that grows, and a bucket of lye', met: did('dyed') },
-      { id: 'colours', text: 'Fly your colour over the deed', hint: 'A dyed banner, planted', met: (g) => [...g.furniture.values()].some((f) => f.kind === 'banner' && !!f.dye) },
+      { id: 'colours', text: 'Fly your colour over the deed', hint: 'A dyed banner, planted', met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'banner' && !!f.dye) },
       { id: 'title', text: 'Earn a title', hint: 'Any trade at 50', met: (g) => g.player.titles.length > 0 },
       { id: 'master', text: 'Earn a master title', hint: 'Any trade at 90', met: (g) => g.player.titles.some((t) => t.endsWith(':90') || t.endsWith(':99')) },
       { id: 'knack', text: 'Find a knack for something', hint: 'Every ten points of a trade leaves one', met: did('knack') },
@@ -153,6 +153,21 @@ export const JOURNAL: Chapter[] = [
     ],
   },
 ];
+
+/**
+ * Only your own work counts.
+ *
+ * Reported from the island: "his actions are completing my journal". It was
+ * doing exactly that. Everything the island sets down arrives in one set of
+ * maps — you have to see a neighbour's boat to sail round it — so a goal
+ * written as "is there a boat" was answered by anybody's boat, and a journal
+ * that counts a stranger's work is not a journal.
+ *
+ * `mine !== false` rather than `mine === true`, because absent means the game
+ * you play by yourself, where everything on the ground is yours.
+ */
+const ours = <T extends { mine?: boolean }>(xs: Iterable<T>): T[] =>
+  [...xs].filter((x) => x.mine !== false);
 
 export const ALL_GOALS: Goal[] = JOURNAL.flatMap((c) => c.goals);
 export const goalCount = ALL_GOALS.length;

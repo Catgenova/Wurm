@@ -3767,7 +3767,16 @@ export class Game {
     this.placed.posts.reset([]);
     this.placed.traps.reset([]);
     for (const r of ground.placed ?? []) {
-      const at = { id: r.id, x: r.x, y: r.y, sx: r.sx, sy: r.sy };
+      /*
+       * `mine` rides along with everything set down.
+       *
+       * The island has always said whose each thing is and the browser threw
+       * it away here, which is how "launch a boat" and "raise an altar" came
+       * to be ticked off in one person's journal by another person's work.
+       * Absent means the single-player game, where everything is yours because
+       * there is only you.
+       */
+      const at = { id: r.id, x: r.x, y: r.y, sx: r.sx, sy: r.sy, mine: r.mine };
       if (r.kind === 'campfire' || r.kind === 'fire') {
         this.campfires.set(r.id, { ...at, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0 });
       } else if (r.kind === 'smelter') {

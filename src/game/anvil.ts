@@ -12,6 +12,12 @@ import { METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft, mouldWear, type
  */
 export interface PlacedAnvil {
   id: number;
+  /**
+   * Whose this is, on an island. Absent in the game you play by yourself,
+   * where everything on the ground is yours because there is only you.
+   */
+  mine?: boolean;
+
   x: number;
   y: number;
   /** Top-left subtile of its two by two block. */
