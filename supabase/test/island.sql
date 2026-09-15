@@ -4778,3 +4778,33 @@ select '675. hild plans a building inside ivar''s border: '
      || coalesce(plan_reason(:'big', :'ivar',
           (select d.x + 1 from deed d where d.world_id = :'big' and d.founded_by = :'ivar'),
           (select d.y from deed d where d.world_id = :'big' and d.founded_by = :'ivar')), 'allowed');
+
+-- Whose crate, and whose building. `crate` had no column saying whose it was
+-- at all, and `building` has had `planned_by` since the day it was made with
+-- nothing ever reading it.
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+insert into crate (world_id, id, kind, x, y, sx, sy, made_by)
+values (:'big', 9001, 'plank', 2041, 2041, 1, 1, :'ivar') \g /dev/null
+select '676. ivar''s crate, to hild: '
+     || coalesce(crate_refusal(:'big', :'hild', 'crate_take_all',
+          '{"kind":"crate","id":9001}'::jsonb), 'ALLOWED')
+     || ' — and to ivar: '
+     || coalesce(crate_refusal(:'big', :'ivar', 'crate_take_all',
+          '{"kind":"crate","id":9001}'::jsonb), 'allowed, once he is standing next to it');
+
+-- A crate from before there was anywhere to write an owner is common ground,
+-- because a migration that guessed would lock somebody out of their stores.
+insert into crate (world_id, id, kind, x, y, sx, sy) values (:'big', 9002, 'plank', 2300, 2300, 1, 1) \g /dev/null
+select '677. and one nobody has ever owned: ivar '
+     || crate_yours(:'big', :'ivar', 9002)::text || ', hild ' || crate_yours(:'big', :'hild', 9002)::text
+     || ' — while ivar''s is his alone: ivar ' || crate_yours(:'big', :'ivar', 9001)::text
+     || ', hild ' || crate_yours(:'big', :'hild', 9001)::text;
+
+insert into building (world_id, id, name, planned_by) values (:'big', 9001, 'Ivarhouse', :'ivar') \g /dev/null
+insert into building_tile (world_id, building, x, y) values (:'big', 9001, 2300, 2305) \g /dev/null
+select '678. ivar''s building, to hild: '
+     || coalesce(build_refusal(:'big', :'hild', 'rename_building',
+          '{"kind":"tile","x":2300,"y":2305,"name":"Hildhouse"}'::jsonb), 'ALLOWED')
+     || ' — and to ivar: '
+     || coalesce(build_refusal(:'big', :'ivar', 'rename_building',
+          '{"kind":"tile","x":2300,"y":2305,"name":"Ivarhall"}'::jsonb), 'allowed');
