@@ -1878,7 +1878,22 @@ export class Creatures {
     const now = Date.now();
     for (const c of this.list.values()) {
       if (!c.legAt || c.legEnds <= c.legAt) {
+        /*
+         * A leg of no length is a thing standing still, and it still has to be
+         * filed under the tile it is standing on.
+         *
+         * Reported as "wildermon active with the player are not visible,
+         * perhaps those working on deed too", and that is exactly the set: the
+         * island parks a companion at its keeper's feet, one kept at the token
+         * beside the token, and an idle worker where it stands, each with
+         * `leg_at` and `leg_ends` both set to now. This loop is the only thing
+         * that fills the tile index while the island owns the wildlife, and it
+         * went straight past all three — so `atTile` never returned them and
+         * nothing drew them. A wild thing between walks kept its last leg's
+         * timestamps and was filed, which is why only tame ones vanished.
+         */
         c.moving = false;
+        this.place(c);
         continue;
       }
       const t = Math.max(0, Math.min(1, (now - c.legAt) / (c.legEnds - c.legAt)));
