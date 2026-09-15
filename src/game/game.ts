@@ -151,6 +151,21 @@ const MAX_MOUNT_SPEED = 5;
 const footing = (climb: number): number => 0.9 + climb / 140;
 /** Tiles to a side of a new island. */
 export const WORLD_SIZE = 1024;
+/**
+ * The island the keeper serves: 4096 tiles a side.
+ *
+ * Sixteen kilometres across and 268 km2, against the one square kilometre a
+ * 256-tile island covers. It is affordable because nothing about it travels:
+ * the land is a pure function of the seed and every browser works out the
+ * ground it is standing on, so what a join costs is the same on a big island
+ * as on a small one. `docs/tile-map-cost-analysis.md` is the arithmetic.
+ *
+ * The single-player island in this browser keeps `WORLD_SIZE`. It is a
+ * different thing with a different life — it lives in IndexedDB, it is rolled
+ * by `generate.ts` rather than from the survey chart, and making everybody's
+ * saved island sixteen times bigger is not a change anybody asked for.
+ */
+export const ISLAND_SIZE = 4096;
 /** A day and a night, in seconds: one game hour to the real minute. */
 export const DAY_SECONDS = 1440;
 /** When the sun comes up and goes down, in game hours. */

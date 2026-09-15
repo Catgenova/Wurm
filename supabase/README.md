@@ -1127,6 +1127,44 @@ a hundred and forty-six measurements moved and not one of them was about faces.
 Postgres's uuid source is its own, so the sequence the island is measured with
 is left alone. Only measurement 277 changed: 68 rulebook tables became 69.
 
+## The big island
+
+The island the keeper serves is 4096 tiles a side. Three things had to change
+before that would run, and all three were the same shape: something that was
+fine at 256 because 256 is small.
+
+**The join stopped carrying the land.** It used to be `rpc_land` for every
+scanline — 138 MB at this size, paid by every player on every join, forever.
+Now it carries the seed. The land is a pure function of the seed and the survey
+chart, the browser has both, and it works the ground out 64 × 64 at a time as
+somebody walks into it. `rpc_land` is still there and still answers; it is
+simply not asked for sixteen million tiles at the door. The land travels once,
+at founding, from `tools/found-island.ts`.
+
+**Wildlife stopped being laid down all at once.** `creature_stock` put an
+island's whole population out when it opened — one wild thing per 32 × 32
+tiles, placed by throwing darts at the map until enough stuck. Sixty-four
+creatures and a few hundred darts at 256². At 4096² it is sixteen thousand
+creatures and up to six hundred and fifty thousand darts, each one reading the
+height of a tile, which on a big island means detoasting an eight kilobyte
+scanline to look at two bytes of it. **`rpc_ready` did not come back**, and it
+was found by opening one — no amount of reading was going to turn that up.
+
+So wildlife settles like everything else here. A block of country — 256 tiles
+square — gets its animals the first time somebody comes within a block of it,
+and the row in `world_stocked` that says so is what stops it happening twice:
+two people walking into the same empty country both try to claim it, one wins
+the primary key, and the loser does nothing rather than doubling the animals.
+`rpc_move` is where it happens, written so that the usual case (nine blocks
+already out) is one index probe and nothing else.
+
+The density is unchanged, so a small island gets exactly the sixty-four it
+always got, in one block, with the same thirty-two darts. What changed is that
+a big one no longer has to populate Cornwall before anybody can stand up in
+Kent — and that an island somebody joins now has wildlife in it even if nobody
+ever called `rpc_ready` on it, which is why a dozen measurements in the suite
+read differently from before.
+
 ## Testing
 
 `npm run db:test` drops the schema, rebuilds it from the migrations and runs

@@ -1,5 +1,10 @@
 # A 4096 × 4096 island on Supabase
 
+> **This has been done.** The island the keeper serves is 4096 tiles a side.
+> What follows is the analysis that said what it would take; the boxes at the
+> end of each section say what was built. The one recommendation still
+> outstanding is per-region Realtime channels — see [Realtime](#realtime).
+
 The world table already allows it: `size int not null check (size between 8 and 4096)`.
 This is what happens if you use that ceiling — measured against the schema in
 `supabase/migrations/`, not against a hypothetical one.
@@ -152,6 +157,15 @@ Terrain then costs nothing per join, and the only thing that grows with the
 player base is the diff stream, which grows with how much people dig rather
 than with how big the map is. **World size stops being a cost driver.**
 
+**Built.** `Island.join` no longer calls `rpc_land` at all. It takes the seed
+out of the world row, hands `generateAtlasWindow` to `World.streamFrom`, and
+the ground is worked out 64 × 64 at a time as somebody reads it — the nine
+squares round the spawn before the first frame, the rest as they walk. Measured
+in a real browser against a 4096 island: **the first frame in about a second,
+nine squares of ground, and a hundred bytes on the wire**. The land travels
+exactly once, at founding, from `tools/found-island.ts`; `Island.found` refuses
+anything over 512 tiles from a tab and says why.
+
 Keeping the land in Postgres as well is still worth it — it is 36 MB and it is
 the authority when generation and history disagree — but it should be read in
 windows, not downloaded whole. A 64 × 64 viewport costs **443 buffers and
@@ -183,20 +197,44 @@ Splitting the channel by region is the single change that makes a big map
 cheaper to run than a small one, because density per channel falls as the map
 grows.
 
-## What still breaks in the client
+**Not built.** This is the one recommendation here that has not been carried
+out. It costs nothing while the island is quiet — the bill is per message
+delivered, so an island with three people on it is three people's worth of
+messages whatever the channel design — and it becomes the binding constraint
+long before two hundred concurrent players. It is the next thing to do.
 
-Two things scale with `w * h` and will not survive 4096², whatever the server
-does:
+## What broke in the client, and what fixed it
 
-1. **`src/world/pathfinding.ts:46`** — `getBuffers(w * h * levels)` allocates
-   five arrays sized by the whole grid: **640 MiB** at 4096² with one level,
-   1.28 GiB with two, on the first click-to-move. The search itself is already
-   bounded by `maxNodes` (30,000); only the index-by-tile buffers are unbounded.
-   A hash map or a windowed sub-grid fixes it.
-2. **`src/ui/panels/minimap.ts:52`** — the base canvas is `w × h`, which at 4096
-   is 16,777,216 pixels and a 67 MB `ImageData`. That is exactly Safari's canvas
-   area cap, so it is marginal rather than certainly broken, and it should
-   become a pre-baked overview image with incremental repaints.
+Two things scaled with `w * h` and could not survive 4096², whatever the server
+did. Both are fixed.
+
+1. **`src/world/pathfinding.ts`** — `getBuffers(w * h * levels)` allocated five
+   arrays sized by the whole grid: **640 MiB** at 4096² with one level, 1.28
+   GiB with two, on the first click-to-move. The search itself was always
+   bounded by `maxNodes` (30,000); only the index-by-tile buffers were
+   unbounded. **Fixed:** tiles are given slots as the search reaches them,
+   through a `Map`, and there can never be more slots than the search may open
+   — one for the start and eight per expansion. About **7 MB, on any island
+   there will ever be**. Measured in the browser: a search 900 tiles across a
+   4096 island comes back in 240 ms having grown the heap by 5 MB.
+2. **`src/ui/panels/minimap.ts`** — the base canvas was `w × h`, which at 4096
+   is 16,777,216 pixels and a 67 MB `ImageData`, and is exactly Safari's canvas
+   area cap. **Fixed:** the picture is capped at 1024 across and tiles are
+   sampled into it — one to a pixel on a small island, **four at 4096**, which
+   is what it was being scaled down to anyway. The repaint strides by the same
+   step, so a full repaint is a sixteenth of the work.
+
+A third turned up that this document did not predict, because it is in the
+database rather than the client. **`creature_stock` laid an island's whole
+wildlife down when it opened** — one wild thing per 32 × 32 tiles, placed by
+throwing darts until enough stuck. Sixty-four creatures and a few hundred darts
+at 256²; **16,384 creatures and up to 650,000 darts at 4096²**, each one
+detoasting an eight-kilobyte scanline to read two bytes of height. `rpc_ready`
+did not come back. Fixed the way everything else on this island works: a block
+of country is stocked the first time somebody comes within a block of it, and
+the row that says so is what stops it happening twice. Same density, same
+thirty-two darts on a small island, and a big one no longer has to populate
+Cornwall before anybody can stand up in Kent.
 
 Two earlier worries have already been fixed on main and are noted here only so
 they are not re-reported: saves moved to IndexedDB, so the old `localStorage`

@@ -1,4 +1,4 @@
-import { Game, WORLD_SIZE } from '../game/game';
+import { Game } from '../game/game';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { Island, type ItemRow, type PlayerRow } from './island';
@@ -12,7 +12,7 @@ import type { ActionDef, Target } from '../game/actions';
  * to know which of the two it got:
  *
  *   ?island=<id>     come ashore on one that exists
- *   ?found=<name>    roll a new one here, hand it over, and be its first
+ *   ?found=<name>    roll a small one here, hand it over, and be its first
  *
  * With neither, the game is the single-player one it has always been, kept in
  * this browser. That path is untouched — an island is an addition, not a
@@ -57,7 +57,15 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   let id = joining ?? '';
   if (!id) {
     tell('Rolling an island…');
-    const size = Number(params.get('size')) || WORLD_SIZE;
+    /*
+     * Founding from a tab is for small islands, and `Island.found` says so
+     * above 512. The big one — `ISLAND_SIZE`, four thousand and ninety-six —
+     * is founded once by `tools/found-island.ts`, because it is three minutes
+     * of ground and 138 MB of land and neither belongs in a page somebody is
+     * waiting on. Coming *ashore* on it costs nothing extra, which is the
+     * whole point of the change.
+     */
+    const size = Number(params.get('size')) || 256;
     const seed = (Math.random() * 0x7fffffff) >>> 0;
     const gen = generateWorld(seed, size);
     id = await island.found(gen.world, founding || 'An island', gen.spawn);

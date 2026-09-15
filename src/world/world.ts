@@ -2,6 +2,29 @@ import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS
 
 export type WorldListener = (x: number, y: number) => void;
 
+/** The square the ground is worked out in. The same one the cost analysis measured. */
+export const CHUNK = 64;
+
+/** One square of land, exactly the shape `generateAtlasWindow` returns. */
+export interface LandWindow {
+  /** (w + 1) x (h + 1) corner heights and soil depths. */
+  heights: Int16Array;
+  dirt: Uint8Array;
+  /** w x h tiles. */
+  tiles: Uint8Array;
+  data: Uint8Array;
+  rock: Uint8Array;
+}
+
+/**
+ * Where ground comes from when nobody has worked it out yet.
+ *
+ * A callback rather than an import, so this file still knows nothing about
+ * atlases, noise or archipelagos — it knows that ground can be asked for a
+ * square at a time, and whoever built the world knows how to answer.
+ */
+export type LandSource = (x0: number, y0: number, w: number, h: number) => LandWindow;
+
 /**
  * The terrain: a grid of tiles plus a (w+1) x (h+1) grid of corner heights,
  * exactly like Wurm's surface. Water sits at height 0.
@@ -41,6 +64,25 @@ export class World {
   fogTouched = true;
   /** The seed this world was made from, so rock kinds stay consistent. */
   seed = 0;
+  /**
+   * Ground that has not been worked out yet.
+   *
+   * A 4096 x 4096 island is 16.8 M tiles and something like three minutes of
+   * generation. Nobody waits three minutes, and nobody needs to: the land is a
+   * pure function of the seed, so it can be worked out a square at a time, and
+   * the nine squares a player can actually see cost a fraction of a second.
+   *
+   * `ready` has one byte per 64 x 64 square and `source` knows how to fill
+   * one. Both stay null for a world that arrived complete — a small island, or
+   * one read back out of a save — and then every reader below is exactly the
+   * array lookup it always was.
+   */
+  private source: LandSource | null = null;
+  private ready: Uint8Array | null = null;
+  private across = 0;
+  private down = 0;
+  /** How many squares have been worked out, for anybody drawing a progress line. */
+  grown = 0;
   minHeight = 0;
   maxHeight = 0;
   private listeners: WorldListener[] = [];
@@ -92,25 +134,129 @@ export class World {
     }
   }
 
+  /**
+   * Work this world out as it is asked for rather than all at once.
+   *
+   * Everything below that reads the ground calls `ensure` first, so there is
+   * no call site anywhere in the program that can forget — a reader that
+   * forgot would not crash, it would quietly see an ocean at height zero,
+   * which is the worst kind of bug to have to find.
+   */
+  streamFrom(source: LandSource): void {
+    this.source = source;
+    this.across = Math.ceil(this.w / CHUNK);
+    this.down = Math.ceil(this.h / CHUNK);
+    this.ready = new Uint8Array(this.across * this.down);
+    this.grown = 0;
+    this.minHeight = 0;
+    this.maxHeight = 0;
+  }
+
+  /** Whether this world is worked out as it goes rather than held whole. */
+  get streamed(): boolean {
+    return this.ready !== null;
+  }
+
+  /** How much of it exists so far, 0 to 1. */
+  get grownShare(): number {
+    return this.ready ? this.grown / this.ready.length : 1;
+  }
+
+  /** The ground under a tile, worked out if it has not been yet. */
+  ensure(x: number, y: number): void {
+    const r = this.ready;
+    if (r === null) return;
+    const cx = x < 0 ? 0 : x >= this.w ? this.across - 1 : (x / CHUNK) | 0;
+    const cy = y < 0 ? 0 : y >= this.h ? this.down - 1 : (y / CHUNK) | 0;
+    if (r[cy * this.across + cx] === 0) this.grow(cx, cy);
+  }
+
+  /**
+   * Every square touching a box.
+   *
+   * What the renderer and the pathfinder call before they sweep a region, so
+   * that a walk across a chunk boundary costs one pause up front rather than a
+   * stutter in the middle of a frame.
+   */
+  ensureBox(x0: number, y0: number, x1: number, y1: number): void {
+    const r = this.ready;
+    if (r === null) return;
+    const cx0 = Math.max(0, (Math.min(x0, x1) / CHUNK) | 0);
+    const cy0 = Math.max(0, (Math.min(y0, y1) / CHUNK) | 0);
+    const cx1 = Math.min(this.across - 1, (Math.max(x0, x1) / CHUNK) | 0);
+    const cy1 = Math.min(this.down - 1, (Math.max(y0, y1) / CHUNK) | 0);
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) if (r[cy * this.across + cx] === 0) this.grow(cx, cy);
+    }
+  }
+
+  /**
+   * One square, worked out and laid into the full arrays.
+   *
+   * The corner planes are one wider than the tile planes, so a square writes
+   * the corners on its far edges as well — the same values its neighbour will
+   * write when its turn comes, which is why the overlap costs nothing and
+   * needs no bookkeeping.
+   */
+  private grow(cx: number, cy: number): void {
+    const source = this.source;
+    const r = this.ready;
+    if (!source || !r) return;
+    // Marked before the work, not after: a source that reads back through this
+    // world would otherwise ask for the square it is in the middle of making.
+    r[cy * this.across + cx] = 1;
+    this.grown += 1;
+    const x0 = cx * CHUNK;
+    const y0 = cy * CHUNK;
+    const w = Math.min(CHUNK, this.w - x0);
+    const h = Math.min(CHUNK, this.h - y0);
+    const win = source(x0, y0, w, h);
+    for (let y = 0; y <= h; y++) {
+      const from = y * (w + 1);
+      const to = (y0 + y) * this.cw + x0;
+      for (let x = 0; x <= w; x++) {
+        const v = win.heights[from + x];
+        this.heights[to + x] = v;
+        this.dirt[to + x] = win.dirt[from + x];
+        if (v > this.maxHeight) this.maxHeight = v;
+        if (v < this.minHeight) this.minHeight = v;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      const from = y * w;
+      const to = (y0 + y) * this.w + x0;
+      for (let x = 0; x < w; x++) {
+        this.tiles[to + x] = win.tiles[from + x];
+        this.data[to + x] = win.data[from + x];
+        this.rock[to + x] = win.rock[from + x];
+      }
+    }
+  }
+
   /** The kind of rock under a tile, bare or buried. */
   rockKind(x: number, y: number): number {
     if (!this.inBounds(x, y)) return 0;
+    this.ensure(x, y);
     return this.rock[y * this.w + x];
   }
 
   setRockKind(x: number, y: number, kind: number): void {
-    if (this.inBounds(x, y)) this.rock[y * this.w + x] = kind;
+    if (!this.inBounds(x, y)) return;
+    this.ensure(x, y);
+    this.rock[y * this.w + x] = kind;
   }
 
   /** Soil left over the bedrock at a corner; 0 means the rock is bare. */
   getDirt(cx: number, cy: number): number {
     const x = cx < 0 ? 0 : cx > this.w ? this.w : cx;
     const y = cy < 0 ? 0 : cy > this.h ? this.h : cy;
+    this.ensure(x, y);
     return this.dirt[y * this.cw + x];
   }
 
   setDirt(cx: number, cy: number, v: number): void {
     if (!this.cornerInBounds(cx, cy)) return;
+    this.ensure(cx, cy);
     this.dirt[cy * this.cw + cx] = Math.max(0, Math.min(255, v));
   }
 
@@ -192,11 +338,13 @@ export class World {
   getHeight(cx: number, cy: number): number {
     const x = cx < 0 ? 0 : cx > this.w ? this.w : cx;
     const y = cy < 0 ? 0 : cy > this.h ? this.h : cy;
+    this.ensure(x, y);
     return this.heights[y * this.cw + x];
   }
 
   setHeight(cx: number, cy: number, v: number): void {
     if (!this.cornerInBounds(cx, cy)) return;
+    this.ensure(cx, cy);
     this.heights[cy * this.cw + cx] = v;
     if (v > this.maxHeight) this.maxHeight = v;
     if (v < this.minHeight) this.minHeight = v;
@@ -218,6 +366,7 @@ export class World {
    * and walk away and the map keeps the trees until you go back.
    */
   remember(x: number, y: number): boolean {
+    this.ensure(x, y);
     const i = y * this.w + x;
     const t = this.tiles[i];
     const d = this.data[i];
@@ -243,8 +392,17 @@ export class World {
     return true;
   }
 
-  /** Mark the whole map as looked at, for a world that predates any fog. */
+  /**
+   * Mark the whole map as looked at, for a world that predates any fog.
+   *
+   * Refused for a streamed world, and that refusal is the point: it would
+   * copy sixteen million zeros into the remembered map and leave a player
+   * looking at a flat ocean they have apparently already explored. On a big
+   * island the fog is not a nicety, it is the thing that makes the map mean
+   * anything, so there is nothing here to opt out of.
+   */
   rememberAll(): void {
+    if (this.ready) return;
     this.fogTouched = true;
     this.knownBox.x0 = 0;
     this.knownBox.y0 = 0;
@@ -266,16 +424,19 @@ export class World {
 
   getTile(x: number, y: number): TileType {
     if (!this.inBounds(x, y)) return TileType.Sand;
+    this.ensure(x, y);
     return this.tiles[y * this.w + x] as TileType;
   }
 
   getData(x: number, y: number): number {
     if (!this.inBounds(x, y)) return 0;
+    this.ensure(x, y);
     return this.data[y * this.w + x];
   }
 
   setTile(x: number, y: number, t: TileType, data = 0): void {
     if (!this.inBounds(x, y)) return;
+    this.ensure(x, y);
     this.tiles[y * this.w + x] = t;
     this.data[y * this.w + x] = data;
     this.notify(x, y);
@@ -351,7 +512,16 @@ export class World {
     return !TILE_DEFS[this.getTile(x, y)].blocks;
   }
 
+  /**
+   * The lowest and highest ground there is.
+   *
+   * Skipped entirely for a streamed world: most of its corners have not been
+   * worked out, so a sweep would read sixteen million zeros and conclude the
+   * island is flat. `grow` keeps the range up to date square by square
+   * instead, which is the same answer arrived at as the ground arrives.
+   */
   recomputeRange(): void {
+    if (this.ready) return;
     let lo = Infinity;
     let hi = -Infinity;
     for (let i = 0; i < this.heights.length; i++) {

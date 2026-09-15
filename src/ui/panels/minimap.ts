@@ -15,6 +15,16 @@ const VIEW_SIZE = 512;
  * you have been round it.
  */
 const MIN_SPAN = 64;
+/**
+ * The widest the base picture is allowed to be, in pixels.
+ *
+ * It used to be one pixel to the tile, which on a thousand-tile island is a
+ * megapixel and on a 4096 one is **sixteen** — a 67 MB `ImageData` and, on
+ * Safari, exactly the canvas area cap. Above this the map samples: four tiles
+ * to a pixel at 4096, which is what the picture is scaled down to anyway
+ * before anybody sees it.
+ */
+const MAX_BASE = 1024;
 
 /**
  * Contours. The map has always shown height as a wash of shading, which says
@@ -28,6 +38,10 @@ const CONTOUR_INDEX = 5;
 /** A small overview map, re-painted per tile as the world changes. */
 export class MinimapPanel {
   private base: HTMLCanvasElement;
+  /** Tiles to a base pixel, and the size of the base picture in pixels. */
+  private readonly step: number;
+  private readonly bw: number;
+  private readonly bh: number;
   private baseCtx: CanvasRenderingContext2D;
   private image: ImageData;
   private view: HTMLCanvasElement;
@@ -48,11 +62,15 @@ export class MinimapPanel {
     private readonly renderer: Renderer,
   ) {
     const w = game.world;
+    // Tiles to a pixel: one on a small island, four at 4096.
+    this.step = Math.max(1, Math.ceil(Math.max(w.w, w.h) / MAX_BASE));
+    this.bw = Math.ceil(w.w / this.step);
+    this.bh = Math.ceil(w.h / this.step);
     this.base = document.createElement('canvas');
-    this.base.width = w.w;
-    this.base.height = w.h;
+    this.base.width = this.bw;
+    this.base.height = this.bh;
     this.baseCtx = this.base.getContext('2d') as CanvasRenderingContext2D;
-    this.image = this.baseCtx.createImageData(w.w, w.h);
+    this.image = this.baseCtx.createImageData(this.bw, this.bh);
     this.view = document.createElement('canvas');
     this.view.className = 'minimap';
     // Fixed, rather than two pixels to the tile: an island of a thousand tiles
@@ -219,9 +237,14 @@ export class MinimapPanel {
     return { x: x0, y: y0, span };
   }
 
+  /** How big the picture is and how many tiles to a pixel, for anybody measuring. */
+  get picture(): { w: number; h: number; step: number } {
+    return { w: this.bw, h: this.bh, step: this.step };
+  }
+
   private paint(x: number, y: number): void {
     const w = this.game.world;
-    const i = (y * w.w + x) * 4;
+    const i = (((y / this.step) | 0) * this.bw + ((x / this.step) | 0)) * 4;
     const d = this.image.data;
     // Three states here as in the world: nothing for land nobody has seen, the
     // land as it is where somebody is looking, and what it was where not.
@@ -307,8 +330,11 @@ export class MinimapPanel {
     this.lastVision = v.revision;
     this.lastFog = fog;
     this.painted = true;
-    for (let y = Math.max(0, box.y0); y <= Math.min(w.h - 1, box.y1); y++) {
-      for (let x = Math.max(0, box.x0); x <= Math.min(w.w - 1, box.x1); x++) this.paint(x, y);
+    // Strided by the same step the picture is sampled at: at 4096 that is a
+    // sixteenth of the work, and every pixel still gets a tile.
+    const st = this.step;
+    for (let y = Math.max(0, box.y0); y <= Math.min(w.h - 1, box.y1); y += st) {
+      for (let x = Math.max(0, box.x0); x <= Math.min(w.w - 1, box.x1); x += st) this.paint(x, y);
     }
     this.dirty = true;
   }
@@ -327,7 +353,8 @@ export class MinimapPanel {
     const ox = view.x;
     const oy = view.y;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.base, ox, oy, view.span, view.span, 0, 0, this.view.width, this.view.height);
+    ctx.drawImage(this.base, ox / this.step, oy / this.step, view.span / this.step, view.span / this.step,
+                  0, 0, this.view.width, this.view.height);
     const cam = this.renderer.camera;
     const corners = [
       cam.screenToWorld(0, 0),

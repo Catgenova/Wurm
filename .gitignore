@@ -3,3 +3,6 @@ dist/
 .vite/
 *.log
 .DS_Store
+
+# Bundled tools, built on demand by the scripts that run them.
+tools/.*.mjs

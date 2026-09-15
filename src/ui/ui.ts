@@ -81,7 +81,7 @@ export class UI {
   readonly menu: ContextMenu;
   readonly tooltip: Tooltip;
   readonly hud: Hud;
-  private readonly minimap: MinimapPanel;
+  readonly minimap: MinimapPanel;
   private readonly eventLog: EventLogPanel;
   private readonly settings: SettingsPanel;
   private readonly cratePanel: CratePanel;

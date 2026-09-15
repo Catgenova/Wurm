@@ -3498,3 +3498,65 @@ do $$ begin
   perform rpc_set_look('{"hair":"bald"}'::jsonb);
   raise notice '555. nobody at all chooses a face: ALLOWED';
 exception when others then raise notice '555. nobody at all chooses a face: refused — %', sqlerrm; end $$;
+
+\echo ''
+\echo '--- the big island'
+-- Sixteen kilometres a side instead of one. What makes it affordable is not
+-- storage and not writes — both were always fine — but that the land stops
+-- travelling: a join carries the seed and every browser works out the ground
+-- it is standing on. docs/tile-map-cost-analysis.md has the arithmetic.
+select set_config('request.jwt.claims', json_build_object('sub', :'alice')::text, false) \g /dev/null
+select rpc_found('Bigness', 7, 4096, 2048, 2048) as big \gset
+select '556. an island of 4096: ' || (select size || ' tiles a side, ' || round((size::bigint * size) / 1e6) || ' M of them'
+       from world where id = :'big')
+     || ', laid down in ' || (select count(*) from land_corner where world_id = :'big') || ' rows of corners and '
+     || (select count(*) from land_tile where world_id = :'big') || ' of tiles';
+do $$ begin
+  perform rpc_found('Bigger still', 7, 8192, 1, 1);
+  raise notice '557. and one twice that:            ALLOWED';
+exception when others then raise notice '557. and one twice that:            refused — %', sqlerrm; end $$;
+
+-- A plateau of grass around the spawn, written as whole rows rather than
+-- corner by corner: eight thousand `land_set_height` calls on a 4096-wide
+-- island is eight thousand rewrites of an eight kilobyte row, and what is
+-- being measured here is the stocking, not the digging.
+update land_corner set heights = decode(repeat('6400', 4097), 'hex'), dirt = decode(repeat('14', 4097), 'hex')
+  where world_id = :'big' and y between 1790 and 2310;
+update land_tile set tiles = decode(repeat('00', 4096), 'hex'), data = decode(repeat('00', 4096), 'hex')
+  where world_id = :'big' and y between 1790 and 2310;
+
+-- Opening it is what used to never come back: it laid down sixteen thousand
+-- creatures by throwing six hundred thousand darts at sixteen million tiles,
+-- each one detoasting an eight kilobyte scanline to read two bytes.
+select rpc_ready(:'big') \g /dev/null
+select '557b. opening it put out ' || (select count(*) from creature where world_id = :'big')
+     || ' wild things in ' || (select count(*) from world_stocked where world_id = :'big')
+     || ' blocks of country; the other ' || ((select ceil(size / 256.0) * ceil(size / 256.0) from world where id = :'big')::int
+        - (select count(*) from world_stocked where world_id = :'big'))
+     || ' fill in as somebody walks into them';
+
+select rpc_join(:'big', 'Alice') \g /dev/null
+select '558. coming ashore on it hands over ' || length(rpc_join(:'big', 'Alice')::text)
+     || ' bytes — the world row, the body and the hour, and not one tile of land';
+-- What the old way would have cost, from the same schema, so the two numbers
+-- sit next to each other rather than one of them being a claim.
+select '559. the land it did not send: ' || round(((select size from world where id = :'big') + 1)
+       * (((select size from world where id = :'big') + 1) * 3 + (select size from world where id = :'big') * 3)
+       * 4.0 / 3 / 1048576) || ' MB, which is what every join used to be';
+select '560. and the land is still here to be asked: a band of four rows is '
+     || length(rpc_land(:'big', 0, 3)::text) || ' bytes of it, off '
+     || (select length(heights) from land_corner where world_id = :'big' and y = 0) || ' bytes a row of corners';
+
+-- Walking into country nobody has been in puts the wildlife out there.
+select set_config('request.jwt.claims', json_build_object('sub', :'alice')::text, false) \g /dev/null
+update player set moved_at = now() - interval '1 hour' where uid = :'alice' and world_id = :'big';
+select '561. blocks of country stocked before a step: ' || (select count(*) from world_stocked where world_id = :'big');
+select rpc_move(:'big', 2300, 2048, 0) \g /dev/null
+select '562. and after one: ' || (select count(*) from world_stocked where world_id = :'big')
+     || ' — a step inside country already put out costs one index probe and nothing else';
+-- And somewhere nobody has been. `rpc_move` believes about forty tiles a call,
+-- so getting there properly is a dozen steps; what is being measured is what
+-- happens when you arrive, not how long the walk is.
+select creature_stock_near(:'big', 2600, 2048) \g /dev/null
+select '563. arriving two blocks over: ' || (select count(*) from world_stocked where world_id = :'big')
+     || ' blocks out now, and ' || (select count(*) from creature where world_id = :'big') || ' wild things on the island';

@@ -1,7 +1,8 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { World } from '../world/world';
 import type { TileType } from '../world/tiles';
-import { blankWorld, layRows, rowsOf, type LandRow } from './landpack';
+import { blankWorld, rowsOf } from './landpack';
+import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { supabase, signIn } from './supabase';
 
 /**
@@ -21,7 +22,18 @@ import { supabase, signIn } from './supabase';
 
 /** How many rows of island go in one request. Big enough to be few, small enough to land. */
 const UPLOAD_BATCH = 32;
-const DOWNLOAD_BATCH = 64;
+/**
+ * The biggest island a browser will hand over.
+ *
+ * Founding uploads the land, and that is the one time it has to travel: it is
+ * how the rules in Postgres come to know what the ground is. A 4096 island is
+ * three minutes of generation and 138 MB of upload, which is fine for a tool
+ * run once and is not something to do inside a tab with somebody watching. So
+ * the browser founds small islands and `tools/found-island.ts` founds the big
+ * one — and this is the line between them, said out loud rather than
+ * discovered at minute two.
+ */
+const FOUND_MAX = 512;
 /**
  * How often we tell the island where we are.
  *
@@ -112,6 +124,7 @@ export class Island {
    * that has moved on without it.
    */
   channelState = 'not asked';
+  private atlas: Atlas | null = null;
   private lastMove = 0;
   private lastSaid = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
@@ -133,6 +146,12 @@ export class Island {
    * So it is rolled here, handed over, and after that it is not ours.
    */
   async found(world: World, name: string, spawn: { x: number; y: number }): Promise<string> {
+    if (world.w > FOUND_MAX) {
+      throw new Error(
+        `An island of ${world.w} tiles is too big to hand over from a browser — that is ${Math.round((world.w + 1) * 33.7 / 1024)} MB of land and minutes of generation. `
+        + `Found it with tools/found-island.ts instead, and come ashore on it with ?island=<id>.`,
+      );
+    }
     this.uid = await signIn();
     const sb = supabase();
     const { data: id, error } = await sb.rpc('rpc_found', {
@@ -151,7 +170,28 @@ export class Island {
     return id;
   }
 
-  /** Come ashore: the body first, then the land, then everything that has happened since. */
+  /**
+   * Come ashore: the body first, then the land, then everything since.
+   *
+   * The land does not come down the wire any more, and that is the whole of
+   * what makes a big island affordable. It used to: `rpc_land` for every
+   * scanline, base64 inside JSON, which is about half a megabyte on a
+   * 256-tile island and **138 MB on a 4096 one** — paid by every player, on
+   * every join, forever. At ten thousand joins a day that is forty-one
+   * terabytes a month.
+   *
+   * But the land is a pure function of the seed and the chart, and this
+   * browser already has the generator and the chart. So the join carries the
+   * seed, and the ground is worked out here, a square at a time, as somebody
+   * walks into it. What is left on the wire is `tile_change` — what people
+   * have actually dug — which grows with how much a place is lived in rather
+   * than with how big it is. **World size stops being a cost.**
+   *
+   * Postgres keeps its own copy and stays the authority: it is what the rules
+   * are checked against, and what settles it when generation and history
+   * disagree. `rpc_land` is still there to be asked. It is simply not asked
+   * for sixteen million tiles at the door.
+   */
   async join(worldId: string, name: string): Promise<void> {
     this.uid = await signIn();
     const sb = supabase();
@@ -161,14 +201,17 @@ export class Island {
     this.info = got.world;
     this.me = got.you;
 
-    const world = blankWorld(got.world.size, got.world.seed);
-    for (let y = 0; y <= world.h; y += DOWNLOAD_BATCH) {
-      const to = Math.min(world.h, y + DOWNLOAD_BATCH - 1);
-      const { data: rows, error: land } = await sb.rpc('rpc_land', { p_world: worldId, p_y0: y, p_y1: to });
-      if (land) throw new Error(`The island did not arrive in one piece: ${land.message}`);
-      layRows(world, rows as LandRow[]);
-      this.hooks.progress?.(to + 1, world.h + 1, 'reading the island');
-    }
+    const size = got.world.size;
+    const seed = got.world.seed;
+    const world = blankWorld(size, seed);
+    this.hooks.progress?.(1, 3, 'reading the chart');
+    const atlas = await this.chart();
+    world.streamFrom((x0, y0, w, h) => generateAtlasWindow(seed, atlas, x0, y0, w, h, size));
+    // The ground under your own feet, before anything else asks for it.
+    const here = got.you;
+    world.ensureBox(Math.floor(here.x) - 64, Math.floor(here.y) - 64, Math.floor(here.x) + 64, Math.floor(here.y) + 64);
+    this.hooks.progress?.(2, 3, 'working out the ground');
+
     // Everything dug since the land was laid down, in the order it happened.
     // The same rows Realtime will carry from here on, so there is one way in
     // and not a second, thinner one for catching up.
@@ -176,10 +219,16 @@ export class Island {
     for (const c of (since ?? []) as Array<{ n: number; x: number; y: number; tile: number; data: number; corners: number[] }>) {
       this.applyChange(c);
     }
-    world.rememberAll();
+    this.hooks.progress?.(3, 3, 'catching up');
     world.groundTouched = false;
     this.world = world;
     await this.watch(worldId);
+  }
+
+  /** The survey chart, read once per tab and kept. */
+  private async chart(): Promise<Atlas> {
+    if (!this.atlas) this.atlas = await loadAtlas();
+    return this.atlas;
   }
 
   private applyChange(c: { n: number; x: number; y: number; tile: number; data: number; corners: number[] }): void {

@@ -27,6 +27,19 @@ on:
         description: 'Also push migrations to the project and smoke-test it'
         type: boolean
         default: false
+      found:
+        description: 'Found a new island on the project and open it'
+        type: boolean
+        default: false
+      size:
+        description: 'How many tiles a side the new island is'
+        default: '4096'
+      island_name:
+        description: 'What the new island is called'
+        default: 'Wildermon'
+      seed:
+        description: 'Its seed; blank rolls one'
+        default: ''
 
 jobs:
   rules:
@@ -120,8 +133,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
+        id: cli
+        continue-on-error: true
         with:
           version: latest
+        env:
+          # The action resolves "latest" through the GitHub API, unauthenticated
+          # from a shared runner address, and a run failed with "rate limit
+          # exceeded" before it had done anything at all. A token costs nothing
+          # and takes the anonymous quota out of the path.
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Get the CLI another way if that did not work
+        if: steps.cli.outcome != 'success'
+        run: |
+          # npm rather than the GitHub API: the same binary, fetched from a
+          # registry that is not counting anonymous requests per address.
+          echo "::warning::supabase/setup-cli failed; installing from npm instead."
+          npm i -g supabase
+          supabase --version
       - name: Link and push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -145,6 +174,36 @@ jobs:
           # tree, so anything the CLI would slot in early has been checked.
           supabase db push --include-all
           supabase migration list --linked
+
+  found:
+    name: Found an island on the project
+    if: github.event_name == 'workflow_dispatch' && inputs.found
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: AI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Work the ground out and hand it over, once
+        env:
+          ISLAND: ${{ inputs.island_name }}
+          SIZE: ${{ inputs.size }}
+          SEED: ${{ inputs.seed }}
+        run: |
+          # The one time the land travels. After this nobody downloads it
+          # again: a join carries the seed and every browser works out the
+          # ground it is standing on. Postgres keeps this copy because the
+          # rules are checked against it.
+          npx esbuild tools/found-island.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/found.mjs --log-level=error
+          node --max-old-space-size=4096 node_modules/.cache/found.mjs \
+            --name "$ISLAND" --size "$SIZE" ${SEED:+--seed "$SEED"} | tee found.log
+          echo "### The island" >> "$GITHUB_STEP_SUMMARY"
+          tail -2 found.log >> "$GITHUB_STEP_SUMMARY"
 
   smoke:
     name: Play on the real island

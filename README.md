@@ -36,6 +36,32 @@ before you choose one.
 An account is an addition, not a toll. Settings (`O`) links to the page, and
 the single-player island in your browser has never needed one.
 
+### The island the keeper serves
+
+`?island=<id>` comes ashore on an island kept in Postgres. That island is now
+**4096 tiles a side** — sixteen kilometres across, 268 km², against the one
+square kilometre a 256-tile island covers.
+
+What makes it affordable is that the land stops travelling. The join used to
+download the whole world before you could take a step: `rpc_land` scanline by
+scanline, base64 inside JSON, which is 138 MB at this size and is paid again by
+every player on every join. It does not any more. The land is a pure function
+of the seed and the survey chart, both of which this browser already has, so
+the join carries the seed and the ground is worked out here — 64 × 64 tiles at
+a time, the nine squares around you before the first frame and the rest as you
+walk into them. What is left on the wire is what people have actually dug.
+
+Postgres keeps its own copy and stays the authority: it is what the rules are
+checked against. That copy travels exactly once, at founding, from
+`tools/found-island.ts` — about half a minute of ground and 130 MB of land, run
+once by a tool rather than in a tab somebody is waiting on. Founding from the
+browser is for small islands and says so above 512 tiles.
+
+`docs/tile-map-cost-analysis.md` is the arithmetic, and the three things that
+had to be fixed before a big island would run at all: the pathfinder's buffers,
+the minimap's canvas, and the database laying down sixteen thousand animals the
+moment an island opened.
+
 ### Who you are
 
 Between making the account and stepping ashore comes the second half of setting
@@ -1015,6 +1041,10 @@ src/
   account.ts         its behaviour; account.css its own small stylesheet
   net/accounts.ts    name rules, the breach check, signing up and back in
   game/look.ts       skin, hair, eyes, build and cloth — the only place they live
+  world/atlas-world.ts  the archipelago, any window of it, from the survey chart
+tools/
+  found-island.ts    works the big island out and hands it over, once
+  measure-map-cost.ts  what a world of a given size costs to store and to send
   engine/            canvas sizing, input, loop, camera (no game knowledge)
   render/iso.ts      projection constants and world <-> iso math
   render/renderer.ts terrain quads, water, entities, picking, overlays
