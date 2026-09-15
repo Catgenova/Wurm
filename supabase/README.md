@@ -1018,7 +1018,7 @@ The address bar decides:
 | *(nothing)* | the single-player game, kept in this browser, exactly as before |
 | `?found=<name>` | roll an island here, hand it over, be its first inhabitant |
 | `?island=<id>` | come ashore on one that exists |
-| `?me=<name>` | what to be called |
+| `?me=<name>` | what to be called, if there is no account signed in here |
 
 Generating an island stays in the browser — it is a large deterministic
 function of a seed that already exists and is tested, and a second
@@ -1028,6 +1028,64 @@ refuses the moment the island opens.
 
 A page that cannot reach the keeper says so and plays on its own. An island is
 an addition, not a replacement.
+
+## A name you can prove
+
+Until accounts, everybody was anybody. The island read `?me=Wanderer` out of
+the address bar, and the only thing behind that name was an anonymous sign-in
+that any tab can mint for itself in a millisecond. Fine for one person on one
+island; nothing at all once there are two.
+
+`account.html` is where a username and a password are set up. The trick that
+makes it small is that **the username is the login**:
+
+    alice  ->  alice@players.wurm.invalid
+
+`.invalid` is reserved by RFC 2606 and can never be delegated to anybody, so
+the address is guaranteed to reach no one, forever. Two things fall out of it:
+
+* **Signing up is the reservation.** The index that makes a name yours is the
+  unique one Auth already keeps over its own addresses, so there is no window
+  between "free when I looked" and "mine now" for a second browser to slip
+  into. No lock, no retry, no race, and no second authority to disagree with
+  the first. `rpc_name_free` exists, but only as a courtesy, and says so.
+* **The name cannot be forged.** `rpc_my_name()` takes no argument: it reads
+  the caller's own address back out of `auth.users` and cuts the suffix off.
+  A browser that signed up as `alice` cannot file itself as `bob`, because it
+  never gets to say. Had that function taken a name and trusted it, the whole
+  change would have been one RPC call from being undone.
+
+What the database cannot do is the password. Auth takes it, hashes it, and
+Postgres only ever learns that a row appeared — so the eight-character minimum
+and the check against breached passwords both happen in the browser, and a
+check in the browser is a courtesy to the honest rather than a control. The
+settings that make them controls are in the project's own Auth configuration
+and nowhere a migration can reach; `20260915025000_accounts.sql` names all
+three, including the one without which none of this works (`Confirm email` has
+to be off, because an address at `.invalid` can never answer a mail).
+
+The breach check is the Pwned Passwords range API by k-anonymity: SHA-1 the
+password, send the **first five hex characters** of the digest and nothing
+else, match the suffixes here. It fails closed — "deny breached passwords" and
+"deny breached passwords when the network is cooperating" are different
+instructions, and only one of them was given.
+
+### The rulebook rule met its first counterexample
+
+`lock_doors()` decided what belonged to the rulebook by asking whether a table
+had a `world_id`: no island of its own meant a definition, so it was made
+readable by everybody and writable by nobody. That held for a hundred and
+twenty migrations. `account` walked straight through it — a roll of who exists
+belongs to no island and is not a definition either — and the sweep dropped the
+policy the migration had just written and put back one letting `anon` read
+every username in the game in a single request.
+
+Nothing above it would have noticed, because every measurement in the suite so
+far asked as somebody who had already come ashore. The rule now has the other
+half it always wanted: the rulebook is what has **no island and nobody in it**.
+A `uid` column means the rows are about people, and people's rows are answered
+for by their own policies. Measurement 543 asks as a stranger, which is the
+only way that class of thing is ever found.
 
 ## Testing
 

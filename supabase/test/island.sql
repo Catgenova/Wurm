@@ -3327,3 +3327,112 @@ select act_perform(:'world2', :'ivar', 'douse_lantern', ('{"kind":"item","uid":'
 select '528. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
      || ' — and there are ' || (select count(*) from item_def where id = 'tinderbox')
      || ' tinderboxes in this game, which is how many there always were';
+
+\echo ''
+\echo '--- a name you can prove'
+-- Until now every name in this file was a string somebody typed. An account is
+-- a name the database can check, and the check is not a column of its own: the
+-- username *is* the address Auth signs you in with, so the unique index over
+-- addresses is the thing that makes a name yours.
+\set alice '33333333-3333-3333-3333-333333333333'
+\set bob   '44444444-4444-4444-4444-444444444444'
+\set ghost '55555555-5555-5555-5555-555555555555'
+reset role;
+-- Auth's own table, written here the way Auth writes it: an address for an
+-- account that has one, and nothing at all for an anonymous one.
+insert into auth.users (id, email) values (:'alice', 'alice@players.wurm.invalid'), (:'ghost', null);
+
+select '529. what counts as a username: ' || string_agg(
+         quote_literal(n) || ' ' || case when name_ok(n) then 'yes' else 'no' end, ', ' order by ord)
+  from (values ('alice', 1), ('al', 2), ('a1ice_the-third', 3), ('1alice', 4),
+               ('alice smith', 5), ('alice@home', 6), ('averyverylongnameindeedx', 7)) v(n, ord);
+
+select '530. a name goes out as ' || name_email('Alice') || ' and comes back as '
+     || coalesce(email_name('ALICE@players.wurm.invalid'), 'nothing')
+     || ' — and an address that is not ours comes back as '
+     || coalesce(email_name('alice@example.com'), 'nothing');
+
+select '531. is bob free? ' || rpc_name_free('bob')::text
+     || ' — is alice? ' || rpc_name_free('alice')::text
+     || ' — is ALICE? ' || rpc_name_free('ALICE')::text
+     || ' — is "al"? ' || rpc_name_free('al')::text;
+
+-- What makes the name hers is not this call; it is the row above. This is the
+-- filing, and the filing takes no argument at all.
+select set_config('request.jwt.claims', json_build_object('sub', :'alice')::text, false) \g /dev/null
+select '532. before alice asks, account holds ' || (select count(*) from account) || ' rows';
+select rpc_my_name() \g /dev/null
+select rpc_my_name() \g /dev/null
+select '533. she asks her name three times: ' || coalesce(rpc_my_name(), 'none')
+     || ' — and account holds ' || (select count(*) from account)
+     || ' row, which is how many three askings should leave';
+
+-- Signing up is the reservation, and this is the index that does it.
+do $$ begin
+  insert into auth.users (id, email) values ('66666666-6666-6666-6666-666666666666', 'ALICE@players.wurm.invalid');
+  raise notice '534. a second alice signs up:      ALLOWED';
+exception when others then raise notice '534. a second alice signs up:      refused — %', sqlerrm; end $$;
+
+-- The name follows the address, so there is no argument for a client to lie in.
+insert into auth.users (id, email) values (:'bob', 'bob@players.wurm.invalid');
+select set_config('request.jwt.claims', json_build_object('sub', :'bob')::text, false) \g /dev/null
+select '535. bob asks his own name: ' || coalesce(rpc_my_name(), 'none')
+     || ' — and what alice is called is still ' || coalesce(account_name(:'alice'), 'nothing');
+
+select set_config('request.jwt.claims', json_build_object('sub', :'ghost')::text, false) \g /dev/null
+select '536. an anonymous account asks: ' || coalesce(rpc_my_name(), 'no name to prove')
+     || ' — rows in account: ' || (select count(*) from account);
+
+select set_config('request.jwt.claims', json_build_object('sub', null)::text, false) \g /dev/null
+select '537. nobody at all asks: ' || coalesce(rpc_my_name(), 'no name to prove');
+
+-- And a client may not simply file itself one.
+--
+-- Two layers say no and the outer one answers first, which is why the message
+-- below is about a grant and not about a policy. `20260914190200_no_writes`
+-- revoked insert, update and delete by default privilege on every table added
+-- from then on, so `account` arrived unwritable without anybody having to
+-- remember; and behind that, `account` has a select policy and no other, which
+-- with row level security on is a refusal in its own right. Either alone would
+-- do. Both is the point.
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'bob')::text, false) \g /dev/null
+do $$ begin
+  insert into account (uid, name) values ('77777777-7777-7777-7777-777777777777', 'alice_the_real');
+  raise notice '538. bob files a name for free:    ALLOWED';
+exception when others then raise notice '538. bob files a name for free:    refused — %', sqlerrm; end $$;
+do $$ begin
+  update account set name = 'alice' where uid = '44444444-4444-4444-4444-444444444444';
+  raise notice '539. bob renames himself alice:    ALLOWED';
+exception when others then raise notice '539. bob renames himself alice:    refused — %', sqlerrm; end $$;
+select '540. bob reads the names on the island: ' || string_agg(a.name, ', ' order by a.name) from account a;
+reset role;
+
+-- One door opens before you have an account, because whoever is knocking has
+-- none. Every other door stays shut to a stranger.
+select '541. what a stranger may call: '
+     || string_agg(f || ' ' || case when has_function_privilege('anon', f, 'execute') then 'yes' else 'no' end,
+                   ', ' order by f)
+  from unnest(array['rpc_name_free(text)', 'rpc_my_name()', 'rpc_join(uuid,text)', 'rpc_act(uuid,text,jsonb,int)']) f;
+
+/*
+ * And what a stranger may read, which is the question this file did not think
+ * to ask until it had cost something.
+ *
+ * `lock_doors()` sweeps every table with no `world_id` into the rulebook —
+ * readable by everyone, writable by nobody — and `account` is the first table
+ * to have no island and still be nobody's business but its own. The sweep
+ * dropped the policy this migration had just written and put back one that let
+ * anybody holding the publishable key pull every username in the game in one
+ * request. Nothing above would have noticed: every measurement so far asked as
+ * somebody who had already come ashore.
+ */
+select '542. the policies on the roll of names: '
+     || string_agg(p.polname || ' for ' || array_to_string(p.polroles::regrole[], ' and '), ', ' order by p.polname)
+  from pg_policy p join pg_class c on c.oid = p.polrelid where c.relname = 'account';
+select count(*) as really from account \gset
+set role anon;
+select set_config('request.jwt.claims', json_build_object('sub', null)::text, false) \g /dev/null
+select '543. a stranger reads the roll of names: ' || (select count(*) from account)
+     || ' of the ' || :really || ' there are';
+reset role;

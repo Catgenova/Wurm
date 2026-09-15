@@ -1,4 +1,5 @@
 import { Game, WORLD_SIZE } from '../game/game';
+import { whoAmI } from './accounts';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateWorld } from '../world/generate';
 import type { ActionDef, Target } from '../game/actions';
@@ -31,7 +32,18 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   const founding = params.get('found');
   if (!joining && founding === null) return null;
 
-  const name = params.get('me') ?? 'Wanderer';
+  /**
+   * What to call you.
+   *
+   * An account first, and the address bar only if there is no account. That
+   * order is the whole point of having accounts: `?me=` is a string anybody
+   * can type, while `whoAmI()` is the island keeper reading a name back out of
+   * the address you signed in with, which nobody can type their way into.
+   * With neither, you are a Wanderer, and the island still lets you in — an
+   * account is a name you can prove, not a toll.
+   */
+  const account = await whoAmI().catch(() => null);
+  const name = account ?? params.get('me') ?? 'Wanderer';
   const log: Array<[string, string]> = [];
   const island = new Island({
     say: (text, kind) => log.push([text, kind]),
@@ -103,6 +115,12 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   };
   for (const [text, kind] of log) game.write(text, kind as Parameters<Game['write']>[1]);
   game.write(`You are on ${info.name}. Send somebody this page's address and they can join you.`, 'system');
+  game.write(
+    account
+      ? `You are signed in as ${account}.`
+      : `You are playing as ${name}, which anybody could type. Settings (O) has a link to set up a name you can prove.`,
+    'system',
+  );
   await island.refreshPack();
   await island.refreshPeople();
   return { game, island, id };

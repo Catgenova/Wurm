@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Wurm Iso — your account</title>
+    <meta name="description" content="A username and a password, and nothing else." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 30 11 16 19 2 11z' fill='%235c9a3e'/%3E%3Cpath d='M2 11v8l14 8v-8z' fill='%23795c3c'/%3E%3Cpath d='M30 11v8l-14 8v-8z' fill='%234f3c27'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./account.css" />
+  </head>
+  <body>
+    <!-- Edit src/account.html, not the generated account.html at the repository root. -->
+    <main class="card">
+      <h1>Wurm Iso</h1>
+      <p class="lede">
+        A name and a password. That is the whole of it — there is no e-mail address to
+        give, and nothing will ever be sent to you.
+      </p>
+
+      <div class="tabs" role="tablist" aria-label="Account">
+        <button type="button" id="tab-new" class="tab on" role="tab" aria-selected="true">Make an account</button>
+        <button type="button" id="tab-back" class="tab" role="tab" aria-selected="false">I already have one</button>
+      </div>
+
+      <form id="form" novalidate autocomplete="on">
+        <label for="name">Username</label>
+        <input
+          id="name" name="username" type="text" autocomplete="username"
+          autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="20"
+          placeholder="alice" aria-describedby="name-note" />
+        <p class="note" id="name-note">
+          Three to twenty characters: a letter first, then letters, numbers, underscore
+          or hyphen. It is what everybody on the island will see over your head.
+        </p>
+
+        <label for="pw">Password</label>
+        <div class="pw">
+          <input id="pw" name="password" type="password" autocomplete="new-password" aria-describedby="pw-note" />
+          <button type="button" id="peek" aria-label="Show the password">show</button>
+        </div>
+        <p class="note" id="pw-note">
+          Eight characters at the very least, and checked against the list of passwords
+          already known to have leaked. Neither it nor its full fingerprint leaves this
+          page.
+        </p>
+
+        <button id="go" type="submit">Make the account</button>
+      </form>
+
+      <p id="say" class="say" role="status" aria-live="polite"></p>
+
+      <p class="fine" id="warn">
+        Because there is no address to send anything to, there is no way to send you a
+        reset link either. <b>A forgotten password is a lost account.</b> Write it down
+        somewhere, or let the browser keep it.
+      </p>
+      <p class="fine">
+        <a id="alone" href="./index.html">Or play on your own, with no account at all</a> —
+        the island in your browser has never needed anybody's permission.
+      </p>
+    </main>
+    <script type="module" src="./account.ts"></script>
+  </body>
+</html>

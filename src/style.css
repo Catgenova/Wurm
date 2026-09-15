@@ -744,6 +744,19 @@ kbd {
   color: var(--ui-dim);
 }
 
+/* A line of prose among the tick boxes: who you are, and where to see about it. */
+.setting-note {
+  margin: 12px 2px 2px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(107, 88, 54, 0.4);
+  color: var(--ui-dim);
+}
+
+.setting-note a {
+  color: var(--ui-accent);
+  white-space: nowrap;
+}
+
 /* The number key that does a row, written at the head of it. */
 .ctx-key {
   flex: 0 0 auto;

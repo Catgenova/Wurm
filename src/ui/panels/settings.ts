@@ -1,5 +1,6 @@
 import type { Game } from '../../game/game';
 import { BINDS, BIND_GROUPS, keyName, keyReserved, MAX_KEYS, type Keybinds } from '../../game/keybinds';
+import { whoAmI } from '../../net/accounts';
 import type { UIWindow } from '../windows';
 
 interface Toggle {
@@ -109,6 +110,35 @@ export class SettingsPanel {
       'Draw the green boundary of your settlement at all times. Otherwise it only shows while pointing at the token.',
       () => game.settings.deedBorder,
       (v) => (game.settings.deedBorder = v),
+    );
+
+    /**
+     * Who you are, and the one thing the game can do about it.
+     *
+     * Setting up an account happens on a page of its own rather than in a
+     * window here, so all this can do is point at it — and pointing at it is
+     * the whole job, because a landing page nobody can find from the game is a
+     * landing page nobody lands on.
+     *
+     * The line starts out saying you have no account and is corrected once the
+     * island keeper answers. That way round on purpose: a browser with no
+     * session never asks anybody anything, and a browser that cannot reach the
+     * keeper is told the truth about what it can prove, which is nothing.
+     */
+    const who = document.createElement('p');
+    who.className = 'setting-note';
+    display.append(who);
+    const door = document.createElement('a');
+    door.href = './account.html';
+    const sayWho = (line: string, label: string): void => {
+      who.textContent = `${line} `;
+      door.textContent = label;
+      who.append(door);
+    };
+    sayWho('No account here, so on an island you are whatever name the address bar says.', 'Set one up');
+    void whoAmI().then(
+      (name) => { if (name) sayWho(`Signed in as ${name}.`, 'Change account'); },
+      () => {},
     );
 
     // ---- The keys ----

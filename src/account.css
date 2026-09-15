@@ -1,0 +1,197 @@
+/*
+ * The landing page stands on its own.
+ *
+ * It does not pull in the game's stylesheet: that is seventeen hundred lines
+ * about windows, toolbars and an inventory grid, none of which is on this
+ * page, and all of which starts by nailing the body down at `overflow: hidden`
+ * so that a canvas can have the screen. A sign-up form wants to scroll on a
+ * phone. So the half-dozen colours are restated here and the rest is left
+ * behind.
+ */
+:root {
+  --ui-bg: rgba(22, 20, 17, 0.9);
+  --ui-bg-2: rgba(34, 30, 25, 0.95);
+  --ui-border: #6b5836;
+  --ui-border-light: #9a7f4c;
+  --ui-text: #d9d0bd;
+  --ui-dim: #8f8574;
+  --ui-accent: #e3b657;
+  --ui-bad: #d98b6a;
+  --ui-good: #8fbf6a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: #12395f;
+  color: var(--ui-text);
+  font: 14px/1.5 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/*
+ * The island under the water line, so that the page is plainly the same place
+ * as the game.
+ *
+ * `100dvh` rather than `100%`: a percentage height resolves against the parent,
+ * `html` has no height of its own, and the whole thing collapses to the height
+ * of the card — which leaves the gradient stopping halfway down the screen and
+ * the centring doing nothing at all. `dvh` is also the one that copes with a
+ * phone's address bar sliding in and out.
+ */
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+  background:
+    radial-gradient(120% 90% at 50% 8%, rgba(92, 154, 62, 0.18), transparent 62%),
+    linear-gradient(#0e2c4a, #12395f 45%, #164a75);
+  background-attachment: fixed;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  padding: 26px 24px 20px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ui-accent);
+}
+
+.lede { margin: 0 0 18px; color: var(--ui-dim); }
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: none;
+  color: var(--ui-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tab:hover { color: var(--ui-text); }
+
+.tab.on {
+  border-color: var(--ui-border);
+  background: var(--ui-bg-2);
+  color: var(--ui-accent);
+  margin-bottom: -1px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ui-dim);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+input {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: rgba(10, 9, 7, 0.55);
+  color: var(--ui-text);
+  font: inherit;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--ui-border-light);
+  box-shadow: 0 0 0 2px rgba(227, 182, 87, 0.18);
+}
+
+.pw { position: relative; }
+
+#peek {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--ui-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#peek:hover { color: var(--ui-accent); border-color: var(--ui-border); }
+
+.note {
+  margin: 6px 0 16px;
+  min-height: 2.6em;
+  color: var(--ui-dim);
+  font-size: 12px;
+}
+
+.note.bad { color: var(--ui-bad); }
+.note.good { color: var(--ui-good); }
+
+#go {
+  width: 100%;
+  margin-top: 2px;
+  padding: 11px;
+  border: 1px solid var(--ui-border-light);
+  border-radius: 4px;
+  background: linear-gradient(rgba(90, 74, 44, 0.95), rgba(62, 51, 31, 0.95));
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+#go:hover:not(:disabled) { border-color: var(--ui-accent); color: #fff; }
+
+#go:disabled { opacity: 0.55; cursor: progress; }
+
+.say {
+  margin: 14px 0 0;
+  min-height: 1.5em;
+  font-size: 13px;
+}
+
+.say.bad { color: var(--ui-bad); }
+.say.good { color: var(--ui-good); }
+
+.fine {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(107, 88, 54, 0.4);
+  color: var(--ui-dim);
+  font-size: 12px;
+}
+
+.fine b { color: var(--ui-text); font-weight: 600; }
+
+a { color: var(--ui-accent); }
+
+/* Whoever is signed in already does not need a form. */
+.card.settled form, .card.settled .tabs, .card.settled #warn { display: none; }

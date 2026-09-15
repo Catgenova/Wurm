@@ -21,8 +21,17 @@ do $$ begin
   if not exists (select from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
 end $$;
 
--- Supabase's own users table, enough of it for a foreign key to mean something.
+-- Supabase's own users table, enough of it for a foreign key to mean something
+-- and, since accounts arrived, for a name to come out of.
+--
+-- The address is not decoration here: a username *is* an address in this game
+-- (`alice` signs in as `alice@players.wurm.invalid`), so the unique index Auth
+-- keeps over this column is the thing that makes a name yours, and a shim
+-- without it would test the account rules against a database where two people
+-- could be called the same thing.
 create table if not exists auth.users (id uuid primary key);
+alter table auth.users add column if not exists email text;
+create unique index if not exists users_email_key on auth.users (lower(email));
 
 /**
  * What Supabase grants on the auth schema, granted here too.
