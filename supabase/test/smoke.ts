@@ -129,25 +129,23 @@ async function main(): Promise<void> {
     check('a recipe we lack the materials for is refused in its own words',
       !noLogs.started && /plank/i.test(noLogs.why ?? ''), noLogs.why ?? 'IT STARTED');
     /*
-     * Something that has no performer yet — whichever that happens to be.
+     * And which of them have no performer behind them yet — asked, not played.
      *
-     * Naming one is how this check rots: it named `cut_down`, felling was
-     * ported, and a passing test started failing because the island had got
-     * *better*. So it tries a few and takes the first that is honestly
-     * refused; and if every one of them has a performer, that is not a failure
-     * either, it is the day the port finished.
+     * This was a loop that *tried* half a dozen actions until one was honestly
+     * refused, and the comment above it worried about the check rotting as the
+     * port caught up. It rotted in the direction nobody planned for: all six
+     * are ported now, so the loop found no refusal and started six real jobs
+     * instead. Three is all the head holds, so the next four checks were
+     * refused for want of room — a live run failing on the island having got
+     * better. Asking starts nothing and cannot rot either way.
      */
     const here = { x: Math.floor(island.me!.x), y: Math.floor(island.me!.y) };
-    let notYet: { started: boolean; why?: string } | null = null;
-    let tried = '';
-    for (const id of ['flatten', 'prospect', 'load_kiln', 'plant', 'dig_worms', 'remove_paving']) {
-      const said = await island.act(id, { kind: 'tile', ...here }, 1);
-      tried = id;
-      if (!said.started && /yet/i.test(said.why ?? '')) { notYet = said; break; }
-    }
-    check('an action with no performer yet says so honestly',
-      notYet !== null || true,
-      notYet ? `${tried}: ${notYet.why}` : 'every one of them is ported now, which is the point of the exercise');
+    const { data: unported, error: portErr } = await supabase().rpc('rpc_unported');
+    const noHands = (unported ?? []) as string[];
+    check('the island is honest about what it cannot do yet', !portErr,
+      portErr ? portErr.message
+        : noHands.length ? `${noHands.length} without a performer: ${noHands.slice(0, 6).join(', ')}`
+          : 'every action in the game has a performer, which is the point of the exercise');
 
     /*
      * The wildlife, which the island stocked for itself the moment the land

@@ -41,6 +41,7 @@ import { WORMY, RICH_WORMS } from '../src/game/actions';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
+import { TRAPS } from '../src/game/traps';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -218,6 +219,12 @@ out.push(`alter table tile_def add column if not exists diggable boolean not nul
 out.push(`create table if not exists relic_def (
   name text primary key, parts int not null, result text not null, difficulty real not null
 );`);
+/* What you set and walk away from, and what it will hold. */
+out.push(`create table if not exists trap_def (
+  id text primary key, name text not null, difficulty real not null, holds real not null,
+  reach real not null, odds real not null, life_min real not null, life_max real not null,
+  water boolean not null default false, hold int, note text not null
+);`);
 /* Which full bucket carries which liquid, and which empty one it leaves. */
 out.push(`create table if not exists vessel_def (
   item text primary key, liquid text not null, empty text not null
@@ -387,7 +394,7 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def;');
 out.push('');
 
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
@@ -593,6 +600,10 @@ for (const id of RICH_WORMS) out.push(`update tile_def set rich_worms = true whe
 for (const id of DIGGABLE) out.push(`update tile_def set diggable = true where id = ${q(id)};`);
 for (const r of RELICS) {
   out.push(`insert into relic_def values (${q(r.name)}, ${q(r.parts)}, ${q(r.result)}, ${q(r.difficulty)});`);
+}
+for (const t of Object.values(TRAPS)) {
+  out.push(`insert into trap_def values (${q(t.id)}, ${q(t.name)}, ${q(t.difficulty)}, ${q(t.holds)}, `
+    + `${q(t.reach)}, ${q(t.odds)}, ${q(t.lifeMin)}, ${q(t.lifeMax)}, ${q(!!t.water)}, ${q(t.hold ?? null)}, ${q(t.note)});`);
 }
 BUSH_DEFS.forEach((b, i) => out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`));
 for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE]] as Array<[string, Array<[string, number]>]>) {

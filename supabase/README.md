@@ -49,11 +49,12 @@ simplification rather than a problem:
 | **5** | things that hold things: a bag stowed and turned out, a chest or bin filled and emptied, a trash crate |
 | **7** | the settlement: upgraded, renamed, disbanded — and work posts driven in, pulled up, set to and called off |
 | **3** | what the old people left in the ground: investigated, put back together, and a book worked through |
+| **6** | traps: a snare set, baited, emptied and lifted; a creel sunk and turned out; and whatever is in one let go |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **32** | known, listed, and honestly refused |
+| **26** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -71,11 +72,51 @@ deeper for every ten points of mind logic above where you began — rather than
 being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
-not the recovery, would make the island unplayable), the one deed trade that
-wants something this island has not got — `seek` wants archaeology — sowing a
-field from a worker's own cheeks, breeding and pairing, riding and the traces,
-trapping, brewing, the ledger, the journal, and the ease a hot oven lends to
-cooking. Every trade a wildermon may be set to is now one this island knows.
+not the recovery, would make the island unplayable), sowing a field from a
+worker's own cheeks, breeding and pairing, riding and the traces, faith and
+the paths, bridges, brewing, the ledger, the journal, and the ease a hot oven
+lends to cooking. Every trade a wildermon may be set to is one this island
+knows, and `rpc_unported()` will read you the rest of the list to your face.
+
+### A trap is a chance compounded, not a chance repeated
+
+A trap is the eighth thing that will not sit still, and the first that is a
+gamble. Everything settled so far had an answer that could be worked out: a
+fire has burned this much of its fuel, a wound has drained this far, a well
+holds what the rate says it holds. A trap asks a question with dice in it, and
+it asks it every forty-five seconds whether anybody is there or not.
+
+Rolling it forty times when somebody finally walks past would be both slow and
+wrong — wrong because a trap that is checked often would catch more than one
+that is not. So it is not rolled forty times. The chance of catching nothing in
+`n` rolls is `(1 - p)^n`, so the chance of catching something is one minus
+that, rolled **once**. The same trick the festering wound uses, and the only
+honest way to settle a gamble from a timestamp.
+
+And unlike a hunt, it is deliberately **not** clamped. `hunt_window()` caps a
+chase at ten seconds however long you were gone, because a hunter cannot have
+been closing on a path nobody wrote down. A trap is the opposite: it catches
+things *precisely* when nobody is watching, which is the whole of what it is
+for. An hour away is eighty real rolls, and eighty rolls at forty in a hundred
+is a certainty.
+
+### An honest check that made the island fail for getting better
+
+The live suite had a check that proved the dispatcher tells the truth about an
+action with no performer behind it. It proved it by *playing*: try half a dozen
+actions in turn, take the first that is refused for want of a performer. The
+comment above it worried, in as many words, about the check rotting as the port
+caught up.
+
+It rotted, in the direction nobody had planned for. Every one of the six is
+ported now, so the loop found no refusal at all and **started six real jobs**
+instead. Three is all a head holds, so the next four checks were refused for
+want of room, and a live run failed because the island had got better.
+
+The fix is not a longer list of candidates, it is not asking by doing.
+`rpc_unported()` reads out the same `act_ported()` the dispatcher consults.
+A question that is asked rather than acted out cannot fill a queue and cannot
+rot either way: the day it returns nothing is the day the port is finished.
 
 ### A fragment is a thing that knows what it is a piece of
 

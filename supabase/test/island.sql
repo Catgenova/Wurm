@@ -2585,3 +2585,99 @@ select '429. a quarter of an hour of a snout: ' || :'nosed' || ' holes dug, '
 select '430. the three that came with the relics: '
      || (select string_agg(id, ', ' order by id) from action_def where dig_action(id))
      || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- what you catch while you are somewhere else'
+delete from placed where world_id = :'world2' and kind = 'trap';
+delete from creature where world_id = :'world2' and mode = 'wild';
+update player set x = 2.5, y = 3.5 where world_id = :'world2' and uid = :'ivar';
+select '431. the three of them: ' || (select string_agg(name || ' — holds taming ' || holds
+       || ', reaches ' || reach || ', ' || round(odds * 100) || ' in a hundred a roll, stands '
+       || round(life_min / 60) || '–' || round(life_max / 60) || ' minutes', ' | ' order by difficulty)
+       from trap_def);
+select give(:'world2', :'ivar', 'snare', 1, 60, 'Oak') \g /dev/null
+select id as snare_item from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'snare'
+  order by id desc limit 1 \gset
+select '432. inside your own borders: ' || coalesce(act_refusal(:'world2', :'ivar', 'set_trap',
+       ('{"kind":"tile","x":8,"y":11,"sx":0,"sy":0,"uid":' || :'snare_item' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'set_trap',
+  ('{"kind":"tile","x":2,"y":4,"sx":1,"sy":1,"uid":' || :'snare_item' || '}')::jsonb) \g /dev/null
+select id as snare from placed where world_id = :'world2' and kind = 'trap' order by id desc limit 1 \gset
+select '433. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+select '434. as it stands: ' || trap_state((select p from placed p where p.id = :'snare'))
+     || ' — and an hour of an unbaited trap catches ' ||
+       (select case when trap_settle(:'snare') then 'nothing, it rotted' else 'nothing at all' end);
+
+/*
+ * Bait it, and put something in reach that would come to it.
+ *
+ * The pack is cleared of everything edible first, and not for tidiness: bait
+ * is whatever comes first in the pack, exactly as the browser takes it, so a
+ * sprig of mint left over from the cooking section was what went in the noose
+ * — and no rabba eats mint, so the snare sat baited for an hour and caught
+ * nothing. Faithful, and a useless measurement.
+ */
+delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar'
+  and exists (select 1 from species_diet sd where sd.item = item.def);
+select give(:'world2', :'ivar', 'blueberry', 3, 40) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'bait_trap', ('{"kind":"trap","id":' || :'snare' || '}')::jsonb) \g /dev/null
+select '435. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+select creature_spawn(:'world2', 'rabba', 2.6, 4.6, 'wild', now() - interval '2 hours') as prey2 \gset
+update creature set from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now(),
+    until = now() + interval '2 hours', settled_at = now() - interval '1 second' where id = :'prey2';
+select '436. a rabba a stride from the noose: it would be caught '
+     || round(catch_chance((select p from placed p where p.id = :'snare'),
+                           (select c from creature c where c.id = :'prey2')) * 100)
+     || ' times in a hundred a roll, and a roll is every ' || trap_check_every() || ' seconds'
+     || ' — so an hour of it is ' || floor(3600 / trap_check_every()) || ' rolls, which is a certainty';
+update placed set since = now() - interval '1 hour' where id = :'snare';
+delete from event where uid = :'ivar';
+select trap_settle(:'snare') \g /dev/null
+select '437. an hour nobody watched: ' || trap_state((select p from placed p where p.id = :'snare'))
+     || ' — and it said: ' || coalesce((select text from event where uid = :'ivar' order by n desc limit 1), 'nothing');
+select '438. the rabba knows it: it is held by trap '
+     || coalesce((select trapped::text from creature where id = :'prey2'), 'nothing')
+     || ', and standing at ' || (select round(to_x::numeric, 1) || ',' || round(to_y::numeric, 1)
+        from creature where id = :'prey2') || ', which is the noose';
+
+-- Getting it out is a skill, and taking the trap up first is not allowed.
+select '439. taking the trap up with something in it: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'pick_up_trap', ('{"kind":"trap","id":' || :'snare' || '}')::jsonb), 'allowed');
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'taming', 60)
+  on conflict (world_id, uid, id) do update set value = 60;
+delete from creature where world_id = :'world2' and mode = 'active';
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+        t bigint := (select id from placed where kind = 'trap' order by id desc limit 1);
+begin
+  for i in 1..8 loop
+    exit when act_refusal(w, me, 'take_catch', jsonb_build_object('kind','trap','id',t)) is not null;
+    perform act_perform(w, me, 'take_catch', jsonb_build_object('kind','trap','id',t));
+    exit when (select caught from placed where id = t) is null;
+  end loop;
+end $$;
+select '440. ' || coalesce((select text from event where uid = :'ivar' and kind = 'event'
+       order by n desc limit 1), 'it said nothing at all')
+     || ' — the rabba is now ' || (select mode from creature where id = :'prey2')
+     || ' and the trap is ' || trap_state((select p from placed p where p.id = :'snare'));
+
+-- And the whole thing comes up again, half rotten.
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pick_up_trap', ('{"kind":"trap","id":' || :'snare' || '}')::jsonb) \g /dev/null
+select '441. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — it went down at QL 60 with nothing on it and comes up with '
+     || (select round(dmg::numeric) from item where world_id = :'world2' and holder_uid = :'ivar'
+         and def = 'snare' order by id desc limit 1) || ' damage on it, from an hour in the weather';
+select '442. traps left standing: ' || (select count(*) from placed where world_id = :'world2' and kind = 'trap')
+     || ' — and the six that came with them: '
+     || (select string_agg(id, ', ' order by id) from action_def where trap_action(id))
+     || ', of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+select '443. and asked outright what it still cannot do: ' || (select count(*) from rpc_unported())
+     || ' of them, the first eight being ' ||
+       (select string_agg(u, ', ') from (select u from rpc_unported() u limit 8) s)
+     || ' — which is the question the live suite used to answer by trying six and'
+     || ' filling its own head with the jobs that started';
