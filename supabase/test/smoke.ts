@@ -16,6 +16,7 @@ import { Island } from '../../src/net/island';
 import { generateAtlasWorld } from '../../src/world/atlas-world';
 import { TILE_DEFS } from '../../src/world/tiles';
 import { supabase, signIn, PROJECT } from '../../src/net/supabase';
+import { nameEmail } from '../../src/net/accounts';
 import { readAtlas } from '../../tools/atlas-node';
 import { ACTION_PACE } from '../../src/game/pace';
 import { pathOptions } from '../../src/game/player';
@@ -925,6 +926,51 @@ async function main(): Promise<void> {
     if (id) {
       const { error } = await supabase().rpc('rpc_abandon', { p_world: id });
       check('gave the island up again', !error, error?.message ?? 'nothing left of it');
+    }
+  }
+
+  /*
+   * The suffix a username wears, put to the real Auth.
+   *
+   * Everything above runs as an anonymous body, and an anonymous body is the
+   * one route through Auth that never touches an e-mail address — so nothing
+   * here and nothing in the local suite could have caught the thing that shut
+   * the island. GoTrue refuses an address at `.invalid` outright, off a list
+   * of barred host suffixes in its own source that no project setting reaches,
+   * and one commit earlier the landing page became the only way ashore. A
+   * local Postgres will store any string at all in `auth.users`; only the real
+   * Auth can say whether it will take one.
+   *
+   * Done by growing the anonymous body already signed in, rather than by
+   * signing up a second time: it is the path somebody who came ashore first
+   * actually takes, and it leaves behind no row this run was not leaving
+   * anyway.
+   *
+   * `rpc_my_name` is the other half. It reads the address back out of
+   * `auth.users` and cuts the suffix off it, so getting the name back proves
+   * both ends at once — that Auth accepted the address, and that the island
+   * still recognises the suffix it is written at.
+   */
+  {
+    const name = `smoke${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const email = nameEmail(name);
+    const suffix = email.slice(name.length);
+    const { error: grew } = await supabase().auth.updateUser({ email, password: crypto.randomUUID() });
+    if (grew) {
+      check(`Auth takes an address at ${suffix}`, false, grew.message);
+      if (/email address/i.test(grew.message) && /invalid/i.test(grew.message)) {
+        say(`        ${suffix} is a suffix Auth will not take, and no setting lifts it.`);
+        say('        The suffix itself has to change: DOMAIN in src/net/accounts.ts,');
+        say('        and name_domains() on the island, which reads both.');
+      }
+    } else {
+      const { data: called } = await supabase().rpc('rpc_my_name');
+      check(`Auth takes an address at ${suffix}, and the name comes back out of it`,
+        called === name, `${String(called)} — the uid did not move`);
+      if (called !== name) {
+        say('        An address Auth accepted but did not apply is what "Confirm email" looks');
+        say('        like from here: turn it off in Authentication → Sign In / Providers.');
+      }
     }
   }
 
