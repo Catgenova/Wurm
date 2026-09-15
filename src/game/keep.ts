@@ -58,14 +58,32 @@ export const HEARTBEAT = 60;
 export const EVENT_KEEP = 24 * 3600;
 
 /**
- * How long a tile change is kept after everybody has seen it.
+ * How long the full history of a tile is kept before it is compacted.
  *
- * `land_set_tile` writes the change into `land_tile` *and* into `tile_change`,
- * so once the last live cursor is past a row the row is telling nobody
- * anything the land does not already say. The week is slack for somebody who
- * has been away.
+ * `tile_change` is what a client replays to catch up, so it cannot simply be
+ * aged out — a row dropped is ground somebody never hears about. It can be
+ * *compacted*, though, and losslessly: replaying diffs in order, only the last
+ * one for a given tile decides where that tile ends up. So everything older
+ * than this collapses to one row per tile, and a client replaying from any
+ * cursor at all lands on exactly the same island as before.
+ *
+ * The week is for the intermediate states, which nothing needs and which are
+ * cheap enough to keep for a while anyway.
  */
 export const CHANGE_KEEP = 7 * 24 * 3600;
+
+/**
+ * How often the keeper does the tidying, as against the settling.
+ *
+ * The clock comes round every few seconds because a finished job should land
+ * at once. Sweeping up old talk and collapsing old diffs is not that sort of
+ * work — doing it twelve times a minute would be twelve scans to delete
+ * nothing.
+ */
+export const SWEEP_EVERY = 300;
+
+/** Rows one sweep will delete, per island, per kind. */
+export const SWEEP_ROWS = 5000;
 
 /** An island nobody has stood on for a month goes back to the sea. */
 export const ISLAND_KEEP = 30 * 24 * 3600;

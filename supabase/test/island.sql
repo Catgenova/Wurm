@@ -3777,3 +3777,42 @@ begin
   raise notice '599. the ground under a thirty-tile walk on the 4096 island: % per cent of it walkable, read in % ms',
     round(s::numeric * 100), round(ms::numeric, 1);
 end $$;
+
+\echo ''
+\echo '--- and the keeper sweeps up'
+-- Talk. One row per line of feedback per person, kept for ever, read by nobody.
+insert into event (world_id, uid, text, kind, at)
+  select :'world2', :'ivar', 'Old news ' || g, 'event', now() - interval '2 days'
+  from generate_series(1, 50) g;
+select count(*) as talk0 from event where world_id = :'world2' \gset
+-- Ground. The same tile dug ten times a fortnight ago, and twice this morning.
+insert into tile_change (world_id, x, y, tile, data, corners, at)
+  select :'faraway', 20, 20, g % 5, 0, '{0,0,0,0}', now() - interval '14 days'
+  from generate_series(1, 10) g;
+insert into tile_change (world_id, x, y, tile, data, corners, at)
+  select :'faraway', 21, 20, 3, 0, '{0,0,0,0}', now() - interval '1 hour'
+  from generate_series(1, 2) g;
+select (select tile from tile_change where world_id = :'faraway' and x = 20 and y = 20 order by n desc limit 1) as ended \gset
+-- An island founded two months ago that nobody ever came back to.
+insert into world (name, seed, size, spawn_x, spawn_y, ready, made_at)
+  values ('Longgone', 7, 32, 16, 16, true, now() - interval '60 days') returning id as sunk \gset
+
+update keeper set swept_at = to_timestamp(0);
+select world_tick()::text as tidied \gset
+select '600. a round that tidies as well as settles: ' || :'tidied';
+select '601. old talk on that island: ' || :'talk0' || ' lines before, '
+     || (select count(*) from event where world_id = :'world2') || ' after — anything past '
+     || round(event_keep() / 3600) || ' hours is swept';
+select '602. a tile dug ten times a fortnight ago is now ' || count(*) || ' row of history, and it still says tile '
+     || (select tile from tile_change where world_id = :'faraway' and x = 20 and y = 20 order by n desc limit 1)
+     || ', which is where it ended up (' || :'ended' || ') — compaction keeps the last word on every tile, so a client '
+     || 'replaying from any cursor at all lands on the same island'
+  from tile_change where world_id = :'faraway' and x = 20 and y = 20;
+select '603. and this morning''s two digs are untouched: '
+     || (select count(*) from tile_change where world_id = :'faraway' and x = 21 and y = 20)
+     || ' rows, because somebody who dropped off an hour ago should still get it in order';
+select '604. an island founded two months ago that nobody came back to: '
+     || case when exists (select 1 from world where id = :'sunk') then 'STILL THERE'
+             else 'given back to the sea, with its 36 MB of land' end;
+select '605. and the islands with people on them are all still here: '
+     || (select string_agg(name, ', ' order by name) from world where id in (:'world2', :'faraway', :'big'));
