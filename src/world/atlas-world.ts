@@ -41,12 +41,24 @@ export interface AtlasConfig {
   lakes: boolean;
 }
 
+/*
+ * `land` and `depth` are the chart's own range, exactly: the highest ground it
+ * draws comes out at `land` and its deepest water at `depth`, because
+ * `tools/build-atlas.ts` normalises the chart against them and prints the pair
+ * to set here. They are one decision with the chart and not two, and the check
+ * in `supabase/test/relief.ts` reports the day they stop agreeing.
+ *
+ * `ridge` used to be 240 and used to be doing the mountains' work: the chart
+ * reached 215 of a nominal 300, the snow line stood at 232, and so every
+ * snowfield on the island was put there by noise the chart only gated. The
+ * chart carries its own mountains now, and this is surface texture on rock.
+ */
 export const ATLAS_CONFIG: AtlasConfig = {
-  land: 300,
-  ridge: 240,
-  depth: 250,
+  land: 603,
+  ridge: 85,
+  depth: 205,
   sea: 0,
-  coast: 18,
+  coast: 11,
   detail: 2.2,
   forest: 0,
   lakes: true,
@@ -62,17 +74,33 @@ export const ATLAS_CONFIG: AtlasConfig = {
  * answers half of: `land` says how high the chart's ground gets, and these say
  * how high it has to get before it is called a mountain. Neither number means
  * anything without the other, and `supabase/test/relief.ts` reads both.
+ *
+ * They were 108, 160 and 232 when the chart reached 215, which is how the snow
+ * line came to stand above the highest ground on the island. Redrawing the
+ * chart to reach 603 without moving these would have been the same mistake
+ * upside down: a tree line at 108 on a continent whose plateau stands at 344
+ * turns every tableland in the archipelago to bare rock, which is exactly what
+ * the first render of it showed.
+ *
+ * So they are set against the relief that now exists, feature by feature. The
+ * tree line is under the height an ordinary island interior stands at, so that
+ * interiors are wooded. The rock line is over the top of the crescent's
+ * plateau, so that its tableland is walkable and only its edges are bare — the
+ * slope rule takes care of the edges, being what a cliff actually is. And the
+ * snow line is over the volcano and under the northeast summits, which is the
+ * arrangement the reference draws: one white range in the archipelago, and a
+ * volcano that is grey because it is a volcano.
  */
 export const BANDS = {
   /** Above this, forest and rock rather than open ground. */
-  hill: 108,
-  hillVary: 18,
+  hill: 104,
+  hillVary: 26,
   /** Above this, bare rock, and tundra where the region has it. */
-  alpine: 160,
-  alpineVary: 22,
+  alpine: 352,
+  alpineVary: 34,
   /** Above this, snow. */
-  snow: 232,
-  snowVary: 12,
+  snow: 410,
+  snowVary: 20,
 } as const;
 
 export interface Atlas {
@@ -205,14 +233,28 @@ function cornerHeight(
   h += f.detail.noise(cx * 0.35, cy * 0.35) * cfg.detail + f.detail.noise(cx * 1.3 + 40, cy * 1.3) * cfg.detail * 0.36;
   h -= cfg.sea;
   h = Math.round(h);
-  return h < -140 ? -140 : h > 480 ? 480 : h;
+  /*
+   * Headroom over the chart rather than a limit on it. The old pair, -140 and
+   * 480, was the radial generator's range, and `generate.ts` does still reach
+   * -140; this generator's chart draws 557 at the caldera rim and -205 on the
+   * ocean floor, and the ridged noise and the detail sit on top of that. A
+   * clamp biting here would be drawn relief flattened into a shelf, which is
+   * what `relief.ts` asserts against.
+   */
+  return h < -320 ? -320 : h > 700 ? 700 : h;
 }
 
-/** Species index by climate: pines and cedars high up, willows near water. */
+/**
+ * Species index by climate: pines and cedars high up, willows near water.
+ *
+ * On the same vertical scale as BANDS, and for the same reason — these were
+ * 95, 7 and 60 against a chart that reached 215, so read as a fraction of the
+ * way up rather than as heights.
+ */
 function pickSpecies(avgHeight: number, moisture: number, r: number): number {
-  if (avgHeight > 95) return r < 0.6 ? 1 : 5;
-  if (avgHeight < 7 && moisture > 0.1) return r < 0.7 ? 4 : 0;
-  if (r > 0.978 && avgHeight < 60) return moisture > 0.2 ? 6 : r > 0.992 ? 8 : 7;
+  if (avgHeight > 258) return r < 0.6 ? 1 : 5;
+  if (avgHeight < 12 && moisture > 0.1) return r < 0.7 ? 4 : 0;
+  if (r > 0.978 && avgHeight < 162) return moisture > 0.2 ? 6 : r > 0.992 ? 8 : 7;
   if (r < 0.32) return 0;
   if (r < 0.6) return 2;
   if (r < 0.78) return 3;
@@ -408,7 +450,7 @@ export function generateAtlasWindow(
       if (bare) continue;
       const height = at(x0 + cx, y0 + cy);
       const n = f.soil.fbm((x0 + cx) * 0.03, (y0 + cy) * 0.03, 3);
-      const depth = 14 + n * 8 - Math.max(0, height) * 0.045;
+      const depth = 14 + n * 8 - Math.max(0, height) * 0.017;
       dirt[cy * (w + 1) + cx] = Math.max(2, Math.min(40, Math.round(depth)));
     }
   }
@@ -435,6 +477,16 @@ export function generateAtlasWorld(
 
 let zoneCache: { atlas: Atlas; zone: number[] } | null = null;
 
+/**
+ * How far above the water a starting tile has to be drawn, as a fraction of
+ * the chart's full height, and how far out to look for the sea. The first is
+ * about twelve dirt units, which clears the warp and the detail noise; the
+ * second is measured in texels of chart, so it is a fixed distance on the
+ * ground however finely the chart happens to be drawn.
+ */
+const FOOT = 0.022;
+const SHORE = 4;
+
 /** Every beach texel on the inner bay: shore, beach height, inside the bay. */
 function spawnZone(atlas: Atlas): number[] {
   if (zoneCache && zoneCache.atlas === atlas) return zoneCache.zone;
@@ -444,8 +496,30 @@ function spawnZone(atlas: Atlas): number[] {
   for (let y = 1; y < n - 1; y++) {
     for (let x = 1; x < n - 1; x++) {
       const i = y * n + x;
-      if (e[i] < 0 || e[i] > 0.09 || atlas.region[i] !== SPAWN_REGION) continue;
-      if (!(e[i - 1] < 0 || e[i + 1] < 0 || e[i - n] < 0 || e[i + n] < 0)) continue;
+      /*
+       * Dry land within sight of the water, rather than the very edge of it.
+       *
+       * This asked for a texel the chart puts above the water line with a
+       * neighbour below it, and that is not the same as a tile you can stand
+       * on. The coastal ramp means a texel touching the sea is a unit or two
+       * above it; the domain warp then samples the chart up to three texels
+       * away, and the detail noise moves the ground three either way on top of
+       * that. Two seeds in five landed at a height of minus three — standing
+       * in the sea, on a shore tile, with half of what was around them water.
+       *
+       * So the floor is high enough to survive both, and the sea is looked for
+       * a few texels out instead of only next door — which is what makes it a
+       * beach rather than a waterline.
+       */
+      if (e[i] < FOOT || e[i] > 0.09 || atlas.region[i] !== SPAWN_REGION) continue;
+      let shore = false;
+      for (let dy = -SHORE; dy <= SHORE && !shore; dy++) {
+        for (let dx = -SHORE; dx <= SHORE; dx++) {
+          const j = i + dy * n + dx;
+          if (j >= 0 && j < n * n && e[j] < 0) { shore = true; break; }
+        }
+      }
+      if (!shore) continue;
       const du = x / n - BAY[0];
       const dv = y / n - BAY[1];
       if (du * du + dv * dv > SPAWN_RADIUS * SPAWN_RADIUS) continue;

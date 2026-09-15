@@ -95,7 +95,7 @@ for (let oy = 0; oy < SIZE; oy += STEP) {
       const h = on.heights[i];
       const g = off.heights[i];
       corners++;
-      if (h <= -140 || h >= 480) clamped++;
+      if (h <= -320 || h >= 700) clamped++;
       if (h > top) top = h;
       if (h < floor) floor = h;
       if (g < 0 && h >= 0) lifted++;
@@ -130,7 +130,7 @@ say();
 // The clamp is the older generator's: `generate.ts` reaches -140, and this one
 // comes nowhere near. If it ever starts biting, drawn relief is being flattened
 // into a shelf and the config wants raising rather than the clamp.
-if (clamped) fail(`${clamped} corners are pinned against the -140 / 480 clamp, flattening relief the chart drew`);
+if (clamped) fail(`${clamped} corners are pinned against the -320 / 700 clamp, flattening relief the chart drew`);
 
 // The vertical scale multiplies each side of zero separately, so it cannot
 // change the sign of a corner and cannot move a coastline. The ridged noise

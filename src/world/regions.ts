@@ -192,7 +192,7 @@ export function speciesFor(region: number, base: number, avg: number, r: number)
   if (base === CHERRY && R.trees.indexOf(CHERRY) < 0) return APPLE;
   // On its own island a cherry is worth the crossing, so it grows past the one
   // tree in fifty that the fruit trees manage elsewhere.
-  if (R.trees.indexOf(CHERRY) >= 0 && r > 0.93 && avg < 60) return CHERRY;
+  if (R.trees.indexOf(CHERRY) >= 0 && r > 0.93 && avg < 162) return CHERRY;
   return base;
 }
 
