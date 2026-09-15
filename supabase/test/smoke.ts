@@ -692,6 +692,29 @@ async function main(): Promise<void> {
         `${before} → ${back.getHeight(cx, cy)} here`);
 
       /*
+       * And whether somebody arriving *after* the hole was dug sees it.
+       *
+       * A join builds the world fresh from the seed and then replays
+       * `tile_change` over it, so the replay has to start at the beginning of
+       * the island and not at wherever this person had read up to. It started
+       * at the cursor for a few hours, which laid pristine ground under every
+       * change anybody had ever made: a tree felled a week ago stood again and
+       * the island told you there was nothing there to cut down.
+       *
+       * A second `Island`, joined from scratch, is the only thing that can
+       * tell — the first one has the change in memory whatever it does.
+       */
+      const second = new Island({
+        say: () => {}, ground: () => {}, people: () => {}, pack: () => {},
+        chart: async () => readAtlas(),
+      });
+      await second.join(id, 'Smoke again');
+      const arrived = second.world?.getHeight(cx, cy);
+      check('somebody arriving afterwards sees the hole too', arrived !== undefined && arrived < before,
+        `${before} before the dig, ${arrived} to somebody who has only just got here`);
+      await second.leave();
+
+      /*
        * And whether this island winds itself.
        *
        * Everything here settles off a timestamp, so `world_tick` on `pg_cron`

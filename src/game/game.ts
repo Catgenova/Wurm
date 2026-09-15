@@ -863,6 +863,7 @@ export class Game {
    * logic above where you began.
    */
   queueCapacity(): number {
+    if (this.remoteCap !== null) return this.remoteCap;
     return BASE_QUEUE + Math.floor(Math.max(0, this.skills.get('mind_logic') - CHAR_START) / 10);
   }
 
@@ -1871,6 +1872,23 @@ export class Game {
       a.elapsed = Math.min(a.duration, a.elapsed + dt);
       return;
     }
+    /*
+     * On the way to a job the island will be asked for. The walking is ours,
+     * the deciding is not: arriving is what sends the ask, and after that the
+     * island's own answer drives the bar.
+     */
+    if (this.ask && a.state === 'walking') {
+      if (this.player.path) return;
+      const { def, target, goes } = a;
+      this.action = null;
+      if (!this.inRange(def, target)) {
+        this.logMsg('You are too far away from that.', 'error');
+        this.events.emit('action');
+        return;
+      }
+      this.ask(def, target, goes);
+      return;
+    }
     const p = this.player;
     if (a.state === 'walking') {
       // Walking off under your own steam used to cancel what you were on your
@@ -2066,6 +2084,32 @@ export class Game {
 
   requestAction(def: ActionDef, target: Target, goes?: number): void {
     if (this.ask) {
+      /*
+       * Walk there first, if it is not already within reach.
+       *
+       * The island checks the distance and refuses — "You are too far away
+       * from that." — which used to be the whole of what happened when you
+       * clicked something across the field: the menu opened, you chose, and
+       * nothing moved. The single-player game has always walked to the job
+       * first, and the walking is the one part of this that is not the
+       * island's business: it says where a body may go, and this side does the
+       * going.
+       *
+       * So the ask is held until the feet arrive, and sent from
+       * `updateAction`. Nothing about who decides has changed — the island is
+       * still asked, and may still say no when we get there.
+       */
+      if (!this.inRange(def, target)) {
+        this.action = { def, target, state: 'walking', elapsed: 0, duration: 0, left: goes, goes };
+        this.watching = false;
+        if (!this.walkToward(def, target)) {
+          this.action = null;
+          this.logMsg("You can't find a way to get there.", 'error');
+          return;
+        }
+        this.events.emit('action');
+        return;
+      }
       this.ask(def, target, goes);
       return;
     }
@@ -3545,6 +3589,41 @@ export class Game {
   markProspected(tiles: number[]): void {
     this.prospected = tiles.length ? { tiles: new Set(tiles), until: this.time + PROSPECT_MARK_TIME } : null;
   }
+
+  /**
+   * The ore a prospector read, as the island has it.
+   *
+   * Seconds left rather than an instant, for the same reason the action bar
+   * takes seconds: the island subtracts its own two clocks and this one does
+   * not have to agree with them about what time it is.
+   */
+  showProspected(tiles: number[], secs: number): void {
+    this.prospected = tiles.length && secs > 0
+      ? { tiles: new Set(tiles), until: this.time + secs }
+      : null;
+  }
+
+  /**
+   * What the island says is lined up behind the job in hand.
+   *
+   * The queue lives on the island — `act_queue` on the player row — so the
+   * browser's own list was empty for ever and the bar never said what was
+   * next. Only the labels are wanted here: a queued job is a thing to read,
+   * and the island is the one that will do it.
+   */
+  showQueue(ids: string[], cap: number | null): void {
+    this.remoteCap = cap;
+    const q = this.queue;
+    q.length = 0;
+    for (const id of ids) {
+      const def = ACTION_BY_ID.get(id);
+      if (def) q.push({ def, target: { kind: 'self' } as unknown as Target });
+    }
+    this.events.emit('action');
+  }
+
+  /** How many jobs the island says fit in this head, when the island is counting. */
+  private remoteCap: number | null = null;
 
   /** Whether a tile is currently marked by prospecting. */
   isProspected(x: number, y: number): boolean {

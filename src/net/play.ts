@@ -178,6 +178,45 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * of the work: the clock runs here between one answer and the next, and
    * whether the job happened is still the island's to say.
    */
+  /*
+   * The wildlife, which the browser had simply never asked for.
+   *
+   * `creatures.fromIsland` stops this machine thinking for any of them — their
+   * hunger, wandering and hunting are all settled over there, the same seam as
+   * actions — and leaves it drawing the legs the island hands over.
+   */
+  game.creatures.fromIsland = true;
+  island.hooks.mobs = (rows) => {
+    game.creatures.sawAll(rows);
+    game.events.emit('creature');
+  };
+
+  /*
+   * The rest of you, which the browser had no way of hearing about.
+   *
+   * Each of these was a separate-looking bug with one cause: the island owns
+   * the player row and the browser read it once, at the join. The action bar
+   * never said what was queued behind the job in hand; prospecting said "they
+   * are marked for a while" and marked nothing; the health and stamina bars
+   * were the ones you came ashore with; the skills window disagreed with the
+   * log line that had just said a skill went up.
+   */
+  island.hooks.mine = (what) => {
+    game.showQueue(what.queue, what.cap);
+    if (what.stats) {
+      const s = game.player.stats as unknown as Record<string, number>;
+      for (const k of ['health', 'stamina', 'hunger', 'thirst']) {
+        if (typeof what.stats[k] === 'number') s[k] = what.stats[k];
+      }
+      game.events.emit('stats');
+    }
+    if (what.skills) {
+      for (const [id, value] of Object.entries(what.skills)) game.skills.values.set(id, value);
+      game.events.emit('skill', '', 0);
+    }
+    game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
+  };
+
   island.hooks.doing = (what) => {
     if (!what.act) {
       game.showAction(null, null);

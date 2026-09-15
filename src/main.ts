@@ -65,6 +65,7 @@ import { TORCH_BURN } from './game/light';
 import { findPath } from './world/pathfinding';
 import { WATER_PALETTE, waterRgb } from './render/water';
 import { drawHeadshot, drawPortrait } from './render/sprites';
+import { followScreen, pageZoom, unzoomPage } from './ui/screen';
 
 const canvasEl = document.getElementById('game') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLElement;
@@ -318,6 +319,28 @@ const loop = new GameLoop(
 );
 loop.start();
 // The island is up and the first frame is drawn; the notice can go.
+/*
+ * Keep the interface on the screen it is actually on.
+ *
+ * Not the page: on a phone those are different boxes. A browser rendering a
+ * desktop layout gives the page nine hundred pixels and shrinks the lot onto
+ * four hundred of glass, and zooming in to read it leaves everything `fixed`
+ * off the side. `src/ui/screen.ts` has the whole of the reasoning; this is
+ * where it is turned on, along with the way back from a zoom — which the game
+ * itself has to offer, because the canvas takes a pinch and zooms the island.
+ */
+const zoomOut = document.createElement('button');
+zoomOut.className = 'zoom-out';
+zoomOut.type = 'button';
+zoomOut.textContent = 'Fit the screen';
+zoomOut.title = 'Put the page back to its own size';
+zoomOut.hidden = true;
+zoomOut.addEventListener('click', () => unzoomPage());
+uiRoot.append(zoomOut);
+followScreen(uiRoot, () => {
+  zoomOut.hidden = pageZoom() <= 1.02;
+});
+
 document.getElementById('boot')?.remove();
 
 /*

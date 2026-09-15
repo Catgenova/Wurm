@@ -1412,6 +1412,38 @@ export const HAUL_SKILL = 'climbing';
 /** What a hunter trains, which decides how hard it hits and how far it ranges. */
 export const FIGHT_SKILL = 'fighting';
 
+/**
+ * A wild thing as the island describes it.
+ *
+ * `rpc_creatures` builds this; nothing here invents any of it. The leg — where
+ * it is walking from, to, and between which two of the island's own instants —
+ * is what lets a browser draw movement between one word and the next without
+ * ever deciding where anything goes.
+ */
+export interface IslandCreature {
+  id: number;
+  species: string;
+  name: string;
+  variant: number;
+  mode: string;
+  stance: string;
+  x: number;
+  y: number;
+  fromX?: number;
+  fromY?: number;
+  toX?: number;
+  toY?: number;
+  legAt?: string | null;
+  legEnds?: string | null;
+  health: number;
+  max?: number;
+  hunger?: number;
+  sex?: string;
+  traits?: string[];
+  hunting?: boolean;
+  mine?: boolean;
+}
+
 export interface Creature {
   id: number;
   species: string;
@@ -1443,6 +1475,16 @@ export interface Creature {
   /** What is coming, settled at the covering so no sire need survive to the birth. */
   unborn: { traits: string[]; sex: Sex } | null;
   // Runtime state below; not saved.
+  /**
+   * The leg the island last said it was on, when the island is the one
+   * thinking. Milliseconds off `Date.parse`, walked in `walkLegs`.
+   */
+  legFromX: number;
+  legFromY: number;
+  legToX: number;
+  legToY: number;
+  legAt: number;
+  legEnds: number;
   state: string;
   until: number;
   tx: number;
@@ -1636,6 +1678,17 @@ export class Creatures {
   ticked = { near: 0, far: 0, asleep: 0, thought: 0 };
   private respawnClock = 0;
 
+  /**
+   * Whether the island is the one doing the thinking.
+   *
+   * Set on an island kept in Postgres, where every wild thing's hunger,
+   * wandering and hunting is settled there — the same seam as actions. Nothing
+   * here may decide anything about a creature then: this side is handed legs
+   * with times on them and walks them, so that the frames between one word
+   * from the island and the next have something to draw.
+   */
+  fromIsland = false;
+
   get(id: number): Creature | undefined {
     return this.list.get(id);
   }
@@ -1674,6 +1727,12 @@ export class Creatures {
       bredAt: -1e9,
       due: 0,
       unborn: null,
+      legFromX: x,
+      legFromY: y,
+      legToX: x,
+      legToY: y,
+      legAt: 0,
+      legEnds: 0,
       state: 'idle',
       until: 0,
       tx: x,
@@ -1710,6 +1769,86 @@ export class Creatures {
     // was just given rather than off the book.
     c.health = maxHealth(c, def);
     return c;
+  }
+
+  /**
+   * Everything the island says is about, in one word.
+   *
+   * The browser never asked. `rpc_creatures` has been there since the island
+   * was built and nothing under `src/` called it, so on a live island the
+   * wildlife was there, moving, hunting — and invisible. The footer said
+   * `0/0 mobs` and meant it.
+   *
+   * Replaces rather than merges: what is not in the list has wandered out of
+   * the range we asked about, or is dead, and either way it is not here.
+   */
+  sawAll(rows: IslandCreature[]): void {
+    const seen = new Set<number>();
+    for (const r of rows) {
+      seen.add(r.id);
+      let c = this.list.get(r.id);
+      if (!c) {
+        c = Creatures.make(r.id, r.species, r.x, r.y, r.mode as CreatureMode, Math.random);
+        this.list.set(r.id, c);
+        if (r.id >= this.nextId) this.nextId = r.id + 1;
+      }
+      c.name = r.name ?? c.name;
+      c.variant = r.variant ?? c.variant;
+      c.mode = r.mode as CreatureMode;
+      c.stance = r.stance as Stance;
+      c.health = r.health;
+      c.hunger = r.hunger ?? c.hunger;
+      c.sex = (r.sex as Sex) ?? c.sex;
+      c.traits = r.traits ?? c.traits;
+      c.enemy = r.hunting ? 0 : null;
+      // The leg it is on, with the island's own clock on both ends. Walked in
+      // `walkLegs` a frame at a time.
+      c.legFromX = r.fromX ?? r.x;
+      c.legFromY = r.fromY ?? r.y;
+      c.legToX = r.toX ?? r.x;
+      c.legToY = r.toY ?? r.y;
+      const at = r.legAt ? Date.parse(r.legAt) : 0;
+      const ends = r.legEnds ? Date.parse(r.legEnds) : 0;
+      c.legAt = at;
+      c.legEnds = Math.max(ends, at);
+      if (!Number.isFinite(c.legAt) || !c.legAt) {
+        c.x = r.x;
+        c.y = r.y;
+      }
+    }
+    for (const id of [...this.list.keys()]) if (!seen.has(id)) this.list.delete(id);
+  }
+
+  /**
+   * Walk everything along the leg the island last gave it.
+   *
+   * The clock is the browser's, and the two do not have to agree to within
+   * anything: a leg that has run out just holds at its far end until the next
+   * word arrives, which is a body standing still rather than a body in the
+   * wrong place.
+   */
+  private walkLegs(): void {
+    const now = Date.now();
+    for (const c of this.list.values()) {
+      if (!c.legAt || c.legEnds <= c.legAt) {
+        c.moving = false;
+        continue;
+      }
+      const t = Math.max(0, Math.min(1, (now - c.legAt) / (c.legEnds - c.legAt)));
+      const nx = c.legFromX + (c.legToX - c.legFromX) * t;
+      const ny = c.legFromY + (c.legToY - c.legFromY) * t;
+      const dx = nx - c.x;
+      const dy = ny - c.y;
+      c.moving = Math.hypot(dx, dy) > 0.002;
+      if (c.moving) {
+        c.dirX = dx;
+        c.dirY = dy;
+        c.walkPhase += Math.hypot(dx, dy) * 6;
+      }
+      c.x = nx;
+      c.y = ny;
+      this.place(c);
+    }
   }
 
   remove(id: number): void {
@@ -1859,6 +1998,10 @@ export class Creatures {
    */
   update(dt: number, game: Game): void {
     this.byTile.clear();
+    if (this.fromIsland) {
+      this.walkLegs();
+      return;
+    }
     this.respawnClock += dt;
     if (this.respawnClock >= RESPAWN_EVERY) {
       this.respawnClock = 0;

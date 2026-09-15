@@ -4,7 +4,8 @@ import type { TileType } from '../world/tiles';
 import { blankWorld, rowsOf } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { supabase, signIn } from './supabase';
-import { BODY_EVERY, FOUND_MAX, HEARTBEAT, RECONCILE_EVERY, REGION } from '../game/keep';
+import type { IslandCreature } from '../game/creatures';
+import { BODY_EVERY, FOUND_MAX, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -97,6 +98,31 @@ export interface IslandHooks {
    * the right bar.
    */
   doing?: (what: { act: string | null; total: number; secs: number; left?: number; goes?: number; queued: number }) => void;
+  /**
+   * The rest of you, as the island has it.
+   *
+   * The island owns the player — queue, skills, stats, and the ore a
+   * prospector read — and `player` came off the Realtime publication when
+   * bodies moved to Broadcast, so the browser's copy of you was whatever the
+   * join handed over and never moved again. It rides the heartbeat, which was
+   * making the round trip anyway.
+   */
+  mine?: (what: {
+    queue: string[];
+    cap: number | null;
+    stats: Record<string, number> | null;
+    skills: Record<string, number> | null;
+    marks: { tiles: number[]; secs: number } | null;
+  }) => void;
+  /**
+   * Everything wild within sight, as the island has it.
+   *
+   * Nothing under `src/` called `rpc_creatures` until now, so on a live island
+   * the wildlife was there and moving and hunting and *invisible* — the
+   * footer read `0/0 mobs` and was telling the truth about what the browser
+   * had asked for.
+   */
+  mobs?: (rows: IslandCreature[]) => void;
   /** Getting an island down takes a moment; this says how it is going. */
   progress?: (done: number, total: number, what: string) => void;
   /**
@@ -141,6 +167,7 @@ export class Island {
   channelState = 'not asked';
   private atlas: Atlas | null = null;
   private lastMove = 0;
+  private lastMobs = 0;
   private lastSaid = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
   private seenChange = 0;
@@ -258,11 +285,29 @@ export class Island {
     world.ensureBox(Math.floor(here.x) - 64, Math.floor(here.y) - 64, Math.floor(here.x) + 64, Math.floor(here.y) + 64);
     this.hooks.progress?.(2, 3, 'working out the ground');
 
-    // Everything dug since we last looked, in the order it happened. The same
-    // rows Realtime will carry from here on, so there is one way in and not a
-    // second, thinner one for catching up — but from a cursor the island keeps
-    // for us, rather than from the beginning of the world every time.
-    this.seenChange = Number(got.you.seen_change ?? 0);
+    /*
+     * Everything ever dug, in the order it happened — from the beginning, not
+     * from where we left off.
+     *
+     * This read the cursor the island keeps for us, and that was wrong in a way
+     * that takes a moment to see. The cursor says how much of the history this
+     * person has *been told*; it does not say anything about the world it was
+     * told into. And the world is built fresh from the seed on every join, so
+     * starting at the cursor lays pristine ground under every change anybody
+     * ever made before this session — a tree somebody felled a week ago stands
+     * again, you are told there is nothing there to cut down, and the island is
+     * right and the screen is wrong. Reported from a phone; exactly this.
+     *
+     * The cursor is a within-a-session thing: `catchUp` moves it so that the
+     * twenty-second reconcile asks for what is new rather than for everything
+     * again. It is not where a join begins.
+     *
+     * What keeps this affordable is `compact_changes` rather than a cursor:
+     * everything older than a week collapses to one row per tile, so the
+     * history a join reads is bounded by how many tiles have ever been touched
+     * and not by how many times anybody touched them.
+     */
+    this.seenChange = 0;
     await this.catchUp();
     this.hooks.progress?.(3, 3, 'catching up');
     world.groundTouched = false;
@@ -326,7 +371,17 @@ export class Island {
       const said = (data ?? {}) as {
         settled?: number; act?: string | null; ends?: string | null;
         left?: number | null; secs?: number | null; total?: number | null; queued?: number;
+        queue?: string[] | null; cap?: number | null;
+        stats?: Record<string, number> | null; skills?: Record<string, number> | null;
+        marks?: { tiles?: number[]; secs?: number } | null;
       };
+      this.hooks.mine?.({
+        queue: said.queue ?? [],
+        cap: said.cap ?? null,
+        stats: said.stats ?? null,
+        skills: said.skills ?? null,
+        marks: said.marks?.tiles ? { tiles: said.marks.tiles, secs: said.marks.secs ?? 0 } : null,
+      });
       if (!said.act) this.goes = undefined;
       this.hooks.doing?.({
         act: said.act ?? null,
@@ -508,6 +563,21 @@ export class Island {
     await this.catchUp();
   }
 
+  /**
+   * What is moving about near us.
+   *
+   * Asked for on its own beat, rather than with the rest of the reconcile: a
+   * wild thing crossing a field is the one thing here that looks wrong when it
+   * is twenty seconds stale, and the call also stirs the country round us — it
+   * is `creature_sweep`'s only door.
+   */
+  async refreshMobs(now: number): Promise<void> {
+    if (!this.info || !this.hooks.mobs || now - this.lastMobs < MOBS_EVERY) return;
+    this.lastMobs = now;
+    const { data } = await supabase().rpc('rpc_creatures', { p_world: this.info.id, p_range: MOBS_RANGE });
+    this.hooks.mobs((data ?? []) as IslandCreature[]);
+  }
+
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
     const { data } = await supabase().from('player').select('*')
@@ -547,6 +617,7 @@ export class Island {
   async move(x: number, y: number, level: number, now: number): Promise<void> {
     if (!this.info) return;
     void this.reconcile(now);
+    void this.refreshMobs(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
 
     /*

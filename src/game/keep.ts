@@ -117,6 +117,22 @@ export const BODY_EVERY = 0.2;
 export const RECONCILE_EVERY = 20;
 
 /**
+ * How often the browser asks what is moving about near it.
+ *
+ * Its own beat rather than the reconcile's, because a wild thing crossing a
+ * field is the one thing on this island that looks wrong when it is twenty
+ * seconds stale. The answer carries a leg with the island's own two instants
+ * on it, so the seconds in between are drawn rather than guessed.
+ *
+ * It is also how the country round somebody gets stirred at all — `rpc_creatures`
+ * is `creature_sweep`'s only door — so this is a heartbeat as much as a read.
+ */
+export const MOBS_EVERY = 2;
+
+/** How far out to ask. Beyond this a thing is somebody else's weather. */
+export const MOBS_RANGE = 40;
+
+/**
  * The biggest island a tab may found.
  *
  * A 4096 world is three minutes of ground and 138 MB of land: a thing done
