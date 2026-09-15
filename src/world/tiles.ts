@@ -87,6 +87,7 @@ export const TREE_DEFS: TreeDef[] = [
   { name: 'Maple', shape: 'round', trunk: '#6b4a34', canopy: ['#f0b053', '#d6782e', '#9c4a1c'], size: 0.95, logs: 1 },
   { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#c4dc8c', '#93b864', '#6a8c48'], size: 1, logs: 1 },
   { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#8fb87c', '#5a8a5c', '#3c6440'], size: 1.05, logs: 2 },
+  { name: 'Cherry', shape: 'round', trunk: '#63452f', canopy: ['#f0b9cb', '#d98aa8', '#a85d7c'], size: 0.9, logs: 1 },
 ];
 
 export interface BushDef {
