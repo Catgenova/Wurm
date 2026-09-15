@@ -4908,3 +4908,54 @@ select id as theirs from item where world_id = :'big' and holder = 'crate' limit
 select '687. hild reaches into ivar''s crate: '
      || coalesce(act_refusal(:'big', :'hild', 'take_from_store',
           ('{"kind":"item","uid":' || :'theirs' || ',"count":1}')::jsonb), 'ALLOWED');
+
+\echo ''
+-- What the island never said out loud.
+--
+-- Buildings have been kept here since they were ported and never sent, so a
+-- plan stood in Postgres that no browser could draw; and a worker whose keeper
+-- holds no settlement was turned loose without a word, which from a phone
+-- looks exactly like a wildermon that has stopped bothering.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+do $$
+declare w uuid := (select id from world where name = 'Bigness');
+begin
+  insert into building (world_id, id, name, levels, planned_by)
+  values (w, 1, 'The Longhouse', 2, '11111111-1111-1111-1111-111111111111');
+  insert into building_tile (world_id, building, x, y) values (w, 1, 2040, 2040), (w, 1, 2041, 2040);
+  insert into wall (world_id, level, dir, x, y, building, type, material, needed, total, planned_by)
+  values (w, 0, 'h', 2040, 2040, 1, 'wall', 'wood', '{"plank":2}'::jsonb, '{"plank":4}'::jsonb,
+          '11111111-1111-1111-1111-111111111111');
+  insert into floor_tile (world_id, level, x, y, building, material, kind, needed, total, planned_by)
+  values (w, 1, 2040, 2040, 1, 'wood', 'floor', '{"plank":1}'::jsonb, '{"plank":3}'::jsonb,
+          '11111111-1111-1111-1111-111111111111');
+end $$;
+select '688. the ground ivar is standing on carries '
+     || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'list') || ' building, '
+     || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'walls') || ' wall and '
+     || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'floors') || ' floor — which it has never once mentioned before';
+select '689. and the building comes whole: ' || (rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 ->> 'name')
+     || ', ' || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 -> 'tiles') || ' tiles over '
+     || (rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 ->> 'levels') || ' storeys';
+-- Far enough off and it is somebody else's business, not yours to draw. Six
+-- hundred tiles out, and clear of the Ivarhouse the earlier subjects put up —
+-- the first go at this stood him five tiles from it and counted that as proof.
+update player set x = 2600.5, y = 2600.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+select '690. from five hundred tiles away it is out of sight: '
+     || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'list') || ' buildings';
+update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+
+-- And the worker nobody told. Somebody with no settlement at all, which is the
+-- state a keeper is left in by disbanding, and the state an old wildermon is
+-- in when its keeper is not who it thinks.
+\set nolands '44444444-4444-4444-4444-444444444444'
+select creature_spawn(:'big', 'rabba', 2040.5, 2041.5, 'deed', now() - interval '3 hours', :'nolands') as orphan \gset
+select '691. a forager on the books of somebody with no settlement: work_site says '
+     || coalesce((select x || ',' || y from work_site(:'big',
+          (select c from creature c where c.world_id = :'big' and c.id = :'orphan'))), 'nothing');
+select worker_settle(:'big', :'orphan') \g /dev/null
+select '692. so it is let go — mode ' || mode || ' — and its keeper is told: '
+     || coalesce((select text from event where world_id = :'big' and uid = :'nolands'
+                  order by at desc limit 1), 'NOTHING, which was the bug')
+from creature where world_id = :'big' and id = :'orphan';

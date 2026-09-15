@@ -382,16 +382,31 @@ export class Buildings {
     return { nextId: this.nextId, list: [...this.list.values()], walls: [...this.walls.values()], floors: [...this.floors.values()] };
   }
 
+  /**
+   * Lay in what is standing, in place of whatever was here.
+   *
+   * On an island this is the island's word and it arrives over and over, with
+   * every answer about the ground — so it replaces rather than merges. A
+   * building taken down elsewhere has to be able to disappear, and a merge
+   * would leave it standing in this browser for ever.
+   */
+  sawIsland(data: BuildingsJSON): void {
+    this.list.clear();
+    this.tileIndex.clear();
+    this.walls.clear();
+    this.floors.clear();
+    this.nextId = data.nextId ?? 1;
+    for (const bl of data.list ?? []) {
+      this.list.set(bl.id, bl);
+      for (const t of bl.tiles) this.tileIndex.set(t, bl.id);
+    }
+    for (const w of data.walls ?? []) this.walls.set(wallKey(w.level, w), w);
+    for (const f of data.floors ?? []) this.floors.set(floorKey(f.level, f.x, f.y), f);
+  }
+
   static fromJSON(data: BuildingsJSON | undefined): Buildings {
     const b = new Buildings();
-    if (!data) return b;
-    b.nextId = data.nextId ?? 1;
-    for (const bl of data.list ?? []) {
-      b.list.set(bl.id, bl);
-      for (const t of bl.tiles) b.tileIndex.set(t, bl.id);
-    }
-    for (const w of data.walls ?? []) b.walls.set(wallKey(w.level, w), w);
-    for (const f of data.floors ?? []) b.floors.set(floorKey(f.level, f.x, f.y), f);
+    if (data) b.sawIsland(data);
     return b;
   }
 }

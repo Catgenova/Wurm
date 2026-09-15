@@ -3846,6 +3846,12 @@ export class Game {
         });
       }
     }
+    /*
+     * What is standing on the ground, which until now the island never said.
+     * Replaced outright rather than merged, because a wall somebody else took
+     * down has to be able to come down here too.
+     */
+    if (ground.buildings) this.buildings.sawIsland(ground.buildings);
     for (const c of ground.crates ?? []) {
       this.crates.set(c.id, {
         id: c.id, x: c.x, y: c.y, sx: c.sx, sy: c.sy,
@@ -4554,4 +4560,14 @@ export interface IslandGround {
    * work off in your journal.
    */
   deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null }>;
+  /**
+   * What is standing, and what is half built.
+   *
+   * The island has kept `building`, `wall` and `floor_tile` since buildings
+   * were ported and has never once said a word about them, so on an island a
+   * building was invisible to everybody — including whoever planned it. It
+   * went up in Postgres, the rules answered about it, and no browser ever drew
+   * a wall of it.
+   */
+  buildings?: BuildingsJSON;
 }
