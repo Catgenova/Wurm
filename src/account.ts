@@ -35,7 +35,6 @@ const tabNew = $<HTMLButtonElement>('tab-new');
 const tabBack = $<HTMLButtonElement>('tab-back');
 const peek = $<HTMLButtonElement>('peek');
 const alone = $<HTMLAnchorElement>('alone');
-const plain = $<HTMLAnchorElement>('ashore-plain');
 const lede = $<HTMLParagraphElement>('lede');
 const maker = $<HTMLElement>('maker');
 const mirror = $<HTMLCanvasElement>('me');
@@ -62,7 +61,14 @@ for (const key of ['island', 'found', 'size', 'seed']) {
   if (had !== null) carried.set(key, had);
 }
 const toGame = `./index.html${carried.toString() ? `?${carried}` : ''}`;
-plain.href = toGame;
+/*
+ * There is no longer a way past this page onto the island.
+ *
+ * "Or go straight ashore with no account" was here, and everybody took it —
+ * which is how every body on the island came to be an anonymous session called
+ * Wanderer, with its skills hanging off a uid kept in `localStorage`. The
+ * single-player game below needs no name and still has none.
+ */
 // And the single-player game, which is still all here and still saved in this
 // browser. It is a link rather than the default now: the front door opens on
 // the island.

@@ -87,7 +87,34 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * account is a name you can prove, not a toll.
    */
   const account = await whoAmI().catch(() => null);
-  const name = account ?? params.get('me') ?? 'Wanderer';
+  /*
+   * No account, no island. The landing page first.
+   *
+   * It has been there all along and the game walked straight past it, so
+   * everybody who ever came ashore was an anonymous session called Wanderer —
+   * indistinguishable on the roster, impossible to tell apart on the tables,
+   * and hanging every skill they earned off a uid kept in `localStorage`,
+   * which is a place browsers tidy up. "Just had all my skills wiped" is what
+   * that looks like from inside.
+   *
+   * The single-player game needs no name and is still one link away; this is
+   * only about coming ashore on somebody else's island, where being somebody
+   * is the point.
+   */
+  if (!account) {
+    tell('Sending you to the landing page to pick a name…');
+    const carried = new URLSearchParams();
+    for (const key of ['island', 'found', 'size', 'seed']) {
+      const had = params.get(key);
+      if (had !== null) carried.set(key, had);
+    }
+    location.replace(`./account.html${carried.toString() ? `?${carried}` : ''}`);
+    // And hold here rather than hand back. Handing back starts the
+    // single-player game behind the notice, which flashes up for as long as
+    // the navigation takes and is not the game anybody asked for.
+    return new Promise<never>(() => {});
+  }
+  const name = account;
   const log: Array<[string, string]> = [];
   const island = new Island({
     say: (text, kind) => log.push([text, kind]),

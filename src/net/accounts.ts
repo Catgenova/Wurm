@@ -225,6 +225,36 @@ export async function createAccount(rawName: string, password: string): Promise<
   if (worse) throw new Error(worse);
 
   const sb = supabase();
+
+  /*
+   * A body that is already ashore keeps its uid, and therefore everything.
+   *
+   * Reported as "just had all my skills wiped", and this is where it happened.
+   * Coming to the island without an account signs you in anonymously, and that
+   * anonymous uid is what every skill, every item and the deed under your feet
+   * hang off — `rpc_join` finds a player by `(world_id, uid)` and makes a new
+   * one when it cannot. Signing *up* while anonymous mints a second account
+   * with a second uid, and the first body is left standing in a field with all
+   * your work on it while you wash ashore again with a hatchet.
+   *
+   * `updateUser` is the documented way to turn an anonymous user into a
+   * permanent one: it puts a name and a password on the account that is
+   * already signed in, and the uid does not move. Afterwards `rpc_my_name`
+   * reads the name back out of `auth.users` — so if it comes back, the
+   * conversion really happened, and if it does not we fall through to making
+   * an account the old way rather than leaving somebody half converted.
+   */
+  const had = await sb.auth.getSession();
+  if ((had.data.session?.user as { is_anonymous?: boolean } | undefined)?.is_anonymous) {
+    const { error: grew } = await sb.auth.updateUser({ email: nameEmail(name), password });
+    if (!grew) {
+      const { data: called } = await sb.rpc('rpc_my_name');
+      if (typeof called === 'string' && called === name) return { name, unconfirmed: false };
+    } else if (/already|taken|registered|exists/i.test(grew.message)) {
+      throw new Error('That name is taken. Try another.');
+    }
+  }
+
   const { data, error } = await sb.auth.signUp({ email: nameEmail(name), password });
   if (error) throw new Error(inOurWords(error.message));
   /**
