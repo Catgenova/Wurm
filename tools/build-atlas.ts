@@ -50,9 +50,19 @@ const atlas = readAtlas();
  *
  * Everything measured in texels below is scaled by `T` so that it goes on
  * meaning the same distance on the ground.
+ *
+ * The size is written down rather than derived from the chart being read, and
+ * that is not fussiness. This tool reads its own last output for the coastline,
+ * so `atlas.n * 2` doubles the chart every single time it runs: 512, then
+ * 1024, then 2048, each one quietly four times the file of the last, with the
+ * relief constants meaning half as much ground each round. It had reached 2048
+ * before anybody looked at the number.
  */
-const N = atlas.n * 2;
-const T = N / atlas.n;
+const N = 1024;
+/** Texels per texel of the 512 chart the distances below were written against. */
+const T = N / 512;
+/** And from whatever the chart on disk happens to be, to what is emitted. */
+const S = N / atlas.n;
 const idx = (x: number, y: number): number => y * N + x;
 
 // ---------------------------------------------------------------- the shapes
@@ -73,6 +83,26 @@ const H = {
   steppe: 470,
   /** The crescent's tableland, walled by cliffs, standing over the bay. */
   plateau: 344,
+  /**
+   * The top bench of the staircase that steps down from it to the beach.
+   *
+   * Held well under the tableland on purpose. At 236 the benches came up so
+   * close beneath it that the drop off its inner edge was a hundred and eight
+   * over four tiles — under the slope at which ground goes bare, so the wall
+   * the reference draws stopped being a wall and the rim went green. The gap
+   * between the two is what makes the inner cliff a cliff.
+   */
+  terrace: 196,
+  /**
+   * And the bottom one, the coastal plain behind the beach.
+   *
+   * Not zero, which was the first try and put the whole interior under water.
+   * The chart keeps 127 steps above the water line, so at this scale a step is
+   * nearly five dirt units and anything under about ten rounds to sea level
+   * and is then taken below it by the detail noise. A bench has to stand clear
+   * of that to be a bench.
+   */
+  plain: 34,
   middle: 404,
   east: 336,
   skerry: 212,
@@ -91,6 +121,8 @@ const H = {
 /** The volcano: a cone with a crater bitten out of the top of it. */
 const CONE: [number, number] = [0.5055, 0.1055];
 const CRATER_R = 0.0225;
+/** How many benches the crescent's interior falls through on its way down. */
+const TIERS = 3;
 const CONE_R = 0.1060;
 /**
  * Which way the crater is breached. The reference draws the rim open to the
@@ -142,17 +174,52 @@ const RANGES: Range[] = [
 ];
 
 /**
- * The river that comes off the plateau and reaches the sea at the bay, as the
- * line it runs along. It is carved rather than filled: a valley the ground
- * falls into, which the marsh and reed rules downstream then make wet.
+ * The river, as the line it runs along, from the northern sea to the bay.
+ *
+ * It rises on the watershed in the middle of the interior and drains both
+ * ways: south across the benches to the bay, and north straight at the
+ * tableland, which it does not go round. It cuts through — a gorge in the
+ * northern cliffs, spilling out to the sea on the far side.
  */
 const RIVER: Array<[number, number]> = [
+  [0.4770, 0.5075], [0.4785, 0.5290], [0.4800, 0.5460], [0.4815, 0.5640],
   [0.4835, 0.5830], [0.4930, 0.6120], [0.4880, 0.6410], [0.4985, 0.6700],
   [0.5065, 0.6930], [0.5015, 0.7150], [0.5140, 0.7330], [0.5215, 0.7470],
 ];
-/** How wide the valley is, and how far the river has cut into the ground. */
-const RIVER_W = 0.0044;
-const RIVER_D = 74;
+/*
+ * The river is a bed the ground is held down to, rather than a shape
+ * subtracted from it.
+ *
+ * Subtracting was the obvious way and it is wrong at the one place that
+ * matters. A fixed depth taken off the ground makes a crease in a plain and
+ * nothing at all in a cliff: the same eighty units that floods a lowland
+ * leaves two hundred and sixty of tableland standing, so the river climbed the
+ * escarpment instead of cutting it. Written as a surface — this is where the
+ * water is, and the ground may not be below it — the river cuts whatever it
+ * runs into, as deep as that happens to be, and touches nothing on either side
+ * of itself. Which is what "break through without toning anything down" is.
+ *
+ * `RIVER_WIDE` is the half-width of the floodplain in soft ground and
+ * `RIVER_TIGHT` the half-width in hard, chosen by how high the ground is: a
+ * river spreads out across a plain and runs in a slot through a cliff, and one
+ * number for both gave either a crease in the lowlands or a hole in the rim.
+ */
+const RIVER_WIDE = 0.0138;
+const RIVER_TIGHT = 0.0026;
+/** How fast the valley sides climb away from the water, in units per width. */
+const RIVER_RISE = 300;
+/**
+ * The water's height at the two mouths, and on the watershed between them.
+ *
+ * Both low, because a bed at twenty-six is a dry valley: the marsh and reed
+ * rules want ground under five and the sand rule under six, so a river whose
+ * floor never gets there is a fold in a field. Both are also not zero, because
+ * a continuous channel at sea level from the bay to the northern sea is not a
+ * river, it is a strait, and there are no bridges on a fresh island. The
+ * watershed between the two mouths is what you walk across.
+ */
+const RIVER_MOUTH = 1;
+const RIVER_CREST = 15;
 
 // ------------------------------------------------------------------- helpers
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
@@ -162,20 +229,33 @@ const smooth = (a: number, b: number, x: number): number => {
 };
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
 
-/** Distance from a point to a line segment, in chart units. */
-function toSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy), 0, 1);
-  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
-}
-
-/** And to a polyline, with how far along it the nearest point lies. */
-function toPath(px: number, py: number, path: Array<[number, number]>): number {
-  let best = Infinity;
-  for (let i = 1; i < path.length; i++) {
-    best = Math.min(best, toSegment(px, py, path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]));
+/** And to a polyline: `out[0]` the distance, `out[1]` how far along it, 0 to 1. */
+const RIVER_RUN = (() => {
+  const at: number[] = [0];
+  let total = 0;
+  for (let i = 1; i < RIVER.length; i++) {
+    total += Math.hypot(RIVER[i][0] - RIVER[i - 1][0], RIVER[i][1] - RIVER[i - 1][1]);
+    at.push(total);
   }
+  return { at, total };
+})();
+
+function toPath(px: number, py: number, path: Array<[number, number]>, out?: number[]): number {
+  let best = Infinity;
+  let along = 0;
+  for (let i = 1; i < path.length; i++) {
+    const ax = path[i - 1][0];
+    const ay = path[i - 1][1];
+    const dx = path[i][0] - ax;
+    const dy = path[i][1] - ay;
+    const t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy), 0, 1);
+    const d = Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+    if (d < best) {
+      best = d;
+      along = (RIVER_RUN.at[i - 1] + t * (RIVER_RUN.at[i] - RIVER_RUN.at[i - 1])) / RIVER_RUN.total;
+    }
+  }
+  if (out) out[1] = along;
   return best;
 }
 
@@ -276,8 +356,8 @@ const land = new Uint8Array(N * N);
   for (let i = 0; i < n0 * n0; i++) sd[i] = was[i] ? toWater[i] - 0.5 : 0.5 - toLand[i];
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const fx = Math.min(n0 - 1, Math.max(0, (x + 0.5) / T - 0.5));
-      const fy = Math.min(n0 - 1, Math.max(0, (y + 0.5) / T - 0.5));
+      const fx = Math.min(n0 - 1, Math.max(0, (x + 0.5) / S - 0.5));
+      const fy = Math.min(n0 - 1, Math.max(0, (y + 0.5) / S - 0.5));
       const x0 = fx | 0;
       const y0 = fy | 0;
       const x1 = Math.min(n0 - 1, x0 + 1);
@@ -313,19 +393,23 @@ for (let y = 0; y < N; y++) {
  */
 const ocean = new Uint8Array(N * N);
 {
+  // Marked when it goes on the stack, not when it comes off. Marking on the
+  // way out lets a cell be pushed once for every neighbour that reaches it,
+  // and on a million-cell grid with an ocean this size that is enough pushes
+  // to take the array past what an array may hold: `Invalid array length`,
+  // four hundred lines from anything to do with rivers.
   const stack: number[] = [];
-  for (let x = 0; x < N; x++) stack.push(x, (N - 1) * N + x);
-  for (let y = 0; y < N; y++) stack.push(y * N, y * N + N - 1);
+  const put = (j: number): void => { if (!ocean[j] && !land[j]) { ocean[j] = 1; stack.push(j); } };
+  for (let x = 0; x < N; x++) { put(x); put((N - 1) * N + x); }
+  for (let y = 0; y < N; y++) { put(y * N); put(y * N + N - 1); }
   while (stack.length) {
     const k = stack.pop() as number;
-    if (ocean[k] || land[k]) continue;
-    ocean[k] = 1;
     const x = k % N;
     const y = (k / N) | 0;
-    if (x > 0) stack.push(k - 1);
-    if (x < N - 1) stack.push(k + 1);
-    if (y > 0) stack.push(k - N);
-    if (y < N - 1) stack.push(k + N);
+    if (x > 0) put(k - 1);
+    if (x < N - 1) put(k + 1);
+    if (y > 0) put(k - N);
+    if (y < N - 1) put(k + N);
   }
 }
 const dShore = distanceTo((i) => !land[i]);
@@ -358,8 +442,30 @@ function hills(u: number, v: number): number {
   return sum / norm;
 }
 
-/** The massif this texel stands on, in dirt units above the coastal shelf. */
-function massif(u: number, v: number, inland: number): number {
+/**
+ * A staircase in `t`: flat treads with the riser between them as sharp as the
+ * chart can hold, which is one texel, which is four tiles.
+ *
+ * `wobble` moves the riser rather than the tread, so the scarp between two
+ * benches wanders instead of following a contour of the distance field — a
+ * terrace drawn with compasses reads as a contour line, not as ground.
+ */
+function tier(t: number, steps: number, wobble: number): number {
+  const s = clamp(t, 0, 1) * steps;
+  const k = Math.min(steps - 1, Math.floor(s));
+  const f = s - k;
+  return Math.min(1, (k + (f > 0.84 + wobble ? 1 : 0)) / steps);
+}
+
+/**
+ * The relief this texel stands on, in dirt units above the coastal shelf.
+ *
+ * `out[0]` is that height. `out[1]` is how much of the landmass's own hill
+ * country to keep underneath it — one everywhere except on the crescent's
+ * benches, where rolling ground would fill the treads back in and there would
+ * be no terrace left to see.
+ */
+function massif(u: number, v: number, inland: number, out: number[]): void {
   // A little domain warp so nothing reads as a circle drawn with compasses.
   const wu = u + warp.fbm(u * 9 + 11, v * 9 - 4, 3) * 0.016;
   const wv = v + warp.fbm(u * 9 - 7, v * 9 + 13, 3) * 0.016;
@@ -377,7 +483,9 @@ function massif(u: number, v: number, inland: number): number {
     const notch = Math.exp(-((off / 0.30) ** 2)) * smooth(CONE_R * 0.75, CRATER_R * 0.8, rc);
     if (rc <= CRATER_R) {
       const wall = mix(H.crater, H.volcano, smooth(0, 1, rc / CRATER_R) ** 0.8);
-      return wall * (1 - 0.72 * notch);
+      out[0] = wall * (1 - 0.72 * notch);
+      out[1] = 1;
+      return;
     }
     /*
      * Very nearly a straight cone. The exponent was 1.45, which falls away so
@@ -389,7 +497,9 @@ function massif(u: number, v: number, inland: number): number {
      * the volcano. Only the shape of the flank can.
      */
     const t = (rc - CRATER_R) / (CONE_R - CRATER_R);
-    return H.volcano * (1 - t) ** 1.05 * gully * (1 - 0.34 * notch);
+    out[0] = H.volcano * (1 - t) ** 1.05 * gully * (1 - 0.34 * notch);
+    out[1] = 1;
+    return;
   }
 
   // ---- The crescent, which is the one everybody lives on.
@@ -427,12 +537,34 @@ function massif(u: number, v: number, inland: number): number {
     // The top is not glass, and where the noise dips the rim is a pass rather
     // than a wall — the bay would otherwise be walled in but for the river.
     const pass = smooth(-0.34, 0.30, roll.fbm(wu * 7.5 + 21, wv * 7.5 - 13, 3));
-    const top = 0.88 + 0.12 * (rough.fbm(wu * 26 + 17, wv * 26 - 5, 4) * 0.5 + 0.5);
-    return H.plateau * seaward * outer * inner * top * (0.52 + 0.48 * pass);
+    const cap = 0.88 + 0.12 * (rough.fbm(wu * 26 + 17, wv * 26 - 5, 4) * 0.5 + 0.5);
+    const plateau = H.plateau * seaward * outer * inner * cap * (0.52 + 0.48 * pass);
+
+    /*
+     * And below the tableland, benches stepping down to the beach.
+     *
+     * Keyed to distance from the bay rather than distance inland, because that
+     * is the direction they descend: the tableland is set by how far it is
+     * from the outer coast, the staircase by how far it is from the water
+     * everybody lands on. `reach` fades them out where the crescent's arms run
+     * away from the bay, so the arms stay the upland the reference draws
+     * rather than becoming a second tableland.
+     */
+    const wobble = rough.fbm(wu * 13 + 61, wv * 13 - 29, 3) * 0.11;
+    const reach = 1 - smooth(0.305, 0.430, db);
+    const ladder = mix(H.plain, H.terrace, tier(smooth(0.170, 0.300, db), TIERS, wobble));
+    const bench = ladder * reach;
+
+    out[0] = Math.max(plateau, bench);
+    // Hill country would fill the treads straight back in. A little is left so
+    // that a bench rolls rather than lying like a floor.
+    out[1] = 1 - 0.85 * reach;
+    return;
   }
 
   // ---- And the ranges, each inside its own ellipse.
   let best = 0;
+  out[1] = 1;
   for (const R of RANGES) {
     const ax = wu - R.at[0];
     const ay = wv - R.at[1];
@@ -444,11 +576,13 @@ function massif(u: number, v: number, inland: number): number {
     const knot = 1 - R.relief + R.relief * rv ** 1.2;
     best = Math.max(best, R.h * (1 - r) ** R.fall * knot);
   }
-  return best;
+  out[0] = best;
 }
 
 // ------------------------------------------------------------- and the chart
 const height = new Float32Array(N * N);
+const mo = [0, 1];
+const riv = [0, 0];
 for (let y = 0; y < N; y++) {
   for (let x = 0; x < N; x++) {
     const i = idx(x, y);
@@ -461,7 +595,8 @@ for (let y = 0; y < N; y++) {
       height[i] = H.shallow * smooth(0, 3.5 * T, d) + (H.abyss - H.shallow) * smooth(3.5 * T, 46 * T, d);
       continue;
     }
-    const m = massif(u, v, dInland[i]);
+    massif(u, v, dInland[i], mo);
+    const m = mo[0];
     /*
      * Every landmass has a body to it before any named relief stands on it.
      * Without this the islands were a coastal shelf with a hill in the middle
@@ -474,22 +609,24 @@ for (let y = 0; y < N; y++) {
      * and it fades out on its own over an islet, which is never more than a
      * texel or two from open water.
      */
-    const body = (H.body * 0.52 + H.body * 0.78 * hills(u, v)) * smooth(0.5 * T, 24 * T, dInland[i]);
+    const body = (H.body * 0.52 + H.body * 0.78 * hills(u, v)) * smooth(0.5 * T, 24 * T, dInland[i]) * mo[1];
     /*
-     * The river is cut after the two are resolved and not before. Carved
+     * The river is applied after the two are resolved and not before. Carved
      * inside the massif it was carved into a number the `max` below then threw
      * away for being smaller than the body of the continent, and the valley
      * did not exist. A river is a thing that happens to whatever ground is
-     * there, which is exactly what cutting it last means.
-     *
-     * Narrow and shallow, deliberately. The first one that worked was half a
-     * texel of chart wide either side of its line, which at eight tiles to the
-     * texel is a sixty-tile trench cut to sea level — it split the continent
-     * in two and there was no walking round it. This is a valley you go down
-     * into and up out of.
+     * there, which is exactly what applying it last means.
      */
-    const cut = RIVER_D * Math.exp(-((toPath(u, v, RIVER) / RIVER_W) ** 2));
-    const relief = Math.max(body, m) - cut;
+    const ground = Math.max(body, m);
+    const dr = toPath(u, v, RIVER, riv);
+    // Its bed: low at both mouths, up over the watershed in between, so the
+    // interior drains north through the gorge and south to the bay.
+    const bed = RIVER_MOUTH + (RIVER_CREST - RIVER_MOUTH) * Math.sin(Math.PI * riv[1]);
+    // A slot where the ground is hard and high, a floodplain where it is low.
+    const tight = smooth(120, 300, ground);
+    const width = mix(RIVER_WIDE, RIVER_TIGHT, tight);
+    const water = bed + RIVER_RISE * (dr / width) ** 2;
+    const relief = Math.min(ground, water);
     // How far the ground takes to climb out of the sea. Gentle where the
     // relief is low, which is every beach and the whole of the bay shore;
     // short where it is high, which is where the reference draws sea cliffs.
@@ -548,8 +685,8 @@ const moist = new Float32Array(N * N);
   const n0 = atlas.n;
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const fx = Math.min(n0 - 1, Math.max(0, (x + 0.5) / T - 0.5));
-      const fy = Math.min(n0 - 1, Math.max(0, (y + 0.5) / T - 0.5));
+      const fx = Math.min(n0 - 1, Math.max(0, (x + 0.5) / S - 0.5));
+      const fy = Math.min(n0 - 1, Math.max(0, (y + 0.5) / S - 0.5));
       const x0 = fx | 0;
       const y0 = fy | 0;
       const x1 = Math.min(n0 - 1, x0 + 1);
@@ -573,8 +710,21 @@ const DEPTH = Math.ceil(-deep);
 
 const px = new Uint8Array(N * N * 3);
 for (let i = 0; i < N * N; i++) {
+  /*
+   * Land stays at or above 128 and water stays below it, whatever the rounding
+   * would otherwise do.
+   *
+   * This tool reads its own last output for the coastline — that is how the
+   * outlines are kept to the texel — so the mask has to be a fixed point, and
+   * without these two clamps it is not. A water texel half a texel off the
+   * shore works out to a depth of about half a unit, which rounds to exactly
+   * 128, which reads back as land. Run it again and the shore has moved a
+   * texel. Run it ten times, as this was, and the coastline has been quietly
+   * redrawn while nobody was looking at it.
+   */
   const e = height[i] >= 0 ? height[i] / LAND : height[i] / DEPTH;
-  px[i * 3] = clamp(Math.round(128 + e * 127), 1, 255);
+  const r = Math.round(128 + e * 127);
+  px[i * 3] = land[i] ? clamp(Math.max(128, r), 128, 255) : clamp(Math.min(127, r), 1, 127);
   /*
    * Green and blue are quantised, and that is what pays for the finer grid.
    *
@@ -680,13 +830,22 @@ function png(w: number, h: number, rgb: Uint8Array): Buffer {
 
 const b64 = png(N, N, px).toString('base64');
 const src = readFileSync(DATA, 'utf8');
-const out = src.replace(/'data:image\/png;base64,[A-Za-z0-9+/=]+'/, `'data:image/png;base64,${b64}'`);
-if (out === src) throw new Error('the chart in atlas-data.ts did not match the shape this replaces');
+const shape = /'data:image\/png;base64,[A-Za-z0-9+\/=]+'/;
+if (!shape.test(src)) throw new Error('the chart in atlas-data.ts is not the shape this replaces');
+const out = src.replace(shape, `'data:image/png;base64,${b64}'`);
+/*
+ * Unchanged is the expected answer on a second run and not a failure. This
+ * used to be `if (out === src) throw`, which conflated "nothing matched" with
+ * "nothing moved" — and now that the mask is a fixed point, nothing moving is
+ * the whole point. The shape is tested separately, above, which is the thing
+ * that guard was actually for.
+ */
+const same = out === src;
 writeFileSync(DATA, out);
 
 let lake = 0;
 for (let i = 0; i < N * N; i++) if (!land[i] && dLand[i] <= 2 && height[i] > -30) lake++;
-console.log(`chart rebuilt: ${N} x ${N}, ${carved} texels carved for the crater`);
+console.log(`chart ${same ? 'unchanged' : 'rebuilt'}: ${N} x ${N}, ${carved} texels carved for the crater`);
 console.log(`highest ground ${top.toFixed(0)}, deepest water ${deep.toFixed(0)}`);
 console.log(`set ATLAS_CONFIG.land = ${LAND} and depth = ${DEPTH}`);
 console.log(`green open on ${((soft.filter((v) => v > 0.02).length / (N * N)) * 100).toFixed(1)}% of the chart`);

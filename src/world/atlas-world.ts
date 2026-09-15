@@ -480,12 +480,17 @@ let zoneCache: { atlas: Atlas; zone: number[] } | null = null;
 /**
  * How far above the water a starting tile has to be drawn, as a fraction of
  * the chart's full height, and how far out to look for the sea. The first is
- * about twelve dirt units, which clears the warp and the detail noise; the
- * second is measured in texels of chart, so it is a fixed distance on the
- * ground however finely the chart happens to be drawn.
+ * low, because it is only there to throw out the texels the chart itself calls
+ * waterline; `findBaySpawn` rolls the real ground and decides. The second is
+ * in texels of chart, so it is a fixed distance on the ground however finely
+ * the chart happens to be drawn.
+ *
+ * Both are fractions and distances rather than heights on purpose: the chart's
+ * scale moves whenever its relief is redrawn, and a floor written as a number
+ * of dirt units would quietly stop meaning the same thing the next time it did.
  */
-const FOOT = 0.022;
-const SHORE = 4;
+const FOOT = 0.012;
+const SHORE = 5;
 
 /** Every beach texel on the inner bay: shore, beach height, inside the bay. */
 function spawnZone(atlas: Atlas): number[] {
@@ -538,9 +543,53 @@ export function findBaySpawn(atlas: Atlas, seed: number, size = 4096): { x: numb
   const zone = spawnZone(atlas);
   if (!zone.length) return { x: size >> 1, y: size >> 1 };
   const n = atlas.n;
-  const i = zone[Math.floor(hash2(seed, 7, 13) * zone.length) % zone.length];
-  return {
+  const where = (i: number): { x: number; y: number } => ({
     x: Math.round((((i % n) + 0.5) / n) * size),
     y: Math.round(((((i / n) | 0) + 0.5) / n) * size),
-  };
+  });
+
+  /*
+   * The chart is asked which texels are beach, and then the ground is rolled
+   * to find out whether they are.
+   *
+   * Those are not the same question and no amount of tuning the first will
+   * make it answer the second. Between the chart and the ground sit the coast
+   * warp, which samples the chart up to three texels away from where it is
+   * standing, and the detail noise, which moves every corner three either way.
+   * Raising the floor the chart had to clear moved which seeds landed badly
+   * without reducing how many did — the number it was testing was not the
+   * number that decides.
+   *
+   * So the candidates are walked in a seeded order and each is rolled: a
+   * sixteen square window, which is cheap, and the first one that is properly
+   * dry with room to walk is where the body goes. The best of what was tried
+   * is kept as a fallback, so this always answers even on a chart whose whole
+   * bay is marginal.
+   */
+  const start = Math.floor(hash2(seed, 7, 13) * zone.length);
+  let best: { x: number; y: number } | null = null;
+  let bestScore = -1;
+  const W = 16;
+  for (let k = 0; k < 48; k++) {
+    const spot = where(zone[(start + k * 37) % zone.length]);
+    const win = generateAtlasWindow(seed, atlas, spot.x - W / 2, spot.y - W / 2, W, W, size);
+    const cw = W + 1;
+    const mid = W / 2;
+    const c = [win.heights[mid * cw + mid], win.heights[mid * cw + mid + 1],
+      win.heights[(mid + 1) * cw + mid + 1], win.heights[(mid + 1) * cw + mid]];
+    const under = Math.min(...c);
+    let dry = 0;
+    for (let y = 0; y < W; y++) {
+      for (let x = 0; x < W; x++) {
+        const q = [win.heights[y * cw + x], win.heights[y * cw + x + 1],
+          win.heights[(y + 1) * cw + x + 1], win.heights[(y + 1) * cw + x]];
+        if (Math.min(...q) >= 0 && Math.max(...q) - Math.min(...q) <= 52) dry++;
+      }
+    }
+    // Standing on dry ground, and over half of what is around you walkable.
+    if (under >= 4 && dry >= W * W * 0.55) return spot;
+    const score = Math.min(under, 4) * 1000 + dry;
+    if (score > bestScore) { bestScore = score; best = spot; }
+  }
+  return best ?? where(zone[start % zone.length]);
 }
