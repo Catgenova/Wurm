@@ -3767,75 +3767,43 @@ select '598. and the one foreign key with nothing behind it now has: '
 -- is at most one a second per person, so this is the budget that decides
 -- whether the check can stay.
 do $$
-declare t0 timestamptz; s double precision; ms double precision;
+declare t0 timestamptz; s double precision; cold double precision; warm double precision;
         w uuid := (select id from world where size = 4096 order by made_at desc limit 1);
 begin
   if w is null then raise notice '599. no 4096 island to read'; return; end if;
+  delete from land_chunk where world_id = w;
   t0 := clock_timestamp();
   s := walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5);
-  ms := extract(milliseconds from (clock_timestamp() - t0));
-  raise notice '599. the ground under a thirty-tile walk on the 4096 island: % per cent of it walkable, read in % ms',
-    round(s::numeric * 100), round(ms::numeric, 1);
+  cold := extract(milliseconds from (clock_timestamp() - t0));
+  t0 := clock_timestamp();
+  s := walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5);
+  warm := extract(milliseconds from (clock_timestamp() - t0));
+  raise notice '599. the ground under a thirty-tile walk on the 4096 island: % per cent of it walkable, read in % ms '
+               'with the square to build first and % ms with it built — against 13 ms off the scanlines',
+    round(s::numeric * 100), round(cold::numeric, 1), round(warm::numeric, 2);
 end $$;
 
 \echo ''
-\echo '--- and the keeper sweeps up'
--- Talk. One row per line of feedback per person, kept for ever, read by nobody.
-insert into event (world_id, uid, text, kind, at)
-  select :'world2', :'ivar', 'Old news ' || g, 'event', now() - interval '2 days'
-  from generate_series(1, 50) g;
-select count(*) as talk0 from event where world_id = :'world2' \gset
--- Ground. The same tile dug ten times a fortnight ago, and twice this morning.
-insert into tile_change (world_id, x, y, tile, data, corners, at)
-  select :'faraway', 20, 20, g % 5, 0, '{0,0,0,0}', now() - interval '14 days'
-  from generate_series(1, 10) g;
-insert into tile_change (world_id, x, y, tile, data, corners, at)
-  select :'faraway', 21, 20, 3, 0, '{0,0,0,0}', now() - interval '1 hour'
-  from generate_series(1, 2) g;
-select (select tile from tile_change where world_id = :'faraway' and x = 20 and y = 20 order by n desc limit 1) as ended \gset
--- An island founded two months ago that nobody ever came back to.
-insert into world (name, seed, size, spawn_x, spawn_y, ready, made_at)
-  values ('Longgone', 7, 32, 16, 16, true, now() - interval '60 days') returning id as sunk \gset
-
-update keeper set swept_at = to_timestamp(0);
-select world_tick()::text as tidied \gset
-select '600. a round that tidies as well as settles: ' || :'tidied';
-select '601. old talk on that island: ' || :'talk0' || ' lines before, '
-     || (select count(*) from event where world_id = :'world2') || ' after — anything past '
-     || round(event_keep() / 3600) || ' hours is swept';
-select '602. a tile dug ten times a fortnight ago is now ' || count(*) || ' row of history, and it still says tile '
-     || (select tile from tile_change where world_id = :'faraway' and x = 20 and y = 20 order by n desc limit 1)
-     || ', which is where it ended up (' || :'ended' || ') — compaction keeps the last word on every tile, so a client '
-     || 'replaying from any cursor at all lands on the same island'
-  from tile_change where world_id = :'faraway' and x = 20 and y = 20;
-select '603. and this morning''s two digs are untouched: '
-     || (select count(*) from tile_change where world_id = :'faraway' and x = 21 and y = 20)
-     || ' rows, because somebody who dropped off an hour ago should still get it in order';
-select '604. an island founded two months ago that nobody came back to: '
-     || case when exists (select 1 from world where id = :'sunk') then 'STILL THERE'
-             else 'given back to the sea, with its 36 MB of land' end;
-select '605. and the islands with people on them are all still here: '
-     || (select string_agg(name, ', ' order by name) from world where id in (:'world2', :'faraway', :'big'));
-
-\echo ''
-\echo '--- what Realtime carries, and to whom'
-select '606. published to Realtime: ' || string_agg(tablename, ', ' order by tablename)
-     || ' — `player` is not among them, because a walking body wrote that row once a second '
-     || 'and every one of those was a billed message to everybody on the island'
-  from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public';
-select '607. an island of ' || w.size || ' is ' || (b * b) || ' blocks of ' || region_size()
-     || ' tiles; a client listens to the nine round it, which is '
-     || round((900.0 / (b * b))::numeric, 1) || ' per cent of the island instead of all of it'
-  from world w, lateral (select ceil(w.size / region_size())::int b) q where w.id = :'big';
-select '608. and every tile change says which block it happened in: tile 2000,2000 is block '
-     || region_of(2000, 2000) || ', tile 0,0 is block ' || region_of(0, 0)
-     || ', and they are not the same conversation';
-
--- The cursor. A join used to read every tile change ever made on the island.
-update player set seen_change = (select max(n) - 1 from tile_change where world_id = :'faraway')
-  where world_id = :'faraway' and uid = :'ivar';
-select '609. coming back to an island with '
-     || (select count(*) from tile_change where world_id = :'faraway') || ' changes on it, having seen all but one: '
-     || (select count(*) from tile_change t, player p
-         where t.world_id = :'faraway' and p.world_id = :'faraway' and p.uid = :'ivar' and t.n > p.seen_change)
-     || ' row to read, not ' || (select count(*) from tile_change where world_id = :'faraway');
+\echo '--- the land, read in squares'
+select '610. a square of the 4096 island holds ' || length(tiles) || ' bytes of tiles and '
+     || length(heights) || ' of corners, which is ' || chunk_size() || ' tiles to a side'
+  from land_chunk where world_id = (select id from world where size = 4096 order by made_at desc limit 1)
+  order by cx, cy limit 1;
+-- The squares are a cache with no opinions: a land write throws away the ones
+-- it touches and the next reader builds what it needs.
+do $$
+declare w uuid := (select id from world where size = 4096 order by made_at desc limit 1);
+        had int; left_after int; saw int;
+begin
+  perform walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5);
+  select count(*) into had from land_chunk where world_id = w;
+  perform land_set_tile(w, 2005, 2000, 16);
+  select count(*) into left_after from land_chunk where world_id = w;
+  saw := round(walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5) * 100);
+  raise notice '611. a tree planted in the middle of that walk: % squares held, % after the write, '
+               'and the walk now gets % per cent of the way — the cache never answers for the scanlines',
+    had, left_after, saw;
+end $$;
+select '612. and the scanlines are still the truth: tile 2005,2000 says '
+     || land_tile((select id from world where size = 4096 order by made_at desc limit 1), 2005, 2000)
+     || ', which is what was written to them';

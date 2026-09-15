@@ -580,10 +580,26 @@ async function main(): Promise<void> {
        * down, picking it up — arrives here too, and a loop that stops at the
        * first tile change of any kind stops before the digging has begun.
        */
+      /*
+       * And ask again if something knocks it out of our hands.
+       *
+       * The island has a clock now, which means the wildlife on it moves and
+       * hunts — and the first live run after that clock went in failed here,
+       * with the dig started, four minutes of nudging, and no hole. What the
+       * event log said was `The ulva is on you. You have a deep cut to the
+       * leg, bleeding.` Being set upon cancels what you were doing, which is
+       * the right rule and was simply never reachable before.
+       *
+       * So the loop asks again whenever the head has gone empty without the
+       * ground moving. A test of whether digging digs should not be a test of
+       * whether anything came out of the trees.
+       */
       const groundWas = ground.length;
       for (let i = 0; i < waitFor(60) && ground.length === groundWas; i++) {
         await sleep(1000);
-        await supabase().rpc('rpc_settle');
+        const said = await supabase().rpc('rpc_settle');
+        const now = (said.data ?? {}) as { act?: string | null };
+        if (!now.act && ground.length === groundWas && i > 2) await island.act('dig', { x: cx, y: cy, cx, cy }, 6);
       }
       await island.refreshPack();
       /*
