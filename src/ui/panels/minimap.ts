@@ -226,10 +226,12 @@ export class MinimapPanel {
     // Three states here as in the world: nothing for land nobody has seen, the
     // land as it is where somebody is looking, and what it was where not.
     const fog = this.game.vision.state(x, y);
+    // Land nobody has laid eyes on is black, as it is in the world: a hole in
+    // the map rather than a dark patch of it.
     if (fog === UNSEEN) {
-      d[i] = 16;
-      d[i + 1] = 20;
-      d[i + 2] = 30;
+      d[i] = 0;
+      d[i + 1] = 0;
+      d[i + 2] = 0;
       d[i + 3] = 255;
       return;
     }
@@ -271,11 +273,16 @@ export class MinimapPanel {
         b *= hard;
       }
     }
-    // Ground out of sight keeps its shape but loses its light.
+    /*
+     * Ground out of sight keeps its shape and loses its colour. Grey rather
+     * than the blue it was, for the reason the world is: this is a memory of
+     * the place, not the place after dark.
+     */
     if (!lit) {
-      r = r * 0.42 + 14;
-      g = g * 0.42 + 18;
-      b = b * 0.46 + 30;
+      const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = (grey + (r - grey) * 0.22) * 0.5 + 16;
+      g = (grey + (g - grey) * 0.22) * 0.5 + 16;
+      b = (grey + (b - grey) * 0.22) * 0.5 + 17;
     }
     d[i] = Math.min(255, r);
     d[i + 1] = Math.min(255, g);

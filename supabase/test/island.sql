@@ -1956,7 +1956,7 @@ select '344. and what is now lit for him: ' ||
          where is_prospected(:'world2', :'hild', x, y));
 select '345. the eleven the ground brought: '
      || (select string_agg(id, ', ' order by id) from action_def where ground_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- and a beast that does the reading for you'
@@ -2111,7 +2111,7 @@ select '364. a quarter of an hour of it: ' || :'carried' || ' goes — a fill an
      || ' left in the well: it stops when there is not a bucket''s worth down there';
 select '365. the six the liquids brought: '
      || (select string_agg(id, ', ' order by id) from action_def where liquid_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- an oven, which is a fire with a roof on it'
@@ -2232,7 +2232,7 @@ select '383. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ', and in the pack: ' || pack_count(:'world2', :'ivar', 'anvil');
 select '384. the ten the forge brought: '
      || (select string_agg(id, ', ' order by id) from action_def where forge_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- a satchel, and the whole reason bags waited three commits'
@@ -2323,7 +2323,7 @@ reset role;
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select '396. the five that hold things: '
      || (select string_agg(id, ', ' order by id) from action_def where holding_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- a settlement grows by being built up'
@@ -2437,7 +2437,7 @@ select '415. after: ' || (select count(*) from deed where world_id = :'world2') 
         ('{"kind":"item","uid":' || (select give(:'world2', :'ivar', 'deed_stake', 1, 50)) || '}')::jsonb), 'allowed');
 select '416. the seven the settlement brought: '
      || (select string_agg(id, ', ' order by id) from action_def where settlement_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- and a thing made of nothing in particular'
@@ -2584,7 +2584,7 @@ select '429. a quarter of an hour of a snout: ' || :'nosed' || ' holes dug, '
           and holder = 'crate' and def = 'fragment'), '0') || ' fragments';
 select '430. the three that came with the relics: '
      || (select string_agg(id, ', ' order by id) from action_def where dig_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- what you catch while you are somewhere else'
@@ -2675,7 +2675,7 @@ select '441. ' || (select text from event where uid = :'ivar' and kind = 'event'
 select '442. traps left standing: ' || (select count(*) from placed where world_id = :'world2' and kind = 'trap')
      || ' — and the six that came with them: '
      || (select string_agg(id, ', ' order by id) from action_def where trap_action(id))
-     || ', of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ', of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 /*
  * And the answer to that question is now nothing at all — which is what took
  * this measurement down the first time it was true, because `string_agg` over
@@ -2858,7 +2858,7 @@ select '466. a rowing boat dragged up a hillside that stands '
         ('{"kind":"furniture","id":' || :'boat' || '}')::jsonb), 'allowed');
 select '467. the eleven that came with the reins: '
      || (select string_agg(id, ', ' order by id) from action_def where ride_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- and what a thing has to be empty of before it will come up'
@@ -3047,7 +3047,7 @@ select '493. what the path is worth, the same body either way: a rabba would tru
      || ' of the fifteen steps are called on rather than simply true, the rest being true all the time';
 select '494. the five that came with it: '
      || (select string_agg(id, ', ' order by id) from action_def where faith_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
 \echo ''
 \echo '--- a bridge, a bed, a herd, a pot of dye and a barrel of ale'
@@ -3290,4 +3290,40 @@ select '521. twenty minutes later: ' || (select case when is_working(p) then 'st
      || ' — and a brew is a well running the other way: one column, one timestamp, no machinery';
 select '522. the last ten: '
      || (select string_agg(id, ', ' order by id) from action_def where last_action(id))
-     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
+     || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
+
+\echo ''
+\echo '--- a torch, and the end of the tinderbox'
+delete from placed where world_id = :'world2' and kind = 'campfire';
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('torch', 'lantern');
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select '523. what a torch is: ' || (select string_agg(i.item || ' × ' || i.count, ' + ' order by i.ord)
+       from recipe_input i where i.recipe = 'make_torch')
+     || ' at ' || (select skill || ' ' || difficulty from recipe where id = 'make_torch')
+     || ' — it burns ' || round(torch_burn(50) / 60) || ' minutes at QL 50 and throws '
+     || held_reach('torch', 50) || ' tiles, where a lantern of the same make throws '
+     || held_reach('lantern', 50);
+select give(:'world2', :'ivar', 'torch', 1, 50) as torch \gset
+select '524. with nothing burning anywhere near: ' || coalesce(act_refusal(:'world2', :'ivar',
+       'light_lantern', ('{"kind":"item","uid":' || :'torch' || '}')::jsonb), 'allowed');
+-- A fire to light it at, set down rather than built: what is being measured
+-- here is the torch, and building a campfire is measured elsewhere.
+insert into placed (world_id, kind, x, y, sx, sy, cx, cy, ql, fuel, lit, since, made_by)
+  values (:'world2', 'campfire', 5, 7, 1, 1, 5.5, 7.5, 40, 600, true, now(), :'ivar');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'light_lantern', ('{"kind":"item","uid":' || :'torch' || '}')::jsonb) \g /dev/null
+select '525. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+select '526. and a lantern with no candle in it: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'light_lantern',
+        ('{"kind":"item","uid":' || (select give(:'world2', :'ivar', 'lantern', 1, 60)) || '}')::jsonb), 'allowed')
+     || ' — but the torch in hand is a light to take one off: '
+     || coalesce(flame_near(:'world2', :'ivar'), 'nothing');
+-- And it burns down while it is lit, and only while it is lit.
+update item set lit_at = now() - interval '2 minutes' where id = :'torch';
+select '527. two minutes of torch later: ' || round(candle_left((select i from item i where i.id = :'torch')) / 60)
+     || ' minutes left of the ' || round(torch_burn(50) / 60) || ' it started with';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'douse_lantern', ('{"kind":"item","uid":' || :'torch' || '}')::jsonb) \g /dev/null
+select '528. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and there are ' || (select count(*) from item_def where id = 'tinderbox')
+     || ' tinderboxes in this game, which is how many there always were';

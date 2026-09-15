@@ -1,7 +1,7 @@
 import { TileType } from '../world/tiles';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
-import { lanternReach } from './light';
+import { heldReach } from './light';
 
 /**
  * What can be seen from where you are standing.
@@ -24,13 +24,35 @@ export const UNSEEN = 0;
 export const KNOWN = 1;
 export const VISIBLE = 2;
 
-/** How far you can see on flat ground at noon, in tiles. */
+/** The characteristic that decides how much of the world reaches you. */
+export const AWARENESS = 'awareness';
+
+/** How far you can see on flat ground at noon, in tiles — at awareness 100. */
 const BASE_SIGHT = 15;
 /** Every this many height units underfoot is worth another tile of range. */
 const HEIGHT_PER_TILE = 9;
 const MAX_SIGHT = 28;
-/** How much of your sight the dark takes: a night halves it. */
-const NIGHT_LOSS = 0.55;
+/**
+ * How much of your sight the dark takes.
+ *
+ * Three quarters of it. A night used to cost about half, which made the dark
+ * an inconvenience; at three quarters it is a reason to stop walking, and a
+ * reason for the torch to exist.
+ */
+const NIGHT_LOSS = 0.75;
+/**
+ * What awareness is worth.
+ *
+ * Everything above is what somebody at **100** sees. At 1 you see a little
+ * over a third of it, and the curve is a square root rather than a straight
+ * line because the early levels are the ones that matter: the difference
+ * between six tiles and nine is the difference between being walked into and
+ * seeing it coming, and the difference between twenty-four and twenty-seven is
+ * a nicer view.
+ */
+const AWARE_FLOOR = 0.36;
+export const awarenessReach = (level: number): number =>
+  AWARE_FLOOR + (1 - AWARE_FLOOR) * Math.sqrt(Math.max(0, Math.min(100, level)) / 100);
 /** Tamed creatures are extra eyes, but not far-seeing ones. */
 const COMPANION_SIGHT = 7;
 /** A lit fire shows its own ground, however dark it is. */
@@ -126,19 +148,29 @@ export class Vision {
     this.recompute();
   }
 
-  /** The distance the player can see right now, by height and by daylight. */
+  /**
+   * The distance the player can see right now.
+   *
+   * Four things have a say, in this order: how much you notice, how high you
+   * are standing, how dark it is, and what you are carrying that burns.
+   */
   sightRange(): number {
     const g = this.game;
     const up = Math.max(0, g.world.heightAt(g.player.x, g.player.y));
-    // A lit lantern gives back most of what the dark takes, and its reach is
-    // a floor under your sight however black the night: you can always see as
-    // far as the light carries.
-    const lamp = g.litLantern();
+    // What you would see in broad daylight, given how much you notice.
+    const open = (BASE_SIGHT + up / HEIGHT_PER_TILE) * awarenessReach(g.skills.get(AWARENESS));
+    /*
+     * And what the dark takes off it. A light in your hand gives most of that
+     * back — three quarters of what the night took — and its own reach is a
+     * floor under your sight however black the hour: you can always see as far
+     * as the thing you are carrying throws.
+     */
+    const lamp = g.heldLight();
     const day = 1 - NIGHT_LOSS * g.darkness() * (lamp ? 0.25 : 1);
     // The reader's path sees a quarter further than anybody else.
     const keen = g.walks('knowledge', 5) ? 1.25 : 1;
-    const seen = Math.max(4, Math.min(MAX_SIGHT * keen, (BASE_SIGHT + up / HEIGHT_PER_TILE) * day * keen));
-    return lamp ? Math.max(seen, lanternReach(lamp.ql)) : seen;
+    const seen = Math.max(3, Math.min(MAX_SIGHT * keen, open * day * keen));
+    return lamp ? Math.max(seen, heldReach(lamp.id, lamp.ql)) : seen;
   }
 
   private recompute(): void {

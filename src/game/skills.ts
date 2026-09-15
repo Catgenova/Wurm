@@ -11,6 +11,14 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'body_control', name: 'Body control', group: 'Characteristics', start: 20 },
   { id: 'mind_logic', name: 'Mind logic', group: 'Characteristics', start: 20 },
   { id: 'soul_strength', name: 'Soul strength', group: 'Characteristics', start: 20 },
+  /*
+   * How much of the world you take in, and the one characteristic that does
+   * not start where the others do. Everybody washes ashore with a body and a
+   * mind already half grown; nobody washes ashore able to read a dark hillside.
+   * It is the whole of how far you see, and it is only learned by fighting in
+   * the dark — which is where a person finds out how little they were noticing.
+   */
+  { id: 'awareness', name: 'Awareness', group: 'Characteristics', start: 1 },
   { id: 'digging', name: 'Digging', group: 'Skills', start: 1 },
   { id: 'mining', name: 'Mining', group: 'Skills', start: 1 },
   { id: 'prospecting', name: 'Prospecting', group: 'Skills', start: 1 },

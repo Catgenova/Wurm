@@ -126,8 +126,18 @@ interface HitRect {
 }
 
 
-/** The cold laid over ground that is remembered rather than watched. */
-const FOG_COLOR = 'rgba(16, 24, 46, 0.58)';
+/**
+ * The cold laid over ground that is remembered rather than watched.
+ *
+ * A neutral grey rather than the blue it was: remembered ground is *memory*,
+ * not night, and a blue wash said "it is dark over there" where what is meant
+ * is "you are not looking". The colour underneath it is drained of its own
+ * hue as well — see `computeColor` — so the two together read as an old
+ * photograph of the place rather than the place at midnight.
+ */
+const FOG_COLOR = 'rgba(30, 30, 32, 0.46)';
+/** How much of its own colour remembered ground keeps. */
+const MEMORY_SATURATION = 0.22;
 const GRID_COLOR = 'rgba(0,0,0,0.16)';
 const DEED_COLOR = 'rgba(96, 230, 110, 0.9)';
 const DEED_SHADOW = 'rgba(0, 40, 0, 0.6)';
@@ -406,7 +416,7 @@ export class Renderer {
   }
 
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
-  private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number]): string {
+  private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number], lit = true): string {
     const w = this.game.world;
     const def = TILE_DEFS[type];
     const c = w.corners(x, y, this.colorBuf);
@@ -446,6 +456,19 @@ export class Renderer {
       g *= 0.86 * k;
       b *= 0.95 * k;
     }
+    /*
+     * Ground you are only remembering keeps almost none of its own colour.
+     * Colour is what an eye is getting *now*; a memory of a place is the shape
+     * of it and how light it was, which is a grey. Done here rather than as
+     * another wash because a wash over green is still green, and because both
+     * of these are cached per tile — it costs nothing after the first frame.
+     */
+    if (!lit) {
+      const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = grey + (r - grey) * MEMORY_SATURATION;
+      g = grey + (g - grey) * MEMORY_SATURATION;
+      b = grey + (b - grey) * MEMORY_SATURATION;
+    }
     return `rgb(${clamp255(r * shade)},${clamp255(g * shade)},${clamp255(b * shade)})`;
   }
 
@@ -455,7 +478,7 @@ export class Renderer {
     let color = cache[idx];
     if (!color) {
       const w = this.game.world;
-      color = this.computeColor(x, y, w.viewTile(x, y, lit), w.viewData(x, y, lit), sun);
+      color = this.computeColor(x, y, w.viewTile(x, y, lit), w.viewData(x, y, lit), sun, lit);
       cache[idx] = color;
     }
     return color;

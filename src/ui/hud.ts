@@ -447,9 +447,17 @@ export class Hud {
     if (favour >= 1) parts.push(`Favour ${Math.floor(favour)} of ${Math.floor(favourCap(this.game.skills.get(FAITH)))}`);
     const over = this.game.overloaded();
     if (over > 0) parts.push(`Overloaded by ${over.toFixed(0)} kg`);
-    // A lit lantern is a thing with a clock on it, so the clock is shown.
-    const lamp = this.game.litLantern();
-    if (lamp) parts.push(`Lantern lit · ${clockLeft(lamp.charges ?? 0)} of candle`);
+    /*
+     * A light in your hand is a thing with a clock on it, so the clock is
+     * shown — and so is what it is buying you, because the whole reason to
+     * carry one is the ground it puts back in front of you.
+     */
+    const lamp = this.game.heldLight();
+    if (lamp) {
+      parts.push(`${itemName(lamp)} lit · ${clockLeft(lamp.charges ?? 0)} left · sees ${Math.round(this.game.vision.sightRange())} tiles`);
+    } else if (this.game.darkness() > 0.45) {
+      parts.push(`Dark · you see ${Math.round(this.game.vision.sightRange())} tiles`);
+    }
     // What the ground under a loaded wheel is costing, when it is costing anything.
     const cart = this.game.driving();
     if (cart) {

@@ -32,7 +32,7 @@ simplification rather than a problem:
 
 | | |
 |---|---|
-| **204** | recipes — every one of them, through one performer |
+| **205** | recipes — every one of them, through one performer |
 | **14** | things set down on the ground: campfires, smelters, furniture |
 | **13** | building: plans, walls, fences, storeys, floors, stairs, ladders and roofs |
 | **11** | the wildermon: examining, taming, feeding, brushing, shearing, milking, stances, names, and letting one go |
@@ -89,6 +89,31 @@ sowing a field from a worker's own cheeks, the ledger, the journal, and the
 ease a hot oven lends to cooking. None of those is an action; they are things
 that happen around the actions, and every one of them is a decision rather
 than an omission.
+
+### The browser changed because of the port, once
+
+Porting `light_lantern` turned up that it wanted a **tinderbox**, that there
+was no tinderbox anywhere in the game — not in `ITEM_DEFS`, not in any recipe,
+nowhere but that one check and a line of help promising it — and therefore that
+a lantern could not be lit by anybody, ever. A whole subsystem with no way in.
+
+That was ported faithfully and named out loud, which is the right thing to do
+with a bug you find in the thing you are copying. It was the wrong place to
+leave it. Both sides light it at a fire now: a campfire, a kiln, a smelter or
+an oven within reach, or off something already alight in your own hand. It is a
+better rule than the tinderbox would have been — it gives the campfire a second
+job, and it means the first thing you do on a dark island is get something
+burning.
+
+A **torch** came with it, on both sides: a shaft with oiled cloth round the
+head, three to five tiles of light and minutes rather than most of an hour, and
+gone when it is done. What it has over a lantern is that anybody can wind one
+in the first hour of an island, which is when the dark is worst. One recipe,
+two columns already there, and no new actions at all — a torch is a thing the
+lantern's three actions already knew how to handle once they stopped asking
+whether it was specifically a lantern.
+
+That is one recipe more than there were, so the island is **374 of 374**.
 
 ### You cannot make the island wait, so you make it have been longer
 
@@ -724,7 +749,7 @@ neither would have said a word about it — the wall would simply have been lit.
 
 Both are named lists now, and the last `like` in the dispatcher went with
 them. A prefix is a bet that no other family will ever want the same verb, and
-on an island with three hundred and seventy-three actions that bet keeps
+on an island with three hundred and seventy-four actions that bet keeps
 losing.
 
 ### A worker is a round trip

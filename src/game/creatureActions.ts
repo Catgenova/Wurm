@@ -378,6 +378,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.gainSkill('fighting', 0.3);
       g.gainSkill(usable.kind, 0.45);
       g.gainSkill('body_strength', 0.05);
+      // And, if it is dark enough to matter, what it teaches you about noticing.
+      g.fought(0.5);
       if (g.rand() > hitChance(g, usable)) {
         g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'event');
       } else {
@@ -439,6 +441,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
       g.gainSkill('fighting', 0.2);
       g.gainSkill('archery', 0.5);
+      // Picking a target out of the dark at range is the hardest looking there is.
+      g.fought(0.7);
       // The far end of a bow's range is a far harder shot than the near end.
       const reach = 1 - (d / (bow.range ?? 6)) * 0.35;
       if (g.rand() > hitChance(g, bow) * reach) {

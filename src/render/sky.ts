@@ -57,10 +57,22 @@ export function skyAt(dark: number, twilight: number): Sky {
  * its colour from the far sky makes the edge of what you know look like
  * distance instead — mist at noon, near black at midnight.
  */
-export function unknownInk(sky: Sky): RGB3 {
-  const base: RGB3 = [18, 57, 95];
-  const m = mix(base, sky.far, 0.5);
-  return [m[0] * 0.8, m[1] * 0.8, m[2] * 0.8];
+/**
+ * Ground nobody has ever laid eyes on: black.
+ *
+ * It used to take half its colour from the sky, which made the unknown a deep
+ * blue that read as *water at dusk* — so an island you had not walked looked
+ * like an island with a sea in the middle of it, and the edge of what you knew
+ * was a soft gradient rather than an edge. Black is not a colour the island
+ * has anywhere else, and that is the whole point of it: nothing is drawn there
+ * because there is nothing there to draw.
+ *
+ * It takes a `Sky` it no longer reads, because the horizon and the void used
+ * to be the same idea and every caller still passes one; the argument is what
+ * keeps the two apart rather than letting the void quietly become sky again.
+ */
+export function unknownInk(_sky: Sky): RGB3 {
+  return [0, 0, 0];
 }
 
 export const css = (c: RGB3): string => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;

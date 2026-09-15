@@ -32,11 +32,11 @@ import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bri
 import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
-import { Vision } from './vision';
+import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
-import { FIRE_REACH, lanternReach, OVEN_REACH, type LightSource } from './light';
+import { FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
@@ -156,6 +156,11 @@ export const DAY_SECONDS = 1440;
 export const DAWN = 6;
 export const DUSK = 20;
 const FORAGE_COOLDOWN = 180;
+/**
+ * How dark it has to be before a fight teaches you anything about noticing.
+ * Dusk is not night: a scuffle at seven in the evening is still fought by eye.
+ */
+const NIGHT_EYES_FROM = 0.35;
 /**
  * The things a single tile can be worked over for, each with its own
  * cooldown: picking berries does not stop you cutting the grass.
@@ -1149,6 +1154,8 @@ export class Game {
    * in whichever place the blow landed, and that wound has its own life.
    */
   hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
+    // Being hit in the dark teaches more about watching than hitting does.
+    this.fought(0.8);
     const hit = this.absorb(raw);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
@@ -1226,6 +1233,40 @@ export class Game {
   /** The lit lantern you are carrying, if you are carrying one. */
   litLantern(): Item | undefined {
     return this.inventory.items.find((it) => it.id === 'lantern' && it.lit && (it.charges ?? 0) > 0);
+  }
+
+  /**
+   * Anything you are carrying that is actually burning — a lantern or a torch.
+   *
+   * The best of them, so that a torch struck while a good lantern is already
+   * going does not shorten your sight. Everything that asks "is there a light
+   * in your hand" asks this; `litLantern` is kept for the one thing that is
+   * specifically about the candle.
+   */
+  heldLight(): Item | undefined {
+    let best: Item | undefined;
+    for (const it of this.inventory.items) {
+      if (!it.lit || (it.charges ?? 0) <= 0) continue;
+      if (!(HELD_LIGHTS as readonly string[]).includes(it.id)) continue;
+      if (!best || heldReach(it.id, it.ql) > heldReach(best.id, best.ql)) best = it;
+    }
+    return best;
+  }
+
+  /**
+   * A blow struck or taken, for whatever wants to know that a fight happened.
+   *
+   * Awareness is learned in exactly one place: fighting in the dark. Nothing
+   * teaches a person what they were not noticing like something coming out of
+   * it at them, and nothing else on this island teaches it at all — so the
+   * skill that decides how far you see is bought with the hours when you can
+   * see least. Weighted by how dark it actually is, so a scuffle at dusk is
+   * worth a fraction of one at the dead of night.
+   */
+  fought(weight = 1): void {
+    const dark = this.darkness();
+    if (dark <= NIGHT_EYES_FROM) return;
+    this.gainSkill(AWARENESS, weight * dark);
   }
 
   /**
@@ -1692,15 +1733,26 @@ export class Game {
       // Nothing knits while it is still open: see to the wound first.
       if (s.hunger > 0.2 && s.thirst > 0.2 && s.health < 1 && !this.bleeding()) s.health = Math.min(1, s.health + dt * 0.004);
     }
-    // A candle burns only while the wick is lit; a dark lantern costs nothing.
-    const lamp = this.litLantern();
-    if (lamp) {
-      lamp.charges = Math.max(0, (lamp.charges ?? 0) - dt);
-      if (lamp.charges <= 0) {
-        lamp.lit = false;
+    /*
+     * A light burns only while it is lit; a dark lantern costs nothing to
+     * carry. Every lit thing in the pack burns at once, because two torches
+     * held to the same night is two torches spent.
+     *
+     * A lantern that runs out goes dark and waits for another candle. A torch
+     * that runs out is gone: there is nothing left of it but char.
+     */
+    for (const it of this.inventory.items) {
+      if (!it.lit || !(HELD_LIGHTS as readonly string[]).includes(it.id)) continue;
+      it.charges = Math.max(0, (it.charges ?? 0) - dt);
+      if (it.charges > 0) continue;
+      it.lit = false;
+      if (it.id === 'torch') {
+        this.logMsg('The torch burns down to your hand and you drop what is left of it.', 'event');
+        this.inventory.remove(it.uid, 1);
+      } else {
         this.logMsg('The candle gutters out and the lantern goes dark.', 'event');
-        this.events.emit('inventory');
       }
+      this.events.emit('inventory');
     }
     this.tendWounds(dt);
     // Favour comes back on its own, at a trickle, up to what faith carries.

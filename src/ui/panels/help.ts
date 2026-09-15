@@ -136,18 +136,33 @@ function helpText(): string {
     <p>The island starts unknown and is uncovered by walking it. Ground comes in three states, and the
     map shows all three differently.</p>
     <table>
-      <tr><td><b>Unknown</b></td><td>Never laid eyes on. Nothing is drawn: no ground, no trees, and it
-      cannot be clicked or acted on.</td></tr>
-      <tr><td><b>In sight</b></td><td>Somebody is looking at it now. Drawn as it is, in full, with
-      everything standing on it.</td></tr>
-      <tr><td><b>Remembered</b></td><td>Walked, but not watched. Drawn cold and without detail, and
-      <b>as it was when you last saw it</b> &mdash; fell a wood, walk away, and the map keeps the trees
-      until you go back and look.</td></tr>
+      <tr><td><b>Unknown</b></td><td>Never laid eyes on. <b>Black</b>: no ground, no trees, nothing
+      drawn at all, and it cannot be clicked or acted on. Not a dark patch of map &mdash; a hole in
+      it.</td></tr>
+      <tr><td><b>In sight</b></td><td>Somebody is looking at it now. Drawn as it is, in full colour,
+      with everything standing on it.</td></tr>
+      <tr><td><b>Remembered</b></td><td>Walked, but not watched. Drawn in <b>grey</b>, without detail,
+      and <b>as it was when you last saw it</b> &mdash; fell a wood, walk away, and the map keeps the
+      trees until you go back and look. Colour is what an eye is getting now; a memory of a place is
+      its shape and nothing else.</td></tr>
     </table>
-    <p>How far you can see depends on where you stand and what hour it is. Fifteen tiles on the flat,
-    further from a hill &mdash; height is worth real distance &mdash; and the dark takes better than half
-    of it, which is what a <b>lit fire</b> is for: anything alight shows its own ground however black the
-    night. A ridge hides the hollow behind it, and a wood is about three trees deep to the eye. Your
+    <p>What you have seen is the map. The circle you can see from where you stand is what turns black
+    into grey, so the shape of the island is the shape of everywhere you have been.</p>
+    <h4>Awareness, and how far that circle reaches</h4>
+    <p><b>Awareness</b> is a characteristic like body strength, and it is the whole of how far you
+    see. Everybody washes ashore with a body and a mind half grown and nobody washes ashore able to
+    read a dark hillside, so it <b>starts at 1</b> where the others start at 20 &mdash; and the fifteen
+    tiles on the flat that this island used to give everybody is what it gives somebody at
+    <b>100</b>. At 1 you see a little over two fifths of that &mdash; six tiles on the flat against
+    fifteen. The early levels are worth the most: the
+    difference between six tiles and nine is the difference between being walked into and seeing it
+    coming.</p>
+    <p>It is learned in exactly one place: <b>fighting in the dark</b>. Nothing else on this island
+    teaches it at all. Nothing teaches a person what they were not noticing like something coming out
+    of the night at them &mdash; and it is weighted by how dark it actually is, so a scuffle at dusk is
+    worth a fraction of one at the dead of night. Taking a blow teaches more than landing one.</p>
+    <p>On top of that: <b>height is worth real distance</b>, a ridge hides the hollow behind it, a wood
+    is about three trees deep to the eye, and the <b>dark takes three quarters of everything</b>. Your
     settlement is watched while you hold it, and your own wildermon are eyes of their own wherever they
     are working.</p>
     <p>All of that is in Settings under <b>Fog of war</b>, if you would rather see the whole island at
@@ -622,16 +637,25 @@ function helpText(): string {
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
     <h3>Light after dark</h3>
-    <p>Night falls properly now, and something has to push back against it. Build a <b>lantern</b> (4
-    ribbons, 2 cloth and a shaft, hammered together &mdash; blacksmithing 24), <b>draw candles</b> from
-    beeswax and yarn, put one in and strike a light with a tinderbox. It burns <b>only while it is
-    lit</b>, so carrying a dark lantern costs nothing but its weight, and when the candle is done it
-    gutters out and says so.</p>
-    <p>A better lantern keeps the draught off the flame and throws further: <b>five tiles and about
-    seventeen minutes</b> to a candle at the roughest, <b>nine tiles and twenty-nine minutes</b> at the
-    best. Carrying one lit gives back most of what the dark takes from your sight &mdash; at the dead of
-    night you see <b>eight tiles</b> without one and <b>sixteen</b> with &mdash; and its reach is a
-    floor under your sight however black it gets.</p>
+    <p>Night takes <b>three quarters</b> of your sight, which is enough to be a reason to stop walking.
+    Two things go in your hand against it.</p>
+    <p>A <b>torch</b> is a shaft with a scrap of cloth wound round the head of it (ropemaking 6) and is
+    the poor relation in every way that matters: three to five tiles of light and <b>minutes</b> rather
+    than most of an hour, and when it is done it is gone &mdash; there is nothing left to refill.
+    What it has over a lantern is that anybody can wind one in the first hour of a new island, which
+    is exactly when the dark is worst.</p>
+    <p>A <b>lantern</b> (4 ribbons, 2 cloth and a shaft &mdash; blacksmithing 24) takes a <b>candle</b>
+    drawn from beeswax and yarn. A better one keeps the draught off the flame and throws further:
+    <b>five tiles and about seventeen minutes</b> to a candle at the roughest, <b>nine tiles and
+    twenty-nine minutes</b> at the best.</p>
+    <p>Either is <b>lit at a fire</b> &mdash; a campfire, a kiln, a smelter or an oven you are standing
+    at, or off something already alight in your own hand. (It used to ask for a tinderbox. There has
+    never been a tinderbox in this game, which meant nobody could ever light anything; the fire is a
+    better rule anyway.) Both burn <b>only while lit</b>, so carrying a dark lantern costs nothing but
+    its weight, and both say so when they go out.</p>
+    <p>Carrying one lit gives back most of what the dark takes from your sight, and its own reach is a
+    <b>floor</b> under your sight however black it gets: you can always see as far as the thing in
+    your hand throws.</p>
     <p>Everything else that burns casts a circle too: a <b>lit campfire</b> five tiles, an <b>oven,
     kiln or smelter</b> in blast four, and the two creatures that carry a light of their own whatever
     their own reach is. Each one burns a soft-edged hole in the night with a little firelight in it.

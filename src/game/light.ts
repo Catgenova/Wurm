@@ -34,6 +34,26 @@ export const candleBurn = (lanternQl: number): number => CANDLE_BURN * (0.7 + Ma
 /** How far a lantern throws, in tiles: five at the roughest, nine at the best. */
 export const lanternReach = (lanternQl: number): number => 5 + Math.round(Math.max(1, Math.min(100, lanternQl)) / 25);
 
+/**
+ * A torch: a rag on a stick, and the poor relation of the lantern in every way
+ * that matters. It throws less light, it burns for minutes rather than the
+ * better part of an hour, and when it is done it is done — there is nothing
+ * left to put a fresh candle in.
+ *
+ * What it has over a lantern is that anybody can make one out of a shaft and a
+ * scrap of cloth in the first hour of a new island, which is exactly when the
+ * dark is worst.
+ */
+export const TORCH_BURN = 5 * 60;
+/** How long this torch burns: a well-wound one holds its pitch. */
+export const torchBurn = (ql: number): number => TORCH_BURN * (0.7 + Math.max(1, Math.min(100, ql)) / 140);
+/** How far a torch throws: three at the roughest, five at the best. */
+export const torchReach = (ql: number): number => 3 + Math.round(Math.max(1, Math.min(100, ql)) / 50);
+
+/** Things you can carry alight, and how far each of them throws. */
+export const HELD_LIGHTS = ['lantern', 'torch'] as const;
+export const heldReach = (id: string, ql: number): number => (id === 'torch' ? torchReach(ql) : lanternReach(ql));
+
 /** What a lit fire throws, by what it is. */
 export const FIRE_REACH = 5;
 export const OVEN_REACH = 4;
