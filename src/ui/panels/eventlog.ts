@@ -1,3 +1,4 @@
+import { SAY_MAX } from '../../game/chat';
 import type { LogEntry, LogKind } from '../../game/events';
 import type { Game } from '../../game/game';
 import type { UIWindow } from '../windows';
@@ -71,7 +72,7 @@ export class EventLogPanel {
     this.input.type = 'text';
     this.input.className = 'log-input';
     this.input.placeholder = 'Say something… (Enter)';
-    this.input.maxLength = 200;
+    this.input.maxLength = SAY_MAX;
     this.input.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Enter') {

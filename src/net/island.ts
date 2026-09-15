@@ -969,6 +969,34 @@ export class Island {
   }
 
   /**
+   * Say something to everybody on the island.
+   *
+   * Nothing is drawn here. The line goes over, the island writes it into
+   * `event` with no `uid` on it, and it comes back down the subscription this
+   * browser is already listening to — the same way it reaches everybody else,
+   * at the same moment, in the same words. Drawn here as well it would appear
+   * twice; drawn here instead, the one person who could not tell whether it
+   * had been heard would be the one who said it.
+   *
+   * The only thing that comes back is a refusal, because a line the island
+   * declined to keep would otherwise vanish without a word.
+   */
+  async say(text: string): Promise<string | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_say', { p_world: this.info.id, p_text: text });
+    if (error) return error.message;
+    const said = data as { said?: string | null; why?: string } | null;
+    return said?.why ?? null;
+  }
+
+  /** What has been said lately, oldest first, for somebody just arriving. */
+  async recentChat(limit = 60): Promise<Array<{ n: number; text: string }>> {
+    if (!this.info) return [];
+    const { data } = await supabase().rpc('rpc_chat', { p_world: this.info.id, p_limit: limit });
+    return rowsIn<{ n: number; text: string }>(data);
+  }
+
+  /**
    * What time it is on the island: its own reading, carried forward.
    *
    * Pinned at the join and again at every heartbeat, and extrapolated between

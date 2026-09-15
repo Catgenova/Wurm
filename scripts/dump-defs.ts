@@ -56,6 +56,7 @@ import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
 import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
+import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
@@ -795,6 +796,7 @@ for (const [fn, v] of [
   /* And how far a wild thing drifts, and how long it stands between. */
   ['wild_reach', WILD_REACH], ['wild_rest', WILD_REST], ['wild_rest_spread', WILD_REST_SPREAD],
   ['hunger_rate', HUNGER_RATE], ['thirst_rate', THIRST_RATE],
+  ['say_max', SAY_MAX], ['say_a_minute', SAY_A_MINUTE],
   ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],
   ['wind_starving', WIND_STARVING], ['heal_rate', HEAL_RATE], ['heal_fed', HEAL_FED],
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],

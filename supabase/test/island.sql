@@ -4840,3 +4840,48 @@ select '680. the crate at ivar''s elbow holds '
                   from jsonb_array_elements((:'ground'::jsonb)->'crates') v
                   where (v->>'id')::int = 1), 'nothing at all')
      || ' — and one twenty tiles off would list none of them';
+
+\echo '--- a global chat'
+-- The event window has had a Talk tab and a box to type in since long before
+-- there was an island, and on an island neither did anything: a line went into
+-- the browser's own log and no further. Two people on the same tile could not
+-- tell each other so.
+--
+-- Almost all of it was already built for something else. `event` has a `uid`
+-- meaning *who it is for*, and a policy reading `uid = auth.uid() or uid is
+-- null` — so a row with no uid is already, exactly, a thing everybody on the
+-- island may read. It is already in the Realtime publication and the browser
+-- already draws whatever arrives on it.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '681. ivar says something with a newline in it: '
+     || coalesce((rpc_say(:'big', 'Hello  the island' || chr(10) || ' anyone about?'))->>'said', 'nothing')
+     || ' — tidied rather than refused, because a phone keyboard puts them in by accident';
+
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select (rpc_say(:'big', 'Over here')) \g /dev/null
+select '682. and hild, arriving, reads back ' || jsonb_array_length(rpc_chat(:'big', 10)) || ' lines: '
+     || (select string_agg(v->>'text', ' | ' order by (v->>'n')::bigint)
+         from jsonb_array_elements(rpc_chat(:'big', 10)) v);
+
+-- A name nobody can wear but their own: `rpc_say` reads it off the account
+-- rather than taking it from the caller, for the same reason `rpc_my_name`
+-- takes no argument.
+select '683. the name on a line is the island''s to write: '
+     || case when (select count(*) from jsonb_array_elements(rpc_chat(:'big', 10)) v
+                    where v->>'text' like '<Hild>%') = 1
+             then 'hild''s line is signed Hild, and there is nowhere to say otherwise'
+             else 'A CLIENT PUT A NAME IN' end;
+
+-- Twenty a minute, which is about the window rather than about load.
+do $$
+declare w uuid := (select id from world where name = 'Bigness'); n int := 0; i int; said jsonb;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', '22222222-2222-2222-2222-222222222222')::text, false);
+  for i in 1..say_a_minute()::int + 4 loop
+    said := rpc_say(w, 'line ' || i);
+    if said->>'said' is not null then n := n + 1; end if;
+  end loop;
+  raise notice '684. hild tries % lines in a row and gets % of them in — the rest are asked to give the others a moment',
+    say_a_minute()::int + 4, n;
+end $$;

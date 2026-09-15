@@ -26,6 +26,7 @@ import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
+import { cleanSaid } from './chat';
 import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
@@ -4401,11 +4402,28 @@ export class Game {
     this.events.emit('inventory');
   }
 
+  /**
+   * Somewhere for a line to go when there is an island listening.
+   *
+   * Filled in by `play.ts`, like `ask` and `stop`. Null in the game you play
+   * by yourself, where the only person who could hear you is you.
+   */
+  talk: ((text: string) => void) | null = null;
+
   say(text: string): void {
-    const trimmed = text.trim();
+    const trimmed = cleanSaid(text);
     if (!trimmed) return;
     if (trimmed.startsWith('/')) {
       this.command(trimmed.slice(1));
+      return;
+    }
+    /*
+     * On an island the line is not drawn here. It goes over, and comes back
+     * down the same subscription that carries it to everybody else — at the
+     * same moment and in the same words.
+     */
+    if (this.talk) {
+      this.talk(trimmed);
       return;
     }
     this.logMsg(`<${this.player.name}> ${trimmed}`, 'chat');

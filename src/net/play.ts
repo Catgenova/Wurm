@@ -288,6 +288,33 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   // Everything the island says, said here. The lines that arrived while the
   // land was still coming down go up first, in the order they were said.
   island.hooks.say = (text, kind) => game.write(text, kind as Parameters<Game['write']>[1]);
+
+  /*
+   * Talking, which the island keeps for everybody.
+   *
+   * The box in the event window has been there since before there was an
+   * island and did nothing on one: a line went into this browser's own log and
+   * no further. It goes over now and comes back down the subscription that is
+   * already open, which is how everybody else gets it — so nothing is drawn
+   * here, and the only thing that comes back is a refusal.
+   */
+  game.talk = (text: string) => {
+    void island.say(text).then((why) => {
+      if (why) game.write(why, 'error');
+    });
+  };
+
+  /*
+   * And what was said before you got here.
+   *
+   * A chat you cannot scroll back through after a refresh is not a persistent
+   * one. Sixty lines, oldest first, written straight into the log so they read
+   * exactly as they did when they were said — and before the subscription is
+   * carrying anything, so nothing lands twice.
+   */
+  void island.recentChat().then((lines) => {
+    for (const line of lines) game.write(line.text, 'chat');
+  });
   island.hooks.ground = (x, y) => game.events.emit('world', x, y);
   island.hooks.pack = (items: ItemRow[]) => {
     game.inventory.items = items.map((it) => ({
