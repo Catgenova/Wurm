@@ -62,6 +62,16 @@ had to be fixed before a big island would run at all: the pathfinder's buffers,
 the minimap's canvas, and the database laying down sixteen thousand animals the
 moment an island opened.
 
+The one the keeper is holding was founded on 15 September 2026, seed 7, 130 MB
+of land handed over in forty-six seconds:
+
+    ?island=b6cc06ac-3d60-41f6-9026-de02cb8555b1
+
+Founding another is the *Island* workflow with **found** ticked; it prints the
+new address. Nothing about the site points at any particular island — the
+address bar is still the only thing that decides, and with nothing in it the
+game is the single-player one it has always been.
+
 ### Who you are
 
 Between making the account and stepping ashore comes the second half of setting
