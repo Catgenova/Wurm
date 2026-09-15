@@ -5003,3 +5003,24 @@ select '697. and about somebody else''s, it still says only what anybody can see
          from (select jsonb_array_elements(rpc_creatures(:'big', 40)) r) q
          where not (r->>'mine')::boolean) kk
        where k in ('skills', 'xp', 'care', 'phase', 'carrying')) || ' of the five';
+
+\echo ''
+\echo '--- the front door'
+/*
+ * Founding an island has never moved it. The claim was written as a coalesce —
+ * "only when there is no home at all… not a door anybody can walk through
+ * twice" — so two islands founded and opened on the live project left everyone
+ * arriving at the oldest ground on it.
+ */
+select '698. the door opens on: ' || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere');
+select set_config('request.jwt.claims', json_build_object('sub', :'alice')::text, false) \g /dev/null
+select rpc_found('Elsewhere', 11, 1024, 512, 512) as door \gset
+select rpc_ready(:'door') \g /dev/null
+select '699. and after founding a second island over ' || found_max() || ' tiles a side: '
+     || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere')
+     || ' — which is what refounding was always supposed to mean';
+select rpc_found('A tab''s island', 13, 64, 32, 32) as small \gset
+select rpc_ready(:'small') \g /dev/null
+select '700. and after one a browser could have rolled: '
+     || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere')
+     || ' — the live smoke test founds sixty-four tiles every run and gives them back';
