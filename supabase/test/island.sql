@@ -3904,3 +3904,32 @@ do $$ begin
   exception when others then raise notice '618. and point the front door somewhere else: refused — %', sqlerrm; end;
 end $$;
 reset role;
+
+\echo ''
+\echo '--- the landing beach'
+-- Wildlife never moved before the clock, so a goblin at the spawn was scenery.
+-- It comes for you now, and a fresh body can do nothing about it.
+select '619. nothing hunts within ' || peace_reach() || ' tiles of where people wash ashore: '
+     || 'the spawn itself is ' || at_peace(:'world2', (select spawn_x + 0.5 from world where id = :'world2'),
+                                           (select spawn_y + 0.5 from world where id = :'world2'))
+     || ', a tile ' || (peace_reach() + 1) || ' away is '
+     || at_peace(:'world2', (select spawn_x + 0.5 + peace_reach() + 1 from world where id = :'world2'),
+                 (select spawn_y + 0.5 from world where id = :'world2'));
+do $$
+declare w uuid := (select id from world where name = 'Faraway');
+        sx int; sy int; i int; beach int := 0; beyond int := 0;
+begin
+  select spawn_x, spawn_y into sx, sy from world where id = w;
+  perform setseed(0.5);
+  for i in 1..400 loop
+    if exists (select 1 from wild_table t where t.monster and t.species = pick_wild(w, sx, sy)) then
+      beach := beach + 1;
+    end if;
+    if exists (select 1 from wild_table t where t.monster
+               and t.species = pick_wild(w, sx + peace_reach()::int + 40, sy)) then
+      beyond := beyond + 1;
+    end if;
+  end loop;
+  raise notice '620. four hundred things put down on the beach and four hundred well past it: % hunters on the beach, % beyond it',
+    beach, beyond;
+end $$;

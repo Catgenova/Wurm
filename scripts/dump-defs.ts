@@ -55,7 +55,7 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
-import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
+import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 
@@ -779,7 +779,7 @@ for (const [fn, v] of [
   ['chunk_size', CHUNK],
   /* And the biggest island a tab may found, which is how the keeper tells a
      browser's island from the tool's. */
-  ['found_max', FOUND_MAX],
+  ['found_max', FOUND_MAX], ['peace_reach', PEACE_REACH],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
