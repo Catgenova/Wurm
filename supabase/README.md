@@ -119,6 +119,14 @@ travel allowed in one step. The ceiling clamps that gap at ten seconds, so it
 was never actually reachable; relying on a clamp somewhere else to save a
 mistake here is not a reason to make it.
 
+One of the shifted timestamps currently buys nothing, and that is worth saying
+before somebody reads the list and assumes otherwise. `item.made_at` moves back
+with the rest, so a plank made at bedtime is honestly nine minutes old in the
+morning — but the browser's ground decay, which is the only rule that would
+*read* that age, is not ported. Nothing left outside on this island rots yet.
+The shift is there so that the day decay arrives it is already carried through
+a night, rather than being a thing somebody has to remember.
+
 One thing is a named departure rather than a port. The browser burns a night's
 banked rest only while you are actually working — standing about does not spend
 it. Nothing here knows whether you are working, and building something that did
