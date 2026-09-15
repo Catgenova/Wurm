@@ -129,6 +129,29 @@ The number keys are the one exception: they are not in the table above and
 cannot be rebound, because they always answer to whatever the Tile window or
 the toolbelt is offering.
 
+### How long things take
+
+Every `baseTime` in the action and recipe tables is a **weight**, not a number
+of seconds: felling a tree is worth more than picking a berry and the tables
+say by how much. What sets the clock is one number in `src/game/pace.ts` —
+mining is the yardstick, and a beginner with a plain pickaxe spends **thirty
+seconds** on a face of rock. Everything else keeps the ratio to that it always
+had, so re-pacing the whole game is one edit.
+
+Skill and a good tool cut it from there: the same rock is about seventeen
+seconds at mining 50 with a middling pick and eight at 90 with a fine one. The
+floor — the shortest a go at anything can be — moves with the pace, so the
+quickest jobs stay quick relative to everything else rather than all landing on
+the same second.
+
+Postgres prices a job the same way, through `act_duration`, which reads an
+`action_pace()` generated from that same constant. Neither side has a number of
+its own to drift with, and the suite checks the two agree.
+
+The world's own clock is a separate thing and was not re-paced: how fast a crop
+comes on, how long a kiln burns, how long a brew works. A field ripens in rather
+fewer swings of a pickaxe than it used to.
+
 ## What is in the game
 
 - **Terrain like Wurm's.** A 1024×1024 tile island — a million tiles, about
@@ -287,9 +310,9 @@ the toolbelt is offering.
   about three hundred jobs and a fine one for over a thousand. Past 75 damage
   it warns in red, and again every five points after; at 100 it breaks and is
   gone. Repair is its own skill: right-click a damaged thing and the work goes
-  a second at a time, taking damage out and a little quality with it — half a
-  minute and a couple of points of quality for a beginner, a few seconds and
-  half a point for a skilled hand.
+  a few seconds at a time, taking damage out and a little quality with it — a
+  couple of minutes and a couple of points of quality for a beginner, far
+  fewer goes and half a point for a skilled hand.
 - **Deed orders.** The deed menu sets one stance for every wildermon kept
   there, and it fires when something wild crosses the border: aggressive ones
   break off work and go for it, defensive ones answer only what has struck at

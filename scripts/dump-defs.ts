@@ -53,6 +53,7 @@ import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
+import { ACTION_FLOOR, ACTION_PACE, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT } from '../src/game/pace';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -713,6 +714,24 @@ for (const [fn, v] of [
   ['groom_cap', GROOM_CAP], ['breed_rest', BREED_REST], ['gestation', GESTATION],
   ['rest_cap', REST_CAP], ['rest_mult', REST_MULT], ['rest_per_second', REST_PER_SECOND],
   ['dawn_hour', DAWN], ['day_seconds', DAY_SECONDS],
+  /*
+   * What one unit of `base_time` is worth in seconds, and the shortest a go at
+   * anything can be. `base_time` in `action_def` and `recipe` is a weight, not
+   * a clock — see `src/game/pace.ts` — and these two are what turn it into
+   * one. Generated for the same reason as everything else here: the browser
+   * and the database have to price a job the same, and two hand-written
+   * numbers are two numbers that drift.
+   */
+  ['action_pace', ACTION_PACE], ['action_floor', ACTION_FLOOR], ['worker_weight', WORKER_WEIGHT],
+  /*
+   * And the yardstick itself, so that the suite can check it has not drifted:
+   * `act_duration(base_time('mine'), 0, 0, 1)` must come to `mining_seconds()`,
+   * which walks the whole chain — the weight, the pace and the floor — in one
+   * sentence. Change mining's weight without changing `MINING_WEIGHT` and
+   * every timer in the game quietly re-prices itself around a mining job that
+   * is no longer thirty seconds; this is what notices.
+   */
+  ['mining_seconds', MINING_SECONDS], ['mining_weight', MINING_WEIGHT],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

@@ -3561,3 +3561,27 @@ select '562. and after one: ' || (select count(*) from world_stocked where world
 select creature_stock_near(:'big', 2600, 2048) \g /dev/null
 select '563. arriving two blocks over: ' || (select count(*) from world_stocked where world_id = :'big')
      || ' blocks out now, and ' || (select count(*) from creature where world_id = :'big') || ' wild things on the island';
+
+\echo ''
+\echo '--- how long everything takes'
+-- `base_time` is a weight, not a clock. Mining is the yardstick: a beginner
+-- with a plain pickaxe spends thirty seconds on a face of rock, and every
+-- other job keeps the ratio to that it always had.
+select '564. the yardstick: a beginner at the rock takes '
+     || round(act_duration((select base_time from action_def where id = 'mine'), 0, 0, 1))
+     || ' seconds, and it is meant to take ' || round(mining_seconds())
+     || ' — ' || case when act_duration((select base_time from action_def where id = 'mine'), 0, 0, 1) = mining_seconds()
+                      then 'they agree' else 'THEY HAVE DRIFTED' end;
+select '565. and mining still weighs ' || (select base_time from action_def where id = 'mine')
+     || ' against the ' || round(mining_weight()) || ' the pace was worked out from';
+select '566. the same rock with skill and a good tool: '
+     || string_agg(round(act_duration((select base_time from action_def where id = 'mine'), s.skill, s.ql, 1)) || 's at skill '
+                   || s.skill || ' with a QL ' || s.ql || ' pick', ', ' order by s.skill)
+  from (values (1, 20), (50, 50), (90, 90)) s(skill, ql);
+select '567. the shortest a go at anything can be: ' || act_duration(0, 99, 99, 1)
+     || ' seconds, which is the old 1.2 at the new pace';
+select '568. a spread of jobs, for the feel of it: '
+     || string_agg(a.label || ' ' || round(act_duration(a.base_time, 1, 20, 1)) || 's', ', ' order by a.base_time, a.id)
+  from action_def a where a.id in ('forage', 'dig', 'mine', 'make_large_cart', 'make_wagon');
+select '569. and a worker over the same task takes ' || round(work_duration(20))
+     || ' seconds at skill 20, which is twice what a hand of that skill would';

@@ -13,6 +13,7 @@ import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
 import type { WoundKind } from './wounds';
 import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel } from './traits';
+import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -1608,7 +1609,7 @@ export const creatureLevel = (c: Creature): number => 1 + Math.floor(Math.max(0,
 
 /** How long a deed worker takes over a task: twice what a player of the same skill would. */
 export function workDuration(skill: number): number {
-  return 2 * Math.max(1.2, 5 * (1 - skill / 140));
+  return 2 * Math.max(ACTION_FLOOR, WORKER_WEIGHT * ACTION_PACE * (1 - skill / 140));
 }
 
 type MoveResult = 'arrived' | 'moving' | 'blocked';

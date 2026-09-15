@@ -22,6 +22,7 @@ import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
+import { ACTION_FLOOR, ACTION_PACE } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { ALL_GOALS } from './journal';
@@ -2197,10 +2198,20 @@ export class Game {
     return Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y);
   }
 
+  /**
+   * How long a go at something takes.
+   *
+   * `baseTime` is a weight rather than a number of seconds — see `pace.ts` —
+   * so the pace is what turns it into a clock. Skill and a good tool shorten
+   * it from there, and the floor moves with the pace so that the quickest jobs
+   * stay quick relative to everything else rather than all landing on the same
+   * second.
+   */
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
     const toolQl = def.tool ? this.toolQl(def.tool) : 0;
-    return Math.max(1.2, def.baseTime * (1 - skill / 140) * (1 - toolQl / 400) * this.controlSpeed());
+    return Math.max(ACTION_FLOOR,
+      def.baseTime * ACTION_PACE * (1 - skill / 140) * (1 - toolQl / 400) * this.controlSpeed());
   }
 
   /**

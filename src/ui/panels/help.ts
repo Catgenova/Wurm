@@ -706,10 +706,10 @@ function helpText(): string {
     is for: a rough tool is good for about three hundred jobs and a fine one for over a thousand. Damage
     also makes a tool work as though it were poorer than it is. Past <b>75 damage</b> it warns you in
     red, and again at every five points after; at 100 it breaks and is gone.</p>
-    <p>Right-click anything damaged and choose <b>Repair</b>. It is its own skill: the work goes on a
-    second at a time, taking damage out and a little quality with it, and you can stop whenever you
-    like. A green repairer takes about half a minute to bring a badly worn tool back and costs it a
-    couple of points of quality; a skilled one does the same in a few seconds for half a point. Nothing
+    <p>Right-click anything damaged and choose <b>Repair</b>. It is its own skill: the work goes on a few
+    seconds at a time, taking damage out and a little quality with it, and you can stop whenever you
+    like. A green repairer needs a couple of minutes to bring a badly worn tool back and costs it a
+    couple of points of quality; a skilled one takes far fewer goes over it, for half a point. Nothing
     repairs past quality 1, so a thing mended often enough is finished in the end &mdash; but that is a
     long way off, and a good tool kept mended will outlast most of what you build with it.</p>
     <h3>Wounds, herbs and covers</h3>
