@@ -4672,3 +4672,42 @@ select '663. and somebody who comes ashore today is '
 select '664. a full stomach lasts ' || round((1 / hunger_rate() / 3600)::numeric, 1)
      || ' hours and a full throat ' || round((1 / thirst_rate() / 3600)::numeric, 1)
      || ' — thirst still running ahead of hunger by the half it always did';
+
+\echo '--- the hour, told rather than counted'
+-- "Day and night only seem to change on client refresh." The island's clock
+-- was never the thing that was wrong: `hour_of_day()` reads the island's own
+-- age against `day_seconds()` and has been right since the world's pace moved.
+--
+-- The browser read it once, at the join, and then added up frames — and a
+-- frame is capped at a tenth of a second, so that a tab coming back from a
+-- stall cannot walk anybody across an island in one step. Every scrap of real
+-- time past that cap is gone, and a tab nobody is looking at gets no frames to
+-- cap at all. So the browser's clock fell behind and stayed behind, and a
+-- reload was the only thing that ever put it right.
+--
+-- The heartbeat carries the island's own reading now. What is checked here is
+-- that it carries it at all, and that the island's two answers about the same
+-- clock — the hour, and whether it is dark — cannot drift apart from one
+-- another without this saying so.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+
+update world set epoch = now() - make_interval(secs => 2 * day_seconds() / 24)
+  where id = :'world2' \g /dev/null
+select (rpc_settle()) as beat2 \gset
+select '665. at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' the heartbeat says night: '
+     || coalesce((:'beat2'::jsonb)->>'night', 'nothing')
+     || ' — and hands over ' || coalesce(round(((:'beat2'::jsonb)->>'time')::numeric)::text, 'nothing')
+     || ' seconds of island, which is a clock and not a picture to draw';
+
+update world set epoch = now() - make_interval(secs => 12 * day_seconds() / 24)
+  where id = :'world2' \g /dev/null
+select (rpc_settle()) as beat12 \gset
+select '666. and at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' it says night: '
+     || coalesce((:'beat12'::jsonb)->>'night', 'nothing')
+     || ' — the same two answers the island gives itself: '
+     || case when ((:'beat12'::jsonb)->>'night')::boolean = is_night(:'world2')
+                 and abs(((:'beat12'::jsonb)->>'time')::double precision - world_time(:'world2')) < 2
+            then 'they agree' else 'THEY HAVE COME APART' end;
+
+select '667. a day on this island runs ' || round((day_seconds() / 60)::numeric) || ' minutes, dawn at '
+     || round(dawn_hour()::numeric) || ' — so a session sees the sun move, if anything is telling it to';

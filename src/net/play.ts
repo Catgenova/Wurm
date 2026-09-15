@@ -188,6 +188,14 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     time: island.time(),
   });
 
+  /*
+   * The hour comes from the island from here on, rather than being counted up
+   * a frame at a time on this machine. Reported as "day and night only seem to
+   * change on client refresh", and a reload was indeed the only thing that
+   * ever put the clock right.
+   */
+  game.islandClock = () => island.time();
+
   /** What was last asked about, so the bar has something to point at. */
   let lastTarget: Target | null = null;
 

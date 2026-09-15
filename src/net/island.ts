@@ -355,6 +355,9 @@ export class Island {
     if (error) throw new Error(`The island would not have us: ${error.message}`);
     const got = data as { world: WorldRow; you: PlayerRow; new: boolean };
     this.info = got.world;
+    // The hour, straight away, so the first frame is drawn in the island's
+    // light rather than in whatever this browser last believed.
+    this.pinClock((got as { time?: unknown }).time);
     this.me = got.you;
 
     const size = got.world.size;
@@ -571,7 +574,12 @@ export class Island {
         queue?: string[] | null; cap?: number | null;
         stats?: Record<string, number> | null; skills?: Record<string, number> | null;
         marks?: { tiles?: number[]; secs?: number } | null;
+        time?: number | null; night?: boolean | null;
       };
+      // The hour, on the beat every browser makes anyway. Nothing else has to
+      // happen for the sun to move, and nothing can make it drift for long.
+      this.pinClock(said.time);
+      if (typeof said.night === 'boolean') this.islandNight = said.night;
       this.hooks.mine?.({
         queue: rowsIn<string>(said.queue),
         cap: said.cap ?? null,
@@ -960,11 +968,50 @@ export class Island {
     await this.pulse();
   }
 
-  /** What time it is on the island, worked out rather than asked for. */
+  /**
+   * What time it is on the island: its own reading, carried forward.
+   *
+   * Pinned at the join and again at every heartbeat, and extrapolated between
+   * them against `performance.now()` — which is monotonic, is not the wall
+   * clock, and keeps running while the tab is asleep. So the hour is right
+   * while somebody is playing, right the moment they come back from a locked
+   * screen, and cannot drift further than one heartbeat's worth of the two
+   * clocks running at different speeds.
+   *
+   * It was `Date.now()` against the island's epoch, which is the same answer
+   * on a machine whose clock is right and a wrong one everywhere else — and
+   * an island where one person sees midnight and another sees noon is not a
+   * shared island. That is kept only for the moment before the first pin.
+   */
   time(): number {
+    if (this.clock) return this.clock.secs + (performance.now() / 1000 - this.clock.at);
     if (!this.info) return 0;
     return (Date.now() - new Date(this.info.epoch).getTime()) / 1000;
   }
+
+  /** The island's last word on its own clock, and when this machine heard it. */
+  private clock: { secs: number; at: number } | null = null;
+
+  /** Take the island's reading, against a clock of ours that only goes forward. */
+  private pinClock(secs: unknown): void {
+    if (typeof secs !== 'number' || !Number.isFinite(secs) || secs < 0) return;
+    this.clock = { secs, at: performance.now() / 1000 };
+  }
+
+  /**
+   * The island's own answer to "is it dark", which nothing draws from.
+   *
+   * The browser works the darkness out from the hour exactly as it always
+   * has — two authorities on one fact is how these two ends have come apart
+   * every other time. This is here to be compared against what the browser
+   * decided, so a day that drifts apart again is found by asking rather than
+   * by somebody lighting a lantern at noon.
+   */
+  night(): boolean | null {
+    return this.islandNight;
+  }
+
+  private islandNight: boolean | null = null;
 
   async leave(): Promise<void> {
     if (this.beat) clearTimeout(this.beat);

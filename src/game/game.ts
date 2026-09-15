@@ -415,6 +415,26 @@ export class Game {
   readonly ground = new Map<string, Item[]>();
   /** Game seconds since the world was created. */
   time = 0;
+
+  /**
+   * What time it is on the island, when there is one, in seconds since it
+   * began. Null in the game you play by yourself, where this browser's own
+   * count is the only clock there is.
+   *
+   * "Day and night only seem to change on client refresh." This is why. The
+   * hour used to be `time`, and `time` is added up a frame at a time — with a
+   * frame capped at a tenth of a second, so that a tab coming back from a
+   * stall does not walk anybody a minute across the island in one step. Every
+   * scrap of real time past that cap is gone, and a tab that is not being
+   * drawn at all gets no frames to cap. So on a phone the clock fell behind by
+   * most of the session, and the one thing that ever put it right was a reload
+   * reading the hour again.
+   *
+   * A seam rather than a number, filled in by `play.ts`, because what is
+   * behind it is the island's own reading pinned against a monotonic clock —
+   * and a monotonic clock keeps running while a tab is asleep.
+   */
+  islandClock: (() => number) | null = null;
   rand: () => number = Math.random;
   private foraged = new Map<number, number>();
 
@@ -1377,7 +1397,8 @@ export class Game {
 
   /** Hours since midnight, 0 up to 24. */
   hourOfDay(): number {
-    return ((this.time % DAY_SECONDS) / DAY_SECONDS) * 24;
+    const secs = this.islandClock ? this.islandClock() : this.time;
+    return ((((secs % DAY_SECONDS) + DAY_SECONDS) % DAY_SECONDS) / DAY_SECONDS) * 24;
   }
 
   /** The clock as it reads on the hud: "06:30". */
@@ -1410,16 +1431,28 @@ export class Game {
     const h = this.hourOfDay();
     const hours = h < DAWN + 0.5 ? DAWN + 0.5 - h : 24 - h + DAWN + 0.5;
     const seconds = (hours / 24) * DAY_SECONDS;
-    this.time += seconds;
-    // Everything that works by itself carries on working while you are under.
-    if (this.campfires.size) this.burnFires(seconds);
-    if (this.smelters.size) this.runSmelters(seconds);
-    if (this.kilns.size) this.runKilns(seconds);
-    if (this.furniture.size) this.runPlaceables(seconds);
-    if (this.posts.size) this.runPosts(seconds);
-    if (this.traps.size) this.runTraps(seconds);
-    if (this.crops.size) this.growCrops();
-    if (this.ground.size) this.applyDecay(seconds);
+    /*
+     * On an island the night belongs to everybody standing in it.
+     *
+     * Winding this browser's clock on to dawn was honest while the clock was
+     * this browser's. It is the island's now, and one sleeper cannot move the
+     * sun for the rest of them — so the rest is still banked and the sun is
+     * left where it stands. The line below says which of the two happened
+     * rather than reporting a morning that did not come.
+     */
+    const skipped = !this.islandClock;
+    if (skipped) {
+      this.time += seconds;
+      // Everything that works by itself carries on working while you are under.
+      if (this.campfires.size) this.burnFires(seconds);
+      if (this.smelters.size) this.runSmelters(seconds);
+      if (this.kilns.size) this.runKilns(seconds);
+      if (this.furniture.size) this.runPlaceables(seconds);
+      if (this.posts.size) this.runPosts(seconds);
+      if (this.traps.size) this.runTraps(seconds);
+      if (this.crops.size) this.growCrops();
+      if (this.ground.size) this.applyDecay(seconds);
+    }
     const s = this.player.stats;
     s.stamina = 1;
     s.health = Math.min(1, s.health + 0.25 * rest);
@@ -1429,8 +1462,11 @@ export class Game {
     this.gainSkill('body_stamina', 0.3 * rest);
     // A good bed banks more of the night than a poor one.
     const banked = this.bankRest(seconds, rest);
+    const bank = banked > 1 ? ` You have ${clockLeft(this.player.rested)} of rest in you; while it burns, everything teaches you twice as much.` : '';
     this.logMsg(
-      `You sleep in the ${what} and wake at ${this.clock()}, rested.${banked > 1 ? ` You have ${clockLeft(this.player.rested)} of rest in you; while it burns, everything teaches you twice as much.` : ''}`,
+      skipped
+        ? `You sleep in the ${what} and wake at ${this.clock()}, rested.${bank}`
+        : `You doze in the ${what} and wake rested. It is still ${this.clock()} — the night runs on for everybody on the island, and it is not one sleeper's to skip.${bank}`,
       'event',
     );
     this.events.emit('world', this.player.tileX, this.player.tileY);
