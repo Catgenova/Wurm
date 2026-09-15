@@ -79,10 +79,10 @@ export const foamAlpha = (swell: number, force: number): number => 0.3 + 0.34 * 
  * by the first of those.
  */
 
-/** Light teal at the water's edge. */
-export const WATER_SHALLOW: readonly [number, number, number] = [132, 220, 214];
-/** Dark deep blue at the bottom of it. */
-export const WATER_DEEP: readonly [number, number, number] = [8, 26, 72];
+/** Bright green-teal at the water's edge. */
+export const WATER_SHALLOW: readonly [number, number, number] = [112, 228, 198];
+/** Deep teal at the bottom of it. */
+export const WATER_DEEP: readonly [number, number, number] = [5, 48, 62];
 
 /** How many colours the ramp is cut into, and how deep each step reaches. */
 export const WATER_STEPS = 40;
@@ -116,7 +116,7 @@ export function waterRgb(depth: number): [number, number, number] {
 export const WATER_PALETTE: readonly string[] = Array.from({ length: WATER_STEPS }, (_, i) => {
   const depth = i * WATER_STEP_UNITS;
   const [r, g, b] = waterRgb(depth);
-  return `rgba(${r},${g},${b},${(0.34 + 0.61 * waterT(depth)).toFixed(3)})`;
+  return `rgba(${r},${g},${b},${(0.58 + 0.4 * waterT(depth)).toFixed(3)})`;
 });
 
 /** The step a depth lands on, for anybody indexing the palette directly. */
