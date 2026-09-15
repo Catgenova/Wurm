@@ -16,6 +16,7 @@ import { generateAtlasWorld } from '../../src/world/atlas-world';
 import { TILE_DEFS } from '../../src/world/tiles';
 import { supabase, signIn, PROJECT } from '../../src/net/supabase';
 import { readAtlas } from '../../tools/atlas-node';
+import { ACTION_PACE } from '../../src/game/pace';
 
 const SIZE = Number(process.env.ISLAND_SIZE ?? 64);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -29,7 +30,23 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  * un-settled `prospect` took four unrelated checks down with it. Anything with
  * a clock on it goes through here.
  */
-async function settle(ms = 12000): Promise<void> {
+/**
+ * How long to wait for a job, in seconds.
+ *
+ * Every budget in this file was written against a world where a go at
+ * something took a second or two, and they are all really counted in *jobs*
+ * rather than in seconds. Actions are paced now — `src/game/pace.ts` — and the
+ * first live run after that re-pacing failed here with exactly the sentence
+ * `drain`'s own comment warns about: an instant action that did not answer at
+ * once, which is a true sentence about a false cause. The cause was that
+ * `drain` gave up after thirty seconds on a queue that now needs a hundred.
+ *
+ * Multiplied rather than raised, so re-pacing the game again cannot quietly
+ * do it a second time.
+ */
+const waitFor = (jobs: number): number => Math.ceil(jobs * ACTION_PACE);
+
+async function settle(ms = waitFor(12) * 1000): Promise<void> {
   for (let i = 0; i < ms / 1000; i++) {
     await sleep(1000);
     await supabase().rpc('rpc_sweep');
@@ -45,7 +62,7 @@ async function settle(ms = 12000): Promise<void> {
  * instant action that did not answer at once, which is a true sentence about
  * a false cause.
  */
-async function drain(id: string, uid: string, tries = 30): Promise<number> {
+async function drain(id: string, uid: string, tries = waitFor(30)): Promise<number> {
   for (let i = 0; i < tries; i++) {
     const { data } = await supabase().from('player').select('act,act_queue').eq('world_id', id).eq('uid', uid).single();
     const left = ((data?.act_queue ?? []) as unknown[]).length + (data?.act ? 1 : 0);
@@ -564,7 +581,7 @@ async function main(): Promise<void> {
        * first tile change of any kind stops before the digging has begun.
        */
       const groundWas = ground.length;
-      for (let i = 0; i < 60 && ground.length === groundWas; i++) {
+      for (let i = 0; i < waitFor(60) && ground.length === groundWas; i++) {
         await sleep(1000);
         await supabase().rpc('rpc_sweep');
       }
@@ -615,9 +632,19 @@ async function main(): Promise<void> {
      * After the digging rather than before it: dropping a thing moves a tile,
      * and a tile that moves arrives on the same channel the dig is waiting on.
      */
-    // Nothing left running, and nothing that the island refuses to put down:
-    // digging leaves dirt in the pack, and dirt goes back in a hole.
-    await drain(id, uid);
+    /*
+     * Nothing left running, and nothing that the island refuses to put down:
+     * digging leaves dirt in the pack, and dirt goes back in a hole.
+     *
+     * The answer is checked rather than thrown away. It used to be discarded,
+     * so a `drain` that gave up while the head was still full read as two
+     * unrelated failures further down — "an instant action that did not answer
+     * at once" and "nothing reached the ground" — and neither of them said the
+     * true thing, which is that the queue was still busy.
+     */
+    const emptied = await drain(id, uid);
+    check('the head is empty before we look at anything', emptied === 0,
+      emptied === 0 ? 'nothing left running' : 'THE QUEUE NEVER EMPTIED — everything below is about that');
     const mine = await supabase().from('item').select('id,def,count')
       .eq('world_id', id).eq('holder_uid', uid).eq('holder', 'player').neq('def', 'dirt').limit(1);
     const one = (mine.data ?? [])[0] as { id: number; def: string; count: number } | undefined;
@@ -634,17 +661,17 @@ async function main(): Promise<void> {
         const here = await supabase().from('player').select('x,y').eq('world_id', id).eq('uid', uid).single();
         const got = await island.act('pick_up',
           { kind: 'ground', x: Math.floor(here.data?.x ?? 0), y: Math.floor(here.data?.y ?? 0), uid: lying.id }, 1);
-        // Picking a thing up takes a second of somebody's time, so it has to
-        // be waited out and nudged like any other job with a clock on it.
+        // Picking a thing up takes a few seconds of somebody's time, so it has
+        // to be waited out and nudged like any other job with a clock on it.
         let left = 1;
-        for (let i = 0; i < 20 && left > 0; i++) {
+        for (let i = 0; i < waitFor(20) && left > 0; i++) {
           await sleep(1000);
           await supabase().rpc('rpc_sweep');
           const { count } = await supabase().from('item').select('*', { count: 'exact', head: true })
             .eq('world_id', id).eq('holder', 'ground').eq('id', lying.id);
           left = count ?? 0;
         }
-        await settle(2000);
+        await settle(waitFor(2) * 1000);
         check('and pick it up again', got.started && left === 0,
           got.why ?? (left === 0 ? 'it is back in the pack' : 'it is still on the grass'));
       }
