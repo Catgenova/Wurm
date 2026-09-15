@@ -1,6 +1,7 @@
 import { Game } from '../game/game';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
+import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import type { ActionDef, Target } from '../game/actions';
@@ -8,15 +9,21 @@ import type { ActionDef, Target } from '../game/actions';
 /**
  * Starting on an island that lives in Postgres rather than in this tab.
  *
- * The join is decided by the address bar, and nothing else in the program has
- * to know which of the two it got:
+ * The front door opens on the island. With nothing in the address bar at all
+ * this asks the keeper which island it keeps and comes ashore on it, which is
+ * what a front door should do — a page that needs a uuid pasted into it is not
+ * one. The rest of the address bar still decides the unusual cases:
  *
- *   ?island=<id>     come ashore on one that exists
+ *   (nothing)        come ashore on the island this keeper keeps
+ *   ?island=<id>     come ashore on a particular one
  *   ?found=<name>    roll a small one here, hand it over, and be its first
+ *   ?alone           play by yourself, in this browser, with no keeper at all
  *
- * With neither, the game is the single-player one it has always been, kept in
- * this browser. That path is untouched — an island is an addition, not a
- * replacement, and a page that cannot reach the keeper still has a game.
+ * The single-player game is still all there and still saved in this browser;
+ * it is one link away rather than the default. It is also where this lands
+ * when the keeper cannot be reached or keeps no island yet — a page that
+ * cannot get to the island should still have a game, and should say which it
+ * gave you and why.
  */
 
 export interface Started {
@@ -25,13 +32,49 @@ export interface Started {
   id: string;
 }
 
+/** How long the front door waits for an answer before giving you the other game. */
+const ASK_HOME_MS = 8000;
+
 /** A line on the loading screen, since founding an island is not instant. */
 type Telling = (text: string) => void;
 
+/**
+ * Which island this keeper keeps, if it keeps one.
+ *
+ * One small read of one small table. It is not an id anybody can set from a
+ * browser: whoever could would be pointing every visitor at an island of their
+ * own, so `home` is written by a migration and by the opening of an island
+ * bigger than a tab may found, and by nothing else.
+ */
+async function homeIsland(): Promise<string | null> {
+  /*
+   * With a clock on it, because this is the first thing the page does.
+   *
+   * A front door that hangs is worse than one that opens on the wrong room:
+   * the single-player game is right there, and eight seconds is already longer
+   * than anybody should spend looking at a notice. A keeper that has not
+   * answered by then is a keeper that is not answering.
+   */
+  const asked = supabase().from('home').select('island').limit(1).maybeSingle();
+  const timeout = new Promise<never>((_, no) =>
+    setTimeout(() => no(new Error('The island keeper did not answer.')), ASK_HOME_MS));
+  const { data, error } = await Promise.race([asked, timeout]);
+  if (error) throw new Error(`Could not ask the keeper which island it keeps: ${error.message}`);
+  return ((data ?? {}) as { island?: string | null }).island ?? null;
+}
+
 export async function startIsland(params: URLSearchParams, tell: Telling): Promise<Started | null> {
-  const joining = params.get('island');
+  if (params.has('alone')) return null;
   const founding = params.get('found');
-  if (!joining && founding === null) return null;
+  let joining = params.get('island');
+  if (!joining && founding === null) {
+    tell('Asking which island…');
+    joining = await homeIsland();
+    if (!joining) {
+      tell('This keeper has no island on it yet — playing on your own instead.');
+      return null;
+    }
+  }
 
   /**
    * What to call you.

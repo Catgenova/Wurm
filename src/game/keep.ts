@@ -116,6 +116,17 @@ export const BODY_EVERY = 0.2;
  */
 export const RECONCILE_EVERY = 20;
 
+/**
+ * The biggest island a tab may found.
+ *
+ * A 4096 world is three minutes of ground and 138 MB of land: a thing done
+ * once by `tools/found-island.ts`, and no way at all to spend a tab somebody
+ * is waiting on. The keeper reads the same number, because it is also how it
+ * tells the tool's island from a browser's — and so which islands may become
+ * the one the front door opens on.
+ */
+export const FOUND_MAX = 512;
+
 /** An island nobody has stood on for a month goes back to the sea. */
 export const ISLAND_KEEP = 30 * 24 * 3600;
 

@@ -147,6 +147,25 @@ async function main(): Promise<void> {
   });
   check('signed in anonymously', !!uid, uid);
 
+  /*
+   * Which island the front door opens on.
+   *
+   * The page has no uuid to paste any more — it asks the keeper. So this is
+   * the first thing a visitor's browser does, and if it comes back empty the
+   * front door opens on the single-player game for everybody, quietly. Worth
+   * one round trip and one honest failure.
+   */
+  {
+    const { data: home } = await supabase().from('home').select('island').limit(1).maybeSingle();
+    const island = ((home ?? {}) as { island?: string | null }).island ?? null;
+    const { data: which } = island
+      ? await supabase().from('world').select('name,size,ready').eq('id', island).maybeSingle()
+      : { data: null };
+    const w = (which ?? null) as { name: string; size: number; ready: boolean } | null;
+    check('the keeper knows which island the front door opens on', !!w?.ready,
+      w ? `${w.name}, ${w.size} tiles a side` : island ? 'it names an island that is not there' : 'it names nothing at all');
+  }
+
   const heard: Array<[string, string]> = [];
   const ground: Array<[number, number]> = [];
   const island = new Island({

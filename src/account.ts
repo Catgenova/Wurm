@@ -35,6 +35,7 @@ const tabNew = $<HTMLButtonElement>('tab-new');
 const tabBack = $<HTMLButtonElement>('tab-back');
 const peek = $<HTMLButtonElement>('peek');
 const alone = $<HTMLAnchorElement>('alone');
+const plain = $<HTMLAnchorElement>('ashore-plain');
 const lede = $<HTMLParagraphElement>('lede');
 const maker = $<HTMLElement>('maker');
 const mirror = $<HTMLCanvasElement>('me');
@@ -61,7 +62,13 @@ for (const key of ['island', 'found', 'size', 'seed']) {
   if (had !== null) carried.set(key, had);
 }
 const toGame = `./index.html${carried.toString() ? `?${carried}` : ''}`;
-alone.href = toGame;
+plain.href = toGame;
+// And the single-player game, which is still all here and still saved in this
+// browser. It is a link rather than the default now: the front door opens on
+// the island.
+const byMyself = new URLSearchParams(carried);
+byMyself.set('alone', '1');
+alone.href = `./index.html?${byMyself}`;
 
 type Mode = 'new' | 'back';
 let mode: Mode = 'new';

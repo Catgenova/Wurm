@@ -33,14 +33,17 @@ unreachable list refused rather than waved through. Because no address can
 receive anything, **a forgotten password is a lost account**; the page says so
 before you choose one.
 
-An account is an addition, not a toll. Settings (`O`) links to the page, and
-the single-player island in your browser has never needed one.
+An account is an addition, not a toll. Settings (`O`) links to the page, the
+island takes a Wanderer without one, and the single-player island in your
+browser has never needed anybody's permission at all.
 
 ### The island the keeper serves
 
-`?island=<id>` comes ashore on an island kept in Postgres. That island is now
-**4096 tiles a side** — sixteen kilometres across, 268 km², against the one
-square kilometre a 256-tile island covers.
+The front door opens on an island kept in Postgres. Open the site with nothing
+in the address bar and it asks the keeper which island it keeps and comes
+ashore on it — a page that needs a uuid pasted into it is not a front door.
+That island is **4096 tiles a side**: sixteen kilometres across, 268 km²,
+against the one square kilometre a 256-tile island covers.
 
 What makes it affordable is that the land stops travelling. The join used to
 download the whole world before you could take a step: `rpc_land` scanline by
@@ -65,12 +68,33 @@ moment an island opened.
 The one the keeper is holding was founded on 15 September 2026, seed 7, 130 MB
 of land handed over in forty-six seconds:
 
-    ?island=b6cc06ac-3d60-41f6-9026-de02cb8555b1
+    b6cc06ac-3d60-41f6-9026-de02cb8555b1
 
-Founding another is the *Island* workflow with **found** ticked; it prints the
-new address. Nothing about the site points at any particular island — the
-address bar is still the only thing that decides, and with nothing in it the
-game is the single-player one it has always been.
+You do not have to know that. The `home` table holds it, the page reads it, and
+the address bar decides only the unusual cases:
+
+| in the address bar | what you get |
+| --- | --- |
+| nothing | the island this keeper keeps |
+| `?island=<id>` | a particular island |
+| `?found=<name>` | a small one, rolled here and handed over |
+| `?alone` | the single-player game, in this browser, with no keeper at all |
+
+`home` is one row and nothing with a browser can write it — whoever could would
+be pointing every visitor at an island of their own. It is set by a migration,
+and claimed by the opening of an island bigger than a tab may found (512
+tiles), which is what tells `tools/found-island.ts` apart from somebody's page.
+The keeper also refuses to reap it: everything else goes back to the sea after
+a month with nobody on it, and a home island in a quiet month would take the
+front door with it.
+
+The single-player game is all still there and still saved in this browser. It
+is one link away rather than the default, and it is also where the page lands
+when the keeper cannot be reached — with a line saying which game you got and
+why, because a page that cannot reach the island should still have a game.
+
+Founding another island is the *Island* workflow with **found** ticked; it
+prints the new address.
 
 ### Who you are
 

@@ -2435,6 +2435,7 @@ create or replace function sweep_every() returns double precision language sql i
 create or replace function sweep_rows() returns double precision language sql immutable as $fn$ select 5000::double precision $fn$;
 create or replace function region_size() returns double precision language sql immutable as $fn$ select 256::double precision $fn$;
 create or replace function chunk_size() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
+create or replace function found_max() returns double precision language sql immutable as $fn$ select 512::double precision $fn$;
 create or replace function favour_trickle() returns double precision language sql immutable as $fn$ select 0.0016::double precision $fn$;
 create or replace function prayer_favour() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
 create or replace function prayer_rest() returns double precision language sql immutable as $fn$ select 2400::double precision $fn$;

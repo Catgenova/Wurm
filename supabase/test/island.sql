@@ -3866,3 +3866,41 @@ begin
   raise notice '613. four hundred straight lines across real generated ground, read in squares and read in strips: '
                '% disagreements, and % of the lines were stopped short by the ground itself', bad, stopped;
 end $$;
+
+\echo ''
+\echo '--- which island the front door opens on'
+-- Coming ashore used to need somebody to hand you a uuid. The keeper knows
+-- which island is the one now, in a row nothing with a browser can write.
+select '614. the front door opens on ' || coalesce((select w.name || ', ' || w.size || ' tiles a side'
+        from world w join home h on h.island = w.id), 'nowhere');
+-- Rockhaven is eight tiles across and was opened long before the big one. A
+-- browser is capped at found_max, so an island over it came from the tool, and
+-- that is the whole of what makes this claim ungameable.
+select '615. the islands that were opened first and did not claim it: '
+     || coalesce((select string_agg(name || ' (' || size || ')', ', ' order by size)
+                  from world where ready and size <= found_max()), 'none')
+     || ' — a browser is capped at ' || found_max()
+     || ' tiles, so anything over that came from the tool, and that is the whole of what makes the claim ungameable';
+do $$
+declare w uuid := (select island from home); was timestamptz;
+begin
+  if w is null then raise notice '616. no home island to leave alone'; return; end if;
+  select made_at into was from world where id = w;
+  update world set made_at = now() - interval '60 days' where id = w;
+  update player set seen_at = now() - interval '60 days' where world_id = w;
+  update keeper set swept_at = to_timestamp(0);
+  perform world_tick();
+  raise notice '616. sixty days with nobody on the home island: %',
+    case when exists (select 1 from world where id = w)
+         then 'still there, because the sea does not take the one the front door opens on'
+         else 'GONE, AND THE FRONT DOOR NOW OPENS ON NOTHING' end;
+  update world set made_at = was where id = w;
+end $$;
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '617. a client can read which island that is: ' || coalesce((select island::text from home), 'none');
+do $$ begin
+  begin update home set island = null; raise notice '618. and point the front door somewhere else: ALLOWED';
+  exception when others then raise notice '618. and point the front door somewhere else: refused — %', sqlerrm; end;
+end $$;
+reset role;

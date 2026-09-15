@@ -4,7 +4,7 @@ import type { TileType } from '../world/tiles';
 import { blankWorld, rowsOf } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { supabase, signIn } from './supabase';
-import { BODY_EVERY, HEARTBEAT, RECONCILE_EVERY, REGION } from '../game/keep';
+import { BODY_EVERY, FOUND_MAX, HEARTBEAT, RECONCILE_EVERY, REGION } from '../game/keep';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -34,7 +34,6 @@ const UPLOAD_BATCH = 32;
  * one — and this is the line between them, said out loud rather than
  * discovered at minute two.
  */
-const FOUND_MAX = 512;
 /**
  * How often we tell the island where we are.
  *

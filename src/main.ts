@@ -78,22 +78,30 @@ const seedParam = params.get('seed');
 await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
 
 /**
- * An island kept somewhere else, if the address bar asks for one.
+ * The island, which is what this page is now.
  *
- * `?island=<id>` comes ashore on one that exists; `?found=<name>` rolls a new
- * one here and hands it over. With neither, everything below is exactly the
- * single-player game it has always been, kept in this browser — an island is
- * an addition, and a page that cannot reach the keeper still has a game.
+ * With nothing in the address bar this asks the keeper which island it keeps
+ * and comes ashore on it. `?island=<id>` goes to a particular one, `?found=`
+ * rolls a small one, and `?alone` is the single-player game — still all here,
+ * still saved in this browser, one link away rather than the default.
+ *
+ * It is also the fallback. A keeper that cannot be reached, or that has no
+ * island on it yet, leaves you with the game in this browser and a line saying
+ * which one you got and why; a page that cannot reach the island should still
+ * have a game.
  */
 const tellBoot = (text: string): void => {
   const notice = document.querySelector('#boot span');
   if (notice) notice.textContent = text;
 };
 let started = null;
+let why = '';
 try {
   started = await startIsland(params, tellBoot);
+  if (!started && !params.has('alone')) why = 'The island keeper has no island on it yet.';
 } catch (e) {
-  tellBoot(`${e instanceof Error ? e.message : 'The island keeper did not answer'} — playing on your own instead.`);
+  why = e instanceof Error ? e.message : 'The island keeper did not answer.';
+  tellBoot(`${why} — playing on your own instead.`);
   await new Promise<void>((done) => setTimeout(done, 2500));
 }
 const island = started?.island ?? null;
@@ -311,6 +319,21 @@ const loop = new GameLoop(
 loop.start();
 // The island is up and the first frame is drawn; the notice can go.
 document.getElementById('boot')?.remove();
+
+/*
+ * Say which game this is, when it is not the island.
+ *
+ * Landing in the single-player game without having asked for it used to be the
+ * only thing that could happen, so it needed no explaining. Now it means
+ * something went wrong or you chose it, and either way the way back is worth
+ * one line rather than a shrug.
+ */
+if (!island) {
+  game.write(why
+    ? `${why} This is the game kept in this browser instead — reload to try the island again.`
+    : 'You are playing by yourself, in this browser. Drop the ?alone from the address to come ashore on the island.',
+    'system');
+}
 
 // Have the store open before anything asks it to write, so that the save on
 // the way out of the page is a write rather than a request to open a database.
