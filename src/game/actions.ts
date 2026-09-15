@@ -682,7 +682,16 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.03,
     baseTime: 5,
     applies: (t, g) => DIGGABLE_PLANT_TILES.has(tile(t, g)) && g.inventory.has('sprout'),
-    check: (_t, g) => (g.inventory.has('sprout') ? null : 'You have no sprout to plant.'),
+    check: (t, g) => {
+      if (!g.inventory.has('sprout')) return 'You have no sprout to plant.';
+      // A grown tile of tree is something you walk round, not through, and the
+      // sprout becomes that tile the moment it goes in. Planted underfoot it
+      // closes over the person who planted it.
+      if (t.kind === 'tile' && t.x === g.player.tileX && t.y === g.player.tileY) {
+        return 'You would be planting it under your own feet. Step off the tile first.';
+      }
+      return null;
+    },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const sprout = g.inventory.find('sprout');

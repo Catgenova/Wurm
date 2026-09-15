@@ -204,9 +204,20 @@ export class Player {
   private tryMove(world: World, nx: number, ny: number, step: (x0: number, y0: number, x1: number, y1: number) => number | null): boolean {
     const tx = Math.floor(nx);
     const ty = Math.floor(ny);
-    if (!world.isPassable(tx, ty)) return false;
     const fx = this.tileX;
     const fy = this.tileY;
+    /*
+     * A body can always walk out of somewhere it should not be.
+     *
+     * The first stride of any walk stays inside the tile the body started in,
+     * so asking whether that tile may be entered pins anyone who is already
+     * standing in one that may not: all three attempts fail, the path is
+     * thrown away, and the only way out is to take the obstacle down. Whoever
+     * ends up inside a tree — by planting one, by somebody else planting one,
+     * or by a tile change arriving from the island — gets to leave on foot.
+     * Walking *into* a blocked tile is refused exactly as before.
+     */
+    if (!world.isPassable(tx, ty) && !(tx === fx && ty === fy)) return false;
     if (fx !== tx || fy !== ty) {
       const level = step(fx, fy, tx, ty);
       if (level === null) return false;

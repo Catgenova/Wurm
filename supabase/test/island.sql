@@ -3611,3 +3611,18 @@ select '575. corn is ' || round((select stage_seconds * 3 from crop_def where id
      || 'jobs did — the two paces are 3.75 and 2.5, so that ratio does not come all the way back. '
      || 'What does come back exactly is the day: ' || round((select stage_seconds * 3 from crop_def where id = 'corn')
         / day_seconds() * 100) || ' hundredths of one, which is what it always was';
+
+\echo ''
+\echo '--- a sprout under your own feet'
+-- A tree is the one tile on this island that nothing can stand on, and `plant`
+-- makes the ground into one. Asking nothing about where the planter stood let
+-- somebody wall themselves in with a sprout and chop their way back out.
+select land_set_tile(:'world2', 11, 9, 0) \g /dev/null
+select give(:'world2', :'ivar', 'sprout', 1, 20, 'Oak') \g /dev/null
+update player set x = 11.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+select '576. stood on 11,9 and asked to plant the sprout there: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'plant', '{"kind":"tile","x":11,"y":9}'::jsonb),
+                 'ALLOWED — AND THE PLANTER IS WALLED IN');
+update player set x = 12.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+select '577. one step to the side, the same tile and the same sprout: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'plant', '{"kind":"tile","x":11,"y":9}'::jsonb), 'allowed');
