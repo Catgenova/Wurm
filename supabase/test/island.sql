@@ -4626,3 +4626,38 @@ select '658. and not a word about when: '
      || case when (select count(*) from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
                    where v ? 'legAt' or v ? 'legEnds') = 0
              then 'no instants travel at all' else 'IT STILL SENDS INSTANTS' end;
+
+\echo '--- the address a name wears'
+-- The suffix was `@players.wurm.invalid`, chosen because RFC 2606 guarantees
+-- `.invalid` reaches nobody. Auth agrees so thoroughly that it refuses the
+-- address outright, from a list of barred host suffixes in its own source that
+-- no project setting can reach — so every account made under it failed, and
+-- one migration earlier the landing page became the only way ashore.
+\set oldtimer '7a7a7a7a-7a7a-7a7a-7a7a-7a7a7a7a7a7a'
+\set newcomer '7b7b7b7b-7b7b-7b7b-7b7b-7b7b7b7b7b7b'
+reset role;
+insert into auth.users (id, email) values
+  (:'oldtimer', 'oldtimer@players.wurm.invalid'),
+  (:'newcomer', 'newcomer@catgenova.github.io');
+
+select '659. a name goes out as ' || name_email('Newcomer')
+     || ' — at a host that resolves and keeps no mailbox, rather than one the internet forbids';
+
+-- Both suffixes are read; only the first is ever handed out.
+select '660. and comes back from ' || (select count(*) from unnest(name_domains())) || ' suffixes: '
+     || coalesce(email_name('NEWCOMER@catgenova.github.io'), 'nothing')
+     || ', ' || coalesce(email_name('oldtimer@players.wurm.invalid'), 'nothing')
+     || ' — and from a stranger''s: ' || coalesce(email_name('someone@example.com'), 'nothing');
+
+-- The bug this half exists to prevent: read only the current suffix and a name
+-- somebody already holds reads as free, and the next person to ask gets it.
+select '661. is oldtimer free? ' || rpc_name_free('oldtimer')::text
+     || ' — is newcomer? ' || rpc_name_free('newcomer')::text
+     || ' — is nobodyatall? ' || rpc_name_free('nobodyatall')::text;
+
+select set_config('request.jwt.claims', json_build_object('sub', :'oldtimer')::text, false) \g /dev/null
+select '662. somebody who came ashore before the suffix moved is still '
+     || coalesce(rpc_my_name(), 'NAMELESS');
+select set_config('request.jwt.claims', json_build_object('sub', :'newcomer')::text, false) \g /dev/null
+select '663. and somebody who comes ashore today is '
+     || coalesce(rpc_my_name(), 'NAMELESS');

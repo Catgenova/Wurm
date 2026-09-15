@@ -25,7 +25,7 @@ end $$;
 -- and, since accounts arrived, for a name to come out of.
 --
 -- The address is not decoration here: a username *is* an address in this game
--- (`alice` signs in as `alice@players.wurm.invalid`), so the unique index Auth
+-- (`alice` signs in as `alice@catgenova.github.io`), so the unique index Auth
 -- keeps over this column is the thing that makes a name yours, and a shim
 -- without it would test the account rules against a database where two people
 -- could be called the same thing.

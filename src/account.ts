@@ -231,8 +231,9 @@ async function attempt(): Promise<void> {
     if (made.unconfirmed) {
       /**
        * Auth made the account and will not let anybody in until a
-       * confirmation mail is answered — and the address is at `.invalid`, so
-       * that mail reached nobody and never will. Said plainly, with the
+       * confirmation mail is answered — and the address is a name at a host
+       * with no mailbox behind it, so that mail reached nobody and never
+       * will. Said plainly, with the
        * setting named, because the alternative is a page that looks like it
        * worked and an account that can never be used.
        */

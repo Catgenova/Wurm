@@ -10,15 +10,26 @@ import { supabase } from './supabase';
  * is being asked for one and nobody is being sent anything — so the username
  * becomes one:
  *
- *     alice  ->  alice@players.wurm.invalid
+ *     alice  ->  alice@catgenova.github.io
  *
- * `.invalid` is reserved by RFC 2606 and can never be delegated to anybody, so
- * that address is guaranteed to reach no one, forever. What it buys is that
- * signing up **is** the reservation: the unique index Auth already keeps over
- * its own addresses is the index that makes a name yours, so there is no
- * window between "free when I looked" and "mine now" for a second browser to
- * get into. No lock, no retry, and no second authority to disagree with the
- * first.
+ * That is the host this game is served from. It resolves, because `*.github.io`
+ * is a DNS wildcard, so an Auth that wants to know whether a domain exists is
+ * satisfied by it; it publishes no MX record, so mail addressed there is
+ * refused by the internet rather than delivered to somebody.
+ *
+ * The suffix used to be `@players.wurm.invalid`, on the grounds that RFC 2606
+ * reserves `.invalid` so that it can never reach anybody — which was true, and
+ * which Auth refuses outright. Its list of barred host suffixes lives in
+ * GoTrue's own source rather than in a project's settings, so there was
+ * nothing anybody could turn off: every account made under it failed with
+ * "Email address is invalid". The old suffix is still recognised on the way
+ * in. It is never handed out again.
+ *
+ * What the trick buys, either way, is that signing up **is** the reservation:
+ * the unique index Auth already keeps over its own addresses is the index that
+ * makes a name yours, so there is no window between "free when I looked" and
+ * "mine now" for a second browser to get into. No lock, no retry, and no
+ * second authority to disagree with the first.
  *
  * What it costs is written down where it will be read rather than hidden here:
  * an address that reaches no one cannot carry a reset link, so **a forgotten
@@ -40,7 +51,14 @@ import { supabase } from './supabase';
  */
 
 /** The suffix a username wears so that Auth has an address to sign in. */
-const DOMAIN = '@players.wurm.invalid';
+const DOMAIN = '@catgenova.github.io';
+/**
+ * And the suffixes it used to wear. Tried on the way in, never handed out, so
+ * that an account made before the suffix moved still opens. The island keeps
+ * the same list in `name_domains()`, which is what stops it handing somebody
+ * else a name that is already spoken for under the old one.
+ */
+const OLD_DOMAINS = ['@players.wurm.invalid'];
 /** Three to twenty, a letter first. The same expression as `name_ok()` in SQL. */
 const SHAPE = /^[a-z][a-z0-9_-]{2,19}$/;
 /** Eight, as asked. */
@@ -59,6 +77,10 @@ export const foldName = (raw: string): string => raw.trim().toLowerCase();
 
 /** The address a username signs in with. */
 export const nameEmail = (name: string): string => foldName(name) + DOMAIN;
+
+/** Every address this name might already be signed up under, the current one first. */
+const everyEmail = (name: string): string[] =>
+  [DOMAIN, ...OLD_DOMAINS].map((suffix) => foldName(name) + suffix);
 
 /** What is wrong with this name, in a sentence, or null if nothing is. */
 export function nameTrouble(raw: string): string | null {
@@ -189,13 +211,13 @@ export async function nameFree(name: string): Promise<boolean> {
  * passed through as it came rather than flattened into "something went wrong",
  * which is the message that helps nobody.
  */
-function inOurWords(message: string): string {
+function inOurWords(message: string, address: string): string {
   const m = message.toLowerCase();
   if (m.includes('already registered') || m.includes('already been registered')) return 'That name is taken. Try another.';
   if (m.includes('invalid login credentials')) return 'No account of that name with that password.';
   if (m.includes('password should be at least')) return `Eight characters at the very least.`;
   if (m.includes('email address') && m.includes('invalid')) {
-    return 'The island keeper will not accept an address ending .invalid, which is what a username becomes here. Its Auth settings need that restriction lifted.';
+    return `The island keeper refused the address ${address}, which is what the name you typed becomes here. That is a domain Auth will not take, and it is not something a setting can allow — the suffix the island hands out has to change, and src/net/accounts.ts is where it is written.`;
   }
   if (m.includes('rate limit') || m.includes('too many')) return 'That is a lot of tries in a short time. Wait a minute and go again.';
   if (m.includes('signups not allowed') || m.includes('signup is disabled')) return 'The island keeper is not taking new accounts at the moment.';
@@ -256,7 +278,7 @@ export async function createAccount(rawName: string, password: string): Promise<
   }
 
   const { data, error } = await sb.auth.signUp({ email: nameEmail(name), password });
-  if (error) throw new Error(inOurWords(error.message));
+  if (error) throw new Error(inOurWords(error.message, nameEmail(name)));
   /**
    * The quiet duplicate.
    *
@@ -277,10 +299,28 @@ export async function createAccount(rawName: string, password: string): Promise<
 export async function signInAs(rawName: string, password: string): Promise<string> {
   const name = foldName(rawName);
   const sb = supabase();
-  const { error } = await sb.auth.signInWithPassword({ email: nameEmail(name), password });
-  if (error) throw new Error(inOurWords(error.message));
-  await sb.rpc('rpc_my_name');
-  return name;
+  /*
+   * Every address this name could be under, in turn.
+   *
+   * Normally that is one address and one request. It is a list because the
+   * suffix moved once, and somebody who got an account before it moved should
+   * not be locked out by a change they never saw. Only a refusal that means
+   * "no such account or wrong password" is worth trying the next suffix for;
+   * anything else — rate limits, an Auth that is down — is the real answer and
+   * asking again would only make it worse. The message kept is the first one,
+   * so what the player reads is about the address they would have today.
+   */
+  let refusal = '';
+  for (const email of everyEmail(name)) {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (!error) {
+      await sb.rpc('rpc_my_name');
+      return name;
+    }
+    if (!refusal) refusal = inOurWords(error.message, email);
+    if (!/invalid login credentials/i.test(error.message)) break;
+  }
+  throw new Error(refusal);
 }
 
 /**
