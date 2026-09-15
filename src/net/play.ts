@@ -2,7 +2,7 @@ import { Game } from '../game/game';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { Island, type ItemRow, type PlayerRow } from './island';
-import { generateWorld } from '../world/generate';
+import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import type { ActionDef, Target } from '../game/actions';
 
 /**
@@ -67,7 +67,16 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
      */
     const size = Number(params.get('size')) || 256;
     const seed = (Math.random() * 0x7fffffff) >>> 0;
-    const gen = generateWorld(seed, size);
+    /*
+     * From the survey chart, not from the old radial mask.
+     *
+     * This has to be the generator the *join* uses, or an island is one shape
+     * the day it is founded and another shape the day somebody comes back to
+     * it: founding uploads what was rolled here, and joining works the ground
+     * out from the seed. Two generators is two islands that have to agree
+     * forever, and they would not.
+     */
+    const gen = generateAtlasWorld(seed, await loadAtlas(), size);
     id = await island.found(gen.world, founding || 'An island', gen.spawn);
     /**
      * Put the island's name in the address bar.

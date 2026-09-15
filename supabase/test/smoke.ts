@@ -12,9 +12,10 @@
  * should not silt the database up a little more every commit.
  */
 import { Island } from '../../src/net/island';
-import { generateWorld } from '../../src/world/generate';
+import { generateAtlasWorld } from '../../src/world/atlas-world';
 import { TILE_DEFS } from '../../src/world/tiles';
 import { supabase, signIn, PROJECT } from '../../src/net/supabase';
+import { readAtlas } from '../../tools/atlas-node';
 
 const SIZE = Number(process.env.ISLAND_SIZE ?? 64);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -99,10 +100,17 @@ async function main(): Promise<void> {
     progress: (done, total, what) => {
       if (done === total || done % (total > 200 ? 256 : 32) === 0) say(`        ${what}… ${Math.round((done / total) * 100)}%`);
     },
+    // The join works the ground out from the chart rather than downloading it,
+    // and `loadAtlas` is an Image and a canvas. There is neither out here, so
+    // the chart is read the way `tools/` reads it — the same bytes, decoded by
+    // hand instead of by a browser.
+    chart: async () => readAtlas(),
   });
 
   const seed = (Math.random() * 0x7fffffff) >>> 0;
-  const gen = generateWorld(seed, SIZE);
+  // The same generator the join uses, or the island handed over and the island
+  // come back to are two different islands.
+  const gen = generateAtlasWorld(seed, readAtlas(), SIZE);
   say(`  rolled a ${SIZE}×${SIZE} island, seed ${seed}, spawn ${gen.spawn.x},${gen.spawn.y}`);
 
   let id = '';

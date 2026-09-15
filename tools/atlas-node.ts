@@ -8,11 +8,9 @@
  * game ships carries a second PNG decoder it never runs.
  */
 import { inflateSync } from 'node:zlib';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { buildRegionMap } from '../src/world/regions';
-import type { Atlas } from '../src/world/atlas-world';
+import { ATLAS_PNG } from '../src/world/atlas-data';
+import { ATLAS_CONFIG, fillInlandWater, type Atlas, type AtlasConfig } from '../src/world/atlas-world';
 
 /**
  * Minimal PNG reader (8-bit truecolour, non-interlaced) so the atlas can be
@@ -67,11 +65,19 @@ function decodePng(file: Buffer): { w: number; ch: number; px: Buffer } {
   return { w, ch, px };
 }
 
-export function readAtlas(): Atlas {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(join(here, '../src/world/atlas-data.ts'), 'utf8');
-  const b64 = /base64,([A-Za-z0-9+/=]+)/.exec(src);
-  if (!b64) throw new Error('no atlas in src/world/atlas-data.ts');
+/**
+ * The chart, decoded.
+ *
+ * It reads the imported constant rather than the file it lives in. That is not
+ * a nicety: reading the file meant `import.meta.url` had to point at `tools/`,
+ * which it does when the script is run in place and does not when the bundle
+ * is written to `node_modules/.cache` — which is where CI writes it. The job
+ * died on `ENOENT` a tenth of a second in, having founded nothing. Imported,
+ * esbuild inlines it and the bundle runs from anywhere.
+ */
+export function readAtlas(cfg: AtlasConfig = ATLAS_CONFIG): Atlas {
+  const b64 = /base64,([A-Za-z0-9+/=]+)/.exec(ATLAS_PNG);
+  if (!b64) throw new Error('the atlas is not a base64 data URL');
   const img = decodePng(Buffer.from(b64[1], 'base64'));
   const n = img.w;
   const elev = new Float32Array(n * n);
@@ -82,5 +88,9 @@ export function readAtlas(): Atlas {
     ridge[i] = img.px[i * img.ch + 1] / 255;
     moist[i] = img.px[i * img.ch + 2] / 255;
   }
+  // The same last step `loadAtlas` takes, because the two have to come out
+  // with the same chart: land generated here and land generated in a browser
+  // are the same island only if the thing they are generated from is.
+  if (!cfg.lakes) fillInlandWater(elev, n);
   return { n, elev, ridge, moist, region: buildRegionMap(elev, n) };
 }

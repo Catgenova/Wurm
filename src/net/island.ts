@@ -91,6 +91,13 @@ export interface IslandHooks {
   pack: (items: ItemRow[]) => void;
   /** Getting an island down takes a moment; this says how it is going. */
   progress?: (done: number, total: number, what: string) => void;
+  /**
+   * How to read the survey chart, for anybody joining from outside a browser.
+   *
+   * Left out, it is `loadAtlas`, which is an `Image` and a canvas. The smoke
+   * test runs in Node and has neither, so it passes the reader in `tools/`.
+   */
+  chart?: () => Promise<Atlas>;
 }
 
 /**
@@ -225,9 +232,18 @@ export class Island {
     await this.watch(worldId);
   }
 
-  /** The survey chart, read once per tab and kept. */
+  /**
+   * The survey chart, read once and kept.
+   *
+   * `loadAtlas` goes through an `Image` and a canvas, which is the right way to
+   * do it in a tab and no way at all anywhere else — the smoke test joins a
+   * real island from Node and died on `Image is not defined` the moment the
+   * join started generating ground. So whoever is joining may say how the
+   * chart is read, and a browser, which is almost always the answer, says
+   * nothing and gets the browser's way.
+   */
   private async chart(): Promise<Atlas> {
-    if (!this.atlas) this.atlas = await loadAtlas();
+    if (!this.atlas) this.atlas = await (this.hooks.chart ?? loadAtlas)();
     return this.atlas;
   }
 

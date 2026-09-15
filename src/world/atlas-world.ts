@@ -86,7 +86,7 @@ export async function loadAtlas(png = ATLAS_PNG, cfg = ATLAS_CONFIG): Promise<At
 }
 
 /** Floods the ocean in from the border; water it never reaches is a lake. */
-function fillInlandWater(elev: Float32Array, n: number): void {
+export function fillInlandWater(elev: Float32Array, n: number): void {
   const seen = new Uint8Array(n * n);
   const stack: number[] = [];
   for (let x = 0; x < n; x++) stack.push(x, (n - 1) * n + x);

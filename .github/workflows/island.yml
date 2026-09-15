@@ -123,6 +123,15 @@ jobs:
           npx esbuild supabase/test/landtrip.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/landtrip.mjs --log-level=error
           node node_modules/.cache/landtrip.mjs
+      - name: The island handed over is the island come back to
+        run: |
+          # Founding uploads what was rolled; joining works the ground out from
+          # the seed and never downloads it. Two generators that disagreed
+          # would put every player on ground the rules do not believe in, and
+          # nothing else in this suite would notice.
+          npx esbuild supabase/test/agree.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/agree.mjs --log-level=error
+          node node_modules/.cache/agree.mjs
 
   migrate:
     name: Push the migrations to the project
@@ -194,6 +203,11 @@ jobs:
           SIZE: ${{ inputs.size }}
           SEED: ${{ inputs.seed }}
         run: |
+          # `pipefail`, because without it this step reported success while the
+          # tool was dying on its second line: a pipeline answers for its last
+          # command, and `tee` always succeeds. A founding job that founds
+          # nothing and says it worked is worse than one that fails.
+          set -o pipefail
           # The one time the land travels. After this nobody downloads it
           # again: a join carries the seed and every browser works out the
           # ground it is standing on. Postgres keeps this copy because the
