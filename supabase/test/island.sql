@@ -4959,3 +4959,47 @@ select '692. so it is let go — mode ' || mode || ' — and its keeper is told:
      || coalesce((select text from event where world_id = :'big' and uid = :'nolands'
                   order by at desc limit 1), 'NOTHING, which was the bug')
 from creature where world_id = :'big' and id = :'orphan';
+
+\echo ''
+\echo '--- and somebody to ask them'
+/*
+ * Every worker measurement above calls `worker_settle` by hand, and all of
+ * them passed while nothing in the database called it at all. So: the door the
+ * island actually opens, and a count of who can reach the rules behind it.
+ */
+select '693. functions on this island that ask a worker to do its day: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.prokind = 'f'
+           and p.prosrc like '%worker_settle(%' and p.proname <> 'worker_settle')
+     || ' — ' || coalesce((select string_agg(p.proname, ', ' order by p.proname)
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.prokind = 'f'
+           and p.prosrc like '%worker_settle(%' and p.proname <> 'worker_settle'),
+         'NOBODY, which was the bug');
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select creature_spawn(:'big', 'rabba', 2040.5, 2041.5, 'stored', now() - interval '3 hours', :'ivar') as hand \gset
+select act_perform(:'big', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'hand' || '}')::jsonb) \g /dev/null
+-- Starving and a quarter of an hour owed, which is how the reported one stood.
+update creature set hunger = 0, until = now() - interval '900 seconds',
+    leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
+    settled_at = now() - interval '900 seconds'
+  where world_id = :'big' and id = :'hand' \g /dev/null
+select '694. a forager on the books, idle at the token, and nobody calling anything by hand — '
+     || creature_sweep(:'big', 2040.5, 2040.5) || ' things stirred by somebody merely looking';
+select '695. and it has been working: foraging ' || round((skills->>'foraging')::numeric, 2)
+     || ' from 1, phase ' || phase || ', with '
+     || (select count(*) from foraged f where f.world_id = :'big' and f.kind = 'forage')
+     || ' beds behind it'
+from creature where world_id = :'big' and id = :'hand';
+select '696. and the window is told what it is doing, rather than guessing: '
+     || coalesce((select 'foraging ' || round((r->'skills'->>'foraging')::numeric, 2)
+                  || ', experience ' || round((r->>'xp')::numeric, 1)
+                  || ', care ' || round((r->>'care')::numeric, 2)
+                  || ', ' || (r->>'phase')
+       from (select jsonb_array_elements(rpc_creatures(:'big', 40)) r) q
+       where (r->>'id')::int = :'hand'), 'NOTHING, which was the other half of it');
+select '697. and about somebody else''s, it still says only what anybody can see: '
+     || (select count(*) from (select jsonb_object_keys(r) k
+         from (select jsonb_array_elements(rpc_creatures(:'big', 40)) r) q
+         where not (r->>'mine')::boolean) kk
+       where k in ('skills', 'xp', 'care', 'phase', 'carrying')) || ' of the five';

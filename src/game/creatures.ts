@@ -1470,7 +1470,29 @@ export interface IslandCreature {
   traits?: string[];
   hunting?: boolean;
   mine?: boolean;
+  /*
+   * And, for your own only, the working life the card used to invent.
+   *
+   * `rpc_creatures` carried a body and a leg and nothing about what a thing
+   * was doing with its day, so the wildermon window filled the rest in from
+   * the book: every wildermon on an island read Foraging 1.00, Experience 0.0,
+   * Care 0% and "Looking for work", however long it had been at it.
+   */
+  care?: number;
+  xp?: number;
+  skills?: Record<string, number>;
+  /** What the island says it is up to: `idle`, `out`, `work`, `home`, and the rest. */
+  phase?: string;
+  carrying?: { def: string; count?: number; ql?: number } | null;
 }
+
+/**
+ * The island's word for what a worker is doing, in the browser's.
+ *
+ * Two words each side of the same thing: the island counts a trip as out,
+ * work, home; this side has toForage, forage, and a thing with its arms full.
+ */
+const STATE_OF: Record<string, string> = { out: 'toForage', work: 'forage' };
 
 export interface Creature {
   id: number;
@@ -1838,6 +1860,16 @@ export class Creatures {
       c.enemy = r.hunting ? 0 : null;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
+      // The working life, which comes for yours and for nobody else's.
+      if (r.care !== undefined) c.care = r.care;
+      if (r.xp !== undefined) c.xp = r.xp;
+      if (r.skills) c.skills = r.skills;
+      if (r.phase !== undefined) c.state = STATE_OF[r.phase] ?? 'idle';
+      if (r.carrying !== undefined) {
+        c.carrying = r.carrying
+          ? { uid: 0, id: r.carrying.def, ql: r.carrying.ql ?? 1, dmg: 0, count: r.carrying.count ?? 1 }
+          : null;
+      }
       /*
        * The leg it is on, put on this machine's clock as it arrives.
        *
