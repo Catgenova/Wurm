@@ -3807,3 +3807,62 @@ end $$;
 select '612. and the scanlines are still the truth: tile 2005,2000 says '
      || land_tile((select id from world where size = 4096 order by made_at desc limit 1), 2005, 2000)
      || ', which is what was written to them';
+
+-- And does reading the ground in squares give the same answers as reading it
+-- in strips? The live run that found the walk check also raised the question,
+-- because "the ground refused a walk" and "the cache read the ground wrong"
+-- look identical from outside. A reference that reads the scanlines directly,
+-- against real generated terrain, tells them apart.
+create function pg_temp.walk_share_strips(p_world uuid, p_uid uuid, p_level int,
+  p_x0 double precision, p_y0 double precision,
+  p_x1 double precision, p_y1 double precision) returns double precision
+  language plpgsql stable as $$
+declare far double precision; n int; i int; t double precision;
+        fx int; fy int; tx int; ty int; climb double precision;
+begin
+  if p_level <> 0 then return 1; end if;
+  far := sqrt(power(p_x1 - p_x0, 2) + power(p_y1 - p_y0, 2));
+  if far <= 0.0001 then return 1; end if;
+  fx := floor(p_x0)::int; fy := floor(p_y0)::int;
+  if bridge_at(p_world, fx, fy) is not null then return 1; end if;
+  n := least(walk_samples()::int, greatest(1, ceil(far * 2)::int));
+  climb := max_step() + skill_of(p_world, p_uid, 'climbing') * climb_per_level();
+  for i in 1..n loop
+    t := i::double precision / n;
+    tx := floor(p_x0 + (p_x1 - p_x0) * t)::int;
+    ty := floor(p_y0 + (p_y1 - p_y0) * t)::int;
+    if tx <> fx or ty <> fy then
+      if not passable(p_world, tx, ty) then return (i - 1)::double precision / n; end if;
+      if abs(tx - fx) <= 1 and abs(ty - fy) <= 1
+         and bridge_at(p_world, tx, ty) is null
+         and abs(centre_height(p_world, tx, ty) - centre_height(p_world, fx, fy)) > climb then
+        return (i - 1)::double precision / n;
+      end if;
+      fx := tx; fy := ty;
+    end if;
+  end loop;
+  return 1;
+end $$;
+
+do $$
+declare w uuid := (select id from world where size = 4096 order by made_at desc limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111';
+        i int; x0 double precision; y0 double precision; x1 double precision; y1 double precision;
+        a double precision; b double precision; bad int := 0; stopped int := 0;
+begin
+  if w is null then raise notice '613. no 4096 island to read'; return; end if;
+  perform setseed(0.25);
+  for i in 1..400 loop
+    -- The same line to both, which the first draft of this did not do: two
+    -- calls to random() in two argument lists is two different walks, and they
+    -- disagreed twelve times out of four hundred for that reason alone.
+    x0 := 1600 + random() * 900; y0 := 1600 + random() * 900;
+    x1 := x0 + (random() - 0.5) * 40; y1 := y0 + (random() - 0.5) * 40;
+    a := walk_share(w, me, 0, x0, y0, x1, y1);
+    b := pg_temp.walk_share_strips(w, me, 0, x0, y0, x1, y1);
+    if a is distinct from b then bad := bad + 1; end if;
+    if a < 1 then stopped := stopped + 1; end if;
+  end loop;
+  raise notice '613. four hundred straight lines across real generated ground, read in squares and read in strips: '
+               '% disagreements, and % of the lines were stopped short by the ground itself', bad, stopped;
+end $$;

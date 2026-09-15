@@ -17,6 +17,9 @@ import { TILE_DEFS } from '../../src/world/tiles';
 import { supabase, signIn, PROJECT } from '../../src/net/supabase';
 import { readAtlas } from '../../tools/atlas-node';
 import { ACTION_PACE } from '../../src/game/pace';
+import { pathOptions } from '../../src/game/player';
+import { findPath } from '../../src/world/pathfinding';
+import type { World } from '../../src/world/world';
 
 const SIZE = Number(process.env.ISLAND_SIZE ?? 64);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -79,12 +82,49 @@ async function drain(id: string, uid: string, tries = waitFor(30)): Promise<numb
  * `rpc_move` believes about five tiles a call, so anywhere further than that
  * takes several — which is the ceiling doing exactly what it is for.
  */
-async function walkTo(id: string, x: number, y: number, tries = 10): Promise<boolean> {
-  for (let i = 0; i < tries; i++) {
-    const { data } = await supabase().rpc('rpc_move', { p_world: id, p_x: x, p_y: y, p_level: 0 });
-    const at = data as { x: number; y: number } | null;
-    if (at && Math.hypot(at.x - x, at.y - y) < 0.25) return true;
-    await sleep(1000);
+/**
+ * Walk somewhere the way a body walks somewhere.
+ *
+ * This used to claim the destination itself, over and over, and let the speed
+ * ceiling pull it most of the way each time until it arrived. That worked
+ * while the island believed anything that was slow enough. It does not now:
+ * `rpc_move` reads the ground under a claimed walk, and a straight line from
+ * here to there is not a walk — it goes through whatever is in between.
+ *
+ * The first live run after that check went in failed exactly here, with the
+ * body stopped at 24.07, 48.36 on a shoreline and four checks downstream of it
+ * failing for want of having arrived. Which is the island being right: no
+ * browser has ever moved like that. A browser walks the waypoints `findPath`
+ * gives it, over ground it has already decided it can cross, and so does this
+ * now — the same function, the same step rule, off the same `World` the join
+ * built.
+ */
+async function walkTo(id: string, world: World, uid: string, x: number, y: number): Promise<boolean> {
+  for (let leg = 0; leg < 8; leg++) {
+    const { data: here } = await supabase().from('player').select('x,y')
+      .eq('world_id', id).eq('uid', uid).single();
+    const from = (here ?? { x, y }) as { x: number; y: number };
+    if (Math.hypot(from.x - x, from.y - y) < 0.6) return true;
+    const path = findPath(world, Math.floor(from.x), Math.floor(from.y), 0,
+      Math.floor(x), Math.floor(y), pathOptions(world));
+    if (!path) return false;
+    for (const wp of path) {
+      const { data } = await supabase().rpc('rpc_move',
+        { p_world: id, p_x: wp.x + 0.5, p_y: wp.y + 0.5, p_level: 0 });
+      const got = data as { x: number; y: number; blocked?: boolean } | null;
+      if (!got) return false;
+      // The ceiling believes about five tiles a call, so a waypoint further
+      // than that takes more than one go at it.
+      for (let again = 0; again < 4 && Math.hypot(got.x - (wp.x + 0.5), got.y - (wp.y + 0.5)) > 0.4; again++) {
+        await sleep(400);
+        const { data: more } = await supabase().rpc('rpc_move',
+          { p_world: id, p_x: wp.x + 0.5, p_y: wp.y + 0.5, p_level: 0 });
+        const step = more as { x: number; y: number } | null;
+        if (!step) break;
+        got.x = step.x; got.y = step.y;
+      }
+      if (Math.hypot(got.x - x, got.y - y) < 0.6) return true;
+    }
   }
   return false;
 }
@@ -496,7 +536,7 @@ async function main(): Promise<void> {
       }
       if (done) break;
     }
-    const walked = await walkTo(id, sx + 0.5, sy + 0.5);
+    const walked = await walkTo(id, back, uid, sx + 0.5, sy + 0.5);
     check('there is somewhere on this island worth a settlement', walked, `${sx},${sy}`);
     const founded = await island.act('found_settlement', { kind: 'item', name: 'Smoke' }, 1);
     check('the stake in the kit founds a settlement', founded.started || founded.done === true,
@@ -557,7 +597,7 @@ async function main(): Promise<void> {
       left === 0 ? 'the head is empty' : 'jobs still waiting after thirty seconds of sweeping');
     check('there is somewhere on this island worth digging', found,
       found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
-    await walkTo(id, cx + 0.5, cy + 0.5);
+    await walkTo(id, back, uid, cx + 0.5, cy + 0.5);
     const before = back.getHeight(cx, cy);
     /*
      * Six goes, not one.
