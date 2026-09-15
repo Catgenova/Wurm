@@ -40,6 +40,7 @@ import { SLAB_VARIANTS } from '../src/world/tiles';
 import { WORMY, RICH_WORMS } from '../src/game/actions';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
+import { TACK } from '../src/game/creatureActions';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 
@@ -225,6 +226,34 @@ out.push(`create table if not exists trap_def (
   reach real not null, odds real not null, life_min real not null, life_max real not null,
   water boolean not null default false, hold int, note text not null
 );`);
+/*
+ * What a wildermon is for besides eating: a back to sit on and a shoulder to
+ * pull with.
+ *
+ * `draught` is the flag a beast is *born* with and `pull` is what its share of
+ * a team is worth; `mount` is a seat height in pixels in the browser, and down
+ * here it is only ever asked whether it is there at all, which is why it stays
+ * the number rather than becoming a boolean — a generated column that quietly
+ * drops information is a generated column somebody has edited.
+ */
+out.push(`alter table species_def add column if not exists mount real;`);
+out.push(`alter table species_def add column if not exists draught boolean not null default false;`);
+out.push(`alter table species_def add column if not exists pull real;`);
+out.push(`alter table species_def add column if not exists pitch real;`);
+out.push(`alter table species_def add column if not exists swims boolean not null default false;`);
+out.push(`alter table species_def add column if not exists pannier real;`);
+/* A cart is pulled by hand; a vehicle is driven from a seat with a team in
+ * front of it; a boat is neither and wants water under it. */
+out.push(`alter table furniture_def add column if not exists cart boolean not null default false;`);
+out.push(`create table if not exists vehicle_def (
+  id text primary key, yokes int not null, needs int not null, seat real not null
+);`);
+out.push(`create table if not exists boat_def (
+  id text primary key, speed real not null, draught real not null, seat real not null,
+  sail boolean not null default false
+);`);
+/* What has to be fitted before anything can be ridden. */
+out.push(`create table if not exists tack_def (ord int primary key, item text not null);`);
 /* Which full bucket carries which liquid, and which empty one it leaves. */
 out.push(`create table if not exists vessel_def (
   item text primary key, liquid text not null, empty text not null
@@ -473,7 +502,8 @@ for (const a of ACTIONS as unknown as A[]) {
 out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
-  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable;`);
+  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
+  vehicle_def, boat_def, tack_def;`);
 type S = Record<string, unknown>;
 for (const d of Object.values(SPECIES) as unknown as S[]) {
   out.push(`insert into species_def values (` + [
@@ -486,6 +516,11 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
     q(d.defaultStance ?? null), q(d.shearYield ?? null), q(d.wound ?? null),
     q(d.notice ?? null), q(d.sight ?? null)].join(', ') + `);`);
   if (d.glow !== undefined) out.push(`update species_def set glow = ${q(d.glow)} where id = ${q(d.id)};`);
+  for (const [col, v] of [['mount', d.mount], ['pull', d.pull], ['pitch', d.pitch], ['pannier', d.pannier]] as Array<[string, unknown]>) {
+    if (v !== undefined) out.push(`update species_def set ${col} = ${q(v)} where id = ${q(d.id)};`);
+  }
+  if (d.draught) out.push(`update species_def set draught = true where id = ${q(d.id)};`);
+  if (d.swims) out.push(`update species_def set swims = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
 }
 for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plantable values (${q(t)});`);
@@ -620,7 +655,13 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.bulk) out.push(`update furniture_def set bulk = true where id = ${q(f.id)};`);
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);
   if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);
+  if (f.cart) out.push(`update furniture_def set cart = true where id = ${q(f.id)};`);
+  const v = f.vehicle as A | undefined;
+  if (v) out.push(`insert into vehicle_def values (${q(f.id)}, ${q(v.yokes)}, ${q(v.needs)}, ${q(v.seat)});`);
+  const b = f.boat as A | undefined;
+  if (b) out.push(`insert into boat_def values (${q(f.id)}, ${q(b.speed)}, ${q(b.draught)}, ${q(b.seat)}, ${q(!!b.sail)});`);
 }
+TACK.forEach((id, ord) => out.push(`insert into tack_def values (${q(ord)}, ${q(id)});`));
 for (const r of RECIPES) {
   out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +
     [q(r.id), q(r.result), q(r.count ?? 1), q(r.tool), q(r.station), q(r.skill), q(r.label), q(r.verb),

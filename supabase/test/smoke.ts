@@ -212,6 +212,40 @@ async function main(): Promise<void> {
     check('and read it for metal', read.started, read.why ?? 'started');
     // Five seconds of somebody's time. Left in the head it fills the queue.
     if (read.started) await drain(id, uid);
+    /*
+     * A saddle and a set of traces, as far as they go with a starting kit —
+     * which is the arithmetic, the refusal, and the one thing that changed
+     * under everything else: `rpc_move` now asks what you are sitting on
+     * before it decides how far you could have got.
+     */
+    const { data: beasts, error: beastErr } = await supabase().from('species_def')
+      .select('id,name,mount,draught,pull').or('mount.not.is.null,draught.is.true');
+    const carries = (beasts ?? []) as Array<{ name: string; mount: number | null; draught: boolean }>;
+    check('what carries and what pulls is on the project', !beastErr && carries.length > 0,
+      beastErr ? beastErr.message
+        : `${carries.filter((b) => b.mount).length} take a saddle, ${carries.filter((b) => b.draught).length} take the traces`);
+    const { data: wains, error: wainErr } = await supabase().from('vehicle_def').select('id,yokes,needs');
+    const { data: hulls } = await supabase().from('boat_def').select('id,speed,draught,sail');
+    check('and what is driven, and what floats', !wainErr && (wains ?? []).length > 0 && (hulls ?? []).length > 0,
+      wainErr ? wainErr.message
+        : `${((wains ?? []) as Array<{ id: string; yokes: number }>).map((v) => `${v.id} ${v.yokes} yokes`).join(', ')}`
+          + ` · ${((hulls ?? []) as Array<{ id: string; draught: number }>).map((b) => `${b.id} draws ${b.draught}`).join(', ')}`);
+    const noCart = await island.act('pull_cart', { kind: 'furniture', id: 1 }, 1);
+    check('taking hold of a cart that is not there is refused in its own words',
+      !noCart.started && /gone/i.test(noCart.why ?? ''), noCart.why ?? 'IT STARTED');
+    /*
+     * And a step on foot, believed. The ceiling used to be a constant and is
+     * now a question — if that question ever answers null or nought, nobody
+     * can walk anywhere on this island, so it is worth one round trip.
+     */
+    const afoot = island.me!;
+    const { data: walked, error: walkErr } = await supabase().rpc('rpc_move',
+      { p_world: id, p_x: afoot.x + 0.5, p_y: afoot.y + 0.5, p_level: 0 });
+    const got = walked as { x: number; y: number; pulled: boolean } | null;
+    check('and we may still walk half a tile on our own legs',
+      !walkErr && !!got && !got.pulled,
+      walkErr ? walkErr.message : got ? `${got.x.toFixed(1)}, ${got.y.toFixed(1)}${got.pulled ? ' — pulled back' : ''}` : 'nothing came back');
+
     const { data: slabs, error: slabErr } = await supabase().from('slab_def').select('id,item');
     check('the four stones a slab is cut from are on the project',
       !slabErr && (slabs ?? []).length === 4,

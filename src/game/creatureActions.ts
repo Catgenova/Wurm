@@ -59,7 +59,7 @@ function vehicleFor(g: Game, c: Creature) {
 }
 
 /** What has to be fitted before anything can be ridden. */
-const TACK = ['saddle', 'bridle'];
+export const TACK = ['saddle', 'bridle'];
 
 /** Bare hands: what you fight with when there is nothing in them. */
 const FIST: WeaponDef = { id: 'fist', kind: 'knives', damage: 3, swing: 1.8 };

@@ -50,11 +50,12 @@ simplification rather than a problem:
 | **7** | the settlement: upgraded, renamed, disbanded — and work posts driven in, pulled up, set to and called off |
 | **3** | what the old people left in the ground: investigated, put back together, and a book worked through |
 | **6** | traps: a snare set, baited, emptied and lifted; a creel sunk and turned out; and whatever is in one let go |
+| **11** | a saddle and a set of traces: tack fitted and stripped, a rider up and down, a beast into the yokes and out, the shafts of a cart taken up and let go, a seat boarded and left, and the whole team unhitched at once |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **26** | known, listed, and honestly refused |
+| **15** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -73,10 +74,54 @@ being refused because your hands are full.
 
 Not yet ported at all: stamina (deliberately — half of it, with the cost but
 not the recovery, would make the island unplayable), sowing a field from a
-worker's own cheeks, breeding and pairing, riding and the traces, faith and
-the paths, bridges, brewing, the ledger, the journal, and the ease a hot oven
-lends to cooking. Every trade a wildermon may be set to is one this island
-knows, and `rpc_unported()` will read you the rest of the list to your face.
+worker's own cheeks, breeding and pairing, faith and the paths, bridges,
+dyeing, brewing, the ledger, the journal, sleeping the night through, and the
+ease a hot oven lends to cooking. Every trade a wildermon may be set to is one
+this island knows, and `rpc_unported()` will read you the rest of the list to
+your face.
+
+### A ridden thing is the ninth that will not sit still, and the only one that settles from a place
+
+Every other thing on this island that moves unwatched moves because a clock
+moved. A fire has burned this much of its fuel; a wound has drained this far; a
+trap has had eighty rolls at the country round it. Not one of them needs to
+know where anybody is standing.
+
+A mount is the opposite of all of them. It moves for exactly one reason — the
+rider moved — and it moves not at a rate but to a **place**. The browser keeps
+it under its rider by copying the player's position onto the creature every
+frame, which is a loop, and there are no loops here.
+
+But there does not have to be one. The moment a rider's position changes is a
+moment this island already knows about, because the client tells it, through
+`rpc_move`. So `drag_along` runs there, in the same statement that moves you:
+the beast under the saddle, the cart behind you, the wagon you are on and the
+team in front of it all land where you did. Nothing is stale and nothing is
+rolled forward, because for once the clock is not what moved.
+
+Everything lands on the same spot, which is close enough. Nothing in the rules
+asks whether a horse is half a tile ahead of the cart it is pulling, and
+pretending to know would be inventing a simulation the browser has not got
+either.
+
+### The ceiling had to learn what you are sitting on
+
+`rpc_move` has always believed a claimed position only as far as the fastest
+thing on two legs could have carried you since you last said where you were. It
+is the one thing standing between a client and the far side of the island, so
+it is not lifted for a rider — it is told.
+
+`travel_speed()` answers with the walk, or what the mount could do, or what the
+team in the traces could do, or the hull's own speed. A vehicle with an
+unfilled yoke answers nought, and nought means walking, because what you are
+doing is pushing it.
+
+The arithmetic is the browser's, including the part that reads like a bug and
+is not: a horse straight out of the wild is *slower* than your own legs — 2.30
+tiles a second against 2.40 — because `footing` is 0.9 until something has been
+learned on bad ground. The same horse at climbing 60 does 3.39 and steps up 51
+height units where your legs manage 32. A horse is worth having for what it
+learns, not for what it is.
 
 ### A trap is a chance compounded, not a chance repeated
 

@@ -2681,3 +2681,173 @@ select '443. and asked outright what it still cannot do: ' || (select count(*) f
        (select string_agg(u, ', ') from (select u from rpc_unported() u limit 8) s)
      || ' — which is the question the live suite used to answer by trying six and'
      || ' filling its own head with the jobs that started';
+
+\echo ''
+\echo '--- a seat, a set of traces and the shafts of a cart'
+delete from placed where world_id = :'world2' and kind = 'furniture';
+delete from creature where world_id = :'world2';
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select '444. what carries and what pulls: '
+     || (select string_agg(name || ' (' || case when mount is not null then 'saddle' else 'traces only' end
+         || ', pull ' || coalesce(pull, 0.25) || ')', ', ' order by id)
+         from species_def where mount is not null or draught)
+     || ' — and the tack is ' || (select string_agg(item, ' and ' order by ord) from tack_def);
+select creature_spawn(:'world2', 'orse', 5.6, 7.6, 'active', now() - interval '1 day') as horse \gset
+update creature set keeper = :'ivar', hunger = 1, from_x = to_x, from_y = to_y,
+    leg_at = now(), leg_ends = now(), settled_at = now(), name = 'Greyfell' where id = :'horse';
+select '445. with nothing in the pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'tack_creature',
+       ('{"kind":"creature","id":' || :'horse' || '}')::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'saddle', 1, 40) \g /dev/null
+select give(:'world2', :'ivar', 'bridle', 1, 40) \g /dev/null
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'tack_creature',
+  ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
+select '446. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and the tack is out of the pack: '
+     || (select count(*) from item where world_id = :'world2' and holder_uid = :'ivar'
+         and def in ('saddle', 'bridle')) || ' pieces left';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'mount_creature',
+  ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
+select '447. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+/*
+ * A green horse is no quicker than walking, and that is the browser's own
+ * arithmetic rather than a slip: `footing` is 0.9 until something has been
+ * learned on bad ground. What a horse is worth having is what it learns.
+ */
+select '448. how fast the island will believe you: ' || round(base_speed()::numeric, 2)
+     || ' tiles a second on your own legs, and ' || round(travel_speed(:'world2', :'ivar')::numeric, 2)
+     || ' up on a green Greyfell';
+update creature set skills = jsonb_set(skills, '{climbing}', '60') where id = :'horse';
+select '449. once it has learned the hills: ' || round(travel_speed(:'world2', :'ivar')::numeric, 2)
+     || ' tiles a second, and a step of '
+     || round(mount_step((select c from creature c where c.id = :'horse'))::numeric)
+     || ' where your own legs take ' || round(max_step()::numeric)
+     || ' — a horse is worth having for what it learns, not for what it is';
+-- Nothing ticks, so the horse moves when the rider does and not before.
+select drag_along(:'world2', :'ivar', 20.5, 30.5) \g /dev/null
+update player set x = 20.5, y = 30.5 where world_id = :'world2' and uid = :'ivar';
+select '450. fifteen tiles later Greyfell is at '
+     || (select round(creature_x(c)::numeric, 1) || ',' || round(creature_y(c)::numeric, 1)
+         from creature c where c.id = :'horse')
+     || ' — which is under the saddle, because a mount does not walk, it is dragged along';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'dismount_creature',
+  ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
+select '451. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and on your own legs again the ceiling is '
+     || round(travel_speed(:'world2', :'ivar')::numeric, 2);
+
+-- The shafts of a hand cart, which wants nothing in front of it at all.
+update player set x = 5.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+select give(:'world2', :'ivar', 'cart', 1, 50, 'Pine') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'cart' order by id desc limit 1) || ',"x":5,"y":7,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as cart from placed where world_id = :'world2' and sub = 'cart' order by id desc limit 1 \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'pull_cart', ('{"kind":"furniture","id":' || :'cart' || '}')::jsonb) \g /dev/null
+select '452. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+select drag_along(:'world2', :'ivar', 9.5, 12.5) \g /dev/null
+update player set x = 9.5, y = 12.5 where world_id = :'world2' and uid = :'ivar';
+-- A second cart, to be told you have your hands full. The same one is not a
+-- second one: the browser lets you take hold of what you are already holding.
+select give(:'world2', :'ivar', 'cart', 1, 50, 'Oak') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'cart' order by id desc limit 1) || ',"x":9,"y":12,"sx":2,"sy":2}')::jsonb) \g /dev/null
+select id as cart2 from placed where world_id = :'world2' and sub = 'cart' order by id desc limit 1 \gset
+select '453. and it came: the cart is at ' || (select x || ',' || y from placed where id = :'cart')
+     || ' — taking hold of the oak one as well: ' || coalesce(act_refusal(:'world2', :'ivar', 'pull_cart',
+        ('{"kind":"furniture","id":' || :'cart2' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'drop_cart', ('{"kind":"furniture","id":' || :'cart' || '}')::jsonb) \g /dev/null
+select '454. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and it stays at ' || (select x || ',' || y from placed where id = :'cart') || ' now nobody has it';
+
+-- A large cart, which will not stir until there is something in the yoke.
+select give(:'world2', :'ivar', 'large_cart', 1, 50, 'Pine') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'large_cart' order by id desc limit 1) || ',"x":9,"y":12,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as wain from placed where world_id = :'world2' and sub = 'large_cart' order by id desc limit 1 \gset
+select '455. the ones that are driven: ' || (select string_agg(v.id || ' — ' || v.yokes || ' yokes, '
+       || v.needs || ' needed, seat ' || v.seat, ' | ' order by v.yokes) from vehicle_def v)
+     || ' — and the hulls: ' || (select string_agg(b.id || ' at ' || b.speed || ' in '
+       || b.draught || ' of water' || case when b.sail then ' under sail' else ' on oars' end,
+       ' | ' order by b.speed) from boat_def b);
+select '456. with nothing in the yokes: ' || coalesce(act_refusal(:'world2', :'ivar', 'board_vehicle',
+       ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb), 'allowed');
+update creature set to_x = 9.6, to_y = 12.6, from_x = 9.6, from_y = 12.6,
+    leg_at = now(), leg_ends = now(), settled_at = now() where id = :'horse';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'hitch_creature',
+  ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
+select '457. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+select creature_spawn(:'world2', 'orse', 9.7, 12.7, 'active', now() - interval '1 day') as horse2 \gset
+update creature set keeper = :'ivar', hunger = 1, from_x = to_x, from_y = to_y,
+    leg_at = now(), leg_ends = now(), settled_at = now(), name = 'Dunn',
+    skills = jsonb_set(skills, '{climbing}', '20') where id = :'horse2';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'hitch_creature',
+  ('{"kind":"creature","id":' || :'horse2' || '}')::jsonb) \g /dev/null
+select '458. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and getting up on one of them now: ' || coalesce(act_refusal(:'world2', :'ivar',
+        'mount_creature', ('{"kind":"creature","id":' || :'horse' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'board_vehicle',
+  ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb) \g /dev/null
+select '459. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
+select '460. two in a pine cart make ' || round(vehicle_speed(:'world2', :'wain')::numeric, 2)
+     || ' tiles a second and take a step of ' || round(vehicle_step(:'world2', :'wain')::numeric)
+     || ' — the pair of them know ' || round(team_climb(:'world2', :'wain')::numeric)
+     || ' of the hills between them, and the ceiling now allows '
+     || round(travel_speed(:'world2', :'ivar')::numeric, 2);
+select drag_along(:'world2', :'ivar', 14.5, 12.5) \g /dev/null
+update player set x = 14.5, y = 12.5 where world_id = :'world2' and uid = :'ivar';
+select '461. five tiles on: the cart is at ' || (select x || ',' || y from placed where id = :'wain')
+     || ' and the team is at ' || (select string_agg(round(creature_x(c)::numeric, 1) || ','
+        || round(creature_y(c)::numeric, 1), ' and ' order by c.id) from creature c
+        where c.hitched_to = :'wain')
+     || ' — the team goes where the cart goes, and the cart goes where the driver goes';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'leave_vehicle', ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb) \g /dev/null
+select '462. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and off the seat the ceiling is ' || round(travel_speed(:'world2', :'ivar')::numeric, 2)
+     || ' again, with the pair of them still in the yokes';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'unhitch_creature',
+  ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
+select '463. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — ' || (select count(*) from creature where world_id = :'world2' and hitched_to = :'wain')
+     || ' left in the yokes';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'unhitch_team', ('{"kind":"furniture","id":' || :'wain' || '}')::jsonb) \g /dev/null
+select '464. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and with the yokes empty nobody is driving: '
+     || (select count(*) from placed where id = :'wain' and driver is not null) || ' hands on the reins';
+update player set x = 14.5, y = 12.5 where world_id = :'world2' and uid = :'ivar';
+update creature set to_x = 14.6, to_y = 12.6, from_x = 14.6, from_y = 12.6,
+    leg_at = now(), leg_ends = now(), settled_at = now() where id = :'horse';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'untack_creature',
+  ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
+select '465. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+     || ' — and it is back in the pack: ' || (select string_agg(def || ' at QL ' || round(ql::numeric), ', '
+        order by def) from item where world_id = :'world2' and holder_uid = :'ivar'
+        and def in ('saddle', 'bridle'));
+
+-- And a hull, which asks nothing but that she is still floating.
+select give(:'world2', :'ivar', 'rowing_boat', 1, 50, 'Pine') \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+     and def = 'rowing_boat' order by id desc limit 1) || ',"x":14,"y":12,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as boat from placed where world_id = :'world2' and sub = 'rowing_boat' order by id desc limit 1 \gset
+select '466. a rowing boat dragged up a hillside that stands '
+     || round(centre_height(:'world2', 14, 12)::numeric) || ' above the water, when she wants '
+     || (select draught from boat_def where id = 'rowing_boat') || ' of it under her: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'board_vehicle',
+        ('{"kind":"furniture","id":' || :'boat' || '}')::jsonb), 'allowed');
+select '467. the eleven that came with the reins: '
+     || (select string_agg(id, ', ' order by id) from action_def where ride_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));
