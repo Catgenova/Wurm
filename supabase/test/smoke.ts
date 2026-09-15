@@ -400,7 +400,18 @@ async function main(): Promise<void> {
         await supabase().rpc('rpc_sweep');
       }
       await island.refreshPack();
-      const { data: rows } = await supabase().from('tile_change').select('*').eq('world_id', id).order('n');
+      /*
+       * The change to *this* tile, newest first.
+       *
+       * It used to take the first row in the table, which was the dig's while
+       * the dig was the only thing that had ever moved a tile. Putting a thing
+       * down moves one, picking it up moves one, and a sweep moves several —
+       * so row zero became somebody else's and the check read a corner that
+       * had never been dug. Asking about the corner we dug is the question we
+       * meant all along.
+       */
+      const { data: rows } = await supabase().from('tile_change').select('*')
+        .eq('world_id', id).eq('x', cx).eq('y', cy).order('n', { ascending: false });
       const { data: evs } = await supabase().from('event').select('*').eq('world_id', id).order('n');
       const lines = (evs ?? []).map((e) => (e as { text: string }).text);
       const changes = (rows ?? []) as Array<{ corners: number[] }>;

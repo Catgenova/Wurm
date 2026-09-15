@@ -1453,11 +1453,12 @@ select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text,
 delete from event where uid = :'ivar';
 update player set x = 5.5, y = 7.5 where uid = :'ivar';
 update deed set level = 5, radius = deed_radius(5) where world_id = :'world2';
-select '281. of the seven errands this island now knows ' ||
+select '281. of the eight errands this island now knows ' ||
        (select count(*) from (values ('hod'), ('mend'), ('stoke'), ('plant'), ('compost'), ('water'), ('prospect'), ('seek')) v(k)
-        where worker_job_ported(v.k)) || ' of eight — and of the rest: '
-     || (select string_agg(v.k, ', ' order by v.k) from (values ('water'), ('prospect'), ('seek')) v(k)
-         where not worker_job_ported(v.k));
+        where worker_job_ported(v.k)) || ' — and of the rest: '
+     || coalesce((select string_agg(v.k, ', ' order by v.k)
+                  from (values ('water'), ('prospect'), ('seek')) v(k) where not worker_job_ported(v.k)),
+                 'there is no rest');
 select '282. setting a holla to carry water: ' || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed',
        ('{"kind":"creature","id":' || (select creature_spawn(:'world2', 'holla', 5.5, 6.5, 'stored', now() - interval '3 hours', :'ivar')) || '}')::jsonb), 'allowed');
 
@@ -2003,9 +2004,9 @@ select '350. of the twenty-two trades a wildermon may be set to, this island now
                                       ('clay'), ('quarry'), ('stoke'), ('fetch'), ('guard'), ('hunt'),
                                       ('peat'), ('reed'), ('water'), ('prospect'), ('plant'), ('hod'),
                                       ('mend'), ('compost'), ('seek'), ('fish')) v(k) where worker_job_ported(v.k))
-     || ' — and the one it does not: '
-     || (select string_agg(v.k, ', ' order by v.k) from (values ('water'), ('seek')) v(k)
-         where not worker_job_ported(v.k));
+     || ' — and the ones it does not: '
+     || coalesce((select string_agg(v.k, ', ' order by v.k) from (values ('water'), ('seek')) v(k)
+                  where not worker_job_ported(v.k)), 'none at all: that is every trade in the game');
 
 \echo ''
 \echo '--- barrels, buckets, and a well that fills itself'
@@ -2459,3 +2460,128 @@ select '418. examining a bucket, which is made of nothing in particular: '
 select '419. and one with a material on it: '
      || examine_item_text(:'world2', :'ivar', (select i from item i where i.world_id = :'world2'
           and i.holder_uid = :'ivar' and i.extra is not null order by i.id desc limit 1));
+
+\echo ''
+\echo '--- what the old people left in the ground'
+update player set x = 8.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+select land_set_tile(:'world2', 8, 10, 1) \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'fragment';
+select '420. the eight things under this island: '
+     || (select string_agg(name || ' (' || parts || ' pieces, ' || result || ')', ', ' order by difficulty)
+         from relic_def);
+select '421. an archaeologist at 1 would know ' || (select count(*) from relics_within(1))
+     || ' of them, at 30 ' || (select count(*) from relics_within(30))
+     || ', at 60 ' || (select count(*) from relics_within(60))
+     || ' — and a turn of the trowel at 30 with a QL 40 trowel finds something '
+     || round(find_chance(30, 40) * 100) || ' times in a hundred';
+update item set holder = 'ground', holder_uid = null, gx = 0, gy = 0
+  where world_id = :'world2' and holder_uid = :'ivar' and def = 'trowel';
+select '422. with no trowel in hand: ' || coalesce(act_refusal(:'world2', :'ivar', 'investigate',
+       '{"kind":"tile","x":8,"y":10}'::jsonb), 'allowed')
+     || ' | on bare rock: ' || coalesce(act_refusal(:'world2', :'ivar', 'investigate',
+        '{"kind":"tile","x":5,"y":5}'::jsonb), 'allowed');
+select give(:'world2', :'ivar', 'trowel', 1, 40) \g /dev/null
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'archaeology', 45)
+  on conflict (world_id, uid, id) do update set value = 45;
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'restoration', 70)
+  on conflict (world_id, uid, id) do update set value = 70;
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; v_x int; v_y int;
+begin
+  -- Fresh ground every time: one turn of the trowel per tile is all it gives.
+  for v_y in 9..14 loop for v_x in 6..13 loop
+    perform land_set_tile(w, v_x, v_y, 1);
+    update player set x = v_x + 0.5, y = v_y + 0.5 where world_id = w and uid = me;
+    if act_refusal(w, me, 'investigate', jsonb_build_object('kind','tile','x',v_x,'y',v_y)) is null then
+      perform act_perform(w, me, 'investigate', jsonb_build_object('kind','tile','x',v_x,'y',v_y));
+    end if;
+  end loop; end loop;
+end $$;
+select '423. forty-eight tiles gone over at archaeology 45: '
+     || (select count(*) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'fragment')
+     || ' fragments, of ' || (select count(distinct fragment_relic(extra)) from item
+          where world_id = :'world2' and holder_uid = :'ivar' and def = 'fragment') || ' different things'
+     || ' — and going over the same ground again: ' || coalesce(act_refusal(:'world2', :'ivar',
+        'investigate', '{"kind":"tile","x":8,"y":10}'::jsonb), 'allowed');
+select '424. what has come up: ' || (select string_agg(fragment_relic(extra) || ' ' || fragment_part(extra)
+       || '/' || (select parts from relic_def r where r.name = fragment_relic(i.extra)), ', '
+       order by fragment_relic(extra), fragment_part(extra))
+       from item i where i.world_id = :'world2' and i.holder_uid = :'ivar' and i.def = 'fragment');
+
+-- Putting one back together.
+select fragment_relic(extra) as relic from item where world_id = :'world2' and holder_uid = :'ivar'
+  and def = 'fragment' order by fragment_relic(extra) limit 1 \gset
+select '425. of the ' || (select parts from relic_def where name = :'relic') || ' pieces of the '
+     || :'relic' || ' he has ' || (select count(*) from pieces_held(:'world2', :'ivar', :'relic'))
+     || ', and is short ' || coalesce(array_to_string(parts_missing(:'world2', :'ivar', :'relic'), ', '), 'none')
+     || ' — so restoring it: ' || coalesce(act_refusal(:'world2', :'ivar', 'restore_relic',
+        ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+           and def = 'fragment' and fragment_relic(extra) = :'relic' order by id limit 1) || '}')::jsonb), 'allowed');
+-- The rest of the pieces of one thing, so there is something to put back.
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111';
+        r relic_def; n int; made bigint;
+begin
+  select * into r from relic_def order by difficulty limit 1;
+  delete from item where world_id = w and holder_uid = me and def = 'fragment';
+  for n in 1..r.parts loop
+    made := give(w, me, 'fragment', 1, 55, r.name || ' ' || n || '/' || r.parts);
+    update item set dmg = 30 where id = made;
+  end loop;
+end $$;
+select name as whole from relic_def order by difficulty limit 1 \gset
+select '426. every piece of the ' || :'whole' || ' in hand at QL 55 and 30 damage: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'restore_relic',
+        ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+           and def = 'fragment' order by id limit 1) || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int; f bigint;
+begin
+  for i in 1..8 loop
+    select id into f from item where world_id = w and holder_uid = me and def = 'fragment' order by id limit 1;
+    exit when f is null;
+    exit when act_refusal(w, me, 'restore_relic', jsonb_build_object('kind','item','uid',f)) is not null;
+    perform act_perform(w, me, 'restore_relic', jsonb_build_object('kind','item','uid',f));
+  end loop;
+end $$;
+select '427. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
+
+\echo ''
+\echo '--- and a nose that does the digging for you'
+select '428. a snout is the twenty-second trade: '
+     || (select count(*) from (values ('forage'), ('botanize'), ('woodcut'), ('farm'), ('mine'), ('sand'),
+                                      ('clay'), ('quarry'), ('stoke'), ('fetch'), ('guard'), ('hunt'),
+                                      ('peat'), ('reed'), ('water'), ('prospect'), ('plant'), ('hod'),
+                                      ('mend'), ('compost'), ('seek'), ('fish')) v(k) where worker_job_ported(v.k))
+     || ' of twenty-two, which is all of them';
+insert into deed (world_id, name, x, y, radius, level, founded_by)
+values (:'world2', 'Lastfound', 8, 11, deed_radius(3), 3, :'ivar')
+on conflict (world_id) do update set name = 'Lastfound', x = 8, y = 11, radius = deed_radius(3), level = 3;
+select place_deed_crate(:'world2') \g /dev/null
+delete from creature where world_id = :'world2' and mode in ('deed', 'stored', 'wild');
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        v_x int; v_y int;
+begin
+  for v_y in 5..15 loop for v_x in 2..14 loop
+    perform land_set_tile(w, v_x, v_y, 1);
+  end loop; end loop;
+  delete from foraged f where f.world_id = w and f.kind = 'dig';
+end $$;
+select creature_spawn(:'world2', 'snout', 8.5, 11.5, 'deed', now() - interval '3 hours', :'ivar') as nose \gset
+update creature set phase = 'idle', until = now() - interval '900 seconds',
+    leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
+    settled_at = now() - interval '900 seconds' where id = :'nose';
+select worker_settle(:'world2', :'nose') as nosed \gset
+select '429. a quarter of an hour of a snout: ' || :'nosed' || ' holes dug, '
+     || (select count(*) from foraged where world_id = :'world2' and kind = 'dig') || ' patches of ground gone over'
+     || ', and in the crate: ' || coalesce((select count(*)::text from item where world_id = :'world2'
+          and holder = 'crate' and def = 'fragment'), '0') || ' fragments';
+select '430. the three that came with the relics: '
+     || (select string_agg(id, ', ' order by id) from action_def where dig_action(id))
+     || ' — of 373 the island now does ' || (select count(*) from action_def where act_ported(id));

@@ -41,18 +41,19 @@ simplification rather than a problem:
 | **5** | what a pair of hands does to what it holds: better it, mend it, eat it, drink it |
 | **8** | and to what is lying about: pick one up, sweep the lot, put one down, look at a thing or a tile, set a thing aside and take it back, call something by a name |
 | **4** | crates: made, set down on a subtile, filled, emptied and lifted again |
-| **1** | setting a wildermon to work the deed or a post, which is twenty-one trades and a crate to fill |
+| **1** | setting a wildermon to work the deed or a post, which is every one of the twenty-two trades and a crate to fill |
 | **8** | working the ground: dig, mine, chip, pack, cultivate, two pavings, dropping dirt back |
 | **11** | and shaping it: flatten a tile, drop dirt on a named corner, lay and lift cut slabs, cut grass and reeds, pick fruit and sprouts, plant a tree, turn the ground over for worms, read it for metal |
 | **6** | liquids: fill a bucket at a shore, a well or a barrel, tip it out, pour it in, drink from it, fill a skin |
 | **10** | the forge: an oven fed, lit, raked and emptied of ashes; a lantern candled, struck and pinched out; an anvil set down, beaten on and heaved up again |
 | **5** | things that hold things: a bag stowed and turned out, a chest or bin filled and emptied, a trash crate |
 | **7** | the settlement: upgraded, renamed, disbanded — and work posts driven in, pulled up, set to and called off |
+| **3** | what the old people left in the ground: investigated, put back together, and a book worked through |
 | **5** | farming: till, sow, tend, harvest, clear |
 | **4** | taking what grows: felling, foraging, botanizing, filling a shovel off a bed |
 | **2** | fishing: a rod off the bank, a net walked round |
 | **1** | planting a deed stake and claiming the island around it |
-| **35** | known, listed, and honestly refused |
+| **32** | known, listed, and honestly refused |
 
 An action the rules do not implement is not the same thing as an action that
 does not exist, and the difference matters to whoever is looking at the menu:
@@ -74,7 +75,44 @@ not the recovery, would make the island unplayable), the one deed trade that
 wants something this island has not got — `seek` wants archaeology — sowing a
 field from a worker's own cheeks, breeding and pairing, riding and the traces,
 trapping, brewing, the ledger, the journal, and the ease a hot oven lends to
-cooking.
+cooking. Every trade a wildermon may be set to is now one this island knows.
+
+### A fragment is a thing that knows what it is a piece of
+
+Everything else made on this island is one item with a quality on it. A
+fragment is one of several, and the several only mean anything together: `old
+lamp 2/3` is the second piece of a three-piece lamp, and until the other two
+are in the same pack it is a scrap of metal.
+
+There is no table for that and there does not need to be. The pieces are
+ordinary rows with the relic and the number written into `extra`, exactly as
+the browser writes them, and a regex takes them apart again. A relic
+half-found is a pack with some of the numbers in it. Forty-eight tiles of an
+island at archaeology 45 turned up fifteen fragments of seven different things.
+
+The ground is also kinder than it needs to be, deliberately: a turn of the
+trowel that finds anything finds a piece you are *short* of, if you are short
+of any. That is not realism, it is the difference between a five-piece helm
+being a long afternoon and a five-piece helm being something nobody finishes.
+
+### Twenty-two of twenty-two
+
+`seek` was the last trade, and it needed nothing that was not already here.
+Every trade before it wanted something the island had not got — crates,
+furnaces, walls, barrels, marks on a map, relics — so each one arrived with a
+subsystem behind it. This one is the gatherer machinery with two branches
+added: what ground is worth a nose, and what a nose turns up. A quarter of an
+hour of a snout is thirty-eight holes and six fragments in the crate.
+
+### A seventh prefix, and the first that was not a column
+
+`h` was the loop variable in `perform_dig` *and* the alias of
+`pieces_held(...) h`, so `h.ql` was ambiguous between a record field and a
+column of the very rows being looped over. The six before this were locals
+colliding with column names; this one is a local colliding with a query alias,
+which the rule "alias every table" does not on its own prevent. Alias every
+table *and* prefix every local, and the two can never meet.
+
 
 ### A post is the seventh thing that will not sit still, and the first that dies
 

@@ -40,6 +40,7 @@ import { SLAB_VARIANTS } from '../src/world/tiles';
 import { WORMY, RICH_WORMS } from '../src/game/actions';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
+import { RELICS, DIGGABLE } from '../src/game/archaeology';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -210,6 +211,13 @@ out.push(`alter table furniture_def add column if not exists well real;`);
 out.push(`alter table furniture_def add column if not exists bulk boolean not null default false;`);
 out.push(`alter table furniture_def add column if not exists hive real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
+/* Ground worth turning over with a trowel: soil and sand, not bare rock or
+ * standing water. */
+out.push(`alter table tile_def add column if not exists diggable boolean not null default false;`);
+/* What the old people left in the ground, and what it takes to put one back. */
+out.push(`create table if not exists relic_def (
+  name text primary key, parts int not null, result text not null, difficulty real not null
+);`);
 /* Which full bucket carries which liquid, and which empty one it leaves. */
 out.push(`create table if not exists vessel_def (
   item text primary key, liquid text not null, empty text not null
@@ -379,7 +387,7 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def;');
 out.push('');
 
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
@@ -582,6 +590,10 @@ for (const [id, name] of Object.entries(LIQUID_NAME)) {
 }
 for (const id of WORMY) out.push(`update tile_def set wormy = true where id = ${q(id)};`);
 for (const id of RICH_WORMS) out.push(`update tile_def set rich_worms = true where id = ${q(id)};`);
+for (const id of DIGGABLE) out.push(`update tile_def set diggable = true where id = ${q(id)};`);
+for (const r of RELICS) {
+  out.push(`insert into relic_def values (${q(r.name)}, ${q(r.parts)}, ${q(r.result)}, ${q(r.difficulty)});`);
+}
 BUSH_DEFS.forEach((b, i) => out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`));
 for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE]] as Array<[string, Array<[string, number]>]>) {
   for (const [item, weight] of table) out.push(`insert into loot_table values (${q(id)}, ${q(item)}, ${q(weight)});`);
