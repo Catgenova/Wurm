@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/copy-site.mjs",
+    "build": "tsc --noEmit && vite build && node scripts/copy-site.mjs && node scripts/bundle-sql.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "defs": "node scripts/emit-defs.mjs",

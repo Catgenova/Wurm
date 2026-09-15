@@ -108,14 +108,20 @@ jobs:
             exit 1
           fi
           echo "nothing added out of order (latest before this commit: ${last:-none})"
+      # `git diff` cannot see a file that is not tracked yet, and a fresh
+      # `_defs.sql` is exactly that — so the old form of this check would have
+      # let a brand new definitions migration through without noticing. Asking
+      # `git status` about the whole directory catches both.
       - name: The definitions are still what the TypeScript says
         run: |
           npm run defs
-          git diff --exit-code supabase/migrations/*_defs.sql \
-            || { echo "::error::The generated definitions are out of date. Run 'npm run defs' and commit."; exit 1; }
           npm run db:bundle
-          git diff --exit-code supabase/all.sql \
-            || { echo "::error::supabase/all.sql is out of date. Run 'npm run db:bundle' and commit."; exit 1; }
+          dirty=$(git status --porcelain supabase/migrations supabase/defs-state.sql supabase/all.sql)
+          if [ -n "$dirty" ]; then
+            echo "$dirty"
+            echo "::error::The generated SQL is out of date. Run 'npm run defs' and 'npm run build', and commit what they write."
+            exit 1
+          fi
       - name: Joining, refusing, digging, settling and who may write what
         run: supabase/test/run.sh
       - name: An island out through the wire format and back, corner by corner
