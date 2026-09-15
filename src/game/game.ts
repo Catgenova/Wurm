@@ -410,7 +410,7 @@ export class Game {
     // body on the first streaming pass, and the rest waits to be walked to.
     game.creatures.stockIsland(game);
     game.logMsg('Welcome to Wurm Iso. You wash ashore on an untouched island with a few tools and your wits.', 'system');
-    game.logMsg('Left-click to walk. Right-click a tile for actions. Drag to look around, scroll to zoom. Press F1 for help.', 'system');
+    game.logMsg('Left-click to walk — it is the only thing that moves you. Right-click a tile for actions. WASD or the arrows push the view about, scroll to zoom. Settings (O) has a Keys tab if you would rather they did something else. Press F1 for help.', 'system');
     return game;
   }
 
@@ -1779,10 +1779,9 @@ export class Game {
     if (!a) return;
     const p = this.player;
     if (a.state === 'walking') {
-      if (p.inputDir.x !== 0 || p.inputDir.y !== 0) {
-        this.cancelAction(true);
-        return;
-      }
+      // Walking off under your own steam used to cancel what you were on your
+      // way to do. There is no longer a way to do that without clicking, and a
+      // click cancels the action itself, so there is nothing left to catch.
       if (!p.path) {
         if (this.inRange(a.def, a.target)) this.beginPerform();
         else if (a.waitUntil !== undefined && this.time < a.waitUntil) {

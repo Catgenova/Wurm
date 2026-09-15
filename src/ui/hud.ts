@@ -1,3 +1,4 @@
+import { keyName, type Keybinds } from '../game/keybinds';
 import { clockLeft } from '../game/boons';
 import { balance, fedWord, NUTRIENTS, NUTRIENT_NAMES, NUTRIENT_NOTES, tableMul } from '../game/nutrition';
 import { SKILL_DEFS } from '../game/skills';
@@ -23,6 +24,8 @@ export interface HudCallbacks {
   useLoop: (loop: number) => void;
   /** Whether the selection window has the number keys just now. */
   numbersTaken: () => boolean;
+  /** What every key does, so the toolbar can say so and keep saying so. */
+  keys: Keybinds;
 }
 
 interface Bar {
@@ -30,25 +33,33 @@ interface Bar {
   value: HTMLSpanElement;
 }
 
-const BUTTONS: Array<{ label: string; key: string; action: (cb: HudCallbacks) => void; id?: string }> = [
-  { label: 'Inventory', key: 'I', action: (cb) => cb.toggle('inventory') },
-  { label: 'Craft', key: 'R', action: (cb) => cb.toggle('craft') },
-  { label: 'Tile', key: 'T', action: (cb) => cb.toggle('tile') },
-  { label: 'Skills', key: 'K', action: (cb) => cb.toggle('skills') },
-  { label: 'Events', key: 'L', action: (cb) => cb.toggle('events') },
-  { label: 'Map', key: 'M', action: (cb) => cb.toggle('map') },
-  { label: 'Wildermon', key: 'P', action: (cb) => cb.toggle('wildermon') },
-  { label: 'Journal', key: 'J', action: (cb) => cb.toggle('journal') },
-  { label: 'Ledger', key: 'B', action: (cb) => cb.toggle('ledger') },
-  { label: 'Stores', key: 'U', action: (cb) => cb.toggle('stores') },
-  { label: 'Deed', key: 'N', action: (cb) => cb.toggle('deed') },
-  { label: 'Grid', key: 'G', action: (cb) => cb.toggleGrid(), id: 'grid' },
-  { label: 'Centre', key: 'C', action: (cb) => cb.center() },
-  { label: '↻ Turn', key: 'Q', action: (cb) => cb.turn(-1) },
-  { label: '↺ Turn', key: 'E', action: (cb) => cb.turn(1) },
-  { label: 'Settings', key: 'O', action: (cb) => cb.toggle('settings') },
-  { label: 'Help', key: 'F1', action: (cb) => cb.toggle('help') },
-  { label: 'New world', key: '', action: (cb) => cb.newWorld(), id: 'new' },
+/*
+ * The toolbar, which says which key does each of these.
+ *
+ * It used to say so by spelling the letter out here, which was true right up
+ * until the Keys tab let somebody move one. Each button now names the *binding*
+ * and asks what it currently answers to, so the toolbar cannot go stale — and
+ * `New world`, which is deliberately on no key at all, names none.
+ */
+const BUTTONS: Array<{ label: string; bind?: string; action: (cb: HudCallbacks) => void; id?: string }> = [
+  { label: 'Inventory', bind: 'win_inventory', action: (cb) => cb.toggle('inventory') },
+  { label: 'Craft', bind: 'win_craft', action: (cb) => cb.toggle('craft') },
+  { label: 'Tile', bind: 'win_tile', action: (cb) => cb.toggle('tile') },
+  { label: 'Skills', bind: 'win_skills', action: (cb) => cb.toggle('skills') },
+  { label: 'Events', bind: 'win_events', action: (cb) => cb.toggle('events') },
+  { label: 'Map', bind: 'win_map', action: (cb) => cb.toggle('map') },
+  { label: 'Wildermon', bind: 'win_wildermon', action: (cb) => cb.toggle('wildermon') },
+  { label: 'Journal', bind: 'win_journal', action: (cb) => cb.toggle('journal') },
+  { label: 'Ledger', bind: 'win_ledger', action: (cb) => cb.toggle('ledger') },
+  { label: 'Stores', bind: 'win_stores', action: (cb) => cb.toggle('stores') },
+  { label: 'Deed', bind: 'win_deed', action: (cb) => cb.toggle('deed') },
+  { label: 'Grid', bind: 'grid', action: (cb) => cb.toggleGrid(), id: 'grid' },
+  { label: 'Centre', bind: 'centre', action: (cb) => cb.center() },
+  { label: '↻ Turn', bind: 'turn_left', action: (cb) => cb.turn(-1) },
+  { label: '↺ Turn', bind: 'turn_right', action: (cb) => cb.turn(1) },
+  { label: 'Settings', bind: 'win_settings', action: (cb) => cb.toggle('settings') },
+  { label: 'Help', bind: 'win_help', action: (cb) => cb.toggle('help') },
+  { label: 'New world', action: (cb) => cb.newWorld(), id: 'new' },
 ];
 
 /** Status bars, the action timer and the toolbar. */
@@ -61,6 +72,9 @@ function ordinal(n: number): string {
 
 export class Hud {
   private bars: Record<string, Bar> = {};
+  /** Toolbar buttons that name a key, and which binding each one names. */
+  private keyed: Array<{ btn: HTMLButtonElement; label: string; bind: string }> = [];
+  private binds!: Keybinds;
   private nameEl: HTMLDivElement;
   private posEl: HTMLDivElement;
   private fpsEl: HTMLDivElement;
@@ -206,11 +220,14 @@ export class Hud {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tb-btn' + (b.id === 'new' ? ' tb-danger' : '');
-      btn.innerHTML = `${b.label}${b.key ? ` <kbd>${b.key}</kbd>` : ''}`;
       btn.addEventListener('click', () => b.action(cb));
       if (b.id === 'grid') this.gridBtn = btn;
+      if (b.bind) this.keyed.push({ btn, label: b.label, bind: b.bind });
+      else btn.textContent = b.label;
       toolbar.append(btn);
     }
+    this.binds = cb.keys;
+    this.drawKeys();
     root.append(toolbar);
 
     this.fpsEl = document.createElement('div');
@@ -343,6 +360,20 @@ export class Hud {
       el.classList.remove('belt-empty');
       el.classList.toggle('belt-barred', !!aim.reason);
       el.title = aim.reason ? `${label} — ${aim.reason}` : `${label}. Press ${(i + 1) % 10}, or right-click to take it off the belt.`;
+    }
+  }
+
+  /**
+   * Put the current key on every button that names one.
+   *
+   * Called once when the toolbar is built and again whenever a binding changes,
+   * so a button cannot go on claiming a key that now does something else. A
+   * button whose thing has been left unbound simply stops claiming anything.
+   */
+  drawKeys(): void {
+    for (const k of this.keyed) {
+      const codes = this.binds.codes(k.bind);
+      k.btn.innerHTML = codes.length ? `${k.label} <kbd>${keyName(codes[0])}</kbd>` : k.label;
     }
   }
 

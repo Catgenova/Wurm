@@ -29,6 +29,7 @@ import { TITLES } from './game/titles';
 import { ITEM_DEFS, itemName } from './game/items';
 import { RECIPES } from './game/recipes';
 import { Game } from './game/game';
+import { Keybinds } from './game/keybinds';
 import { clearSave, loadGame, saveGame, saveOnExit, warmSave } from './game/save';
 import { Renderer, skyWash, sunAt } from './render/renderer';
 import { SWAY_MAX, swayAt } from './render/sway';
@@ -97,6 +98,14 @@ const canvas = new FullscreenCanvas(canvasEl);
 const renderer = new Renderer(canvas, game);
 const camera = renderer.camera;
 const input = new Input(canvasEl);
+/** Screen pixels a second the view slides while a push key is held. */
+const PAN_SPEED = 900;
+/**
+ * What the keys do. Read here and written by the Keys tab in Settings; kept in
+ * `localStorage`, so it belongs to whoever is sitting here rather than to the
+ * island they happen to have open.
+ */
+const keys = new Keybinds();
 /** Quarter-turn the view (+1 or -1) and remember the choice in the save. */
 function turnView(step: number): void {
   camera.turn(step, (x, y) => game.world.heightAt(x, y));
@@ -110,6 +119,7 @@ const ui = new UI(game, renderer, uiRoot, canvasEl, {
     location.href = location.pathname;
   },
   turn: turnView,
+  keys,
 });
 
 game.hooks = {
@@ -159,7 +169,58 @@ input.onPinch = (factor, x, y) => {
   camera.zoomAt(x, y, factor);
 };
 
-input.onKey = (code) => {
+/**
+ * One press, looked up rather than hard-coded.
+ *
+ * Every entry in this table is a row in Settings → Keys. The digits are not:
+ * they are ten of a kind, answering to whatever the selection window or the
+ * toolbelt is offering, and they stay where they are.
+ */
+const PRESSES: Record<string, () => void> = {
+  centre: () => {
+    game.settings.follow = true;
+    camera.follow = true;
+  },
+  turn_left: () => turnView(-1),
+  turn_right: () => turnView(1),
+  zoom_in: () => camera.zoomAt(canvas.width / 2, canvas.height / 2, 1.25),
+  zoom_out: () => camera.zoomAt(canvas.width / 2, canvas.height / 2, 0.8),
+  storey_up: () => ui.hud.stepStorey(1),
+  storey_down: () => ui.hud.stepStorey(-1),
+  cutaway: () => ui.hud.toggleCutaway(),
+  grid: () => (game.settings.grid = !game.settings.grid),
+  win_inventory: () => ui.toggleWindow('inventory'),
+  win_craft: () => ui.toggleWindow('craft'),
+  win_tile: () => ui.toggleWindow('tile'),
+  win_skills: () => ui.toggleWindow('skills'),
+  win_events: () => ui.toggleWindow('events'),
+  win_map: () => ui.toggleWindow('map'),
+  win_wildermon: () => ui.toggleWindow('wildermon'),
+  win_deed: () => ui.toggleWindow('deed'),
+  win_ledger: () => ui.toggleWindow('ledger'),
+  win_stores: () => ui.toggleWindow('stores'),
+  win_journal: () => ui.toggleWindow('journal'),
+  win_settings: () => ui.toggleWindow('settings'),
+  win_help: () => ui.toggleWindow('help'),
+  walk_home: () => game.walkHome(),
+  stop: () => {
+    if (ui.menu.isOpen) ui.menu.hide();
+    else if (game.action) game.cancelAction();
+    else player.stop();
+  },
+  chat: () => ui.focusChat(),
+};
+
+input.onKey = (code, ev) => {
+  /*
+   * A key the Keys tab is listening for never reaches the game — and never
+   * reaches the browser either. Binding F1 must not open the browser's help,
+   * and binding Tab must not walk the focus out of the window.
+   */
+  if (ui.grabKey(code)) {
+    ev.preventDefault();
+    return;
+  }
   // The number keys: the selection window when it is looking at something,
   // and the loops on a worn toolbelt otherwise. 0 is the tenth of either.
   const digit = /^Digit([0-9])$/.exec(code);
@@ -167,113 +228,35 @@ input.onKey = (code) => {
     ui.pressNumber((Number(digit[1]) + 9) % 10);
     return;
   }
-  switch (code) {
-    case 'KeyI':
-      ui.toggleWindow('inventory');
-      break;
-    case 'KeyK':
-      ui.toggleWindow('skills');
-      break;
-    case 'KeyR':
-      ui.toggleWindow('craft');
-      break;
-    case 'KeyT':
-      ui.toggleWindow('tile');
-      break;
-    case 'PageUp':
-      ui.hud.stepStorey(1);
-      break;
-    case 'PageDown':
-      ui.hud.stepStorey(-1);
-      break;
-    case 'KeyX':
-      ui.hud.toggleCutaway();
-      break;
-    case 'KeyL':
-      ui.toggleWindow('events');
-      break;
-    case 'KeyM':
-      ui.toggleWindow('map');
-      break;
-    case 'F1':
-    case 'KeyH':
-      ui.toggleWindow('help');
-      break;
-    case 'KeyO':
-      ui.toggleWindow('settings');
-      break;
-    case 'KeyP':
-      ui.toggleWindow('wildermon');
-      break;
-    case 'KeyN':
-      ui.toggleWindow('deed');
-      break;
-    case 'KeyB':
-      ui.toggleWindow('ledger');
-      break;
-    case 'KeyG':
-      game.settings.grid = !game.settings.grid;
-      break;
-    case 'KeyC':
-      game.settings.follow = true;
-      camera.follow = true;
-      break;
-    case 'Home':
-      game.walkHome();
-      break;
-    case 'KeyQ':
-      turnView(-1);
-      break;
-    case 'KeyE':
-      turnView(1);
-      break;
-    case 'Equal':
-    case 'NumpadAdd':
-      camera.zoomAt(canvas.width / 2, canvas.height / 2, 1.25);
-      break;
-    case 'Minus':
-    case 'NumpadSubtract':
-      camera.zoomAt(canvas.width / 2, canvas.height / 2, 0.8);
-      break;
-    case 'Escape':
-      if (ui.menu.isOpen) ui.menu.hide();
-      else if (game.action) game.cancelAction();
-      else player.stop();
-      break;
-    case 'Enter':
-      ui.focusChat();
-      break;
-  }
+  const id = keys.actionFor(code);
+  if (id) PRESSES[id]?.();
 };
 
 const loop = new GameLoop(
   (dt) => {
-    let dx = 0;
-    let dy = 0;
-    if (input.isDown('KeyW') || input.isDown('ArrowUp')) {
-      dx -= 1;
-      dy -= 1;
-    }
-    if (input.isDown('KeyS') || input.isDown('ArrowDown')) {
-      dx += 1;
-      dy += 1;
-    }
-    if (input.isDown('KeyA') || input.isDown('ArrowLeft')) {
-      dx -= 1;
-      dy += 1;
-    }
-    if (input.isDown('KeyD') || input.isDown('ArrowRight')) {
-      dx += 1;
-      dy -= 1;
-    }
-    // dx/dy are screen-relative (view space); turn them into world directions.
-    if ((dx !== 0 || dy !== 0) && !input.isTyping()) {
-      camera.follow = true;
-      player.inputDir.x = camera.unrotateX(dx, dy);
-      player.inputDir.y = camera.unrotateY(dx, dy);
-    } else {
-      player.inputDir.x = 0;
-      player.inputDir.y = 0;
+    /*
+     * The keys push the view, and nothing else moves you: walking is a click,
+     * and a click is the only thing that walks.
+     *
+     * These are screen directions and stay screen directions — unlike the
+     * walking they replaced, which had to be turned back into world directions
+     * because the body moves through the world and the camera does not.
+     */
+    const held = (id: string): boolean => keys.isHeld(id, (c) => input.isDown(c));
+    let px = 0;
+    let py = 0;
+    if (held('pan_up')) py += 1;
+    if (held('pan_down')) py -= 1;
+    if (held('pan_left')) px += 1;
+    if (held('pan_right')) px -= 1;
+    if ((px !== 0 || py !== 0) && !input.isTyping()) {
+      // Diagonals go the same speed as the straights. `panBy` takes screen
+      // pixels and divides by the zoom itself, so the view slides at the same
+      // rate under the eye however far out it is — and it lets the camera off
+      // following, exactly as a drag does.
+      const len = Math.hypot(px, py);
+      const step = PAN_SPEED * dt;
+      camera.panBy((px / len) * step, (py / len) * step);
     }
 
     game.update(dt);

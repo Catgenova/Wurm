@@ -57,6 +57,7 @@ import { jobEntry, pinEntry, pinnable } from './beltmenu';
 import { creatureLines } from './creatureinfo';
 import { MARK_COLOURS } from '../game/marks';
 import { SettingsPanel } from './panels/settings';
+import type { Keybinds } from '../game/keybinds';
 import { Hud } from './hud';
 import { buildHelp } from './panels/help';
 import { EventLogPanel } from './panels/eventlog';
@@ -70,6 +71,8 @@ export interface UICallbacks {
   newWorld: () => void;
   /** Quarter-turn the camera: +1 or -1. */
   turn: (step: number) => void;
+  /** What every key does, for the Keys tab in Settings to write to. */
+  keys: Keybinds;
 }
 
 /** Builds and updates every HTML overlay above the canvas. */
@@ -107,7 +110,17 @@ export class UI {
       turn: cb.turn,
       useLoop: (loop) => this.useLoop(loop),
       numbersTaken: () => this.numbersTaken,
+      keys: cb.keys,
     });
+    /*
+     * One place hears about a rebinding and tells the rest. The Keys tab redraws
+     * its own rows; the toolbar has to be told, because the button that says
+     * `Inventory I` is not the thing that changed it.
+     */
+    cb.keys.onChange = () => {
+      this.hud.drawKeys();
+      this.settings.drawKeys();
+    };
 
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });
     this.eventLog = new EventLogPanel(events, game);
@@ -121,8 +134,8 @@ export class UI {
     this.tilePanel = new TilePanel(tileWin, game, (pick) => this.menuFor(pick), this.tooltip);
     const map = this.windows.create({ id: 'map', title: 'Map', x: 12, y: 370, width: 236, height: 262, anchor: 'tr', open: false });
     this.minimap = new MinimapPanel(map, game, renderer);
-    const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 640, width: 300, height: 190, anchor: 'tr', open: false });
-    this.settings = new SettingsPanel(settings, game);
+    const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 56, width: 380, height: 520, anchor: 'tr', open: false });
+    this.settings = new SettingsPanel(settings, game, cb.keys);
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
     this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'));
     const journal = this.windows.create({ id: 'journal', title: 'Journal', x: 12, y: 56, width: 330, height: 420, anchor: 'tr', open: false });
@@ -152,6 +165,17 @@ export class UI {
     help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (window.innerHeight - 460) / 2)}px`;
     buildHelp(help);
+  }
+
+  /**
+   * A press, offered to the Keys tab before the game sees it.
+   *
+   * True means it was taken: something in Settings was waiting for a key, and
+   * this one was it. Nothing else in the UI swallows keys, which is why this is
+   * a question with one asker and one answerer rather than a chain.
+   */
+  grabKey(code: string): boolean {
+    return this.settings.grab(code);
   }
 
   toggleWindow(id: string): void {

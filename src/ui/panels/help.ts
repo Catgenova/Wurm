@@ -3,14 +3,22 @@ import type { UIWindow } from '../windows';
 function helpText(): string {
   return `
     <h3>Getting around</h3>
+    <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
+    <i>view</i>, which is a different thing and used far more often. Click where you want to be
+    and you will set off, going round whatever is in the way.</p>
     <table>
-      <tr><td><kbd>Left click</kbd></td><td>Walk to a tile</td></tr>
-      <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Walk (screen relative)</td></tr>
-      <tr><td><kbd>Drag</kbd></td><td>Look around (detaches the camera)</td></tr>
+      <tr><td><kbd>Left click</kbd></td><td>Walk to a tile — the only thing that moves you</td></tr>
+      <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></td><td>Push the view about (detaches the camera)</td></tr>
+      <tr><td><kbd>Drag</kbd></td><td>The same, with the mouse</td></tr>
       <tr><td><kbd>Scroll</kbd> / <kbd>+</kbd> <kbd>-</kbd></td><td>Zoom</td></tr>
-      <tr><td><kbd>C</kbd></td><td>Centre the camera on yourself</td></tr>
+      <tr><td><kbd>C</kbd></td><td>Centre the camera on yourself, and have it follow again</td></tr>
       <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Turn the view a quarter turn; the compass shows north</td></tr>
     </table>
+    <p>Every key here can be changed: <b>Settings</b> (<kbd>O</kbd>) has a <b>Keys</b> tab with the
+    whole list in it. Click a key, press the one you would rather have, and it is set — a key that
+    was already doing something else is taken off it rather than doing both. The number keys
+    <kbd>1</kbd>–<kbd>0</kbd> are the exception and cannot be moved: they always answer to whatever
+    the Tile window or the toolbelt is offering.</p>
     <h3>Touch screens</h3>
     <table>
       <tr><td>Tap</td><td>Walk to a tile</td></tr>
@@ -162,7 +170,9 @@ function helpText(): string {
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
       <tr><td><kbd>P</kbd></td><td>Wildermon: your tamed creatures' stats and actions</td></tr>
       <tr><td><kbd>J</kbd></td><td>Journal: everything worth doing, ticking itself off</td></tr>
-      <tr><td><kbd>O</kbd></td><td>Settings (tile grid, deed border)</td></tr>
+      <tr><td><kbd>B</kbd></td><td>Ledger: everything you have ever made</td></tr>
+      <tr><td><kbd>N</kbd></td><td>Settlement: your deed at a glance</td></tr>
+      <tr><td><kbd>O</kbd></td><td>Settings: what the island looks like, and what every key does</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>

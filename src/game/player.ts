@@ -68,7 +68,6 @@ export class Player {
   swimming = false;
   walkPhase = 0;
   path: PathPoint[] | null = null;
-  inputDir = { x: 0, y: 0 };
   stats: Stats = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
   /** What is worn or held, by slot: the uid of the item, or null. */
   equipped: Record<string, number | null> = { head: null, chest: null, arms: null, legs: null, feet: null, weapon: null, offhand: null };
@@ -117,8 +116,6 @@ export class Player {
 
   stop(): void {
     this.path = null;
-    this.inputDir.x = 0;
-    this.inputDir.y = 0;
   }
 
   /** Returns the distance actually moved this frame (tiles). */
@@ -130,12 +127,16 @@ export class Player {
     let vx = 0;
     let vy = 0;
     let distanceLimit = Infinity;
-    if (this.inputDir.x !== 0 || this.inputDir.y !== 0) {
-      this.path = null;
-      const len = Math.hypot(this.inputDir.x, this.inputDir.y);
-      vx = this.inputDir.x / len;
-      vy = this.inputDir.y / len;
-    } else if (this.path && this.path.length) {
+    /*
+     * A body goes where it is walking to and nowhere else.
+     *
+     * There used to be a second way in here: a held direction, straight off the
+     * keys, which steered the body frame by frame and threw the path away. The
+     * keys push the view now, nothing feeds a direction in, and a branch nobody
+     * can reach is worse than no branch at all — it reads like a thing that
+     * still happens.
+     */
+    if (this.path && this.path.length) {
       const wp = this.path[0];
       const dx = wp.x + 0.5 - this.x;
       const dy = wp.y + 0.5 - this.y;
