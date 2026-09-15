@@ -1,0 +1,20 @@
+{
+  // The half of this repository that runs in Node rather than in a tab: the
+  // island's live test, and the tools that found an island and read the chart.
+  //
+  // It had no typechecking at all. `tsconfig.json` includes `src` and nothing
+  // else, so `supabase/test/smoke.ts` — eight hundred lines, and the only test
+  // that ever touches the real project — was first compiled by esbuild inside
+  // the live job, after the migrations had already been pushed. A duplicate
+  // variable took a live run down three minutes in, for something `tsc` says
+  // in a second and for free.
+  //
+  // The DOM stays in `lib` even out here, because these files import the same
+  // modules the game does and one of them knows how to read the survey chart
+  // out of an `Image`. Node's globals are added rather than swapped in.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["supabase/test", "tools"]
+}

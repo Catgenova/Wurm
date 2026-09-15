@@ -1,7 +1,33 @@
 import { TILLABLE } from '../game/farming';
 import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
+import { bedrockAt } from '../world/ore';
 import { groundRoll, TILE_DEFS, TileType, dustiness } from '../world/tiles';
+
+/**
+ * What the rock under a tile is, when anybody has looked.
+ *
+ * Bare rock says what it is by being bare. Everything else has soil on top and
+ * only a prospector can tell you — and the reading fades, because a prospector
+ * remembers what they read for a while and not for ever.
+ *
+ * This was a line in the mouseover and nowhere else, which on a phone is
+ * nowhere at all: there is no hovering with a finger, so the one thing
+ * prospecting is *for* — is this seam worth mining, and what quality will it
+ * give — could be lit up on the ground and unreadable. It is one sentence in
+ * one place now, and the mouseover, the tile window and the right-click menu
+ * all say it, so none of them can drift from the others.
+ *
+ * Null when nobody has read this ground, which is the honest answer and not a
+ * guess.
+ */
+export function groundReading(g: Game, x: number, y: number): string | null {
+  const w = g.world;
+  const bare = w.getTile(x, y) === TileType.Rock;
+  if (!bare && !g.isProspected(x, y)) return null;
+  const rock = bedrockAt(w, x, y);
+  return `${rock.name}${rock.ore ? ` · mining ${rock.level}` : ''} · up to QL ${rock.maxQl}${bare ? '' : ', buried'}`;
+}
 
 /**
  * What a piece of ground is *for*.

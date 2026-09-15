@@ -40,7 +40,7 @@ import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kil
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
-import { bedrockAt } from '../world/ore';
+import { groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
 import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
@@ -391,10 +391,8 @@ export class UI {
     if (growing) lines.push(describeCrop(growing, this.game.time));
     const soil = w.getDirt(pick.cx, pick.cy);
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)} · ${soil > 0 ? `${soil} soil over rock` : 'bare rock'}`);
-    const rock = bedrockAt(w, pick.x, pick.y);
-    const bare = w.getTile(pick.x, pick.y) === TileType.Rock;
-    const known = bare || this.game.isProspected(pick.x, pick.y);
-    if (known) lines.push(`${rock.name}${rock.ore ? ` · mining ${rock.level}` : ''} · up to QL ${rock.maxQl}${bare ? '' : ', buried'}`);
+    const reading = groundReading(this.game, pick.x, pick.y);
+    if (reading) lines.push(reading);
     const deed = this.game.deed;
     if (deed && this.game.isToken(pick.x, pick.y)) lines.push(`Settlement token of ${deed.name}`);
     else if (deed && this.game.onDeed(pick.x, pick.y)) lines.push(`Part of ${deed.name}`);
@@ -431,8 +429,8 @@ export class UI {
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {
-    const { title, entries } = this.menuFor(pick);
-    this.menu.show(sx, sy, title, entries);
+    const { title, facts, entries } = this.menuFor(pick);
+    this.menu.show(sx, sy, title, entries, facts);
   }
 
   /**
@@ -440,7 +438,7 @@ export class UI {
    * right-click menu and the tile window are the same list seen two ways, so
    * neither can fall behind the other.
    */
-  menuFor(pick: Pick): { title: string; entries: MenuItem[] } {
+  menuFor(pick: Pick): { title: string; facts?: string; entries: MenuItem[] } {
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {
       return { title: `${creature.name} (${this.game.creatures.describe(creature)})`, entries: this.creatureEntries(creature.id) };
@@ -783,7 +781,9 @@ export class UI {
       });
     }
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;
-    return { title, entries };
+    // What a prospector read here, which was a mouseover line and so was not
+    // readable at all with a finger.
+    return { title, facts: groundReading(this.game, pick.x, pick.y) ?? undefined, entries };
   }
 
   /** Feeding, lighting and cooking at a campfire. */

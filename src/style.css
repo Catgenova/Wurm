@@ -740,6 +740,15 @@ kbd {
   white-space: nowrap;
 }
 
+/* What a prospector read here, under the name and above the jobs. */
+.ctx-facts {
+  padding: 0 8px 5px;
+  margin-top: -3px;
+  margin-bottom: 3px;
+  color: var(--ui-dim);
+  white-space: nowrap;
+}
+
 .ctx-item {
   display: flex;
   justify-content: space-between;
@@ -1812,7 +1821,25 @@ kbd {
 .tile-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+/*
+ * The ground's own reading, on its own line under the name.
+ *
+ * Not shouted in capitals like the rest of the head: it is a sentence with
+ * numbers in it — "Iron ore · mining 20 · up to QL 45, buried" — and an ore
+ * name in small capitals with letters spaced out is harder to read, not
+ * easier. Full width so it wraps under the little `i` rather than fighting it.
+ */
+.tile-head-facts {
+  flex: 1 0 100%;
+  margin-top: 1px;
+  color: var(--ui-dim);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 11px;
 }
 
 .tile-head-name {

@@ -122,6 +122,12 @@ jobs:
             echo "::error::The generated SQL is out of date. Run 'npm run defs' and 'npm run build', and commit what they write."
             exit 1
           fi
+      # The live test is eight hundred lines that nothing typechecked: `tsconfig`
+      # covered `src` and no more, so `smoke.ts` was first compiled by esbuild
+      # inside the live job — after the migrations had been pushed to the real
+      # project. A duplicate variable took a run down three minutes in.
+      - name: The tests and tools that run outside a browser still compile
+        run: npx tsc --noEmit -p tsconfig.node.json
       - name: Joining, refusing, digging, settling and who may write what
         run: supabase/test/run.sh
       - name: An island out through the wire format and back, corner by corner

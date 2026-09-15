@@ -3,12 +3,12 @@ import type { Pick } from '../../render/renderer';
 import { buildMenuRows, type MenuItem } from '../contextmenu';
 import { creatureSkills } from '../creatureinfo';
 import { Repaint } from '../repaint';
-import { tileUses } from '../tileinfo';
+import { groundReading, tileUses } from '../tileinfo';
 import type { Tooltip } from '../tooltip';
 import type { UIWindow } from '../windows';
 
 /** What the window is looking at, and everything that could be done to it. */
-export type TileMenuSource = (pick: Pick) => { title: string; entries: MenuItem[] };
+export type TileMenuSource = (pick: Pick) => { title: string; facts?: string; entries: MenuItem[] };
 
 /**
  * The tile window: click any tile and everything you could do to it is listed
@@ -26,6 +26,17 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 export class TilePanel {
   private head: HTMLDivElement;
   private titleEl: HTMLSpanElement;
+  /**
+   * What a prospector read here, under the name.
+   *
+   * The one thing prospecting is for — whether this seam is worth mining and
+   * what quality it gives — was a line in the mouseover, and there is no
+   * mouseover on a phone. Lighting the ground up and then having no way to
+   * read it is most of the way to not having prospected at all.
+   */
+  private factsEl: HTMLDivElement;
+  /** The reading as last drawn, because it fades with nothing to announce it. */
+  private reading: string | null = null;
   private info: HTMLButtonElement;
   /** Whether the note is up at all, by hover or by click. */
   private noteOpen = false;
@@ -74,7 +85,10 @@ export class TilePanel {
       if (this.pinned) this.showNote();
       else this.tooltip.hide(this);
     });
-    this.head.append(this.titleEl, this.info);
+    this.factsEl = document.createElement('div');
+    this.factsEl.className = 'tile-head-facts';
+    this.factsEl.hidden = true;
+    this.head.append(this.titleEl, this.info, this.factsEl);
     this.list = document.createElement('div');
     this.list.className = 'inv-list';
     win.body.append(this.head, this.list);
@@ -135,7 +149,18 @@ export class TilePanel {
       this.pinned = false;
       this.tooltip.hide(this);
     }
-    if (!this.win.isOpen || !this.repaint.due(now)) return;
+    if (!this.win.isOpen) return;
+    /*
+     * A prospector's reading goes out by itself.
+     *
+     * Everything else here changes because something happened and said so —
+     * ground dug, a thing picked up, a skill gained. The marks simply run out
+     * of time, and a window left open would go on showing an ore reading for a
+     * seam nobody can remember any more. Cheap to ask: it is one string, and
+     * `changed` below still refuses to redraw when it reads the same.
+     */
+    if (this.pick && groundReading(this.game, this.pick.x, this.pick.y) !== this.reading) this.repaint.ask();
+    if (!this.repaint.due(now)) return;
     this.render(now);
   }
 
@@ -145,19 +170,24 @@ export class TilePanel {
       this.list.replaceChildren();
       this.titleEl.textContent = 'Nothing selected';
       this.info.hidden = true;
+      this.reading = null;
+      this.factsEl.hidden = true;
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
       empty.textContent = 'Click any tile and everything you can do to it is listed here.';
       this.list.append(empty);
       return;
     }
-    const { title, entries } = this.source(this.pick);
+    const { title, facts, entries } = this.source(this.pick);
     // What the list would say, down to every reason and every note. If it
     // matches what is already on screen, nothing is touched.
-    if (!this.repaint.changed(now, title + '\u0000' + entries.map(sign).join('\u0000'))) return;
+    if (!this.repaint.changed(now, `${title}\u0000${facts ?? ''}\u0000${entries.map(sign).join('\u0000')}`)) return;
     this.list.replaceChildren();
     this.titleEl.textContent = title;
     this.info.hidden = false;
+    this.reading = facts ?? null;
+    this.factsEl.textContent = facts ?? '';
+    this.factsEl.hidden = !facts;
     if (!entries.length) {
       const none = document.createElement('div');
       none.className = 'inv-empty';

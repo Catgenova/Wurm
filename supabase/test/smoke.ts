@@ -734,9 +734,9 @@ async function main(): Promise<void> {
       check('eight goes of digging are in hand', many.started && busy?.act === 'dig',
         `${busy?.act ?? 'nothing'}, ${busy?.act_left ?? 0} to go`);
       await island.stop();
-      const { data: after } = await supabase().from('player').select('act,act_left,act_ends,act_queue')
+      const { data: stopped } = await supabase().from('player').select('act,act_left,act_ends,act_queue')
         .eq('world_id', id).eq('uid', uid).single();
-      const idle = after as { act: string | null; act_queue: unknown[] } | null;
+      const idle = stopped as { act: string | null; act_queue: unknown[] } | null;
       check('and stopping stops it on the island, not only on the screen',
         idle?.act === null && (idle?.act_queue ?? []).length === 0,
         idle?.act ? `still ${idle.act} over there` : 'nothing in hand and nothing queued');
