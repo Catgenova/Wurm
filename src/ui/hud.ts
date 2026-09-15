@@ -226,6 +226,24 @@ export class Hud {
       else btn.textContent = b.label;
       toolbar.append(btn);
     }
+    /*
+     * A way to see the rest of them on a narrow screen.
+     *
+     * Eighteen buttons is sixteen hundred pixels of toolbar, which on a phone
+     * is four screens of sideways scrolling with nothing to say so. Clipped to
+     * one row instead, with this to drop the rest down — ordered first in CSS
+     * so it is always the one button that is certainly reachable.
+     */
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'tb-btn tb-more';
+    more.textContent = 'More';
+    more.addEventListener('click', () => {
+      const open = toolbar.classList.toggle('open');
+      more.textContent = open ? 'Less' : 'More';
+    });
+    toolbar.append(more);
+
     this.binds = cb.keys;
     this.drawKeys();
     root.append(toolbar);

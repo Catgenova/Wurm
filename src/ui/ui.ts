@@ -66,6 +66,7 @@ import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
 import { Tooltip } from './tooltip';
 import { WindowManager } from './windows';
+import { uiBox } from './screen';
 
 export interface UICallbacks {
   newWorld: () => void;
@@ -162,8 +163,8 @@ export class UI {
     const ledgerWin = this.windows.create({ id: 'ledger', title: 'Ledger', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
     this.ledgerPanel = new LedgerPanel(ledgerWin, game);
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
-    help.el.style.left = `${Math.max(0, (window.innerWidth - 440) / 2)}px`;
-    help.el.style.top = `${Math.max(0, (window.innerHeight - 460) / 2)}px`;
+    help.el.style.left = `${Math.max(0, (uiBox().w - 440) / 2)}px`;
+    help.el.style.top = `${Math.max(0, (uiBox().h - 460) / 2)}px`;
     buildHelp(help);
   }
 

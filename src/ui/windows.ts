@@ -1,3 +1,5 @@
+import { uiBox, uiFloor, uiPoint } from './screen';
+
 export type Anchor = 'tl' | 'tr' | 'bl' | 'br';
 
 export interface WindowOptions {
@@ -73,8 +75,8 @@ export class UIWindow {
     this.el.append(title, this.body);
 
     // Never start larger than the screen, whatever the saved layout says.
-    const w = Math.min(saved?.w ?? opts.width, Math.max(160, window.innerWidth - 16));
-    const h = Math.min(saved?.h ?? opts.height, Math.max(70, window.innerHeight - 16));
+    const w = Math.min(saved?.w ?? opts.width, Math.max(160, uiBox().w - 16));
+    const h = Math.min(saved?.h ?? opts.height, Math.max(70, uiBox().h - 16));
     this.el.style.width = `${w}px`;
     this.el.style.height = `${h}px`;
     if (saved) {
@@ -82,8 +84,8 @@ export class UIWindow {
       this.el.style.top = `${saved.y}px`;
     } else {
       const anchor = opts.anchor ?? 'tl';
-      const left = anchor === 'tr' || anchor === 'br' ? window.innerWidth - w - opts.x : opts.x;
-      const top = anchor === 'bl' || anchor === 'br' ? window.innerHeight - h - opts.y : opts.y;
+      const left = anchor === 'tr' || anchor === 'br' ? uiBox().w - w - opts.x : opts.x;
+      const top = anchor === 'bl' || anchor === 'br' ? uiBox().h - h - opts.y : opts.y;
       this.el.style.left = `${left}px`;
       this.el.style.top = `${top}px`;
     }
@@ -93,14 +95,16 @@ export class UIWindow {
     let drag: { dx: number; dy: number } | null = null;
     title.addEventListener('pointerdown', (e) => {
       if (buttons.contains(e.target as Node) || e.button !== 0 || this.maximized) return;
-      drag = { dx: e.clientX - this.el.offsetLeft, dy: e.clientY - this.el.offsetTop };
+      const at = uiPoint(e);
+      drag = { dx: at.x - this.el.offsetLeft, dy: at.y - this.el.offsetTop };
       title.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
     title.addEventListener('pointermove', (e) => {
       if (!drag) return;
-      this.el.style.left = `${e.clientX - drag.dx}px`;
-      this.el.style.top = `${e.clientY - drag.dy}px`;
+      const at = uiPoint(e);
+      this.el.style.left = `${at.x - drag.dx}px`;
+      this.el.style.top = `${at.y - drag.dy}px`;
       this.clamp();
     });
     title.addEventListener('pointerup', (e) => {
@@ -156,12 +160,12 @@ export class UIWindow {
   }
 
   private applyMaximized(): void {
-    const margin = Math.max(8, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.04));
+    const margin = Math.max(8, Math.round(Math.min(uiBox().w, uiBox().h) * 0.04));
     this.applyGeometry({
       x: margin,
       y: margin,
-      w: Math.max(160, window.innerWidth - margin * 2),
-      h: Math.max(70, window.innerHeight - margin * 2),
+      w: Math.max(160, uiBox().w - margin * 2),
+      h: Math.max(70, uiBox().h - margin * 2),
     });
   }
 
@@ -210,10 +214,26 @@ export class UIWindow {
       this.applyMaximized();
       return;
     }
-    const maxLeft = Math.max(0, window.innerWidth - 60);
-    const maxTop = Math.max(0, window.innerHeight - 30);
+    const box = uiBox();
+    const floor = uiFloor();
+    const narrow = this.el.closest('#ui')?.classList.contains('narrow') ?? false;
+
+    /*
+     * On a narrow screen a window is kept wholly inside the interface, and
+     * never taller than the room there is. A desktop may hang one off the
+     * bottom edge on purpose — that is what dragging by the title is for —
+     * but a phone has no second screen to hang it onto.
+     */
+    if (narrow) {
+      const room = Math.max(70, box.h - floor - 12);
+      if (this.el.offsetHeight > room) this.el.style.height = `${room}px`;
+    }
+    const maxLeft = Math.max(0, box.w - 60);
+    const maxTop = narrow
+      ? Math.max(floor, box.h - this.el.offsetHeight - 6)
+      : Math.max(floor, box.h - 30);
     const left = Math.min(maxLeft, Math.max(-this.el.offsetWidth + 60, this.el.offsetLeft));
-    const top = Math.min(maxTop, Math.max(0, this.el.offsetTop));
+    const top = Math.min(maxTop, Math.max(floor, this.el.offsetTop));
     this.el.style.left = `${left}px`;
     this.el.style.top = `${top}px`;
   }
@@ -236,9 +256,21 @@ export class WindowManager {
     } catch {
       this.saved = {};
     }
-    window.addEventListener('resize', () => {
-      for (const w of this.windows.values()) w.clamp();
-    });
+    window.addEventListener('resize', () => this.clampAll());
+  }
+
+  /**
+   * Pull every window back inside the interface.
+   *
+   * Called when the interface's own box changes, which is not the same event
+   * as the window resizing: a pinch, or a browser deciding to lay the page out
+   * nine hundred pixels wide, both move the box while `resize` says nothing.
+   * Windows are placed once when they are made, and that happens before the
+   * box is first measured, so without this a window keeps the position it was
+   * given against a viewport that was never the screen.
+   */
+  clampAll(): void {
+    for (const w of this.windows.values()) w.clamp();
   }
 
   create(opts: WindowOptions): UIWindow {

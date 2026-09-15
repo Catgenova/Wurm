@@ -1,3 +1,5 @@
+import { uiBox } from './screen';
+
 export interface MenuItem {
   label: string;
   /** Why the entry is unavailable; shown in red. */
@@ -165,8 +167,8 @@ export class ContextMenu {
     this.el.style.left = '0px';
     this.el.style.top = '0px';
     const rect = this.el.getBoundingClientRect();
-    const left = Math.min(this.anchor.x, window.innerWidth - rect.width - 4);
-    const top = Math.min(this.anchor.y, window.innerHeight - rect.height - 4);
+    const left = Math.min(this.anchor.x, uiBox().w - rect.width - 4);
+    const top = Math.min(this.anchor.y, uiBox().h - rect.height - 4);
     this.el.style.left = `${Math.max(0, left)}px`;
     this.el.style.top = `${Math.max(0, top)}px`;
   }

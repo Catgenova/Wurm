@@ -339,6 +339,9 @@ zoomOut.addEventListener('click', () => unzoomPage());
 uiRoot.append(zoomOut);
 followScreen(uiRoot, () => {
   zoomOut.hidden = pageZoom() <= 1.02;
+  // The box the windows live in has just changed, and `resize` did not fire:
+  // a pinch moves it, and so does a browser laying the page out for a desktop.
+  ui.windows.clampAll();
 });
 
 document.getElementById('boot')?.remove();

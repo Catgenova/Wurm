@@ -38,6 +38,57 @@ const MAX_SCALE = 2.6;
 export const NARROW = 720;
 
 /**
+ * The interface's own box and scale, as `fitScreen` last left them.
+ *
+ * Everything that positions itself in the interface has to measure against
+ * *this* rather than against `window`: with `#ui` scaled and offset, a window
+ * anchored to the right of `window.innerWidth` lands off the side of a screen
+ * that is only four hundred of the interface's own pixels wide.
+ */
+let box = { w: 0, h: 0, scale: 1, left: 0, top: 0 };
+
+/** How much room the interface has, in its own coordinates. */
+export const uiBox = (): { w: number; h: number } =>
+  box.w ? { w: box.w, h: box.h } : { w: window.innerWidth, h: window.innerHeight };
+
+/**
+ * Where a pointer is, in the interface's own coordinates.
+ *
+ * `clientX` is a page coordinate and the interface is a scaled, shifted box
+ * inside the page; dragging a window by raw client pixels moves it two and a
+ * third times too far on a phone rendering a desktop layout.
+ */
+/**
+ * The highest a window may be put, which is not always zero.
+ *
+ * On a narrow screen the status panel goes full width across the top, and a
+ * window opened where a desktop would put it lands squarely on it — covering
+ * the health bars, the clock and the light, which are the things somebody
+ * keeps a window open to work *against*. Measured rather than written down,
+ * because the panel's height depends on what is on you.
+ */
+export function uiFloor(): number {
+  const ui = document.getElementById('ui');
+  if (!ui?.classList.contains('narrow')) return 0;
+  const status = ui.querySelector('.hud-status') as HTMLElement | null;
+  if (!status) return 0;
+  const floor = Math.round(status.offsetTop + status.offsetHeight + 8);
+  /*
+   * Unless there would be nothing left under it.
+   *
+   * A phone in landscape rendering a desktop layout leaves the interface about
+   * a hundred and ninety of its own pixels tall, and a status panel takes most
+   * of that. Keeping windows below it there means keeping them off the screen,
+   * which is worse than letting them cover it.
+   */
+  return uiBox().h - floor < 200 ? 0 : floor;
+}
+
+export function uiPoint(e: { clientX: number; clientY: number }): { x: number; y: number } {
+  return { x: (e.clientX - box.left) / box.scale, y: (e.clientY - box.top) / box.scale };
+}
+
+/**
  * Put the interface over the visible screen.
  *
  * Returns the scale it chose, which is 1 on anything ordinary.
@@ -63,6 +114,7 @@ export function fitScreen(ui: HTMLElement): number {
   ui.style.width = `${w / scale}px`;
   ui.style.height = `${h / scale}px`;
   ui.classList.toggle('narrow', w / scale <= NARROW);
+  box = { w: w / scale, h: h / scale, scale, left, top };
   return scale;
 }
 

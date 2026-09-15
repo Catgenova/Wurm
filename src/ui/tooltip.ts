@@ -1,3 +1,5 @@
+import { uiBox } from './screen';
+
 export class Tooltip {
   readonly el: HTMLDivElement;
   /**
@@ -36,8 +38,8 @@ export class Tooltip {
     const rect = this.el.getBoundingClientRect();
     let left = x + 16;
     let top = y + 20;
-    if (left + rect.width > window.innerWidth - 4) left = x - rect.width - 8;
-    if (top + rect.height > window.innerHeight - 4) top = y - rect.height - 8;
+    if (left + rect.width > uiBox().w - 4) left = x - rect.width - 8;
+    if (top + rect.height > uiBox().h - 4) top = y - rect.height - 8;
     this.el.style.left = `${left}px`;
     this.el.style.top = `${top}px`;
   }

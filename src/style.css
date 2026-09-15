@@ -107,6 +107,20 @@ body {
   pointer-events: auto;
 }
 
+/*
+ * `hidden` means hidden.
+ *
+ * Any `display` of its own beats the browser's rule for the attribute, so a
+ * row given `display: flex` and then hidden still takes its height — which is
+ * how the status panel came to be two hundred and twenty-six pixels tall on a
+ * phone with five empty rows in it. There were already two hand-written
+ * exceptions for exactly this; one rule is better than three and a fourth
+ * waiting to be written.
+ */
+[hidden] {
+  display: none !important;
+}
+
 kbd {
   display: inline-block;
   padding: 0 4px;
@@ -446,26 +460,120 @@ kbd {
  * phone showing a desktop layout those are nine hundred pixels apart, which is
  * how the toolbar came to be two rows lying across the health bars.
  */
+/*
+ * A phone's worth of interface.
+ *
+ * Measured rather than guessed, at 412 across: the status panel was 230 by 226
+ * — over half the width and a quarter of the height — and the toolbar had
+ * 1,581 pixels of buttons in a 386-pixel strip, which is four screens of
+ * sideways scrolling with nothing on screen to say so.
+ *
+ * So the panel goes full width and lays its bars two to a row, which is
+ * shorter and uses the width it has; and the toolbar clips to one row with a
+ * `More` that drops the rest down.
+ */
 #ui.narrow .hud-status {
   top: 54px;
+  left: 12px;
+  right: 12px;
+  width: auto;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 12px;
+  align-items: center;
 }
 
-#ui.narrow {
-  .toolbar {
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-width: none;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    transform: none;
-    scrollbar-width: none;
-  }
+#ui.narrow .hud-name,
+#ui.narrow .hud-footer,
+#ui.narrow .hud-boons,
+#ui.narrow .hud-companion,
+#ui.narrow .hud-light {
+  grid-column: 1 / -1;
+}
 
-  .toolbar::-webkit-scrollbar {
-    display: none;
-  }
+#ui.narrow .hud-bar-row {
+  grid-template-columns: 46px 1fr 30px;
+  font-size: 11px;
+}
+
+/* A key badge means nothing to a finger, and is half the width of a button. */
+#ui.narrow .tb-btn kbd {
+  display: none;
+}
+
+#ui.narrow .toolbar {
+  max-height: 33px;
+  overflow: hidden;
+  align-content: flex-start;
+}
+
+#ui.narrow .toolbar.open {
+  max-height: none;
+  overflow: visible;
+}
+
+#ui.narrow .tb-more {
+  order: -1;
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.tb-more {
+  display: none;
+}
+
+#ui.narrow .tb-more {
+  display: inline-block;
+}
+
+/*
+ * Windows are the width of the screen on a phone, and below the status panel.
+ *
+ * Opened where a desktop would put them they land squarely on top of it: a
+ * full-width window at `top: 56` covers the health bars, the clock and the
+ * light, which are the things you keep a window open to work against.
+ */
+#ui.narrow .win {
+  left: 12px !important;
+  width: calc(100% - 24px) !important;
+  max-height: calc(100% - 300px);
+  resize: none;
+}
+
+#ui.narrow .win.below {
+  top: 190px !important;
+}
+
+/* The affinity strip and the Eat button, which are a row of their own here. */
+#ui.narrow .hud-food {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+/*
+ * The Eat button sits beside the reading, not under it.
+ *
+ * The row is a three-column grid and the button is a fourth child, so it wrapped
+ * onto a line of its own and pushed Water out of step with Food.
+ */
+#ui.narrow .hud-bar-row:has(button) {
+  grid-template-columns: 46px 1fr 30px auto;
+}
+
+#ui.narrow .hud-bar-row button {
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+#ui.narrow .toolbar {
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-width: none;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  transform: none;
 }
 
 
