@@ -1862,6 +1862,15 @@ export class Game {
   private updateAction(dt: number): void {
     const a = this.action;
     if (!a) return;
+    /*
+     * A job being watched rather than done. The clock runs so the bar moves
+     * between one answer from the island and the next; nothing else happens,
+     * because nothing else here is entitled to.
+     */
+    if (this.watching) {
+      a.elapsed = Math.min(a.duration, a.elapsed + dt);
+      return;
+    }
     const p = this.player;
     if (a.state === 'walking') {
       // Walking off under your own steam used to cancel what you were on your
@@ -2007,6 +2016,53 @@ export class Game {
    * than a second copy of every action.
    */
   ask: ((def: ActionDef, target: Target, goes?: number) => void) | null = null;
+
+  /**
+   * A job somebody else is doing, shown here so that there is a clock on it.
+   *
+   * `ask` sends the whole of an action away, which is what makes the island
+   * the authority — and left the screen with nothing to draw. There was no
+   * progress bar on an island at all: you pressed cut down, the log said "You
+   * start cutting down", and then nothing moved for half a minute.
+   *
+   * So the island says what it is doing and this shows it. The clock runs here
+   * and *only* the clock: `updateAction` will not finish a watched job, will
+   * not perform it, and will not cancel it because the body moved. Whether it
+   * happened is the island's to say, and it says so by stopping telling us
+   * about it.
+   */
+  watching = false;
+
+  /**
+   * Put the island's job on the screen, or take it off.
+   *
+   * `total` is how long the whole go is and `secs` how much of it is left, both
+   * worked out by the island — a browser clock that is a minute out would draw
+   * a bar that is a minute wrong, and there is no reason to subtract two of the
+   * island's timestamps here rather than there.
+   */
+  showAction(def: ActionDef | null, target: Target | null, total = 0, secs = 0, left?: number, goes?: number): void {
+    this.watching = true;
+    if (!def) {
+      if (this.action) {
+        this.action = null;
+        this.events.emit('action');
+      }
+      return;
+    }
+    const had = this.action;
+    const same = had && had.def.id === def.id && had.left === left;
+    this.action = {
+      def,
+      target: target ?? (had?.target as Target) ?? { kind: 'self' } as unknown as Target,
+      state: 'performing',
+      duration: Math.max(0.001, total),
+      elapsed: Math.max(0, Math.min(total, total - secs)),
+      left,
+      goes: goes ?? had?.goes,
+    };
+    if (!same) this.events.emit('action');
+  }
 
   requestAction(def: ActionDef, target: Target, goes?: number): void {
     if (this.ask) {

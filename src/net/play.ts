@@ -4,7 +4,7 @@ import { whoAmI } from './accounts';
 import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
-import type { ActionDef, Target } from '../game/actions';
+import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 
 /**
  * Starting on an island that lives in Postgres rather than in this tab.
@@ -161,8 +161,31 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     time: island.time(),
   });
 
+  /** What was last asked about, so the bar has something to point at. */
+  let lastTarget: Target | null = null;
+
   game.ask = (def: ActionDef, target: Target, goes?: number) => {
+    lastTarget = target;
     void island.act(def.id, target as unknown as Record<string, unknown>, goes ?? 1);
+  };
+
+  /*
+   * The clock on what the island is doing.
+   *
+   * `ask` sends the whole of an action away, which is what makes the island
+   * the authority — and left the screen with nothing to draw. `showAction`
+   * puts the island's own reckoning on the bar without this machine owning any
+   * of the work: the clock runs here between one answer and the next, and
+   * whether the job happened is still the island's to say.
+   */
+  island.hooks.doing = (what) => {
+    if (!what.act) {
+      game.showAction(null, null);
+      return;
+    }
+    const def = ACTION_BY_ID.get(what.act);
+    if (!def) return;
+    game.showAction(def, lastTarget, what.total, what.secs, what.left, what.goes);
   };
 
   // Everything the island says, said here. The lines that arrived while the

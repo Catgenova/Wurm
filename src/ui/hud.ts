@@ -563,8 +563,11 @@ export class Hud {
       return;
     }
     this.actionEl.hidden = false;
-    // A counted job says how far through the count it is: "3 of 10".
-    const count = a.goes !== undefined && a.left !== undefined ? ` · ${a.goes - a.left + 1} of ${a.goes}` : '';
+    // A counted job says how far through the count it is: "3 of 10". Coming
+    // back to an island mid-job, the island knows what is left and nobody
+    // knows what was asked for, so it says that instead.
+    const count = a.goes !== undefined && a.left !== undefined ? ` · ${a.goes - a.left + 1} of ${a.goes}`
+      : a.left !== undefined && a.left > 1 ? ` · ${a.left} to go` : '';
     if (a.state === 'walking') {
       this.actionLabel.textContent = `Walking over to ${a.def.label.toLowerCase()}…${count}`;
       this.actionFill.style.width = '0%';

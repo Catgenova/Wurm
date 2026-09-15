@@ -89,6 +89,14 @@ export interface IslandHooks {
   people: (people: PlayerRow[]) => void;
   /** What is in our hands changed. */
   pack: (items: ItemRow[]) => void;
+  /**
+   * What the island says we are in the middle of, and how far through it is.
+   *
+   * Seconds rather than timestamps: they are worked out on the island, off two
+   * of its own clocks, so a browser whose clock is a minute out still draws
+   * the right bar.
+   */
+  doing?: (what: { act: string | null; total: number; secs: number; left?: number; goes?: number; queued: number }) => void;
   /** Getting an island down takes a moment; this says how it is going. */
   progress?: (done: number, total: number, what: string) => void;
   /**
@@ -158,6 +166,14 @@ export class Island {
   private lastReconcile = 0;
   /** Our pack, kept by row rather than refetched whole on anybody's crafting. */
   private pack = new Map<number, ItemRow>();
+  /**
+   * How many goes we asked for, which the island does not keep.
+   *
+   * `act_left` counts down and the number originally asked for is not written
+   * anywhere, so "3 of 10" can only be said by the side that said ten. Cleared
+   * when the island stops telling us it is doing anything.
+   */
+  private goes: number | undefined;
 
   /**
    * Where everything the island says goes. Not readonly: the first few lines
@@ -307,7 +323,22 @@ export class Island {
     if (!this.info) return;
     try {
       const { data } = await supabase().rpc('rpc_settle', { p_seen: this.seenChange });
-      const said = (data ?? {}) as { settled?: number; act?: string | null; ends?: string | null };
+      const said = (data ?? {}) as {
+        settled?: number; act?: string | null; ends?: string | null;
+        left?: number | null; secs?: number | null; total?: number | null; queued?: number;
+      };
+      if (!said.act) this.goes = undefined;
+      this.hooks.doing?.({
+        act: said.act ?? null,
+        total: said.total ?? 0,
+        secs: said.secs ?? 0,
+        left: said.left ?? undefined,
+        goes: this.goes,
+        queued: said.queued ?? 0,
+      });
+      // Something landed, so what we are carrying may have changed in a way no
+      // row-level message would have told us about — a thing put down, say.
+      if ((said.settled ?? 0) > 0) void this.refreshPack();
       const due = said.ends ? (new Date(said.ends).getTime() - Date.now()) / 1000 : Infinity;
       // A quarter-second of slack, because a timer that fires a shade early
       // asks for work that is not due yet and has to ask again.
@@ -561,7 +592,12 @@ export class Island {
     if (error) return { started: false, why: error.message };
     const result = data as ActResult;
     // We know when this ends before the island tells anybody, so ask to be
-    // settled then rather than at the next heartbeat.
+    // settled then rather than at the next heartbeat — and put the clock on
+    // the screen now rather than a heartbeat from now.
+    if (result.started && !result.done && result.seconds) {
+      this.goes = times;
+      this.hooks.doing?.({ act: action, total: result.seconds, secs: result.seconds, left: times, goes: times, queued: 0 });
+    }
     if (result.ends) this.armBeat((new Date(result.ends).getTime() - Date.now()) / 1000 + 0.25);
     return result;
   }
