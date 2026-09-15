@@ -37,7 +37,7 @@ import { FURNITURE_BY_ID } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
-import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA } from './water';
+import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
 import type { Peer } from '../game/roster';
@@ -155,7 +155,6 @@ export function nearestSide(x: number, y: number, wx: number, wy: number): Side 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
-const WATER_STEPS = 24;
 /** How much of a neighbour's colour washes over the edge of a tile. */
 const BLEND_ALPHA = 0.46;
 /** How far in from the edge the neighbour's colour reaches, as a share of the way to the middle. */
@@ -164,8 +163,6 @@ const BLEND_REACH = 0.55;
 const GRAIN_SPECKS = 14;
 /** The colour an outline is drawn in round whatever the cursor is on. */
 const HOVER_INK = 'rgb(255, 226, 120)';
-const WATER_SHALLOW = [86, 168, 190];
-const WATER_DEEP = [16, 58, 118];
 
 function normalize(x: number, y: number, z: number): [number, number, number] {
   const l = Math.hypot(x, y, z);
@@ -204,15 +201,6 @@ export function skyWash(hour: number, dark: number): Array<{ colour: string; alp
   if (dawn > 0.01) out.push({ colour: '255, 168, 146', alpha: dawn * 0.18 });
   if (dark > 0.01) out.push({ colour: '12, 20, 44', alpha: dark * 0.68 });
   return out;
-}
-
-const WATER_PALETTE: string[] = [];
-for (let i = 0; i < WATER_STEPS; i++) {
-  const t = Math.pow(i / (WATER_STEPS - 1), 0.75);
-  const r = Math.round(WATER_SHALLOW[0] + (WATER_DEEP[0] - WATER_SHALLOW[0]) * t);
-  const g = Math.round(WATER_SHALLOW[1] + (WATER_DEEP[1] - WATER_SHALLOW[1]) * t);
-  const b = Math.round(WATER_SHALLOW[2] + (WATER_DEEP[2] - WATER_SHALLOW[2]) * t);
-  WATER_PALETTE.push(`rgba(${r},${g},${b},${(0.42 + 0.5 * t).toFixed(3)})`);
 }
 
 /**
@@ -2181,7 +2169,7 @@ export class Renderer {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
     const depth = Math.max(0, -(c[0] + c[1] + c[2] + c[3]) / 4);
-    const level = Math.min(WATER_STEPS - 1, Math.floor(depth / 1.6));
+    const level = waterLevel(depth);
     const { dirX, dirY, force } = this.surf;
     const wave = swellAt(x, y, this.time, dirX, dirY, force);
     const show = swellShow(force);

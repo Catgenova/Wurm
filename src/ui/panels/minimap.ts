@@ -4,6 +4,7 @@ import type { Renderer } from '../../render/renderer';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, rockVariant } from '../../world/tiles';
 import { UNSEEN, VISIBLE } from '../../game/vision';
 import type { UIWindow } from '../windows';
+import { waterRgb } from '../../render/water';
 
 /** How wide the drawn map is, whatever size the island is. */
 const VIEW_SIZE = 512;
@@ -271,10 +272,10 @@ export class MinimapPanel {
       g = 60;
       b = 40;
     } else if (w.hasWater(x, y)) {
-      const k = Math.max(0.35, 1 - Math.max(0, -h) / 60);
-      r = 30 * k + 20;
-      g = 80 * k + 30;
-      b = 140 * k + 50;
+      // The same ramp the world is painted with. The map used to roll its own,
+      // over a different pair of colours and a different depth, so a shelf
+      // that read as pale green out of the window read as navy on the map.
+      [r, g, b] = waterRgb(Math.max(0, -h));
     } else {
       const slope = w.getHeight(x + 1, y + 1) - w.getHeight(x, y);
       const shade = 0.9 + Math.max(-0.35, Math.min(0.25, -slope / 60));

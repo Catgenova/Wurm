@@ -49,3 +49,76 @@ export const TROUGH_ALPHA = 0.085;
  */
 export const FOAM_WIDTH = 3.2;
 export const foamAlpha = (swell: number, force: number): number => 0.3 + 0.34 * Math.max(0, swell) * swellShow(force);
+
+/* ---- And the colour of it, shallow to deep -------------------------------
+ *
+ * One ramp, read by the world and by the map, because a coastline that is pale
+ * green on one and navy on the other is two coastlines. The map used to roll
+ * its own — `1 - depth / 60` over a different pair of colours — and the two
+ * had never agreed about anything except that water is blue.
+ *
+ * ## How far down it goes
+ *
+ * The ramp used to cover thirty-eight height units and the island goes down a
+ * hundred and twenty, so **seventy-three per cent of the sea was one flat
+ * colour** and the gradient was a fringe a few tiles wide round the shore.
+ * Measured on the real island, across a band of it:
+ *
+ *     0–2      0.8%        20–40   16.7%
+ *     2–5      1.5%        40–80   50.0%
+ *     5–10     2.5%       80–160   23.0%
+ *     10–20    5.6%
+ *
+ * So the ramp covers the whole hundred and twenty now, and the half of the sea
+ * that sits between forty and eighty units down — the open water anybody
+ * actually looks at — falls in the middle of it rather than off the end.
+ *
+ * The steps are not even. `t` is raised to a power below one, which spends
+ * more of the ramp on shallow water than on deep: two feet of water and six
+ * look quite different and eighty and ninety do not, and the eye reads a coast
+ * by the first of those.
+ */
+
+/** Light teal at the water's edge. */
+export const WATER_SHALLOW: readonly [number, number, number] = [132, 220, 214];
+/** Dark deep blue at the bottom of it. */
+export const WATER_DEEP: readonly [number, number, number] = [8, 26, 72];
+
+/** How many colours the ramp is cut into, and how deep each step reaches. */
+export const WATER_STEPS = 40;
+export const WATER_STEP_UNITS = 3;
+/** More of the ramp spent on the shallows, where the eye reads the shape of a coast. */
+const WATER_CURVE = 0.7;
+
+/** How far along the ramp a given depth falls, 0 at the waterline and 1 at the bottom. */
+export const waterT = (depth: number): number => {
+  const step = Math.min(WATER_STEPS - 1, Math.max(0, Math.floor(depth / WATER_STEP_UNITS)));
+  return (step / (WATER_STEPS - 1)) ** WATER_CURVE;
+};
+
+/** The colour at a depth, before any alpha. */
+export function waterRgb(depth: number): [number, number, number] {
+  const t = waterT(depth);
+  return [
+    Math.round(WATER_SHALLOW[0] + (WATER_DEEP[0] - WATER_SHALLOW[0]) * t),
+    Math.round(WATER_SHALLOW[1] + (WATER_DEEP[1] - WATER_SHALLOW[1]) * t),
+    Math.round(WATER_SHALLOW[2] + (WATER_DEEP[2] - WATER_SHALLOW[2]) * t),
+  ];
+}
+
+/**
+ * And with it, ready to paint.
+ *
+ * Shallow water is thin enough to see the sand through and deep water is not,
+ * so the alpha climbs with the colour — which is most of what makes a shelf
+ * read as a shelf rather than as a differently coloured floor.
+ */
+export const WATER_PALETTE: readonly string[] = Array.from({ length: WATER_STEPS }, (_, i) => {
+  const depth = i * WATER_STEP_UNITS;
+  const [r, g, b] = waterRgb(depth);
+  return `rgba(${r},${g},${b},${(0.34 + 0.61 * waterT(depth)).toFixed(3)})`;
+});
+
+/** The step a depth lands on, for anybody indexing the palette directly. */
+export const waterLevel = (depth: number): number =>
+  Math.min(WATER_STEPS - 1, Math.max(0, Math.floor(depth / WATER_STEP_UNITS)));

@@ -1137,7 +1137,14 @@ cached per tile and invalidated when a corner changes.
 
 **Water.** Any tile with a corner below zero draws its terrain first, then a
 water polygon at height zero clipped to the submerged part of the tile
-(marching-squares style), tinted by depth.
+(marching-squares style), coloured by how deep it is: **light teal at the
+water's edge through to a dark blue at the bottom**, over forty steps covering
+the whole hundred and twenty height units the island goes down. The alpha
+climbs with the colour, so the sand shows through the shallows and not through
+the deep, which is most of what makes a shelf read as a shelf. The map is
+painted from the same ramp — it used to have one of its own, over a different
+pair of colours and a different depth, so a shelf that read as pale green out
+of the window read as navy on the map.
 
 **Actions.** `game/actions.ts` is a data table. Each action says which targets it
 applies to, why it may currently be unavailable (shown greyed in the menu),
