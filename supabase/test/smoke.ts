@@ -323,12 +323,32 @@ async function main(): Promise<void> {
     const noDeed = await island.act('plan_building', { kind: 'tile', ...here, name: 'Hall' }, 1);
     check('building anywhere at all wants a deed first', !noDeed.started && /deed/i.test(noDeed.why ?? ''),
       noDeed.why ?? 'IT WENT THROUGH');
-    const noStake = await island.act('found_settlement', { kind: 'item', name: 'Smoke' }, 1);
-    check('and founding one wants a stake in hand', !noStake.started && /stake/i.test(noStake.why ?? ''),
-      noStake.why ?? 'IT WENT THROUGH');
     const noWall = await island.act('build_wall', { kind: 'tile', ...here, side: 'n' }, 1);
     check('a wall with nothing planned is a wall, not a campfire',
       !noWall.started && /wall/i.test(noWall.why ?? ''), noWall.why ?? 'IT WENT THROUGH');
+
+    /*
+     * And then founding one for real, which the kit can now do.
+     *
+     * This was a refusal check — founding wants a stake in hand, and a fresh
+     * player had none. Then the starting kit learned to hand out the browser's
+     * twelve things, one of which is a deed stake, and a true check began
+     * failing because the island had got better. Again. So it stops asking for
+     * the refusal it used to get and plants the stake instead: a settlement
+     * founded through the front door, read back off the project, and the
+     * refusal worth having is the second one.
+     */
+    const founded = await island.act('found_settlement', { kind: 'item', name: 'Smoke' }, 1);
+    check('the stake in the kit founds a settlement', founded.started || founded.done === true,
+      founded.why ?? 'the token is in the ground');
+    await drain(id, uid);
+    const { data: deeds } = await supabase().from('deed').select('name,radius').eq('world_id', id);
+    const town = (deeds ?? []) as Array<{ name: string; radius: number }>;
+    check('and the island keeps it', town.length === 1,
+      town.length ? `${town[0].name}, ${town[0].radius * 2 + 1} tiles across` : 'no settlement came of it');
+    const twice = await island.act('found_settlement', { kind: 'item', name: 'Twice' }, 1);
+    check('and will not have a second', !twice.started && /already/i.test(twice.why ?? ''),
+      twice.why ?? 'IT WENT THROUGH');
 
     /*
      * Find a corner actually worth digging, rather than assuming the one we
