@@ -502,29 +502,17 @@ kbd {
   display: none;
 }
 
-#ui.narrow .toolbar {
-  max-height: 33px;
-  overflow: hidden;
-  align-content: flex-start;
-}
+/*
+ * The toolbar clipped itself to one row here, with a More button to drop the
+ * rest down, because there were eighteen buttons and they were four screens of
+ * sideways scrolling. Thirteen of them were windows and are one button and a
+ * list now, so five is the whole of it and it fits on a phone with room over.
+ */
 
-#ui.narrow .toolbar.open {
-  max-height: none;
-  overflow: visible;
-}
-
-#ui.narrow .tb-more {
-  order: -1;
+/* The one button that opens all of them, marked as the way in. */
+.tb-windows {
   border-color: var(--ui-accent);
   color: var(--ui-accent);
-}
-
-.tb-more {
-  display: none;
-}
-
-#ui.narrow .tb-more {
-  display: inline-block;
 }
 
 /*
@@ -598,10 +586,6 @@ kbd {
   color: var(--ui-accent);
 }
 
-.tb-btn.tb-danger:hover {
-  border-color: #a24a3a;
-  color: #f0a08f;
-}
 
 .action-bar {
   position: absolute;

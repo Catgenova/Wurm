@@ -30,7 +30,7 @@ import { ITEM_DEFS, itemName } from './game/items';
 import { RECIPES } from './game/recipes';
 import { Game } from './game/game';
 import { Keybinds } from './game/keybinds';
-import { clearSave, loadGame, saveGame, saveOnExit, warmSave } from './game/save';
+import { loadGame, saveGame, saveOnExit, warmSave } from './game/save';
 import { Renderer, skyWash, sunAt } from './render/renderer';
 import { SWAY_MAX, swayAt } from './render/sway';
 import { PUFFS, PUFF_LIFE, PUFF_RISE, puffAge, puffOf } from './render/smoke';
@@ -129,15 +129,7 @@ function turnView(step: number): void {
   game.settings.rotation = camera.rotation;
 }
 
-const ui = new UI(game, renderer, uiRoot, canvasEl, {
-  newWorld: () => {
-    if (!confirm('Start a new world? Your current island, items and skills will be lost.')) return;
-    void clearSave();
-    location.href = location.pathname;
-  },
-  turn: turnView,
-  keys,
-});
+const ui = new UI(game, renderer, uiRoot, canvasEl, { turn: turnView, keys });
 
 game.hooks = {
   prompt: (question, fallback) => window.prompt(question, fallback),

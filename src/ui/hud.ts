@@ -13,12 +13,14 @@ import { itemName } from '../game/items';
 import { ACTION_BY_ID } from '../game/actions';
 import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
+import { uiPoint } from './screen';
 
 export interface HudCallbacks {
   toggle: (id: string) => void;
   toggleGrid: () => void;
   center: () => void;
-  newWorld: () => void;
+  /** Open the list of windows, anchored under the button that asked. */
+  windows: (x: number, y: number) => void;
   turn: (step: number) => void;
   /** Press a loop on the belt, aimed at whatever the cursor is on. */
   useLoop: (loop: number) => void;
@@ -34,32 +36,50 @@ interface Bar {
 }
 
 /*
- * The toolbar, which says which key does each of these.
+ * Every window there is, in the order the menu lists them.
+ *
+ * These were thirteen buttons across the top, and with the four view controls
+ * and a `New world` nobody wanted that was eighteen — sixteen hundred pixels
+ * of toolbar, which on a phone is four screens of sideways scrolling with
+ * nothing to say so. They are one button and a list now.
+ *
+ * The keys are unchanged and the list says what they are, which is the other
+ * half of the point: a menu you have to open every time would be a step
+ * backwards, and this is where somebody learns the key that means they never
+ * have to open it again.
+ */
+export const WINDOWS: Array<{ label: string; bind: string; id: string }> = [
+  { label: 'Inventory', bind: 'win_inventory', id: 'inventory' },
+  { label: 'Craft', bind: 'win_craft', id: 'craft' },
+  { label: 'Tile', bind: 'win_tile', id: 'tile' },
+  { label: 'Skills', bind: 'win_skills', id: 'skills' },
+  { label: 'Events', bind: 'win_events', id: 'events' },
+  { label: 'Map', bind: 'win_map', id: 'map' },
+  { label: 'Wildermon', bind: 'win_wildermon', id: 'wildermon' },
+  { label: 'Journal', bind: 'win_journal', id: 'journal' },
+  { label: 'Ledger', bind: 'win_ledger', id: 'ledger' },
+  { label: 'Stores', bind: 'win_stores', id: 'stores' },
+  { label: 'Deed', bind: 'win_deed', id: 'deed' },
+  { label: 'Settings', bind: 'win_settings', id: 'settings' },
+  { label: 'Help', bind: 'win_help', id: 'help' },
+];
+
+/*
+ * What is left on the toolbar, which says which key does each of these.
  *
  * It used to say so by spelling the letter out here, which was true right up
- * until the Keys tab let somebody move one. Each button now names the *binding*
- * and asks what it currently answers to, so the toolbar cannot go stale — and
- * `New world`, which is deliberately on no key at all, names none.
+ * until the Keys tab let somebody move one. Each button names the *binding*
+ * and asks what it currently answers to, so the toolbar cannot go stale.
+ *
+ * These four stay out where a thumb can reach them because they are not
+ * windows: they are how you look at the island, pressed between one glance and
+ * the next rather than opened and read.
  */
 const BUTTONS: Array<{ label: string; bind?: string; action: (cb: HudCallbacks) => void; id?: string }> = [
-  { label: 'Inventory', bind: 'win_inventory', action: (cb) => cb.toggle('inventory') },
-  { label: 'Craft', bind: 'win_craft', action: (cb) => cb.toggle('craft') },
-  { label: 'Tile', bind: 'win_tile', action: (cb) => cb.toggle('tile') },
-  { label: 'Skills', bind: 'win_skills', action: (cb) => cb.toggle('skills') },
-  { label: 'Events', bind: 'win_events', action: (cb) => cb.toggle('events') },
-  { label: 'Map', bind: 'win_map', action: (cb) => cb.toggle('map') },
-  { label: 'Wildermon', bind: 'win_wildermon', action: (cb) => cb.toggle('wildermon') },
-  { label: 'Journal', bind: 'win_journal', action: (cb) => cb.toggle('journal') },
-  { label: 'Ledger', bind: 'win_ledger', action: (cb) => cb.toggle('ledger') },
-  { label: 'Stores', bind: 'win_stores', action: (cb) => cb.toggle('stores') },
-  { label: 'Deed', bind: 'win_deed', action: (cb) => cb.toggle('deed') },
   { label: 'Grid', bind: 'grid', action: (cb) => cb.toggleGrid(), id: 'grid' },
   { label: 'Centre', bind: 'centre', action: (cb) => cb.center() },
   { label: '↻ Turn', bind: 'turn_left', action: (cb) => cb.turn(-1) },
   { label: '↺ Turn', bind: 'turn_right', action: (cb) => cb.turn(1) },
-  { label: 'Settings', bind: 'win_settings', action: (cb) => cb.toggle('settings') },
-  { label: 'Help', bind: 'win_help', action: (cb) => cb.toggle('help') },
-  { label: 'New world', action: (cb) => cb.newWorld(), id: 'new' },
 ];
 
 /** Status bars, the action timer and the toolbar. */
@@ -216,33 +236,37 @@ export class Hud {
 
     const toolbar = document.createElement('div');
     toolbar.className = 'toolbar';
+    /*
+     * One button for all thirteen windows.
+     *
+     * Anchored under itself rather than at the pointer, because the point of
+     * this is a finger: the list wants to open where the thumb already is and
+     * stay there, not follow a cursor that a phone does not have. Measured
+     * through `uiPoint` because the interface is a scaled box over the screen
+     * and a client coordinate is not one of its own.
+     */
+    const windows = document.createElement('button');
+    windows.type = 'button';
+    windows.className = 'tb-btn tb-windows';
+    windows.textContent = 'UI Menu';
+    windows.title = 'Every window there is';
+    windows.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const r = windows.getBoundingClientRect();
+      const at = uiPoint({ clientX: r.left, clientY: r.bottom + 2 });
+      cb.windows(at.x, at.y);
+    });
+    toolbar.append(windows);
     for (const b of BUTTONS) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'tb-btn' + (b.id === 'new' ? ' tb-danger' : '');
+      btn.className = 'tb-btn';
       btn.addEventListener('click', () => b.action(cb));
       if (b.id === 'grid') this.gridBtn = btn;
       if (b.bind) this.keyed.push({ btn, label: b.label, bind: b.bind });
       else btn.textContent = b.label;
       toolbar.append(btn);
     }
-    /*
-     * A way to see the rest of them on a narrow screen.
-     *
-     * Eighteen buttons is sixteen hundred pixels of toolbar, which on a phone
-     * is four screens of sideways scrolling with nothing to say so. Clipped to
-     * one row instead, with this to drop the rest down — ordered first in CSS
-     * so it is always the one button that is certainly reachable.
-     */
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'tb-btn tb-more';
-    more.textContent = 'More';
-    more.addEventListener('click', () => {
-      const open = toolbar.classList.toggle('open');
-      more.textContent = open ? 'Less' : 'More';
-    });
-    toolbar.append(more);
 
     this.binds = cb.keys;
     this.drawKeys();

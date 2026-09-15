@@ -57,8 +57,8 @@ import { jobEntry, pinEntry, pinnable } from './beltmenu';
 import { creatureLines } from './creatureinfo';
 import { MARK_COLOURS } from '../game/marks';
 import { SettingsPanel } from './panels/settings';
-import type { Keybinds } from '../game/keybinds';
-import { Hud } from './hud';
+import { keyName, type Keybinds } from '../game/keybinds';
+import { Hud, WINDOWS } from './hud';
 import { buildHelp } from './panels/help';
 import { EventLogPanel } from './panels/eventlog';
 import { InventoryPanel } from './panels/inventory';
@@ -69,7 +69,6 @@ import { WindowManager } from './windows';
 import { uiBox } from './screen';
 
 export interface UICallbacks {
-  newWorld: () => void;
   /** Quarter-turn the camera: +1 or -1. */
   turn: (step: number) => void;
   /** What every key does, for the Keys tab in Settings to write to. */
@@ -92,6 +91,8 @@ export class UI {
   private readonly ledgerPanel: LedgerPanel;
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
+  /** What every key does, so the window menu can name them. */
+  private readonly keys: Keybinds;
 
   constructor(
     private readonly game: Game,
@@ -100,6 +101,7 @@ export class UI {
     canvas: HTMLCanvasElement,
     cb: UICallbacks,
   ) {
+    this.keys = cb.keys;
     this.windows = new WindowManager(root);
     this.menu = new ContextMenu(root, canvas);
     this.tooltip = new Tooltip(root);
@@ -107,7 +109,7 @@ export class UI {
       toggle: (id) => this.toggleWindow(id),
       toggleGrid: () => (game.settings.grid = !game.settings.grid),
       center: () => (renderer.camera.follow = true),
-      newWorld: cb.newWorld,
+      windows: (x, y) => this.showWindowMenu(x, y),
       turn: cb.turn,
       useLoop: (loop) => this.useLoop(loop),
       numbersTaken: () => this.numbersTaken,
@@ -426,6 +428,29 @@ export class UI {
       lines.push(`On the ground: ${pile.length} items`);
     }
     this.tooltip.show(sx, sy, lines);
+  }
+
+  /**
+   * Every window there is, under the one button that opens them.
+   *
+   * Thirteen buttons across the top of a phone was four screens of sideways
+   * scrolling; one button and a list is the same thirteen doors without the
+   * wall of them. Each row says which key it answers to, so the menu teaches
+   * its own way out of itself — and whether the window is open already, since
+   * the row toggles rather than opens and a list that will not say which way
+   * it is about to go is a list you have to try.
+   */
+  showWindowMenu(x: number, y: number): void {
+    const entries: MenuItem[] = WINDOWS.map((wdw) => {
+      const open = this.windows.get(wdw.id)?.isOpen ?? false;
+      const codes = this.keys.codes(wdw.bind);
+      return {
+        label: `${open ? '✓ ' : ''}${wdw.label}`,
+        note: codes.length ? keyName(codes[0]) : undefined,
+        onSelect: () => this.toggleWindow(wdw.id),
+      };
+    });
+    this.menu.show(x, y, 'Windows', entries);
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {
