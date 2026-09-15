@@ -191,4 +191,41 @@ export const CRATE_ACTIONS: ActionDef[] = [
   },
 ];
 
+CRATE_ACTIONS.push({
+  id: 'take_from_store',
+  label: 'Take out',
+  verb: 'taking it out',
+  instant: true,
+  quantity: true,
+  stamina: 0,
+  baseTime: 0,
+  /*
+   * Not in the generic item menu: it only means anything about a thing that is
+   * already in a crate or a chest, and those are reached through the store
+   * window. It exists so that taking one thing out has a door of its own —
+   * there has been a way to put a thing in and a way to take everything out,
+   * and nothing in between, so the browser did the in-between itself and the
+   * island put it straight back.
+   */
+  hidden: true,
+  applies: (t, g) => t.kind === 'item' && !g.inventory.get(t.uid) && !!g.storeWith(t.uid),
+  check: (t, g) => {
+    if (t.kind !== 'item') return null;
+    const where = g.storeWith(t.uid);
+    if (!where) return 'It is gone.';
+    const dx = where.at[0] - g.player.x;
+    const dy = where.at[1] - g.player.y;
+    return Math.hypot(dx, dy) > 2.4 ? `Stand next to the ${where.what} to take things out of it.` : null;
+  },
+  perform: (t, g) => {
+    if (t.kind !== 'item') return;
+    const where = g.storeWith(t.uid);
+    if (!where) return;
+    const got = where.take(t.uid);
+    if (!got) return;
+    g.inventory.addItem(got);
+    g.logMsg(`You take ${got.count > 1 ? `${got.count} × ` : 'the '}${itemName(got).toLowerCase()} out of the ${where.what}.`, 'event');
+  },
+});
+
 export const CRATE_ACTION_BY_ID = new Map(CRATE_ACTIONS.map((a) => [a.id, a]));

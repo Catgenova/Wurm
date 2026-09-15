@@ -207,6 +207,30 @@ export class UI {
       g.logMsg(`Stand next to the ${store.what} to move things in and out of it.`, 'error');
       return;
     }
+    /*
+     * On an island a drag is an ask like any other.
+     *
+     * Reported as rubber-banding: "it's happening when I click and drag but
+     * not when I click and hit button". This half moved the row from one
+     * window to the other in the browser's own copy and told nobody, so the
+     * next answer from the island put it straight back. The menu entries have
+     * always gone through `requestAction`; this now does too, and a drag ends
+     * up meaning exactly what the entry beside it means.
+     *
+     * Panniers and a bag in your pack have no door of their own and are still
+     * carried here, which is right: they are yours and travel with you.
+     */
+    if (g.ask && (store.kind === 'crate' || store.kind === 'furniture')) {
+      const id = to === 'inventory' ? 'take_from_store'
+        : store.kind === 'crate' ? 'store_in_crate' : 'store_in_furniture';
+      const def = ACTION_BY_ID.get(id);
+      if (!def) return;
+      const held = to === 'inventory'
+        ? store.items.find((it) => it.uid === p.uid)
+        : g.inventory.get(p.uid);
+      g.requestAction(def, { kind: 'item', uid: p.uid, count: held?.count ?? 1 });
+      return;
+    }
     if (to === 'inventory') {
       const item = store.take(p.uid);
       if (!item) return;

@@ -1,6 +1,7 @@
 import { crateCentre, crateName, crateCapacity, crateUnits } from '../../game/crates';
 import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
 import { bloodMul } from '../../game/creatures';
+import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { bagAdd, bagRefuses, bagRoom, bagTake, itemDef, type Item, itemName } from '../../game/items';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
@@ -13,6 +14,14 @@ export interface Store {
   capacity: number;
   centre: [number, number];
   what: string;
+  /**
+   * Which of the island's doors this one is behind, when it is behind one.
+   *
+   * Panniers and a bag in your pack are carried in your own copy and have no
+   * door of their own, so a drag into or out of those stays where it always
+   * was. A crate and a chest are the island's, and a drag has to ask.
+   */
+  kind: 'crate' | 'furniture' | 'carried';
   take: (uid: number) => Item | null;
   /** Why it will not take this, or null. */
   refuses: (item: Item) => string | null;
@@ -96,6 +105,7 @@ export class CratePanel {
         capacity: crateCapacity(crate),
         centre: crateCentre(crate),
         what: 'crate',
+        kind: 'crate',
         take: (uid) => this.game.crateTake(crate, uid),
         refuses: (item) => (crateUnits(crate) + item.count > crateCapacity(crate) ? `The ${crateName(crate).toLowerCase()} is full.` : null),
         add: (item) => this.game.crateAdd(crate, item),
@@ -111,6 +121,7 @@ export class CratePanel {
         capacity: cap,
         centre: [beast.x, beast.y],
         what: 'panniers',
+        kind: 'carried',
         take: (uid) => this.game.pannierTake(beast, uid),
         refuses: (item) => (units() + item.count > cap ? `${beast.name} is loaded as it is.` : null),
         add: (item) => this.game.pannierAdd(beast, item),
@@ -121,6 +132,7 @@ export class CratePanel {
     if (bag && bagRoom(bag)) {
       return {
         title: `${itemName(bag)} (QL ${bag.ql.toFixed(0)})`,
+        kind: 'carried',
         items: bag.inside ?? [],
         capacity: bagRoom(bag),
         centre: [this.game.player.x, this.game.player.y],
@@ -147,6 +159,7 @@ export class CratePanel {
         capacity: furnitureCapacity(piece),
         centre: furnitureCentre(piece),
         what: furnitureName(piece).toLowerCase(),
+        kind: 'furniture',
         take: (uid) => this.game.furnitureTake(piece, uid),
         refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureUnits(piece) + item.count > furnitureCapacity(piece) ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
         add: (item) => this.game.furnitureAdd(piece, item),
@@ -251,6 +264,16 @@ export class CratePanel {
         const [cx, cy] = store.centre;
         if (Math.hypot(cx - this.game.player.x, cy - this.game.player.y) > 2.4) {
           this.game.logMsg(`Stand next to the ${store.what} to take things out.`, 'error');
+          return;
+        }
+        /*
+         * The same door the drag uses. This took the row out of the browser's
+         * own copy and told nobody, so on an island the next answer put it
+         * back — "it still rubber bands from crate to inventory".
+         */
+        const def = ACTION_BY_ID.get('take_from_store');
+        if (this.game.ask && def && store.kind !== 'carried') {
+          this.game.requestAction(def, { kind: 'item', uid: item.uid, count: item.count });
           return;
         }
         const it = store.take(item.uid);

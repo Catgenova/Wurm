@@ -3006,6 +3006,35 @@ export class Game {
     return true;
   }
 
+  /**
+   * The crate or chest holding this thing, if one is.
+   *
+   * There has been a way to put a thing into a container and a way to take
+   * *everything* out, and nothing in between — so taking one thing out was
+   * done by the browser alone, moving the row from one window to the other in
+   * its own copy with nobody told. On an island the next answer put it back,
+   * which is what "it rubber bands from crate to inventory" was. This is what
+   * `take_from_store` asks, so that there is a door.
+   *
+   * Crates and the chests and barrels that hold things are shown through the
+   * same window, and had the same hole in them, so both are looked in.
+   */
+  storeWith(uid: number): { what: string; at: [number, number]; take: (id: number) => Item | null } | null {
+    for (const c of this.crates.values()) {
+      if (!c.items.some((it) => it.uid === uid)) continue;
+      return { what: crateName(c).toLowerCase(), at: crateCentre(c), take: (id) => this.crateTake(c, id) };
+    }
+    for (const f of this.furniture.values()) {
+      if (!f.items.some((it) => it.uid === uid)) continue;
+      return {
+        what: furnitureName(f).toLowerCase(),
+        at: [f.x + 0.5, f.y + 0.5],
+        take: (id) => this.furnitureTake(f, id),
+      };
+    }
+    return null;
+  }
+
   crateTake(crate: PlacedCrate, uid: number): Item | null {
     const idx = crate.items.findIndex((it) => it.uid === uid);
     if (idx < 0) return null;

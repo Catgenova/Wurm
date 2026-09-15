@@ -4885,3 +4885,26 @@ begin
   raise notice '684. hild tries % lines in a row and gets % of them in — the rest are asked to give the others a moment',
     say_a_minute()::int + 4, n;
 end $$;
+
+-- Taking one thing out, which the island could not do. There has been a way to
+-- put a thing in and a way to take everything out, and nothing in between — so
+-- the browser did the in-between itself and the next answer put it back.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select id as stowed from item where world_id = :'big' and holder = 'crate' and def = 'log' limit 1 \gset
+select '685. ivar takes one of the two logs back out: '
+     || coalesce(act_refusal(:'big', :'ivar', 'take_from_store',
+          ('{"kind":"item","uid":' || :'stowed' || ',"count":1}')::jsonb), 'allowed');
+select act_perform(:'big', :'ivar', 'take_from_store',
+  ('{"kind":"item","uid":' || :'stowed' || ',"count":1}')::jsonb) \g /dev/null
+select '686. and the crate is down to ' || crate_units(:'big', 1)
+     || ' with ' || (select coalesce(sum(count), 0) from item
+                     where world_id = :'big' and holder = 'player' and holder_uid = :'ivar' and def = 'log')
+     || ' in his hands — split off the stack rather than all or nothing';
+
+-- And it is a door, not a hole: hild cannot reach into ivar's crate.
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+update player set x = 2041.5, y = 2040.5 where world_id = :'big' and uid = :'hild' \g /dev/null
+select id as theirs from item where world_id = :'big' and holder = 'crate' limit 1 \gset
+select '687. hild reaches into ivar''s crate: '
+     || coalesce(act_refusal(:'big', :'hild', 'take_from_store',
+          ('{"kind":"item","uid":' || :'theirs' || ',"count":1}')::jsonb), 'ALLOWED');
