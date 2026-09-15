@@ -125,7 +125,7 @@ const PAN_SPEED = 900;
  * island they happen to have open.
  */
 const keys = new Keybinds();
-/** Quarter-turn the view (+1 or -1) and remember the choice in the save. */
+/** Turn the view an eighth (+1 or -1) and remember the choice in the save. */
 function turnView(step: number): void {
   camera.turn(step, (x, y) => game.world.heightAt(x, y));
   game.settings.rotation = camera.rotation;
@@ -149,7 +149,7 @@ game.hooks = {
 };
 
 const player = game.player;
-camera.rotation = game.settings.rotation & 3;
+camera.rotation = game.settings.rotation;
 camera.focus(player.x, player.y, game.playerHeight(), null);
 
 declare global {

@@ -207,7 +207,7 @@ interface SaveData {
   ground?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
-  settings: { grid: boolean; rotation?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean; fog?: boolean; follow?: boolean; edgePan?: boolean };
+  settings: { grid: boolean; rotation?: number; eighths?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean; fog?: boolean; follow?: boolean; edgePan?: boolean };
   savedAt: number;
   deed?: Deed | null;
   buildings?: BuildingsJSON;
@@ -272,7 +272,10 @@ function meta(game: Game): SaveMeta {
     ground: game.groundToJSON(),
     skills: game.skills.toJSON(),
     time: game.time,
-    settings: { ...game.settings },
+    // The view used to turn in quarters and now turns in eighths. Written
+    // under a name that says which, so a save from before is still read as
+    // the angle it was left at rather than half of it.
+    settings: { ...game.settings, rotation: undefined, eighths: game.settings.rotation },
     savedAt: Date.now(),
     deed: game.deed,
     buildings: game.buildings.toJSON(),
@@ -551,7 +554,7 @@ function finish(world: World, m: SaveMeta): Game {
   for (const crate of game.crates.values()) restake(crate.items);
   if (game.deed && !game.deedCrate()) game.placeDeedCrate();
   game.settings.grid = m.settings?.grid ?? true;
-  game.settings.rotation = (m.settings?.rotation ?? 0) & 3;
+  game.settings.rotation = (m.settings?.eighths ?? (m.settings?.rotation ?? 0) * 2) & 7;
   game.settings.deedBorder = m.settings?.deedBorder ?? true;
   game.settings.cutaway = m.settings?.cutaway ?? false;
   game.settings.tileWindow = m.settings?.tileWindow ?? true;

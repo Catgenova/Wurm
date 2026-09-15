@@ -1,4 +1,5 @@
 import { HEIGHT_SCALE, isoToWorld, isoX, isoY } from '../render/iso';
+import { TURNS, VIEWS, type View } from '../render/view';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -6,16 +7,22 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
  * The camera lives in iso space: (cx, cy) is the iso point shown at the centre
  * of the viewport, `zoom` scales iso units to CSS pixels.
  *
- * `rotation` turns the view in quarter turns. World coordinates are rotated
- * about the origin into "view space" (u, v) before the iso projection, so the
- * renderer can keep drawing axis-aligned diamonds whichever way you look.
+ * `rotation` turns the view an eighth of the way round at a time. World
+ * coordinates are rotated about the origin into "view space" (u, v) before the
+ * iso projection, so the renderer can keep drawing one fixed tile shape
+ * whichever way you are looking.
+ *
+ * Every point drawn on the screen goes through `rotateX` and `rotateY`, so the
+ * angle is kept to hand as a cosine and a sine rather than looked up each
+ * time; setting `rotation` is what keeps them honest.
  */
 export class Camera {
   cx = 0;
   cy = 0;
   zoom = 1;
-  /** Quarter turns, 0..3. */
-  rotation = 0;
+  private turns = 0;
+  private cos = 1;
+  private sin = 0;
   minZoom = 0.35;
   maxZoom = 2.5;
   /** When true the camera glides towards the focus target every frame. */
@@ -28,60 +35,40 @@ export class Camera {
     this.height = height;
   }
 
+  /** Which of the eight viewpoints, 0..7, each an eighth of a turn on from the last. */
+  get rotation(): number {
+    return this.turns;
+  }
+
+  set rotation(r: number) {
+    this.turns = ((r % TURNS) + TURNS) % TURNS;
+    this.cos = VIEWS[this.turns].cos;
+    this.sin = VIEWS[this.turns].sin;
+  }
+
+  /** Everything the renderer needs to walk the ground from where it is standing. */
+  get view(): View {
+    return VIEWS[this.turns];
+  }
+
   /** World x/y (point or vector) to view-space u. */
   rotateX(x: number, y: number): number {
-    switch (this.rotation) {
-      case 1:
-        return y;
-      case 2:
-        return -x;
-      case 3:
-        return -y;
-      default:
-        return x;
-    }
+    return x * this.cos + y * this.sin;
   }
 
   /** World x/y (point or vector) to view-space v. */
   rotateY(x: number, y: number): number {
-    switch (this.rotation) {
-      case 1:
-        return -x;
-      case 2:
-        return -y;
-      case 3:
-        return x;
-      default:
-        return y;
-    }
+    return y * this.cos - x * this.sin;
   }
 
   /** View-space u/v back to world x. */
   unrotateX(u: number, v: number): number {
-    switch (this.rotation) {
-      case 1:
-        return -v;
-      case 2:
-        return -u;
-      case 3:
-        return v;
-      default:
-        return u;
-    }
+    return u * this.cos - v * this.sin;
   }
 
   /** View-space u/v back to world y. */
   unrotateY(u: number, v: number): number {
-    switch (this.rotation) {
-      case 1:
-        return u;
-      case 2:
-        return -v;
-      case 3:
-        return -u;
-      default:
-        return v;
-    }
+    return u * this.sin + v * this.cos;
   }
 
   /** Move the camera towards a world point. */
@@ -108,15 +95,6 @@ export class Camera {
     return (isoY(this.rotateX(wx, wy), this.rotateY(wx, wy), h) - this.cy) * this.zoom + this.height / 2;
   }
 
-  /** View-space point to screen, skipping the rotation. */
-  viewToScreenX(u: number, v: number): number {
-    return (isoX(u, v) - this.cx) * this.zoom + this.width / 2;
-  }
-
-  viewToScreenY(u: number, v: number, h: number): number {
-    return (isoY(u, v, h) - this.cy) * this.zoom + this.height / 2;
-  }
-
   screenToIso(sx: number, sy: number): { x: number; y: number } {
     return { x: (sx - this.width / 2) / this.zoom + this.cx, y: (sy - this.height / 2) / this.zoom + this.cy };
   }
@@ -128,14 +106,14 @@ export class Camera {
     return { x: this.unrotateX(view.x, view.y), y: this.unrotateY(view.x, view.y) };
   }
 
-  /** Turn the view a quarter turn (+1 or -1) about the world point currently under the screen centre. */
+  /** Turn the view an eighth (+1 or -1) about the world point currently under the screen centre. */
   turn(step: number, heightAt: (x: number, y: number) => number): void {
     const cx = this.width / 2;
     const cy = this.height / 2;
     let p = this.screenToWorld(cx, cy, 0);
     for (let i = 0; i < 3; i++) p = this.screenToWorld(cx, cy, heightAt(p.x, p.y));
     const h = heightAt(p.x, p.y);
-    this.rotation = (((this.rotation + step) % 4) + 4) % 4;
+    this.rotation = this.turns + step;
     this.focus(p.x, p.y, h, null);
   }
 

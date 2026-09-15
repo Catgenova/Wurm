@@ -12,6 +12,7 @@
     "defs": "node scripts/emit-defs.mjs",
     "db:test": "supabase/test/run.sh",
     "db:bundle": "node scripts/bundle-sql.mjs",
+    "views": "node tools/views.mjs > src/render/view.ts",
     "atlas": "npx esbuild tools/build-atlas.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/build-atlas.mjs --log-level=error && node --max-old-space-size=4096 node_modules/.cache/build-atlas.mjs"
   },
   "devDependencies": {

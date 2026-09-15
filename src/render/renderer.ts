@@ -20,6 +20,7 @@ import {
 import { hash2 } from '../world/noise';
 import { bareRock, dustiness, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { depthOf, type View } from './view';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -161,6 +162,16 @@ const BLEND_ALPHA = 0.46;
 const BLEND_REACH = 0.55;
 /** Specks of grain laid on each tile once you are close enough to see them. */
 const GRAIN_SPECKS = 14;
+/*
+ * Roof shading: how bright a slope is, by the way it falls on screen. The
+ * three numbers are the old four tones — 1 falling away up and left, 0.86 up
+ * and right, 0.78 down and left, 0.64 towards the viewer — refitted as a plane
+ * through those four, so a cardinal viewpoint shades a roof exactly as it
+ * always did and every viewpoint between two of them follows on.
+ */
+const ROOF_LIGHT = 0.82;
+const ROOF_SIDE = 0.14;
+const ROOF_DROP = 0.22;
 /** The colour an outline is drawn in round whatever the cursor is on. */
 const HOVER_INK = 'rgb(255, 226, 120)';
 
@@ -245,6 +256,8 @@ export class Renderer {
   private memColors: (string | null)[];
   private lastVision = -1;
   private pts = new Float64Array(8);
+  /** The tile's outline in screen pixels from its anchor corner, worked out once a frame. */
+  private shapeBuf = new Float64Array(8);
   private cornerBuf = [0, 0, 0, 0];
   /**
    * Corners for working out a colour, kept apart from the ones the draw loop
@@ -284,7 +297,6 @@ export class Renderer {
   /** The wind as the surface sees it, worked out once a frame rather than per tile. */
   private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
-  private tileBuf = [0, 0];
   private playerFacing = 1;
   private creatureHits: HitRect[] = [];
   private crateHits: HitRect[] = [];
@@ -482,16 +494,15 @@ export class Renderer {
    * It costs nothing over open country: a field of grass has no edges to
    * blend, so the work is proportional to how broken up the ground is.
    */
-  private blendEdges(ctx: CanvasRenderingContext2D, rot: number, u: number, v: number, mine: TileType, lit: boolean, sun: [number, number, number], pts: Float64Array): void {
+  private blendEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, mine: TileType, lit: boolean, sun: [number, number, number], pts: Float64Array): void {
     const world = this.game.world;
-    const nb = this.tileBuf;
     const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
     const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
     for (let e = 0; e < 4; e++) {
-      // The four view-space neighbours, in the order the corners are listed.
-      this.viewToWorldTile(rot, u + (e === 1 ? 1 : e === 3 ? -1 : 0), v + (e === 0 ? -1 : e === 2 ? 1 : 0), nb);
-      const nx = nb[0];
-      const ny = nb[1];
+      // Screen edge `e` runs between corners `e` and `e + 1`; the view knows
+      // which of the tile's four neighbours lies across it.
+      const nx = x + V.edges[e][0];
+      const ny = y + V.edges[e][1];
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
       const theirs = world.viewTile(nx, ny, lit) as TileType;
       if (theirs === mine || HARD_EDGED.has(theirs)) continue;
@@ -570,11 +581,19 @@ export class Renderer {
     ctx.lineWidth = 1;
     ctx.lineJoin = 'round';
 
+    // The ground is walked in the lattice of whichever viewpoint we are at:
+    // `d` down the screen a line at a time, `e` along it. The lattice is a
+    // root-two step coarser at the diagonals, where a tile is a rectangle
+    // rather than a diamond, and denser cells would draw each one twice.
+    const V = cam.view;
+    const stepW = HALF_W * V.unit;
+    const stepH = HALF_H * V.unit;
     const b = cam.isoBounds();
-    const eMin = Math.floor(b.left / HALF_W) - 1;
-    const eMax = Math.ceil(b.right / HALF_W) + 1;
-    const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / HALF_H) - 2;
-    const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / HALF_H) + 1;
+    const eMin = Math.floor(b.left / stepW) - 1;
+    const eMax = Math.ceil(b.right / stepW) + 1;
+    const eStep = V.staggered ? 2 : 1;
+    const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / stepH) - 2;
+    const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / stepH) + 1;
     const grid = this.game.settings.grid && zoom >= 0.7;
     const vision = this.game.vision;
     const fogged = this.game.settings.fog;
@@ -643,13 +662,19 @@ export class Renderer {
     const grain = zoom >= 1.25;
     // Close enough to be picking things up rather than looking at the country.
     const player = this.game.player;
-    const rot = cam.rotation;
-    const tb = this.tileBuf;
-    this.worldToViewTile(rot, player.tileX, player.tileY, tb);
-    const playerDepth = tb[0] + tb[1];
-    const hw = HALF_W * zoom;
-    const hh = HALF_H * zoom;
+    const playerDepth = depthOf(V, player.tileX, player.tileY);
+    const hw = stepW * zoom;
+    const hh = stepH * zoom;
     const hs = HEIGHT_SCALE * zoom;
+    // The tile's screen outline and the world corners it hangs on. Both are
+    // fixed for the whole frame: the shape of a tile does not change across
+    // the island, only where it sits and how far its corners are lifted.
+    const off = this.shapeBuf;
+    for (let i = 0; i < 4; i++) {
+      off[i * 2] = V.shape[i][0] * hw;
+      off[i * 2 + 1] = V.shape[i][1] * hh;
+    }
+    const co = V.corners;
     const bottomMargin = 220 * zoom;
     const pts = this.pts;
     const c = this.cornerBuf;
@@ -671,26 +696,26 @@ export class Renderer {
         this.grainDark = new Path2D();
         this.grainPale = new Path2D();
       }
-      const baseY = (d * HALF_H - cam.cy) * zoom + H / 2;
+      const baseY = (d * stepH - cam.cy) * zoom + H / 2;
       let e = eMin;
-      if (((e + d) & 1) !== 0) e++;
-      for (; e <= eMax; e += 2) {
-        const u = (d + e) / 2;
-        const v = (d - e) / 2;
-        this.viewToWorldTile(rot, u, v, tb);
-        const x = tb[0];
-        const y = tb[1];
+      if (V.staggered && ((e + d) & 1) !== 0) e++;
+      for (; e <= eMax; e += eStep) {
+        const x = V.x[0] + V.x[1] * d + V.x[2] * e;
+        const y = V.y[0] + V.y[1] * d + V.y[2] * e;
         if (x < 0 || y < 0 || x >= world.w || y >= world.h) continue;
-        this.viewCorners(rot, u, v, c);
-        const baseX = (e * HALF_W - cam.cx) * zoom + W / 2;
-        pts[0] = baseX;
-        pts[1] = baseY - c[0] * hs;
-        pts[2] = baseX + hw;
-        pts[3] = baseY + hh - c[1] * hs;
-        pts[4] = baseX;
-        pts[5] = baseY + 2 * hh - c[2] * hs;
-        pts[6] = baseX - hw;
-        pts[7] = baseY + hh - c[3] * hs;
+        c[0] = world.getHeight(x + co[0][0], y + co[0][1]);
+        c[1] = world.getHeight(x + co[1][0], y + co[1][1]);
+        c[2] = world.getHeight(x + co[2][0], y + co[2][1]);
+        c[3] = world.getHeight(x + co[3][0], y + co[3][1]);
+        const baseX = (e * stepW - cam.cx) * zoom + W / 2;
+        pts[0] = baseX + off[0];
+        pts[1] = baseY + off[1] - c[0] * hs;
+        pts[2] = baseX + off[2];
+        pts[3] = baseY + off[3] - c[1] * hs;
+        pts[4] = baseX + off[4];
+        pts[5] = baseY + off[5] - c[2] * hs;
+        pts[6] = baseX + off[6];
+        pts[7] = baseY + off[7] - c[3] * hs;
         const minY = Math.min(pts[1], pts[3], pts[5], pts[7]);
         const maxY = Math.max(pts[1], pts[3], pts[5], pts[7]);
         if (maxY < 0 || minY > H + bottomMargin) continue;
@@ -725,10 +750,10 @@ export class Renderer {
         ctx.fill();
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
         const t0 = world.viewTile(x, y, lit) as TileType;
-        if (blend && !wet && !HARD_EDGED.has(t0)) this.blendEdges(ctx, rot, u, v, t0, lit, sun, pts);
+        if (blend && !wet && !HARD_EDGED.has(t0)) this.blendEdges(ctx, V, x, y, t0, lit, sun, pts);
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
-        if (wet) this.drawWater(u, v, x, y, c, fogged && !lit ? fogPath : undefined);
+        if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
         if (grain && !wet) this.addGrain(x, y, pts, zoom);
 
@@ -742,7 +767,7 @@ export class Renderer {
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
             this.ents.push({ kind: t === TileType.Tree ? 'tree' : 'bush', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
           }
-          if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, rot, d > playerDepth);
+          if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
           fogPath.moveTo(pts[0], pts[1]);
           fogPath.lineTo(pts[2], pts[3]);
           fogPath.lineTo(pts[4], pts[5]);
@@ -874,7 +899,7 @@ export class Renderer {
             });
           }
         }
-        if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, rot, d > playerDepth);
+        if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
       }
 
       if (d === playerDepth) {
@@ -927,78 +952,6 @@ export class Renderer {
     }
 
     this.drawOverlays(ctx, zoom);
-  }
-
-  /** View-space tile (u, v) to world tile, written into `out`. */
-  private viewToWorldTile(rot: number, u: number, v: number, out: number[]): void {
-    switch (rot) {
-      case 1:
-        out[0] = -v - 1;
-        out[1] = u;
-        break;
-      case 2:
-        out[0] = -u - 1;
-        out[1] = -v - 1;
-        break;
-      case 3:
-        out[0] = v;
-        out[1] = -u - 1;
-        break;
-      default:
-        out[0] = u;
-        out[1] = v;
-    }
-  }
-
-  /** World tile to view-space tile, written into `out`. */
-  private worldToViewTile(rot: number, x: number, y: number, out: number[]): void {
-    switch (rot) {
-      case 1:
-        out[0] = y;
-        out[1] = -x - 1;
-        break;
-      case 2:
-        out[0] = -x - 1;
-        out[1] = -y - 1;
-        break;
-      case 3:
-        out[0] = -y - 1;
-        out[1] = x;
-        break;
-      default:
-        out[0] = x;
-        out[1] = y;
-    }
-  }
-
-  /** Corner heights of view tile (u, v) in screen order: top, right, bottom, left. */
-  private viewCorners(rot: number, u: number, v: number, out: number[]): void {
-    const w = this.game.world;
-    switch (rot) {
-      case 1:
-        out[0] = w.getHeight(-v, u);
-        out[1] = w.getHeight(-v, u + 1);
-        out[2] = w.getHeight(-v - 1, u + 1);
-        out[3] = w.getHeight(-v - 1, u);
-        break;
-      case 2:
-        out[0] = w.getHeight(-u, -v);
-        out[1] = w.getHeight(-u - 1, -v);
-        out[2] = w.getHeight(-u - 1, -v - 1);
-        out[3] = w.getHeight(-u, -v - 1);
-        break;
-      case 3:
-        out[0] = w.getHeight(v, -u);
-        out[1] = w.getHeight(v, -u - 1);
-        out[2] = w.getHeight(v + 1, -u - 1);
-        out[3] = w.getHeight(v + 1, -u);
-        break;
-      default:
-        out[0] = w.getHeight(u, v);
-        out[1] = w.getHeight(u + 1, v);
-        out[2] = w.getHeight(u + 1, v + 1);
-        out[3] = w.getHeight(u, v + 1);
-    }
   }
 
   /**
@@ -1279,36 +1232,27 @@ export class Renderer {
 
   /**
    * Floors and walls belonging to a tile. Walls are drawn on the two borders
-   * that are the tile's back edges in the current rotation, so every wall is
-   * drawn exactly once, after the ground behind it and before whatever stands
-   * in front. Walls of the building the player is inside go translucent once
-   * they would hide the player.
+   * that are the tile's back edges under the current viewpoint, so every wall
+   * is drawn exactly once, after the ground behind it and before whatever
+   * stands in front. Walls of the building the player is inside go translucent
+   * once they would hide the player.
+   *
+   * Looked at square on — the four diagonal viewpoints — the two borders
+   * running away from the viewer are edge on and draw as nothing at all, which
+   * is what a wall seen end on looks like. Which of the pair is claimed still
+   * matters: claim both sides of one border and it is drawn twice.
    */
-  private drawStructures(x: number, y: number, rot: number, inFront: boolean): void {
+  private drawStructures(x: number, y: number, V: View, inFront: boolean): void {
     const bld = this.game.buildings;
     const w = this.game.world;
     const inside = bld.buildingAt(this.game.player.tileX, this.game.player.tileY);
     const building = bld.buildingAt(x, y);
     const base = w.getHeight(x, y);
-    let backA: Border;
-    let backB: Border;
-    switch (rot) {
-      case 1:
-        backA = borderOf(x, y, 'n');
-        backB = borderOf(x, y, 'e');
-        break;
-      case 2:
-        backA = borderOf(x, y, 'e');
-        backB = borderOf(x, y, 's');
-        break;
-      case 3:
-        backA = borderOf(x, y, 's');
-        backB = borderOf(x, y, 'w');
-        break;
-      default:
-        backA = borderOf(x, y, 'n');
-        backB = borderOf(x, y, 'w');
-    }
+    // One border across the top of the screen and one down a side, whichever
+    // way we are looking: between them every wall on the island is claimed by
+    // exactly one tile, and claimed by the tile in front of it.
+    const backA: Border = borderOf(x, y, V.back[0]);
+    const backB: Border = borderOf(x, y, V.back[1]);
     const playerLevel = this.game.player.level;
     const maxLevels = building ? building.levels : Math.max(1, this.maxLevelsAround(x, y));
     const { cutaway, viewLevel } = this.game.settings;
@@ -1505,14 +1449,22 @@ export class Renderer {
     const csy = cam.worldToScreenY(cx, cy, centreH);
     const cu = cam.rotateX(cx, cy);
     const cv = cam.rotateY(cx, cy);
-    const tri = (a: [number, number, number], b: [number, number, number]): void => {
-      const mx = (a[0] + b[0]) / 2;
-      const my = (a[1] + b[1]) / 2;
-      const du = cam.rotateX(mx, my) - cu;
-      const dv = cam.rotateY(mx, my) - cv;
+    /*
+     * How bright one of the four slopes is: which way it falls on screen, read
+     * as a direction rather than as a quadrant. A quadrant shades the two
+     * halves of a slope by where each half's middle happens to sit, which is
+     * the same answer for both only while the view is square to the grid — an
+     * eighth turn splits every roof down the middle.
+     */
+    const shadeOf = (dx: number, dy: number): number => {
+      const du = cam.rotateX(cx + dx, cy + dy) - cu;
+      const dv = cam.rotateY(cx + dx, cy + dy) - cv;
       const sx = du - dv;
       const sy = du + dv;
-      const shade = sx < 0 && sy < 0 ? 1 : sx > 0 && sy < 0 ? 0.86 : sx < 0 ? 0.78 : 0.64;
+      const len = Math.abs(sx) + Math.abs(sy) || 1;
+      return ROOF_LIGHT - (ROOF_SIDE * sx + ROOF_DROP * sy) / len;
+    };
+    const tri = (a: [number, number, number], b: [number, number, number], shade: number): void => {
       ctx.beginPath();
       ctx.moveTo(csx, csy);
       ctx.lineTo(cam.worldToScreenX(a[0], a[1]), cam.worldToScreenY(a[0], a[1], a[2]));
@@ -1531,8 +1483,12 @@ export class Renderer {
       const b = corners[(i + 1) % 4];
       const [nx, ny] = neighbours[i];
       const mid: [number, number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, roof(nx, ny) ? ridge : eave];
-      tri(a, mid);
-      tri(mid, b);
+      // Both halves of a slope face the same way, so both take the shade of
+      // the slope itself: the way out from the middle of the roof to the
+      // middle of this side.
+      const shade = shadeOf(mid[0] - cx, mid[1] - cy);
+      tri(a, mid, shade);
+      tri(mid, b, shade);
     }
     ctx.globalAlpha = 1;
   }
@@ -1595,10 +1551,16 @@ export class Renderer {
       ctx.lineTo(px(t0, k1), py(t0, k1));
       ctx.closePath();
     };
-    // The face running along the view's x axis catches the light.
+    // The face running along the view's x axis catches the light. How much of
+    // it does is a matter of degree rather than a choice between two: turning
+    // the view an eighth would otherwise jump a wall between the two tones,
+    // and at a diagonal it is neither.
     const vx = cam.rotateX(bx - ax, by - ay);
     const vy = cam.rotateY(bx - ax, by - ay);
-    const lit = Math.abs(vx) >= Math.abs(vy) ? (vx > 0 ? 1 : 0.8) : 0.72;
+    const along = Math.abs(vx);
+    const into = Math.abs(vy);
+    const face = along / (along + into || 1);
+    const lit = 0.72 * (1 - face) + (vx > 0 ? 1 : 0.8) * face;
     const done = isDone(wall);
     ctx.globalAlpha = alpha;
     if (!done) {
@@ -2151,20 +2113,22 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawWater(u: number, v: number, x: number, y: number, c: number[], fogInto?: Path2D): void {
+  private drawWater(V: View, x: number, y: number, c: number[], fogInto?: Path2D): void {
     const poly = this.waterPoly;
     // Where the ground crosses zero: two points on a beach tile, none on open
     // water, and four on the rare saddle, which gets no foam rather than the
-    // wrong foam.
+    // wrong foam. Walked round the tile in the order its corners are drawn, so
+    // the polygon that comes out is the shape it looks like on screen.
     const edge = this.waterEdge;
+    const cs = V.corners;
     let cross = 0;
     let n = 0;
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) & 3;
-      const ax = i === 1 || i === 2 ? u + 1 : u;
-      const ay = i >= 2 ? v + 1 : v;
-      const bx = j === 1 || j === 2 ? u + 1 : u;
-      const by = j >= 2 ? v + 1 : v;
+      const ax = x + cs[i][0];
+      const ay = y + cs[i][1];
+      const bx = x + cs[j][0];
+      const by = y + cs[j][1];
       const ha = c[i];
       const hb = c[j];
       if (ha < 0) {
@@ -2194,8 +2158,8 @@ export class Renderer {
     ctx.fillStyle = WATER_PALETTE[level];
     ctx.beginPath();
     for (let k = 0; k < n; k += 2) {
-      const sx = cam.viewToScreenX(poly[k], poly[k + 1]);
-      const sy = cam.viewToScreenY(poly[k], poly[k + 1], 0);
+      const sx = cam.worldToScreenX(poly[k], poly[k + 1]);
+      const sy = cam.worldToScreenY(poly[k], poly[k + 1], 0);
       if (k === 0) {
         ctx.moveTo(sx, sy);
         fogInto?.moveTo(sx, sy);
@@ -2217,8 +2181,8 @@ export class Renderer {
       ctx.strokeStyle = `rgba(240,250,255,${foamAlpha(wave, force).toFixed(3)})`;
       ctx.lineWidth = FOAM_WIDTH * cam.zoom * (0.72 + 0.42 * Math.max(0, wave) * show);
       ctx.beginPath();
-      ctx.moveTo(cam.viewToScreenX(edge[0], edge[1]), cam.viewToScreenY(edge[0], edge[1], 0));
-      ctx.lineTo(cam.viewToScreenX(edge[2], edge[3]), cam.viewToScreenY(edge[2], edge[3], 0));
+      ctx.moveTo(cam.worldToScreenX(edge[0], edge[1]), cam.worldToScreenY(edge[0], edge[1], 0));
+      ctx.lineTo(cam.worldToScreenX(edge[2], edge[3]), cam.worldToScreenY(edge[2], edge[3], 0));
       ctx.stroke();
       ctx.lineWidth = 1;
     }
@@ -2477,20 +2441,23 @@ export class Renderer {
     const cam = this.camera;
     const world = this.game.world;
     const iso = cam.screenToIso(sx, sy);
-    const eF = iso.x / HALF_W;
-    const dF = iso.y / HALF_H;
-    const up = Math.ceil((world.maxHeight * HEIGHT_SCALE) / HALF_H) + 1;
-    const down = Math.ceil((-world.minHeight * HEIGHT_SCALE) / HALF_H) + 3;
+    const V = cam.view;
+    const stepW = HALF_W * V.unit;
+    const stepH = HALF_H * V.unit;
+    const eF = iso.x / stepW;
+    const dF = iso.y / stepH;
+    // A hill in front stands between the cursor and the ground it is over, so
+    // the search runs from the nearest line that could reach this high back to
+    // the furthest that could reach this low, and takes the first tile it hits.
+    const up = Math.ceil((world.maxHeight * HEIGHT_SCALE) / stepH) + 1;
+    const down = Math.ceil((-world.minHeight * HEIGHT_SCALE) / stepH) + 3;
     const eLo = Math.floor(eF) - 1;
     const eHi = Math.ceil(eF) + 1;
-    const rot = cam.rotation;
-    const tb = this.tileBuf;
     for (let d = Math.floor(dF) + up; d >= Math.floor(dF) - down; d--) {
       for (let e = eLo; e <= eHi; e++) {
-        if (((e + d) & 1) !== 0) continue;
-        this.viewToWorldTile(rot, (d + e) / 2, (d - e) / 2, tb);
-        const x = tb[0];
-        const y = tb[1];
+        if (V.staggered && ((e + d) & 1) !== 0) continue;
+        const x = V.x[0] + V.x[1] * d + V.x[2] * e;
+        const y = V.y[0] + V.y[1] * d + V.y[2] * e;
         if (!world.inBounds(x, y)) continue;
         // Ground nobody has seen is not there to be clicked on.
         if (this.pointInTile(x, y, sx, sy)) return this.game.vision.state(x, y) === UNSEEN ? null : this.makePick(x, y, sx, sy);
