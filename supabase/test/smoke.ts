@@ -632,6 +632,26 @@ async function main(): Promise<void> {
       check('and our own copy of the land moved with it', back.getHeight(cx, cy) < before,
         `${before} → ${back.getHeight(cx, cy)} here`);
 
+      /*
+       * And whether this island winds itself.
+       *
+       * Everything here settles off a timestamp, so `world_tick` on `pg_cron`
+       * is what makes a finished job land for somebody watching, a wild thing
+       * move, a trap spring and a shut tab go home. Whether it is ever called
+       * depends on something no migration controls — whether the extension is
+       * available on the database it was applied to — and until this call
+       * there was no way to ask the real project.
+       *
+       * It is reported rather than insisted on: a project without pg_cron is a
+       * switch in a dashboard, not a broken build. The sentence is the point.
+       */
+      const { data: clock, error: clockErr } = await supabase().rpc('rpc_clock');
+      const wound = (clock ?? {}) as { winds?: boolean; every?: number };
+      check('the island can say whether it winds itself', !clockErr,
+        clockErr ? clockErr.message
+          : wound.winds ? `it does — a round every ${wound.every} seconds`
+          : 'IT DOES NOT — no pg_cron on this project, so nothing turns world_tick and the world only moves when somebody asks');
+
       // Everything a client reads it reads through a policy; the one on
       // `player` used to read itself and so refused every row.
       const { data: people, error: peopleErr } = await supabase().from('player').select('*').eq('world_id', id);
