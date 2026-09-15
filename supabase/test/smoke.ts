@@ -49,7 +49,7 @@ const waitFor = (jobs: number): number => Math.ceil(jobs * ACTION_PACE);
 async function settle(ms = waitFor(12) * 1000): Promise<void> {
   for (let i = 0; i < ms / 1000; i++) {
     await sleep(1000);
-    await supabase().rpc('rpc_sweep');
+    await supabase().rpc('rpc_settle');
   }
 }
 
@@ -68,7 +68,7 @@ async function drain(id: string, uid: string, tries = waitFor(30)): Promise<numb
     const left = ((data?.act_queue ?? []) as unknown[]).length + (data?.act ? 1 : 0);
     if (left === 0) return 0;
     await sleep(1000);
-    await supabase().rpc('rpc_sweep');
+    await supabase().rpc('rpc_settle');
   }
   return -1;
 }
@@ -583,7 +583,7 @@ async function main(): Promise<void> {
       const groundWas = ground.length;
       for (let i = 0; i < waitFor(60) && ground.length === groundWas; i++) {
         await sleep(1000);
-        await supabase().rpc('rpc_sweep');
+        await supabase().rpc('rpc_settle');
       }
       await island.refreshPack();
       /*
@@ -666,7 +666,7 @@ async function main(): Promise<void> {
         let left = 1;
         for (let i = 0; i < waitFor(20) && left > 0; i++) {
           await sleep(1000);
-          await supabase().rpc('rpc_sweep');
+          await supabase().rpc('rpc_settle');
           const { count } = await supabase().from('item').select('*', { count: 'exact', head: true })
             .eq('world_id', id).eq('holder', 'ground').eq('id', lying.id);
           left = count ?? 0;

@@ -87,7 +87,7 @@ select '    he was told: ' || string_agg(text, ' | ' order by n) from event wher
 delete from event;
 select rpc_act(:'world', 'dig', '{"x":9,"y":9,"cx":9,"cy":9}', 6) \g /dev/null
 update player set act_started = act_started - interval '600 seconds', act_ends = act_ends - interval '600 seconds' where uid = :'ivar';
-select rpc_sweep() as swept \gset
+select (rpc_settle()->>'settled') as swept \gset
 select '11. ' || :'swept' || ' goes settled by the sweep, and he is now '
      || coalesce((select act from player where uid = :'ivar'), 'finished');
 select '    height at that corner ' || land_height(:'world', 9, 9) || ' from 100, dirt ' || land_dirt(:'world', 9, 9) || ' from 20'
@@ -98,7 +98,7 @@ select '    height at that corner ' || land_height(:'world', 9, 9) || ' from 100
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 select rpc_act(:'world', 'dig', '{"x":8,"y":8,"cx":8,"cy":8}', 3) \g /dev/null
 update player set act_started = act_started - interval '600 seconds', act_ends = act_ends - interval '600 seconds' where uid = :'hild';
-select rpc_sweep() \g /dev/null
+select rpc_settle() \g /dev/null
 select '12. Ivar and Hild both dug: ' || count(*) || ' things of dirt between them, '
      || count(distinct id) || ' distinct numbers, highest ' || max(id) from item where def = 'dirt';
 
@@ -3626,3 +3626,60 @@ select '576. stood on 11,9 and asked to plant the sprout there: '
 update player set x = 12.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
 select '577. one step to the side, the same tile and the same sprout: '
      || coalesce(act_refusal(:'world2', :'ivar', 'plant', '{"kind":"tile","x":11,"y":9}'::jsonb), 'allowed');
+
+\echo ''
+\echo '--- the island''s own clock'
+-- Everything here settles off a timestamp, which works right up to the moment
+-- nobody calls. `settle` had three callers and the browser reached one of them
+-- only when the body moved, so a job finished while standing still landed at
+-- whatever later moment somebody happened to walk somewhere.
+select '578. the clock: a round every ' || tick_seconds() || ' seconds, a shut tab left standing for '
+     || round(idle_logout() / 60) || ' minutes, talk kept ' || round(event_keep() / 3600)
+     || ' hours, tile changes ' || round(change_keep() / 86400) || ' days, and an island nobody visits '
+     || round(island_keep() / 86400) || ' days';
+
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update world set ready = true where id = :'world2';
+select land_set_tile(:'world2', 12, 9, 0) \g /dev/null
+update player set x = 12.5, y = 9.5, seen_at = now(), away = false,
+       stats = jsonb_set(stats, '{stamina}', '1') where world_id = :'world2' and uid = :'ivar';
+select give(:'world2', :'ivar', 'shovel', 1, 30) \g /dev/null
+delete from event where world_id = :'world2';
+select rpc_act(:'world2', 'dig', '{"x":12,"y":9,"cx":12,"cy":9}', 1) \g /dev/null
+update player set act_started = act_started - interval '600 seconds',
+       act_ends = act_ends - interval '600 seconds' where world_id = :'world2' and uid = :'ivar';
+select '579. he digs, and then stands perfectly still. Ten minutes later he is still '
+     || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'finished')
+     || ' — nothing has called, so nothing has happened';
+select world_tick()::text as tock \gset
+select '580. one round of the clock: ' || :'tock';
+select '581. and now he is ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'finished')
+     || ', having been told: '
+     || coalesce((select text from event where world_id = :'world2' and uid = :'ivar' and kind = 'event'
+                  order by n desc limit 1), 'nothing');
+
+-- A body nobody has been near for hours is a shut tab, not a person.
+update player set seen_at = now() - interval '3 hours', away = false
+  where world_id = :'world2' and uid = :'hild';
+select world_tick() \g /dev/null
+select '582. hild left her tab open three hours ago: away is now '
+     || (select away from player where world_id = :'world2' and uid = :'hild')
+     || ', and the island heard "'
+     || coalesce((select text from event where world_id = :'world2' and uid is null
+                  and text like '% has gone home.' order by n desc limit 1), 'nothing') || '"';
+select '583. ivar, who was here a moment ago, is still on his feet: away is '
+     || (select away from player where world_id = :'world2' and uid = :'ivar');
+select '584. and nobody can turn the handle for anybody else: rpc_sweep is '
+     || case when exists (select 1 from pg_proc where proname = 'rpc_sweep'
+                            and pronamespace = 'public'::regnamespace)
+             then 'STILL THERE' else 'gone, and rpc_settle only settles the caller' end;
+select '585. does this database wind itself? '
+     || case when clock_running() then 'yes — pg_cron has the key'
+             else 'no pg_cron here, so the browser settles itself and the suite turns the handle' end;
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select rpc_join(:'world2') \g /dev/null
+select '586. and she comes back: away is now '
+     || (select away from player where world_id = :'world2' and uid = :'hild')
+     || ', and she was told "'
+     || coalesce((select text from event where world_id = :'world2' and uid = :'hild' and kind = 'system'
+                  order by n desc limit 1), 'nothing') || '"';

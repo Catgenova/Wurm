@@ -4,6 +4,7 @@ import type { TileType } from '../world/tiles';
 import { blankWorld, rowsOf } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { supabase, signIn } from './supabase';
+import { HEARTBEAT } from '../game/keep';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -136,6 +137,22 @@ export class Island {
   private lastSaid = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
   private seenChange = 0;
+  /**
+   * The timer that turns our own handle.
+   *
+   * Nothing on this island ticks: every job settles off a timestamp the next
+   * time something calls in. `rpc_move` was effectively the only caller, and
+   * it is skipped when the body has not gone anywhere new — so a thirty-second
+   * go at a rock finished while standing still landed at whatever later moment
+   * we happened to walk somewhere, all of it at once. This is the other half
+   * of the fix: the island has `pg_cron` for everybody else, and we ask for
+   * ourselves the moment our own work is due.
+   *
+   * It is the heartbeat too. `rpc_settle` writes `seen_at`, which is what
+   * tells the island the difference between somebody standing still at a forge
+   * and a tab that was shut an hour ago.
+   */
+  private beat: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Where everything the island says goes. Not readonly: the first few lines
@@ -230,6 +247,37 @@ export class Island {
     world.groundTouched = false;
     this.world = world;
     await this.watch(worldId);
+    this.armBeat(HEARTBEAT);
+  }
+
+  /**
+   * Ask the island to settle us, and set the next asking.
+   *
+   * The answer carries what is still due, so the next timer comes off the same
+   * round trip rather than off a Realtime row we may not be carrying. A job
+   * that ends in four seconds is asked for in four seconds; with nothing due
+   * it falls back to the heartbeat.
+   */
+  private armBeat(seconds: number): void {
+    if (this.beat) clearTimeout(this.beat);
+    this.beat = setTimeout(() => void this.pulse(), Math.max(0.5, seconds) * 1000);
+  }
+
+  private async pulse(): Promise<void> {
+    if (!this.info) return;
+    try {
+      const { data } = await supabase().rpc('rpc_settle');
+      const said = (data ?? {}) as { settled?: number; act?: string | null; ends?: string | null };
+      const due = said.ends ? (new Date(said.ends).getTime() - Date.now()) / 1000 : Infinity;
+      // A quarter-second of slack, because a timer that fires a shade early
+      // asks for work that is not due yet and has to ask again.
+      this.armBeat(Math.min(HEARTBEAT, Math.max(0.5, due + 0.25)));
+    } catch {
+      // A round trip that failed is not a reason to stop asking; the island is
+      // the authority on whether anything happened, and it will still be there
+      // in a heartbeat's time.
+      this.armBeat(HEARTBEAT);
+    }
   }
 
   /**
@@ -385,7 +433,11 @@ export class Island {
       p_world: this.info.id, p_action: action, p_target: target, p_times: times,
     });
     if (error) return { started: false, why: error.message };
-    return data as ActResult;
+    const result = data as ActResult;
+    // We know when this ends before the island tells anybody, so ask to be
+    // settled then rather than at the next heartbeat.
+    if (result.ends) this.armBeat((new Date(result.ends).getTime() - Date.now()) / 1000 + 0.25);
+    return result;
   }
 
   /** What time it is on the island, worked out rather than asked for. */
@@ -395,6 +447,8 @@ export class Island {
   }
 
   async leave(): Promise<void> {
+    if (this.beat) clearTimeout(this.beat);
+    this.beat = null;
     await this.channel?.unsubscribe();
     this.channel = null;
   }
