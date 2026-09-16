@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
+import { skillRises, tookOff } from './felt';
 import { packAll } from './packed';
 
 /**
@@ -199,6 +200,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
 
   /** What was last asked about, so the bar has something to point at. */
   let lastTarget: Target | null = null;
+  /** Whether the island's book of skills has landed once, so a rise is a rise. */
+  let seeded = false;
 
   game.ask = (def: ActionDef, target: Target, goes?: number) => {
     lastTarget = target;
@@ -242,7 +245,11 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    */
   game.packFromIsland = true;
   island.hooks.mobs = (rows) => {
-    game.creatures.sawAll(rows);
+    // Everything that lost health since the last answer gets its number, which
+    // is the half of the fight that happens away from your own body.
+    for (const h of game.creatures.sawAll(rows)) {
+      game.events.emit('hit', h.x, h.y, h.taken, 'dealt');
+    }
     game.events.emit('creature');
   };
 
@@ -270,13 +277,41 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     if (what.queue) game.showQueue(what.queue, what.cap ?? null);
     if (what.stats) {
       const s = game.player.stats as unknown as Record<string, number>;
+      // What health it took off, before it is written down: a body on an
+      // island is hurt over there, so `hurtPlayer` — which is what puts a
+      // number over you in a game of your own — never runs.
+      const was = s.health;
       for (const k of ['health', 'stamina', 'hunger', 'thirst']) {
         if (typeof what.stats[k] === 'number') s[k] = what.stats[k];
       }
+      const took = tookOff(was, s.health);
+      if (took) game.events.emit('hit', game.player.x, game.player.y, took, 'taken');
       game.events.emit('stats');
     }
     if (what.skills) {
+      /*
+       * And which skill went up, which this had no way of saying.
+       *
+       * Reported as "floating text only shows for climbing". It was exactly
+       * that: `gainSkill` is what raises a skill *and* emits the event the
+       * floating number is drawn from, and on an island the island raises
+       * them, so the only ones left running through it here are the two the
+       * browser still owns — climbing and swimming, off your own feet in
+       * `update`. Everything else came down this line, which set the numbers
+       * and then emitted a nameless gain of nothing:
+       *
+       *     game.events.emit('skill', '', 0);
+       *
+       * The renderer drops a gain of nothing, so the log said "Mining
+       * increased by 0.42" and nothing floated. Nothing new has to be sent:
+       * the whole book arrives every beat, so the rise is the difference
+       * between what it says and what we were holding.
+       */
+      for (const r of skillRises(what.skills, (id) => game.skills.get(id), seeded)) {
+        game.events.emit('skill', r.id, r.gain);
+      }
       for (const [id, value] of Object.entries(what.skills)) game.skills.values.set(id, value);
+      seeded = true;
       game.events.emit('skill', '', 0);
     }
     if (what.marks !== undefined) game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);

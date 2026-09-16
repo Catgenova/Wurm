@@ -182,6 +182,16 @@ jobs:
           npx esbuild supabase/test/pack.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/pack.mjs --log-level=error
           node node_modules/.cache/pack.mjs
+      - name: What the island's answers say has happened to you
+        run: |
+          # Reported as "floating text only shows for climbing". The renderer
+          # draws a floater off a skill gain or a hit, both of which come out
+          # of the code that does the thing — and on an island the island does
+          # it. Climbing is earned off your own feet, which is why it was the
+          # one left. The change is worked out from what already arrives.
+          npx esbuild supabase/test/felt.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/felt.mjs --log-level=error
+          node node_modules/.cache/felt.mjs
 
   migrate:
     name: Push the migrations to the project

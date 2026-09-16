@@ -1713,6 +1713,23 @@ export function workDuration(skill: number): number {
 
 type MoveResult = 'arrived' | 'moving' | 'blocked';
 
+/** A blow the island reported by the health it took off, and where it landed. */
+export interface Hurt {
+  x: number;
+  y: number;
+  taken: number;
+}
+
+/**
+ * How much health has to go before it is worth a number.
+ *
+ * A body's top health moves with its age, so an old thing shedding a
+ * hundredth as it goes past its prime is not a wound, and neither is the
+ * rounding between one answer and the next. The renderer writes anything
+ * under this as "blocked", which would be a lie about both.
+ */
+const HURT_FLOOR = 0.05;
+
 export class Creatures {
   readonly list = new Map<number, Creature>();
   nextId = 1;
@@ -1838,12 +1855,16 @@ export class Creatures {
    * Replaces rather than merges: what is not in the list has wandered out of
    * the range we asked about, or is dead, and either way it is not here.
    */
-  sawAll(rows: IslandCreature[]): void {
+  sawAll(rows: IslandCreature[]): Hurt[] {
     const now = Date.now();
     const seen = new Set<number>();
+    const hurt: Hurt[] = [];
     for (const r of rows) {
       seen.add(r.id);
       let c = this.list.get(r.id);
+      // What it stood at before this answer, which is the only record of a
+      // blow anybody struck between two of them.
+      const was = c?.health;
       if (!c) {
         c = Creatures.make(r.id, r.species, r.x, r.y, r.mode as CreatureMode, Math.random);
         this.list.set(r.id, c);
@@ -1854,6 +1875,17 @@ export class Creatures {
       c.mode = r.mode as CreatureMode;
       c.stance = r.stance as Stance;
       c.health = r.health;
+      /*
+       * A number over anything that lost health since the last answer.
+       *
+       * Not a claim about who struck it — on a shared island it may have been
+       * somebody else, and the island does not say. It is what the thing lost,
+       * which is what a damage number means. Only over something we had
+       * already seen: the first sight of a creature is not a wound.
+       */
+      if (was !== undefined && was - r.health > HURT_FLOOR) {
+        hurt.push({ x: r.x, y: r.y, taken: was - r.health });
+      }
       c.hunger = r.hunger ?? c.hunger;
       c.sex = (r.sex as Sex) ?? c.sex;
       c.traits = r.traits ?? c.traits;
@@ -1896,6 +1928,7 @@ export class Creatures {
       }
     }
     for (const id of [...this.list.keys()]) if (!seen.has(id)) this.list.delete(id);
+    return hurt;
   }
 
   /**
