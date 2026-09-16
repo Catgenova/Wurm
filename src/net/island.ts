@@ -315,6 +315,25 @@ export class Island {
   private beat: ReturnType<typeof setTimeout> | null = null;
   /** The block of country the channel is listening to, as `rx,ry`. */
   private block = '';
+  /**
+   * The highest line of talk we have heard, from either road.
+   *
+   * Realtime is the fast one and is not a promise: a channel that dropped for
+   * a moment loses whatever was said while it was down, and `event` was the
+   * one table with no way to catch up. The beat carries this and gets back
+   * anything newer, so a dropped line arrives late rather than never — and
+   * because both roads are counted here, nothing arrives twice.
+   */
+  private said = 0;
+  /**
+   * Whether the next ground read should bring the things that hardly move.
+   *
+   * Buildings, walls, floors and settlements cost a correlated subquery and
+   * three scans, and they only change when somebody builds. So they come on
+   * the reconcile, and on the first read after any of our own work — which is
+   * what stops a wall you just put up waiting twenty seconds to exist.
+   */
+  private groundSlow = true;
   /** The island's shared topic we are holding a share of, if any. */
   private bodiesTopic = '';
   /** Bodies go on a topic everybody on the island agrees on. */
@@ -632,6 +651,7 @@ export class Island {
       const { data } = await supabase().rpc('rpc_settle', {
         p_seen: this.seenChange,
         p_world: this.info.id,
+        p_said: this.said,
       });
       const said = (data ?? {}) as {
         settled?: number; act?: string | null; ends?: string | null;
@@ -640,9 +660,22 @@ export class Island {
         stats?: Record<string, number> | null; skills?: Record<string, number> | null;
         marks?: { tiles?: number[]; secs?: number } | null;
         goes?: number | null; time?: number | null; night?: boolean | null;
+        said?: Array<{ n: number; text: string; kind: string }> | null;
       };
       // The hour, on the beat every browser makes anyway. Nothing else has to
       // happen for the sun to move, and nothing can make it drift for long.
+      /*
+       * Anything said while nobody was listening.
+       *
+       * Only ever lines we have not heard — the cursor moves with both roads —
+       * so this is a catch-up and not an echo. Said before the rest of the
+       * answer is applied, so the log reads in the order it happened.
+       */
+      for (const line of said.said ?? []) {
+        if (line.n <= this.said) continue;
+        this.said = line.n;
+        this.hooks.say(line.text, line.kind);
+      }
       this.pinClock(said.time);
       if (typeof said.night === 'boolean') this.islandNight = said.night;
       this.hooks.mine?.({
@@ -774,8 +807,11 @@ export class Island {
     this.channel = listening
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event', filter: on },
         (m) => {
-          const e = m.new as { text: string; kind: string; uid: string | null };
+          const e = m.new as { n?: number; text: string; kind: string; uid: string | null };
           if (e.uid && e.uid !== this.uid) return;
+          // Counted on the way past, so the beat's catch-up knows where we got
+          // to and does not say any of it twice.
+          if (typeof e.n === 'number') this.said = Math.max(this.said, e.n);
           this.hooks.say(e.text, e.kind);
         })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: `holder_uid=eq.${this.uid}` },
@@ -864,6 +900,9 @@ export class Island {
   private async reconcile(now: number): Promise<void> {
     if (!this.info || now - this.lastReconcile < RECONCILE_EVERY) return;
     this.lastReconcile = now;
+    // And the ground's slow half with it, so a wall somebody else built is
+    // twenty seconds late at worst rather than never.
+    this.groundSlow = true;
     await this.refreshPeople();
     await this.refreshPack();
     await this.catchUp();
@@ -907,7 +946,12 @@ export class Island {
   async refreshGround(now: number): Promise<void> {
     if (!this.info || !this.hooks.built || now - this.lastGround < GROUND_EVERY) return;
     this.lastGround = now;
-    const { data } = await supabase().rpc('rpc_ground', { p_world: this.info.id, p_range: GROUND_RANGE });
+    // The slow half when it is owed, and the burning half every other time.
+    const slow = this.groundSlow;
+    this.groundSlow = false;
+    const { data } = await supabase().rpc('rpc_ground', {
+      p_world: this.info.id, p_range: GROUND_RANGE, p_slow: slow,
+    });
     if (data) this.hooks.built(data as IslandGround);
   }
 
@@ -1039,6 +1083,9 @@ export class Island {
      * budget they do.
      */
     if (result.done) this.armBeat(0.5);
+    // Our own work is the one thing that can put a wall up, so the next ground
+    // read after it brings the half that holds walls.
+    this.groundSlow = true;
     return result;
   }
 

@@ -3944,16 +3944,27 @@ export class Game {
      * nothing, ever. It is yours or it is nothing: other people's come in
      * beside it and are drawn, and light nothing.
      */
-    this.neighbourDeeds = ground.deeds ?? [];
-    const d = ground.deed;
-    const was = this.deed;
-    this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine } : null;
-    // Only when it is actually different: this runs every few seconds, and a
-    // settlement that has not moved is not news to anybody.
-    if ((was?.name ?? null) !== (d?.name ?? null) || was?.x !== d?.x || was?.y !== d?.y
-        || was?.radius !== d?.radius || was?.level !== d?.level) {
-      if (d) this.events.emit('world', d.x, d.y);
-      else if (was) this.events.emit('world', was.x, was.y);
+    /*
+     * The settlements, which only arrive with the slow half.
+     *
+     * `buildings` has always been applied only when it was sent; these two
+     * were not, so the fast ground read — everything burning, once a second —
+     * would have wiped your own settlement and your neighbours' off the map
+     * between reconciles. `undefined` is "nothing said about this"; `null` is
+     * still "you have no settlement", which is what a disband sends.
+     */
+    if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds;
+    if (ground.deed !== undefined) {
+      const d = ground.deed;
+      const was = this.deed;
+      this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine } : null;
+      // Only when it is actually different: this runs every few seconds, and a
+      // settlement that has not moved is not news to anybody.
+      if ((was?.name ?? null) !== (d?.name ?? null) || was?.x !== d?.x || was?.y !== d?.y
+          || was?.radius !== d?.radius || was?.level !== d?.level) {
+        if (d) this.events.emit('world', d.x, d.y);
+        else if (was) this.events.emit('world', was.x, was.y);
+      }
     }
     this.placed.crates.reset(this.crates.values());
     this.placed.campfires.reset(this.campfires.values());
