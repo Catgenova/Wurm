@@ -2188,3 +2188,56 @@ kbd {
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/*
+ * The picture on a treasure map.
+ *
+ * The square first and as big as the window will give it, because the square
+ * is the whole point: everything else on the page is a caption to it. The
+ * canvas is drawn at a fixed 384 and scaled, so a window dragged wider gets a
+ * bigger picture rather than a differently-cut one — what is on the map must
+ * not change with the size of the window it is being looked at in.
+ */
+.hoard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+}
+
+.hoard-view {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  align-self: center;
+  border: 2px solid rgba(70, 54, 32, 0.9);
+  border-radius: 2px;
+  background: #1b2732;
+  /* Tile edges are information here, not an artefact: the ground is drawn a
+   * square at a time and smoothing them turns a coastline into a smudge. */
+  image-rendering: pixelated;
+}
+
+.hoard-caption {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #d8c9a6;
+}
+
+/*
+ * The warm line, which is the search. Given room of its own and a rule above
+ * it so it reads as the island answering rather than as more caption.
+ */
+.hoard-warm {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #f0e2bd;
+  padding-top: 6px;
+  border-top: 1px solid rgba(107, 88, 54, 0.45);
+  min-height: 2.8em;
+}
+
+.hoard-dig {
+  align-self: flex-start;
+}

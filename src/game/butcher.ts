@@ -1,7 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import { SPECIES, type ButcherPart } from './creatures';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import { HOARD_METALS, itemDef, itemName, type Item } from './items';
 
 /**
  * Butchering a corpse. The Butchering skill decides how much of a carcass is
@@ -25,7 +25,7 @@ export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
  * out of the carcass with it, and it is the only place on the island four of
  * these lumps turn up together.
  */
-export const HOARD_METALS = ['adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump', 'gold_lump', 'silver_lump'];
+export { HOARD_METALS } from './items';
 
 /**
  * How much of a carcass is worth keeping. Bare hands manage about a third; a

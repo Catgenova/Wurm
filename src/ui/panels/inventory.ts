@@ -39,6 +39,8 @@ export class InventoryPanel {
     private readonly dropped?: (p: DragPayload) => void,
     /** Opens a carried bag in the store window. */
     private readonly openBag?: (uid: number) => void,
+    /** Opens a treasure map's picture. */
+    private readonly readMap?: (uid: number) => void,
   ) {
     this.search = document.createElement('input');
     this.search.type = 'search';
@@ -218,6 +220,12 @@ export class InventoryPanel {
     const entries: MenuItem[] = [];
     // A bag is opened rather than used, so that entry comes first.
     if (isBag(item)) entries.push({ label: 'Open', note: `${bagUnits(item)} / ${bagRoom(item)} things`, onSelect: () => this.openBag?.(item.uid) });
+    /*
+     * And a map is read rather than used. First, for the same reason: the
+     * whole of what a map is for is looking at it, and "Dig it up" is a thing
+     * you do once, at the end, somewhere else entirely.
+     */
+    if (item.id === 'treasure_map') entries.push({ label: 'Read', note: 'Look at the country on it', onSelect: () => this.readMap?.(item.uid) });
     entries.push(...this.game.actionsFor(target).map(({ def, reason }) => {
       const all = def.maxRepeat ? def.maxRepeat(target, this.game) : item.count;
       if (def.quantity && all > 1 && !reason) {

@@ -364,6 +364,19 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   large_barrel: { name: 'Large barrel', category: 'misc', weight: 34, decay: 4, description: 'Holds 250 litres of one liquid. It takes a while to fill and longer to empty.' },
 };
 
+/**
+ * What a hoard is made of: the deep metals, best first.
+ *
+ * Here rather than in `butcher.ts` with the dragon it used to come off,
+ * because a hoard is come by two ways now and `butcher.ts` reaches into
+ * `creatures.ts`. `treasure.ts` importing it from there closed a ring —
+ * treasure → butcher → creatures → treasure — and the module that lost the
+ * race was the one whose actions `ACTIONS` spreads, so the whole action list
+ * came up empty at run time with "TREASURE_ACTIONS is not iterable". It
+ * builds perfectly either way; only running it says so.
+ */
+export const HOARD_METALS = ['adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump', 'gold_lump', 'silver_lump'];
+
 export interface Item {
   uid: number;
   id: string;

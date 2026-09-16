@@ -65,6 +65,7 @@ import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
 import { SocialPanel } from './panels/social';
+import { HoardPanel } from './panels/hoard';
 import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
 import { WindowManager } from './windows';
@@ -104,6 +105,7 @@ export class UI {
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
   private readonly social: SocialPanel;
+  private readonly hoard: HoardPanel;
   /** The island, for the one window that asks it things directly. */
   private readonly island: Island | null;
   /** What every key does, so the window menu can name them. */
@@ -144,7 +146,7 @@ export class UI {
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });
     this.eventLog = new EventLogPanel(events, game);
     const inventory = this.windows.create({ id: 'inventory', title: 'Inventory', x: 12, y: 56, width: 340, height: 300, anchor: 'tr' });
-    new InventoryPanel(inventory, game, this.menu, (p) => this.moveDragged(p, 'inventory'), (uid) => this.cratePanel.openBag(uid));
+    new InventoryPanel(inventory, game, this.menu, (p) => this.moveDragged(p, 'inventory'), (uid) => this.cratePanel.openBag(uid), (uid) => this.hoard.openOn(uid));
     const skills = this.windows.create({ id: 'skills', title: 'Skills', x: 364, y: 56, width: 260, height: 380, anchor: 'tr', open: false });
     new SkillsPanel(skills, game);
     // The handful you are moving today, beside the book that holds all forty.
@@ -186,6 +188,13 @@ export class UI {
     // you know and where they are, and what has been written.
     const socialWin = this.windows.create({ id: 'social', title: 'Social', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
     this.social = new SocialPanel(socialWin, game, this.island);
+    /*
+     * Not on the Menu, because it is not a window you open — it is a window a
+     * particular map opens. Reading a second map while the first is up shows
+     * the second: there is only ever one picture in front of you.
+     */
+    const hoardWin = this.windows.create({ id: 'hoard', title: 'The map', x: 12, y: 56, width: 412, height: 520, anchor: 'tl', open: false });
+    this.hoard = new HoardPanel(hoardWin, game, this.island);
     const ledgerWin = this.windows.create({ id: 'ledger', title: 'Ledger', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
     this.ledgerPanel = new LedgerPanel(ledgerWin, game);
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
@@ -310,6 +319,7 @@ export class UI {
     this.stores.update(performance.now());
     this.deedPanel.update(performance.now());
     this.social.update(performance.now() / 1000);
+    this.hoard.update(performance.now() / 1000);
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());
     this.ledgerPanel.update(performance.now());

@@ -150,20 +150,34 @@ export function mapChanceFromBeast(health: number): number {
 
 import type { Game } from './game';
 import type { ActionDef } from './actions';
-import { ITEM_DEFS, rollRarity, type Item } from './items';
+import { HOARD_METALS, ITEM_DEFS, rollRarity, type Item } from './items';
 import { canImprove } from './improve';
-import { HOARD_METALS } from './butcher';
 
 /**
  * The ordinary things in a hoard, beside the lumps: a tool or a blade.
+ *
+ * Worked out on the first ask rather than when this file loads, and that is
+ * not a saving. `canImprove` comes from `improve.ts`, which reaches into
+ * `gear`, `furniture` and `materials`, and somewhere down there something
+ * reaches back: computing this at module scope put `TREASURE_ACTIONS` after
+ * `ACTIONS` had already spread it, and the whole action list came up empty
+ * with "TREASURE_ACTIONS is not iterable". A screenshot of the map window
+ * found it; nothing else would have, because a cycle like that builds
+ * perfectly and only fails when it runs.
  *
  * Everything worth bettering, less the furniture and the boats — which are
  * worth bettering too and are not things anybody buried. The suite's first
  * hoard came up with a cart and a chest in it. `category` already draws the
  * line, so there is no weight written down here to drift from the island's.
  */
-export const HOARD_THINGS = Object.keys(ITEM_DEFS)
-  .filter((id) => canImprove(id) && ITEM_DEFS[id].category === 'tool');
+let hoardThingsCache: string[] | null = null;
+export function hoardThings(): string[] {
+  if (!hoardThingsCache) {
+    hoardThingsCache = Object.keys(ITEM_DEFS)
+      .filter((id) => canImprove(id) && ITEM_DEFS[id].category === 'tool');
+  }
+  return hoardThingsCache;
+}
 
 /**
  * A hoard in the ground, as the browser keeps one.
@@ -298,7 +312,8 @@ export const TREASURE_ACTIONS: ActionDef[] = [
       }
       const goods: string[] = [];
       for (let i = 0; i < tier.lumps; i++) goods.push(HOARD_METALS[Math.floor(g.rand() * HOARD_METALS.length)]);
-      for (let i = 0; i < tier.things; i++) goods.push(HOARD_THINGS[Math.floor(g.rand() * HOARD_THINGS.length)]);
+      const things = hoardThings();
+      for (let i = 0; i < tier.things; i++) goods.push(things[Math.floor(g.rand() * things.length)]);
       for (const id of goods) {
         const ql = Math.max(1, Math.min(100, map.ql * (0.7 + g.rand() * 0.5)));
         const rare = rollRarity(g.rand);

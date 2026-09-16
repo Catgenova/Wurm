@@ -214,6 +214,18 @@ export interface MyDeed {
 }
 
 /** Everything the social window shows, in one answer. */
+/** What the island will say about a map, which is a picture and a tier. */
+export interface TreasureMap {
+  side: number;
+  tier: string;
+  ql: number;
+  /** Tile ids, row by row; -1 is off the end of the island. */
+  tiles: number[];
+  /** Corner heights, one more each way; -1000 is off the end of it. */
+  heights: number[];
+  why?: string;
+}
+
 export interface Social {
   /**
    * Every settlement that is yours, the one you founded first.
@@ -1308,6 +1320,34 @@ export class Island {
     const { data, error } = await supabase().rpc('rpc_social', { p_world: this.info.id });
     if (error || !data) return null;
     return data as Social;
+  }
+
+  /**
+   * The picture on a map, which is the whole of what this browser is told.
+   *
+   * A square of ground with the hoard at the middle of it and not one number
+   * that says where on the island it is. `-1` is a tile off the end of the
+   * land and `-1000` a corner of it: near a coast the picture shows the sea,
+   * because the alternative is sliding the window inland and telling the
+   * browser how far it slid, which is a coordinate.
+   */
+  async treasureMap(item: number): Promise<TreasureMap | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_treasure_map', {
+      p_world: this.info.id, p_item: item,
+    });
+    if (error || !data) return null;
+    return data as TreasureMap;
+  }
+
+  /** How warm you are: a band, and never a bearing. */
+  async treasureWarm(item: number): Promise<{ here: boolean; say: string } | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_treasure_warm', {
+      p_world: this.info.id, p_item: item,
+    });
+    if (error || !data) return null;
+    return data as { here: boolean; say: string };
   }
 
   /** Ask somebody to come and live on your land. */
