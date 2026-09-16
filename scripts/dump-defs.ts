@@ -10,7 +10,7 @@
  * turns them into rows. What Postgres holds is generated, never hand-edited —
  * the algorithms are ported, the constants are not.
  */
-import { ITEM_DEFS } from '../src/game/items';
+import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
 import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, BUSH_DEFS } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
@@ -218,6 +218,10 @@ out.push(`create table if not exists title_def (
 /* And the trades that sit beside each other, so a knack earned at one can land
    on its neighbour: the same hands and the same wood. */
 out.push(`create table if not exists knack_kin (skill text primary key, family text not null);`);
+/* How fast a thing left lying on the ground goes off, by what sort of thing it
+   is, when its own row does not say. Food rots in about half an hour; a tool
+   lasts most of a day. */
+out.push(`create table if not exists category_decay (category text primary key, per_hour real not null);`);
 out.push(`alter table item_def add column if not exists food real;`);
 out.push(`alter table item_def add column if not exists drink real;`);
 /* What a thing says about itself when you look at it, and how many other
@@ -590,7 +594,7 @@ out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
-  title_def, knack_kin,
+  title_def, knack_kin, category_decay,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
 
@@ -680,6 +684,7 @@ out.push(`create or replace function boon_seconds() returns double precision lan
 out.push(`create or replace function boon_bonus() returns double precision language sql immutable as $fn$ select ${q(BOON_BONUS)}::double precision $fn$;`);
 for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(t.skill)}, ${q(t.at)}, ${q(t.name)});`);
 for (const [skill, family] of FAMILY_OF) out.push(`insert into knack_kin values (${q(skill)}, ${q(family)});`);
+for (const [cat, per] of Object.entries(CATEGORY_DECAY)) out.push(`insert into category_decay values (${q(cat)}, ${q(per)});`);
 for (const m of METALS) {
   out.push(`insert into metal_def values (${q(m.id)}, ${q(m.name)}, ${q(m.ore)}, ${q(m.lump)}, ${q(m.level)}, ${q(m.work)});`);
 }

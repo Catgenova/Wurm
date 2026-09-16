@@ -5677,3 +5677,79 @@ select '749. taken past fifty: titles '
 select '750. and the beat carries all of it: ' || (select string_agg(k, ', ' order by k)
          from jsonb_object_keys(rpc_settle(null, :'world2')) k
          where k in ('rested', 'boons', 'knacks', 'titles', 'title', 'nutrition'));
+
+\echo ''
+\echo '--- and what goes off where it lies'
+/*
+ * `item_def.decay` is real data — food rots in about half an hour, a tool
+ * lasts most of a day — and `groundDecayRate` is real arithmetic on top of it.
+ * Neither side had ever called either, so a haunch of meat dropped in a field
+ * was still a haunch of meat a week later.
+ */
+delete from item where world_id = :'world2' and holder = 'ground' \g /dev/null
+insert into item (world_id, holder, gx, gy, def, ql) values (:'world2', 'ground', 3, 3, 'meat', 30)
+  returning id as haunch \gset
+insert into item (world_id, holder, gx, gy, def, ql) values (:'world2', 'ground', 3, 3, 'pickaxe', 30)
+  returning id as dropped_pick \gset
+select '751. on the floor at QL 30: meat goes off at '
+     || round((select ground_decay_rate(i) from item i where i.id = :'haunch')::numeric, 1)
+     || ' damage an hour, a pickaxe at '
+     || round((select ground_decay_rate(i) from item i where i.id = :'dropped_pick')::numeric, 1)
+     || ' — and a crate is a roof: nothing in one rots at all';
+select ground_sweep(:'world2') \g /dev/null
+update item set rot_at = now() - interval '2 hours' where world_id = :'world2' and holder = 'ground' \g /dev/null
+select ground_sweep(:'world2') \g /dev/null
+select '752. two hours later: the meat is '
+     || coalesce((select round(dmg::numeric)::text || ' damaged' from item where id = :'haunch'), 'gone altogether')
+     || ' and the pickaxe is '
+     || coalesce((select round(dmg::numeric)::text || ' damaged' from item where id = :'dropped_pick'), 'gone');
+
+-- And the body, which was thinner than the one being drawn.
+update player set nutrition = '{}'::jsonb, stats = jsonb_set(stats, '{hunger}', '1'), act = null,
+    body_at = now() - interval '600 seconds', moved_at = now() - interval '1 hour'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select round(((stats->>'hunger')::numeric), 4) as empty_table from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set nutrition = '{"starch":1,"flesh":1,"fat":1,"greens":1}'::jsonb,
+    stats = jsonb_set(stats, '{hunger}', '1'), body_at = now() - interval '600 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '753. ten minutes of standing about: hunger ' || :'empty_table' || ' on an empty table and '
+     || (select round(((stats->>'hunger')::numeric), 4) from player where world_id = :'world2' and uid = :'ivar')
+     || ' on a full one — and the table itself is down to '
+     || (select round((nutrition->>'starch')::numeric, 3) from player where world_id = :'world2' and uid = :'ivar')
+     || ' from 1, because one good dinner is not meant to feed a body for life';
+update player set stats = jsonb_set(stats, '{stamina}', '0'), body_at = now() - interval '60 seconds',
+    moved_at = now() - interval '1 hour' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select round(((stats->>'stamina')::numeric), 3) as still from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set stats = jsonb_set(stats, '{stamina}', '0'), body_at = now() - interval '60 seconds',
+    moved_at = now() where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '754. a minute of wind back: ' || :'still' || ' standing still and '
+     || (select round(((stats->>'stamina')::numeric), 3) from player where world_id = :'world2' and uid = :'ivar')
+     || ' on the move — `wind_walk` was crossed the day the body was and called by nothing';
+
+select '755. every crate in sight counted once for the lot: crates_near reads crate_units '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.proname = 'crates_near' and p.prosrc like '%crate_units(%')
+     || ' times, where it used to run one for every crate within forty tiles on every ground read';
+
+/*
+ * And the sweep that would have found most of today's work without anybody
+ * reporting anything: rules the island keeps and never runs.
+ *
+ * A report rather than a rule. Some of these are honestly unused — a tool's
+ * helper, a door the browser calls and nothing down here does — so a number
+ * that goes up is a question rather than a failure. It is here because "the
+ * rule is written and nothing runs it" was the shape of the sleep bonus, the
+ * knacks, the titles, swimming, the walking wind and everything going off.
+ */
+select '756. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+from (
+  select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'
+     and not exists (select 1 from pg_depend e where e.objid = p.oid and e.deptype = 'e')
+     and not exists (select 1 from pg_proc q join pg_namespace m on m.oid = q.pronamespace
+                     where m.nspname = 'public' and q.oid <> p.oid and q.prosrc like '%' || p.proname || '(%')
+) q;
