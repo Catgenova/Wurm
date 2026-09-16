@@ -91,7 +91,7 @@ export const BODY_GAP = 180;
 export function bodyForward(
   was: Body,
   secs: number,
-  at: { acting: boolean; wind: number; drain?: number },
+  at: { acting: boolean; wind: number; drain?: number; spend?: number },
 ): Body {
   const gone = Math.max(0, Math.min(BODY_GAP, secs));
   if (gone <= 0) return was;
@@ -103,8 +103,18 @@ export function bodyForward(
   // Wind comes back only while your hands are empty, and an empty stomach or a
   // dry throat gets it back at a share of the rate.
   const starving = was.hunger <= 0 || was.thirst <= 0 ? WIND_STARVING : 1;
+  /*
+   * Wind, which goes one way at a time.
+   *
+   * The island takes the whole cost of a job at the end of it, in `spend_wind`
+   * — one step, and the beat lands a quarter-second later, so the bar sat
+   * still through a four-and-a-half-second swing and then dropped. Spread over
+   * the go it comes down as the work is done and arrives at the same number,
+   * which is the same bargain as everything else drawn here: the shape is
+   * ours, the value is the island's, and every answer re-pins it.
+   */
   const stamina = at.acting
-    ? was.stamina
+    ? Math.max(0, was.stamina - gone * (at.spend ?? 0))
     : Math.min(1, was.stamina + gone * WIND_REST * at.wind * starving);
   // Nothing knits on an empty stomach — and a body that is still bleeding is
   // losing more than it is making, which the island works out in two places

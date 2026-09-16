@@ -1839,7 +1839,22 @@ export class Game {
       // What the wounds are taking, by the island's own sum — `woundDrain` and
       // `wound_drain` are the same arithmetic over the same table.
       const drain = p.wounds.reduce((n, w) => n + woundDrain(w), 0);
-      const now = bodyForward(s, dt, { acting: this.action?.state === 'performing', wind, drain });
+      /*
+       * And what the job in hand is costing, spread across it.
+       *
+       * The island's own sum, not this one's: `spend_wind` says in as many
+       * words that it leaves the burden out — "the island does not know what
+       * you are carrying" — so `staminaCost` would overshoot for a laden body
+       * and be yanked back on every answer. Drawing the island's arithmetic is
+       * the whole discipline here.
+       */
+      const a = this.action;
+      const doing = a?.state === 'performing';
+      const body = Math.max(0.45, 1 - Math.max(0, this.skills.get('body_stamina') - CHAR_START) * 0.0045);
+      const spend = doing && a.def.stamina > 0
+        ? (a.def.stamina * body) / Math.max(0.001, a.duration)
+        : 0;
+      const now = bodyForward(s, dt, { acting: doing, wind, drain, spend });
       s.hunger = now.hunger;
       s.thirst = now.thirst;
       s.stamina = now.stamina;

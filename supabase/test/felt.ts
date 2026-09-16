@@ -232,5 +232,36 @@ say('starved and bleeding loses the blood and gains nothing',
   +bodyForward({ health: 0.8, stamina: 1, hunger: 0.1, thirst: 1 }, 10, bleeding).health.toFixed(4),
   +(0.8 - 10 * 0.01).toFixed(4));
 
+/*
+ * And the wind a job is taking, spread across it.
+ *
+ * `spend_wind` takes the whole cost at the end of a go, and the beat lands a
+ * quarter-second after that — so the bar stood still through a four-and-a-half
+ * second swing and then dropped. Spread over the go it comes down as the work
+ * is done and arrives at the same number, which is the only thing that matters:
+ * the shape is drawn here, the value is the island's, and every answer re-pins.
+ */
+console.log('\n--- and the wind a job is taking');
+
+const fresh: Body = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
+// A four-and-a-half second go costing 0.09 of wind: 0.02 a second.
+const swinging = { acting: true, wind: 1, spend: 0.09 / 4.5 };
+say('a third of the way through the swing',
+  +bodyForward(fresh, 1.5, swinging).stamina.toFixed(4), +(1 - 0.03).toFixed(4));
+say('and by the end of it, where the island puts it',
+  +bodyForward(fresh, 4.5, swinging).stamina.toFixed(4), +(1 - 0.09).toFixed(4));
+say('a job that costs nothing takes nothing',
+  bodyForward(fresh, 4.5, { acting: true, wind: 1, spend: 0 }).stamina, 1);
+say('and wind does not go below nothing',
+  bodyForward({ ...fresh, stamina: 0.01 }, 4.5, swinging).stamina, 0);
+// Frame by frame lands where one step does, which is what makes it drawable.
+let wound = fresh;
+for (let i = 0; i < 45; i++) wound = bodyForward(wound, 0.1, swinging);
+say('forty-five frames against one go in one step',
+  +wound.stamina.toFixed(6), +bodyForward(fresh, 4.5, swinging).stamina.toFixed(6));
+// Hands empty is the other direction, and still is.
+say('and with the job finished it comes back up',
+  bodyForward({ ...fresh, stamina: 0.5 }, 1, rested).stamina > 0.5, true);
+
 console.log(fails ? `\n${fails} of ${n} wrong` : `\nall ${n} right`);
 process.exit(fails ? 1 : 0);
