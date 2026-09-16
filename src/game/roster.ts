@@ -33,6 +33,12 @@ export interface Peer extends PeerState {
   span: number;
   /** Their own walk cycle, so their legs move at their own pace. */
   walkPhase: number;
+  /**
+   * And which of the eight ways they are drawn turned, kept here for the same
+   * reason: it is worked out from a heading that can sit on the line between
+   * two of them, and it must not be re-decided from scratch every frame.
+   */
+  facing: number;
 }
 
 /** How far out of step a peer must be before they are snapped rather than walked. */
@@ -88,7 +94,7 @@ export class Roster {
     if (state.id === this.self) return;
     const had = this.peers.get(state.id);
     if (!had) {
-      this.peers.set(state.id, { ...state, at: now, fromX: state.x, fromY: state.y, span: 0, walkPhase: 0 });
+      this.peers.set(state.id, { ...state, at: now, fromX: state.x, fromY: state.y, span: 0, walkPhase: 0, facing: 1 });
       return;
     }
     const jumped = Math.hypot(state.x - had.x, state.y - had.y) > TELEPORT;
@@ -98,7 +104,7 @@ export class Roster {
     // is running slow should be walked slowly, not walked fast and then waited.
     had.span = jumped ? 0 : Math.max(0.01, Math.min(1, now - had.at));
     had.at = now;
-    Object.assign(had, { ...state, at: now, fromX: had.fromX, fromY: had.fromY, span: had.span, walkPhase: had.walkPhase });
+    Object.assign(had, { ...state, at: now, fromX: had.fromX, fromY: had.fromY, span: had.span, walkPhase: had.walkPhase, facing: had.facing });
   }
 
   /** Everybody, in one word, replacing whoever is no longer in the list. */

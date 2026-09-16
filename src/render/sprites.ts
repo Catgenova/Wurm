@@ -3036,6 +3036,7 @@ function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 export interface PlayerPose {
   phase: number;
   moving: boolean;
+  /** Which of the eight ways it is turned. See `facingOf`. */
   facing: number;
   swimming: boolean;
   working: boolean;
@@ -3292,11 +3293,14 @@ function hairOver(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
 }
 
 /** Whatever is on the chin, if anything is. */
-function beard(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
+function beard(ctx: CanvasRenderingContext2D, w: Worn, r: number, t: Turn): void {
   const id = w.look.beard;
   if (id === 'none') return;
+  // A beard is on the front of a face, and gone by the time the face is.
+  const show = Math.min(1, Math.max(0, (t.depth + 0.35) / 0.55));
+  if (show <= 0) return;
   ctx.fillStyle = id === 'stubble' ? darken(w.hair, -0.05) : w.hair;
-  ctx.globalAlpha = id === 'stubble' ? 0.45 : 1;
+  ctx.globalAlpha = (id === 'stubble' ? 0.45 : 1) * show;
   switch (id) {
     case 'stubble':
       ctx.beginPath();
@@ -3341,29 +3345,166 @@ function beard(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
   ctx.globalAlpha = 1;
 }
 
-/** A head at (cx, cy): hair behind, skull, eye, hair over, beard. */
-function head(ctx: CanvasRenderingContext2D, w: Worn, cx: number, cy: number, r: number): void {
+/* ---- Which way a figure is turned -------------------------------------- */
+
+/** How many ways round a figure can be turned, now that the view has eight. */
+export const FACINGS = 8;
+/** How far to each side of the nose an eye sits, in radians. */
+const EYE_APART = 0.61;
+/**
+ * How deep a body is front to back against how wide across the shoulders. It
+ * is what a figure edge on narrows to, and the one number here that is a
+ * judgement rather than geometry.
+ */
+const BODY_DEPTH = 0.58;
+/**
+ * How far past the halfway line a heading swings before the figure turns.
+ *
+ * Only just past it. The deadband is there to stop a heading that is sitting
+ * exactly on a boundary from flicking between two drawings on numerical noise,
+ * and that takes a hair — half a step plus three degrees. Wider is worse than
+ * none: a *steady* heading a little way past the line then sticks on the wrong
+ * facing and stays there, which is not a flicker but a figure walking along
+ * looking somewhere else.
+ */
+const TURN_HOLD = 0.56;
+
+/**
+ * Which of the eight ways a figure is turned, from where it is heading.
+ *
+ * Zero is straight at you, two is screen right, four straight away, six screen
+ * left. Take the heading *on screen* rather than in the world: the projection
+ * squashes one axis and not the other, so a thing walking north and a thing
+ * walking east do not leave at the same angle, and the angle you can see is
+ * the one it should be facing.
+ *
+ * `was` is what it faces now, and it keeps it while the heading stays within a
+ * little over half a step. Without that, a walk along a line that happens to
+ * sit on a boundary is spent flicking between two drawings.
+ */
+export function facingOf(sx: number, sy: number, was?: number): number {
+  if (Math.abs(sx) + Math.abs(sy) < 1e-6) return was ?? 0;
+  const at = (((Math.atan2(sx, sy) / (TAU / FACINGS)) % FACINGS) + FACINGS) % FACINGS;
+  if (was !== undefined) {
+    let off = at - was;
+    if (off > FACINGS / 2) off -= FACINGS;
+    if (off < -FACINGS / 2) off += FACINGS;
+    if (Math.abs(off) < TURN_HOLD) return was;
+  }
+  return Math.round(at) % FACINGS;
+}
+
+/**
+ * A figure is a body in plan rather than a picture with two sides.
+ *
+ * Everything below is drawn facing right and flipped when it turns the other
+ * way, which is the whole of what a two-way figure ever needed. Eight ways
+ * needs one number more — how much of the front is showing — and then nothing
+ * has to be decided twice. The shoulders find their own width, because a torso
+ * seen end on is as wide as the body is thick; the arms find their own places
+ * on either side of that, and meet in the middle when it is edge on; the eyes
+ * sit on the front of a ball and go round the back with it.
+ */
+interface Turn {
+  /** -1 when the figure is turned to screen left, and the drawing is flipped. */
+  mirror: number;
+  /** How much of the front shows: 1 straight at you, 0 edge on, -1 away. */
+  depth: number;
+  /** And how much of the side: 0 square to you, 1 edge on. */
+  side: number;
+  /** What is left of the shoulders' width at this angle, as a share of it. */
+  girth: number;
+}
+
+function turnOf(facing: number): Turn {
+  const a = (facing / FACINGS) * TAU;
+  const depth = Math.cos(a);
+  const across = Math.sin(a);
+  const side = Math.abs(across);
+  return { mirror: across < -1e-9 ? -1 : 1, depth, side, girth: Math.hypot(depth, BODY_DEPTH * side) };
+}
+
+/**
+ * A head at (cx, cy): hair behind, skull, eyes, hair over, beard.
+ *
+ * The eyes are placed rather than drawn. A head is a ball with two eyes on the
+ * front of it; where each lands on screen and whether it is on the near side
+ * at all both fall out of the angle. So the same three lines give two eyes
+ * face on, one in profile and none from behind, and every step between them.
+ */
+function head(ctx: CanvasRenderingContext2D, w: Worn, cx: number, cy: number, r: number, t: Turn): void {
   ctx.save();
   ctx.translate(cx, cy);
-  hairBehind(ctx, w, r);
+  const front = t.depth >= 0;
+  // Whatever hangs behind the skull is behind it while you can see the face —
+  // which is what hides a ponytail when somebody is walking towards you — and
+  // in front of it the moment you are looking at the back of their head.
+  if (front) hairBehind(ctx, w, r);
   ctx.fillStyle = w.skin;
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, TAU);
   ctx.fill();
-  // One eye, because the figure is always three-quarters away from you and the
-  // far one would be a pixel of noise on the silhouette.
+  const nose = Math.atan2(t.side, t.depth);
   ctx.fillStyle = w.eye;
-  ctx.fillRect(r * 0.35, -r * 0.33, r * 0.28, r * 0.28);
-  hairOver(ctx, w, r);
-  beard(ctx, w, r);
+  for (const off of [-EYE_APART, EYE_APART]) {
+    const at = nose + off;
+    const on = Math.cos(at);
+    if (on <= 0.12) continue;
+    // Foreshortened on its way round the side, so the last one to go narrows
+    // rather than winking out at full width.
+    const wide = r * 0.28 * Math.max(0.4, on);
+    ctx.fillRect(r * 0.62 * Math.sin(at) - wide / 2, -r * 0.33, wide, r * 0.28);
+  }
+  if (!front) {
+    // The back of a head is hair rather than face. Nothing to do for a bald
+    // one, which is the point of doing it this way round.
+    if (w.look.hair !== 'bald') {
+      // The whole skull, not most of it: a cap short of the jaw leaves a pale
+      // crescent under it, and a crescent of skin at the bottom of the back of
+      // a head reads as a chin on backwards.
+      ctx.globalAlpha = Math.min(1, -t.depth * 1.4);
+      ctx.fillStyle = w.hair;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    hairBehind(ctx, w, r);
+  }
+  bothSides(ctx, t, () => hairOver(ctx, w, r));
+  bothSides(ctx, t, () => beard(ctx, w, r, t));
   ctx.restore();
+}
+
+/**
+ * Draw something on both sides of a face.
+ *
+ * A fringe and a beard are the same on the left of a head as on the right, and
+ * every one of these silhouettes is drawn facing right because that was all a
+ * two-way figure ever needed. So the far half is the same drawing squashed
+ * across: the full width of it when the face is square to you, none of it at
+ * all in profile, and the right amount of it at every angle between — which is
+ * what a cheek looks like from three quarters on.
+ *
+ * Both halves are the same opaque colours, so where they overlap there is
+ * nothing to see and no seam down the middle of anybody.
+ */
+function bothSides(ctx: CanvasRenderingContext2D, t: Turn, draw: () => void): void {
+  const far = 1 - t.side;
+  if (far > 0.01) {
+    ctx.save();
+    ctx.scale(-far, 1);
+    draw();
+    ctx.restore();
+  }
+  draw();
 }
 
 /**
  * The same figure, sat down: knees forward over the footboard, both hands out
  * on the reins, and no shadow, because what is under it is the cart.
  */
-function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose, w: Worn): void {
+function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose, w: Worn, t: Turn): void {
   const jolt = pose.moving ? Math.sin(pose.phase * 0.9) * 0.6 : 0;
   const chest = 4.5 * w.build.shoulder;
   // thighs forward, shins down
@@ -3387,16 +3528,17 @@ function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose, w: Worn): v
   ctx.moveTo(9, -17 + jolt);
   ctx.lineTo(15, -12 + jolt);
   ctx.stroke();
-  head(ctx, w, 0, -24.5 + jolt, 4.6);
+  head(ctx, w, 0, -24.5 + jolt, 4.6, t);
 }
 
 /** Draws the character with its feet at (sx, sy). */
 export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
   const w = wornOf(pose);
   const b = w.build;
+  const t = turnOf(pose.facing);
   ctx.save();
   ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  ctx.scale(zoom * t.mirror, zoom);
   if (pose.swimming) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.beginPath();
@@ -3404,29 +3546,49 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     ctx.fill();
     ctx.fillStyle = w.tunic;
     ctx.fillRect(-6, -8, 12, 7);
-    head(ctx, w, 0, -12, 5.5);
+    head(ctx, w, 0, -12, 5.5, t);
     ctx.restore();
     return;
   }
   if (pose.driving) {
-    drawDriver(ctx, pose, w);
+    drawDriver(ctx, pose, w, t);
     ctx.restore();
     return;
   }
   const swing = pose.moving ? Math.sin(pose.phase) : 0;
   const bob = pose.moving ? Math.abs(Math.cos(pose.phase)) * 1.2 : 0;
-  const chest = 4.5 * b.shoulder;
-  const waist = 4.5 * b.waist;
-  const hip = 3.5 * b.hip;
+  // Across the shoulders, and then what is left of it at this angle.
+  const span = 4.5 * b.shoulder;
+  const chest = span * t.girth;
+  const waist = 4.5 * b.waist * t.girth;
+  const hips = 3.5 * b.hip;
   // The shadow marks the one subtile the character stands on.
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
   ctx.fill();
-  // legs
+  /*
+   * Legs. They do not get thinner as the figure turns, they come together:
+   * two hips a fixed distance apart, swinging round with the body until edge
+   * on they are one behind the other. Same for the arms below.
+   */
+  const legW = Math.max(1.8, hips * 0.92);
+  const apart = hips * 0.55 * t.depth;
+  ctx.fillStyle = darken(w.trousers, 0.16);
+  ctx.fillRect(apart - legW / 2, -12 - swing * 2, legW, 12 + swing * 2);
   ctx.fillStyle = w.trousers;
-  ctx.fillRect(-hip, -12 + swing * 2, hip - 0.5, 12 - swing * 2);
-  ctx.fillRect(0.5, -12 - swing * 2, hip - 0.5, 12 + swing * 2);
+  ctx.fillRect(-apart - legW / 2, -12 + swing * 2, legW, 12 - swing * 2);
+  // arms
+  const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
+  const arm = (span + 0.9) * t.depth;
+  const sleeve = 3.3;
+  const hand = 2.5;
+  // The far one goes down before the body and comes up a shade darker, so a
+  // figure with its back to you has an arm behind it rather than stuck on.
+  ctx.fillStyle = darken(w.tunic, 0.16);
+  ctx.fillRect(arm - sleeve / 2, -25 - bob - armSwing, sleeve, 8);
+  ctx.fillStyle = darken(w.skin, 0.16);
+  ctx.fillRect(arm - hand / 2, -17 - bob - armSwing, hand, hand);
   // body: shoulders at the top, waist at the belt, so a build is a taper
   // rather than a wider rectangle.
   ctx.fillStyle = w.tunic;
@@ -3439,18 +3601,12 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
   ctx.fill();
   ctx.fillStyle = BELT;
   ctx.fillRect(-waist - 0.2, -14.5 - bob, waist * 2 + 0.4, 1.6);
-  // arms
-  const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
+  // and the near arm over the body it swings across
   ctx.fillStyle = w.tunic;
-  // The sleeves overlap the chest by a hair. The body is a taper now rather
-  // than a rectangle, so an arm that starts exactly at the shoulder line
-  // leaves a sliver of background down the side of everybody in the game.
-  ctx.fillRect(-chest - 2.5, -25 - bob + armSwing, 3.3, 8);
-  ctx.fillRect(chest - 0.8, -25 - bob - armSwing, 3.3, 8);
+  ctx.fillRect(-arm - sleeve / 2, -25 - bob + armSwing, sleeve, 8);
   ctx.fillStyle = w.skin;
-  ctx.fillRect(-chest - 2.5, -17 - bob + armSwing, 2.5, 2.5);
-  ctx.fillRect(chest, -17 - bob - armSwing, 2.5, 2.5);
-  head(ctx, w, 0, -31 - bob, 4.6);
+  ctx.fillRect(-arm - hand / 2, -17 - bob + armSwing, hand, hand);
+  head(ctx, w, 0, -31 - bob, 4.6, t);
   ctx.restore();
 }
 
@@ -3479,7 +3635,7 @@ export function drawHeadshot(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.beginPath();
   ctx.ellipse(x + size / 2, y + size * 1.24, size * 0.36, size * 0.3, 0, 0, TAU);
   ctx.fill();
-  head(ctx, w, x + size / 2, y + size * 0.5, r);
+  head(ctx, w, x + size / 2, y + size * 0.5, r, turnOf(1));
   ctx.restore();
 }
 
@@ -3489,14 +3645,16 @@ export function drawHeadshot(ctx: CanvasRenderingContext2D, x: number, y: number
  * a preview that is its own code is a preview that can lie to you, and the
  * whole point of choosing a face is seeing the one you will get.
  */
-export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, look: Look, phase = 0): void {
+export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, look: Look, phase = 0, facing = 1): void {
   const zoom = Math.min(w / 26, h / 42);
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
+  // Three quarters on by default, which is the angle a face is easiest to
+  // judge at and the one the game showed everybody before it could turn.
   drawPlayer(ctx, x + w / 2, y + h - h * 0.08, zoom, {
-    phase, moving: false, facing: 1, swimming: false, working: false, look,
+    phase, moving: false, facing, swimming: false, working: false, look,
   });
   ctx.restore();
 }

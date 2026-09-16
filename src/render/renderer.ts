@@ -47,7 +47,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { SWAY_MAX, swayAt } from './sway';
-import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
+import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -1051,14 +1051,29 @@ export class Renderer {
     draw(ctx, sx, sy);
   }
 
+  /**
+   * Which of the eight ways something heading (dx, dy) through the world is
+   * turned, as the screen sees it.
+   *
+   * The heading put through the projection rather than the world angle
+   * quantised: the projection squashes one axis and not the other, so a figure
+   * walking north and one walking east do not leave at the same angle, and the
+   * screen is what it is being drawn on.
+   */
+  private facingOnScreen(dx: number, dy: number, was?: number): number {
+    const cam = this.camera;
+    const du = cam.rotateX(dx, dy);
+    const dv = cam.rotateY(dx, dy);
+    return facingOf((du - dv) * HALF_W, (du + dv) * HALF_H, was);
+  }
+
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
     if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx || (a.lift ?? 0) - (b.lift ?? 0));
     const player = this.game.player;
     const cam = this.camera;
-    const screenDx = cam.rotateX(player.dirX, player.dirY) - cam.rotateY(player.dirX, player.dirY);
-    if (Math.abs(screenDx) > 0.05) this.playerFacing = screenDx > 0 ? 1 : -1;
+    this.playerFacing = this.facingOnScreen(player.dirX, player.dirY, this.playerFacing);
     for (const ent of ents) {
       // Being hit beats being pointed at: a blow should read as a blow even
       // while the cursor is sitting on the thing taking it.
@@ -1083,12 +1098,12 @@ export class Renderer {
       }
       if (ent.kind === 'peer' && ent.peer) {
         const peer = ent.peer;
-        const dx = cam.rotateX(peer.dirX, peer.dirY) - cam.rotateY(peer.dirX, peer.dirY);
+        peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             phase: peer.moving ? peer.walkPhase : this.time * 6,
             moving: peer.moving,
-            facing: dx >= 0 ? 1 : -1,
+            facing: peer.facing,
             swimming: peer.swimming,
             working: peer.working,
             driving: false,
