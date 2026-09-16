@@ -7,6 +7,7 @@ import { FISH } from './fishing';
 import { DYES } from './dyes';
 import { WOUND_KINDS } from './wounds';
 import { TRAPS } from './traps';
+import { BREWS } from './brewing';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
 
 /**
@@ -582,3 +583,33 @@ export function recipeAction(r: Recipe): ActionDef {
 
 export const RECIPE_ACTIONS: ActionDef[] = RECIPES.map(recipeAction);
 export const RECIPE_BY_ID = new Map(RECIPES.map((r) => [r.id, r]));
+
+/**
+ * Everything somebody made that is worth eating, worked out once.
+ *
+ * Reported: a knack off a raw berry. `boonOf` gated on "anything with
+ * something in it", which is a handful of blueberries as much as a stew — so a
+ * trade could be favoured for twenty minutes by eating fruit straight off a
+ * bush, and the line over the list in `boons.ts` has said "everything cooked"
+ * since the day it was written while the code under it said nothing of the
+ * kind.
+ *
+ * It lives here rather than in `boons.ts` because the rule is "is there a
+ * recipe for it", and `boons.ts` may not ask: `actions.ts` imports it, and
+ * this file reaches back through traps to `actions.ts`. Everything that grants
+ * a knack is already on this side of that ring.
+ *
+ * A dish off a fire, a cheese, an oil pressed under a quern, a barrel that has
+ * finished working: things that took a fire, a tool or a month. Meat off a
+ * kill, a fish off a line, a berry off a bush and milk out of a beast are food
+ * and are not a knack.
+ */
+let cooked: Set<string> | null = null;
+export function knackable(id: string): boolean {
+  if (!cooked) {
+    cooked = new Set(RECIPES.map((r) => r.result));
+    // A barrel that has finished working is drawn off into `<brew>_bucket`.
+    for (const brew of BREWS) cooked.add(`${brew.id}_bucket`);
+  }
+  return cooked.has(id);
+}

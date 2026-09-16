@@ -16,7 +16,7 @@ import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
-import type { Station } from './recipes';
+import { knackable, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
@@ -1601,6 +1601,8 @@ export class Game {
    * than stacking on itself.
    */
   grantBoon(itemId: string, ql: number): string | null {
+    // A knack comes off something somebody made. A berry off a bush is food.
+    if (!knackable(itemId)) return null;
     const skill = boonOf(this.seed, itemId);
     if (!skill) return null;
     const seconds = boonTime(itemId, ql);

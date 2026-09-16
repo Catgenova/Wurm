@@ -5589,3 +5589,50 @@ select '743. and what he woke up as: health '
      || coalesce((select act from player where world_id = :'big' and uid = :'ivar'), 'nothing')
      || ') and nothing queued behind it ('
      || (select jsonb_array_length(act_queue) from player where world_id = :'big' and uid = :'ivar') || ')';
+
+\echo ''
+\echo '--- a leash, and a knack off a dish'
+/*
+ * Two reports. Aggressive things chase you until you are dead: every give-up
+ * in `hunt_settle` measured the gap between hunter and hunted, and a hunter
+ * runs at `speed * 1.15`, so the gap it was tested against was a gap it was
+ * closing. And a knack came off a raw berry: `boon_of` gave one for anything
+ * with something in it, which is a handful of blueberries as much as a stew.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '744. of the ' || (select count(*) from item_def f where f.category = 'food'
+         and (coalesce(f.food,0) > 0 or coalesce(f.drink,0) > 0))
+     || ' nourishing things on the island, '
+     || (select count(*) from item_def f where f.category = 'food'
+         and (coalesce(f.food,0) > 0 or coalesce(f.drink,0) > 0)
+         and boon_of((select seed from world where id = :'world2'), f.id) is not null)
+     || ' carry a knack — a berry gives '
+     || coalesce(boon_of((select seed from world where id = :'world2'), 'blueberry'), 'nothing')
+     || ', raw meat gives ' || coalesce(boon_of((select seed from world where id = :'world2'), 'meat'), 'nothing')
+     || ', and a stew gives ' || coalesce(boon_of((select seed from world where id = :'world2'), 'stew'), 'NOTHING');
+
+-- A goblin that has had your scent and run forty tiles for it.
+update player set x = 2100.5, y = 2060.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+select creature_spawn(:'big', 'goblin', 2099.5, 2060.5, 'wild', now() - interval '1 hour') as chaser \gset
+update creature set hunting = :'ivar', hunt_x = 2060, hunt_y = 2060, hunt_again = null,
+    until = now(), leg_at = now(), leg_ends = now() where world_id = :'big' and id = :'chaser' \g /dev/null
+select (hunt_settle(:'big', (select c from creature c where c.world_id = :'big' and c.id = :'chaser'),
+    (select s from species_def s where s.id = 'goblin'),
+    age_row((select born from creature where world_id = :'big' and id = :'chaser')))) as ran \gset
+select '745. a goblin ' || round(sqrt(power(2100.5 - 2060, 2) + power(2060.5 - 2060, 2)))
+     || ' tiles from where it first had his scent, and the leash is ' || hunt_leash() || ': it is hunting '
+     || coalesce(((:'ran'::creature).hunting)::text, 'nobody')
+     || ', and will take an interest again in '
+     || coalesce(round(extract(epoch from (((:'ran'::creature).hunt_again) - now())))::text, 'NO REST SET')
+     || ' seconds — which is what stops it dropping you and picking you up again on the next breath';
+-- And the same goblin with the leash tied where it is standing, which is a
+-- chase that has only just started.
+update creature set hunt_x = 2099.5, hunt_y = 2060.5, hunt_again = null, hunting = :'ivar'
+  where world_id = :'big' and id = :'chaser' \g /dev/null
+select '746. and one that has only just started, with the leash tied where it stands: hunting '
+     || coalesce(((hunt_settle(:'big',
+          (select c from creature c where c.world_id = :'big' and c.id = :'chaser'),
+          (select s from species_def s where s.id = 'goblin'),
+          age_row((select born from creature where world_id = :'big' and id = :'chaser')))).hunting)::text,
+        'NOBODY, AND IT IS STANDING ON HIM')
+     || ' — a leash is a leash, not a truce';

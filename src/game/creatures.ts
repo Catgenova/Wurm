@@ -1249,6 +1249,31 @@ export const WILD_SPECIES: Array<[string, number]> = [
 /** How far off a hunter picks up your scent, and how far you must get to lose it. */
 const HUNT_SIGHT = 7;
 const HUNT_GIVE_UP = 13;
+
+/**
+ * How far a hunter will come from where it first had your scent, in tiles.
+ *
+ * Reported as being chased until you are dead, and that is exactly what
+ * happened: the only thing that called a hunt off was the gap between hunter
+ * and hunted, and a hunter runs at `speed * 1.15` — so the gap it was measured
+ * against was a gap it was closing. Outrunning one was the only way to lose
+ * it, and most things on this island are faster than a body carrying a pack.
+ *
+ * So the leash is tied where the chase *began* instead. Thirty tiles is a
+ * screen and a half: far enough that a goblin is worth running from and not a
+ * formality, short enough that running works.
+ */
+export const HUNT_LEASH = 30;
+
+/**
+ * And how long it wants nothing to do with hunting after it gives one up.
+ *
+ * Without this it drops the chase at the end of the leash, notices you again
+ * on the next breath because you are still within its sight, and the leash is
+ * measured afresh from there — which is the same endless chase with a stutter
+ * in it.
+ */
+export const HUNT_REST = world(60);
 /** Fuel in a hearth above which a stoker leaves it alone: ten minutes' worth. */
 const HEARTH_FULL = 600;
 /** A deed worker goes looking for a meal once its belly is down to this. */
@@ -1555,6 +1580,11 @@ export interface Creature {
   cooldown: number;
   busyUntil: number;
   searchAt: number;
+  /** Where it first had your scent, which is what the leash is tied to. */
+  huntX: number;
+  huntY: number;
+  /** When it will take an interest again, after giving a chase up. */
+  huntRest: number;
   /** When it last said it had nowhere to put a load down. */
   noRoomAt: number;
   /** Time banked up while nobody was watching, spent on the next think. */
@@ -1825,6 +1855,9 @@ export class Creatures {
       cooldown: 0,
       busyUntil: 0,
       searchAt: 0,
+      huntX: 0,
+      huntY: 0,
+      huntRest: -1e9,
       noRoomAt: 0,
       owed: 0,
       calledAt: -1e9,
@@ -3456,15 +3489,22 @@ export class Creatures {
     const d = Math.hypot(p.x - c.x, p.y - c.y);
     const hunting = c.enemy === PLAYER_ATTACKER;
     const giveUp = def.monster ? HUNT_GIVE_UP * 2.2 : HUNT_GIVE_UP;
-    if (hunting && (d > giveUp || c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3))) {
+    // How far it has come from where it started, which is the one measure that
+    // grows while it chases. The gap to you does not: it is closing that.
+    const came = Math.hypot(c.x - c.huntX, c.y - c.huntY);
+    if (hunting && (d > giveUp || came > HUNT_LEASH
+                    || c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3))) {
       c.enemy = null;
+      if (came > HUNT_LEASH) c.huntRest = game.time + HUNT_REST;
       return false;
     }
     if (!hunting) {
-      if (d > (def.notice ?? HUNT_SIGHT) || game.time < c.searchAt) return false;
+      if (d > (def.notice ?? HUNT_SIGHT) || game.time < c.searchAt || game.time < c.huntRest) return false;
       c.searchAt = game.time + 2;
       if (!this.tileOk(game, Math.floor(p.x), Math.floor(p.y))) return false;
       c.enemy = PLAYER_ATTACKER;
+      c.huntX = c.x;
+      c.huntY = c.y;
       game.logMsg(`A ${def.name.toLowerCase()} has your scent.`, 'error');
     }
     if (d <= 1.1) {

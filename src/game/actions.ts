@@ -35,7 +35,7 @@ import { materialOfItem } from './materials';
 import { boonOf } from './boons';
 import { SKILL_DEFS } from './skills';
 import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, isBag } from './items';
-import { RECIPE_ACTIONS } from './recipes';
+import { knackable, RECIPE_ACTIONS } from './recipes';
 
 /**
  * What an action acts upon. Tile targets carry the corner nearest to the click
@@ -986,7 +986,9 @@ export const ACTIONS: ActionDef[] = [
       const stuff = made ? ` ${made.name}: ${made.note}` : '';
       const r = rarityOf(item);
       const rare = r.name ? ` It is ${r.name}: better at what it is for by a ${r.boost > 1.3 ? 'half' : r.boost > 1.15 ? 'quarter' : 'tenth'}, slower to wear and to rot, and can be bettered ${r.ceiling} past your own skill.` : '';
-      const skill = boonOf(g.seed, item.id);
+      // A knack comes off something somebody made, so the examine line says so
+      // for the same things the eating does.
+      const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;
       const favours = skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '';
       // What it is worth at the work now, which is rarely the number stamped on it.
       const worth = g.toolWorth(item);
