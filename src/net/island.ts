@@ -592,7 +592,22 @@ export class Island {
   private async pulse(): Promise<void> {
     if (!this.info) return;
     try {
-      const { data } = await supabase().rpc('rpc_settle', { p_seen: this.seenChange });
+      /*
+       * Which island this is a beat for, which it never said.
+       *
+       * `rpc_settle` was the one door of the twenty that took no `p_world`, so
+       * the island had to guess — and `rpc_join` leaves a player row behind on
+       * every island you have ever joined, so there was more than one row to
+       * guess between and nothing to choose by. The same answer carries the
+       * hour and the bars, so when the guess moved, the sun and the body moved
+       * with it: "it switches randomly to nighttime and hunger/thirst plummet
+       * until refreshed". Refreshing worked because `rpc_join` names its
+       * island. This one does now too.
+       */
+      const { data } = await supabase().rpc('rpc_settle', {
+        p_seen: this.seenChange,
+        p_world: this.info.id,
+      });
       const said = (data ?? {}) as {
         settled?: number; act?: string | null; ends?: string | null;
         left?: number | null; secs?: number | null; total?: number | null; queued?: number;
