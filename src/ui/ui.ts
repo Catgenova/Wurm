@@ -40,7 +40,7 @@ import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kil
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
-import { groundReading } from './tileinfo';
+import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
 import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
@@ -419,8 +419,8 @@ export class UI {
       lines.push(w.tileName(pick.x, pick.y));
     }
     if (growing) lines.push(describeCrop(growing, this.game.time));
-    const soil = w.getDirt(pick.cx, pick.cy);
-    lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)} · corner h ${w.getHeight(pick.cx, pick.cy)} · ${soil > 0 ? `${soil} soil over rock` : 'bare rock'}`);
+    lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)}`);
+    lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);
     if (reading) lines.push(reading);
     const deed = this.game.deed;
@@ -491,7 +491,7 @@ export class UI {
    * right-click menu and the tile window are the same list seen two ways, so
    * neither can fall behind the other.
    */
-  menuFor(pick: Pick): { title: string; facts?: string; entries: MenuItem[] } {
+  menuFor(pick: Pick): { title: string; facts?: string[]; entries: MenuItem[] } {
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {
       return { title: `${creature.name} (${this.game.creatures.describe(creature)})`, entries: this.creatureEntries(creature.id) };
@@ -835,9 +835,18 @@ export class UI {
       });
     }
     const title = building ? `${building.name} (${pick.x}, ${pick.y})` : `${this.game.world.tileName(pick.x, pick.y)} (${pick.x}, ${pick.y})`;
-    // What a prospector read here, which was a mouseover line and so was not
-    // readable at all with a finger.
-    return { title, facts: groundReading(this.game, pick.x, pick.y) ?? undefined, entries };
+    /*
+     * What is true of the ground, above the list of what can be done to it.
+     *
+     * Where the corner you picked stands, first, because half the list is
+     * corner work and the dot on the ground says which corner without saying
+     * how high it is. Then what a prospector read, when anybody has read it.
+     * Both were mouseover lines, and neither was readable at all with a
+     * finger.
+     */
+    const reading = groundReading(this.game, pick.x, pick.y);
+    const facts = [cornerReading(this.game, pick.cx, pick.cy), ...(reading ? [reading] : [])];
+    return { title, facts, entries };
   }
 
   /** Feeding, lighting and cooking at a campfire. */

@@ -8,7 +8,7 @@ import type { Tooltip } from '../tooltip';
 import type { UIWindow } from '../windows';
 
 /** What the window is looking at, and everything that could be done to it. */
-export type TileMenuSource = (pick: Pick) => { title: string; facts?: string; entries: MenuItem[] };
+export type TileMenuSource = (pick: Pick) => { title: string; facts?: string[]; entries: MenuItem[] };
 
 /**
  * The tile window: click any tile and everything you could do to it is listed
@@ -27,12 +27,13 @@ export class TilePanel {
   private head: HTMLDivElement;
   private titleEl: HTMLSpanElement;
   /**
-   * What a prospector read here, under the name.
+   * What is true of the ground, under the name: where the corner you picked
+   * stands, and what a prospector read here.
    *
-   * The one thing prospecting is for — whether this seam is worth mining and
-   * what quality it gives — was a line in the mouseover, and there is no
-   * mouseover on a phone. Lighting the ground up and then having no way to
-   * read it is most of the way to not having prospected at all.
+   * Both were mouseover lines and there is no mouseover on a phone. Lighting
+   * ground up and then having no way to read it is most of the way to not
+   * having prospected at all; marking a corner with a dot and never saying how
+   * high it is leaves every corner action to be guessed at.
    */
   private factsEl: HTMLDivElement;
   /** The reading as last drawn, because it fades with nothing to announce it. */
@@ -181,13 +182,17 @@ export class TilePanel {
     const { title, facts, entries } = this.source(this.pick);
     // What the list would say, down to every reason and every note. If it
     // matches what is already on screen, nothing is touched.
-    if (!this.repaint.changed(now, `${title}\u0000${facts ?? ''}\u0000${entries.map(sign).join('\u0000')}`)) return;
+    if (!this.repaint.changed(now, `${title}\u0000${(facts ?? []).join('\u0001')}\u0000${entries.map(sign).join('\u0000')}`)) return;
     this.list.replaceChildren();
     this.titleEl.textContent = title;
     this.info.hidden = false;
-    this.reading = facts ?? null;
-    this.factsEl.textContent = facts ?? '';
-    this.factsEl.hidden = !facts;
+    this.reading = groundReading(this.game, this.pick.x, this.pick.y);
+    this.factsEl.replaceChildren(...(facts ?? []).map((fact) => {
+      const line = document.createElement('div');
+      line.textContent = fact;
+      return line;
+    }));
+    this.factsEl.hidden = !facts?.length;
     if (!entries.length) {
       const none = document.createElement('div');
       none.className = 'inv-empty';

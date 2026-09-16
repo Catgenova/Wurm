@@ -30,6 +30,31 @@ export function groundReading(g: Game, x: number, y: number): string | null {
 }
 
 /**
+ * Where the corner you have picked stands, and what is on it.
+ *
+ * Every corner action is about one corner and about how high it is: mining and
+ * chipping a face back, dropping dirt, digging, flattening, and whether a wall
+ * will stand. The renderer marks the one you picked with a dot, and the number
+ * behind the dot was a mouseover line and nowhere else — which on a phone is
+ * nowhere at all. The same hole the prospector's reading fell down, and the
+ * same fix: one sentence in one place, said by the mouseover, the tile window
+ * and the right-click menu alike.
+ *
+ * Read against the water line rather than as a bare number, because that is
+ * what every one of those actions is actually asking. Zero *is* the water
+ * line — so a corner sitting on it reads as sitting on it, which is worth
+ * saying plainly: it is dry ground, it is a face you can work, and it is the
+ * one height that used to be refused for being wet.
+ */
+export function cornerReading(g: Game, cx: number, cy: number): string {
+  const w = g.world;
+  const h = w.getHeight(cx, cy);
+  const soil = w.getDirt(cx, cy);
+  const stands = h === 0 ? 'at the water line' : h > 0 ? `${h} above the water` : `${-h} under water`;
+  return `Corner ${cx}, ${cy} · ${stands} · ${soil > 0 ? `${soil} soil over rock` : 'bare rock'}`;
+}
+
+/**
  * What a piece of ground is *for*.
  *
  * The tile window already lists everything you could do to a tile this

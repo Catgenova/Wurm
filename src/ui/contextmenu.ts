@@ -142,18 +142,19 @@ export class ContextMenu {
     return !this.el.hidden;
   }
 
-  show(x: number, y: number, title: string, items: MenuItem[], facts?: string): void {
+  show(x: number, y: number, title: string, items: MenuItem[], facts?: string[]): void {
     this.el.replaceChildren();
     const head = document.createElement('div');
     head.className = 'ctx-title';
     head.textContent = title;
     this.el.append(head);
-    // What is true of the thing rather than what can be done to it — the ore a
-    // prospector read, which used to be sayable only by hovering.
-    if (facts) {
+    // What is true of the thing rather than what can be done to it: where the
+    // corner you picked stands, and the ore a prospector read. Both of them
+    // used to be sayable only by hovering, and a finger cannot hover.
+    for (const fact of facts ?? []) {
       const line = document.createElement('div');
       line.className = 'ctx-facts';
-      line.textContent = facts;
+      line.textContent = fact;
       this.el.append(line);
     }
     if (!items.length) {
