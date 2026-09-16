@@ -57,7 +57,7 @@ import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
 import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
-import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
+import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, LEG_SLACK, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 
@@ -782,6 +782,8 @@ for (const [fn, v] of [
   /* And the biggest island a tab may found, which is how the keeper tells a
      browser's island from the tool's. */
   ['found_max', FOUND_MAX], ['peace_reach', PEACE_REACH],
+  /* And the slack that lets the creature box be looked up rather than scanned. */
+  ['leg_slack', LEG_SLACK],
   /* And the most fog of war the island keeps for one body, so the one thing
      a browser writes by the yard cannot become free storage. */
   ['fog_bytes', FOG_BYTES],

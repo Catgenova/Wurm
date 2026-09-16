@@ -2438,6 +2438,7 @@ create or replace function region_size() returns double precision language sql i
 create or replace function chunk_size() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
 create or replace function found_max() returns double precision language sql immutable as $fn$ select 512::double precision $fn$;
 create or replace function peace_reach() returns double precision language sql immutable as $fn$ select 24::double precision $fn$;
+create or replace function leg_slack() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
 create or replace function fog_bytes() returns double precision language sql immutable as $fn$ select 262144::double precision $fn$;
 create or replace function wild_reach() returns double precision language sql immutable as $fn$ select 1.5::double precision $fn$;
 create or replace function wild_rest() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;

@@ -155,6 +155,29 @@ export const MOBS_EVERY = 1;
 export const MOBS_RANGE = 40;
 
 /**
+ * How far past the asking a creature's leg is allowed to reach.
+ *
+ * Where a thing *is* is a point on the leg it is walking: four columns and the
+ * clock, which is nothing a btree can look up. So both the sweep and the read
+ * narrow first on where the leg *ends*, which is one index away, and then work
+ * the exact answer out for the handful that survives.
+ *
+ * This is the slack that makes the first filter a superset of the second. It
+ * is enormous on purpose: the longest leg measured on a real island is 2.13
+ * tiles, and `creature_sweep` has bounded itself this way since it was written
+ * with eight. Sixty-four still cuts a 4096 island to a twentieth — measured,
+ * one island with four thousand creatures on it:
+ *
+ *     rpc_creatures, whole island   120 buffers   1.51 ms
+ *     narrowed to the box            22 buffers   0.25 ms
+ *     creature_sweep, the same        9 buffers   0.05 ms
+ *
+ * and it changes the shape rather than the constant: what these cost is the
+ * creatures near you now, not the creatures on the island.
+ */
+export const LEG_SLACK = 64;
+
+/**
  * The biggest island a tab may found.
  *
  * A 4096 world is three minutes of ground and 138 MB of land: a thing done
