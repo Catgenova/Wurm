@@ -5909,6 +5909,34 @@ select '777. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar
      || ' then ' || ((rpc_social(:'world2'))->'unread')::text;
 
 /*
+ * And every number about a rare thing, read off the one table that holds them.
+ *
+ * `rarity_def` is generated from `RARITIES`, and four functions used to write
+ * the same numbers out again by hand. One of them had drifted: `improve_ceiling`
+ * said 4, 10 and 20 where the table, the browser and this island's own examine
+ * line all said 5, 12 and 25 — so it told you a thing could be bettered five
+ * past your skill and then refused at four.
+ */
+select '779. every rarity read off `rarity_def`: '
+     || (select string_agg(r.id || ' ×' || round(rarity_boost(r.id)::numeric, 2)
+           || ' wear ×' || round(rarity_keep(r.id)::numeric, 2)
+           || ' +' || round(r.ceiling::numeric, 0) || ' QL, 1 in '
+           || round(1 / r.odds::numeric, 0) || ' of the step before', ', ' order by r.ord) from rarity_def r)
+     || ' — and a plain thing ×' || round(rarity_boost(null)::numeric, 2);
+
+-- The rule and the sentence about the rule, which disagreed by five whole
+-- points of quality on a fantastic tool.
+insert into item (world_id, holder, holder_uid, def, ql, dmg, count, extra, rare)
+values (:'world2', 'player', :'ivar', 'hatchet', 40, 0, 1, 'Iron', 'fantastic')
+returning id as prize \gset
+select round(skill_of(:'world2', :'ivar', 'blacksmithing')::numeric, 1) as smith \gset
+select '780. a fantastic hatchet, with blacksmithing at ' || :'smith' || ': the island lets it be bettered to '
+     || round(improve_ceiling(:'world2', :'ivar', 'blacksmithing', 'fantastic')::numeric, 1)
+     || ', and tells you "' || substring((select examine_item_text(:'world2', :'ivar', i) from item i where i.id = :'prize')
+          from 'can be bettered [0-9]+ past your own skill') || '"';
+delete from item where id = :'prize' \g /dev/null
+
+/*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
  *
@@ -5918,7 +5946,7 @@ select '777. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '778. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '781. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

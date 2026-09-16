@@ -37,7 +37,7 @@ import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/g
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
 import { PLANTABLE } from '../src/game/game';
-import { RARITIES } from '../src/game/items';
+import { RARITIES, RARITY_ODDS } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
@@ -336,6 +336,16 @@ out.push(`alter table item_def add column if not exists holds real;`);
 out.push(`create table if not exists rarity_def (
   id text primary key, ord int not null, boost real not null, keep real not null, ceiling real not null
 );`);
+/*
+ * And the odds of each step, which lived in `rarity_roll` as three literals.
+ *
+ * Every other number about rarity is in this table and crossed from
+ * `RARITIES`; the odds were the one that was not, and `improve_ceiling` is
+ * what a second copy costs — it said a rare thing could be bettered 4 past
+ * your skill while the table, the browser and this island's own examine line
+ * all said 5. One table, and nothing to keep in step by hand.
+ */
+out.push(`alter table rarity_def add column if not exists odds real not null default 0;`);
 out.push(`create table if not exists dye_def (
   id text primary key, name text not null, word text not null
 );`);
@@ -657,7 +667,7 @@ for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plan
  */
 RARITIES.forEach((r, ord) => {
   if (!r.name) return;
-  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)});`);
+  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)}, ${q(RARITY_ODDS[ord - 1])});`);
 });
 for (const d of DYES) out.push(`insert into dye_def values (${q(d.id)}, ${q(d.name)}, ${q(d.word)});`);
 for (const m of Object.values(IMPROVE_MATERIALS)) {
