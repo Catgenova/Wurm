@@ -93,6 +93,40 @@ async function drop(topic: string): Promise<void> {
   await supabase().removeChannel(had.channel);
 }
 
+/**
+ * A job lined up behind the one in hand, and how many goes it is for.
+ *
+ * The count used to be dropped on the way out of the island — the queue went
+ * over as a list of action ids — so a queue of one flatten and a queue of ten
+ * were the same three letters, and the line under the bar could not say which
+ * it was looking at.
+ */
+export interface Lined {
+  action: string;
+  goes: number;
+}
+
+/**
+ * The queue as it arrives, whichever shape it is in.
+ *
+ * An island that has not had the migration pushed yet sends bare ids, and a
+ * browser that has not been redeployed reads objects as ids and finds no
+ * action of that name. So this takes both and neither order of landing shows
+ * anything false: the worst either end does is fall back to one go.
+ */
+export function lineUp(rows: unknown): Lined[] {
+  if (!Array.isArray(rows)) return [];
+  const out: Lined[] = [];
+  for (const r of rows) {
+    if (typeof r === 'string') out.push({ action: r, goes: 1 });
+    else if (r && typeof r === 'object' && typeof (r as Lined).action === 'string') {
+      const n = (r as Lined).goes;
+      out.push({ action: (r as Lined).action, goes: typeof n === 'number' && n > 0 ? n : 1 });
+    }
+  }
+  return out;
+}
+
 export interface WorldRow {
   id: string;
   name: string;
@@ -187,7 +221,7 @@ export interface IslandHooks {
    * put out a prospector's marks on its way past.
    */
   mine?: (what: {
-    queue?: string[];
+    queue?: Lined[];
     cap?: number | null;
     stats?: Record<string, number> | null;
     skills?: Record<string, number> | null;
@@ -237,7 +271,7 @@ export interface ActResult {
   inHand?: number;
   capacity?: number;
   /** What is lined up behind the job in hand, when this ask put something there. */
-  queue?: string[];
+  queue?: unknown[];
 }
 
 export class Island {
@@ -301,15 +335,6 @@ export class Island {
   private token = '';
   /** Our pack, kept by row rather than refetched whole on anybody's crafting. */
   private pack = new Map<number, ItemRow>();
-  /**
-   * How many goes we asked for, which the island does not keep.
-   *
-   * `act_left` counts down and the number originally asked for is not written
-   * anywhere, so "3 of 10" can only be said by the side that said ten. Cleared
-   * when the island stops telling us it is doing anything.
-   */
-  private goes: number | undefined;
-
   /**
    * Where everything the island says goes. Not readonly: the first few lines
    * arrive while the land is still coming down, before there is a game to put
@@ -611,29 +636,28 @@ export class Island {
       const said = (data ?? {}) as {
         settled?: number; act?: string | null; ends?: string | null;
         left?: number | null; secs?: number | null; total?: number | null; queued?: number;
-        queue?: string[] | null; cap?: number | null;
+        queue?: unknown; cap?: number | null;
         stats?: Record<string, number> | null; skills?: Record<string, number> | null;
         marks?: { tiles?: number[]; secs?: number } | null;
-        time?: number | null; night?: boolean | null;
+        goes?: number | null; time?: number | null; night?: boolean | null;
       };
       // The hour, on the beat every browser makes anyway. Nothing else has to
       // happen for the sun to move, and nothing can make it drift for long.
       this.pinClock(said.time);
       if (typeof said.night === 'boolean') this.islandNight = said.night;
       this.hooks.mine?.({
-        queue: rowsIn<string>(said.queue),
+        queue: lineUp(said.queue),
         cap: said.cap ?? null,
         stats: said.stats ?? null,
         skills: said.skills ?? null,
         marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
       });
-      if (!said.act) this.goes = undefined;
       this.hooks.doing?.({
         act: said.act ?? null,
         total: said.total ?? 0,
         secs: said.secs ?? 0,
         left: said.left ?? undefined,
-        goes: this.goes,
+        goes: said.goes ?? undefined,
         queued: said.queued ?? 0,
       });
       // Something landed, so what we are carrying may have changed in a way no
@@ -974,7 +998,6 @@ export class Island {
     // settled then rather than at the next heartbeat — and put the clock on
     // the screen now rather than a heartbeat from now.
     if (result.started && !result.done && result.seconds) {
-      this.goes = times;
       this.hooks.doing?.({ act: action, total: result.seconds, secs: result.seconds, left: times, goes: times, queued: 0 });
     }
     /*
@@ -987,7 +1010,7 @@ export class Island {
      * answer now, and this is where the bar takes it.
      */
     if (result.queued && result.queue) {
-      this.hooks.mine?.({ queue: result.queue, cap: result.capacity ?? null });
+      this.hooks.mine?.({ queue: lineUp(result.queue), cap: result.capacity ?? null });
     }
     if (result.ends) this.armBeat((new Date(result.ends).getTime() - Date.now()) / 1000 + 0.25);
     return result;
@@ -1011,7 +1034,6 @@ export class Island {
     if (!this.info) return;
     if (this.beat) clearTimeout(this.beat);
     this.beat = null;
-    this.goes = undefined;
     await supabase().rpc('rpc_cancel', { p_world: this.info.id });
     await this.pulse();
   }

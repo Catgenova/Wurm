@@ -608,7 +608,13 @@ export class Hud {
     // A counted job says how far through the count it is: "3 of 10". Coming
     // back to an island mid-job, the island knows what is left and nobody
     // knows what was asked for, so it says that instead.
-    const count = a.goes !== undefined && a.left !== undefined ? ` · ${a.goes - a.left + 1} of ${a.goes}`
+    // Both numbers are the island's and belong to the same job, so the sum is
+    // sound; it is still clamped, because a bar that reads "-8 of 1" is worse
+    // than one that reads nothing and there is no telling what an island a
+    // version behind will say.
+    const at = a.goes !== undefined && a.left !== undefined ? a.goes - a.left + 1 : 0;
+    const count = a.goes !== undefined && a.left !== undefined && at >= 1 && at <= a.goes
+      ? ` · ${at} of ${a.goes}`
       : a.left !== undefined && a.left > 1 ? ` · ${a.left} to go` : '';
     if (a.state === 'walking') {
       this.actionLabel.textContent = `Walking over to ${a.def.label.toLowerCase()}…${count}`;
@@ -622,7 +628,10 @@ export class Hud {
     const queue = this.game.queue;
     if (queue.length) {
       this.queueEl.hidden = false;
-      this.queueEl.textContent = `Then: ${queue.map((q) => q.def.label.toLowerCase()).join(' → ')} · ${queue.length + 1}/${this.game.queueCapacity()}`;
+      // What each one is for, not just what it is: three flattens and one
+      // flatten ten times are a very different afternoon.
+      const then = queue.map((q) => `${q.def.label.toLowerCase()}${(q.goes ?? 1) > 1 ? ` ×${q.goes}` : ''}`);
+      this.queueEl.textContent = `Then: ${then.join(' → ')} · ${queue.length + 1}/${this.game.queueCapacity()}`;
     } else this.queueEl.hidden = true;
   }
 }

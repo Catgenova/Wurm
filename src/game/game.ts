@@ -2225,7 +2225,17 @@ export class Game {
       duration: Math.max(0.001, total),
       elapsed: Math.max(0, Math.min(total, total - secs)),
       left,
-      goes: goes ?? had?.goes,
+      /*
+       * What the island says was asked for, and nothing else.
+       *
+       * This used to fall back to the count of whatever was in hand before,
+       * which is how the bar came to draw "3 of 10" off two numbers from two
+       * different jobs: ask for ten while something is in hand and the ask is
+       * queued, so nothing here ever heard the ten, and the one it was still
+       * holding belonged to the job that had just finished. The island keeps
+       * `act_goes` now, through the queue and out the other side.
+       */
+      goes,
     };
     if (!same) this.events.emit('action');
   }
@@ -3958,13 +3968,16 @@ export class Game {
    * next. Only the labels are wanted here: a queued job is a thing to read,
    * and the island is the one that will do it.
    */
-  showQueue(ids: string[], cap: number | null): void {
+  showQueue(lined: Array<{ action: string; goes: number }>, cap: number | null): void {
     this.remoteCap = cap;
     const q = this.queue;
     q.length = 0;
-    for (const id of ids) {
-      const def = ACTION_BY_ID.get(id);
-      if (def) q.push({ def, target: { kind: 'self' } as unknown as Target });
+    for (const { action, goes } of lined) {
+      const def = ACTION_BY_ID.get(action);
+      // The count comes with it now. It used to be thrown away on the island
+      // side, so the line under the bar named the job three times and could
+      // not say that one of them was for ten goes.
+      if (def) q.push({ def, target: { kind: 'self' } as unknown as Target, goes });
     }
     this.events.emit('action');
   }
