@@ -67,6 +67,21 @@ function helpText(): string {
     itself outlined so it is found by scrolling rather than by reading. The counts in the footer are
     buttons &mdash; click one and the herd is laid out flat, worst first, with nothing filtered out,
     so a count of what is wrong takes you to it.</p>
+    <h3>Other people</h3>
+    <p>Right-click somebody standing on the island and you can <b>invite them to your settlement</b>,
+    <b>ask them to be a friend</b>, or <b>write to them</b>. All three live in the <b>Social</b> window
+    (<kbd>Y</kbd>) as well, which has three tabs: <b>Waiting</b> is everything that wants a yes or a no
+    from you, <b>Friends</b> is everybody you know and where they are, and <b>Letters</b> is what has
+    been written.</p>
+    <p>A <b>citizen</b> of a settlement may build on its land, use its crates and stores, and draw from
+    its water, exactly as the founder does. Disbanding, upgrading, renaming and setting wildermon to
+    work stay with whoever planted the stake. You can live on one deed at a time, and holding land of
+    your own means you cannot be anybody's citizen until you disband it.</p>
+    <p>A <b>friend</b> is mutual: you ask, they say yes, and after that each of you can see where the
+    other is &mdash; but only while they are actually at the keyboard. A friend who has gone shows as
+    away and nothing more. <b>Letters</b> are kept: one reaches an open tab the moment it is written and
+    is still waiting the next time somebody looks, however long that takes.</p>
+
     <h3>The settlement window</h3>
     <p><kbd>N</kbd> opens the settlement at a glance: its level and how far the border runs, how many
     wildermon are working of how many it can take, what the next upgrade still wants and the button
@@ -187,6 +202,7 @@ function helpText(): string {
       <tr><td><kbd>J</kbd></td><td>Journal: everything worth doing, ticking itself off</td></tr>
       <tr><td><kbd>B</kbd></td><td>Ledger: everything you have ever made</td></tr>
       <tr><td><kbd>N</kbd></td><td>Settlement: your deed at a glance</td></tr>
+      <tr><td><kbd>Y</kbd></td><td>Social: who is waiting on you, who you know, and what has been written</td></tr>
       <tr><td><kbd>O</kbd></td><td>Settings: what the island looks like, and what every key does</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>

@@ -5847,6 +5847,48 @@ select '767. and it is written once now, not eleven times: '
      || ' function says it';
 
 /*
+ * And the people you know, which this island had no way of saying anything
+ * about: one inhabitant per settlement, no friends, and nothing you could say
+ * to one person that the whole island did not hear.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '769. Ivar asks Hild home: ' || (rpc_invite(:'world2', :'hild'))::text
+     || ', and asking twice: ' || ((rpc_invite(:'world2', :'hild'))->>'why');
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select coalesce(on_my_deed(:'world2', :'hild', (select x from deed where world_id = :'world2' and founded_by = :'ivar'),
+                           (select y from deed where world_id = :'world2' and founded_by = :'ivar'))::text, 'null') as before_yes \gset
+select rpc_invite_answer(:'world2', :'ivar', true) \g /dev/null
+select '770. before she answers the token is hers to build on: ' || :'before_yes'
+     || '; after: ' || on_my_deed(:'world2', :'hild', (select x from deed where world_id = :'world2' and founded_by = :'ivar'),
+                                  (select y from deed where world_id = :'world2' and founded_by = :'ivar'))::text
+     || ' — one line in `on_my_deed`, and twenty rules know a citizen when they see one';
+insert into item (world_id, holder, holder_uid, def, ql, count)
+values (:'world2', 'player', :'hild', 'deed_stake', 50, 1) \g /dev/null
+select '771. and what a citizen may not do — found her own: "'
+     || coalesce(deed_refusal(:'world2', :'hild', 'found_settlement', '{}'::jsonb), 'ALLOWED')
+     || '", disband his: "' || coalesce(settlement_refusal(:'world2', :'hild', 'disband_deed', '{}'::jsonb), 'ALLOWED')
+     || '" — `perform_settlement` reads `founded_by` for itself and was left exactly where it was';
+
+-- Its own statement, or the select beside it reads the island from before it
+-- ran: the suite has been bitten by that before and says so at the top.
+select rpc_friend(:'world2', :'ivar') as asked \gset
+select '772. Hild asks to be a friend: ' || :'asked'
+     || ', and Ivar is told: "' || (select text from event where world_id = :'world2' and uid = :'ivar' order by n desc limit 1) || '"';
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select rpc_friend(:'world2', :'hild') \g /dev/null
+select '773. and once he says yes, where she is: ' || ((rpc_social(:'world2'))->'friends')::text;
+update player set seen_at = now() - interval '2 hours' where world_id = :'world2' and uid = :'hild' \g /dev/null
+select '774. and with Hild away from the keyboard: ' || ((rpc_social(:'world2'))->'friends')::text
+     || ' — the island knows where every body is every second of the day, and a window that said so would be a radar';
+
+select rpc_letter(:'world2', :'hild', 'The iron is in the crate by the token.') \g /dev/null
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select '775. a letter: waiting ' || ((rpc_social(:'world2'))->'unread')::text
+     || ', delivered as "' || (select text from event where world_id = :'world2' and uid = :'hild' and kind = 'letter' order by n desc limit 1) || '"';
+select '776. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar'))->'letters')::text
+     || ' then ' || ((rpc_social(:'world2'))->'unread')::text;
+
+/*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
  *
@@ -5856,7 +5898,7 @@ select '767. and it is written once now, not eleven times: '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '768. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '777. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

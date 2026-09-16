@@ -131,7 +131,7 @@ function turnView(step: number): void {
   game.settings.rotation = camera.rotation;
 }
 
-const ui = new UI(game, renderer, uiRoot, canvasEl, { turn: turnView, keys });
+const ui = new UI(game, renderer, uiRoot, canvasEl, { turn: turnView, keys, island });
 
 /*
  * The game asks in its own words, on its own canvas.

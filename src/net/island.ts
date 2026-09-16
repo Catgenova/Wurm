@@ -188,6 +188,43 @@ export interface ItemRow {
   [key: string]: unknown;
 }
 
+/** Somebody, as the social window draws them. */
+export interface Folk {
+  uid: string;
+  name: string;
+  online: boolean;
+  /** Where they are, which comes only with a friend or a neighbour, and only while they are about. */
+  x?: number;
+  y?: number;
+}
+
+/** Everything the social window shows, in one answer. */
+export interface Social {
+  deed: { name: string; x: number; y: number; level: number; radius: number; founder: string; by: string; mine: boolean } | null;
+  /** The roll of wherever you live, founder first, you left off it. */
+  folk: Folk[];
+  /** Somewhere asking you to come and live there. */
+  invites: Array<{ founder: string; by: string; deed: string; at: number }>;
+  /** And the ones you have out, which only a founder ever has. */
+  sent: Array<{ uid: string; name: string; at: number }>;
+  friends: Folk[];
+  /** Waiting on you. */
+  asked: Array<{ uid: string; name: string; at: number }>;
+  /** Waiting on them. */
+  asking: Array<{ uid: string; name: string; at: number }>;
+  unread: Array<{ uid: string; name: string; n: number }>;
+  /** Everybody ashore, by name, for the window to pick from. No whereabouts. */
+  here: Folk[];
+}
+
+/** One line of a conversation. */
+export interface Letter {
+  n: number;
+  mine: boolean;
+  text: string;
+  at: number;
+}
+
 export interface IslandHooks {
   /** A line for the log, from the island rather than from here. */
   say: (text: string, kind: string) => void;
@@ -1232,6 +1269,77 @@ export class Island {
    */
   tickGoal(id: string): void {
     if (!this.ticked.includes(id)) this.ticked.push(id);
+  }
+
+  /**
+   * Everything the social window shows: the roll, the friends, the letters.
+   *
+   * One ask rather than six, because it is one window — it opens showing all
+   * of it at once, and six round trips to fill one page is six chances for the
+   * page to be half one moment and half another. Asked by the window while it
+   * is open and after anything it does, and never while it is shut: an
+   * invitation and a friend's asking both announce themselves down the same
+   * Realtime line everything else says, so nothing waits on this.
+   */
+  async social(): Promise<Social | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_social', { p_world: this.info.id });
+    if (error || !data) return null;
+    return data as Social;
+  }
+
+  /** Ask somebody to come and live on your land. */
+  async invite(uid: string): Promise<string | null> {
+    return this.socialDoor('rpc_invite', { p_uid: uid });
+  }
+
+  /** Yes or no to an invitation of your own. */
+  async answerInvite(founder: string, yes: boolean): Promise<string | null> {
+    return this.socialDoor('rpc_invite_answer', { p_founder: founder, p_yes: yes });
+  }
+
+  /** Off the roll: yourself with no argument, or somebody the founder is sending away. */
+  async leaveDeed(uid?: string): Promise<string | null> {
+    return this.socialDoor('rpc_leave_deed', { p_uid: uid ?? null });
+  }
+
+  /** Ask to be somebody's friend, or say yes when they asked first. */
+  async befriend(uid: string): Promise<string | null> {
+    return this.socialDoor('rpc_friend', { p_uid: uid });
+  }
+
+  /** No, or not any more. */
+  async unfriend(uid: string): Promise<string | null> {
+    return this.socialDoor('rpc_unfriend', { p_uid: uid });
+  }
+
+  /** A word to one person, which is still there tomorrow. */
+  async writeTo(uid: string, text: string): Promise<string | null> {
+    return this.socialDoor('rpc_letter', { p_uid: uid, p_text: text });
+  }
+
+  /** One conversation, oldest first — and read, by the reading of it. */
+  async letters(uid: string, limit = 60): Promise<Letter[]> {
+    if (!this.info) return [];
+    const { data, error } = await supabase().rpc('rpc_letters', {
+      p_world: this.info.id, p_with: uid, p_limit: limit,
+    });
+    if (error || !data) return [];
+    return rowsIn<Letter>((data as { letters?: unknown }).letters);
+  }
+
+  /**
+   * One shape for all six, because all six are the same shape: a door that
+   * either does the thing or says in one sentence why it will not.
+   *
+   * Returns the sentence, or null when it went through — which is what every
+   * caller wants to put in the log and nothing more.
+   */
+  private async socialDoor(door: string, args: Record<string, unknown>): Promise<string | null> {
+    if (!this.info) return 'You are not on an island.';
+    const { data, error } = await supabase().rpc(door, { p_world: this.info.id, ...args });
+    if (error) return error.message;
+    return (data as { why?: string } | null)?.why ?? null;
   }
 
   async act(action: string, target: Record<string, unknown>, times = 1): Promise<ActResult> {

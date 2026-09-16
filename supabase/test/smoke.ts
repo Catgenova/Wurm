@@ -945,6 +945,31 @@ async function main(): Promise<void> {
     const { data: pack } = await supabase().from('item').select('*').eq('world_id', id).eq('holder_uid', uid);
     check('we are carrying the starting kit', (pack ?? []).length >= 9, `${(pack ?? []).length} things`);
 
+    /*
+     * The social doors, through PostgREST rather than through psql.
+     *
+     * Everything they do needs two people and CI has one, so this is not the
+     * rules — `island.sql` measures those against the rules themselves. This
+     * is the one thing only a real project can answer: that the doors are
+     * *there*. A door added by a migration is exposed by PostgREST's schema
+     * cache and gated by `private.lock_doors()`, and either of those going
+     * wrong looks exactly like this passing locally and 404ing live.
+     */
+    {
+      const { data: social, error: socialErr } = await supabase().rpc('rpc_social', { p_world: id });
+      const seen = (social ?? null) as { here?: unknown[]; friends?: unknown[] } | null;
+      check('the island can say who we know', !socialErr && !!seen,
+        socialErr?.message ?? `${(seen?.friends ?? []).length} friends, ${(seen?.here ?? []).length} others ashore`);
+      // Ourselves, which every one of them refuses in its own words. The point
+      // is the sentence coming back at all: an unreachable door raises.
+      const { data: self, error: friendErr } = await supabase().rpc('rpc_friend', { p_world: id, p_uid: uid });
+      check('and refuses to make us our own friend', !friendErr && !!(self as { why?: string } | null)?.why,
+        friendErr?.message ?? String((self as { why?: string } | null)?.why));
+      const { data: post, error: letterErr } = await supabase().rpc('rpc_letter', { p_world: id, p_uid: uid, p_text: 'hello' });
+      check('and to post us a letter to ourselves', !letterErr && !!(post as { why?: string } | null)?.why,
+        letterErr?.message ?? String((post as { why?: string } | null)?.why));
+    }
+
     // What a client must not be able to do, asked for real through PostgREST.
     /*
      * A refused UPDATE is not an error.

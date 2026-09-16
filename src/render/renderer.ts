@@ -59,6 +59,15 @@ export interface Pick {
   cy: number;
   /** A creature under the cursor, when one is. */
   creature?: number;
+  /**
+   * Somebody else under the cursor, by the uid the island knows them by.
+   *
+   * Everything else on this list is picked by a number that means something to
+   * this browser. A person has to be picked by something that means something
+   * to the *island*, because what you do with one — invite them home, ask to be
+   * their friend, write to them — is a door and not a drawing.
+   */
+  peer?: string;
   /** A crate under the cursor, when one is. */
   crate?: number;
   /** A campfire under the cursor, when one is. */
@@ -114,6 +123,7 @@ interface HitRect {
   w: number;
   h: number;
   creature?: number;
+  peer?: string;
   crate?: number;
   fire?: number;
   smelter?: number;
@@ -299,6 +309,7 @@ export class Renderer {
   private drawnTiles = 0;
   private playerFacing = 1;
   private creatureHits: HitRect[] = [];
+  private peerHits: HitRect[] = [];
   private crateHits: HitRect[] = [];
   private fireHits: HitRect[] = [];
   private smelterHits: HitRect[] = [];
@@ -714,6 +725,7 @@ export class Renderer {
     const pts = this.pts;
     const c = this.cornerBuf;
     this.creatureHits.length = 0;
+    this.peerHits.length = 0;
     this.crateHits.length = 0;
     this.fireHits.length = 0;
     this.smelterHits.length = 0;
@@ -1138,6 +1150,12 @@ export class Renderer {
       }
       if (ent.kind === 'peer' && ent.peer) {
         const peer = ent.peer;
+        // The same box a creature catches clicks with, because it is the same
+        // figure at the same size. Without one, the only thing you could ever
+        // do to another person was walk to the tile they were standing on.
+        if (peer.uid) {
+          this.peerHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 26 * zoom, w: 20 * zoom, h: 28 * zoom, peer: peer.uid });
+        }
         peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
@@ -2460,6 +2478,10 @@ export class Renderer {
    * it put the cursor on a tile a long way from where it was pointing.
    */
   pick(sx: number, sy: number): Pick | null {
+    for (let i = this.peerHits.length - 1; i >= 0; i--) {
+      const h = this.peerHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), peer: h.peer };
+    }
     for (let i = this.creatureHits.length - 1; i >= 0; i--) {
       const h = this.creatureHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), creature: h.creature };

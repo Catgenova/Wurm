@@ -64,9 +64,11 @@ import { EventLogPanel } from './panels/eventlog';
 import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
+import { SocialPanel } from './panels/social';
 import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
 import { WindowManager } from './windows';
+import type { Island } from '../net/island';
 import { uiBox } from './screen';
 
 export interface UICallbacks {
@@ -74,6 +76,15 @@ export interface UICallbacks {
   turn: (step: number) => void;
   /** What every key does, for the Keys tab in Settings to write to. */
   keys: Keybinds;
+  /**
+   * The island, when there is one.
+   *
+   * The only thing in here that talks to it directly. Everything else on this
+   * canvas asks the game and the game asks the island — but who somebody is to
+   * you is not a fact about the world being drawn: there is no wildermon, no
+   * tile and no item behind a friend, only a door and an answer.
+   */
+  island?: Island | null;
 }
 
 /** Builds and updates every HTML overlay above the canvas. */
@@ -92,6 +103,9 @@ export class UI {
   private readonly ledgerPanel: LedgerPanel;
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
+  private readonly social: SocialPanel;
+  /** The island, for the one window that asks it things directly. */
+  private readonly island: Island | null;
   /** What every key does, so the window menu can name them. */
   private readonly keys: Keybinds;
 
@@ -103,6 +117,7 @@ export class UI {
     cb: UICallbacks,
   ) {
     this.keys = cb.keys;
+    this.island = cb.island ?? null;
     this.windows = new WindowManager(root);
     this.menu = new ContextMenu(root, canvas);
     this.tooltip = new Tooltip(root);
@@ -167,6 +182,10 @@ export class UI {
       game.moveTo(x, y);
       game.logMsg(`Walking to (${x}, ${y}).`, 'info');
     });
+    // Everybody, and what they are to you: who is waiting on an answer, who
+    // you know and where they are, and what has been written.
+    const socialWin = this.windows.create({ id: 'social', title: 'Social', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
+    this.social = new SocialPanel(socialWin, game, this.island);
     const ledgerWin = this.windows.create({ id: 'ledger', title: 'Ledger', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
     this.ledgerPanel = new LedgerPanel(ledgerWin, game);
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
@@ -290,6 +309,7 @@ export class UI {
     this.wildermon.update(performance.now());
     this.stores.update(performance.now());
     this.deedPanel.update(performance.now());
+    this.social.update(performance.now() / 1000);
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());
     this.ledgerPanel.update(performance.now());
@@ -496,6 +516,7 @@ export class UI {
    * neither can fall behind the other.
    */
   menuFor(pick: Pick): { title: string; facts?: string[]; entries: MenuItem[] } {
+    if (pick.peer !== undefined) return this.personMenu(pick.peer);
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {
       return { title: `${creature.name} (${this.game.creatures.describe(creature)})`, entries: this.creatureEntries(creature.id) };
@@ -1411,6 +1432,57 @@ export class UI {
       // settlement with no name on it and called it Homestead.
       onSelect: () => g.requestAction(def, t),
     }];
+  }
+
+  /**
+   * What you can do to a person, which until now was nothing at all.
+   *
+   * Everything else on this canvas is picked and then acted on through the
+   * game: a tile, a creature, a crate. A person is not in the game — the
+   * roster is a name and a pose and nothing the simulation reads — so these go
+   * straight to the island, which is the only thing that knows who they are.
+   *
+   * Written in the second person like every other menu here, and each one says
+   * what it would do rather than what it is called: *ask Ivar to live at
+   * Ravenhold* is the whole sentence, and it is the label.
+   */
+  private personMenu(uid: string): { title: string; facts?: string[]; entries: MenuItem[] } {
+    const who = this.game.roster.list().find((p) => p.uid === uid);
+    const name = who?.name ?? 'Somebody';
+    const isle = this.island;
+    if (!isle) {
+      return { title: name, entries: [{ label: 'Nothing to be done', disabled: true, hint: 'There is no island here to ask.', onSelect: () => {} }] };
+    }
+    const said = (what: Promise<string | null>): void => {
+      void what.then((why) => {
+        if (why) this.game.logMsg(why, 'error');
+      });
+    };
+    const entries: MenuItem[] = [];
+    const deed = this.game.deed;
+    if (deed) {
+      entries.push({
+        label: `Invite ${name} to ${deed.name}`,
+        note: 'They may build and store here',
+        onSelect: () => said(isle.invite(uid)),
+      });
+    }
+    entries.push({
+      label: `Ask ${name} to be a friend`,
+      note: 'You will see where each other are',
+      onSelect: () => said(isle.befriend(uid)),
+    });
+    entries.push({
+      label: `Write to ${name}`,
+      note: 'Kept, and read whenever they next look',
+      onSelect: () => this.social.openOn(uid, 'letters'),
+    });
+    entries.push({ label: 'Everybody…', onSelect: () => this.social.openOn(uid, 'friends') });
+    return {
+      title: name,
+      facts: [who ? `${name} is standing at ${Math.floor(who.x)}, ${Math.floor(who.y)}.` : `${name} is on this island.`],
+      entries,
+    };
   }
 
   private nameEntry(t: Target): MenuItem[] {

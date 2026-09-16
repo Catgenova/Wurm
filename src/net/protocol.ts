@@ -51,6 +51,17 @@ export const TIMEOUT = 15;
 export interface PeerState {
   id: PeerId;
   name: string;
+  /**
+   * Who they are to the island, when there is an island.
+   *
+   * `id` is a hash: it tells two people apart on screen and is no use for
+   * naming one to a door. Inviting somebody to your deed, asking to be their
+   * friend or writing to them all want the uid the island knows them by, and
+   * the only place the browser ever had it was the row it threw away building
+   * this. Absent between two browsers talking to each other, which have no
+   * island and no uids.
+   */
+  uid?: string;
   x: number;
   y: number;
   /** Facing, in world space; the renderer turns it into a screen side. */

@@ -448,7 +448,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     game.roster.sawAll(people
       .filter((p) => p.uid !== island.uid)
       .map((p) => ({
-        id: hashId(p.uid), name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1,
+        id: hashId(p.uid), uid: p.uid, name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1,
         level: p.level, moving: false, swimming: false, working: !!p.act, look: cleanLook(p.look),
       })));
   };
