@@ -863,8 +863,23 @@ select '133c. and a hundred offerings do not make it a certainty: the whole chan
 update creature set coaxed = 3, coaxed_at = now() where id = :'cid' \g /dev/null
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'tame', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
-select '134. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('system','event'))
+-- `kind` widened to take in 'skill', because that is the half that was
+-- missing: reported as taming giving nothing for an attempt, "at least in
+-- chat". It was giving something and nothing said so.
+select '134. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('system','event','skill'))
      || ' — it is ' || (select mode from creature where id = :'cid');
+delete from event where uid = :'ivar';
+select round(skill_told(:'world2', :'ivar', 'taming', 0.35)::numeric, 4) as onrefusal \gset
+select '134b. and what a refusal is worth, which is what a refusal has always been worth: '
+     || :'onrefusal' || ' of taming — ' || coalesce((select text from event where uid = :'ivar' and kind = 'skill'
+                                                     order by n desc limit 1), 'AND STILL NOTHING SAID');
+select '134c. performers that say what went up: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.proname like 'perform_%'
+           and (p.prosrc like '%increased by%' or p.prosrc like '%skill_told(%'))
+     || ' — including ' || (select string_agg(p.proname, ', ' order by p.proname)
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.proname = 'perform_creature' and p.prosrc like '%skill_told(%');
 update creature set mode = 'active', keeper = :'ivar', stance = 'defensive' where id = :'cid';
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'feed', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
