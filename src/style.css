@@ -1322,6 +1322,92 @@ kbd {
   }
 }
 
+/* The tracker: the few trades you are watching today ---------------------- */
+
+.track-body {
+  padding: 6px 8px 8px;
+}
+
+.track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/*
+ * Two lines to a trade: what it is called and what it stands at, then how far
+ * it has come toward the next level. The name may run long — "Weaponsmithing"
+ * against a two hundred and sixty pixel window — so it is the column that
+ * gives, and the number beside it never moves.
+ */
+.track-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+}
+
+.track-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-value {
+  color: var(--ui-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.track-drop {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid #5a4c38;
+  border-radius: 2px;
+  background: #2a231b;
+  color: var(--ui-dim);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.track-drop:hover {
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.track-bar {
+  grid-column: 1 / 3;
+}
+
+.track-fill {
+  background: linear-gradient(#b6d07a, #7fa044);
+}
+
+.track-next {
+  grid-column: 3;
+  color: var(--ui-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.track-add {
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px;
+  border: 1px solid #5a4c38;
+  border-radius: 2px;
+  background: #2a231b;
+  color: var(--ui-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.track-add:hover {
+  border-color: var(--ui-accent);
+}
+
 /* Event log --------------------------------------------------------------- */
 
 .log-body {

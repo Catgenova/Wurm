@@ -53,6 +53,7 @@ export const WINDOWS: Array<{ label: string; bind: string; id: string }> = [
   { label: 'Craft', bind: 'win_craft', id: 'craft' },
   { label: 'Tile', bind: 'win_tile', id: 'tile' },
   { label: 'Skills', bind: 'win_skills', id: 'skills' },
+  { label: 'Tracker', bind: 'win_tracker', id: 'tracker' },
   { label: 'Events', bind: 'win_events', id: 'events' },
   { label: 'Map', bind: 'win_map', id: 'map' },
   { label: 'Wildermon', bind: 'win_wildermon', id: 'wildermon' },

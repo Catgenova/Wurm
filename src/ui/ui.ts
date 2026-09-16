@@ -64,6 +64,7 @@ import { EventLogPanel } from './panels/eventlog';
 import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
+import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
 import { WindowManager } from './windows';
 import { uiBox } from './screen';
@@ -131,6 +132,9 @@ export class UI {
     new InventoryPanel(inventory, game, this.menu, (p) => this.moveDragged(p, 'inventory'), (uid) => this.cratePanel.openBag(uid));
     const skills = this.windows.create({ id: 'skills', title: 'Skills', x: 364, y: 56, width: 260, height: 380, anchor: 'tr', open: false });
     new SkillsPanel(skills, game);
+    // The handful you are moving today, beside the book that holds all forty.
+    const tracker = this.windows.create({ id: 'tracker', title: 'Tracker', x: 364, y: 446, width: 260, height: 210, anchor: 'tr', open: false });
+    new TrackerPanel(tracker, game, (x, y, title, items) => this.menu.show(x, y, title, items));
     const craft = this.windows.create({ id: 'craft', title: 'Crafting', x: 364, y: 56, width: 360, height: 360, anchor: 'tr', open: false });
     this.craftPanel = new CraftPanel(craft, game);
     const tileWin = this.windows.create({ id: 'tile', title: 'Tile', x: 12, y: 200, width: 300, height: 320, open: false });

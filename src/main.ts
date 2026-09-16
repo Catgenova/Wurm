@@ -214,6 +214,7 @@ const PRESSES: Record<string, () => void> = {
   win_craft: () => ui.toggleWindow('craft'),
   win_tile: () => ui.toggleWindow('tile'),
   win_skills: () => ui.toggleWindow('skills'),
+  win_tracker: () => ui.toggleWindow('tracker'),
   win_events: () => ui.toggleWindow('events'),
   win_map: () => ui.toggleWindow('map'),
   win_wildermon: () => ui.toggleWindow('wildermon'),
