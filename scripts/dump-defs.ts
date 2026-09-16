@@ -37,7 +37,7 @@ import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/g
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
 import { PLANTABLE } from '../src/game/game';
-import { RARITIES, RARITY_ODDS } from '../src/game/items';
+import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
@@ -346,6 +346,16 @@ out.push(`create table if not exists rarity_def (
  * all said 5. One table, and nothing to keep in step by hand.
  */
 out.push(`alter table rarity_def add column if not exists odds real not null default 0;`);
+/*
+ * And the two sentences, which `rarity_word` also wrote out by hand.
+ *
+ * `word` is what is said when one comes off the bench; `lift` is what is said
+ * when a thing already in your hands becomes one under the file. Both are
+ * prose and both belong with the numbers they go with, for the same reason the
+ * numbers do: there is one of each now instead of two.
+ */
+out.push(`alter table rarity_def add column if not exists word text not null default '';`);
+out.push(`alter table rarity_def add column if not exists lift text not null default '';`);
 out.push(`create table if not exists dye_def (
   id text primary key, name text not null, word text not null
 );`);
@@ -667,7 +677,7 @@ for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plan
  */
 RARITIES.forEach((r, ord) => {
   if (!r.name) return;
-  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)}, ${q(RARITY_ODDS[ord - 1])});`);
+  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)}, ${q(RARITY_ODDS[ord - 1])}, ${q(RARITY_WORD[ord])}, ${q(RARITY_LIFT[ord])});`);
 });
 for (const d of DYES) out.push(`insert into dye_def values (${q(d.id)}, ${q(d.name)}, ${q(d.word)});`);
 for (const m of Object.values(IMPROVE_MATERIALS)) {

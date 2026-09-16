@@ -2,7 +2,7 @@ import type { ActionDef } from './actions';
 import { ARMOUR_BY_ID, isShield, WEAPON_BY_ID } from './gear';
 import { FURNITURE_BY_ID } from './furniture';
 import type { Game } from './game';
-import { itemDef, itemName, rarityOf, type Item } from './items';
+import { itemDef, itemName, liftRarity, rarityOf, RARITIES, RARITY_LIFT, type Item } from './items';
 import { isMould } from './metal';
 import { materialOfItem, matOf } from './materials';
 
@@ -167,6 +167,25 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       }
       const ceiling = Math.min(99.9, improveCeiling(g, what.skill, item));
       item.ql = Math.max(item.ql, Math.min(ceiling, item.ql + improveStep(g, item, what.skill)));
+      /*
+       * And now and again the thing itself comes on, not just its quality.
+       *
+       * The same odds as the bench: a hundred good passes turn a plain thing
+       * rare about once, a thousand a rare thing supreme, ten thousand a
+       * supreme thing fantastic. One step at a time, so the only road to the
+       * top of it is through the middle of it.
+       *
+       * Said before the quality line, the way the bench says it, and the line
+       * after calls the thing by its new name because `itemName` reads the
+       * rarity. A step up also lifts the ceiling it may be bettered to, which
+       * is the next pass's business rather than this one's.
+       */
+      const lifted = liftRarity(item, g.rand);
+      if (lifted !== null) {
+        item.rare = lifted;
+        g.note(RARITIES[lifted].name);
+        g.logMsg(RARITY_LIFT[lifted], 'skill');
+      }
       g.events.emit('inventory');
       g.logMsg(`The ${itemName(item).toLowerCase()} is better than it was. (QL ${item.ql.toFixed(1)})`, 'event');
       // Keep at it while there is room and stock of the right stuff left.

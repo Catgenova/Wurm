@@ -192,6 +192,18 @@ jobs:
           npx esbuild supabase/test/felt.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/felt.mjs --log-level=error
           node node_modules/.cache/felt.mjs
+      - name: What a rare thing is, and what a pass can turn one into
+        run: |
+          # Every rarity number is crossed from `RARITIES` into `rarity_def`,
+          # so the two sides agree by construction — right up until somebody
+          # writes one out again by hand. `improve_ceiling` did: it said a rare
+          # thing could be bettered 4 past your skill while the table, the
+          # browser and the island's own examine line all said 5. This puts the
+          # two lists side by side, and rolls the ladder a quarter of a million
+          # times to show a pass is one step up or none.
+          npx esbuild supabase/test/rare.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/rare.mjs --log-level=error
+          node node_modules/.cache/rare.mjs
       - name: Every goal the journal counts is a note the island writes
         run: |
           # Forty-six of the journal's eighty-five goals count things done, and

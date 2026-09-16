@@ -438,7 +438,51 @@ export const RARITY_WORD = [
   'For a moment the whole of it is obvious, and what you set down is the finest thing you will ever make.',
 ];
 
+/**
+ * What is said when a thing you are already working becomes more than it was.
+ *
+ * Its own three sentences rather than the bench's, because they are a
+ * different moment: nothing has been set down, and the thing in your hands is
+ * one you have been at for a while.
+ */
+export const RARITY_LIFT = [
+  '',
+  'Something gives under the file, and what was an ordinary thing is not one any more.',
+  'You go over it once more and it comes back at you: a better thing than the one you started on.',
+  'The last stroke lands and the whole of it settles. You will not make its like again.',
+];
+
 export const rarityOf = (item: { rare?: number }): RarityDef => RARITIES[Math.max(0, Math.min(3, item.rare ?? 0))];
+
+/**
+ * The chance a thing is this rare *at all*, rather than the chance of the step
+ * on its own.
+ *
+ * `RARITY_ODDS` is rolled in turn, so each entry is conditional on the one
+ * before it: a tenth, of a tenth, of a hundredth. What somebody actually means
+ * by "the odds of a fantastic" is the three multiplied out — one in ten
+ * thousand — and that is what this is.
+ */
+export const rarityChance = (step: number): number =>
+  step < 1 || step >= RARITIES.length ? 0 : RARITY_ODDS.slice(0, step).reduce((p, o) => p * o, 1);
+
+/**
+ * A step up under the file, on a pass that went well.
+ *
+ * The same odds as making one outright, and one step at a time: a hundred good
+ * passes turn a plain thing rare about once, a thousand turn a rare thing
+ * supreme, ten thousand turn a supreme thing fantastic. Never two steps — an
+ * ordinary thing does not become fantastic because somebody was lucky once,
+ * and there is no way to reach the top of it but through the middle.
+ *
+ * Null when nothing happened, which is almost always, and when there is
+ * nothing above what it already is.
+ */
+export function liftRarity(item: { rare?: number }, rand: () => number): number | null {
+  const step = (item.rare ?? 0) + 1;
+  if (step >= RARITIES.length) return null;
+  return rand() < rarityChance(step) ? step : null;
+}
 
 /** Roll for rarity on a newly made thing: nothing helps and nothing hurts. */
 export function rollRarity(rand: () => number): number {

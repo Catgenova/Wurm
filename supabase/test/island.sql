@@ -5937,6 +5937,78 @@ select '780. a fantastic hatchet, with blacksmithing at ' || :'smith' || ': the 
 delete from item where id = :'prize' \g /dev/null
 
 /*
+ * And a thing coming on under the file, which is new: rarity used to be rolled
+ * once at the bench and never again, so no amount of work could turn an
+ * ordinary thing into a good one.
+ */
+select '782. the ladder: '
+     || (select string_agg(coalesce(q.id, 'plain') || ' → ' || coalesce(rarity_next(q.id), 'nothing above it'), ', '
+                           order by q.ord)
+         from (select null::text as id, 0 as ord union all select r.id, r.ord from rarity_def r) q)
+     || ' — at 1 in ' || (select string_agg(round(1 / rarity_chance(r.id)::numeric, 0)::text, ', 1 in ' order by r.ord) from rarity_def r)
+     || ' a pass, which is `RARITY_ODDS` multiplied out rather than each step on its own';
+/*
+ * And what a pass can *ever* turn a thing into, which is the half of this that
+ * matters: twenty thousand rolls from each starting point, and every distinct
+ * thing that came out of them.
+ *
+ * Written as an exhaustive list rather than a rate, because the rates are
+ * exact arithmetic and 782 already reads them off. The first draft of this
+ * sampled a starting rarity with `random()` in a lateral and then passed it to
+ * `rarity_lift` — and Postgres inlined the lateral, so the two references drew
+ * *different* numbers and the measurement was reporting on pairs that never
+ * happened. Nothing random decides what is being asked here now.
+ */
+select '783. what a good pass can ever turn a thing into, over twenty thousand rolls apiece: '
+     || (select string_agg(q.was || ' → ' || q.got, ', ' order by q.ord)
+         from (select coalesce(r.id, 'plain') as was, r.ord,
+                 (select string_agg(distinct coalesce(l.got, 'itself'), ' or ' order by coalesce(l.got, 'itself'))
+                  from (select rarity_lift(r.id) as got from generate_series(1, 20000)) l) as got
+               from (select null::text as id, 0 as ord
+                     union all select d.id, d.ord from rarity_def d) r) q)
+     || ' — one step or none, and no road to the top of it but through the middle';
+
+-- End to end, with the odds forced so the roll is not the thing being tested:
+-- one good pass, and the thing in hand is not the thing it was.
+update rarity_def set odds = 1 where id = 'rare' \g /dev/null
+update player set stats = jsonb_set(stats, '{stamina}', '1') where world_id = :'world2' and uid = :'ivar' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'world2', 'player', :'ivar', 'iron_lump', 60, 20, 'Iron') \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, dmg, count, extra)
+values (:'world2', 'player', :'ivar', 'hatchet', 20, 0, 1, 'Iron') returning id as under_file \gset
+delete from event where world_id = :'world2' and uid = :'ivar' \g /dev/null
+/*
+ * The world and the thing both read off the thing itself.
+ *
+ * psql does not substitute a variable inside a dollar-quoted block, so this
+ * cannot be handed `:'world2'` — and `select id from world limit 1` is not it
+ * either: there are several islands by the time the suite gets here and that
+ * has no `order by`. The item knows which world it is on; ask it.
+ */
+do $$
+declare me uuid := '11111111-1111-1111-1111-111111111111'; c bigint; w uuid; i int;
+begin
+  select q.id, q.world_id into c, w from item q
+   where q.def = 'hatchet' and not q.issued and q.holder_uid = me order by q.id desc limit 1;
+  for i in 1..40 loop
+    exit when (select rare from item where id = c) is not null;
+    update item set dmg = 0 where id = c;
+    exit when item_refusal(w, me, 'improve_item', jsonb_build_object('kind', 'item', 'uid', c)) is not null;
+    perform perform_item(w, me, 'improve_item', jsonb_build_object('kind', 'item', 'uid', c));
+  end loop;
+end $$;
+select '784. a plain iron hatchet, worked on: it is now '
+     || coalesce((select rare from item where id = :'under_file'), 'plain')
+     || ' — "' || coalesce((select text from event where world_id = :'world2' and uid = :'ivar'
+                            and kind = 'skill' order by n desc limit 1), 'nothing said') || '"'
+     || ', the journal has counted ' || coalesce((select (tally->>'rare') from player where world_id = :'world2' and uid = :'ivar'), '0')
+     || ', and the ceiling it may be bettered to went from '
+     || round(improve_ceiling(:'world2', :'ivar', 'blacksmithing', null)::numeric, 1) || ' to '
+     || round(improve_ceiling(:'world2', :'ivar', 'blacksmithing',
+          (select rare from item where id = :'under_file'))::numeric, 1);
+update rarity_def set odds = 0.01 where id = 'rare' \g /dev/null
+
+/*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
  *
@@ -5946,7 +6018,7 @@ delete from item where id = :'prize' \g /dev/null
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '781. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '785. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'
