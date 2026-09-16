@@ -1,4 +1,5 @@
 import { generateWorld } from '../world/generate';
+import type { Hoard } from './treasure';
 import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
@@ -146,6 +147,7 @@ export interface GameInit {
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   marks?: Marker[];
+  hoards?: Hoard[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
   /** What knacks were called before they were called knacks. */
   affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
@@ -313,6 +315,16 @@ export class Game {
    * everything that reads it can ask once and skip.
    */
   readonly roster = new Roster();
+  /**
+   * Hoards in the ground, by the map that points at each.
+   *
+   * On an island this is `treasure`, a table nothing may read. Here it is in
+   * the save, which hides nothing — a single-player island is the player's own
+   * machine and always was. What makes it a hunt is the picture, not the
+   * secrecy: the map shows you a stretch of country and you go and look.
+   */
+  hoards: Hoard[] = [];
+
   /** Names pinned to spots on the island, and the next id to give one. */
   readonly marks: Marker[] = [];
   private nextMarkId = 1;
@@ -535,6 +547,7 @@ export class Game {
     this.spawn = init.spawn;
     this.player = new Player(init.player?.x ?? init.spawn.x + 0.5, init.player?.y ?? init.spawn.y + 0.5);
     if (init.player) readPlayer(this.player, init.player);
+    this.hoards = init.hoards ?? [];
     for (const m of init.marks ?? []) {
       this.marks.push(m);
       if (m.id >= this.nextMarkId) this.nextMarkId = m.id + 1;

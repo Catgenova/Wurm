@@ -14,6 +14,7 @@ import { IMPROVE_ACTIONS } from './improve';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
+import { TREASURE_ACTIONS, maybeMap } from './treasure';
 import { FIRST_AID_ACTIONS } from './firstaid';
 import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
 import { DEED_ACTIONS } from './deed';
@@ -400,6 +401,8 @@ export const ACTIONS: ActionDef[] = [
       const yieldId = def.digYield ?? 'dirt';
       const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You dig up some ${itemDef(yieldId).name.toLowerCase()} from the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
+      // And one spadeful in a thousand that is not dirt at all.
+      maybeMap(g, 'digging', 'shovel');
     },
   },
   {
@@ -536,6 +539,8 @@ export const ACTIONS: ActionDef[] = [
       const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', pickQl)) });
       const what = itemDef(yieldId).name.toLowerCase();
       g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
+      // And one swing in a thousand that brings out something nobody quarried.
+      maybeMap(g, 'mining', 'pickaxe');
       // Cutting the face back is its own job, with its own entry in the menu.
       // Now and again one comes down anyway.
       if (g.rand() < MINE_COLLAPSE) {
@@ -1520,6 +1525,7 @@ export const ACTIONS: ActionDef[] = [
   ...FAITH_ACTIONS,
   ...MEDITATION_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
+  ...TREASURE_ACTIONS,
   ...FIRST_AID_ACTIONS,
   ...PLACEABLE_ACTIONS,
   ...CRATE_ACTIONS,

@@ -54,6 +54,10 @@ import { BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
+import {
+  MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
+  UNEARTH_REACH,
+} from '../src/game/treasure';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
@@ -250,6 +254,18 @@ out.push(`alter table tile_def add column if not exists diggable boolean not nul
 /* What the old people left in the ground, and what it takes to put one back. */
 out.push(`create table if not exists relic_def (
   name text primary key, parts int not null, result text not null, difficulty real not null
+);`);
+/*
+ * What a map of a given quality is a map to, and what the map says as you get
+ * warm. The bands are prose because the island says them: told a distance in
+ * tiles anybody would triangulate, and the picture would be decoration.
+ */
+out.push(`create table if not exists treasure_def (
+  id text primary key, ord int not null, min_ql real not null, name text not null,
+  guard text not null, guards int not null, lumps int not null, things int not null
+);`);
+out.push(`create table if not exists map_band (
+  ord int primary key, within real not null, say text not null
 );`);
 /* What you set and walk away from, and what it will hold. */
 out.push(`create table if not exists trap_def (
@@ -512,7 +528,7 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band;');
 out.push('');
 
 /*
@@ -870,6 +886,13 @@ for (const [fn, v] of [
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
+/* What a hunt is: how often a map turns up, how far it points and how near you must stand. */
+for (const [fn, v] of [
+  ['map_odds', MAP_ODDS], ['map_kill_scale', MAP_KILL_SCALE], ['map_kill_cap', MAP_KILL_CAP],
+  ['map_range', MAP_RANGE], ['unearth_reach', UNEARTH_REACH], ['map_snippet', MAP_SNIPPET],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
 /* What a prayer is worth and what it takes; what a sitting is worth and how often. */
 for (const [fn, v] of [
   ['favour_trickle', FAVOUR_TRICKLE], ['prayer_favour', PRAYER_FAVOUR], ['prayer_rest', PRAYER_REST],
@@ -911,6 +934,17 @@ for (const id of DIGGABLE) out.push(`update tile_def set diggable = true where i
 for (const r of RELICS) {
   out.push(`insert into relic_def values (${q(r.name)}, ${q(r.parts)}, ${q(r.result)}, ${q(r.difficulty)});`);
 }
+for (const t of TREASURE_TIERS) {
+  out.push(`insert into treasure_def values (${q(t.id)}, ${q(t.ord)}, ${q(t.minQl)}, ${q(t.name)}, `
+    + `${q(t.guard)}, ${q(t.guards)}, ${q(t.lumps)}, ${q(t.things)});`);
+}
+/*
+ * `Infinity` is a number in TypeScript and is not one in Postgres's `real`, so
+ * the last band — the one that catches everything left — is written as a
+ * distance no island is wide rather than as infinity.
+ */
+MAP_BANDS.forEach((b, ord) => out.push(
+  `insert into map_band values (${q(ord)}, ${q(Number.isFinite(b.within) ? b.within : 1e9)}, ${q(b.say)});`));
 for (const t of Object.values(TRAPS)) {
   out.push(`insert into trap_def values (${q(t.id)}, ${q(t.name)}, ${q(t.difficulty)}, ${q(t.holds)}, `
     + `${q(t.reach)}, ${q(t.odds)}, ${q(t.lifeMin)}, ${q(t.lifeMax)}, ${q(!!t.water)}, ${q(t.hold ?? null)}, ${q(t.note)});`);

@@ -16,6 +16,7 @@ import type { Look } from './look';
 import type { PathId } from './meditation';
 import type { BeltPin } from './belt';
 import type { Marker } from './marks';
+import type { Hoard } from './treasure';
 import type { Nutrient } from './nutrition';
 import type { Ledger } from './ledger';
 import type { Crop } from './farming';
@@ -199,6 +200,8 @@ interface SaveData {
   memData?: string;
   spawn: { x: number; y: number };
   marks?: Marker[];
+  /** What is buried, by the map that points at it. */
+  hoards?: Hoard[];
   player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
   /** What knacks were called before they were called knacks. */
   affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
@@ -266,6 +269,7 @@ function meta(game: Game): SaveMeta {
     size: w.w,
     spawn: game.spawn,
     marks: game.marks,
+    hoards: game.hoards,
     player: { x: game.player.x, y: game.player.y, name: game.player.name, look: game.player.look, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, knacks: game.player.knacks, nutrition: game.player.nutrition, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, belt: game.player.belt },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
@@ -538,6 +542,7 @@ function finish(world: World, m: SaveMeta): Game {
     anvils: m.anvils,
     crops: m.crops,
     marks: m.marks,
+    hoards: m.hoards,
     crate: m.crate ?? null,
     guests: m.guests,
   });

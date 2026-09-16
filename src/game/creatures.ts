@@ -1,4 +1,5 @@
 import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
+import { mapFromBeast } from './treasure';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { DeedStore, Game } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
@@ -3834,6 +3835,13 @@ export class Creatures {
     // What the carcass is worth follows the size of the thing that left it.
     const size = ageDef(t, game.time).yield;
     game.dropOnGround(x, y, { uid: game.inventory.nextUid++, id: 'corpse', ql: Math.max(1, Math.min(100, (15 + game.rand() * 35) * size)), dmg: 0, count: 1, extra: def.name });
+    /*
+     * And what it was keeping, which is the other half of where a map comes
+     * from. Only a monster, and only to whoever struck it down: the odds and
+     * the quality both come off its health, so a goblin carries a scrap and a
+     * dragon carries a dragon's.
+     */
+    if (killer === 'player' && def.monster) mapFromBeast(game, def.health, x, y);
     if (killer === 'player') game.logMsg(`You kill the wild ${def.name.toLowerCase()}. Its corpse lies where it fell.`, 'event');
     else if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'error');
     else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'event');

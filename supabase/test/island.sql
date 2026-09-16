@@ -6067,6 +6067,148 @@ select '788. and what it told the browser: heights '
      || ', soil ' || (select soil::text from tile_change where world_id = :'world2' and x = 6 and y = 6 order by n desc limit 1)
      || ' — the soil was the one thing about a square this row never carried, so fourteen stayed fourteen however long anybody dug';
 
+
+\echo ''
+\echo '--- a map is a picture of somewhere'
+/*
+ * A world of its own for the hunt: sixty-four tiles, flat, dry, with nobody's
+ * stake in it. The main island is sixteen across and has three settlements on
+ * it by now, and a treasure has to go somewhere that is none of them.
+ */
+\set dane '44444444-4444-4444-4444-444444444444'
+do $$
+declare w uuid; i int; j int;
+begin
+  insert into world (name, seed, size, spawn_x, spawn_y, ready)
+  values ('Hoarding', 77, 64, 32, 32, true) returning id into w;
+  perform land_blank(w, 64);
+  for j in 0..64 loop
+    for i in 0..64 loop perform land_set_height(w, i, j, 30); end loop;
+  end loop;
+  for j in 0..63 loop
+    for i in 0..63 loop perform land_set_tile(w, i, j, 0); end loop;
+  end loop;
+end $$;
+select id as world3 from world where name = 'Hoarding' \gset
+select set_config('request.jwt.claims', json_build_object('sub', :'dane')::text, false) \g /dev/null
+select rpc_join(:'world3', 'Dane') \g /dev/null
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now()
+  where uid = :'dane' \g /dev/null
+
+-- Dug up out of the ground: a grand one, because the roll is being asked for
+-- rather than waited a thousand spadefuls for.
+select bury_treasure(:'world3', :'dane', 80, 32, 32) as mapid \gset
+select '790. one spadeful in a thousand: ' ||
+       (select item_name(i) || ', QL ' || round(i.ql::numeric, 0) from item i where i.id = :'mapid')
+     || ' — buried ' || (select round(sqrt((t.x - 32) ^ 2 + (t.y - 32) ^ 2)::numeric, 0) from treasure t where t.item_id = :'mapid')
+     || ' tiles off, on ground standing ' || (select round(centre_height(:'world3', t.x, t.y)::numeric, 0) from treasure t where t.item_id = :'mapid')
+     || ' above the water, on nobody''s deed ('
+     || (select not exists (select 1 from deed_covering(:'world3', t.x, t.y)) from treasure t where t.item_id = :'mapid')
+     || ')';
+
+/*
+ * And the thing the whole mechanic rests on. `treasure` has `world_id` on it,
+ * so `private.lock_doors()` gives it no read policy — RLS on and nothing
+ * written is a table that answers empty whoever asks.
+ */
+select '791. and where it is, to anybody who asks the island directly: '
+     || (select case when relrowsecurity then 'row security on' else 'WIDE OPEN' end
+           from pg_class where relname = 'treasure')
+     || ', policies ' || (select count(*) from pg_policies where tablename = 'treasure')
+     || ', granted to ' || coalesce((select string_agg(distinct grantee, ', ')
+           from information_schema.role_table_grants where table_name = 'treasure'
+             and grantee in ('anon', 'authenticated')), 'nobody')
+     || ' — the two calls below are the only things on the island that can see it';
+
+-- What a browser is told instead.
+select set_config('request.jwt.claims', json_build_object('sub', :'dane')::text, false) \g /dev/null
+select '792. what it is told instead: ' ||
+       (select (m->>'side') || ' tiles a side, ' || jsonb_array_length(m->'tiles') || ' of them and '
+            || jsonb_array_length(m->'heights') || ' corner heights, a ' || (m->>'tier')
+            || ' map — and not one number in it that says where on the island any of it is'
+        from (select rpc_treasure_map(:'world3', :'mapid') as m) q);
+
+-- Walking in. The body is put down at a distance rather than walked, because
+-- what is being measured is the sentence, not the walking.
+do $$
+declare v_t treasure; v_d double precision;
+begin
+  select * into v_t from treasure where item_id = (select id from item where def = 'treasure_map' limit 1);
+  for v_d in select unnest(array[60, 20, 6, 1]) loop
+    update player set x = v_t.x + 0.5 + v_d, y = v_t.y + 0.5
+      where uid = '44444444-4444-4444-4444-444444444444';
+    raise notice '     % tiles off: %', v_d,
+      coalesce(treasure_refusal((select world_id from treasure limit 1),
+        '44444444-4444-4444-4444-444444444444', 'unearth',
+        jsonb_build_object('uid', v_t.item_id)), 'DIG');
+  end loop;
+end $$;
+select '793. and how warm you are, which is a distance and never a bearing — the four lines above, and the last of them is the one that lets you dig';
+
+-- On the spot, and what comes out of the ground.
+do $$
+declare v_t treasure;
+begin
+  select * into v_t from treasure limit 1;
+  update player set x = v_t.x + 0.5, y = v_t.y + 0.5
+    where uid = '44444444-4444-4444-4444-444444444444';
+end $$;
+select t.x as hx, t.y as hy from treasure t limit 1 \gset
+select rpc_act(:'world3', 'unearth', ('{"kind":"item","uid":' || :'mapid' || '}')::jsonb, 1) \g /dev/null
+update player set act_started = act_started - interval '300 seconds', act_ends = act_ends - interval '300 seconds'
+  where uid = :'dane' \g /dev/null
+select settle(:'world3', :'dane') \g /dev/null
+select '794. the spade goes through rotten board: '
+     || (select count(*) from item where world_id = :'world3' and holder = 'ground' and gx = :'hx' and gy = :'hy')
+     || ' things lying where they fell ('
+     || (select string_agg(distinct def, ', ' order by def) from item
+          where world_id = :'world3' and holder = 'ground' and gx = :'hx' and gy = :'hy')
+     || '), ' || (select count(*) from creature where world_id = :'world3' and species = 'dragon')
+     || ' dragon over them, and the map itself '
+     || (select case when count(*) = 0 then 'gone from the pack, and the row with it: '
+                     || (select count(*) from treasure where item_id = :'mapid') || ' left'
+                else 'STILL IN THE PACK' end
+         from item where id = :'mapid');
+
+/*
+ * And the rule that has to hold twice: a map drawn on open country that
+ * somebody settles afterwards. Refusing the dig would leave a dead map in a
+ * pack; refusing the settlement would need the island to explain itself
+ * without giving the spot away. So the hoard moves, and nobody notices,
+ * because nobody ever had a coordinate to notice leaving.
+ */
+select bury_treasure(:'world3', :'dane', 30, 32, 32) as map2 \gset
+select t.x as wasx, t.y as wasy from treasure t where t.item_id = :'map2' \gset
+do $$
+declare v_t treasure;
+begin
+  select * into v_t from treasure where item_id = (select max(item_id) from treasure);
+  insert into deed (world_id, name, x, y, radius, founded_by)
+  values (v_t.world_id, 'Latecomer', v_t.x, v_t.y, 5, '44444444-4444-4444-4444-444444444444');
+end $$;
+select '795. a stake goes in over a buried hoard at ' || :'wasx' || ',' || :'wasy' || ': it is now at '
+     || (select t.x || ',' || t.y from treasure_at(:'map2') t)
+     || ', which is off the deed (' || (select not exists (select 1 from deed_covering(:'world3', t.x, t.y)) from treasure_at(:'map2') t)
+     || ') — the map lives, the settlement stands, and the only thing that moved was a row nobody can read';
+
+/*
+ * What a map is worth, and what is over it. Both sides of the ladder read
+ * `treasure_def`, which is crossed from `TREASURE_TIERS`.
+ */
+select '796. what a map is worth: ' || string_agg(
+         t.id || ' from QL ' || round(t.min_ql::numeric, 0) || ' — ' || t.guards || ' ' || t.guard
+         || ', ' || t.lumps || ' lump' || case when t.lumps = 1 then '' else 's' end
+         || ' and ' || t.things || ' thing' || case when t.things = 1 then '' else 's' end,
+         '; ' order by t.ord)
+from treasure_def t;
+
+select '797. and what a body is worth carrying one: ' || string_agg(
+         s.name || ' 1 in ' || round((1 / map_chance_beast(s.health))::numeric, 0)
+         || ' at about QL ' || round((12 + s.health / 8)::numeric, 0), ', ' order by s.health)
+     || ' — and nothing you could have tamed drops one at all, which is '
+     || (select count(*) from species_def where not monster) || ' of the ' || (select count(*) from species_def)
+from species_def s where s.monster;
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6077,7 +6219,7 @@ select '788. and what it told the browser: heights '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '789. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '798. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

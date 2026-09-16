@@ -246,6 +246,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   ink: { name: 'Ink', category: 'material', weight: 0.1, stackable: true, decay: 8, description: 'Soot, gland and lye water, ground together until it flows black.' },
   book: { name: 'Book', category: 'misc', weight: 1.2, decay: 6, description: 'Papyrus sewn between leather boards. Reading it sharpens the head, and wears the pages.' },
   fragment: { name: 'Fragment', category: 'misc', weight: 0.6, decay: 3, description: 'A broken piece of something old. Find the rest of it and a restorer can put it back together.' },
+  treasure_map: { name: 'Treasure map', category: 'misc', weight: 0.1, decay: 20, description: 'A square of oiled hide with a stretch of country drawn on it and no names anywhere. Read it to see the picture; walk until the ground matches, then dig. Something is always left to watch over a hoard. Keep it in a pack or a crate — left lying in a field it will rot, and take the hoard with it.' },
   statuette: { name: 'Statuette', category: 'misc', weight: 1.4, decay: 2, description: 'A small figure in worn stone, carried by people who are long gone.' },
   old_lamp: { name: 'Old lamp', category: 'misc', weight: 0.9, decay: 3, description: 'A closed clay lamp with a wick hole. It still smells faintly of oil.' },
   bronze_mirror: { name: 'Bronze mirror', category: 'misc', weight: 0.8, decay: 3, description: 'A disc of bronze polished on one face. It gives back a dim, honest likeness.' },
