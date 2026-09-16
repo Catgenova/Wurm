@@ -91,21 +91,26 @@ export const BODY_GAP = 180;
 export function bodyForward(
   was: Body,
   secs: number,
-  at: { acting: boolean; wind: number },
+  at: { acting: boolean; wind: number; drain?: number },
 ): Body {
   const gone = Math.max(0, Math.min(BODY_GAP, secs));
   if (gone <= 0) return was;
   const hunger = Math.max(0, was.hunger - gone * HUNGER_RATE);
   const thirst = Math.max(0, was.thirst - gone * THIRST_RATE);
+  // What is running out of you, which is `wounds_settle` rather than
+  // `body_settle` but lands on the same number and so has to be drawn with it.
+  const bled = Math.max(0, was.health - gone * (at.drain ?? 0));
   // Wind comes back only while your hands are empty, and an empty stomach or a
   // dry throat gets it back at a share of the rate.
   const starving = was.hunger <= 0 || was.thirst <= 0 ? WIND_STARVING : 1;
   const stamina = at.acting
     ? was.stamina
     : Math.min(1, was.stamina + gone * WIND_REST * at.wind * starving);
-  // Nothing knits on an empty stomach.
-  const health = hunger > HEAL_FED && thirst > HEAL_FED && was.health < 1
-    ? Math.min(1, was.health + gone * HEAL_RATE)
-    : was.health;
+  // Nothing knits on an empty stomach — and a body that is still bleeding is
+  // losing more than it is making, which the island works out in two places
+  // and this has to add up in one.
+  const health = hunger > HEAL_FED && thirst > HEAL_FED && bled < 1
+    ? Math.min(1, bled + gone * HEAL_RATE)
+    : bled;
   return { health, stamina, hunger, thirst };
 }

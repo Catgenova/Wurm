@@ -199,5 +199,38 @@ for (let i = 0; i < 600; i++) stepped = bodyForward(stepped, 0.1, rested);
 say('six hundred frames of a tenth, against one minute in one go',
   +stepped.hunger.toFixed(9), +bodyForward(full, 60, rested).hunger.toFixed(9));
 
+/*
+ * And a body that is bleeding while it is drawn.
+ *
+ * The island takes this off in `wounds_settle` rather than `body_settle`, but
+ * both land on the same bar, so the curve drawn here has to be the sum of them
+ * or it walks away from the island between answers. `woundDrain` and
+ * `wound_drain` are the same arithmetic over the same table.
+ */
+console.log('\n--- and one that is still bleeding');
+
+const hurt: Body = { health: 0.8, stamina: 1, hunger: 1, thirst: 1 };
+const bleeding = { acting: false, wind: 1, drain: 0.01 };
+// Both at once, because the island does both at once: `wounds_settle` takes
+// the blood and `body_settle` knits, and a fed body does the second while the
+// first is still happening.
+say('ten seconds of bleeding, and of knitting',
+  +bodyForward(hurt, 10, bleeding).health.toFixed(4), +(0.8 - 10 * 0.01 + 10 * 0.004).toFixed(4));
+say('and it does not knit while it bleeds faster than it knits',
+  bodyForward(hurt, 10, bleeding).health < hurt.health, true);
+say('a drain slower than the knitting still comes out ahead',
+  bodyForward(hurt, 10, { acting: false, wind: 1, drain: 0.001 }).health > hurt.health, true);
+say('no wounds, no drain, and the old answer stands',
+  bodyForward(hurt, 10, rested).health, bodyForward(hurt, 10, { acting: false, wind: 1, drain: 0 }).health);
+// Bled dry inside the clamp, and then knitting from nothing — which is what
+// the island does too, in its two separate passes over the same number.
+say('bled to nothing and knitting back off the floor',
+  +bodyForward({ ...hurt, health: 0.01 }, 600, bleeding).health.toFixed(4),
+  +(BODY_GAP * 0.004).toFixed(4));
+// Starved and bleeding: the blood still comes out, the knitting still does not.
+say('starved and bleeding loses the blood and gains nothing',
+  +bodyForward({ health: 0.8, stamina: 1, hunger: 0.1, thirst: 1 }, 10, bleeding).health.toFixed(4),
+  +(0.8 - 10 * 0.01).toFixed(4));
+
 console.log(fails ? `\n${fails} of ${n} wrong` : `\nall ${n} right`);
 process.exit(fails ? 1 : 0);

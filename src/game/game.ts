@@ -1836,7 +1836,10 @@ export class Game {
        * richer version above it — see the note on it.
        */
       const wind = 1 + Math.max(0, this.skills.get('body_stamina') - CHAR_START) * WIND_PER_LEVEL;
-      const now = bodyForward(s, dt, { acting: this.action?.state === 'performing', wind });
+      // What the wounds are taking, by the island's own sum — `woundDrain` and
+      // `wound_drain` are the same arithmetic over the same table.
+      const drain = p.wounds.reduce((n, w) => n + woundDrain(w), 0);
+      const now = bodyForward(s, dt, { acting: this.action?.state === 'performing', wind, drain });
       s.hunger = now.hunger;
       s.thirst = now.thirst;
       s.stamina = now.stamina;
@@ -1910,7 +1913,17 @@ export class Game {
       }
       this.events.emit('inventory');
     }
-    this.tendWounds(dt);
+    /*
+     * And the wounds themselves, which are the island's where there is one.
+     *
+     * `tendWounds` closes them, turns them bad and takes the blood out — all
+     * three of which `wounds_settle` is already doing over there, off its own
+     * clock and its own dice. Running both would close a wound twice as fast
+     * and roll for infection twice as often, and then have the next answer
+     * disagree with all of it. The blood is drawn forward above, because that
+     * lands on a bar somebody is watching; the rest is drawn, not decided.
+     */
+    if (!this.bodyFromIsland) this.tendWounds(dt);
     // Favour comes back on its own, at a trickle, up to what faith carries.
     const cap = favourCap(this.skills.get(FAITH));
     if (this.player.favour < cap) this.player.favour = Math.min(cap, this.player.favour + dt * FAVOUR_TRICKLE);
@@ -3974,6 +3987,20 @@ export class Game {
     this.placed.anvils.reset(this.anvils.values());
     this.events.emit('crate');
     this.events.emit('smelter');
+  }
+
+  /**
+   * What the island says you are carrying.
+   *
+   * Replaced wholesale rather than merged: over there `wounds_settle` closes
+   * them, turns them bad and takes the blood out, so what arrives is the whole
+   * truth about them and an empty list means they have all closed over. This
+   * side draws them and lets `bodyForward` take the blood off the bar between
+   * answers; it does not decide anything about them.
+   */
+  sawWounds(rows: unknown[]): void {
+    this.player.wounds = rows as Wound[];
+    this.events.emit('stats');
   }
 
   /** Light up the ore a prospector just read, for a while. */

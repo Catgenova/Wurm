@@ -4105,11 +4105,30 @@ select '596. one door apiece, not two: '
      || (select string_agg(proname || '/' || pronargs, ', ' order by proname)
          from pg_proc where proname in ('rpc_settle', 'rpc_ground'));
 
-select '597. the clock: a round every ' || tick_seconds() || ' seconds, a shut tab left standing for '
+/*
+ * And what you are carrying, which had never gone out at all.
+ *
+ * `wounds_settle` has drained health, turned wounds bad and closed them over
+ * since they were ported, and no door mentioned them — so the window was empty
+ * however cut about you were, and the health going down had no stated reason.
+ */
+update player set wounds = '[{"kind":"cut","part":"chest","severity":0.2,"bleeding":true,"infected":false,"dressing":null}]'::jsonb
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select '597. the beat now says what you are carrying: '
+     || jsonb_array_length(coalesce((rpc_settle(null, :'world2'))->'wounds', '[]'::jsonb))
+     || ' — ' || coalesce(((rpc_settle(null, :'world2'))->'wounds'->0->>'kind'), 'nothing')
+     || ' to the ' || coalesce(((rpc_settle(null, :'world2'))->'wounds'->0->>'part'), 'nowhere')
+     || ', bleeding ' || round(wound_drain((rpc_settle(null, :'world2'))->'wounds'->0)::numeric, 4)
+     || ' a second, which is what the bar has to come down by';
+update player set wounds = '[]'::jsonb where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select '598. and once they have closed over it says so, rather than saying nothing: '
+     || ((rpc_settle(null, :'world2'))->'wounds')::text;
+
+select '599. the clock: a round every ' || tick_seconds() || ' seconds, a shut tab left standing for '
      || to_char(idle_logout() / 60, 'FM990.0') || ' minutes, talk kept ' || round(event_keep() / 3600)
      || ' hours, tile changes ' || round(change_keep() / 86400) || ' days, and an island nobody visits '
      || round(island_keep() / 86400) || ' days';
-select '598. and the counter every door writes to is '
+select '600. and the counter every door writes to is '
      || (select case relpersistence when 'u' then 'unlogged, so a hundred and thirty bytes a call is nothing'
                                     else 'LOGGED — every rate-limit check is write-ahead log' end
          from pg_class where relname = 'caller')
@@ -4127,12 +4146,12 @@ delete from event where world_id = :'world2';
 select rpc_act(:'world2', 'dig', '{"x":12,"y":9,"cx":12,"cy":9}', 1) \g /dev/null
 update player set act_started = act_started - interval '600 seconds',
        act_ends = act_ends - interval '600 seconds' where world_id = :'world2' and uid = :'ivar';
-select '599. he digs, and then stands perfectly still. Ten minutes later he is still '
+select '601. he digs, and then stands perfectly still. Ten minutes later he is still '
      || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'finished')
      || ' — nothing has called, so nothing has happened';
 select world_tick()::text as tock \gset
-select '600. one round of the clock: ' || :'tock';
-select '601. and now he is ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'finished')
+select '602. one round of the clock: ' || :'tock';
+select '603. and now he is ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'finished')
      || ', having been told: '
      || coalesce((select text from event where world_id = :'world2' and uid = :'ivar' and kind = 'event'
                   order by n desc limit 1), 'nothing');
@@ -4141,23 +4160,23 @@ select '601. and now he is ' || coalesce((select act from player where world_id 
 update player set seen_at = now() - interval '3 hours', away = false
   where world_id = :'world2' and uid = :'hild';
 select world_tick() \g /dev/null
-select '602. hild left her tab open three hours ago: away is now '
+select '604. hild left her tab open three hours ago: away is now '
      || (select away from player where world_id = :'world2' and uid = :'hild')
      || ', and the island heard "'
      || coalesce((select text from event where world_id = :'world2' and uid is null
                   and text like '% has gone home.' order by n desc limit 1), 'nothing') || '"';
-select '603. ivar, who was here a moment ago, is still on his feet: away is '
+select '605. ivar, who was here a moment ago, is still on his feet: away is '
      || (select away from player where world_id = :'world2' and uid = :'ivar');
-select '604. and nobody can turn the handle for anybody else: rpc_sweep is '
+select '606. and nobody can turn the handle for anybody else: rpc_sweep is '
      || case when exists (select 1 from pg_proc where proname = 'rpc_sweep'
                             and pronamespace = 'public'::regnamespace)
              then 'STILL THERE' else 'gone, and rpc_settle only settles the caller' end;
-select '605. does this database wind itself? '
+select '607. does this database wind itself? '
      || case when clock_running() then 'yes — pg_cron has the key'
              else 'no pg_cron here, so the browser settles itself and the suite turns the handle' end;
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 select rpc_join(:'world2') \g /dev/null
-select '606. and she comes back: away is now '
+select '608. and she comes back: away is now '
      || (select away from player where world_id = :'world2' and uid = :'hild')
      || ', and she was told "'
      || coalesce((select text from event where world_id = :'world2' and uid = :'hild' and kind = 'system'
@@ -4183,20 +4202,20 @@ insert into tile_change (world_id, x, y, tile, data, corners) values (:'faraway'
 
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '607. an island Ivar has never been to: he can see '
+select '609. an island Ivar has never been to: he can see '
      || (select count(*) from item where world_id = :'faraway' and holder = 'ground') || ' of its ground things, '
      || (select count(*) from placed where world_id = :'faraway') || ' of its fires and '
      || (select count(*) from tile_change where world_id = :'faraway') || ' of its dug tiles'
      || ' — all three were the whole service before';
-select '608. and the land itself is still open on purpose: '
+select '610. and the land itself is still open on purpose: '
      || (select count(*) from land_tile where world_id = :'faraway') || ' rows, because it is a pure function of a seed anybody is handed';
 do $$ begin
   begin perform land_window((select id from world where name = 'Faraway'), 0, 8);
-    raise notice '609. pull the land down wholesale: ALLOWED';
-  exception when others then raise notice '609. pull the land down wholesale: refused — %', sqlerrm; end;
+    raise notice '611. pull the land down wholesale: ALLOWED';
+  exception when others then raise notice '611. pull the land down wholesale: refused — %', sqlerrm; end;
 end $$;
 reset role;
-select '610. and rpc_land itself is '
+select '612. and rpc_land itself is '
      || case when exists (select 1 from pg_proc where proname = 'rpc_land' and pronamespace = 'public'::regnamespace)
              then 'STILL THERE' else 'gone; land_window has the body and no grant' end;
 
@@ -4206,29 +4225,29 @@ insert into player (world_id, uid, name, x, y, stats)
   values (:'faraway', :'ivar', 'Ivar', 5.5, 5.5, '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb)
   on conflict (world_id, uid) do update set x = 5.5, y = 5.5, away = false;
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '611. four tiles of flat open ground: he gets '
+select '613. four tiles of flat open ground: he gets '
      || round(walk_share(:'faraway', :'ivar', 0, 5.5, 5.5, 9.5, 5.5)::numeric * 100) || '% of the way';
 select land_set_tile(:'faraway', 7, 5, 16) \g /dev/null
-select '612. with a tree grown in the middle of it: '
+select '614. with a tree grown in the middle of it: '
      || round(walk_share(:'faraway', :'ivar', 0, 5.5, 5.5, 9.5, 5.5)::numeric * 100)
      || '% — pulled up at the trunk, which is the one tile nothing stands on';
 select land_set_tile(:'faraway', 7, 5, 0) \g /dev/null
 select land_set_height(:'faraway', 9, 5, 3000), land_set_height(:'faraway', 9, 6, 3000),
        land_set_height(:'faraway', 10, 5, 3000), land_set_height(:'faraway', 10, 6, 3000) \g /dev/null
-select '613. and with a cliff instead: tile 8 is ' || round(centre_height(:'faraway', 8, 5))
+select '615. and with a cliff instead: tile 8 is ' || round(centre_height(:'faraway', 8, 5))
      || ' units up from tile 7, against a step of '
      || round(max_step() + skill_of(:'faraway', :'ivar', 'climbing') * climb_per_level())
      || ' — he gets ' || round(walk_share(:'faraway', :'ivar', 0, 5.5, 5.5, 9.5, 5.5)::numeric * 100) || '%';
 update player set moved_at = now() - interval '10 seconds' where world_id = :'faraway' and uid = :'ivar';
-select '614. and through rpc_move, which is where it counts: ' || (rpc_move(:'faraway', 9.5, 5.5, 0))::text;
+select '616. and through rpc_move, which is where it counts: ' || (rpc_move(:'faraway', 9.5, 5.5, 0))::text;
 select land_set_height(:'faraway', 9, 5, 0), land_set_height(:'faraway', 9, 6, 0),
        land_set_height(:'faraway', 10, 5, 0), land_set_height(:'faraway', 10, 6, 0) \g /dev/null
 update player set moved_at = now() - interval '10 seconds' where world_id = :'faraway' and uid = :'ivar';
-select '615. the cliff levelled, the same walk again: ' || (rpc_move(:'faraway', 9.5, 5.5, 0))::text;
+select '617. the cliff levelled, the same walk again: ' || (rpc_move(:'faraway', 9.5, 5.5, 0))::text;
 
 -- Counting the callers.
 delete from caller where uid = :'ivar';
-select '616. a minute of asking: the island keeps listening for '
+select '618. a minute of asking: the island keeps listening for '
      || (select count(*) from generate_series(1, (calls_a_minute() + 20)::int) g
          where not too_fast(:'ivar')) || ' of ' || (calls_a_minute() + 20)::int
      || ' calls, which is the ' || calls_a_minute() || ' it is meant to be';
@@ -4239,10 +4258,10 @@ update world set made_by = :'ivar' where id = :'world2';
 update player set seen_at = now(), away = false where world_id = :'world2' and uid = :'hild';
 do $$ begin
   begin perform rpc_abandon((select id from world where name <> 'Rockhaven' and name <> 'Faraway' order by made_at limit 1));
-    raise notice '617. give up an island with Hild still on it: ALLOWED';
-  exception when others then raise notice '617. give up an island with Hild still on it: refused — %', sqlerrm; end;
+    raise notice '619. give up an island with Hild still on it: ALLOWED';
+  exception when others then raise notice '619. give up an island with Hild still on it: refused — %', sqlerrm; end;
 end $$;
-select '618. and the one foreign key with nothing behind it now has: '
+select '620. and the one foreign key with nothing behind it now has: '
      || (select count(*) from pg_indexes where tablename = 'item' and indexdef like '%(placed)%')
      || ' index on item(placed)';
 
@@ -4253,7 +4272,7 @@ do $$
 declare t0 timestamptz; s double precision; cold double precision; warm double precision;
         w uuid := (select id from world where size = 4096 order by made_at desc limit 1);
 begin
-  if w is null then raise notice '619. no 4096 island to read'; return; end if;
+  if w is null then raise notice '621. no 4096 island to read'; return; end if;
   delete from land_chunk where world_id = w;
   t0 := clock_timestamp();
   s := walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5);
@@ -4261,7 +4280,7 @@ begin
   t0 := clock_timestamp();
   s := walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5);
   warm := extract(milliseconds from (clock_timestamp() - t0));
-  raise notice '619. the ground under a thirty-tile walk on the 4096 island: % per cent of it walkable, read in % ms '
+  raise notice '621. the ground under a thirty-tile walk on the 4096 island: % per cent of it walkable, read in % ms '
                'with the square to build first and % ms with it built — against 13 ms off the scanlines',
     round(s::numeric * 100), round(cold::numeric, 1), round(warm::numeric, 2);
 end $$;
@@ -4272,7 +4291,7 @@ end $$;
 -- back on its own and everybody would be face down by the third section.
 update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- the land, read in squares'
-select '630. a square of the 4096 island holds ' || length(tiles) || ' bytes of tiles and '
+select '632. a square of the 4096 island holds ' || length(tiles) || ' bytes of tiles and '
      || length(heights) || ' of corners, which is ' || chunk_size() || ' tiles to a side'
   from land_chunk where world_id = (select id from world where size = 4096 order by made_at desc limit 1)
   order by cx, cy limit 1;
@@ -4287,11 +4306,11 @@ begin
   perform land_set_tile(w, 2005, 2000, 16);
   select count(*) into left_after from land_chunk where world_id = w;
   saw := round(walk_share(w, '11111111-1111-1111-1111-111111111111', 0, 2000.5, 2000.5, 2030.5, 2000.5) * 100);
-  raise notice '631. a tree planted in the middle of that walk: % squares held, % after the write, '
+  raise notice '633. a tree planted in the middle of that walk: % squares held, % after the write, '
                'and the walk now gets % per cent of the way — the cache never answers for the scanlines',
     had, left_after, saw;
 end $$;
-select '632. and the scanlines are still the truth: tile 2005,2000 says '
+select '634. and the scanlines are still the truth: tile 2005,2000 says '
      || land_tile((select id from world where size = 4096 order by made_at desc limit 1), 2005, 2000)
      || ', which is what was written to them';
 
@@ -4337,7 +4356,7 @@ declare w uuid := (select id from world where size = 4096 order by made_at desc 
         i int; x0 double precision; y0 double precision; x1 double precision; y1 double precision;
         a double precision; b double precision; bad int := 0; stopped int := 0;
 begin
-  if w is null then raise notice '633. no 4096 island to read'; return; end if;
+  if w is null then raise notice '635. no 4096 island to read'; return; end if;
   perform setseed(0.25);
   for i in 1..400 loop
     -- The same line to both, which the first draft of this did not do: two
@@ -4350,7 +4369,7 @@ begin
     if a is distinct from b then bad := bad + 1; end if;
     if a < 1 then stopped := stopped + 1; end if;
   end loop;
-  raise notice '633. four hundred straight lines across real generated ground, read in squares and read in strips: '
+  raise notice '635. four hundred straight lines across real generated ground, read in squares and read in strips: '
                '% disagreements, and % of the lines were stopped short by the ground itself', bad, stopped;
 end $$;
 
@@ -4362,12 +4381,12 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
 \echo '--- which island the front door opens on'
 -- Coming ashore used to need somebody to hand you a uuid. The keeper knows
 -- which island is the one now, in a row nothing with a browser can write.
-select '634. the front door opens on ' || coalesce((select w.name || ', ' || w.size || ' tiles a side'
+select '636. the front door opens on ' || coalesce((select w.name || ', ' || w.size || ' tiles a side'
         from world w join home h on h.island = w.id), 'nowhere');
 -- Rockhaven is eight tiles across and was opened long before the big one. A
 -- browser is capped at found_max, so an island over it came from the tool, and
 -- that is the whole of what makes this claim ungameable.
-select '635. the islands that were opened first and did not claim it: '
+select '637. the islands that were opened first and did not claim it: '
      || coalesce((select string_agg(name || ' (' || size || ')', ', ' order by size)
                   from world where ready and size <= found_max()), 'none')
      || ' — a browser is capped at ' || found_max()
@@ -4375,13 +4394,13 @@ select '635. the islands that were opened first and did not claim it: '
 do $$
 declare w uuid := (select island from home); was timestamptz;
 begin
-  if w is null then raise notice '636. no home island to leave alone'; return; end if;
+  if w is null then raise notice '638. no home island to leave alone'; return; end if;
   select made_at into was from world where id = w;
   update world set made_at = now() - interval '60 days' where id = w;
   update player set seen_at = now() - interval '60 days' where world_id = w;
   update keeper set swept_at = to_timestamp(0);
   perform world_tick();
-  raise notice '636. sixty days with nobody on the home island: %',
+  raise notice '638. sixty days with nobody on the home island: %',
     case when exists (select 1 from world where id = w)
          then 'still there, because the sea does not take the one the front door opens on'
          else 'GONE, AND THE FRONT DOOR NOW OPENS ON NOTHING' end;
@@ -4389,10 +4408,10 @@ begin
 end $$;
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '637. a client can read which island that is: ' || coalesce((select island::text from home), 'none');
+select '639. a client can read which island that is: ' || coalesce((select island::text from home), 'none');
 do $$ begin
-  begin update home set island = null; raise notice '638. and point the front door somewhere else: ALLOWED';
-  exception when others then raise notice '638. and point the front door somewhere else: refused — %', sqlerrm; end;
+  begin update home set island = null; raise notice '640. and point the front door somewhere else: ALLOWED';
+  exception when others then raise notice '640. and point the front door somewhere else: refused — %', sqlerrm; end;
 end $$;
 reset role;
 
@@ -4404,7 +4423,7 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
 \echo '--- the landing beach'
 -- Wildlife never moved before the clock, so a goblin at the spawn was scenery.
 -- It comes for you now, and a fresh body can do nothing about it.
-select '639. nothing hunts within ' || peace_reach() || ' tiles of where people wash ashore: '
+select '641. nothing hunts within ' || peace_reach() || ' tiles of where people wash ashore: '
      || 'the spawn itself is ' || at_peace(:'world2', (select spawn_x + 0.5 from world where id = :'world2'),
                                            (select spawn_y + 0.5 from world where id = :'world2'))
      || ', a tile ' || (peace_reach() + 1) || ' away is '
@@ -4425,7 +4444,7 @@ begin
       beyond := beyond + 1;
     end if;
   end loop;
-  raise notice '640. four hundred things put down on the beach and four hundred well past it: % hunters on the beach, % beyond it',
+  raise notice '642. four hundred things put down on the beach and four hundred well past it: % hunters on the beach, % beyond it',
     beach, beyond;
 end $$;
 
@@ -4455,11 +4474,11 @@ values (:'world2', 'player', :'ivar', 'log', 30, 40, 'Pine');
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 4))->>'started', 'no') as s1 \gset
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'inHand', 'not queued') as s2 \gset
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'inHand', 'not queued') as s3 \gset
-select '641. four goes of sawing in hand with two more behind it: started ' || :'s1'
+select '643. four goes of sawing in hand with two more behind it: started ' || :'s1'
      || ', then ' || :'s2' || ' and ' || :'s3' || ' in hand';
 select coalesce((rpc_cancel(:'world2'))::text, 'null') as put \gset
-select '642. and he puts it down: ' || :'put';
-select '643. nothing in hand and nothing in mind: ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
+select '644. and he puts it down: ' || :'put';
+select '645. nothing in hand and nothing in mind: ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
      || ', ' || (select jsonb_array_length(act_queue) from player where world_id = :'world2' and uid = :'ivar') || ' queued, due '
      || coalesce((select act_ends::text from player where world_id = :'world2' and uid = :'ivar'), 'never');
 
@@ -4472,12 +4491,12 @@ update player set act_started = now() - interval '11 seconds', act_ends = now() 
   where world_id = :'world2' and uid = :'ivar';
 select coalesce((rpc_cancel(:'world2'))::text, 'null') as late \gset
 select coalesce((select sum(count) from item where holder_uid = :'ivar' and def = 'plank')::text, '0') as p1 \gset
-select '644. one go of three comes due as he stops: ' || :'p0' || ' planks before and ' || :'p1'
+select '646. one go of three comes due as he stops: ' || :'p0' || ' planks before and ' || :'p1'
      || ' after, which is one log sawn and no more — the go that was due is kept, and he is left doing '
      || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
      || ', so the other two went with the stop (' || :'late' || ')';
 select coalesce((rpc_cancel(:'world2'))::text, 'null') as again \gset
-select '645. and stopping with empty hands is nothing at all: ' || :'again';
+select '647. and stopping with empty hands is nothing at all: ' || :'again';
 
 -- It has no uid to be given, so there is no version of this that reaches
 -- anybody else's hands. Hild saws on while Ivar stops.
@@ -4490,10 +4509,10 @@ select rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 3) \g /dev/null
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 3) \g /dev/null
 select rpc_cancel(:'world2') \g /dev/null
-select '646. ivar stops and hild does not: ivar is doing '
+select '648. ivar stops and hild does not: ivar is doing '
      || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
      || ', hild is doing ' || coalesce((select act from player where world_id = :'world2' and uid = :'hild'), 'nothing');
-select '647. and stopping is a door an account may knock on: rpc_cancel(uuid) '
+select '649. and stopping is a door an account may knock on: rpc_cancel(uuid) '
      || case when has_function_privilege('authenticated', 'rpc_cancel(uuid)', 'execute') then 'yes' else 'NO' end
      || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_cancel(uuid)', 'execute') then 'YES' else 'no' end;
 
@@ -4516,22 +4535,22 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
  */
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select coalesce((rpc_fog(:'world2', 'AAECAwQFBgcICQ=='))::text, 'null') as kept \gset
-select '648. ivar hands over where he has been: ' || :'kept';
-select '649. and the island keeps it: ' || coalesce((select seen from fog where world_id = :'world2' and uid = :'ivar'), 'nothing')
+select '650. ivar hands over where he has been: ' || :'kept';
+select '651. and the island keeps it: ' || coalesce((select seen from fog where world_id = :'world2' and uid = :'ivar'), 'nothing')
      || ', written ' || coalesce((select case when at > now() - interval '1 minute' then 'just now' else at::text end
                                   from fog where world_id = :'world2' and uid = :'ivar'), 'never');
 do $$ begin
   perform rpc_fog((select id from world where name = 'Rockhaven'), 'AAEC');
-  raise notice '650. and hands some to an island he is not on: ALLOWED';
-exception when others then raise notice '650. and hands some to an island he is not on: refused — %', sqlerrm; end $$;
+  raise notice '652. and hands some to an island he is not on: ALLOWED';
+exception when others then raise notice '652. and hands some to an island he is not on: refused — %', sqlerrm; end $$;
 do $$
 declare w uuid := (select world_id from player where uid = '11111111-1111-1111-1111-111111111111' limit 1);
 begin
   perform rpc_fog(w, repeat('A', (fog_bytes() + 1)::int));
-  raise notice '651. and hands over more than an island keeps: ALLOWED';
-exception when others then raise notice '651. and hands over more than an island keeps: refused — %', sqlerrm; end $$;
+  raise notice '653. and hands over more than an island keeps: ALLOWED';
+exception when others then raise notice '653. and hands over more than an island keeps: refused — %', sqlerrm; end $$;
 select coalesce((rpc_fog(:'world2', ''))::text, 'null') as wiped \gset
-select '652. handing over nothing puts the map back to black: ' || :'wiped'
+select '654. handing over nothing puts the map back to black: ' || :'wiped'
      || ', ' || (select count(*) from fog where world_id = :'world2' and uid = :'ivar') || ' rows left';
 select rpc_fog(:'world2', 'AAECAwQFBgcICQ==') \g /dev/null
 
@@ -4539,14 +4558,14 @@ select rpc_fog(:'world2', 'AAECAwQFBgcICQ==') \g /dev/null
 -- where somebody has walked is not a thing to hand to whoever is hunting them.
 set role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
-select '653. hild looks for ivar''s map: ' || (select count(*) from fog where uid = :'ivar') || ' rows'
+select '655. hild looks for ivar''s map: ' || (select count(*) from fog where uid = :'ivar') || ' rows'
      || ', and for her own: ' || (select count(*) from fog where uid = :'hild') || ' rows';
 do $$ begin
   update fog set seen = 'AAAA' where uid = '11111111-1111-1111-1111-111111111111';
-  raise notice '654. and writes over it directly: ALLOWED';
-exception when others then raise notice '654. and writes over it directly: refused — %', sqlerrm; end $$;
+  raise notice '656. and writes over it directly: ALLOWED';
+exception when others then raise notice '656. and writes over it directly: refused — %', sqlerrm; end $$;
 reset role;
-select '655. and the door itself: rpc_fog(uuid,text) to an account '
+select '657. and the door itself: rpc_fog(uuid,text) to an account '
      || case when has_function_privilege('authenticated', 'rpc_fog(uuid,text)', 'execute') then 'yes' else 'NO' end
      || ', to a stranger ' || case when has_function_privilege('anon', 'rpc_fog(uuid,text)', 'execute') then 'YES' else 'no' end;
 
@@ -4571,11 +4590,11 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
  */
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select coalesce(jsonb_array_length((rpc_ground(:'world2', 60))->'placed')::text, '0') as things \gset
-select '656. everything ivar can see on the ground: ' || :'things' || ' things, of which '
+select '658. everything ivar can see on the ground: ' || :'things' || ' things, of which '
      || coalesce((select string_agg(kind || ' ×' || n, ', ' order by kind) from (
           select v->>'kind' as kind, count(*) as n
           from jsonb_array_elements((rpc_ground(:'world2', 60))->'placed') v group by 1) k), 'nothing');
-select '657. and a campfire comes with what is true of it now: '
+select '659. and a campfire comes with what is true of it now: '
      || coalesce((select jsonb_pretty(v)::text from jsonb_array_elements((rpc_ground(:'world2', 60))->'placed') v
                   where v->>'kind' = 'campfire' limit 1), 'no campfire in sight');
 /*
@@ -4597,26 +4616,26 @@ begin
   select (v->>'fuel')::double precision into v_said
     from jsonb_array_elements((rpc_ground(w, 60))->'placed') v
     where (v->>'id')::bigint = v_id;
-  raise notice '658. a fire left burning for two hundred seconds: the row still says % and the island says %, which is the burning nobody watched',
+  raise notice '660. a fire left burning for two hundred seconds: the row still says % and the island says %, which is the burning nobody watched',
     round(v_row), round(v_said);
 end $$;
-select '659. and the crates and the settlement come with it: '
+select '661. and the crates and the settlement come with it: '
      || jsonb_array_length((rpc_ground(:'world2', 60))->'crates') || ' crates, settlement '
      || coalesce(((rpc_ground(:'world2', 60))->'deed'->>'name'), 'none')
      || ', ours: ' || coalesce(((rpc_ground(:'world2', 60))->'deed'->>'mine'), 'n/a');
-select '660. and asking about a patch of ground nobody is near: '
+select '662. and asking about a patch of ground nobody is near: '
      || jsonb_array_length((rpc_ground(:'world2', 0.5))->'placed') || ' things within half a tile';
 do $$ begin
   perform rpc_ground((select id from world where name = 'Rockhaven'), 40);
-  raise notice '661. and the ground of an island he is not on: ALLOWED';
-exception when others then raise notice '661. and the ground of an island he is not on: refused — %', sqlerrm; end $$;
+  raise notice '663. and the ground of an island he is not on: ALLOWED';
+exception when others then raise notice '663. and the ground of an island he is not on: refused — %', sqlerrm; end $$;
 
 -- And the settlement refusal, which used to claim somebody else's was yours.
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
-select '662. hild asks to found a settlement where ivar holds one: '
+select '664. hild asks to found a settlement where ivar holds one: '
      || coalesce(deed_refusal(:'world2', :'hild', 'found_settlement', '{"kind":"item"}'), 'allowed');
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '663. and ivar, who holds it, is told it is his to disband: '
+select '665. and ivar, who holds it, is told it is his to disband: '
      || coalesce(deed_refusal(:'world2', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');
 
 \echo ''
@@ -4639,7 +4658,7 @@ update player set stats = '{"health":0.5,"stamina":0.5,"hunger":1,"thirst":1}'::
        body_at = now() - interval '120 seconds'
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select body_settle(:'world2', :'ivar') \g /dev/null
-select '664. two minutes of standing about: ' || (select 'hunger ' || round(((stats->>'hunger')::numeric), 4)
+select '666. two minutes of standing about: ' || (select 'hunger ' || round(((stats->>'hunger')::numeric), 4)
      || ', thirst ' || round(((stats->>'thirst')::numeric), 4)
      || ', wind ' || round(((stats->>'stamina')::numeric), 3)
      || ', health ' || round(((stats->>'health')::numeric), 3)
@@ -4652,7 +4671,7 @@ update player set stats = jsonb_set(stats, '{stamina}', '0.5'), act = 'dig',
        body_at = now() - interval '60 seconds'
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select body_settle(:'world2', :'ivar') \g /dev/null
-select '665. a minute with a job in hand: wind ' || (select round(((stats->>'stamina')::numeric), 3)
+select '667. a minute with a job in hand: wind ' || (select round(((stats->>'stamina')::numeric), 3)
      from player where world_id = :'world2' and uid = :'ivar') || ', which is the half it started with';
 
 -- A wound knits only on a body that is fed and watered.
@@ -4660,7 +4679,7 @@ update player set stats = '{"health":0.5,"stamina":1,"hunger":0.05,"thirst":0.05
        act = null, act_ends = null, act_left = null, body_at = now() - interval '300 seconds'
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select body_settle(:'world2', :'ivar') \g /dev/null
-select '666. five minutes starving and parched: health ' || (select round(((stats->>'health')::numeric), 3)
+select '668. five minutes starving and parched: health ' || (select round(((stats->>'health')::numeric), 3)
      from player where world_id = :'world2' and uid = :'ivar')
      || ', and nothing knits on a body with nothing in it';
 
@@ -4669,15 +4688,15 @@ update player set stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::json
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select spend_wind(:'world2', :'ivar', 'mine') \g /dev/null
 select spend_wind(:'world2', :'ivar', 'mine') \g /dev/null
-select '667. two swings at a rock face: wind ' || (select round(((stats->>'stamina')::numeric), 3)
+select '669. two swings at a rock face: wind ' || (select round(((stats->>'stamina')::numeric), 3)
      from player where world_id = :'world2' and uid = :'ivar')
      || ' — mine costs ' || (select stamina from action_def where id = 'mine') || ' a go, less what a hardy body saves';
 
 update player set stats = jsonb_set(stats, '{stamina}', '0.02'), body_at = now()
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
-select '668. and asking for another with nothing left: '
+select '670. and asking for another with nothing left: '
      || coalesce(act_refusal(:'world2', :'ivar', 'mine', '{"kind":"tile","x":5,"y":5,"cx":5,"cy":5}'), 'allowed');
-select '669. while something that costs no wind is still allowed: '
+select '671. while something that costs no wind is still allowed: '
      || coalesce(act_refusal(:'world2', :'ivar', 'examine',
           (select jsonb_build_object('kind', 'tile', 'x', floor(x)::int, 'y', floor(y)::int)
            from player where world_id = :'world2' and uid = :'ivar')), 'allowed');
@@ -4695,7 +4714,7 @@ update player set stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::json
        act = null, body_at = now() - interval '7 days'
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select body_settle(:'world2', :'ivar') \g /dev/null
-select '670. a week away: thirst ' || (select round(((stats->>'thirst')::numeric), 4)
+select '672. a week away: thirst ' || (select round(((stats->>'thirst')::numeric), 4)
      from player where world_id = :'world2' and uid = :'ivar')
      || ', which is ' || body_gap() || ' seconds of it and not ' || (7 * 24 * 3600) || '';
 
@@ -4704,7 +4723,7 @@ update player set stats = jsonb_set(stats, '{hunger}', '1'), body_at = now() - i
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select coalesce(((rpc_settle())->'stats'->>'hunger'), 'nothing') as beat \gset
-select '671. and the heartbeat every browser makes anyway settles it: rpc_settle says hunger '
+select '673. and the heartbeat every browser makes anyway settles it: rpc_settle says hunger '
      || round(:'beat'::numeric, 4) || ', which the browser draws as it is told';
 
 \echo ''
@@ -4729,7 +4748,7 @@ insert into player (world_id, uid, name, x, y, stats, look)
   values (:'elsewhere', :'ivar', 'Ivar', 1.5, 1.5,
           '{"health":1,"stamina":1,"hunger":0.2,"thirst":0.15}'::jsonb, '{}'::jsonb)
   on conflict (world_id, uid) do update set stats = excluded.stats \g /dev/null
-select '672. one person, the islands he stands on, and a day one hour long: '
+select '674. one person, the islands he stands on, and a day one hour long: '
      || (select string_agg(w.name || ' at ' || to_char(hour_of_day(w.id), 'FM90.0')
                            || (case when is_night(w.id) then ' (night)' else ' (day)' end)
                            || ', hunger ' || to_char((p.stats->>'hunger')::numeric, 'FM0.00'),
@@ -4741,16 +4760,16 @@ select '672. one person, the islands he stands on, and a day one hour long: '
 update player set seen_at = now() - interval '61 seconds' where uid = :'ivar' \g /dev/null
 update player set seen_at = now() where uid = :'ivar'
   and (seen_at < now() - interval '5 seconds') \g /dev/null
-select '673. after one beat of the old, world-less kind, rows tied on the newest seen_at: '
+select '675. after one beat of the old, world-less kind, rows tied on the newest seen_at: '
      || (select count(*) from player where uid = :'ivar'
          and seen_at = (select max(seen_at) from player where uid = :'ivar'))
      || ' — and `order by seen_at desc limit 1` has nothing left to sort by';
 
 -- Named, it answers about the island named, whichever one that is.
-select '674. asked about ' || (select name from world where id = :'world2') || ': '
+select '676. asked about ' || (select name from world where id = :'world2') || ': '
      || to_char(((rpc_settle(null, :'world2'))->>'time')::numeric % day_seconds()::numeric / day_seconds()::numeric * 24, 'FM90.0')
      || ' o''clock, hunger ' || to_char(((rpc_settle(null, :'world2'))->'stats'->>'hunger')::numeric, 'FM0.00');
-select '675. asked about ' || (select name from world where id = :'elsewhere') || ': '
+select '677. asked about ' || (select name from world where id = :'elsewhere') || ': '
      || to_char(((rpc_settle(null, :'elsewhere'))->>'time')::numeric % day_seconds()::numeric / day_seconds()::numeric * 24, 'FM90.0')
      || ' o''clock, hunger ' || to_char(((rpc_settle(null, :'elsewhere'))->'stats'->>'hunger')::numeric, 'FM0.00')
      || ' — the same beat, the other island, and nothing random about which';
@@ -4758,7 +4777,7 @@ select '675. asked about ' || (select name from world where id = :'elsewhere') |
 -- And standing on one island no longer tells the others you are there.
 update player set seen_at = now() - interval '61 seconds', away = true where uid = :'ivar' \g /dev/null
 select rpc_settle(null, :'world2') \g /dev/null
-select '676. and a beat sent from ' || (select name from world where id = :'world2')
+select '678. and a beat sent from ' || (select name from world where id = :'world2')
      || ' leaves the rest of them: '
      || (select string_agg(w.name || ' ' || (case when p.away then 'away' else 'here' end),
                            ', ' order by w.name)
@@ -4792,9 +4811,9 @@ values (:'world2', 'player', :'ivar', 'log', 30, 30, 'Pine') \g /dev/null
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))->>'started', 'no') as a1 \gset
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))::text, 'null') as a2 \gset
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1))::text, 'null') as a3 \gset
-select '677. one in hand and two asked for behind it — the second ask says: ' || :'a2';
-select '678. and the third: ' || :'a3';
-select '679. which is the same three the bar would draw: in hand '
+select '679. one in hand and two asked for behind it — the second ask says: ' || :'a2';
+select '680. and the third: ' || :'a3';
+select '681. which is the same three the bar would draw: in hand '
      || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
      || ', queued ' || (select jsonb_array_length(act_queue) from player where world_id = :'world2' and uid = :'ivar')
      || ' — so ' || (select jsonb_array_length(act_queue) + 1 from player where world_id = :'world2' and uid = :'ivar')
@@ -4815,13 +4834,13 @@ update player set act = null, act_target = null, act_started = null, act_ends = 
   where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 1) \g /dev/null
 select coalesce((rpc_act(:'world2', 'make_planks', '{"kind":"item"}', 10))->'queue', 'null'::jsonb) as lined \gset
-select '680. one in hand, ten asked for behind it, and the queue says what for: ' || :'lined';
-select '681. while the first is in hand: ' ||
+select '682. one in hand, ten asked for behind it, and the queue says what for: ' || :'lined';
+select '683. while the first is in hand: ' ||
        (select 'goes ' || coalesce((r->>'goes'), 'nothing') || ', left ' || coalesce((r->>'left'), 'nothing')
         from (select rpc_settle(null, :'world2') as r) q)
      || ' — so the bar reads 1 of 1, which is the job it is actually looking at';
 update player set act_ends = now() - interval '1 second' where world_id = :'world2' and uid = :'ivar' \g /dev/null
-select '682. and once the ten come to hand: ' ||
+select '684. and once the ten come to hand: ' ||
        (select 'goes ' || (r->>'goes') || ', left ' || (r->>'left')
                || ', so the bar reads ' || ((r->>'goes')::int - (r->>'left')::int + 1) || ' of ' || (r->>'goes')
         from (select rpc_settle(null, :'world2') as r) q)
@@ -4829,12 +4848,12 @@ select '682. and once the ten come to hand: ' ||
 update player set act_ends = now() - interval '1 second' where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select rpc_settle(null, :'world2') \g /dev/null
 update player set act_ends = now() - interval '1 second' where world_id = :'world2' and uid = :'ivar' \g /dev/null
-select '683. two goes off the run: ' ||
+select '685. two goes off the run: ' ||
        (select ((r->>'goes')::int - (r->>'left')::int + 1) || ' of ' || (r->>'goes')
                || ', and what was asked for has not moved: ' || (r->>'goes')
         from (select rpc_settle(null, :'world2') as r) q);
 select rpc_cancel(:'world2') \g /dev/null
-select '684. and stopping clears it, so there is ' ||
+select '686. and stopping clears it, so there is ' ||
        (select coalesce(act_goes::text, 'nothing')
         from player where world_id = :'world2' and uid = :'ivar')
      || ' left over to be drawn against whatever comes next';
@@ -4862,11 +4881,11 @@ update creature set until = now(), settled_at = now(), leg = 0,
 update creature set until = now() - interval '60 seconds', settled_at = now() - interval '60 seconds'
   where world_id = :'world2' and id = :'grazer' \g /dev/null
 select creature_settle(:'world2', :'grazer') \g /dev/null
-select '685. a minute of grazing: ' || (select leg from creature where world_id = :'world2' and id = :'grazer')
+select '687. a minute of grazing: ' || (select leg from creature where world_id = :'world2' and id = :'grazer')
      || ' legs walked, and it is ' || (select round(sqrt((to_x - :'gx') ^ 2 + (to_y - :'gy') ^ 2)::numeric, 1)
                                        from creature where world_id = :'world2' and id = :'grazer')
      || ' tiles from where it started — it used to walk a leg every three seconds and think nothing of five';
-select '686. the numbers behind that: it drifts ' || wild_reach() || ' tiles at a time and stands '
+select '688. the numbers behind that: it drifts ' || wild_reach() || ' tiles at a time and stands '
      || wild_rest() || ' to ' || (wild_rest() + wild_rest_spread()) || ' seconds between';
 
 /*
@@ -4882,13 +4901,13 @@ select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text,
 update player set x = :'gx', y = :'gy' where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select coalesce((select jsonb_pretty(v) from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
                  where (v->>'id')::int = :'grazer'), 'not in sight') as legsays \gset
-select '687. what the island says about the leg it is on: '
+select '689. what the island says about the leg it is on: '
      || coalesce((select 'for ' || round((v->>'legFor')::numeric, 2) || 's with '
                        || round((v->>'legLeft')::numeric, 2) || 's of it left'
                   from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
                   where (v->>'id')::int = :'grazer'), 'not in sight')
      || ' — seconds, so nothing has to agree about when';
-select '688. and not a word about when: '
+select '690. and not a word about when: '
      || case when (select count(*) from jsonb_array_elements(rpc_creatures(:'world2', 20)) v
                    where v ? 'legAt' or v ? 'legEnds') = 0
              then 'no instants travel at all' else 'IT STILL SENDS INSTANTS' end;
@@ -4906,26 +4925,26 @@ insert into auth.users (id, email) values
   (:'oldtimer', 'oldtimer@players.wurm.invalid'),
   (:'newcomer', 'newcomer@catgenova.github.io');
 
-select '689. a name goes out as ' || name_email('Newcomer')
+select '691. a name goes out as ' || name_email('Newcomer')
      || ' — at a host that resolves and keeps no mailbox, rather than one the internet forbids';
 
 -- Both suffixes are read; only the first is ever handed out.
-select '690. and comes back from ' || (select count(*) from unnest(name_domains())) || ' suffixes: '
+select '692. and comes back from ' || (select count(*) from unnest(name_domains())) || ' suffixes: '
      || coalesce(email_name('NEWCOMER@catgenova.github.io'), 'nothing')
      || ', ' || coalesce(email_name('oldtimer@players.wurm.invalid'), 'nothing')
      || ' — and from a stranger''s: ' || coalesce(email_name('someone@example.com'), 'nothing');
 
 -- The bug this half exists to prevent: read only the current suffix and a name
 -- somebody already holds reads as free, and the next person to ask gets it.
-select '691. is oldtimer free? ' || rpc_name_free('oldtimer')::text
+select '693. is oldtimer free? ' || rpc_name_free('oldtimer')::text
      || ' — is newcomer? ' || rpc_name_free('newcomer')::text
      || ' — is nobodyatall? ' || rpc_name_free('nobodyatall')::text;
 
 select set_config('request.jwt.claims', json_build_object('sub', :'oldtimer')::text, false) \g /dev/null
-select '692. somebody who came ashore before the suffix moved is still '
+select '694. somebody who came ashore before the suffix moved is still '
      || coalesce(rpc_my_name(), 'NAMELESS');
 select set_config('request.jwt.claims', json_build_object('sub', :'newcomer')::text, false) \g /dev/null
-select '693. and somebody who comes ashore today is '
+select '695. and somebody who comes ashore today is '
      || coalesce(rpc_my_name(), 'NAMELESS');
 
 \echo '--- how long a body lasts'
@@ -4935,7 +4954,7 @@ select '693. and somebody who comes ashore today is '
 -- inside one makes eating and drinking the thing you are doing rather than
 -- something you see to. Said in hours here, because that is the unit the
 -- decision was actually made in and a rate per second hides it.
-select '694. a full stomach lasts ' || round((1 / hunger_rate() / 3600)::numeric, 1)
+select '696. a full stomach lasts ' || round((1 / hunger_rate() / 3600)::numeric, 1)
      || ' hours and a full throat ' || round((1 / thirst_rate() / 3600)::numeric, 1)
      || ' — thirst still running ahead of hunger by the half it always did';
 
@@ -4960,7 +4979,7 @@ select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text,
 update world set epoch = now() - make_interval(secs => 2 * day_seconds() / 24)
   where id = :'world2' \g /dev/null
 select (rpc_settle()) as beat2 \gset
-select '695. at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' the heartbeat says night: '
+select '697. at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' the heartbeat says night: '
      || coalesce((:'beat2'::jsonb)->>'night', 'nothing')
      || ' — and hands over ' || coalesce(round(((:'beat2'::jsonb)->>'time')::numeric)::text, 'nothing')
      || ' seconds of island, which is a clock and not a picture to draw';
@@ -4968,14 +4987,14 @@ select '695. at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' the
 update world set epoch = now() - make_interval(secs => 12 * day_seconds() / 24)
   where id = :'world2' \g /dev/null
 select (rpc_settle()) as beat12 \gset
-select '696. and at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' it says night: '
+select '698. and at ' || to_char(hour_of_day(:'world2')::numeric, 'FM90.0') || ' it says night: '
      || coalesce((:'beat12'::jsonb)->>'night', 'nothing')
      || ' — the same two answers the island gives itself: '
      || case when ((:'beat12'::jsonb)->>'night')::boolean = is_night(:'world2')
                  and abs(((:'beat12'::jsonb)->>'time')::double precision - world_time(:'world2')) < 2
             then 'they agree' else 'THEY HAVE COME APART' end;
 
-select '697. a day on this island runs ' || round((day_seconds() / 60)::numeric) || ' minutes, dawn at '
+select '699. a day on this island runs ' || round((day_seconds() / 60)::numeric) || ' minutes, dawn at '
      || round(dawn_hour()::numeric) || ' — so a session sees the sun move, if anything is telling it to';
 
 \echo '--- a settlement each'
@@ -4995,7 +5014,7 @@ select rpc_join(:'big', 'Ivar') \g /dev/null
 update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
 insert into item (world_id, holder, holder_uid, def, ql, count)
 values (:'big', 'player', :'ivar', 'deed_stake', 50, 1) \g /dev/null
-select '698. ivar plants his stake on the big island: '
+select '700. ivar plants his stake on the big island: '
      || coalesce(deed_refusal(:'big', :'ivar', 'found_settlement', '{"kind":"item"}'), 'allowed');
 select act_perform(:'big', :'ivar', 'found_settlement', '{"kind":"item","name":"Ivarholm"}') \g /dev/null
 
@@ -5005,38 +5024,38 @@ insert into item (world_id, holder, holder_uid, def, ql, count)
 values (:'big', 'player', :'hild', 'deed_stake', 50, 1) \g /dev/null
 -- Standing inside ivar's border.
 update player set x = 2042.5, y = 2041.5 where world_id = :'big' and uid = :'hild' \g /dev/null
-select '699. hild tries to found inside ivar''s border: '
+select '701. hild tries to found inside ivar''s border: '
      || coalesce(deed_refusal(:'big', :'hild', 'found_settlement', '{"kind":"item"}'), 'ALLOWED');
 -- And well clear of it.
 update player set x = 2070.5, y = 2070.5 where world_id = :'big' and uid = :'hild' \g /dev/null
-select '700. and well clear of it: '
+select '702. and well clear of it: '
      || coalesce(deed_refusal(:'big', :'hild', 'found_settlement', '{"kind":"item"}'), 'allowed');
 select act_perform(:'big', :'hild', 'found_settlement', '{"kind":"item","name":"Hildstead"}') \g /dev/null
-select '701. so the island holds ' || (select count(*) from deed where world_id = :'big')
+select '703. so the island holds ' || (select count(*) from deed where world_id = :'big')
      || ' settlements: ' || (select string_agg(name, ' and ' order by founded_at) from deed where world_id = :'big');
 
 -- What each of them is handed. `deed` is yours or nothing; `deeds` is whose
 -- ground you are near enough to be standing on, and lights nothing.
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '702. ivar, at his own token, is told about '
+select '704. ivar, at his own token, is told about '
      || coalesce((rpc_ground(:'big', 40))->'deed'->>'name', 'no settlement of his own')
      || ' as his, and ' || jsonb_array_length((rpc_ground(:'big', 40))->'deeds')
      || ' of anybody else''s within forty tiles';
 update player set x = 2400.5, y = 2400.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
-select '703. and from four hundred tiles away, still '
+select '705. and from four hundred tiles away, still '
      || coalesce((rpc_ground(:'big', 40))->'deed'->>'name', 'nothing')
      || ' as his and ' || jsonb_array_length((rpc_ground(:'big', 40))->'deeds')
      || ' of hild''s — which is what used to cut a hole in somebody''s fog';
 
 -- And the things hung off a settlement are hung off the right one.
-select '704. ivar works ' || worker_cap(:'big', :'ivar') || ' wildermon and hild '
+select '706. ivar works ' || worker_cap(:'big', :'ivar') || ' wildermon and hild '
      || worker_cap(:'big', :'hild') || ', each off their own level — and ivar has '
      || workers_on_deed(:'big', :'ivar') || ' on the books, not hild''s';
 
 -- And the door that was standing open: `plan_reason` refused with the words
 -- "You may only build on your own deed" while asking whether the tile was on
 -- *a* deed. With one settlement to the island those were the same question.
-select '705. hild plans a building inside ivar''s border: '
+select '707. hild plans a building inside ivar''s border: '
      || coalesce(plan_reason(:'big', :'hild',
           (select d.x + 1 from deed d where d.world_id = :'big' and d.founded_by = :'ivar'),
           (select d.y from deed d where d.world_id = :'big' and d.founded_by = :'ivar')), 'ALLOWED')
@@ -5051,7 +5070,7 @@ select '705. hild plans a building inside ivar''s border: '
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 insert into crate (world_id, id, kind, x, y, sx, sy, made_by)
 values (:'big', 9001, 'plank', 2041, 2041, 1, 1, :'ivar') \g /dev/null
-select '706. ivar''s crate, to hild: '
+select '708. ivar''s crate, to hild: '
      || coalesce(crate_refusal(:'big', :'hild', 'crate_take_all',
           '{"kind":"crate","id":9001}'::jsonb), 'ALLOWED')
      || ' — and to ivar: '
@@ -5061,14 +5080,14 @@ select '706. ivar''s crate, to hild: '
 -- A crate from before there was anywhere to write an owner is common ground,
 -- because a migration that guessed would lock somebody out of their stores.
 insert into crate (world_id, id, kind, x, y, sx, sy) values (:'big', 9002, 'plank', 2300, 2300, 1, 1) \g /dev/null
-select '707. and one nobody has ever owned: ivar '
+select '709. and one nobody has ever owned: ivar '
      || crate_yours(:'big', :'ivar', 9002)::text || ', hild ' || crate_yours(:'big', :'hild', 9002)::text
      || ' — while ivar''s is his alone: ivar ' || crate_yours(:'big', :'ivar', 9001)::text
      || ', hild ' || crate_yours(:'big', :'hild', 9001)::text;
 
 insert into building (world_id, id, name, planned_by) values (:'big', 9001, 'Ivarhouse', :'ivar') \g /dev/null
 insert into building_tile (world_id, building, x, y) values (:'big', 9001, 2300, 2305) \g /dev/null
-select '708. ivar''s building, to hild: '
+select '710. ivar''s building, to hild: '
      || coalesce(build_refusal(:'big', :'hild', 'rename_building',
           '{"kind":"tile","x":2300,"y":2305,"name":"Hildhouse"}'::jsonb), 'ALLOWED')
      || ' — and to ivar: '
@@ -5084,7 +5103,7 @@ insert into crate (world_id, id, kind, x, y, sx, sy) values
   (:'big', 9105, 'plank', 2071, 2071, 1, 1) \g /dev/null
 delete from crate where world_id = :'big' and deed and id = 2 \g /dev/null
 select coalesce(place_deed_crate(:'big', :'hild')::text, 'nowhere') as penned \gset
-select '709. a token with all five of its old spots taken still gets a crate: ' || :'penned'
+select '711. a token with all five of its old spots taken still gets a crate: ' || :'penned'
      || ' — at ' || coalesce((select x || ',' || y from crate where world_id = :'big' and id = :'penned'::int), 'nowhere')
      || ', where the token is 2070,2070';
 
@@ -5101,7 +5120,7 @@ select '679b. ivar puts two logs in his deed crate: '
 select act_perform(:'big', :'ivar', 'store_in_crate',
   ('{"kind":"item","uid":' || :'logs' || ',"count":2}')::jsonb) \g /dev/null
 select (rpc_ground(:'big', 40)) as ground \gset
-select '710. the crate at ivar''s elbow holds '
+select '712. the crate at ivar''s elbow holds '
      || coalesce((select (v->>'units') || ' units and lists ' || jsonb_array_length(v->'things') || ' sorts'
                   from jsonb_array_elements((:'ground'::jsonb)->'crates') v
                   where (v->>'id')::int = 1), 'nothing at all')
@@ -5119,20 +5138,20 @@ select '710. the crate at ivar''s elbow holds '
 -- island may read. It is already in the Realtime publication and the browser
 -- already draws whatever arrives on it.
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '711. ivar says something with a newline in it: '
+select '713. ivar says something with a newline in it: '
      || coalesce((rpc_say(:'big', 'Hello  the island' || chr(10) || ' anyone about?'))->>'said', 'nothing')
      || ' — tidied rather than refused, because a phone keyboard puts them in by accident';
 
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 select (rpc_say(:'big', 'Over here')) \g /dev/null
-select '712. and hild, arriving, reads back ' || jsonb_array_length(rpc_chat(:'big', 10)) || ' lines: '
+select '714. and hild, arriving, reads back ' || jsonb_array_length(rpc_chat(:'big', 10)) || ' lines: '
      || (select string_agg(v->>'text', ' | ' order by (v->>'n')::bigint)
          from jsonb_array_elements(rpc_chat(:'big', 10)) v);
 
 -- A name nobody can wear but their own: `rpc_say` reads it off the account
 -- rather than taking it from the caller, for the same reason `rpc_my_name`
 -- takes no argument.
-select '713. the name on a line is the island''s to write: '
+select '715. the name on a line is the island''s to write: '
      || case when (select count(*) from jsonb_array_elements(rpc_chat(:'big', 10)) v
                     where v->>'text' like '<Hild>%') = 1
              then 'hild''s line is signed Hild, and there is nowhere to say otherwise'
@@ -5148,7 +5167,7 @@ begin
     said := rpc_say(w, 'line ' || i);
     if said->>'said' is not null then n := n + 1; end if;
   end loop;
-  raise notice '714. hild tries % lines in a row and gets % of them in — the rest are asked to give the others a moment',
+  raise notice '716. hild tries % lines in a row and gets % of them in — the rest are asked to give the others a moment',
     say_a_minute()::int + 4, n;
 end $$;
 
@@ -5157,12 +5176,12 @@ end $$;
 -- the browser did the in-between itself and the next answer put it back.
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select id as stowed from item where world_id = :'big' and holder = 'crate' and def = 'log' limit 1 \gset
-select '715. ivar takes one of the two logs back out: '
+select '717. ivar takes one of the two logs back out: '
      || coalesce(act_refusal(:'big', :'ivar', 'take_from_store',
           ('{"kind":"item","uid":' || :'stowed' || ',"count":1}')::jsonb), 'allowed');
 select act_perform(:'big', :'ivar', 'take_from_store',
   ('{"kind":"item","uid":' || :'stowed' || ',"count":1}')::jsonb) \g /dev/null
-select '716. and the crate is down to ' || crate_units(:'big', 1)
+select '718. and the crate is down to ' || crate_units(:'big', 1)
      || ' with ' || (select coalesce(sum(count), 0) from item
                      where world_id = :'big' and holder = 'player' and holder_uid = :'ivar' and def = 'log')
      || ' in his hands — split off the stack rather than all or nothing';
@@ -5171,7 +5190,7 @@ select '716. and the crate is down to ' || crate_units(:'big', 1)
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
 update player set x = 2041.5, y = 2040.5 where world_id = :'big' and uid = :'hild' \g /dev/null
 select id as theirs from item where world_id = :'big' and holder = 'crate' limit 1 \gset
-select '717. hild reaches into ivar''s crate: '
+select '719. hild reaches into ivar''s crate: '
      || coalesce(act_refusal(:'big', :'hild', 'take_from_store',
           ('{"kind":"item","uid":' || :'theirs' || ',"count":1}')::jsonb), 'ALLOWED');
 
@@ -5197,18 +5216,18 @@ begin
   values (w, 1, 2040, 2040, 1, 'wood', 'floor', '{"plank":1}'::jsonb, '{"plank":3}'::jsonb,
           '11111111-1111-1111-1111-111111111111');
 end $$;
-select '718. the ground ivar is standing on carries '
+select '720. the ground ivar is standing on carries '
      || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'list') || ' building, '
      || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'walls') || ' wall and '
      || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'floors') || ' floor — which it has never once mentioned before';
-select '719. and the building comes whole: ' || (rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 ->> 'name')
+select '721. and the building comes whole: ' || (rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 ->> 'name')
      || ', ' || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 -> 'tiles') || ' tiles over '
      || (rpc_ground(:'big', 40) -> 'buildings' -> 'list' -> 0 ->> 'levels') || ' storeys';
 -- Far enough off and it is somebody else's business, not yours to draw. Six
 -- hundred tiles out, and clear of the Ivarhouse the earlier subjects put up —
 -- the first go at this stood him five tiles from it and counted that as proof.
 update player set x = 2600.5, y = 2600.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
-select '720. from five hundred tiles away it is out of sight: '
+select '722. from five hundred tiles away it is out of sight: '
      || jsonb_array_length(rpc_ground(:'big', 40) -> 'buildings' -> 'list') || ' buildings';
 update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
 
@@ -5217,11 +5236,11 @@ update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'iva
 -- in when its keeper is not who it thinks.
 \set nolands '44444444-4444-4444-4444-444444444444'
 select creature_spawn(:'big', 'rabba', 2040.5, 2041.5, 'deed', now() - interval '3 hours', :'nolands') as orphan \gset
-select '721. a forager on the books of somebody with no settlement: work_site says '
+select '723. a forager on the books of somebody with no settlement: work_site says '
      || coalesce((select x || ',' || y from work_site(:'big',
           (select c from creature c where c.world_id = :'big' and c.id = :'orphan'))), 'nothing');
 select worker_settle(:'big', :'orphan') \g /dev/null
-select '722. so it is let go — mode ' || mode || ' — and its keeper is told: '
+select '724. so it is let go — mode ' || mode || ' — and its keeper is told: '
      || coalesce((select text from event where world_id = :'big' and uid = :'nolands'
                   order by at desc limit 1), 'NOTHING, which was the bug')
 from creature where world_id = :'big' and id = :'orphan';
@@ -5233,7 +5252,7 @@ from creature where world_id = :'big' and id = :'orphan';
  * them passed while nothing in the database called it at all. So: the door the
  * island actually opens, and a count of who can reach the rules behind it.
  */
-select '723. functions on this island that ask a worker to do its day: '
+select '725. functions on this island that ask a worker to do its day: '
      || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'public' and p.prokind = 'f'
            and p.prosrc like '%worker_settle(%' and p.proname <> 'worker_settle')
@@ -5250,21 +5269,21 @@ update creature set hunger = 0, until = now() - interval '900 seconds',
     leg_at = now() - interval '900 seconds', leg_ends = now() - interval '900 seconds',
     settled_at = now() - interval '900 seconds'
   where world_id = :'big' and id = :'hand' \g /dev/null
-select '724. a forager on the books, idle at the token, and nobody calling anything by hand — '
+select '726. a forager on the books, idle at the token, and nobody calling anything by hand — '
      || creature_sweep(:'big', 2040.5, 2040.5) || ' things stirred by somebody merely looking';
-select '725. and it has been working: foraging ' || round((skills->>'foraging')::numeric, 2)
+select '727. and it has been working: foraging ' || round((skills->>'foraging')::numeric, 2)
      || ' from 1, phase ' || phase || ', with '
      || (select count(*) from foraged f where f.world_id = :'big' and f.kind = 'forage')
      || ' beds behind it'
 from creature where world_id = :'big' and id = :'hand';
-select '726. and the window is told what it is doing, rather than guessing: '
+select '728. and the window is told what it is doing, rather than guessing: '
      || coalesce((select 'foraging ' || round((r->'skills'->>'foraging')::numeric, 2)
                   || ', experience ' || round((r->>'xp')::numeric, 1)
                   || ', care ' || round((r->>'care')::numeric, 2)
                   || ', ' || (r->>'phase')
        from (select jsonb_array_elements(rpc_creatures(:'big', 40)) r) q
        where (r->>'id')::int = :'hand'), 'NOTHING, which was the other half of it');
-select '727. and about somebody else''s, it still says only what anybody can see: '
+select '729. and about somebody else''s, it still says only what anybody can see: '
      || (select count(*) from (select jsonb_object_keys(r) k
          from (select jsonb_array_elements(rpc_creatures(:'big', 40)) r) q
          where not (r->>'mine')::boolean) kk
@@ -5278,15 +5297,15 @@ select '727. and about somebody else''s, it still says only what anybody can see
  * twice" — so two islands founded and opened on the live project left everyone
  * arriving at the oldest ground on it.
  */
-select '728. the door opens on: ' || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere');
+select '730. the door opens on: ' || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere');
 select set_config('request.jwt.claims', json_build_object('sub', :'alice')::text, false) \g /dev/null
 select rpc_found('Elsewhere', 11, 1024, 512, 512) as door \gset
 select rpc_ready(:'door') \g /dev/null
-select '729. and after founding a second island over ' || found_max() || ' tiles a side: '
+select '731. and after founding a second island over ' || found_max() || ' tiles a side: '
      || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere')
      || ' — which is what refounding was always supposed to mean';
 select rpc_found('A tab''s island', 13, 64, 32, 32) as small \gset
 select rpc_ready(:'small') \g /dev/null
-select '730. and after one a browser could have rolled: '
+select '732. and after one a browser could have rolled: '
      || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere')
      || ' — the live smoke test founds sixty-four tiles every run and gives them back';

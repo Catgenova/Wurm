@@ -225,6 +225,8 @@ export interface IslandHooks {
     cap?: number | null;
     stats?: Record<string, number> | null;
     skills?: Record<string, number> | null;
+    /** What you are carrying, which the island keeps and had never said. */
+    wounds?: unknown[];
     marks?: { tiles: number[]; secs: number } | null;
   }) => void;
   /**
@@ -658,6 +660,7 @@ export class Island {
         left?: number | null; secs?: number | null; total?: number | null; queued?: number;
         queue?: unknown; cap?: number | null;
         stats?: Record<string, number> | null; skills?: Record<string, number> | null;
+        wounds?: unknown[] | null;
         marks?: { tiles?: number[]; secs?: number } | null;
         goes?: number | null; time?: number | null; night?: boolean | null;
         said?: Array<{ n: number; text: string; kind: string }> | null;
@@ -683,6 +686,7 @@ export class Island {
         cap: said.cap ?? null,
         stats: said.stats ?? null,
         skills: said.skills ?? null,
+        wounds: Array.isArray(said.wounds) ? said.wounds : undefined,
         marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
       });
       this.hooks.doing?.({

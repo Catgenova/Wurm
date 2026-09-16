@@ -314,6 +314,16 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       seeded = true;
       game.events.emit('skill', '', 0);
     }
+    /*
+     * And what you are carrying.
+     *
+     * The island has kept wounds all along and no door ever mentioned them, so
+     * the window was empty however cut about you were and a bandage had
+     * nothing to be put on. Replaced wholesale rather than merged: the island
+     * closes them, turns them bad and takes the blood out, and this side draws
+     * what it is told. An empty list is "they have all closed over".
+     */
+    if (what.wounds) game.sawWounds(what.wounds);
     if (what.marks !== undefined) game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
   };
 
