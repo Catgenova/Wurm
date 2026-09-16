@@ -4090,11 +4090,29 @@ select '593. a beat with nothing done carries ' || coalesce((select string_agg(k
 select skill_raise(:'world2', :'ivar', 'mining', 1) \g /dev/null
 select '594. and one after a skill moved carries ' || coalesce((select string_agg(k, ', ' order by k)
          from jsonb_object_keys(rpc_settle(null, :'world2')) k where k in ('skills', 'said')), 'nothing');
-select '595. talk since the beginning: '
+-- And who the catch-up is for. It is counted from the highest line the browser
+-- has heard, and a browser that has just opened has heard none: it carried a
+-- nought, `e.n > 0` is every line on the island, and a refresh was handed its
+-- own oldest sixty back — beginning, on a played-in body, at the day it washed
+-- ashore. A nought means "I have just got here"; what was said before that is
+-- `rpc_chat`'s, and a joining browser already asks it.
+select '595. a browser that has just opened, carrying a nought: '
      || jsonb_array_length(coalesce((rpc_settle(null, :'world2', 0))->'said', '[]'::jsonb))
-     || ' lines, and since the end of it: '
-     || jsonb_array_length(coalesce((rpc_settle(null, :'world2',
-          (select max(n) from event)))->'said', '[]'::jsonb));
+     || ' lines to catch up on, and the mark to count from after this: '
+     || coalesce((rpc_settle(null, :'world2', 0))->>'saidTo',
+                 'NONE, SO IT WILL ASK FROM THE BEGINNING AGAIN');
+-- And the case it was built for: a channel down while two lines go past, one
+-- to him and one to the island.
+select (select coalesce(max(n), 0) from event where world_id = :'world2') as dropped \gset
+select tell(:'world2', :'ivar', 'Your fire has gone out.', 'info') \g /dev/null
+select tell(:'world2', null, 'Somewhere a tree comes down.', 'system') \g /dev/null
+select '595b. and one whose channel dropped at ' || :'dropped' || ', two lines ago: '
+     || jsonb_array_length(coalesce((rpc_settle(null, :'world2', :'dropped'))->'said', '[]'::jsonb))
+     || ' lines it had not heard — "'
+     || coalesce((rpc_settle(null, :'world2', :'dropped'))->'said'->0->>'text', 'NOTHING')
+     || '" first — and the mark is '
+     || coalesce((rpc_settle(null, :'world2', :'dropped'))->>'saidTo',
+                 'left out, because it has one of its own');
 /*
  * And the thing that would have broken the island: `create or replace` with a
  * new argument list makes a second function rather than replacing the first,
@@ -5125,6 +5143,53 @@ select '712. the crate at ivar''s elbow holds '
                   from jsonb_array_elements((:'ground'::jsonb)->'crates') v
                   where (v->>'id')::int = 1), 'nothing at all')
      || ' — and one twenty tiles off would list none of them';
+
+-- And whose settlement a disbanding takes.
+--
+-- Reported from the island: a settlement gone, its crate standing where it
+-- always had, and its holder had disbanded nothing. The disbanding ended
+--
+--     delete from deed where world_id = p_world;
+--
+-- which was a complete sentence for as long as an island held one settlement,
+-- and which a day later took every settlement on the island. Nothing in this
+-- file would have caught it: the disbanding subject above counts the island's
+-- settlements after the fact, on an island that has only ever held one, so it
+-- reads the same whether the delete was scoped or not.
+\set quitter '66666666-6666-6666-6666-666666666666'
+select set_config('request.jwt.claims', json_build_object('sub', :'quitter')::text, false) \g /dev/null
+select rpc_join(:'big', 'Sella') \g /dev/null
+update player set x = 2500.5, y = 2500.5 where world_id = :'big' and uid = :'quitter' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count)
+values (:'big', 'player', :'quitter', 'deed_stake', 50, 1) \g /dev/null
+select act_perform(:'big', :'quitter', 'found_settlement', '{"kind":"item","name":"Sellaby"}') \g /dev/null
+select '712b. three settlements now: '
+     || (select string_agg(name, ', ' order by founded_at) from deed where world_id = :'big')
+     || ', and ' || (select count(*) from crate where world_id = :'big' and deed) || ' deed crates';
+select act_perform(:'big', :'quitter', 'disband_deed', '{"kind":"tile","x":2500,"y":2500}') \g /dev/null
+select '712c. sella gives hers up, four hundred tiles from anybody: '
+     || coalesce((select string_agg(name, ' and ' order by founded_at) from deed where world_id = :'big'),
+                 'NONE OF THEM ARE LEFT, WHICH WAS THE BUG')
+     || ' still stand, with ' || (select count(*) from crate where world_id = :'big' and deed)
+     || ' deed crates — ivar''s is still his to reach into: '
+     || coalesce((deed_crate(:'big', :'ivar')).id::text, 'OUT OF REACH')
+     || ', and sella''s went with her settlement: '
+     || coalesce((deed_crate(:'big', :'quitter')).id::text, 'gone, as it should be');
+
+-- And which token a wildermon is put to work at, which read the same
+-- island-wide sentence for the home it sends a stored beast to. Hild's, and
+-- she founded second, so the row a bare `select * from deed` hands back first
+-- is ivar's — thirty tiles from where she is standing.
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select creature_spawn(:'big', 'rabba', 2070.5, 2071.5, 'stored', now() - interval '3 hours', :'hild') as hers \gset
+select act_perform(:'big', :'hild', 'assign_deed', ('{"kind":"creature","id":' || :'hers' || '}')::jsonb) \g /dev/null
+select '712d. hild sets a rabba to work and it stands at '
+     || (select round(from_x::numeric, 1) || ', ' || round(from_y::numeric, 1)
+         from creature where world_id = :'big' and id = :'hers')
+     || ' — her token is at '
+     || (select x || ', ' || y from deed where world_id = :'big' and founded_by = :'hild')
+     || ' and ivar''s at '
+     || (select x || ', ' || y from deed where world_id = :'big' and founded_by = :'ivar');
 
 \echo '--- a global chat'
 -- The event window has had a Talk tab and a box to type in since long before

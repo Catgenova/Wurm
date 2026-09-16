@@ -664,6 +664,7 @@ export class Island {
         marks?: { tiles?: number[]; secs?: number } | null;
         goes?: number | null; time?: number | null; night?: boolean | null;
         said?: Array<{ n: number; text: string; kind: string }> | null;
+        saidTo?: number | null;
       };
       // The hour, on the beat every browser makes anyway. Nothing else has to
       // happen for the sun to move, and nothing can make it drift for long.
@@ -679,6 +680,16 @@ export class Island {
         this.said = line.n;
         this.hooks.say(line.text, line.kind);
       }
+      /*
+       * And, on the first beat, where the talk had got to before we arrived.
+       *
+       * The cursor starts at nought, which meant "from the beginning of the
+       * island" and handed a refreshed page its own first sixty lines back.
+       * The island now reads a nought as "just got here" and sends the mark
+       * instead, so the catch-up starts from the moment somebody opened the
+       * page rather than from the day they washed ashore.
+       */
+      if (typeof said.saidTo === 'number') this.said = Math.max(this.said, said.saidTo);
       this.pinClock(said.time);
       if (typeof said.night === 'boolean') this.islandNight = said.night;
       this.hooks.mine?.({
