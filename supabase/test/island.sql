@@ -5458,3 +5458,59 @@ select '736. a face five above the sea with a fathom of soil on its corner: wate
      || coalesce(terrain_refusal(:'big', :'ivar', 'mine',
           '{"x":2200,"y":2200,"cx":2200,"cy":2200}'::jsonb), 'allowed')
      || ' — the old rule read that bedrock and refused, blaming water that was not there';
+
+\echo ''
+\echo '--- what your own ask did'
+/*
+ * Reported as inventory rubberbanding when things are moved between a pack and
+ * a container: a stack put in a crate turns up in the crate and stays in the
+ * pack as well, for the twenty seconds until the next reconcile, and then
+ * goes.
+ *
+ * Nothing ever told a browser that a thing had *left* its hands. `item` is
+ * published with the default replica identity, so a DELETE carries the primary
+ * key and nothing else, and the browser's Realtime filter is `holder_uid = me`
+ * — which a row with only an `id` on it cannot match. Putting a whole stack in
+ * a crate deletes the row. And a thing that goes to the ground has
+ * `holder_uid` set to null, so the *new* row does not match either. Realtime
+ * carries every arrival and no departure.
+ *
+ * So the ask answers with both halves, read after the write and in the
+ * transaction that did it.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set x = 2040.5, y = 2040.5 where world_id = :'big' and uid = :'ivar' \g /dev/null
+insert into crate (world_id, id, kind, x, y, sx, sy, made_by)
+values (:'big', 9301, 'plank', 2039, 2040, 1, 1, :'ivar') \g /dev/null
+-- Whichever one he would actually reach for, which is the one `store_in_crate`
+-- picks: naming a crate here and measuring a different one is how the first
+-- draft of this passed while saying nothing.
+select (nearest_crate(:'big', 2040.5, 2040.5)).id as near \gset
+insert into item (world_id, holder, holder_uid, def, ql, count, extra)
+values (:'big', 'player', :'ivar', 'log', 40, 3, 'Oak') returning id as stack \gset
+select (rpc_act(:'big', 'store_in_crate',
+  ('{"kind":"item","uid":' || :'stack' || ',"count":3}')::jsonb, 1)) as put \gset
+select '737. three logs put in a crate — the answer to the ask hands back a pack of '
+     || jsonb_array_length((:'put'::jsonb)->'pack') || ', and the stack is '
+     || case when exists (select 1 from jsonb_array_elements((:'put'::jsonb)->'pack') e
+                          where (e->>'id')::bigint = :'stack') then 'STILL IN IT' else 'gone from it' end
+     || ' — which is what nothing on the wire ever said';
+select '738. and the crate he reached for (' || :'near' || ') comes with it: '
+     || coalesce((select (v->>'units') || ' units, ' || jsonb_array_length(v->'things') || ' sort(s)'
+                  from jsonb_array_elements((:'put'::jsonb)->'crates') v where (v->>'id')::int = :'near'),
+                 'THE CRATE IS NOT IN THE ANSWER')
+     || ' — both halves of the move from one reading, so it is never in both places or neither';
+select (rpc_act(:'big', 'take_from_store',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'big' and holder = 'crate' and crate = :'near' and def = 'log')
+   || ',"count":2}')::jsonb, 1)) as took \gset
+select '739. and two taken back out: the pack holds '
+     || (select coalesce(sum((e->>'count')::int), 0) from jsonb_array_elements((:'took'::jsonb)->'pack') e
+         where e->>'def' = 'log') || ' logs and the crate is down to '
+     || coalesce((select v->>'units' from jsonb_array_elements((:'took'::jsonb)->'crates') v
+                  where (v->>'id')::int = :'near'), '?') || ' units';
+select '740. and the two answers about a crate are one expression: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.prosrc like '%crates_near(%' and p.proname <> 'crates_near')
+     || ' functions read it — ' || (select string_agg(p.proname, ', ' order by p.proname)
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.prosrc like '%crates_near(%' and p.proname <> 'crates_near');

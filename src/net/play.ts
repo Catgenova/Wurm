@@ -259,6 +259,14 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * on a live island was a row in `placed` and a blank patch of grass.
    */
   island.hooks.built = (ground) => game.sawGround(ground);
+  /*
+   * And the crates our own ask touched, which come back with the answer to it.
+   *
+   * Laid down on their own rather than through `sawGround`, which clears
+   * everything standing and rebuilds it: right for a ground read, wrong for an
+   * answer that names the two crates at your elbow.
+   */
+  island.hooks.stored = (crates) => game.sawCrates(crates);
 
   /*
    * The rest of you, which the browser had no way of hearing about.

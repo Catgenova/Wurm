@@ -4005,6 +4005,31 @@ export class Game {
   }
 
   /**
+   * The crates the island has just said something about, and only those.
+   *
+   * `sawGround` clears everything set down and builds it again, because a
+   * ground read is the whole of what is standing near you. This is not that:
+   * it is the answer to one ask, naming the crates within arm's reach, and
+   * everything it does not mention is left exactly where it was.
+   */
+  sawCrates(crates: IslandCrate[]): void {
+    for (const c of crates) {
+      this.crates.set(c.id, {
+        id: c.id, x: c.x, y: c.y, sx: c.sx, sy: c.sy,
+        kind: c.kind as PlacedCrate['kind'],
+        items: (c.things ?? []).map((it) => ({
+          uid: it.id, id: it.def, ql: it.ql, dmg: it.dmg, count: it.count,
+          extra: it.extra ?? undefined,
+        })),
+        units: c.units,
+        name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
+      });
+    }
+    this.placed.crates.reset(this.crates.values());
+    this.events.emit('crate');
+  }
+
+  /**
    * What the island says you are carrying.
    *
    * Replaced wholesale rather than merged: over there `wounds_settle` closes

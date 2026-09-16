@@ -4,7 +4,7 @@ import { blankWorld, layChange, rowsOf, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
-import type { IslandGround } from '../game/game';
+import type { IslandCrate, IslandGround } from '../game/game';
 import { BODY_EVERY, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
 
@@ -248,6 +248,14 @@ export interface IslandHooks {
    * settlement. Reported as "placed campfire doesn't show": it was there.
    */
   built?: (ground: IslandGround) => void;
+  /**
+   * The crates your own ask touched, laid down without touching anything else.
+   *
+   * Not `built`: a ground read is the whole of what is standing near you and
+   * `sawGround` clears and rebuilds from it, which is right for a ground read
+   * and wrong for an answer that names two crates.
+   */
+  stored?: (crates: IslandCrate[]) => void;
   /** Getting an island down takes a moment; this says how it is going. */
   progress?: (done: number, total: number, what: string) => void;
   /**
@@ -274,6 +282,18 @@ export interface ActResult {
   capacity?: number;
   /** What is lined up behind the job in hand, when this ask put something there. */
   queue?: unknown[];
+  /**
+   * What you are holding now, and what is in the crates at your elbow.
+   *
+   * The two halves of moving a thing, read after the move and inside the same
+   * transaction. Realtime carries every arrival into your hands and no
+   * departure out of them — a whole stack put in a crate is a delete, and a
+   * delete on a table with the default replica identity carries a primary key
+   * the browser's `holder_uid` filter cannot match — so until this, the only
+   * thing that noticed was the twenty-second reconcile.
+   */
+  pack?: ItemRow[];
+  crates?: IslandCrate[];
 }
 
 export class Island {
@@ -350,6 +370,16 @@ export class Island {
    * again in this session.
    */
   private booked = false;
+  /**
+   * How many of our own asks we have laid down.
+   *
+   * A read is issued, the island answers an ask, and then the read comes back
+   * carrying the world as it was before the ask — which puts the thing back
+   * where it was until the next read puts it right again, and that is the
+   * rubberband somebody is watching. So a read notes this on the way out and
+   * is thrown away on the way in if it has moved.
+   */
+  private acted = 0;
   /** The island's shared topic we are holding a share of, if any. */
   private bodiesTopic = '';
   /** Bodies go on a topic everybody on the island agrees on. */
@@ -981,9 +1011,23 @@ export class Island {
     // The slow half when it is owed, and the burning half every other time.
     const slow = this.groundSlow;
     this.groundSlow = false;
+    const asked = this.acted;
     const { data } = await supabase().rpc('rpc_ground', {
       p_world: this.info.id, p_range: GROUND_RANGE, p_slow: slow,
     });
+    /*
+     * Thrown away if one of our own asks was answered while this was out.
+     *
+     * This read is the ground as it was before that ask, and `sawGround`
+     * rebuilds every crate from it — so laying it down would put a thing we
+     * have just taken out of a crate back into it, until the next read a
+     * second later took it out again. The slow half is owed again rather than
+     * lost, and a second is a cheap price for never going backwards.
+     */
+    if (asked !== this.acted) {
+      if (slow) this.groundSlow = true;
+      return;
+    }
     if (data) this.hooks.built(data as IslandGround);
   }
 
@@ -1009,6 +1053,7 @@ export class Island {
    */
   async refreshPack(): Promise<void> {
     if (!this.info) return;
+    const asked = this.acted;
     /*
      * And what is in the bags, which never came down at all.
      *
@@ -1019,6 +1064,10 @@ export class Island {
      */
     const { data } = await supabase().from('item').select('*')
       .eq('world_id', this.info.id).in('holder', ['player', 'bag']).eq('holder_uid', this.uid);
+    // Asked before one of our own asks was answered, so it is the pack as it
+    // was before the thing moved. The answer to that ask is newer and already
+    // laid down.
+    if (asked !== this.acted) return;
     this.pack.clear();
     for (const it of rowsIn<ItemRow>(data)) this.pack.set(it.id, it);
     this.hooks.pack([...this.pack.values()]);
@@ -1081,6 +1130,21 @@ export class Island {
     });
     if (error) return { started: false, why: error.message };
     const result = data as ActResult;
+    /*
+     * What the ask did, laid down before anything else in the answer.
+     *
+     * Both halves together and from the one reading, so a thing never shows in
+     * the pack and the crate at once, or in neither. `acted` goes up with
+     * them, and any read that was already in flight when it did is thrown
+     * away rather than allowed to put the thing back.
+     */
+    if (result.pack) {
+      this.pack.clear();
+      for (const it of result.pack) this.pack.set(it.id, it);
+      this.hooks.pack([...this.pack.values()]);
+    }
+    if (result.crates) this.hooks.stored?.(result.crates);
+    if (result.pack || result.crates) this.acted++;
     // We know when this ends before the island tells anybody, so ask to be
     // settled then rather than at the next heartbeat — and put the clock on
     // the screen now rather than a heartbeat from now.
