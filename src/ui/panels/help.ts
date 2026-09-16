@@ -75,8 +75,11 @@ function helpText(): string {
     been written.</p>
     <p>A <b>citizen</b> of a settlement may build on its land, use its crates and stores, and draw from
     its water, exactly as the founder does. Disbanding, upgrading, renaming and setting wildermon to
-    work stay with whoever planted the stake. You can live on one deed at a time, and holding land of
-    your own means you cannot be anybody's citizen until you disband it.</p>
+    work stay with whoever planted the stake.</p>
+    <p>You may found <b>one</b> settlement of your own and be a citizen of <b>three</b> others, whether
+    or not you hold one. A border you may work inside is drawn at the same weight as your own, so land
+    you were asked onto does not look like a stranger's. Leaving a roll frees the place at once, and an
+    invitation you had no room for is left standing until you do.</p>
     <p>A <b>friend</b> is mutual: you ask, they say yes, and after that each of you can see where the
     other is &mdash; but only while they are actually at the keyboard. A friend who has gone shows as
     away and nothing more. <b>Letters</b> are kept: one reaches an open tab the moment it is written and

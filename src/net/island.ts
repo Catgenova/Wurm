@@ -198,11 +198,33 @@ export interface Folk {
   y?: number;
 }
 
+/** One settlement of yours, with the people on its roll. */
+export interface MyDeed {
+  name: string;
+  x: number;
+  y: number;
+  level: number;
+  radius: number;
+  founder: string;
+  by: string;
+  /** Whether you planted the stake, which is what disbanding and upgrading ask. */
+  mine: boolean;
+  /** Its roll, founder included, you left off it. */
+  folk: Folk[];
+}
+
 /** Everything the social window shows, in one answer. */
 export interface Social {
-  deed: { name: string; x: number; y: number; level: number; radius: number; founder: string; by: string; mine: boolean } | null;
-  /** The roll of wherever you live, founder first, you left off it. */
-  folk: Folk[];
+  /**
+   * Every settlement that is yours, the one you founded first.
+   *
+   * A list rather than the one it was: you hold at most one and may be a
+   * citizen of three others, and a window showing only the first of four would
+   * be hiding three places somebody lives.
+   */
+  deeds: MyDeed[];
+  /** How many more you may join. */
+  room: number;
   /** Somewhere asking you to come and live there. */
   invites: Array<{ founder: string; by: string; deed: string; at: number }>;
   /** And the ones you have out, which only a founder ever has. */
@@ -1298,9 +1320,13 @@ export class Island {
     return this.socialDoor('rpc_invite_answer', { p_founder: founder, p_yes: yes });
   }
 
-  /** Off the roll: yourself with no argument, or somebody the founder is sending away. */
-  async leaveDeed(uid?: string): Promise<string | null> {
-    return this.socialDoor('rpc_leave_deed', { p_uid: uid ?? null });
+  /**
+   * Off one roll: yourself, or somebody the founder is sending away.
+   *
+   * Which settlement has to be named now that a person may be on several.
+   */
+  async leaveDeed(founder: string, uid?: string): Promise<string | null> {
+    return this.socialDoor('rpc_leave_deed', { p_founder: founder, p_uid: uid ?? null });
   }
 
   /** Ask to be somebody's friend, or say yes when they asked first. */

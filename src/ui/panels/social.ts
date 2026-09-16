@@ -1,4 +1,4 @@
-import type { Folk, Island, Letter, Social } from '../../net/island';
+import type { Folk, Island, Letter, MyDeed, Social } from '../../net/island';
 import type { Game } from '../../game/game';
 import type { UIWindow } from '../windows';
 
@@ -87,7 +87,14 @@ export class SocialPanel {
   private find(uid: string): Folk | null {
     const s = this.seen;
     if (!s) return null;
-    return [...s.friends, ...s.folk, ...s.here].find((f) => f.uid === uid) ?? null;
+    return [...s.friends, ...this.neighbours(s), ...s.here].find((f) => f.uid === uid) ?? null;
+  }
+
+  /** Everybody off every roll of yours, each named once however many you share. */
+  private neighbours(s: Social): Folk[] {
+    const by = new Map<string, Folk>();
+    for (const d of s.deeds) for (const f of d.folk) if (!by.has(f.uid)) by.set(f.uid, f);
+    return [...by.values()];
   }
 
   private async refresh(force: boolean): Promise<void> {
@@ -296,38 +303,15 @@ export class SocialPanel {
       ]));
     }
 
-    if (s.deed) {
-      const d = s.deed;
-      this.page.append(this.head(`${d.name} · ${d.mine ? 'yours' : `${d.by}'s`} · ${d.x}, ${d.y}`));
-      if (!s.folk.length) {
-        this.page.append(this.empty(d.mine
-          ? 'Nobody else lives here yet. Right-click somebody and invite them.'
-          : 'Nobody else lives here yet.'));
-      }
-      for (const who of s.folk) {
-        const acts = [this.button('Write', `Write to ${who.name}`, () => void this.openThread(who))];
-        if (d.mine && who.uid !== d.founder) {
-          acts.push(this.button('Send away', `Take ${who.name} off the roll of ${d.name}`,
-            () => void this.did(isle.leaveDeed(who.uid))));
-        }
-        this.page.append(this.row(who, this.whereabouts(who), acts));
-      }
-      if (!d.mine) {
-        const leave = document.createElement('div');
-        leave.className = 'social-row social-ask';
-        const text = document.createElement('span');
-        text.className = 'social-name';
-        text.textContent = `You are a citizen of ${d.name}.`;
-        const acts = document.createElement('span');
-        acts.className = 'social-acts';
-        acts.append(this.button('Leave', `Stop being a citizen of ${d.name}`,
-          () => void this.did(isle.leaveDeed())));
-        leave.append(text, acts);
-        this.page.append(leave);
-      }
+    for (const d of s.deeds) this.drawDeed(s, d);
+    if (!s.deeds.length) {
+      this.page.append(this.head('Settlements'));
+      this.page.append(this.empty('You hold none and live on none. Plant a stake, or wait to be asked.'));
+    } else if (s.room > 0) {
+      this.page.append(this.empty(`You may be a citizen of ${s.room} more.`));
     }
 
-    const known = new Set([...s.friends, ...s.folk].map((f) => f.uid));
+    const known = new Set([...s.friends, ...this.neighbours(s)].map((f) => f.uid));
     const strangers = s.here.filter((f) => !known.has(f.uid));
     this.page.append(this.head(`Everybody else ashore (${strangers.length})`));
     if (!strangers.length) this.page.append(this.empty('Nobody else has been here.'));
@@ -336,11 +320,43 @@ export class SocialPanel {
         this.button('Befriend', `Ask ${who.name} to be a friend`, () => void this.did(isle.befriend(who.uid))),
         this.button('Write', `Write to ${who.name}`, () => void this.openThread(who)),
       ];
-      if (s.deed?.mine) {
-        acts.unshift(this.button('Invite', `Ask ${who.name} to live at ${s.deed.name}`,
+      const own = s.deeds.find((d) => d.mine);
+      if (own) {
+        acts.unshift(this.button('Invite', `Ask ${who.name} to live at ${own.name}`,
           () => void this.did(isle.invite(who.uid))));
       }
       this.page.append(this.row(who, who.online ? 'ashore' : 'away', acts));
+    }
+  }
+
+  /**
+   * One settlement of yours: who lives on it, and the way off it.
+   *
+   * The same block whether you planted the stake or were asked on. A founder
+   * gets a way to take somebody off the roll; everybody else gets a way to
+   * take themselves off it.
+   */
+  private drawDeed(s: Social, d: MyDeed): void {
+    const isle = this.island;
+    if (!isle) return;
+    this.page.append(this.head(`${d.name} · ${d.mine ? 'yours' : `${d.by}'s`} · ${d.x}, ${d.y}`));
+    if (!d.folk.length) {
+      this.page.append(this.empty(d.mine
+        ? 'Nobody else lives here yet. Right-click somebody and invite them.'
+        : 'Nobody else lives here yet.'));
+    }
+    for (const who of d.folk) {
+      const acts = [this.button('Write', `Write to ${who.name}`, () => void this.openThread(who))];
+      if (d.mine && who.uid !== d.founder) {
+        acts.push(this.button('Send away', `Take ${who.name} off the roll of ${d.name}`,
+          () => void this.did(isle.leaveDeed(d.founder, who.uid))));
+      }
+      this.page.append(this.row(who, this.whereabouts(who), acts));
+    }
+    if (!d.mine) {
+      this.page.append(this.plain(`You are a citizen of ${d.name}.`, '',
+        [this.button('Leave', `Stop being a citizen of ${d.name}`,
+          () => void this.did(isle.leaveDeed(d.founder)))]));
     }
   }
 
@@ -353,7 +369,7 @@ export class SocialPanel {
       return;
     }
     const unread = new Map(s.unread.map((u) => [u.uid, u.n]));
-    const people = [...s.friends, ...s.folk];
+    const people = [...s.friends, ...this.neighbours(s)];
     for (const u of s.unread) {
       if (!people.some((p) => p.uid === u.uid)) people.push({ uid: u.uid, name: u.name, online: false });
     }

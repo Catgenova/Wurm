@@ -1812,7 +1812,14 @@ export class Renderer {
    * kept apart.
    */
   private drawDeedBorder(ctx: CanvasRenderingContext2D): void {
-    for (const d of this.game.neighbourDeeds) this.deedRing(ctx, d, 0.45);
+    /*
+     * Somebody else's border is faint; land you were asked onto is not.
+     *
+     * A citizen may build on three settlements besides their own, and a border
+     * you may work inside is a different thing from one you are only standing
+     * near — so it is drawn at the weight your own is.
+     */
+    for (const d of this.game.neighbourDeeds) this.deedRing(ctx, d, d.mine ? 0.8 : 0.45);
     const deed = this.game.deed;
     if (deed) this.deedRing(ctx, deed, 1);
   }

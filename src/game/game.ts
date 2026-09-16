@@ -91,6 +91,16 @@ export const DEED_RADIUS = 5;
 export const DEED_RADIUS_PER_LEVEL = 2;
 export const DEED_WORKERS_AT_LEVEL_ONE = 1;
 export const MAX_DEED_LEVEL = 5;
+/**
+ * How many settlements you may be a citizen of, besides the one you founded.
+ *
+ * One deed is yours: you planted the stake, you pay for the upgrades, you are
+ * the one who can disband it. Beyond that a person can belong to other
+ * people's land — help build it, keep things in its crates, work its fields —
+ * and three is enough to be a neighbour, a partner and a guest without the
+ * word *citizen* ceasing to mean anything.
+ */
+export const DEEDS_JOINED = 3;
 
 export const deedLevel = (d: Deed | null): number => Math.max(1, Math.min(MAX_DEED_LEVEL, d?.level ?? 1));
 export const deedRadiusAt = (level: number): number => DEED_RADIUS + (level - 1) * DEED_RADIUS_PER_LEVEL;
@@ -895,7 +905,7 @@ export class Game {
    * Drawn, and used to say why the ground will not take a building — never to
    * light anything, which is the whole distinction this pair exists for.
    */
-  neighbourDeeds: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null }> = [];
+  neighbourDeeds: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean }> = [];
 
   /** The neighbour whose settlement covers this tile, if one does. */
   deedAt(x: number, y: number): { name: string; holder: string | null } | null {
@@ -4789,7 +4799,7 @@ export interface IslandGround {
    * settlement in it did — lit their homestead in your fog and ticked their
    * work off in your journal.
    */
-  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null }>;
+  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean }>;
   /**
    * What is standing, and what is half built.
    *

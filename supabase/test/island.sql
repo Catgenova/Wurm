@@ -5862,23 +5862,47 @@ select '770. before she answers the token is hers to build on: ' || :'before_yes
      || '; after: ' || on_my_deed(:'world2', :'hild', (select x from deed where world_id = :'world2' and founded_by = :'ivar'),
                                   (select y from deed where world_id = :'world2' and founded_by = :'ivar'))::text
      || ' — one line in `on_my_deed`, and twenty rules know a citizen when they see one';
-insert into item (world_id, holder, holder_uid, def, ql, count)
-values (:'world2', 'player', :'hild', 'deed_stake', 50, 1) \g /dev/null
-select '771. and what a citizen may not do — found her own: "'
-     || coalesce(deed_refusal(:'world2', :'hild', 'found_settlement', '{}'::jsonb), 'ALLOWED')
-     || '", disband his: "' || coalesce(settlement_refusal(:'world2', :'hild', 'disband_deed', '{}'::jsonb), 'ALLOWED')
-     || '" — `perform_settlement` reads `founded_by` for itself and was left exactly where it was';
+/*
+ * And the roll: one settlement of your own, and a citizen of three besides.
+ *
+ * Three tiny deeds with made-up founders, because a founder holds exactly one
+ * and this island is sixteen tiles across. What is being measured is the cap
+ * and the door's words for it, not whether four squares fit on a small island.
+ */
+insert into deed (world_id, name, x, y, radius, level, founded_by) values
+  (:'world2', 'Southfold', 2, 13, 1, 1, '0000000a-0000-0000-0000-00000000000a'),
+  (:'world2', 'Eastmere',  13, 2, 1, 1, '0000000b-0000-0000-0000-00000000000b'),
+  (:'world2', 'Northgate', 13, 13, 1, 1, '0000000c-0000-0000-0000-00000000000c') \g /dev/null
+insert into deed_invite (world_id, founder, uid) values
+  (:'world2', '0000000a-0000-0000-0000-00000000000a', :'hild'),
+  (:'world2', '0000000b-0000-0000-0000-00000000000b', :'hild'),
+  (:'world2', '0000000c-0000-0000-0000-00000000000c', :'hild') \g /dev/null
+select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
+select ((rpc_social(:'world2'))->>'room') as room_before \gset
+select (rpc_invite_answer(:'world2', '0000000a-0000-0000-0000-00000000000a', true)) as took_a \gset
+select (rpc_invite_answer(:'world2', '0000000b-0000-0000-0000-00000000000b', true)) as took_b \gset
+select (rpc_invite_answer(:'world2', '0000000c-0000-0000-0000-00000000000c', true)) as took_c \gset
+select '771. already living at Lambfold, Hild had room for ' || :'room_before' || ' more: '
+     || coalesce((:'took_a'::jsonb)->>'deed', '-') || ' yes, '
+     || coalesce((:'took_b'::jsonb)->>'deed', '-') || ' yes, and the third "'
+     || coalesce((:'took_c'::jsonb)->>'why', 'ALLOWED') || '"'
+     || ' — with the invitation left standing, so leaving one is all it takes';
+select '772. and her land is now ' || (select string_agg(d.name, ', ' order by d.name) from deeds_of(:'world2', :'hild') d)
+     || ' — she may build on every one of them ('
+     || (select string_agg(on_my_deed(:'world2', :'hild', d.x, d.y)::text, ', ' order by d.name) from deeds_of(:'world2', :'hild') d)
+     || ') and still may not disband Ivar''s: "'
+     || coalesce(settlement_refusal(:'world2', :'hild', 'disband_deed', '{}'::jsonb), 'ALLOWED') || '"';
 
 -- Its own statement, or the select beside it reads the island from before it
 -- ran: the suite has been bitten by that before and says so at the top.
 select rpc_friend(:'world2', :'ivar') as asked \gset
-select '772. Hild asks to be a friend: ' || :'asked'
+select '773. Hild asks to be a friend: ' || :'asked'
      || ', and Ivar is told: "' || (select text from event where world_id = :'world2' and uid = :'ivar' order by n desc limit 1) || '"';
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 select rpc_friend(:'world2', :'hild') \g /dev/null
-select '773. and once he says yes, where she is: ' || ((rpc_social(:'world2'))->'friends')::text;
+select '774. and once he says yes, where she is: ' || ((rpc_social(:'world2'))->'friends')::text;
 update player set seen_at = now() - interval '2 hours' where world_id = :'world2' and uid = :'hild' \g /dev/null
-select '774. and with Hild away from the keyboard: ' || ((rpc_social(:'world2'))->'friends')::text
+select '775. and with Hild away from the keyboard: ' || ((rpc_social(:'world2'))->'friends')::text
      || ' — the island knows where every body is every second of the day, and a window that said so would be a radar';
 
 /*
@@ -5896,16 +5920,16 @@ update player set x = 2.5, y = 0.5, stats = jsonb_set(stats, '{stamina}', '0'),
     body_at = now() - interval '30 seconds', act = null
   where world_id = :'world2' and uid = :'hild' \g /dev/null
 select body_settle(:'world2', :'hild') \g /dev/null
-select '775. off the end of the land, where `land_height` says nothing: in deep water '
+select '776. off the end of the land, where `land_height` says nothing: in deep water '
      || :'off_the_map' || ' — and thirty seconds of standing there leaves the wind at '
      || (select round((stats->>'stamina')::numeric, 3) from player where world_id = :'world2' and uid = :'hild')
      || ' rather than nought, which is the difference between resting and drowning';
 
 select rpc_letter(:'world2', :'hild', 'The iron is in the crate by the token.') \g /dev/null
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
-select '776. a letter: waiting ' || ((rpc_social(:'world2'))->'unread')::text
+select '777. a letter: waiting ' || ((rpc_social(:'world2'))->'unread')::text
      || ', delivered as "' || (select text from event where world_id = :'world2' and uid = :'hild' and kind = 'letter' order by n desc limit 1) || '"';
-select '777. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar'))->'letters')::text
+select '778. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar'))->'letters')::text
      || ' then ' || ((rpc_social(:'world2'))->'unread')::text;
 
 /*
@@ -5917,7 +5941,7 @@ select '777. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar
  * line all said 5, 12 and 25 — so it told you a thing could be bettered five
  * past your skill and then refused at four.
  */
-select '779. every rarity read off `rarity_def`: '
+select '780. every rarity read off `rarity_def`: '
      || (select string_agg(r.id || ' ×' || round(rarity_boost(r.id)::numeric, 2)
            || ' wear ×' || round(rarity_keep(r.id)::numeric, 2)
            || ' +' || round(r.ceiling::numeric, 0) || ' QL, 1 in '
@@ -5930,7 +5954,7 @@ insert into item (world_id, holder, holder_uid, def, ql, dmg, count, extra, rare
 values (:'world2', 'player', :'ivar', 'hatchet', 40, 0, 1, 'Iron', 'fantastic')
 returning id as prize \gset
 select round(skill_of(:'world2', :'ivar', 'blacksmithing')::numeric, 1) as smith \gset
-select '780. a fantastic hatchet, with blacksmithing at ' || :'smith' || ': the island lets it be bettered to '
+select '781. a fantastic hatchet, with blacksmithing at ' || :'smith' || ': the island lets it be bettered to '
      || round(improve_ceiling(:'world2', :'ivar', 'blacksmithing', 'fantastic')::numeric, 1)
      || ', and tells you "' || substring((select examine_item_text(:'world2', :'ivar', i) from item i where i.id = :'prize')
           from 'can be bettered [0-9]+ past your own skill') || '"';
@@ -5941,7 +5965,7 @@ delete from item where id = :'prize' \g /dev/null
  * once at the bench and never again, so no amount of work could turn an
  * ordinary thing into a good one.
  */
-select '782. the ladder: '
+select '783. the ladder: '
      || (select string_agg(coalesce(q.id, 'plain') || ' → ' || coalesce(rarity_next(q.id), 'nothing above it'), ', '
                            order by q.ord)
          from (select null::text as id, 0 as ord union all select r.id, r.ord from rarity_def r) q)
@@ -5959,7 +5983,7 @@ select '782. the ladder: '
  * *different* numbers and the measurement was reporting on pairs that never
  * happened. Nothing random decides what is being asked here now.
  */
-select '783. what a good pass can ever turn a thing into, over twenty thousand rolls apiece: '
+select '784. what a good pass can ever turn a thing into, over twenty thousand rolls apiece: '
      || (select string_agg(q.was || ' → ' || q.got, ', ' order by q.ord)
          from (select coalesce(r.id, 'plain') as was, r.ord,
                  (select string_agg(distinct coalesce(l.got, 'itself'), ' or ' order by coalesce(l.got, 'itself'))
@@ -5997,7 +6021,7 @@ begin
     perform perform_item(w, me, 'improve_item', jsonb_build_object('kind', 'item', 'uid', c));
   end loop;
 end $$;
-select '784. a plain iron hatchet, worked on: it is now '
+select '785. a plain iron hatchet, worked on: it is now '
      || coalesce((select rare from item where id = :'under_file'), 'plain')
      || ' — "' || coalesce((select text from event where world_id = :'world2' and uid = :'ivar'
                             and kind = 'skill' order by n desc limit 1), 'nothing said') || '"'
@@ -6034,11 +6058,11 @@ begin
     perform act_perform(w, me, 'dig', '{"kind":"tile","x":6,"y":6,"cx":6,"cy":6}'::jsonb);
   end loop;
 end $$;
-select '786. three spadefuls out of a corner that stood at 40 with 14 of soil on it: the island has it at '
+select '787. three spadefuls out of a corner that stood at 40 with 14 of soil on it: the island has it at '
      || land_height(:'world2', 6, 6) || ' with ' || land_dirt(:'world2', 6, 6)
      || ' left, and rock at ' || rock_height(:'world2', 6, 6)
      || ' — which has not moved, because dirt does not roll';
-select '787. and what it told the browser: heights '
+select '788. and what it told the browser: heights '
      || (select corners::text from tile_change where world_id = :'world2' and x = 6 and y = 6 order by n desc limit 1)
      || ', soil ' || (select soil::text from tile_change where world_id = :'world2' and x = 6 and y = 6 order by n desc limit 1)
      || ' — the soil was the one thing about a square this row never carried, so fourteen stayed fourteen however long anybody dug';
@@ -6053,7 +6077,7 @@ select '787. and what it told the browser: heights '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '788. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '789. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'
