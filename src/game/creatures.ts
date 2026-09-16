@@ -1678,19 +1678,24 @@ const STREAM_BATCH = 6;
 const PER_REGION = 1;
 /**
  * Coaxing. A wild thing offered food again and again grows used to the hand
- * holding it, so every attempt in a row makes the next a little likelier. It
- * is a slight thing per go and it goes nowhere near making a hard tame easy;
- * what it does is stop a long run of refusals feeling like no progress at all.
- * A run lapses if you leave it alone, and raising a hand to it ends the run
+ * holding it, so every attempt in a row makes the next a little likelier. A
+ * run lapses if you leave it alone, and raising a hand to it ends the run
  * outright: nothing that has been hit takes food from you.
+ *
+ * It used to stop at four offerings — a ceiling of twelve points, which on a
+ * hard tame is not enough to see, and which turned a long run of refusals back
+ * into no progress at all: the very thing coaxing is for. There is no ceiling
+ * on it now. Keep offering and it keeps warming, and the only limit is the one
+ * on the whole chance, which `tameChance` has always clamped at 0.95 — so
+ * patience buys a hard tame rather than guaranteeing it, and the run still
+ * lapses the moment you walk away.
  */
 export const COAX_STEP = 0.03;
-export const COAX_CAP = 0.12;
 export const COAX_LAPSE = world(90);
 
 /** What a run of offerings is worth to the next one, 0 when the run has lapsed. */
 export const coaxBonus = (c: Creature, time: number): number =>
-  c.coaxed <= 0 || time - c.coaxedAt > COAX_LAPSE ? 0 : Math.min(COAX_CAP, c.coaxed * COAX_STEP);
+  c.coaxed <= 0 || time - c.coaxedAt > COAX_LAPSE ? 0 : c.coaxed * COAX_STEP;
 
 /** Forget a run of offerings: it was tamed, or hurt, or simply left alone. */
 export const forgetCoaxing = (c: Creature): void => {

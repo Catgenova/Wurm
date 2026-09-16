@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { ageDef, attackOf, careWord, coaxBonus, COAX_CAP, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
@@ -160,7 +160,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         c.coaxed += 1;
         c.coaxedAt = g.time;
         const won = coaxBonus(c, g.time);
-        const warming = won > 0 ? ` It is ${won >= COAX_CAP ? 'as used to you as it will get' : 'growing used to you'}: ${(won * 100).toFixed(0)}% readier than the first time.` : '';
+        const warming = won > 0 ? ` It is growing used to you: ${(won * 100).toFixed(0)}% readier than the first time.` : '';
         g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.${warming}`, 'event');
         g.gainSkill('taming', 0.35);
         g.gainSkill('soul_strength', 0.2);

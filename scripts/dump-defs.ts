@@ -21,7 +21,7 @@ import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
-import { COAX_LAPSE, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD } from '../src/game/creatures';
+import { COAX_LAPSE, COAX_STEP, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD } from '../src/game/creatures';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
 import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
@@ -761,6 +761,9 @@ for (const [fn, v] of [
    * young. Generated now, like everything else that is a number.
    */
   ['young_for', YOUNG_FOR], ['old_at', OLD_AT], ['coax_lapse', COAX_LAPSE],
+  /* What one offering is worth to the next one. There is no ceiling on the run
+     any more, so this is the whole of the rule and belongs in one place. */
+  ['coax_step', COAX_STEP],
   /*
    * And the keeper's own numbers: how often the island's clock comes round,
    * how long a shut tab is left standing there, how long talk and tile changes

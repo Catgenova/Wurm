@@ -843,6 +843,24 @@ update skill set value = 60 where uid = :'ivar' and id = 'taming';
 insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'taming', 60 where not exists (select 1 from skill where uid = :'ivar' and id = 'taming');
 update creature set hunger = 0.2, coaxed = 3, coaxed_at = now() where id = :'cid';
 select '     ' || round((select tame_chance(:'world2', :'ivar', c) * 100 from creature c where id = :'cid')::numeric, 1) || '%';
+-- And how far a run of offerings gets you, which was reported as stopping.
+-- `least(0.12, coaxed * 0.03)` — so the fourth offering was the last one worth
+-- making, and twelve points is not enough to see on a hard tame, which turned
+-- a long run of refusals back into no progress at all.
+update creature set coaxed = 4, coaxed_at = now() where id = :'cid' \g /dev/null
+select round((coax_bonus((select c from creature c where c.id = :'cid')) * 100)::numeric) as four \gset
+update creature set coaxed = 12 where id = :'cid' \g /dev/null
+select round((coax_bonus((select c from creature c where c.id = :'cid')) * 100)::numeric) as twelve \gset
+update creature set coaxed_at = now() - make_interval(secs => coax_lapse() + 60) where id = :'cid' \g /dev/null
+select round((coax_bonus((select c from creature c where c.id = :'cid')) * 100)::numeric) as gone \gset
+select '133b. what a run of offerings is worth: four of them ' || :'four' || ' points, twelve of them '
+     || :'twelve' || ' — where it used to stop at 12 however long you kept at it — and '
+     || :'gone' || ' once you have walked away for ' || round(coax_lapse() / 60) || ' minutes';
+update creature set coaxed = 200, coaxed_at = now() where id = :'cid' \g /dev/null
+select '133c. and a hundred offerings do not make it a certainty: the whole chance is '
+     || round((select tame_chance(:'world2', :'ivar', c) * 100 from creature c where id = :'cid')::numeric, 1)
+     || '%, which is the ceiling tame_chance has always had on it — patience buys a hard tame, it does not promise one';
+update creature set coaxed = 3, coaxed_at = now() where id = :'cid' \g /dev/null
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'tame', ('{"kind":"creature","id":' || :'cid' || '}')::jsonb) \g /dev/null
 select '134. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('system','event'))
