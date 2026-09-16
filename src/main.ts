@@ -228,6 +228,10 @@ const PRESSES: Record<string, () => void> = {
   emotes: () => ui.showEmotes(),
   stop: () => {
     if (ui.menu.isOpen) ui.menu.hide();
+    // Before the job and before the feet: Escape while walking after somebody
+    // has to mean "stop following", or it stops the walk and the next tick
+    // starts it again.
+    else if (game.following()) game.unfollow('You stop following.');
     else if (game.action) game.cancelAction();
     else player.stop();
   },

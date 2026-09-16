@@ -1488,6 +1488,18 @@ export class UI {
       });
     };
     const entries: MenuItem[] = [];
+    /*
+     * First, because it is the only one of these that is about being in the
+     * same place as somebody, and being in the same place is what the rest of
+     * them are usually for. It is also the only one this machine answers by
+     * itself — everything below goes to the island.
+     */
+    const after = this.game.following(uid);
+    entries.push({
+      label: after ? `Stop following ${name}` : `Follow ${name}`,
+      note: after ? 'You are walking after them' : 'Walk after them until you go somewhere else',
+      onSelect: () => this.game.follow(uid, name),
+    });
     const deed = this.game.deed;
     if (deed) {
       entries.push({

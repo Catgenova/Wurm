@@ -127,6 +127,22 @@ export const DEEDS_JOINED = 3;
  */
 export const CROWD_HIDES = 20;
 
+/**
+ * Following somebody: how often to think about it, how close is close enough,
+ * and how far off is gone.
+ *
+ * Twice a second rather than every frame, because re-pathing sixty times a
+ * second to the same tile is a walk that restarts before it takes a step.
+ * Two tiles is close enough to talk and near enough that it reads as
+ * following rather than as treading on somebody. And forty is the distance
+ * at which they are somebody else's problem — past it a follow is a walk
+ * across the island with no arrival, and it should end saying so rather than
+ * quietly going on.
+ */
+export const FOLLOW_EVERY = 0.5;
+export const FOLLOW_CLOSE = 2;
+export const FOLLOW_LOSE = 40;
+
 export const deedLevel = (d: Deed | null): number => Math.max(1, Math.min(MAX_DEED_LEVEL, d?.level ?? 1));
 export const deedRadiusAt = (level: number): number => DEED_RADIUS + (level - 1) * DEED_RADIUS_PER_LEVEL;
 export const deedWorkersAt = (level: number): number => DEED_WORKERS_AT_LEVEL_ONE + (level - 1);
@@ -1236,6 +1252,90 @@ export class Game {
   }
 
   /** Set off for home, saying so. Returns false when there is nowhere to go. */
+  /**
+   * Somebody you are walking after.
+   *
+   * Entirely on this machine. The island is not told and has nothing to be
+   * told: following is a series of ordinary walks, and every one of them goes
+   * through `rpc_move` like any other step. There is no rule over there that
+   * would read it and nothing it could refuse.
+   */
+  private followed: { uid: string; name: string } | null = null;
+  private followTick = 0;
+  /** The tile we last set off for, so a stationary target is not re-pathed at. */
+  private followTile: { x: number; y: number } | null = null;
+
+  /**
+   * Whether you are following somebody in particular, or anybody at all.
+   *
+   * Both questions, because both get asked: the menu wants to know whether
+   * *this* row is the one you are following, and Escape only wants to know
+   * whether there is anything to stop.
+   */
+  following(uid?: string): boolean {
+    return uid === undefined ? this.followed !== null : this.followed?.uid === uid;
+  }
+
+  /** Walk after somebody until one of you stops it. Asking twice stops it. */
+  follow(uid: string, name: string): void {
+    if (this.followed?.uid === uid) {
+      this.unfollow(`You stop following ${name}.`);
+      return;
+    }
+    this.followed = { uid, name };
+    this.followTile = null;
+    this.followTick = FOLLOW_EVERY;
+    this.logMsg(`You follow ${name}. Move anywhere yourself, or press Escape, to stop.`, 'info');
+  }
+
+  unfollow(why?: string): void {
+    if (!this.followed) return;
+    this.followed = null;
+    this.followTile = null;
+    if (why) this.logMsg(why, 'info');
+  }
+
+  /**
+   * Keep up, a few times a second rather than every frame.
+   *
+   * Re-pathing at sixty frames a second would be sixty paths a second to the
+   * same tile and a walk that restarts before it takes a step. So: only when
+   * the clock comes round, and then only when they have actually moved off the
+   * tile we set out for or we have arrived and stopped.
+   */
+  private updateFollow(dt: number): void {
+    const f = this.followed;
+    if (!f) return;
+    this.followTick += dt;
+    if (this.followTick < FOLLOW_EVERY) return;
+    this.followTick = 0;
+    const who = this.roster.list().find((p) => p.uid === f.uid);
+    if (!who) {
+      this.unfollow(`You have lost sight of ${f.name}.`);
+      return;
+    }
+    const away = Math.hypot(who.x - this.player.x, who.y - this.player.y);
+    if (away > FOLLOW_LOSE) {
+      this.unfollow(`${f.name} is too far off to follow.`);
+      return;
+    }
+    // Close enough. Stand still rather than shuffling into them, and stay
+    // following, because they will move again.
+    if (away <= FOLLOW_CLOSE) {
+      if (this.followTile) {
+        this.player.stop();
+        this.followTile = null;
+      }
+      return;
+    }
+    const tx = Math.floor(who.x);
+    const ty = Math.floor(who.y);
+    if (this.followTile && this.followTile.x === tx && this.followTile.y === ty && this.player.moving) return;
+    this.followTile = { x: tx, y: ty };
+    // `moveTo` says so itself when there is no way through, so this does not.
+    if (!this.moveTo(tx, ty, true)) this.unfollow();
+  }
+
   walkHome(): boolean {
     const h = this.home();
     if (!h) {
@@ -1881,6 +1981,15 @@ export class Game {
     if (this.actors.size > 1) {
       for (const actor of this.actors.values()) this.as(actor, () => this.updateBody(dt));
     } else this.updateBody(dt);
+    /*
+     * Outside the body loop, and deliberately.
+     *
+     * `updateBody` runs once per actor on a machine hosting other people, with
+     * `this.player` swapped to each of them in turn — and following is one
+     * person's, kept on the game rather than on a body. Inside that loop it
+     * would walk every guest after whoever you picked.
+     */
+    if (this.followed) this.updateFollow(dt);
     this.updateWorld(dt);
   }
 
@@ -2539,7 +2648,16 @@ export class Game {
   }
 
   /** Walk to a tile; when the tile itself is blocked, stop next to it. */
-  moveTo(x: number, y: number): boolean {
+  /**
+   * Walk there.
+   *
+   * `keepFollowing` is only ever true from `updateFollow`, which is the one
+   * caller that is not you deciding to go somewhere. Everything else — a
+   * click, walking home, a job that wants you nearer — is you, and you going
+   * somewhere is how anybody stops following without thinking about it.
+   */
+  moveTo(x: number, y: number, keepFollowing = false): boolean {
+    if (!keepFollowing) this.unfollow();
     this.cancelAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return false;
