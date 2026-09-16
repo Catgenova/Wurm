@@ -6009,6 +6009,41 @@ select '784. a plain iron hatchet, worked on: it is now '
 update rarity_def set odds = 0.01 where id = 'rare' \g /dev/null
 
 /*
+ * And how deep the soil is, which the island changed on every spadeful and
+ * never told anybody.
+ *
+ * Reported from the island: fourteen dirt dug out of a corner and no nearer
+ * the rock — "the number above water went down appropriately but not the
+ * number above rock". `tile_change` carried the four corner heights and
+ * nothing about the dirt, so the browser's soil stayed at whatever the
+ * generator rolled, for ever.
+ */
+select land_set_height(:'world2', 6, 6, 40), land_set_dirt(:'world2', 6, 6, 14),
+       land_set_height(:'world2', 7, 6, 40), land_set_dirt(:'world2', 7, 6, 14),
+       land_set_height(:'world2', 7, 7, 40), land_set_dirt(:'world2', 7, 7, 14),
+       land_set_height(:'world2', 6, 7, 40), land_set_dirt(:'world2', 6, 7, 14) \g /dev/null
+delete from tile_change where world_id = :'world2' \g /dev/null
+update player set x = 6.5, y = 6.5, stats = jsonb_set(stats, '{stamina}', '1'), act = null
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+do $$
+declare me uuid := '11111111-1111-1111-1111-111111111111'; w uuid; i int;
+begin
+  select p.world_id into w from player p where p.uid = me and p.x = 6.5 limit 1;
+  for i in 1..12 loop
+    exit when land_dirt(w, 6, 6) <= 11;
+    perform act_perform(w, me, 'dig', '{"kind":"tile","x":6,"y":6,"cx":6,"cy":6}'::jsonb);
+  end loop;
+end $$;
+select '786. three spadefuls out of a corner that stood at 40 with 14 of soil on it: the island has it at '
+     || land_height(:'world2', 6, 6) || ' with ' || land_dirt(:'world2', 6, 6)
+     || ' left, and rock at ' || rock_height(:'world2', 6, 6)
+     || ' — which has not moved, because dirt does not roll';
+select '787. and what it told the browser: heights '
+     || (select corners::text from tile_change where world_id = :'world2' and x = 6 and y = 6 order by n desc limit 1)
+     || ', soil ' || (select soil::text from tile_change where world_id = :'world2' and x = 6 and y = 6 order by n desc limit 1)
+     || ' — the soil was the one thing about a square this row never carried, so fourteen stayed fourteen however long anybody dug';
+
+/*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
  *
@@ -6018,7 +6053,7 @@ update rarity_def set odds = 0.01 where id = 'rare' \g /dev/null
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '785. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '788. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

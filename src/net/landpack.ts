@@ -29,6 +29,17 @@ export interface TileChange {
   data: number;
   /** The square's four corner heights, clockwise from its own corner. */
   corners: number[];
+  /**
+   * And the soil over the rock at those same four corners, in the same order.
+   *
+   * Absent on a row written before the island carried it, and on one an older
+   * page is replaying — which is why it is applied only when all four are
+   * there. A browser that is not told how deep the soil is keeps the
+   * generator's answer for ever: reported as digging fourteen spadefuls out of
+   * a corner and being no nearer the rock, because the height came down the
+   * wire and the soil never did.
+   */
+  soil?: number[];
 }
 
 /**
@@ -53,6 +64,15 @@ export function layChange(world: World, c: TileChange): boolean {
     world.setHeight(c.x + 1, c.y, k[1]);
     world.setHeight(c.x + 1, c.y + 1, k[2]);
     world.setHeight(c.x, c.y + 1, k[3]);
+  }
+  // And how much soil is left over the rock, which used to be the one thing
+  // about a square the island changed and never said.
+  const s = c.soil;
+  if (Array.isArray(s) && s.length === 4) {
+    world.setDirt(c.x, c.y, s[0]);
+    world.setDirt(c.x + 1, c.y, s[1]);
+    world.setDirt(c.x + 1, c.y + 1, s[2]);
+    world.setDirt(c.x, c.y + 1, s[3]);
   }
   world.setTile(c.x, c.y, c.tile as Parameters<World['setTile']>[2], c.data);
   return true;

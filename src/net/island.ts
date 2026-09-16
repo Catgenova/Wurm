@@ -720,7 +720,7 @@ export class Island {
     if (!this.info) return;
     const { data } = await supabase().from('tile_change').select('*')
       .eq('world_id', this.info.id).gt('n', this.seenChange).order('n');
-    const rows = rowsIn<{ n: number; x: number; y: number; tile: number; data: number; corners: number[] }>(data);
+    const rows = rowsIn<{ n: number; x: number; y: number; tile: number; data: number; corners: number[]; soil?: number[] }>(data);
     for (const c of rows) this.applyChange(c);
     if (rows.length) this.seenChange = Math.max(this.seenChange, rows[rows.length - 1].n);
   }

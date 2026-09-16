@@ -32,21 +32,34 @@ function joining(): World {
 }
 
 /** What the ground under a tile is before anybody has touched it. */
-function asRolled(x: number, y: number): { tile: number; data: number; corners: number[] } {
+function asRolled(x: number, y: number): { tile: number; data: number; corners: number[]; soil: number[] } {
   const win = generateAtlasWindow(SEED, atlas, x, y, 1, 1, SIZE);
   return {
     tile: win.tiles[0],
     data: win.data[0],
     corners: [win.heights[0], win.heights[1], win.heights[3], win.heights[2]],
+    soil: [win.dirt[0], win.dirt[1], win.dirt[3], win.dirt[2]],
   };
 }
 
-/** A dig at a tile: every corner a step lower, and the ground turned over. */
+/**
+ * A dig at a tile: every corner a step lower, the soil a step thinner, and the
+ * ground turned over.
+ *
+ * The soil is the half of this that was missing until somebody dug fourteen
+ * spadefuls out of a corner on the live island and was told they were no
+ * nearer the rock. The ground came down the wire; how much of it was left over
+ * the rock never did.
+ */
 function dug(x: number, y: number, by = 8): TileChange {
   const was = asRolled(x, y);
   // Whatever it was, something else — so "the tile is what the island says"
   // cannot pass by the tile having been that already.
-  return { x, y, tile: was.tile === 1 ? 2 : 1, data: 0, corners: was.corners.map((c) => c - by) };
+  return {
+    x, y, tile: was.tile === 1 ? 2 : 1, data: 0,
+    corners: was.corners.map((c) => c - by),
+    soil: was.soil.map((d) => Math.max(0, d - by)),
+  };
 }
 
 const ok: string[] = [];
@@ -85,6 +98,42 @@ const check = (what: string, passed: boolean, detail = ''): void => {
   check('and survives the rest of the island being worked out',
     w.getTile(x, y) === c.tile && w.getHeight(x, y) === c.corners[0],
     `tile ${w.getTile(x, y)}, corner ${w.getHeight(x, y)}`);
+}
+
+/*
+ * And the soil that came off with the ground.
+ *
+ * `tile_change` carried the four corner heights and nothing about the dirt, so
+ * a dig lowered the ground on both sides and thinned the soil on the island's
+ * side alone. Reported from the island as fourteen spadefuls and no nearer the
+ * rock — and worse than a wrong number: the browser reads its own soil to
+ * decide whether a corner is down to bare rock at all, so it kept offering a
+ * dig the island had been refusing for an hour.
+ */
+{
+  const w = joining();
+  const x = 64, y = 88;
+  const was = asRolled(x, y);
+  const c = dug(x, y, 3);
+  layChange(w, c);
+  check('the soil comes down with the ground',
+    w.getDirt(x, y) === c.soil?.[0] && w.getDirt(x + 1, y + 1) === c.soil?.[2],
+    `${was.soil[0]} rolled, ${w.getDirt(x, y)} now, ${c.soil?.[0]} wanted`);
+  check('and the rock under it is where the island says it is',
+    w.rockHeight(x, y) === c.corners[0] - (c.soil?.[0] ?? 0),
+    `surface ${w.getHeight(x, y)} less ${w.getDirt(x, y)} of soil`);
+
+  /*
+   * And a row from before the island carried any: the browser keeps its own
+   * reckoning rather than zeroing the soil under a square it was told nothing
+   * about. Every `tile_change` written before today is one of these.
+   */
+  const older = joining();
+  const before = asRolled(x, y);
+  layChange(older, { x, y, tile: 2, data: 0, corners: before.corners.map((k) => k - 1) });
+  check('and a row with no soil on it leaves the soil alone',
+    older.getDirt(x, y) === before.soil[0],
+    `${before.soil[0]} rolled, ${older.getDirt(x, y)} after`);
 }
 
 /*
