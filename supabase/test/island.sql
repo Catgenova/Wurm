@@ -5881,11 +5881,31 @@ update player set seen_at = now() - interval '2 hours' where world_id = :'world2
 select '774. and with Hild away from the keyboard: ' || ((rpc_social(:'world2'))->'friends')::text
      || ' — the island knows where every body is every second of the day, and a window that said so would be a radar';
 
+/*
+ * And ground nobody has a height for, which is not thirty feet of water.
+ *
+ * `land_height` answers NULL where nothing has been written, a NULL guard in a
+ * `case` matches no `when`, and `in_deep_water` kept its yes in the `else` — so
+ * a body on unread ground was a swimmer, and a swimmer spends wind rather than
+ * getting it back. Fourteen checks of one live run failed with "You are too
+ * exhausted to do that", and the body never recovered.
+ */
+update player set x = 9999.5, y = 9999.5 where world_id = :'world2' and uid = :'hild' \g /dev/null
+select coalesce(in_deep_water(:'world2', :'hild')::text, 'null') as off_the_map \gset
+update player set x = 2.5, y = 0.5, stats = jsonb_set(stats, '{stamina}', '0'),
+    body_at = now() - interval '30 seconds', act = null
+  where world_id = :'world2' and uid = :'hild' \g /dev/null
+select body_settle(:'world2', :'hild') \g /dev/null
+select '775. off the end of the land, where `land_height` says nothing: in deep water '
+     || :'off_the_map' || ' — and thirty seconds of standing there leaves the wind at '
+     || (select round((stats->>'stamina')::numeric, 3) from player where world_id = :'world2' and uid = :'hild')
+     || ' rather than nought, which is the difference between resting and drowning';
+
 select rpc_letter(:'world2', :'hild', 'The iron is in the crate by the token.') \g /dev/null
 select set_config('request.jwt.claims', json_build_object('sub', :'hild')::text, false) \g /dev/null
-select '775. a letter: waiting ' || ((rpc_social(:'world2'))->'unread')::text
+select '776. a letter: waiting ' || ((rpc_social(:'world2'))->'unread')::text
      || ', delivered as "' || (select text from event where world_id = :'world2' and uid = :'hild' and kind = 'letter' order by n desc limit 1) || '"';
-select '776. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar'))->'letters')::text
+select '777. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar'))->'letters')::text
      || ' then ' || ((rpc_social(:'world2'))->'unread')::text;
 
 /*
@@ -5898,7 +5918,7 @@ select '776. and read by the reading of it: ' || ((rpc_letters(:'world2', :'ivar
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '777. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '778. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'
