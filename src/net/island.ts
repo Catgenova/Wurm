@@ -149,6 +149,8 @@ export interface ItemRow {
   /** Alight, for the things that burn, and when it was set going. */
   lit: boolean;
   lit_at: string | null;
+  /** The bag this is in, when `holder` says 'bag'. */
+  inside: number | null;
   [key: string]: unknown;
 }
 
@@ -742,7 +744,7 @@ export class Island {
           if (m.eventType === 'DELETE') this.pack.delete((m.old as ItemRow).id);
           else {
             const it = m.new as ItemRow;
-            if (it.holder === 'player') this.pack.set(it.id, it);
+            if (it.holder === 'player' || it.holder === 'bag') this.pack.set(it.id, it);
             else this.pack.delete(it.id);
           }
           this.hooks.pack([...this.pack.values()]);
@@ -881,8 +883,16 @@ export class Island {
    */
   async refreshPack(): Promise<void> {
     if (!this.info) return;
+    /*
+     * And what is in the bags, which never came down at all.
+     *
+     * `holder = 'player'` is what is loose in your hands; a thing stowed is
+     * filed under `holder = 'bag'` with the bag's id in `inside`. So a
+     * backpack on an island was an empty backpack however much was in it, and
+     * `packed` nests the two back together on the way in.
+     */
     const { data } = await supabase().from('item').select('*')
-      .eq('world_id', this.info.id).eq('holder', 'player').eq('holder_uid', this.uid);
+      .eq('world_id', this.info.id).in('holder', ['player', 'bag']).eq('holder_uid', this.uid);
     this.pack.clear();
     for (const it of rowsIn<ItemRow>(data)) this.pack.set(it.id, it);
     this.hooks.pack([...this.pack.values()]);

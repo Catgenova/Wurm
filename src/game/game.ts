@@ -20,7 +20,7 @@ import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
+import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
 import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -3036,6 +3036,27 @@ export class Game {
    * same window, and had the same hole in them, so both are looked in.
    */
   storeWith(uid: number): { what: string; at: [number, number]; take: (id: number) => Item | null } | null {
+    /*
+     * A bag on your back is the third of these, and was missing.
+     *
+     * It did not show while a bag on an island was always empty, and would
+     * have the moment its contents came down: the window would have moved the
+     * row in this browser's copy and the next answer would have put it back.
+     * A worn bag is never out of reach, so it stands where you do.
+     */
+    const bag = this.inventory.bagWith(uid);
+    if (bag) {
+      return {
+        what: itemDef(bag.id).name.toLowerCase(),
+        at: [this.player.x, this.player.y],
+        take: (id) => {
+          const got = bagTake(bag, id);
+          if (got) this.inventory.addItem(got);
+          this.events.emit('inventory');
+          return got;
+        },
+      };
+    }
     for (const c of this.crates.values()) {
       if (!c.items.some((it) => it.uid === uid)) continue;
       return { what: crateName(c).toLowerCase(), at: crateCentre(c), take: (id) => this.crateTake(c, id) };

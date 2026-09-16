@@ -655,6 +655,33 @@ export class Inventory {
     return this.items.find((it) => it.uid === uid);
   }
 
+  /**
+   * A thing you are carrying, wherever in the pack it is: loose in your hands
+   * or stowed in one of your bags.
+   *
+   * Deliberately not `get`. A hundred places ask `get` what is in your hands
+   * and then spend it, and `remove` and `take` only know about the top level,
+   * so widening that one would offer jobs that quietly did nothing — the
+   * shape of bug the bag work exists to fix. This is asked by the few that
+   * the island has agreed may reach into a bag: filling something, drinking
+   * out of it, and taking one thing back out.
+   */
+  held(uid: number): Item | undefined {
+    const loose = this.items.find((it) => it.uid === uid);
+    if (loose) return loose;
+    // One bag will not go inside another, so there is no deeper to look.
+    for (const bag of this.items) {
+      const inside = bag.inside?.find((it) => it.uid === uid);
+      if (inside) return inside;
+    }
+    return undefined;
+  }
+
+  /** The bag a thing is stowed in, when it is in one. */
+  bagWith(uid: number): Item | undefined {
+    return this.items.find((b) => b.inside?.some((it) => it.uid === uid));
+  }
+
   has(id: string): boolean {
     return this.items.some((it) => it.id === id);
   }

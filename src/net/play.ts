@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
-import { packed } from './packed';
+import { packAll } from './packed';
 
 /**
  * Starting on an island that lives in Postgres rather than in this tab.
@@ -324,7 +324,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   });
   island.hooks.ground = (x, y) => game.events.emit('world', x, y);
   island.hooks.pack = (items: ItemRow[]) => {
-    game.inventory.items = items.map((it) => packed(it, island));
+    game.inventory.items = packAll(items, island);
     game.events.emit('inventory');
   };
   /*

@@ -15,7 +15,7 @@ import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
 import { FIRST_AID_ACTIONS } from './firstaid';
-import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, waterNear } from './placeables';
+import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
@@ -1105,17 +1105,17 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 1.5,
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       return !!item && !!itemDef(item.id).charges && !!itemDef(item.id).drink;
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       return item && (item.charges ?? 0) > 0 ? null : 'It is empty.';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       if (!item || !(item.charges ?? 0)) return;
       item.charges = (item.charges ?? 1) - 1;
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + (itemDef(item.id).drink ?? 0));
@@ -1132,15 +1132,15 @@ export const ACTIONS: ActionDef[] = [
     verb: 'filling the bucket',
     stamina: 0.01,
     baseTime: 2,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'bucket',
+    applies: (t, g) => t.kind === 'item' && g.inventory.held(t.uid)?.id === 'bucket',
     check: (t, g) => {
       if (t.kind !== 'item') return null;
-      if (g.inventory.get(t.uid)?.id !== 'bucket') return 'That is not an empty bucket.';
+      if (g.inventory.held(t.uid)?.id !== 'bucket') return 'That is not an empty bucket.';
       return sourceFor(g) ? null : 'You need water: a shore, a well, or a barrel with something in it.';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       if (!item || item.id !== 'bucket') return;
       const source = sourceFor(g);
       const got = fillFromSource(g, item);
@@ -1157,15 +1157,16 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
-      const id = g.inventory.get(t.uid)?.id;
+      const id = g.inventory.held(t.uid)?.id;
       return id === 'water_bucket' || id === 'lye_bucket';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      const item = g.inventory.get(t.uid);
-      if (!item || !g.inventory.remove(item.uid, 1)) return;
-      g.inventory.add('bucket', { ql: item.ql });
-      g.logMsg(`You tip the ${itemDef(item.id).name.toLowerCase()} out.`, 'event');
+      const item = g.inventory.held(t.uid);
+      if (!item) return;
+      const was = itemDef(item.id).name.toLowerCase();
+      if (!vesselBecomes(g, item, 'bucket')) return;
+      g.logMsg(`You tip the ${was} out.`, 'event');
     },
   },
   {
@@ -1176,18 +1177,18 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 2,
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       return !!item && !!itemDef(item.id).charges;
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       if (item && (item.charges ?? 0) >= (itemDef(item.id).charges ?? 0)) return 'It is already full.';
       return waterNear(g) ? null : 'You need water: a shore, a well, or a barrel of it.';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       if (!item) return;
       item.charges = itemDef(item.id).charges ?? 0;
       g.inventory.onChange?.();
@@ -1227,7 +1228,19 @@ export const ACTIONS: ActionDef[] = [
     instant: true,
     stamina: 0,
     baseTime: 0,
-    applies: (t, g) => t.kind === 'item' && !g.inventory.get(t.uid)?.locked,
+    /*
+     * Only what is loose in your hands. This asked whether the thing was
+     * *not* locked, which is also true of a thing that is not there at all —
+     * so the entry turned up on anything in a crate or a bag and then did
+     * nothing, and on an island fetched back "It is gone." Putting a thing by
+     * is about keeping a craft from spending it, and a craft only spends what
+     * is loose, so a stowed thing is already safe.
+     */
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && !item.locked;
+    },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const item = g.inventory.get(t.uid);

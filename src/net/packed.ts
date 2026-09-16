@@ -78,3 +78,28 @@ export function burnt(it: ItemRow, island: Aged): number | undefined {
   if (!it.lit || !it.lit_at) return it.charges;
   return Math.max(0, it.charges - island.since(it.lit_at));
 }
+
+/**
+ * A whole pack, with what is in the bags put back inside them.
+ *
+ * The island files a stowed thing under `holder = 'bag'` with the bag's id in
+ * `inside`, and the browser holds a bag as a thing with an `inside` list. Two
+ * passes, because a bag and its contents arrive in no particular order: make
+ * every thing first, then hang each stowed one off the bag it names.
+ *
+ * Anything naming a bag that did not come down with it stays at the top level
+ * rather than vanishing — a thing you are carrying is better shown in the
+ * wrong pocket than not shown at all.
+ */
+export function packAll(rows: readonly ItemRow[], island: Aged): Item[] {
+  const all = new Map<number, Item>();
+  for (const r of rows) all.set(r.id, packed(r, island));
+  const top: Item[] = [];
+  for (const r of rows) {
+    const it = all.get(r.id) as Item;
+    const bag = r.holder === 'bag' && r.inside !== null ? all.get(r.inside) : undefined;
+    if (!bag) top.push(it);
+    else (bag.inside ??= []).push(it);
+  }
+  return top;
+}

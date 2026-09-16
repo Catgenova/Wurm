@@ -140,7 +140,8 @@ export class UI {
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 56, width: 380, height: 520, anchor: 'tr', open: false });
     this.settings = new SettingsPanel(settings, game, cb.keys);
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
-    this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'));
+    this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'),
+      (x, y, title, items) => this.menu.show(x, y, title, items));
     const journal = this.windows.create({ id: 'journal', title: 'Journal', x: 12, y: 56, width: 330, height: 420, anchor: 'tr', open: false });
     new JournalPanel(journal, game);
     const pals = this.windows.create({ id: 'wildermon', title: 'Wildermon', x: 364, y: 330, width: 330, height: 320, anchor: 'tr', open: false });
@@ -217,12 +218,15 @@ export class UI {
      * always gone through `requestAction`; this now does too, and a drag ends
      * up meaning exactly what the entry beside it means.
      *
-     * Panniers and a bag in your pack have no door of their own and are still
-     * carried here, which is right: they are yours and travel with you.
+     * A bag on your back is the island's too, since the bag work: it holds
+     * rows like any other store and `take_from_store` and `stow_item` are its
+     * doors. Panniers have none of their own and are still carried here, which
+     * is right: they are a beast's and travel with it.
      */
-    if (g.ask && (store.kind === 'crate' || store.kind === 'furniture')) {
+    if (g.ask && store.kind !== 'carried') {
       const id = to === 'inventory' ? 'take_from_store'
-        : store.kind === 'crate' ? 'store_in_crate' : 'store_in_furniture';
+        : store.kind === 'crate' ? 'store_in_crate'
+        : store.kind === 'bag' ? 'stow_item' : 'store_in_furniture';
       const def = ACTION_BY_ID.get(id);
       if (!def) return;
       const held = to === 'inventory'

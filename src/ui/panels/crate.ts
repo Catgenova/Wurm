@@ -4,6 +4,7 @@ import { bloodMul } from '../../game/creatures';
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { bagAdd, bagRefuses, bagRoom, bagTake, itemDef, type Item, itemName } from '../../game/items';
+import type { MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 
@@ -17,11 +18,12 @@ export interface Store {
   /**
    * Which of the island's doors this one is behind, when it is behind one.
    *
-   * Panniers and a bag in your pack are carried in your own copy and have no
-   * door of their own, so a drag into or out of those stays where it always
-   * was. A crate and a chest are the island's, and a drag has to ask.
+   * A pannier is carried in your own copy and has no door of its own, so a
+   * drag into or out of one stays where it always was. A crate, a chest and —
+   * since the bag work — a bag on your back are the island's, and a drag has
+   * to ask: `take_from_store` knows about all three.
    */
-  kind: 'crate' | 'furniture' | 'carried';
+  kind: 'crate' | 'furniture' | 'bag' | 'carried';
   take: (uid: number) => Item | null;
   /** Why it will not take this, or null. */
   refuses: (item: Item) => string | null;
@@ -42,6 +44,13 @@ export class CratePanel {
     private readonly win: UIWindow,
     private readonly game: Game,
     private readonly dropped?: (p: DragPayload) => void,
+    /**
+     * Somewhere to show an item's own menu, for the stores whose contents can
+     * be worked on where they lie — which since the bag work means bags: a
+     * skin in your backpack fills and pours without coming out of it, and a
+     * window with only a Take button is no way to say so.
+     */
+    private readonly showMenu?: (x: number, y: number, title: string, items: MenuItem[]) => void,
   ) {
     win.body.classList.add('inv-body');
     const head = document.createElement('div');
@@ -132,7 +141,7 @@ export class CratePanel {
     if (bag && bagRoom(bag)) {
       return {
         title: `${itemName(bag)} (QL ${bag.ql.toFixed(0)})`,
-        kind: 'carried',
+        kind: 'bag',
         items: bag.inside ?? [],
         capacity: bagRoom(bag),
         centre: [this.game.player.x, this.game.player.y],
@@ -280,12 +289,54 @@ export class CratePanel {
         if (it) this.game.inventory.addItem(it);
       });
       row.append(name, ql, dmg, take);
+      if (store.kind === 'bag' && this.showMenu) {
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          this.openMenu(item, e.clientX, e.clientY);
+        });
+      }
       makeDraggable(row, { uid: item.uid, from: 'store', name: itemName(item) });
       this.list.append(row);
     }
     const weight = store.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);
     const used = store.items.reduce((n, it) => n + it.count, 0);
     this.footer.textContent = `${used} / ${store.capacity} things · ${weight.toFixed(1)} kg`;
+  }
+
+  /**
+   * What can be done with a thing where it lies.
+   *
+   * The same list the pack window shows, asked the same way: `actionsFor`
+   * answers for a stowed thing now, and answers with the ones the island has
+   * agreed may reach into a bag — filling, drinking, pouring. Taking it out
+   * comes first, because it is what the window is otherwise for.
+   */
+  private openMenu(item: Item, x: number, y: number): void {
+    const target = { kind: 'item' as const, uid: item.uid };
+    const entries: MenuItem[] = [{
+      label: 'Take out',
+      onSelect: () => {
+        const def = ACTION_BY_ID.get('take_from_store');
+        if (this.game.ask && def) {
+          this.game.requestAction(def, { ...target, count: item.count });
+          return;
+        }
+        const store = this.store();
+        const got = store?.take(item.uid);
+        if (got) this.game.inventory.addItem(got);
+        this.render();
+      },
+    }];
+    for (const { def, reason } of this.game.actionsFor(target)) {
+      entries.push({
+        label: def.label,
+        hint: reason ?? undefined,
+        disabled: !!reason,
+        onSelect: () => this.game.requestAction(def, target),
+      });
+    }
+    this.win.focus();
+    this.showMenu?.(x, y, itemName(item), entries);
   }
 
   open(id: number): void {

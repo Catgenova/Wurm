@@ -86,7 +86,7 @@ export const waterNear = (g: Game): boolean => g.nearWater() || vesselsNear(g, '
  * would take, so a run of buckets goes in without pointing at each in turn.
  */
 export function nextVessel(g: Game, uid: number): Item | undefined {
-  const clicked = g.inventory.get(uid);
+  const clicked = g.inventory.held(uid);
   if (clicked && VESSELS[clicked.id]) return clicked;
   return g.inventory.items.find((it) => VESSELS[it.id] && barrelFor(g, VESSELS[it.id].liquid) !== undefined);
 }
@@ -415,7 +415,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     quantity: true,
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
-      const item = g.inventory.get(t.uid);
+      const item = g.inventory.held(t.uid);
       const vessel = item && VESSELS[item.id];
       return !!vessel && barrelFor(g, vessel.liquid) !== undefined;
     },
@@ -441,10 +441,9 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (!barrel) return;
       const room = liquidCapacity(barrel) - litresIn(barrel);
       const poured = Math.min(BUCKET_LITRES, room);
-      if (poured <= 0 || !g.inventory.remove(item.uid, 1)) return;
+      if (poured <= 0 || !vesselBecomes(g, item, vessel.empty)) return;
       barrel.litres = litresIn(barrel) + poured;
       barrel.liquid = vessel.liquid;
-      g.inventory.add(vessel.empty, { ql: item.ql });
       g.events.emit('crate');
       g.events.emit('world', barrel.x, barrel.y);
       g.logMsg(
@@ -582,7 +581,29 @@ export function fillFromSource(g: Game, item: Item): LiquidKind | null {
   const source = sourceFor(g);
   if (!source) return null;
   if (source.from && !drawFrom(g, source.from, BUCKET_LITRES)) return null;
-  if (!g.inventory.remove(item.uid, 1)) return null;
-  g.inventory.add(BUCKET_OF[source.liquid], { ql: item.ql });
+  if (!vesselBecomes(g, item, BUCKET_OF[source.liquid])) return null;
   return source.liquid;
+}
+
+/**
+ * One vessel becoming another, in place: an empty bucket becoming a bucket of
+ * water and back again.
+ *
+ * It was a remove and an add, which is two things where there is one. A bucket
+ * is not stackable, so there was never more than one of it to split — and what
+ * the pair of them threw away was where it was. Fill a bucket in your backpack
+ * that way and the new one lands in your hands, so the bag empties itself a
+ * bucket at a time. The island swaps the row in place for the same reason;
+ * this is the same swap, and the same rule about charges: as many goes in it
+ * as the new thing holds.
+ */
+export function vesselBecomes(g: Game, item: Item, id: string): boolean {
+  if (item.count !== 1) return false;
+  item.id = id;
+  const charges = itemDef(id).charges;
+  if (charges) item.charges = charges;
+  else delete item.charges;
+  g.inventory.onChange?.();
+  g.events.emit('inventory');
+  return true;
 }
