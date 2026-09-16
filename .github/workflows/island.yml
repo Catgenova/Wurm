@@ -172,6 +172,16 @@ jobs:
           npx esbuild supabase/test/relief.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/relief.mjs --log-level=error
           node node_modules/.cache/relief.mjs
+      - name: A thing in your hands crosses from the island whole
+        run: |
+          # Reported as "players cannot drink from water skins or fill them".
+          # Both sides of that were right and the seam between them was not:
+          # `play.ts` read six fields off an item row and dropped seven, so a
+          # full skin arrived empty. Nothing measured the seam, which is why a
+          # bug that broke seven features at once went unseen.
+          npx esbuild supabase/test/pack.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pack.mjs --log-level=error
+          node node_modules/.cache/pack.mjs
 
   migrate:
     name: Push the migrations to the project

@@ -118,6 +118,14 @@ export interface PlayerRow {
   [key: string]: unknown;
 }
 
+/**
+ * A row of the island's `item` table, whole.
+ *
+ * Named out rather than left to the index signature below, because what this
+ * carries is the difference between a thing and the browser's idea of it: the
+ * six fields at the top were all that was ever read off one, and the seven
+ * under them were dropped on the floor. See `packed` in `play.ts`.
+ */
 export interface ItemRow {
   id: number;
   def: string;
@@ -126,6 +134,21 @@ export interface ItemRow {
   count: number;
   extra: string | null;
   holder: string;
+  /** Drinks left in a skin, or seconds of candle left as of `lit_at` in a lantern. */
+  charges: number | null;
+  /** Put by: not to be dropped, eaten, or swallowed by a recipe looking for its kind. */
+  locked: boolean;
+  /** Handed out rather than made, and so with nothing in it to better. */
+  issued: boolean;
+  /** 'rare', 'supreme' or 'fantastic'; null for the ordinary run of things. */
+  rare: string | null;
+  /** The colour it has taken, as a `dye_def` id. */
+  dye: string | null;
+  /** Circles of cunning worked into it. */
+  bless: number | null;
+  /** Alight, for the things that burn, and when it was set going. */
+  lit: boolean;
+  lit_at: string | null;
   [key: string]: unknown;
 }
 
@@ -1015,6 +1038,24 @@ export class Island {
     if (this.clock) return this.clock.secs + (performance.now() / 1000 - this.clock.at);
     if (!this.info) return 0;
     return (Date.now() - new Date(this.info.epoch).getTime()) / 1000;
+  }
+
+  /**
+   * How long ago the island wrote a timestamp, in seconds, by its clock.
+   *
+   * Rows off the table carry instants rather than seconds — `select *` has no
+   * arithmetic in it — so anything that wants an age has to work one out. The
+   * subtraction is between two of the island's own stamps, which is the same
+   * number on every machine, and `time()` is the island's reading carried
+   * forward on a monotonic clock. So none of it asks this browser what the
+   * hour is, which is the whole point: a phone twenty seconds out gets the
+   * same answer as one that is right.
+   */
+  since(stamp: string | null): number {
+    if (!stamp || !this.info) return 0;
+    const at = (Date.parse(stamp) - Date.parse(this.info.epoch)) / 1000;
+    if (!Number.isFinite(at)) return 0;
+    return Math.max(0, this.time() - at);
   }
 
   /** The island's last word on its own clock, and when this machine heard it. */

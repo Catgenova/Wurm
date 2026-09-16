@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
+import { packed } from './packed';
 
 /**
  * Starting on an island that lives in Postgres rather than in this tab.
@@ -234,6 +235,12 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * a timestamp now, and this side stops moving what it does not own.
    */
   game.bodyFromIsland = true;
+  /*
+   * And the pack, which it has always kept — the browser simply never read
+   * most of a row off it. See `packed` below for the seven fields that were
+   * dropped and the bugs each of them was.
+   */
+  game.packFromIsland = true;
   island.hooks.mobs = (rows) => {
     game.creatures.sawAll(rows);
     game.events.emit('creature');
@@ -317,9 +324,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   });
   island.hooks.ground = (x, y) => game.events.emit('world', x, y);
   island.hooks.pack = (items: ItemRow[]) => {
-    game.inventory.items = items.map((it) => ({
-      uid: it.id, id: it.def, ql: it.ql, dmg: it.dmg, count: it.count, extra: it.extra ?? undefined,
-    }));
+    game.inventory.items = items.map((it) => packed(it, island));
     game.events.emit('inventory');
   };
   /*

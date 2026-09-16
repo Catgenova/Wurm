@@ -1874,11 +1874,16 @@ export class Game {
       it.charges = Math.max(0, (it.charges ?? 0) - dt);
       if (it.charges > 0) continue;
       it.lit = false;
-      if (it.id === 'torch') {
-        this.logMsg('The torch burns down to your hand and you drop what is left of it.', 'event');
-        this.inventory.remove(it.uid, 1);
-      } else {
-        this.logMsg('The candle gutters out and the lantern goes dark.', 'event');
+      // Going dark is what the eye sees, and this side may say so. What
+      // becomes of the thing afterwards is the island's word where there is
+      // one, and it will say it down the same subscription as everything else.
+      if (!this.packFromIsland) {
+        if (it.id === 'torch') {
+          this.logMsg('The torch burns down to your hand and you drop what is left of it.', 'event');
+          this.inventory.remove(it.uid, 1);
+        } else {
+          this.logMsg('The candle gutters out and the lantern goes dark.', 'event');
+        }
       }
       this.events.emit('inventory');
     }
@@ -2166,6 +2171,17 @@ export class Game {
    * plainly marked below.
    */
   bodyFromIsland = false;
+
+  /**
+   * Whether the pack is the island's to keep, in the same way.
+   *
+   * The count-down on a burning thing stays here either way — it is drawing,
+   * between one answer and the next, like the action bar. What does not is
+   * what happens when it reaches the bottom: the island holds the row, and a
+   * browser that quietly drops a spent torch out of the pack is announcing
+   * something that did not happen. The next refresh hands it straight back.
+   */
+  packFromIsland = false;
 
   /**
    * A job somebody else is doing, shown here so that there is a clock on it.
