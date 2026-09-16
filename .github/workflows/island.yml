@@ -192,6 +192,17 @@ jobs:
           npx esbuild supabase/test/felt.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/felt.mjs --log-level=error
           node node_modules/.cache/felt.mjs
+      - name: Where the water starts, and where a pick stops
+        run: |
+          # Reported as a copper vein that would not be mined, with "You cannot
+          # mine below the water level" and no water drawn on it. The island's
+          # half of that is measured in island.sql against the rules; this is
+          # the browser's half — that water is drawn from the first unit below
+          # the line, so one dug corner is already a puddle, and that the
+          # allowance both sides read is one number and not two.
+          npx esbuild supabase/test/tide.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/tide.mjs --log-level=error
+          node node_modules/.cache/tide.mjs
 
   migrate:
     name: Push the migrations to the project

@@ -205,6 +205,31 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
  */
 export const MINE_COLLAPSE = 0.01;
 
+/**
+ * How deep the water over a face may be and still be worked, in height units.
+ *
+ * Reported from the island: a copper vein that would not be mined, with "You
+ * cannot mine below the water level." and no water anywhere on the tile. Two
+ * things were wrong in one line, `rockHeight(corner) <= 0`.
+ *
+ * It asked the wrong corner height. `rockHeight` is the surface less the soil
+ * over it, so a corner shared with a meadow refuses a face standing fifty
+ * units above the sea, on the grounds that the bedrock buried under the grass
+ * beside it is below sea level. Water is a question about the surface, and the
+ * surface is what `hasWater` reads and what the renderer draws.
+ *
+ * And it was a height out even where the two agree: `<= 0` refuses a face
+ * standing *at* the waterline, and water is only drawn below it — so nought is
+ * the one height that refuses and shows nothing, which is exactly where a
+ * shore face sits.
+ *
+ * So: the corner's own height, and ten units of water allowed over it. That is
+ * about waist deep at the tide line and you work standing in it, which is what
+ * a shore quarry looks like. Past that you are swimming, and nobody swings a
+ * pick while swimming.
+ */
+export const MINE_DEPTH = 10;
+
 /** Ground with anything living in it, and the damp ground that is full of them. */
 export const WORMY = new Set<TileType>([TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Marsh, TileType.Moss]);
 export const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
@@ -490,7 +515,7 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to mine.';
-      if (g.world.rockHeight(t.cx, t.cy) <= 0) return 'You cannot mine below the water level.';
+      if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
       const ore = oreAt(g.world, t.x, t.y);
       if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
       return null;
@@ -538,7 +563,7 @@ export const ACTIONS: ActionDef[] = [
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to cut rock.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      if (g.world.rockHeight(t.cx, t.cy) <= 0) return 'You cannot cut the rock below the water level.';
+      if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
       const ore = oreAt(g.world, t.x, t.y);
       if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
       return null;

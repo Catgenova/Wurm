@@ -38,7 +38,7 @@ import { PLANTABLE } from '../src/game/game';
 import { RARITIES } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
-import { WORMY, RICH_WORMS } from '../src/game/actions';
+import { MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
@@ -772,6 +772,8 @@ for (const [fn, v] of [
    */
   /* What a level of climbing adds to the steepest step a body can take. */
   ['climb_per_level', CLIMB_PER_LEVEL],
+  /* And how far under the waterline a rock face may still be worked. */
+  ['mine_depth', MINE_DEPTH],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
   ['change_keep', CHANGE_KEEP], ['island_keep', ISLAND_KEEP],
   ['tick_worlds', TICK_WORLDS], ['tick_players', TICK_PLAYERS], ['calls_a_minute', CALLS_A_MINUTE],

@@ -2423,6 +2423,7 @@ create or replace function young_for() returns double precision language sql imm
 create or replace function old_at() returns double precision language sql immutable as $fn$ select 54000::double precision $fn$;
 create or replace function coax_lapse() returns double precision language sql immutable as $fn$ select 225::double precision $fn$;
 create or replace function climb_per_level() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
+create or replace function mine_depth() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function tick_seconds() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function idle_logout() returns double precision language sql immutable as $fn$ select 450::double precision $fn$;
 create or replace function event_keep() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;

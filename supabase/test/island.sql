@@ -5374,3 +5374,75 @@ select rpc_ready(:'small') \g /dev/null
 select '732. and after one a browser could have rolled: '
      || coalesce((select w.name from home h join world w on w.id = h.island), 'nowhere')
      || ' — the live smoke test founds sixty-four tiles every run and gives them back';
+
+\echo ''
+\echo '--- a face at the tide line'
+/*
+ * Reported from the island with a picture of it: a copper vein, "You cannot
+ * mine below the water level.", and no water drawn on the tile or anywhere
+ * near it. One line was wrong in two ways.
+ *
+ *     if rock_height(p_world, cx, cy) <= 0 then
+ *
+ * `rock_height` is `land_height - land_dirt` — the bedrock under the soil, not
+ * the ground. A corner a vein shares with a meadow carries that meadow's soil,
+ * so a face standing clear of the sea is refused because the rock buried
+ * beside it is not. And `<=` refuses a face standing *at* the waterline, while
+ * water is drawn at `< 0`: nought is the one height that refuses and shows
+ * nothing to refuse for, and nought is where a shore face stands.
+ *
+ * Done on the big island, well away from anything the earlier subjects built.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+do $$
+declare w uuid := (select id from world where name = 'Bigness');
+begin
+  perform land_set_dirt(w, 2200, 2200, 0); perform land_set_dirt(w, 2201, 2200, 0);
+  perform land_set_dirt(w, 2201, 2201, 0); perform land_set_dirt(w, 2200, 2201, 0);
+  perform land_set_height(w, 2200, 2200, 0); perform land_set_height(w, 2201, 2200, 0);
+  perform land_set_height(w, 2201, 2201, 0); perform land_set_height(w, 2200, 2201, 0);
+  perform land_set_rock(w, 2200, 2200, 4);   -- the copper vein from the report
+  perform reconcile(w, 2200, 2200);
+end $$;
+select '733. a ' || (select name from rock_def where id = land_rock(:'big', 2200, 2200))
+     || ' standing exactly at the waterline: water drawn ' || has_water(:'big', 2200, 2200)::text
+     || ', and mining it is ' || coalesce(terrain_refusal(:'big', :'ivar', 'mine',
+          '{"x":2200,"y":2200,"cx":2200,"cy":2200}'::jsonb), 'allowed')
+     || ' — nought is the one height that used to refuse and draw nothing to refuse for';
+
+do $$
+declare w uuid := (select id from world where name = 'Bigness');
+begin
+  perform land_set_height(w, 2200, 2200, -10); perform land_set_height(w, 2201, 2200, -10);
+  perform land_set_height(w, 2201, 2201, -10); perform land_set_height(w, 2200, 2201, -10);
+end $$;
+select '734. and ' || mine_depth() || ' under, which you work standing in: water drawn '
+     || has_water(:'big', 2200, 2200)::text || ', mining is ' || coalesce(terrain_refusal(:'big', :'ivar', 'mine',
+          '{"x":2200,"y":2200,"cx":2200,"cy":2200}'::jsonb), 'allowed');
+
+do $$
+declare w uuid := (select id from world where name = 'Bigness');
+begin
+  perform land_set_height(w, 2200, 2200, -11); perform land_set_height(w, 2201, 2200, -11);
+  perform land_set_height(w, 2201, 2201, -11); perform land_set_height(w, 2200, 2201, -11);
+end $$;
+select '735. one unit deeper than that: ' || coalesce(terrain_refusal(:'big', :'ivar', 'mine',
+          '{"x":2200,"y":2200,"cx":2200,"cy":2200}'::jsonb), 'ALLOWED')
+     || ' — and chipping it back: ' || coalesce(terrain_refusal(:'big', :'ivar', 'chip_corner',
+          '{"x":2200,"y":2200,"cx":2200,"cy":2200}'::jsonb), 'ALLOWED');
+
+-- And the case the report was almost certainly standing on: dry ground, well
+-- above the sea, with a fathom of soil on the corner the vein shares.
+do $$
+declare w uuid := (select id from world where name = 'Bigness');
+begin
+  perform land_set_height(w, 2200, 2200, 5); perform land_set_height(w, 2201, 2200, 5);
+  perform land_set_height(w, 2201, 2201, 5); perform land_set_height(w, 2200, 2201, 5);
+  perform land_set_dirt(w, 2200, 2200, 20);
+end $$;
+select '736. a face five above the sea with a fathom of soil on its corner: water drawn '
+     || has_water(:'big', 2200, 2200)::text || ', the bedrock under the soil at '
+     || rock_height(:'big', 2200, 2200) || ', and mining it is '
+     || coalesce(terrain_refusal(:'big', :'ivar', 'mine',
+          '{"x":2200,"y":2200,"cx":2200,"cy":2200}'::jsonb), 'allowed')
+     || ' — the old rule read that bedrock and refused, blaming water that was not there';
