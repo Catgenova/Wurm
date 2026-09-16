@@ -185,6 +185,57 @@ const check = (what: string, passed: boolean, detail = ''): void => {
   check('and neither worked out any ground', w.grown === 0, `${w.grown} squares`);
 }
 
+/*
+ * And the ground under it all, when the squares are not asked for in order.
+ *
+ * Reported from a phone as "massive grid ditches through the entire map", and
+ * that is exactly what it was: a line of corners left at the nought the array
+ * was made with, every sixty-four tiles in both directions. A square that
+ * reached its own edge *after* its neighbour below had been worked out decided
+ * the whole edge belonged to that neighbour and wrote none of it — and the
+ * neighbour never touched it either, because it does not reach that far. A
+ * trench through the land, a shoal through the sea, and bare rock down the
+ * middle of it, because the soil is skipped along with the height.
+ *
+ * Nobody walks an island in reading order, so neither does this: south first,
+ * then back north over ground nobody has asked about yet, which is the order
+ * that leaves a square with a ready neighbour below it.
+ */
+{
+  const w = joining();
+  for (const [tx, ty] of [[100, 150], [100, 80], [170, 80], [170, 150], [40, 80], [40, 150]] as Array<[number, number]>) {
+    w.getHeight(tx, ty);
+  }
+  const wandered = w.grown;
+  const truth = generateAtlasWindow(SEED, atlas, 0, 0, SIZE, SIZE, SIZE);
+  let wrong = 0;
+  let nought = 0;
+  let first = '';
+  for (let gy = 0; gy <= SIZE; gy++) {
+    for (let gx = 0; gx <= SIZE; gx++) {
+      const mine = w.getHeight(gx, gy);
+      const real = truth.heights[gy * (SIZE + 1) + gx];
+      if (mine === real) continue;
+      wrong++;
+      if (mine === 0) nought++;
+      if (!first) first = `${gx},${gy} is ${mine} and should be ${real}`;
+    }
+  }
+  check('a square worked out after its neighbours still writes its own edges',
+    wrong === 0, `${wrong} corners wrong after wandering over ${wandered} squares, ${nought} of them left at nought${first ? ` — ${first}` : ''}`);
+  const w2 = joining();
+  for (const [tx, ty] of [[100, 150], [100, 80], [170, 80], [170, 150]] as Array<[number, number]>) w2.getHeight(tx, ty);
+  // And the reason the skipping is there at all: a corner somebody has dug is
+  // not written back over by a square that turns up afterwards.
+  const deep = dug(101, 128, 9);
+  layChange(w2, deep);
+  w2.getHeight(101, 70);
+  w2.getHeight(40, 128);
+  check('and a corner somebody dug is still not written back over',
+    w2.getHeight(101, 128) === deep.corners[0],
+    `${w2.getHeight(101, 128)} against the ${deep.corners[0]} that was dug`);
+}
+
 for (const l of ok) console.log(l);
 for (const l of bad) console.log(l);
 console.log(bad.length ? `${bad.length} of ${ok.length + bad.length} went wrong.`

@@ -239,11 +239,28 @@ export class World {
   private cornerTaken(gx: number, gy: number, cx: number, cy: number): boolean {
     const r = this.ready;
     if (!r) return false;
-    const i0 = gx % CHUNK === 0 ? gx / CHUNK - 1 : (gx / CHUNK) | 0;
-    const j0 = gy % CHUNK === 0 ? gy / CHUNK - 1 : (gy / CHUNK) | 0;
-    for (let j = j0; j <= j0 + 1; j++) {
+    /*
+     * Which squares actually touch this corner, and only those.
+     *
+     * A corner on a square line is shared with the square across it; a corner
+     * in the middle of that line is shared with nobody, and the square along
+     * the *other* axis does not reach it. Asking one square too far each way
+     * was the whole of "there are ditches through the entire map": walk south
+     * and back north and the square you come back to sees its neighbour below
+     * marked ready, decides the whole of its left-hand edge is somebody
+     * else's, and writes none of it. Nobody else ever does either, so a line
+     * of corners stays at the nought the array was made with — a trench
+     * through the land, a shoal through the sea, and bare rock down the middle
+     * of it because the soil was skipped with the height. Straight, unbroken,
+     * and every sixty-four tiles both ways.
+     */
+    const onX = gx % CHUNK === 0;
+    const onY = gy % CHUNK === 0;
+    const i0 = onX ? gx / CHUNK - 1 : (gx / CHUNK) | 0;
+    const j0 = onY ? gy / CHUNK - 1 : (gy / CHUNK) | 0;
+    for (let j = j0; j <= (onY ? j0 + 1 : j0); j++) {
       if (j < 0 || j >= this.down) continue;
-      for (let i = i0; i <= i0 + 1; i++) {
+      for (let i = i0; i <= (onX ? i0 + 1 : i0); i++) {
         if (i < 0 || i >= this.across) continue;
         if (i === cx && j === cy) continue;
         if (r[j * this.across + i] === 1) return true;
