@@ -353,6 +353,41 @@ export class Renderer {
     return this.drawnTiles;
   }
 
+  /**
+   * Sprites already the size they are about to be drawn.
+   *
+   * A tree is a canvas drawn at its own scale and then squeezed down to
+   * whatever the zoom is, and squeezing a picture is the expensive half of
+   * putting one on the screen. A wood is a hundred and seventy trees drawn
+   * from about eight pictures, so it was doing that same squeeze a hundred and
+   * seventy times a frame for eight answers.
+   *
+   * Each one is squeezed once, into a canvas of its own at the size the screen
+   * wants, and then blitted. The cache is thrown away whenever the zoom
+   * changes, which is the only thing that can change the answer — a pinch
+   * costs one frame of rebuilding and every frame after it is a straight copy.
+   *
+   * Kept at device pixels rather than CSS ones, because the context is scaled
+   * by the display's ratio: a canvas made at CSS size would be blown back up
+   * on the way out and come out softer than it does now.
+   */
+  private scaled = new Map<HTMLCanvasElement, HTMLCanvasElement>();
+  private scaledAt = -1;
+
+  /** The same sprite, already down to `w` by `h` CSS pixels. */
+  private atSize(src: HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
+    const had = this.scaled.get(src);
+    if (had) return had;
+    const dpr = this.canvas.dpr;
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(w * dpr));
+    cv.height = Math.max(1, Math.round(h * dpr));
+    const g = cv.getContext('2d');
+    if (g) g.drawImage(src, 0, 0, cv.width, cv.height);
+    this.scaled.set(src, cv);
+    return cv;
+  }
+
   private invalidate(x: number, y: number): void {
     const w = this.game.world;
     for (let yy = y - 1; yy <= y + 1; yy++) {
@@ -1068,6 +1103,11 @@ export class Renderer {
   }
 
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
+    // One squeeze per picture per zoom, rather than one per thing drawn.
+    if (zoom !== this.scaledAt) {
+      this.scaledAt = zoom;
+      this.scaled.clear();
+    }
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
     if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx || (a.lift ?? 0) - (b.lift ?? 0));
@@ -1228,17 +1268,24 @@ export class Renderer {
       // the rest, which is why this can be thrown away entirely at midday.
       if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
       if (ent.kind === 'tree' || ent.kind === 'bush') {
+        const ready = this.atSize(spr.canvas, dw, dh);
         // Rooted at the foot, leaning at the head: the shear is taken about
-        // the trunk, so the tree bends rather than slides.
+        // the trunk, so the tree bends rather than slides. A lean that moves
+        // the crown less than half a pixel is not worth a transform to draw.
         const bend = (swayAt(ent.x, ent.y, this.time, this.lean.force) * SWAY_MAX * (ent.kind === 'bush' ? 0.6 : 1)) / 2;
+        if (Math.abs(this.lean.x * bend) * dh < 0.5) {
+          ctx.drawImage(ready, left, top, dw, dh);
+          continue;
+        }
         ctx.save();
         ctx.translate(ent.sx, ent.sy);
         ctx.transform(1, 0, -this.lean.x * bend, 1, 0, 0);
-        ctx.drawImage(spr.canvas, left - ent.sx, top - ent.sy, dw, dh);
+        ctx.drawImage(ready, left - ent.sx, top - ent.sy, dw, dh);
         ctx.restore();
         continue;
       }
-      this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(spr.canvas, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh));
+      const ready = this.atSize(spr.canvas, dw, dh);
+      this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(ready, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh));
       if (ent.kind === 'crate' && ent.crateId !== undefined) {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
