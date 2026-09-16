@@ -244,6 +244,13 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * dropped and the bugs each of them was.
    */
   game.packFromIsland = true;
+  // And the record of what has been ticked off, which is the island's to keep:
+  // nothing on this side is ever written down on an island.
+  game.tickedGoal = (id) => island.tickGoal(id);
+  // And nothing is read out of it until the island has sent it: a tally that
+  // has not arrived yet is an empty one, and every goal already met would be
+  // announced all over again on every refresh.
+  game.journalReady = false;
   island.hooks.mobs = (rows) => {
     // Everything that lost health since the last answer gets its number, which
     // is the half of the fight that happens away from your own body.
@@ -357,6 +364,31 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       for (const [k, v] of Object.entries(what.nutrition)) if (typeof v === 'number') n[k] = v;
     }
     if (what.marks !== undefined) game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
+    /*
+     * And the journal, which had nothing to read and nowhere to keep it.
+     *
+     * Forty-six of its eighty-five goals count things done, the counting was
+     * done by browser performers that do not run on an island, and an island
+     * session never saves — so a whole afternoon's work ticked nothing and
+     * whatever it did tick went with the tab. The island notes and keeps all
+     * three of these now.
+     *
+     * The tally is *merged* rather than replaced, because two keys are still
+     * this side's: `reach` and `laden` are sailing, and the browser still owns
+     * how a hull moves through water. The island's count wins wherever it has
+     * one, and a key only this tab knows about survives the beat.
+     */
+    if (what.tally) for (const [k, v] of Object.entries(what.tally)) {
+      if (typeof v === 'number') game.tally[k] = v;
+    }
+    if (what.ledger) {
+      for (const k of Object.keys(game.ledger)) delete game.ledger[k];
+      Object.assign(game.ledger, what.ledger);
+    }
+    if (what.ticked) {
+      for (const id of what.ticked) game.ticked.add(id);
+      game.journalReady = true;
+    }
   };
 
   island.hooks.doing = (what) => {

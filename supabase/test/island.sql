@@ -5789,6 +5789,42 @@ select '759. and ashore: wind coming back at '
      || (select (drowned_at is null)::text from player where world_id = :'world2' and uid = :'ivar');
 
 /*
+ * And the journal, which could not tick a single one of its eighty-five goals
+ * on an island.
+ *
+ * No measurement of its own is needed to set this up: the six hundred goes
+ * above are a session, and this is what the island wrote down while they
+ * happened. A key that stops appearing here is a note that has come unhooked
+ * from the rule it sits next to.
+ */
+select '761. what the island noted through the whole of the above: '
+     || (select string_agg(k || '×' || v, ', ' order by k)
+         from (select key as k, value::text as v from jsonb_each_text(
+                 (select tally from player where world_id = :'world2' and uid = :'ivar'))) q);
+select '762. and the ledger of what came off the bench: '
+     || (select count(*) from jsonb_object_keys(
+           (select ledger from player where world_id = :'world2' and uid = :'ivar')) k)
+     || ' kinds, ' || (select coalesce(sum((v->>'n')::int), 0)
+         from jsonb_each((select ledger from player where world_id = :'world2' and uid = :'ivar')) e(k, v))
+     || ' things in all, best QL ' || (select round(max((v->>'best')::numeric), 1)
+         from jsonb_each((select ledger from player where world_id = :'world2' and uid = :'ivar')) e(k, v));
+
+-- And the half of it the browser still works out: a tick comes up on the beat
+-- and stays up, because done is done through a refresh and a change of machine.
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select rpc_settle(null, :'world2', null, false, '["tree","ore","fire"]'::jsonb) \g /dev/null
+select rpc_settle(null, :'world2', null, false, '["fire","crate"]'::jsonb) \g /dev/null
+select '763. ticked off, through two beats and no duplicates: '
+     || (select string_agg(t, ', ' order by t) from jsonb_array_elements_text(
+           (select ticked from player where world_id = :'world2' and uid = :'ivar')) t);
+select coalesce((rpc_settle(null, :'world2', null, false))->>'tally', 'nothing') as quiet \gset
+select journal_note(:'world2', :'ivar', 'worms') \g /dev/null
+select '764. and the beat only carries it when it has moved: a quiet beat says '
+     || case when :'quiet' = 'nothing' then 'nothing' else 'the lot' end
+     || ', and one after a note says '
+     || case when (rpc_settle(null, :'world2', null, false))->>'tally' is null then 'nothing' else 'the lot' end;
+
+/*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
  *
@@ -5798,7 +5834,7 @@ select '759. and ashore: wind coming back at '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '760. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '765. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

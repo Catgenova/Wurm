@@ -332,6 +332,25 @@ export class Game {
   readonly ledger: Ledger = {};
   /** Goals already ticked off, which stay ticked whatever happens after. */
   readonly ticked = new Set<string>();
+  /**
+   * Who to tell when one is ticked, on an island. Nothing here off one.
+   *
+   * The journal reads the book, the pack, the ground and what is standing on
+   * it, all of which the island keeps and this side draws — so the *reading*
+   * stays here and the record goes over. Eighty-five predicates are eighty-five
+   * ports for another day; a list of ids is one column.
+   */
+  tickedGoal?: (id: string) => void;
+  /**
+   * Whether the journal is worth reading yet.
+   *
+   * True by itself, because a browser playing alone has its journal the moment
+   * it has loaded one. On an island it is the island's, and the first beat is
+   * a second away — so until that lands, this side is holding an empty tally
+   * and no ticks, and every goal already met would be announced again on every
+   * refresh. Nothing is lost by waiting a second for the book.
+   */
+  journalReady = true;
   private journalAt = -1e9;
 
   /** Note that something was done, once. */
@@ -369,6 +388,7 @@ export class Game {
     // their save. A guest's mining skill is not the host's progress, and a
     // guest has no journal of their own yet — so theirs ticks nothing.
     if (this.acting !== this.local) return;
+    if (!this.journalReady) return;
     if (this.time - this.journalAt < 2) return;
     this.journalAt = this.time;
     for (const goal of ALL_GOALS) {
@@ -381,6 +401,11 @@ export class Game {
       }
       if (!met) continue;
       this.ticked.add(goal.id);
+      // And the island keeps the record of it, so that done stays done through
+      // a refresh. An island session never saves — `main.ts` starts the save
+      // loop behind `if (!island)` — so until now every tick was a thing this
+      // tab knew and nothing else did.
+      this.tickedGoal?.(goal.id);
       this.logMsg(`Journal: ${goal.text.toLowerCase()}. (${this.ticked.size} of ${ALL_GOALS.length})`, 'skill');
       this.events.emit('journal');
     }

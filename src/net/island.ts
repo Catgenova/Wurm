@@ -239,6 +239,15 @@ export interface IslandHooks {
     titles?: string[];
     title?: string | null;
     nutrition?: Record<string, number>;
+    /**
+     * And the journal, which on an island could not tick a single one of its
+     * eighty-five goals: forty-six of them count things done, the counting was
+     * done by browser performers that do not run here, and an island session
+     * never saves, so whatever did get counted went with the tab.
+     */
+    tally?: Record<string, number>;
+    ledger?: Record<string, unknown>;
+    ticked?: string[];
   }) => void;
   /**
    * Everything wild within sight, as the island has it.
@@ -391,6 +400,14 @@ export class Island {
    * again in this session.
    */
   private booked = false;
+  /**
+   * Goals ticked off since the last beat, waiting to be handed over.
+   *
+   * A list rather than a flag because two can be met by one action, and
+   * because the beat is a second away at worst — the journal has never been in
+   * a hurry about anything.
+   */
+  private ticked: string[] = [];
   /**
    * How many of our own asks we have laid down.
    *
@@ -715,12 +732,26 @@ export class Island {
        * until refreshed". Refreshing worked because `rpc_join` names its
        * island. This one does now too.
        */
+      /*
+       * And anything the journal has just worked out is done.
+       *
+       * The ticking stays here — a goal is a question about the book, the
+       * pack, the ground and what is standing on it all at once — but the
+       * *record* is the island's, so that done stays done through a refresh.
+       * Handed over on the beat the browser makes anyway rather than through a
+       * door of its own: there is never any hurry about a tick.
+       */
+      const ticking = this.ticked.length ? this.ticked.slice() : null;
       const { data } = await supabase().rpc('rpc_settle', {
         p_seen: this.seenChange,
         p_world: this.info.id,
         p_said: this.said,
         p_book: !this.booked,
+        p_ticked: ticking,
       });
+      // Only what went up in this answer, so a tick made while it was in
+      // flight is still waiting on the next one.
+      if (ticking) this.ticked = this.ticked.slice(ticking.length);
       const said = (data ?? {}) as {
         settled?: number; act?: string | null; ends?: string | null;
         left?: number | null; secs?: number | null; total?: number | null; queued?: number;
@@ -730,6 +761,7 @@ export class Island {
         marks?: { tiles?: number[]; secs?: number } | null;
         rested?: number; boons?: unknown[]; knacks?: Record<string, number>;
         titles?: string[]; title?: string | null; nutrition?: Record<string, number>;
+        tally?: Record<string, number>; ledger?: Record<string, unknown>; ticked?: string[];
         goes?: number | null; time?: number | null; night?: boolean | null;
         said?: Array<{ n: number; text: string; kind: string }> | null;
         saidTo?: number | null;
@@ -771,6 +803,7 @@ export class Island {
         marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
         rested: said.rested, boons: said.boons, knacks: said.knacks,
         titles: said.titles, title: said.title, nutrition: said.nutrition,
+        tally: said.tally, ledger: said.ledger, ticked: said.ticked,
       });
       this.hooks.doing?.({
         act: said.act ?? null,
@@ -1190,6 +1223,17 @@ export class Island {
   }
 
   /** Ask to do something. What comes back is a refusal or a promise, never a result. */
+  /**
+   * A goal the journal has just worked out is done.
+   *
+   * Handed over on the next beat. Nothing waits on it and nothing is lost if
+   * the beat is a second away — what this is for is that it survives the tab
+   * being shut, which until now it did not.
+   */
+  tickGoal(id: string): void {
+    if (!this.ticked.includes(id)) this.ticked.push(id);
+  }
+
   async act(action: string, target: Record<string, unknown>, times = 1): Promise<ActResult> {
     if (!this.info) return { started: false, why: 'You are not on an island.' };
     const { data, error } = await supabase().rpc('rpc_act', {

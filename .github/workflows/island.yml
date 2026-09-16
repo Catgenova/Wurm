@@ -192,6 +192,17 @@ jobs:
           npx esbuild supabase/test/felt.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/felt.mjs --log-level=error
           node node_modules/.cache/felt.mjs
+      - name: Every goal the journal counts is a note the island writes
+        run: |
+          # Forty-six of the journal's eighty-five goals count things done, and
+          # every one of those counts was written by a browser performer — so on
+          # an island not one of them could ever tick, and nothing said so. The
+          # notes are the island's now, and this is what says when one goes
+          # missing: a goal whose key nobody sets looks exactly like a goal
+          # nobody has got round to.
+          npx esbuild supabase/test/writ.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/writ.mjs --log-level=error
+          node node_modules/.cache/writ.mjs
       - name: Where the water starts, and where a pick stops
         run: |
           # Reported as a copper vein that would not be mined, with "You cannot
