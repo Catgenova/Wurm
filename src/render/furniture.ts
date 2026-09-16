@@ -35,6 +35,7 @@ export function furnitureSpan(kind: string): [number, number] {
 
 /** How tall a piece stands, in pixels at zoom 1. */
 export const FURNITURE_HEIGHT: Record<string, number> = {
+  brazier: 13,
   sign: 26,
   great_sign: 30,
   stool: 11,
@@ -363,6 +364,47 @@ const DRAW: Record<string, Draw> = {
     ctx.lineTo(-W * 0.36, -h * 0.42 + D * 0.62);
     ctx.quadraticCurveTo(0, -h * 0.62 + D * 0.62, W * 0.36, -h * 0.42 + D * 0.62);
     ctx.lineTo(W * 0.36, -h * 0.12 + D * 0.62);
+    ctx.closePath();
+    ctx.fill();
+  },
+  brazier: (ctx, W, D, h, lit) => {
+    /*
+     * A shallow bowl of brick on a short stem, banded with iron, with the fire
+     * sitting proud of the rim rather than shut behind a mouth — which is the
+     * whole difference between this and the oven above it. Cold it is a stone
+     * dish; lit it is the brightest thing on a deed at night.
+     */
+    post(ctx, 0, 0, h * 0.5, STONE, W * 0.34);
+    box(ctx, 0, 0, W * 0.72, D * 0.72, h * 0.22, STONE, h * 0.5);
+    // The iron band round the lip.
+    ctx.strokeStyle = IRON.left;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.72 + D * 0.72, W * 0.72, D * 0.55, 0, 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    // What is in the bowl: embers, or cold ash.
+    const cy = -h * 0.74 + D * 0.72;
+    ctx.fillStyle = lit ? '#ff9c2e' : '#3a332c';
+    ctx.beginPath();
+    ctx.ellipse(0, cy, W * 0.55, D * 0.4, 0, 0, TAU);
+    ctx.fill();
+    if (!lit) return;
+    // And the flame over it, which is what anybody actually sees of one.
+    // Two tongues rather than one, and neither of them centred: a single
+    // symmetrical cone reads as a traffic cone, not as fire.
+    ctx.fillStyle = 'rgba(255,196,96,0.92)';
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.46, cy);
+    ctx.bezierCurveTo(-W * 0.4, cy - h * 0.45, -W * 0.14, cy - h * 0.5, -W * 0.06, cy - h * 0.92);
+    ctx.bezierCurveTo(W * 0.14, cy - h * 0.52, W * 0.36, cy - h * 0.4, W * 0.46, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,196,0.92)';
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.2, cy);
+    ctx.bezierCurveTo(-W * 0.18, cy - h * 0.24, W * 0.02, cy - h * 0.3, W * 0.06, cy - h * 0.58);
+    ctx.bezierCurveTo(W * 0.14, cy - h * 0.28, W * 0.2, cy - h * 0.2, W * 0.22, cy);
     ctx.closePath();
     ctx.fill();
   },

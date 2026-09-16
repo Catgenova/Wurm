@@ -54,6 +54,7 @@ import { BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
+import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
@@ -883,6 +884,13 @@ for (const [fn, v] of [
    */
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
   ['swim_depth', SWIM_DEPTH], ['swim_learn', SWIM_LEARN], ['drown_warn', DROWN_WARN],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/* What a brazier is: how much it holds, and how fast it goes by how well it was built. */
+for (const [fn, v] of [
+  ['brazier_capacity', BRAZIER_CAPACITY],
+  ['brazier_burn_one', BRAZIER_BURN_AT_ONE], ['brazier_burn_hundred', BRAZIER_BURN_AT_HUNDRED],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

@@ -33,6 +33,40 @@ import { world } from './pace';
 /** Most fuel an oven holds: it is bigger than a campfire and burns longer. */
 export const OVEN_CAPACITY = world(7200);
 
+/**
+ * How fast a brazier eats what is in it, by how well it was built.
+ *
+ * A shallow bowl with a bad draw roars through its fuel; one laid true and
+ * banded tight burns low and long. Seconds of fuel spent per second alight:
+ * about one and a half at quality 1, one at 40, and three fifths at 100 — so
+ * a well-made brazier gets nearly three times the night out of the same
+ * armful of wood as a rough one.
+ *
+ * Braziers only. Every other fire on this island burns a second a second, and
+ * quietly re-pricing the smelters and the kilns is not what anybody asked for.
+ */
+export const BRAZIER_BURN_AT_ONE = 1.55;
+export const BRAZIER_BURN_AT_HUNDRED = 0.6;
+export const brazierBurn = (ql: number): number =>
+  BRAZIER_BURN_AT_ONE
+  + (BRAZIER_BURN_AT_HUNDRED - BRAZIER_BURN_AT_ONE) * (Math.max(1, Math.min(100, ql)) - 1) / 99;
+
+/** What a brazier holds: a night's worth and a little over. */
+export const BRAZIER_CAPACITY = world(3600);
+
+/**
+ * What a hearth holds and what it is called.
+ *
+ * `isOven` has been `furnitureDef(kind).hearth` since the day it was written —
+ * the four actions below were never about ovens, only ever about anything that
+ * burns. What *was* about ovens was every sentence they said, so a brazier
+ * would have told you its firebox was packed and that it had been raked out.
+ * The name comes off the piece now, and the capacity with it.
+ */
+const hearthName = (f: PlacedFurniture): string => furnitureDef(f.kind).name.toLowerCase();
+const hearthCapacity = (f: PlacedFurniture): number =>
+  (f.kind === 'brazier' ? BRAZIER_CAPACITY : OVEN_CAPACITY);
+
 type FurnitureTarget = Extract<Target, { kind: 'furniture' }>;
 const pieceOf = (g: Game, t: Target): PlacedFurniture | undefined => (t.kind === 'furniture' ? g.furniture.get((t as FurnitureTarget).id) : undefined);
 const nearPiece = (g: Game, f: PlacedFurniture, range = 2.4): boolean => {
@@ -48,9 +82,22 @@ export function trashNear(g: Game): PlacedFurniture | undefined {
 }
 
 /** How long an oven's fuel will last, in words. */
+/**
+ * Seconds of fuel a hearth spends per second alight.
+ *
+ * One, for everything that was here before this: an oven, a smelter and a
+ * kiln all burn a second a second, and quietly re-pricing them is not what
+ * anybody asked for.
+ */
+export const hearthBurn = (f: PlacedFurniture): number =>
+  (f.kind === 'brazier' ? brazierBurn(f.ql ?? 20) : 1);
+
 export const ovenBurnsFor = (f: PlacedFurniture): string => {
-  const m = Math.round((f.fuel ?? 0) / 60);
-  return m >= 60 ? `${(m / 60).toFixed(1)} hours` : m >= 1 ? `${m} minutes` : `${Math.round(f.fuel ?? 0)} seconds`;
+  // What is in it divided by how fast it goes, which is how long it will
+  // burn — and for everything but a brazier those are the same number.
+  const left = (f.fuel ?? 0) / hearthBurn(f);
+  const m = Math.round(left / 60);
+  return m >= 60 ? `${(m / 60).toFixed(1)} hours` : m >= 1 ? `${m} minutes` : `${Math.round(left)} seconds`;
 };
 
 /** Every vessel within reach that has a liquid in it, the fullest first. */
@@ -102,7 +149,7 @@ function drawFrom(g: Game, f: PlacedFurniture, litres: number): boolean {
 }
 
 export const PLACEABLE_ACTIONS: ActionDef[] = [
-  // ---- The oven: a fire with a roof on it. ----
+  // ---- A hearth: an oven is a fire with a roof on it, a brazier one without. ----
   {
     id: 'fuel_oven',
     label: 'Fuel',
@@ -117,11 +164,11 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     },
     check: (t, g) => {
       const f = pieceOf(g, t);
-      if (!f || !isOven(f)) return 'That is not an oven.';
-      if (!nearPiece(g, f)) return 'Stand next to the oven.';
+      if (!f || !isOven(f)) return 'That is not something you can light a fire in.';
+      if (!nearPiece(g, f)) return `Stand next to the ${hearthName(f)}.`;
       const item = t.kind === 'furniture' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
       if (!item || !isFuel(item.id)) return 'Ovens take the same wood and coal a fire does.';
-      if ((f.fuel ?? 0) >= OVEN_CAPACITY) return 'The firebox is packed as full as it will take.';
+      if ((f.fuel ?? 0) >= hearthCapacity(f)) return 'It is packed as full as it will take.';
       return null;
     },
     perform: (t, g) => {
@@ -130,12 +177,12 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
       if (!item || !isFuel(item.id)) return;
       const per = FUEL_VALUES[item.id];
-      const room = Math.max(0, OVEN_CAPACITY - (f.fuel ?? 0));
+      const room = Math.max(0, hearthCapacity(f) - (f.fuel ?? 0));
       const fits = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), Math.ceil(room / per)));
       if (!g.inventory.remove(item.uid, fits)) return;
-      f.fuel = Math.min(OVEN_CAPACITY, (f.fuel ?? 0) + per * fits);
+      f.fuel = Math.min(hearthCapacity(f), (f.fuel ?? 0) + per * fits);
       g.events.emit('world', f.x, f.y);
-      g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} into the oven. ${ovenBurnsFor(f)} of fuel.`, 'event');
+      g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} into the ${hearthName(f)}. ${ovenBurnsFor(f)} of fuel.`, 'event');
     },
   },
   {
@@ -160,7 +207,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (!f || f.lit || (f.fuel ?? 0) <= 0) return;
       f.lit = true;
       g.events.emit('world', f.x, f.y);
-      g.logMsg(`The oven draws and the fire takes hold. ${ovenBurnsFor(f)} of fuel.`, 'event');
+      g.logMsg(`The ${hearthName(f)} draws and the fire takes hold. ${ovenBurnsFor(f)} of fuel.`, 'event');
     },
   },
   {
@@ -178,7 +225,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (!f || !f.lit) return;
       f.lit = false;
       g.events.emit('world', f.x, f.y);
-      g.logMsg('You rake the fire out of the oven. It will keep its heat for nobody.', 'event');
+      g.logMsg(`You rake the fire out of the ${hearthName(f)}. It will keep its heat for nobody.`, 'event');
     },
   },
   {
@@ -194,12 +241,12 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
-      if (!nearPiece(g, f)) return 'Stand next to the oven.';
+      if (!nearPiece(g, f)) return `Stand next to the ${hearthName(f)}.`;
       return hasAshes(f) ? null : 'There are no ashes worth taking yet.';
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
-      if (f) rakeAshes(g, f, 'oven');
+      if (f) rakeAshes(g, f, hearthName(f));
     },
   },
   // ---- The cart: storage that walks with you. ----

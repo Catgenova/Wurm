@@ -6260,6 +6260,80 @@ select '801. and with ' || (select count(*) from player where world_id = :'world
          from jsonb_array_elements(folk_ashore(:'world3', :'dane')) f)
      || ' with whereabouts — nobody deployed anything, the island simply filled up';
 
+
+\echo ''
+\echo '--- a fire where you want one'
+/*
+ * Two braziers, the same fuel in each, built by two different masons. Time is
+ * moved by winding `since` back rather than by waiting, which is how every
+ * other clock in this suite is read.
+ */
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  insert into placed (world_id, kind, sub, x, y, cx, cy, ql, fuel, lit, since)
+  values (w, 'furniture', 'brazier', 4, 4, 4.5, 4.5, 8,  3600, true, now() - interval '20 minutes'),
+         (w, 'furniture', 'brazier', 6, 4, 6.5, 4.5, 95, 3600, true, now() - interval '20 minutes'),
+         (w, 'furniture', 'oven',    8, 4, 8.5, 4.5, 8,  3600, true, now() - interval '20 minutes');
+end $$;
+select '803. twenty minutes alight, an hour of fuel in each: '
+     || string_agg(
+          coalesce(fd.name, p.sub) || ' QL ' || round(p.ql::numeric, 0)
+          || ' burns ' || round(placed_burn_rate(p)::numeric, 2) || ' a second, '
+          || round(placed_fuel(p)::numeric / 60, 0) || 'm left of '
+          || round((placed_fuel(p) / placed_burn_rate(p))::numeric / 60, 0) || 'm burning',
+          '; ' order by p.ql)
+from placed p left join furniture_def fd on fd.id = p.sub
+where p.world_id = :'world3' and p.kind = 'furniture';
+
+select '804. and the ashes follow the fuel rather than the clock: '
+     || string_agg(coalesce(fd.name, p.sub) || ' QL ' || round(p.ql::numeric, 0)
+          || ' ' || round(placed_ash(p)::numeric, 1), ', ' order by p.ql)
+     || ' — a rough one has burned more, so it has more of them'
+from placed p left join furniture_def fd on fd.id = p.sub
+where p.world_id = :'world3' and p.kind = 'furniture';
+
+-- And the night, which is the whole reason a brazier is not an oven.
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  update placed set lit = false, fuel = 3600, since = now() where world_id = w and kind = 'furniture';
+  -- Wind the world to the small hours, and then to noon.
+  update world set epoch = now() - make_interval(secs => (day_seconds() * 0.05)::int) where id = w;
+end $$;
+/*
+ * Its own statement, and then the report. Folding a mutation into the select
+ * that reports on it reads the snapshot from before it ran — which is what
+ * this file's own preamble says, and this measurement came back blank the
+ * first time for exactly that reason.
+ */
+select brazier_sweep(:'world3') as lit1 \gset
+select '805. at ' || round(hour_of_day(:'world3')::numeric, 1) || ' o''clock (night ' || is_night(:'world3')
+     || ') the heartbeat lights ' || :'lit1' || ' of them, and what is burning is '
+     || coalesce((select string_agg(coalesce(fd.name, p.sub), ', ' order by p.sub) from placed p
+          left join furniture_def fd on fd.id = p.sub
+          where p.world_id = :'world3' and p.lit), 'nothing')
+     || ' — the oven is not in that list, and an oven that lit itself every night is an oven nobody could keep fuel in';
+
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  update world set epoch = now() - make_interval(secs => (day_seconds() * 0.5)::int) where id = w;
+end $$;
+-- The braziers burn for a while before dawn comes, so there is something to
+-- carry forward rather than a full hour going back into an hour.
+update placed set since = now() - interval '25 minutes'
+  where world_id = :'world3' and sub = 'brazier' and lit \g /dev/null
+select brazier_sweep(:'world3') as out1 \gset
+select '806. and at ' || round(hour_of_day(:'world3')::numeric, 1) || ' o''clock (night ' || is_night(:'world3')
+     || ') it rakes out ' || :'out1' || ', with what each burned taken off what it was carrying: '
+     || (select string_agg(round(p.fuel::numeric / 60, 0) || 'm', ', ' order by p.ql) from placed p
+          where p.world_id = :'world3' and p.sub = 'brazier')
+     || ' left, carried forward rather than started again';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6270,7 +6344,7 @@ select '801. and with ' || (select count(*) from player where world_id = :'world
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '802. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '807. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

@@ -1,4 +1,5 @@
 import { generateWorld } from '../world/generate';
+import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
 import { oreAt } from '../world/ore';
@@ -3965,6 +3966,36 @@ export class Game {
       this.logMsg('A campfire burns down to ashes.', 'event');
       this.events.emit('world', f.x, f.y);
       this.events.emit('crate');
+    }
+    /*
+     * And the braziers, which light themselves.
+     *
+     * A brazier exists to be a light, so leaving it burning through the
+     * afternoon is fuel spent on nothing and asking somebody to walk round
+     * their deed twice a day is a chore rather than a feature. One with fuel
+     * in it takes at dusk and is raked out at dawn.
+     *
+     * Only braziers. An oven burns while somebody is baking and stops when
+     * they stop, and an oven that lit itself every night would be an oven
+     * nobody could keep fuel in.
+     */
+    const night = this.isNight();
+    for (const f of this.furniture.values()) {
+      if (f.kind !== 'brazier') continue;
+      if (f.lit) {
+        f.fuel = Math.max(0, (f.fuel ?? 0) - dt * brazierBurn(f.ql ?? 20));
+        if (f.fuel <= 0) {
+          f.lit = false;
+          this.logMsg('A brazier burns down and goes dark.', 'event');
+          this.events.emit('world', f.x, f.y);
+        } else if (!night) {
+          f.lit = false;
+          this.events.emit('world', f.x, f.y);
+        }
+      } else if (night && (f.fuel ?? 0) > 0) {
+        f.lit = true;
+        this.events.emit('world', f.x, f.y);
+      }
     }
   }
 

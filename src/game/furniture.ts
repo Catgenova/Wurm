@@ -137,6 +137,17 @@ export const FURNITURE: FurnitureDef[] = [
   piece('loom', 'Loom', 2, 2, [['plank', 8], ['timber', 4], ['shaft', 6], ['nail', 24]], 22, 18, 'You build a loom and thread the warp.'),
   // Masonry, not carpentry: these two are laid in brick and mortar.
   piece('oven', 'Oven', 2, 2, [['stone_brick', 10], ['mortar', 4]], 24, 18, 'You lay the courses, turn an arch over the mouth and leave it to set. An oven.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
+  /*
+   * A fire you can put where you want one, which an oven is not.
+   *
+   * `hearth` is the whole of what makes it burn: fuelling, lighting, raking
+   * out and taking the ashes have read `furnitureDef(kind).hearth` since the
+   * oven was written, so a second hearth needed no action of its own. What it
+   * needed was a reason to exist, and that is the night — a brazier lights
+   * itself at dusk, goes out at dawn, and shows the ground around it while it
+   * burns.
+   */
+  piece('brazier', 'Brazier', 1, 1, [['stone_brick', 6], ['mortar', 2], ['ribbon', 2]], 20, 12, 'You lay a shallow bowl of brick and band it with iron. A brazier.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
   piece('altar', 'Altar', 2, 2, [['stone_brick', 16], ['mortar', 8], ['stone_slab', 4], ['gold_lump', 1]], 40, 40, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true }),
   piece('banner', 'Banner', 1, 1, [['cloth', 4], ['shaft', 2], ['rope', 1], ['nail', 6]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
   piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
