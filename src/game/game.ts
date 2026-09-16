@@ -103,6 +103,28 @@ export const MAX_DEED_LEVEL = 5;
  */
 export const DEEDS_JOINED = 3;
 
+/**
+ * How many people have to be about before the island stops saying where
+ * everybody is.
+ *
+ * A list of every body on the island with a position beside it is a radar, and
+ * `rpc_social` has said so in a comment since the day it was written: your
+ * friends' whereabouts, and everybody else's name and nothing more. That is
+ * the right rule for a place with people in it.
+ *
+ * It is the wrong rule for an empty one. On four thousand tiles with a
+ * half-dozen ashore you can play for a week and never learn that anybody else
+ * exists, and the thing a new island needs most is for its handful of people
+ * to run into each other. So while there are fewer than this many about,
+ * everybody is on the map, with their name on them.
+ *
+ * A headcount rather than a switch, deliberately: a switch is a thing somebody
+ * has to remember to turn off, and this turns itself off on the day it stops
+ * being true. The Social window says which side of the line the island is on,
+ * so the day it changes is a thing people read rather than notice.
+ */
+export const CROWD_HIDES = 20;
+
 export const deedLevel = (d: Deed | null): number => Math.max(1, Math.min(MAX_DEED_LEVEL, d?.level ?? 1));
 export const deedRadiusAt = (level: number): number => DEED_RADIUS + (level - 1) * DEED_RADIUS_PER_LEVEL;
 export const deedWorkersAt = (level: number): number => DEED_WORKERS_AT_LEVEL_ONE + (level - 1);
@@ -919,6 +941,16 @@ export class Game {
    * light anything, which is the whole distinction this pair exists for.
    */
   neighbourDeeds: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean }> = [];
+
+  /**
+   * Everybody else ashore, as of the last slow read.
+   *
+   * Only those with an `x` on them can be drawn, and whether anybody has one
+   * is the island's call rather than this machine's: while fewer than
+   * `CROWD_HIDES` are about it says where everybody is, and after that it says
+   * where your friends are and no more.
+   */
+  folkAshore: Array<{ uid: string; name: string; online: boolean; x?: number; y?: number }> = [];
 
   /** The neighbour whose settlement covers this tile, if one does. */
   deedAt(x: number, y: number): { name: string; holder: string | null } | null {
@@ -4058,6 +4090,7 @@ export class Game {
      * still "you have no settlement", which is what a disband sends.
      */
     if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds;
+    if (ground.folk !== undefined) this.folkAshore = ground.folk;
     if (ground.deed !== undefined) {
       const d = ground.deed;
       const was = this.deed;
@@ -4813,6 +4846,15 @@ export interface IslandGround {
    * work off in your journal.
    */
   deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean }>;
+  /**
+   * Everybody else ashore, with whereabouts while the island is quiet.
+   *
+   * On the slow half, beside the settlements, because it is the same kind of
+   * thing: a fact about the island rather than about the tile you are on.
+   * `folk_ashore` decides whether the positions come with it — see
+   * `CROWD_HIDES`.
+   */
+  folk?: Array<{ uid: string; name: string; online: boolean; x?: number; y?: number }>;
   /**
    * What is standing, and what is half built.
    *

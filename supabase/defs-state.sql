@@ -2719,6 +2719,7 @@ create or replace function nutrient_decay() returns double precision language sq
 create or replace function climb_per_level() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
 create or replace function mine_depth() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function deeds_joined() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
+create or replace function crowd_hides() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function tick_seconds() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function idle_logout() returns double precision language sql immutable as $fn$ select 450::double precision $fn$;
 create or replace function event_keep() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;

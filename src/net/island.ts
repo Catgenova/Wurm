@@ -241,6 +241,16 @@ export interface Social {
   invites: Array<{ founder: string; by: string; deed: string; at: number }>;
   /** And the ones you have out, which only a founder ever has. */
   sent: Array<{ uid: string; name: string; at: number }>;
+  /**
+   * Whether the island is quiet enough to be saying where everybody is.
+   *
+   * Decided by a headcount rather than a switch, so it turns itself off on the
+   * day it stops being true — see `CROWD_HIDES`. Optional because a page that
+   * has not been redeployed is talking to an island that answers neither.
+   */
+  open?: boolean;
+  /** And the headcount at which it stops. */
+  crowd?: number;
   friends: Folk[];
   /** Waiting on you. */
   asked: Array<{ uid: string; name: string; at: number }>;

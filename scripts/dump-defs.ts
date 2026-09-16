@@ -36,7 +36,7 @@ import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
-import { DEEDS_JOINED, PLANTABLE } from '../src/game/game';
+import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
@@ -843,7 +843,7 @@ for (const [fn, v] of [
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
   /* And how many other people's settlements you may be a citizen of. */
-  ['deeds_joined', DEEDS_JOINED],
+  ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
   ['change_keep', CHANGE_KEEP], ['island_keep', ISLAND_KEEP],
   ['tick_worlds', TICK_WORLDS], ['tick_players', TICK_PLAYERS], ['calls_a_minute', CALLS_A_MINUTE],

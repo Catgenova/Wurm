@@ -325,9 +325,21 @@ export class SocialPanel {
         acts.unshift(this.button('Invite', `Ask ${who.name} to live at ${own.name}`,
           () => void this.did(isle.invite(who.uid))));
       }
-      this.page.append(this.row(who, who.online ? 'ashore' : 'away', acts));
+      this.page.append(this.row(who, this.whereabouts(who), acts));
+    }
+    /*
+     * And why a stranger has a place beside their name, which will one day
+     * stop being true without anybody deploying anything. Said here rather
+     * than left to be noticed: the island decides this on a headcount, and a
+     * rule that changes itself is a rule people should be able to read.
+     */
+    if (s.open !== undefined) {
+      this.page.append(this.empty(s.open
+        ? `While there are fewer than ${s.crowd ?? 0} people about, the island says where everybody is, and they are all on your map. That stops on its own once it fills up.`
+        : `There are ${s.crowd ?? 0} or more people about, so the island says where your friends and neighbours are and no more.`));
     }
   }
+
 
   /**
    * One settlement of yours: who lives on it, and the way off it.

@@ -6209,6 +6209,57 @@ select '797. and what a body is worth carrying one: ' || string_agg(
      || (select count(*) from species_def where not monster) || ' of the ' || (select count(*) from species_def)
 from species_def s where s.monster;
 
+
+\echo ''
+\echo '--- while the island is nearly empty'
+/*
+ * Reported from the island: *"player names on map / easier visibility of other
+ * players would be welcome while the population is low, even if it's something
+ * that's later removed"*. It removes itself.
+ */
+-- Three more ashore, which is the island this rule was asked for.
+do $$
+declare i int; u uuid;
+begin
+  for i in 1..3 loop
+    u := ('55555555-0000-0000-0000-' || lpad(i::text, 12, '0'))::uuid;
+    perform set_config('request.jwt.claims', json_build_object('sub', u)::text, false);
+    perform rpc_join((select id from world where name = 'Hoarding'), 'Crowd' || i);
+  end loop;
+end $$;
+select '799. four people on a 64-tile island: the island is quiet (' || folk_seen(:'world3')
+     || '), and of the people ashore he is told '
+     || (select count(*) filter (where f->>'x' is not null) || ' of ' || count(*)
+         from jsonb_array_elements(folk_ashore(:'world3', :'dane')) f)
+     || ' with whereabouts on them';
+
+-- And the same list, through both doors that hand it out.
+select set_config('request.jwt.claims', json_build_object('sub', :'dane')::text, false) \g /dev/null
+select '800. which is what both doors say: rpc_social here '
+     || (select jsonb_array_length(rpc_social(:'world3')->'here')) || ' with open '
+     || (rpc_social(:'world3')->>'open') || ' at ' || (rpc_social(:'world3')->>'crowd')
+     || ', and the slow half of rpc_ground folk '
+     || (select jsonb_array_length(rpc_ground(:'world3', 40, true)->'folk'))
+     || ' — one rule, read twice, so neither can drift open while the other closes';
+
+-- Now fill it up.
+do $$
+declare i int; u uuid;
+begin
+  for i in 4..24 loop
+    u := ('55555555-0000-0000-0000-' || lpad(i::text, 12, '0'))::uuid;
+    perform set_config('request.jwt.claims', json_build_object('sub', u)::text, false);
+    perform rpc_join((select id from world where name = 'Hoarding'), 'Crowd' || i);
+  end loop;
+end $$;
+select set_config('request.jwt.claims', json_build_object('sub', :'dane')::text, false) \g /dev/null
+select '801. and with ' || (select count(*) from player where world_id = :'world3')
+     || ' ashore, which is past the ' || crowd_hides()::int || ' the rule is written at: quiet ('
+     || folk_seen(:'world3') || '), and of the people ashore he is now told '
+     || (select count(*) filter (where f->>'x' is not null) || ' of ' || count(*)
+         from jsonb_array_elements(folk_ashore(:'world3', :'dane')) f)
+     || ' with whereabouts — nobody deployed anything, the island simply filled up';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6219,7 +6270,7 @@ from species_def s where s.monster;
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '798. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '802. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

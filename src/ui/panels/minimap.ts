@@ -412,6 +412,41 @@ export class MinimapPanel {
       ctx.fillStyle = css;
       ctx.fillText(m.name, bx + 3, my - 11);
     }
+    /*
+     * Everybody else, while the island is quiet enough to say where they are.
+     *
+     * Drawn after the marks and before you, so a person is never hidden under
+     * a pin and you are never hidden under a person. Somebody outside the
+     * drawn window is pinned to its edge rather than dropped: on a map that
+     * only shows the ground you have walked, dropping them would mean the
+     * people worth walking to are exactly the ones you cannot see.
+     */
+    for (const f of this.game.folkAshore) {
+      if (!f.online || f.x === undefined || f.y === undefined) continue;
+      const fx = (f.x + 0.5 - ox) * scale;
+      const fy = (f.y + 0.5 - oy) * scale;
+      const off = fx < 4 || fy < 4 || fx > this.view.width - 4 || fy > this.view.height - 4;
+      const px2 = Math.max(5, Math.min(this.view.width - 5, fx));
+      const py2 = Math.max(5, Math.min(this.view.height - 5, fy));
+      ctx.beginPath();
+      ctx.arc(px2, py2, off ? 3 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = off ? 'rgba(126,190,255,0.75)' : '#7ebeff';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      if (!this.names) continue;
+      // Their name to the right, and to the left rather than off the edge —
+      // the same rule the marks follow, because they are read the same way.
+      const w = ctx.measureText(f.name).width;
+      const right = px2 + 7 + w + 6 <= this.view.width;
+      const bx = right ? px2 + 7 : Math.max(0, px2 - 7 - w - 6);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(bx, py2 - 9, w + 6, 17);
+      ctx.fillStyle = off ? 'rgba(200,224,255,0.85)' : '#cfe6ff';
+      ctx.fillText(f.name, bx + 3, py2);
+    }
     const p = this.game.player;
     ctx.fillStyle = '#ffe36e';
     ctx.beginPath();
