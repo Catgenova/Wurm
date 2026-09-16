@@ -5736,6 +5736,59 @@ select '755. every crate in sight counted once for the lot: crates_near reads cr
      || ' times, where it used to run one for every crate within forty tiles on every ground read';
 
 /*
+ * And deep water, which cost nothing at all until now.
+ *
+ * A pool ten under the line, dug out of a meadow that stands at a hundred, so
+ * that the one thing changing is whether the ground under a body is there.
+ */
+select land_set_height(:'world2', 3, 12, -10), land_set_height(:'world2', 4, 12, -10),
+       land_set_height(:'world2', 4, 13, -10), land_set_height(:'world2', 3, 13, -10) \g /dev/null
+update player set x = 8.5, y = 8.5, level = 0 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select coalesce(in_deep_water(:'world2', :'ivar')::text, 'null') as on_grass \gset
+update player set x = 3.5, y = 12.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select coalesce(in_deep_water(:'world2', :'ivar')::text, 'null') as in_water \gset
+insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, driver)
+values (:'world2', 'furniture', 'rowing_boat', 3, 12, 1, 1, 3.5, 12.5, :'ivar')
+returning id as hull \gset
+select coalesce(in_deep_water(:'world2', :'ivar')::text, 'null') as in_hull \gset
+delete from placed where id = :'hull' \g /dev/null
+select '756. out of your depth: on the meadow ' || :'on_grass' || ', in ten feet of water '
+     || :'in_water' || ', and in a hull in the same ten feet ' || :'in_hull'
+     || ' — a hull in thirty feet of water was swimming, which is the one thing a boat is for';
+
+update player set act = null, stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb,
+    body_at = now() - interval '30 seconds', swim_at = null, drowned_at = null
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from skill where world_id = :'world2' and uid = :'ivar' and id = 'swimming' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '757. half a minute of it: wind '
+     || (select round((stats->>'stamina')::numeric, 4) from player where world_id = :'world2' and uid = :'ivar')
+     || ' of a full breath, swimming up from 1 to '
+     || round(skill_of(:'world2', :'ivar', 'swimming')::numeric, 4)
+     || ' on twenty-five goes, with '
+     || (select round(extract(epoch from (now() - swim_at))::numeric, 0) from player where world_id = :'world2' and uid = :'ivar')
+     || ' seconds left on the clock for the next call';
+
+delete from event where world_id = :'world2' and uid = :'ivar' \g /dev/null
+update player set body_at = now() - interval '20 seconds' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '758. twenty seconds more: wind '
+     || (select round((stats->>'stamina')::numeric, 4) from player where world_id = :'world2' and uid = :'ivar')
+     || ' and health ' || (select round((stats->>'health')::numeric, 4) from player where world_id = :'world2' and uid = :'ivar')
+     || ' — charged for the part there was no breath left for and not for the whole stretch — "'
+     || coalesce((select text from event where world_id = :'world2' and uid = :'ivar' and kind = 'error' order by n desc limit 1), 'nothing said') || '"';
+
+update player set x = 8.5, y = 8.5, body_at = now() - interval '10 seconds',
+    moved_at = now() - interval '1 hour' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select body_settle(:'world2', :'ivar') \g /dev/null
+select '759. and ashore: wind coming back at '
+     || (select round((stats->>'stamina')::numeric, 4) from player where world_id = :'world2' and uid = :'ivar')
+     || ', the swimming clock started again '
+     || (select (swim_at >= now() - interval '2 seconds')::text from player where world_id = :'world2' and uid = :'ivar')
+     || ' and the telling-off forgotten '
+     || (select (drowned_at is null)::text from player where world_id = :'world2' and uid = :'ivar');
+
+/*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
  *
@@ -5745,7 +5798,7 @@ select '755. every crate in sight counted once for the lot: crates_near reads cr
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '756. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '760. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

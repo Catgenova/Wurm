@@ -52,6 +52,16 @@ export const HEAL_FED = 0.2;
 /** Swimming costs wind, and drowning costs blood. */
 export const SWIM_WIND = 0.03;
 export const DROWN_RATE = 0.05;
+/**
+ * What a second of deep water teaches, and how often it will tell you off.
+ *
+ * Both were written into the one place that used them and nowhere else, which
+ * was fine while nothing else used them. The island charges the wind and the
+ * blood now, and it has to raise the same trade at the same rate and nag at
+ * the same spacing, so they are numbers rather than literals.
+ */
+export const SWIM_LEARN = 0.09;
+export const DROWN_WARN = 4;
 
 /** Below this you are too far gone to start anything. */
 export const EXHAUSTED = 0.08;

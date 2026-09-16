@@ -2738,6 +2738,9 @@ create or replace function heal_fed() returns double precision language sql immu
 create or replace function swim_wind() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
 create or replace function drown_rate() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
 create or replace function exhausted() returns double precision language sql immutable as $fn$ select 0.08::double precision $fn$;
+create or replace function swim_depth() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
+create or replace function swim_learn() returns double precision language sql immutable as $fn$ select 0.09::double precision $fn$;
+create or replace function drown_warn() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
 create or replace function favour_trickle() returns double precision language sql immutable as $fn$ select 0.0016::double precision $fn$;
 create or replace function prayer_favour() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
 create or replace function prayer_rest() returns double precision language sql immutable as $fn$ select 2400::double precision $fn$;

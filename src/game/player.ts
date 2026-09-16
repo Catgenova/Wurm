@@ -86,6 +86,17 @@ export class Player {
   visualLevel = 0;
   moving = false;
   swimming = false;
+  /**
+   * Whether something else is holding you up: a hull, a cart bed, a saddle.
+   *
+   * Deep water was read off the ground and nothing else, so a hull in thirty
+   * feet of water was *swimming* — slowed to a swimmer's share of a walking
+   * pace and spending a swimmer's wind, in a boat, which is the one thing a
+   * boat is for. A Wadd carrying a rider across a sound was the same. The
+   * question deep water actually asks is whether your own feet are in it, and
+   * only the game knows what is under you, so it says so each tick.
+   */
+  carried = false;
   walkPhase = 0;
   path: PathPoint[] | null = null;
   stats: Stats = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
@@ -174,7 +185,7 @@ export class Player {
     }
 
     const h = world.heightAt(this.x, this.y);
-    this.swimming = h < -SWIM_DEPTH;
+    this.swimming = !this.carried && h < -SWIM_DEPTH;
 
     if (vx === 0 && vy === 0) {
       this.moving = false;

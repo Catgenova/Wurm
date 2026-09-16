@@ -5,7 +5,7 @@ import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
-import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
+import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
@@ -1813,6 +1813,9 @@ export class Game {
     p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
     // Only wheels feel the ground: a boat is on water and feet are feet.
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
+    // And whether your own feet are in the water at all, which is the whole of
+    // what deep water is asking. A hull, a cart bed or a saddle is not.
+    p.carried = !!(driven || up);
     const { rule } = this.movement();
     const moved = p.update(dt, this.world, rule);
     this.acting.stepped = moved;
@@ -1892,18 +1895,30 @@ export class Game {
       if (was > 0 && this.player.rested === 0) this.logMsg('The rest goes out of you. Skills go in at their ordinary pace again.', 'system');
     }
     if (p.swimming) {
-      // Deep water is its own teacher, and a strong swimmer tires more slowly.
+      /*
+       * Deep water is its own teacher, and a strong swimmer tires more slowly.
+       *
+       * All of it is the island's on an island now, down to the telling-off:
+       * `swim_wind` and `drown_rate` were crossed the day the body was and
+       * called by nothing over there, so deep water cost a body nothing at all
+       * — and the trade this raised was raised into a number the next beat
+       * threw away, because the island sends the whole book and has never had
+       * a `swimming` row to send. An hour of open water, and a refresh put it
+       * back to one.
+       */
       this.acting.swimClock += dt;
       if (this.acting.swimClock >= 1) {
         this.acting.swimClock = 0;
-        this.gainSkill('swimming', 0.09);
+        if (!this.bodyFromIsland) this.gainSkill('swimming', SWIM_LEARN);
       }
-      if (!this.bodyFromIsland) s.stamina = Math.max(0, s.stamina - dt * SWIM_WIND * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
-      if (s.stamina <= 0) {
-        if (!this.bodyFromIsland) s.health = Math.max(0, s.health - dt * DROWN_RATE);
-        if (this.time - this.acting.drownWarning > 4) {
-          this.acting.drownWarning = this.time;
-          this.logMsg('You are exhausted and swallowing water. Get to shore!', 'error');
+      if (!this.bodyFromIsland) {
+        s.stamina = Math.max(0, s.stamina - dt * SWIM_WIND * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
+        if (s.stamina <= 0) {
+          s.health = Math.max(0, s.health - dt * DROWN_RATE);
+          if (this.time - this.acting.drownWarning > DROWN_WARN) {
+            this.acting.drownWarning = this.time;
+            this.logMsg('You are exhausted and swallowing water. Get to shore!', 'error');
+          }
         }
       }
     } else if (!performing && !this.bodyFromIsland) {

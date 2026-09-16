@@ -57,10 +57,10 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
-import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
+import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, LEG_SLACK, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
-import { CLIMB_PER_LEVEL } from '../src/game/player';
+import { CLIMB_PER_LEVEL, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 
 const q = (v: unknown): string => {
@@ -835,7 +835,16 @@ for (const [fn, v] of [
   ['say_max', SAY_MAX], ['say_a_minute', SAY_A_MINUTE],
   ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],
   ['wind_starving', WIND_STARVING], ['heal_rate', HEAL_RATE], ['heal_fed', HEAL_FED],
+  /*
+   * And deep water, which the island kept two numbers for and never spent.
+   *
+   * `swim_wind` and `drown_rate` were crossed the day the body was and called
+   * by nothing, so an island charged nothing for open water. The depth it
+   * starts at and what a second of it teaches were literals in the browser,
+   * which is fine while one side owns a rule and no use at all once both do.
+   */
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
+  ['swim_depth', SWIM_DEPTH], ['swim_learn', SWIM_LEARN], ['drown_warn', DROWN_WARN],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
