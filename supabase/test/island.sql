@@ -5824,6 +5824,28 @@ select '764. and the beat only carries it when it has moved: a quiet beat says '
      || ', and one after a note says '
      || case when (rpc_settle(null, :'world2', null, false))->>'tally' is null then 'nothing' else 'the lot' end;
 
+-- And the line every go of every job ends with, which was written out by hand
+-- in ten places and said a different name from the window it sends you to.
+delete from event where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select skill_told(:'world2', :'ivar', 'armorsmithing', 1) \g /dev/null
+select '765. "' || (select text from event where world_id = :'world2' and uid = :'ivar'
+                    and kind = 'skill' order by n desc limit 1)
+     || '" — the Skills window calls it '
+     || (select name from skill_def where id = 'armorsmithing')
+     || ', and for fifteen of the sixty trades that is not what initcap gives you';
+-- And a gain under four places, which happens whenever the floor meets a low
+-- roll: `skill_gain_of` floors at 0.0001 and then multiplies by 0.6 to 1.4.
+delete from event where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select skill_said(:'world2', :'ivar', 'armorsmithing', min_gain() * 0.6) \g /dev/null
+select '766. and the smallest gain the rules can give: "'
+     || (select text from event where world_id = :'world2' and uid = :'ivar'
+         and kind = 'skill' order by n desc limit 1)
+     || '" — four places would have read "increased by 0.0001", which is not what it was';
+select '767. and it is written once now, not eleven times: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.prokind = 'f' and p.prosrc like '% increased by %')
+     || ' function says it';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -5834,7 +5856,7 @@ select '764. and the beat only carries it when it has moved: a quiet beat says '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '765. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '768. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'
