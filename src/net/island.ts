@@ -336,6 +336,20 @@ export class Island {
    * what stops a wall you just put up waiting twenty seconds to exist.
    */
   private groundSlow = true;
+  /**
+   * Whether the island's book of skills has landed in this browser yet.
+   *
+   * The beat sends the book only when a skill has moved, counted off a stamp
+   * on the player row — and a page that has just opened holds nothing but the
+   * starting value of every skill while that row remembers telling the *last*
+   * page. Reported as an iron vein refusing a miner with "Yours is 1.0" while
+   * the log line above it said 13.26.
+   *
+   * A cursor kept over there cannot tell "you have this already" from "you
+   * have just arrived", so this side says which. Asked for once, and never
+   * again in this session.
+   */
+  private booked = false;
   /** The island's shared topic we are holding a share of, if any. */
   private bodiesTopic = '';
   /** Bodies go on a topic everybody on the island agrees on. */
@@ -654,6 +668,7 @@ export class Island {
         p_seen: this.seenChange,
         p_world: this.info.id,
         p_said: this.said,
+        p_book: !this.booked,
       });
       const said = (data ?? {}) as {
         settled?: number; act?: string | null; ends?: string | null;
@@ -690,6 +705,8 @@ export class Island {
        * page rather than from the day they washed ashore.
        */
       if (typeof said.saidTo === 'number') this.said = Math.max(this.said, said.saidTo);
+      // The book has landed, so stop asking for it and take the deltas.
+      if (said.skills) this.booked = true;
       this.pinClock(said.time);
       if (typeof said.night === 'boolean') this.islandNight = said.night;
       this.hooks.mine?.({

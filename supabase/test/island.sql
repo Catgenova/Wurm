@@ -4090,6 +4090,18 @@ select '593. a beat with nothing done carries ' || coalesce((select string_agg(k
 select skill_raise(:'world2', :'ivar', 'mining', 1) \g /dev/null
 select '594. and one after a skill moved carries ' || coalesce((select string_agg(k, ', ' order by k)
          from jsonb_object_keys(rpc_settle(null, :'world2')) k where k in ('skills', 'said')), 'nothing');
+-- And the half of that which was wrong: the stamp is on the player, not on the
+-- session, so a page that had just opened — holding nothing but the starting
+-- value of every skill — was told nothing, because the last page had been.
+-- Reported as an iron vein refusing a miner with "Yours is 1.0" under a log
+-- line saying 13.26, which also locks: the seam you cannot start is the seam
+-- that would have raised the skill that says you can.
+select rpc_settle(null, :'world2') \g /dev/null
+select '594b. a browser that has just opened, holding no book, asks for it: mining '
+     || coalesce((rpc_settle(null, :'world2', null, true))->'skills'->>'mining', 'NOT SENT')
+     || ' — and the beat after, holding it: ' || coalesce((select string_agg(k, ', ' order by k)
+         from jsonb_object_keys(rpc_settle(null, :'world2', null, false)) k where k = 'skills'),
+       'left out, which is what the delta is for');
 -- And who the catch-up is for. It is counted from the highest line the browser
 -- has heard, and a browser that has just opened has heard none: it carried a
 -- nought, `e.n > 0` is every line on the island, and a refresh was handed its
