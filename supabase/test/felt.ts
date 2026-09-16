@@ -19,7 +19,7 @@
  */
 import { Creatures } from '../../src/game/creatures';
 import type { IslandCreature } from '../../src/game/creatures';
-import { skillRises, tookOff, HURT_FLOOR, SKILL_FLOOR, type Rise } from '../../src/net/felt';
+import { bodyForward, skillRises, tookOff, BODY_GAP, HURT_FLOOR, SKILL_FLOOR, type Body, type Rise } from '../../src/net/felt';
 
 let fails = 0;
 let n = 0;
@@ -139,6 +139,65 @@ field.sawAll([mob({ id: 1, health: 30 }), mob({ id: 2, health: 40, x: 4, y: 5 })
 say('two in front of you and one of them struck',
   field.sawAll([mob({ id: 1, health: 30 }), mob({ id: 2, health: 33, x: 4, y: 5 })]),
   [{ x: 4, y: 5, taken: 7 }]);
+
+/*
+ * And the body drawn forward, which is the whole of why the bars can be live
+ * without asking anything.
+ *
+ * Every number below is checked against what `body_settle` does with the same
+ * input — the island's rates, read out of Postgres:
+ *
+ *     hunger_rate 5e-05  thirst_rate 7.5e-05  wind_rest 0.05
+ *     heal_rate 0.004    heal_fed 0.2         wind_starving 0.3
+ */
+console.log('\n--- and a body between one answer and the next');
+
+const full: Body = { health: 1, stamina: 1, hunger: 1, thirst: 1 };
+const rested = { acting: false, wind: 1 };
+const working = { acting: true, wind: 1 };
+
+say('a minute of standing still takes off hunger',
+  +(1 - bodyForward(full, 60, rested).hunger).toFixed(6), 0.003);
+say('and thirst, half again as fast',
+  +(1 - bodyForward(full, 60, rested).thirst).toFixed(6), 0.0045);
+say('no time, no change', bodyForward(full, 0, rested), full);
+say('and time going backwards is no time at all', bodyForward(full, -5, rested), full);
+
+const worn: Body = { health: 0.5, stamina: 0.2, hunger: 0.8, thirst: 0.8 };
+say('ten seconds of wind back, hands empty',
+  +bodyForward(worn, 10, rested).stamina.toFixed(4), 0.2 + 10 * 0.05);
+say('and none at all with your hands full',
+  bodyForward(worn, 60, working).stamina, 0.2);
+say('wind does not go past full',
+  bodyForward({ ...worn, stamina: 0.99 }, 60, rested).stamina, 1);
+
+say('a minute of knitting, fed and watered',
+  +bodyForward(worn, 60, rested).health.toFixed(4), 0.5 + 60 * 0.004);
+const starved: Body = { health: 0.5, stamina: 0.2, hunger: 0.1, thirst: 0.8 };
+say('and none on an empty stomach', bodyForward(starved, 60, rested).health, 0.5);
+say('an empty one gets its wind back at a share of the rate',
+  +bodyForward({ ...worn, hunger: 0 }, 10, rested).stamina.toFixed(4), 0.2 + 10 * 0.05 * 0.3);
+
+say('a body twice as good at standing about',
+  +bodyForward(worn, 5, { acting: false, wind: 2 }).stamina.toFixed(4), 0.2 + 5 * 0.05 * 2);
+
+// Nothing falls below nothing, and nothing is drawn past what the island will
+// settle in one go.
+const nearly: Body = { health: 0.5, stamina: 0.2, hunger: 0.0001, thirst: 0.0001 };
+say('hunger stops at nothing', bodyForward(nearly, 600, rested).hunger, 0);
+say('and a gap longer than the island settles is clamped to it',
+  bodyForward(full, 10000, rested).hunger, bodyForward(full, BODY_GAP, rested).hunger);
+
+/*
+ * The frame rate and the heartbeat land in the same place, which is what makes
+ * this safe to draw: sixty steps of a sixtieth of a second come out where one
+ * step of a second does, so the bar does not creep away from the island's own
+ * answer between pins.
+ */
+let stepped = full;
+for (let i = 0; i < 600; i++) stepped = bodyForward(stepped, 0.1, rested);
+say('six hundred frames of a tenth, against one minute in one go',
+  +stepped.hunger.toFixed(9), +bodyForward(full, 60, rested).hunger.toFixed(9));
 
 console.log(fails ? `\n${fails} of ${n} wrong` : `\nall ${n} right`);
 process.exit(fails ? 1 : 0);

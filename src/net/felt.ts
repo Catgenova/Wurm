@@ -8,6 +8,8 @@
  * said and what was being held, and give back what moved.
  */
 
+import { HEAL_FED, HEAL_RATE, HUNGER_RATE, THIRST_RATE, WIND_REST, WIND_STARVING } from '../game/body';
+
 /** A skill that went up, and by how much. */
 export interface Rise {
   id: string;
@@ -54,3 +56,56 @@ export const HURT_FLOOR = 0.0005;
 
 export const tookOff = (was: number, now: number): number =>
   (was - now > HURT_FLOOR ? was - now : 0);
+
+/* ---- And the body, drawn forward between answers ------------------------- */
+
+/** The four bars, as the island keeps them. */
+export interface Body {
+  health: number;
+  stamina: number;
+  hunger: number;
+  thirst: number;
+}
+
+/**
+ * The most of a gap the island will settle in one go. `body_settle` clamps to
+ * this, so drawing past it would draw a body the island does not believe in.
+ * Nothing reaches it in practice: an answer arrives at least every heartbeat.
+ */
+export const BODY_GAP = 180;
+
+/**
+ * A body carried forward by the island's own arithmetic.
+ *
+ * This is `body_settle` in TypeScript, to the letter — the same rates, which
+ * are generated from the same constants, so the curve drawn here is the curve
+ * the next answer will confirm rather than one near it.
+ *
+ * It is deliberately *not* `Game.update`'s own richer version, which the
+ * island has never had: that one multiplies hunger and thirst by what is in
+ * your stomach, gets wind back more slowly while walking, and will not knit a
+ * wound while it is still bleeding. Drawing any of those here would drift from
+ * the island and snap back on every answer, which is worse than either. They
+ * are the island's to decide, not this function's to guess.
+ */
+export function bodyForward(
+  was: Body,
+  secs: number,
+  at: { acting: boolean; wind: number },
+): Body {
+  const gone = Math.max(0, Math.min(BODY_GAP, secs));
+  if (gone <= 0) return was;
+  const hunger = Math.max(0, was.hunger - gone * HUNGER_RATE);
+  const thirst = Math.max(0, was.thirst - gone * THIRST_RATE);
+  // Wind comes back only while your hands are empty, and an empty stomach or a
+  // dry throat gets it back at a share of the rate.
+  const starving = was.hunger <= 0 || was.thirst <= 0 ? WIND_STARVING : 1;
+  const stamina = at.acting
+    ? was.stamina
+    : Math.min(1, was.stamina + gone * WIND_REST * at.wind * starving);
+  // Nothing knits on an empty stomach.
+  const health = hunger > HEAL_FED && thirst > HEAL_FED && was.health < 1
+    ? Math.min(1, was.health + gone * HEAL_RATE)
+    : was.health;
+  return { health, stamina, hunger, thirst };
+}

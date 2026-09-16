@@ -4,6 +4,7 @@ import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
+import { bodyForward } from '../net/felt';
 import { DROWN_RATE, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
@@ -1818,6 +1819,28 @@ export class Game {
     if (!this.bodyFromIsland) {
       s.hunger = Math.max(0, s.hunger - dt * HUNGER_RATE * keep);
       s.thirst = Math.max(0, s.thirst - dt * THIRST_RATE * keep);
+    } else {
+      /*
+       * The island's body, drawn forward between one answer and the next.
+       *
+       * The four bars rode `rpc_settle` and nothing else, so standing still
+       * they were up to a minute stale: eat a loaf and the hunger bar sat
+       * there and then jumped. The answer is not to ask more often — it is
+       * that a body is a function of elapsed time and fixed rates, and this
+       * side has every one of them, generated from the same constants the
+       * island's are. So the curve is drawn here at the frame rate and the
+       * island re-pins it on every answer, exactly as the action bar and a
+       * wildermon's leg already work.
+       *
+       * `bodyForward` is `body_settle` to the letter and deliberately not the
+       * richer version above it — see the note on it.
+       */
+      const wind = 1 + Math.max(0, this.skills.get('body_stamina') - CHAR_START) * WIND_PER_LEVEL;
+      const now = bodyForward(s, dt, { acting: this.action?.state === 'performing', wind });
+      s.hunger = now.hunger;
+      s.thirst = now.thirst;
+      s.stamina = now.stamina;
+      s.health = now.health;
     }
 
     // What climbing and swimming have earned, and what the armour costs, before the next step.
