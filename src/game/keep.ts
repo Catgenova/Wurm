@@ -27,12 +27,25 @@
 /**
  * How often the clock comes round.
  *
- * The shortest job in the game is `ACTION_FLOOR`, four and a half seconds, so
- * five is close enough that nothing sits finished for long. It is a floor on
- * how stale the world can look to somebody watching, not on how quickly your
- * own work lands — the browser settles itself the moment its own job is due.
+ * It is a floor on how stale the world can look to somebody *watching*, not on
+ * how quickly your own work lands — the browser settles itself the moment its
+ * own job is due. So this is what somebody else's dig, somebody else's fire
+ * and somebody else's beast cost you in lateness.
+ *
+ * A second. It was five, chosen against `ACTION_FLOOR` — the shortest job in
+ * the game is four and a half seconds, so nothing sat finished for long. What
+ * that reasoning missed is that the tick is also the only thing that stirs the
+ * country around a body standing still, so five seconds was five seconds of
+ * everything-but-you.
+ *
+ * Measured on a warm database with three live islands and a hundred and
+ * thirty-four creatures on them, a round of `world_tick` costs **2.5 ms** —
+ * the first call after a restart is 770 ms of planning and then it settles.
+ * At one a second that is a quarter of one per cent of a core, and the work
+ * per round is capped by `TICK_WORLDS` and `TICK_PLAYERS` regardless, so the
+ * cost of turning it up is bounded whatever the island grows into.
  */
-export const TICK_SECONDS = 5;
+export const TICK_SECONDS = 1;
 
 /**
  * Quiet for this long and your body goes home.
@@ -43,14 +56,20 @@ export const TICK_SECONDS = 5;
  * whatever you were doing and says so; your skills, your pack and your land
  * are exactly where you left them when you come back.
  */
-export const IDLE_LOGOUT = 15 * 60;
+export const IDLE_LOGOUT = 450;
 
 /**
  * How often the browser says it is still here.
  *
  * `rpc_settle` is the heartbeat as well as the settle, so one call does both:
- * it lands whatever is due and writes `seen_at`. A minute is far inside the
- * quarter-hour above, and the write is skipped when the row is already fresh.
+ * it lands whatever is due and writes `seen_at`. A minute leaves six and a
+ * half of the seven and a half above, and the write is skipped when the row is
+ * already fresh.
+ *
+ * Worth knowing where the margin goes: a phone that backgrounds the tab
+ * freezes this timer, so the walk from "put the phone down" to "your body has
+ * gone home" is now seven and a half minutes rather than fifteen. Your skills,
+ * your pack and your land are exactly where you left them either way.
  */
 export const HEARTBEAT = 60;
 
@@ -126,8 +145,11 @@ export const RECONCILE_EVERY = 20;
  *
  * It is also how the country round somebody gets stirred at all — `rpc_creatures`
  * is `creature_sweep`'s only door — so this is a heartbeat as much as a read.
+ *
+ * One second. Together with the ground below it this is the largest call in
+ * the budget, which is why `CALLS_A_MINUTE` moved with it.
  */
-export const MOBS_EVERY = 2;
+export const MOBS_EVERY = 1;
 
 /** How far out to ask. Beyond this a thing is somebody else's weather. */
 export const MOBS_RANGE = 40;
@@ -178,8 +200,32 @@ export const ISLAND_KEEP = 30 * 24 * 3600;
 export const TICK_WORLDS = 20;
 export const TICK_PLAYERS = 200;
 
-/** Calls one person may make in a minute before the island stops listening. */
-export const CALLS_A_MINUTE = 240;
+/**
+ * Calls one person may make in a minute before the island stops listening.
+ *
+ * It has to carry the polls above with room to spare, and they moved. What one
+ * body costs now, per minute:
+ *
+ *     wildlife, every second      60
+ *     ground, every second        60
+ *     reconcile, every twenty      9   (three calls a round)
+ *     the beat                     1   at rest, ~13 through a run of work
+ *     fog, every forty-five        1   and only when new ground was seen
+ *     where you are                60   while walking, and never standing still
+ *                                ---
+ *                                 203  walking and working, against 240
+ *
+ * Eighty-five per cent of the old ceiling, with nothing left for a handful of
+ * instant asks — and what happens at the ceiling is not a polite refusal. A
+ * thrown `rpc_creatures` hands the browser `null`, `rowsIn` makes `[]` of it,
+ * and `sawAll([])` takes every creature off the screen. So the ceiling is
+ * doubled, which is the same order of traffic per player and leaves the burst
+ * room the old one had.
+ *
+ * (The other half of that hazard is fixed where it lives: `refreshMobs` no
+ * longer treats a call that failed as an island with nothing on it.)
+ */
+export const CALLS_A_MINUTE = 480;
 
 /**
  * How finely the island reads the ground under a claimed walk.
@@ -223,11 +269,12 @@ export const FOG_EVERY = 45;
 /**
  * How often the browser asks what is on the ground around it.
  *
- * Slower than the wildlife, which is moving, and faster than the heartbeat,
- * because a fire burning down and a kiln working through its load are things
- * you watch. The answer is usually a handful of rows and often none.
+ * The same beat as the wildlife now. It used to be slower on the grounds that
+ * the wildlife is the thing that moves — but a fire burning down and a kiln
+ * working through its load are things you stand and watch, and a second is
+ * what they are worth. The answer is usually a handful of rows and often none.
  */
-export const GROUND_EVERY = 3;
+export const GROUND_EVERY = 1;
 
 /** And how far out, which is past anything a screen shows. */
 export const GROUND_RANGE = 40;

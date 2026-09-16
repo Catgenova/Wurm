@@ -2423,14 +2423,14 @@ create or replace function young_for() returns double precision language sql imm
 create or replace function old_at() returns double precision language sql immutable as $fn$ select 54000::double precision $fn$;
 create or replace function coax_lapse() returns double precision language sql immutable as $fn$ select 225::double precision $fn$;
 create or replace function climb_per_level() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
-create or replace function tick_seconds() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
-create or replace function idle_logout() returns double precision language sql immutable as $fn$ select 900::double precision $fn$;
+create or replace function tick_seconds() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function idle_logout() returns double precision language sql immutable as $fn$ select 450::double precision $fn$;
 create or replace function event_keep() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
 create or replace function change_keep() returns double precision language sql immutable as $fn$ select 604800::double precision $fn$;
 create or replace function island_keep() returns double precision language sql immutable as $fn$ select 2592000::double precision $fn$;
 create or replace function tick_worlds() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function tick_players() returns double precision language sql immutable as $fn$ select 200::double precision $fn$;
-create or replace function calls_a_minute() returns double precision language sql immutable as $fn$ select 240::double precision $fn$;
+create or replace function calls_a_minute() returns double precision language sql immutable as $fn$ select 480::double precision $fn$;
 create or replace function walk_samples() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
 create or replace function sweep_every() returns double precision language sql immutable as $fn$ select 300::double precision $fn$;
 create or replace function sweep_rows() returns double precision language sql immutable as $fn$ select 5000::double precision $fn$;

@@ -4044,7 +4044,7 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
 -- only when the body moved, so a job finished while standing still landed at
 -- whatever later moment somebody happened to walk somewhere.
 select '591. the clock: a round every ' || tick_seconds() || ' seconds, a shut tab left standing for '
-     || round(idle_logout() / 60) || ' minutes, talk kept ' || round(event_keep() / 3600)
+     || to_char(idle_logout() / 60, 'FM990.0') || ' minutes, talk kept ' || round(event_keep() / 3600)
      || ' hours, tile changes ' || round(change_keep() / 86400) || ' days, and an island nobody visits '
      || round(island_keep() / 86400) || ' days';
 

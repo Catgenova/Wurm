@@ -880,7 +880,18 @@ export class Island {
   async refreshMobs(now: number): Promise<void> {
     if (!this.info || !this.hooks.mobs || now - this.lastMobs < MOBS_EVERY) return;
     this.lastMobs = now;
-    const { data } = await supabase().rpc('rpc_creatures', { p_world: this.info.id, p_range: MOBS_RANGE });
+    const { data, error } = await supabase().rpc('rpc_creatures', { p_world: this.info.id, p_range: MOBS_RANGE });
+    /*
+     * A call that failed is not an island with nothing on it.
+     *
+     * `rowsIn` makes `[]` of a `null`, and `sawAll([])` takes every creature
+     * off the screen — so one dropped call, one rate limit, one blip of a
+     * network emptied the field and the next answer put it all back. Harmless
+     * while this ran every two seconds and somebody had to be unlucky; at one
+     * a second it is sixty chances a minute. What we last saw is a better
+     * picture of the island than nothing at all.
+     */
+    if (error || !Array.isArray(data)) return;
     this.hooks.mobs(rowsIn<IslandCreature>(data));
   }
 
@@ -1013,6 +1024,21 @@ export class Island {
       this.hooks.mine?.({ queue: lineUp(result.queue), cap: result.capacity ?? null });
     }
     if (result.ends) this.armBeat((new Date(result.ends).getTime() - Date.now()) / 1000 + 0.25);
+    /*
+     * And an ask the island has already finished with.
+     *
+     * An instant job — eating, stowing, tipping a bucket out — comes back
+     * `done` with no `ends` on it, so nothing above re-times the beat and
+     * nothing carries the body back. Eat a loaf and the hunger bar sat still
+     * for up to a minute and then jumped, which is most of what "some things
+     * seem delayed" was.
+     *
+     * Half a second rather than at once, because `armBeat` clears the timer it
+     * replaces: a dozen instant asks in a row cost one settle after the last
+     * of them instead of a dozen, which matters more now the polls take the
+     * budget they do.
+     */
+    if (result.done) this.armBeat(0.5);
     return result;
   }
 
