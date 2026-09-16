@@ -568,7 +568,8 @@ export function findBaySpawn(atlas: Atlas, seed: number, size = 4096): { x: numb
    */
   const start = Math.floor(hash2(seed, 7, 13) * zone.length);
   let best: { x: number; y: number } | null = null;
-  let bestScore = -1;
+  let bestScore = -Infinity;
+  let bestUnder = -Infinity;
   const W = 16;
   for (let k = 0; k < 48; k++) {
     const spot = where(zone[(start + k * 37) % zone.length]);
@@ -589,7 +590,57 @@ export function findBaySpawn(atlas: Atlas, seed: number, size = 4096): { x: numb
     // Standing on dry ground, and over half of what is around you walkable.
     if (under >= 4 && dry >= W * W * 0.55) return spot;
     const score = Math.min(under, 4) * 1000 + dry;
-    if (score > bestScore) { bestScore = score; best = spot; }
+    if (score > bestScore) { bestScore = score; best = spot; bestUnder = under; }
   }
+
+  /*
+   * And if the bay has nothing dry on it, look at the island instead.
+   *
+   * The loop above rolls each candidate and *measures* how far under the water
+   * it is, and then the fallback handed back the best of them whatever that
+   * measurement said. On a chart whose bay comes out marginal that is a spot
+   * it has just read as minus a hundred and sixty-five: the body comes ashore
+   * in a hundred and sixty-five feet of water, and a swimmer spends wind
+   * instead of getting it back, so it is exhausted inside a minute and stays
+   * exhausted until something walks it to dry land. Nothing does.
+   *
+   * It has never happened on a real island — 4096, 1024 and 256 all answer dry
+   * on every seed tried. It happens on 27 seeds in 60 at 64 tiles a side,
+   * which is the size the live smoke test rolls, with a fresh random seed
+   * every run: a coin flip on whether the run means anything. Fourteen checks
+   * went down to it in one run and were read, twice, as a rule that had just
+   * changed.
+   *
+   * So the last resort is a coarse sweep of the whole island rather than a
+   * shrug: the same window and the same two questions, over a grid of at most
+   * 24 by 24. It is the wrong shore — nobody meant to start here — but it is
+   * ground, and the alternative is the sea.
+   */
+  if (bestUnder < 4) {
+    const step = Math.max(1, Math.floor((size - W) / 23));
+    for (let gy = 0; gy + W < size; gy += step) {
+      for (let gx = 0; gx + W < size; gx += step) {
+        const spot = { x: gx + W / 2, y: gy + W / 2 };
+        const win = generateAtlasWindow(seed, atlas, gx, gy, W, W, size);
+        const cw = W + 1;
+        const mid = W / 2;
+        const c = [win.heights[mid * cw + mid], win.heights[mid * cw + mid + 1],
+          win.heights[(mid + 1) * cw + mid + 1], win.heights[(mid + 1) * cw + mid]];
+        const under = Math.min(...c);
+        let dry = 0;
+        for (let y = 0; y < W; y++) {
+          for (let x = 0; x < W; x++) {
+            const q = [win.heights[y * cw + x], win.heights[y * cw + x + 1],
+              win.heights[(y + 1) * cw + x + 1], win.heights[(y + 1) * cw + x]];
+            if (Math.min(...q) >= 0 && Math.max(...q) - Math.min(...q) <= 52) dry++;
+          }
+        }
+        if (under >= 4 && dry >= W * W * 0.55) return spot;
+        const score = Math.min(under, 4) * 1000 + dry;
+        if (score > bestScore) { bestScore = score; best = spot; bestUnder = under; }
+      }
+    }
+  }
+
   return best ?? where(zone[start % zone.length]);
 }

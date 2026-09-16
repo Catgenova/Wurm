@@ -202,6 +202,28 @@ async function main(): Promise<void> {
     await island.join(id, 'The Machine');
     check('came ashore', !!island.world && !!island.me, `${((Date.now() - t1) / 1000).toFixed(1)}s`);
 
+    /*
+     * And came ashore, rather than into the sea.
+     *
+     * `findBaySpawn` measures each candidate and used to hand back the best of
+     * them whatever the measurement said, so on a marginal chart the body
+     * started in deep water. A swimmer spends wind instead of getting it back,
+     * so it was flat inside a minute and stayed flat, and every check that
+     * costs stamina answered `You are too exhausted to do that` instead of
+     * answering the question it was asked. Fourteen went down that way in one
+     * run, and the list of them — cart, pray, bridge, bucket, wound, wall,
+     * stake — is the same list whatever drowned the body, which is how it got
+     * read as a rule that had just changed. Twice.
+     *
+     * Named here so it can only ever be read as itself. It is one line and it
+     * is first, because everything after it depends on the body being able to
+     * act at all.
+     */
+    const deep = gen.world.centerHeight(gen.spawn.x, gen.spawn.y);
+    check('and onto dry land, not into the sea', deep >= 0,
+      `the ground under the spawn is ${deep.toFixed(0)}`
+      + (deep >= 0 ? '' : ' — a body that starts in the water never gets its wind back'));
+
     // The island that came back, against the island that went out.
     const back = island.world!;
     const same = (a: ArrayLike<number>, b: ArrayLike<number>): number => {
