@@ -1,4 +1,5 @@
 import { mulberry32 } from '../world/noise';
+import { emotePose } from '../game/emotes';
 import {
   BUILDS, DEFAULT_LOOK, darken, eyeColour, hairColour, shirtColour, skinColour, trouserColour,
   type Gender, type Look,
@@ -3047,6 +3048,9 @@ export interface PlayerPose {
   trousers?: string;
   /** Who this is: skin, hair, eyes, build and the clothes they came ashore in. */
   look?: Look;
+  /** An emote in progress, and how far through it is (0 to 1). */
+  emote?: string;
+  emoteT?: number;
 }
 
 const BELT = '#33241a';
@@ -3556,7 +3560,23 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     return;
   }
   const swing = pose.moving ? Math.sin(pose.phase) : 0;
+  /*
+   * A hop lifts the whole figure and a wave swings one arm, and both of them
+   * ride the numbers that were already here: `bob` is subtracted from every y
+   * below, and the shadow is drawn before it and stays where it is — which is
+   * what makes a hop look like leaving the ground rather than growing.
+   */
+  const em = pose.emote ? emotePose(pose.emote, pose.emoteT ?? 0) : null;
   const bob = pose.moving ? Math.abs(Math.cos(pose.phase)) * 1.2 : 0;
+  /*
+   * A hop lifts the *whole* figure, legs included, which the walking bob above
+   * deliberately does not — a stride rides the chest a pixel over still legs.
+   * Seven pixels of it does not: the first screenshot of a hop had a torso
+   * floating clear of a pair of legs still standing on the ground. So `lift`
+   * is its own number and reaches everything drawn, and only the shadow is
+   * left where it was, because the shadow is the ground.
+   */
+  const lift = em?.lift ?? 0;
   // Across the shoulders, and then what is left of it at this angle.
   const span = 4.5 * b.shoulder;
   const chest = span * t.girth;
@@ -3575,9 +3595,9 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
   const legW = Math.max(1.8, hips * 0.92);
   const apart = hips * 0.55 * t.depth;
   ctx.fillStyle = darken(w.trousers, 0.16);
-  ctx.fillRect(apart - legW / 2, -12 - swing * 2, legW, 12 + swing * 2);
+  ctx.fillRect(apart - legW / 2, -12 - swing * 2 - lift, legW, 12 + swing * 2);
   ctx.fillStyle = w.trousers;
-  ctx.fillRect(-apart - legW / 2, -12 + swing * 2, legW, 12 - swing * 2);
+  ctx.fillRect(-apart - legW / 2, -12 + swing * 2 - lift, legW, 12 - swing * 2);
   // arms
   const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
   const arm = (span + 0.9) * t.depth;
@@ -3586,27 +3606,35 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
   // The far one goes down before the body and comes up a shade darker, so a
   // figure with its back to you has an arm behind it rather than stuck on.
   ctx.fillStyle = darken(w.tunic, 0.16);
-  ctx.fillRect(arm - sleeve / 2, -25 - bob - armSwing, sleeve, 8);
+  ctx.fillRect(arm - sleeve / 2, -25 - bob - lift - armSwing, sleeve, 8);
   ctx.fillStyle = darken(w.skin, 0.16);
-  ctx.fillRect(arm - hand / 2, -17 - bob - armSwing, hand, hand);
+  ctx.fillRect(arm - hand / 2, -17 - bob - lift - armSwing, hand, hand);
   // body: shoulders at the top, waist at the belt, so a build is a taper
   // rather than a wider rectangle.
   ctx.fillStyle = w.tunic;
   ctx.beginPath();
-  ctx.moveTo(-chest, -26 - bob);
-  ctx.lineTo(chest, -26 - bob);
-  ctx.lineTo(waist, -12 - bob);
-  ctx.lineTo(-waist, -12 - bob);
+  ctx.moveTo(-chest, -26 - bob - lift);
+  ctx.lineTo(chest, -26 - bob - lift);
+  ctx.lineTo(waist, -12 - bob - lift);
+  ctx.lineTo(-waist, -12 - bob - lift);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = BELT;
-  ctx.fillRect(-waist - 0.2, -14.5 - bob, waist * 2 + 0.4, 1.6);
-  // and the near arm over the body it swings across
+  ctx.fillRect(-waist - 0.2, -14.5 - bob - lift, waist * 2 + 0.4, 1.6);
+  // and the near arm over the body it swings across — or up beside the head,
+  // when there is a wave in it.
   ctx.fillStyle = w.tunic;
-  ctx.fillRect(-arm - sleeve / 2, -25 - bob + armSwing, sleeve, 8);
-  ctx.fillStyle = w.skin;
-  ctx.fillRect(-arm - hand / 2, -17 - bob + armSwing, hand, hand);
-  head(ctx, w, 0, -31 - bob, 4.6, t);
+  if (em && em.wave !== 0) {
+    const lean = em.wave * 2.2;
+    ctx.fillRect(-arm - sleeve / 2 + lean, -33 - bob - lift, sleeve, 9);
+    ctx.fillStyle = w.skin;
+    ctx.fillRect(-arm - hand / 2 + lean * 1.6, -35 - bob - lift, hand, hand);
+  } else {
+    ctx.fillRect(-arm - sleeve / 2, -25 - bob - lift + armSwing, sleeve, 8);
+    ctx.fillStyle = w.skin;
+    ctx.fillRect(-arm - hand / 2, -17 - bob - lift + armSwing, hand, hand);
+  }
+  head(ctx, w, 0, -31 - bob - lift, 4.6, t);
   ctx.restore();
 }
 

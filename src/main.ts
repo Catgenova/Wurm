@@ -225,6 +225,7 @@ const PRESSES: Record<string, () => void> = {
   win_settings: () => ui.toggleWindow('settings'),
   win_help: () => ui.toggleWindow('help'),
   walk_home: () => game.walkHome(),
+  emotes: () => ui.showEmotes(),
   stop: () => {
     if (ui.menu.isOpen) ui.menu.hide();
     else if (game.action) game.cancelAction();

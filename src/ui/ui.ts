@@ -1,4 +1,5 @@
 import type { Game } from '../game/game';
+import { EMOTES } from '../game/emotes';
 import type { Pick, Renderer } from '../render/renderer';
 import { TileType, TREE_DEFS, treeSpecies, treeVariant , SLAB_BY_ITEM } from '../world/tiles';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
@@ -513,6 +514,24 @@ export class UI {
       };
     });
     this.menu.show(x, y, 'Windows', entries);
+  }
+
+  /**
+   * The emotes, in the middle of the screen where the key left the cursor.
+   *
+   * A menu rather than a key each: two of them is a pair of bindings and five
+   * is a keyboard nobody can remember, and this costs one keypress more and
+   * never runs out of room. Each row says the command that does the same
+   * thing, so the menu teaches the way out of itself.
+   */
+  showEmotes(): void {
+    const cam = this.renderer.camera;
+    this.menu.show(cam.width / 2, cam.height / 2, 'Emotes',
+      EMOTES.map((e) => ({
+        label: e.label,
+        note: `/${e.id}`,
+        onSelect: () => this.game.emote(e.id),
+      })));
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {

@@ -1,4 +1,5 @@
 import { generateWorld } from '../world/generate';
+import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
@@ -4762,6 +4763,25 @@ export class Game {
    */
   talk: ((text: string) => void) | null = null;
 
+  /**
+   * Wave, or hop.
+   *
+   * Drawn here at once and said over the wire in the same breath: an emote
+   * that waited for the island to answer would be an emote you pressed and
+   * then watched for, which is the opposite of the point of one.
+   */
+  emote(id: string): void {
+    const def = EMOTE_BY_ID.get(id);
+    if (!def) return;
+    this.player.emote = id;
+    this.player.emoteAt = performance.now() / 1000;
+    this.logMsg(def.said.replace('{name}', 'You').replace(/s\.$/, '.'), 'event');
+    this.emoted?.(id);
+  }
+
+  /** Filled in by whatever is carrying this game to other people, if anything. */
+  emoted?: (id: string) => void;
+
   say(text: string): void {
     const trimmed = cleanSaid(text);
     if (!trimmed) return;
@@ -4796,9 +4816,16 @@ export class Game {
         this.logMsg(`You are at (${this.player.tileX}, ${this.player.tileY}), height ${this.world.heightAt(this.player.x, this.player.y).toFixed(1)}.`, 'system');
         break;
       case 'help':
-        this.logMsg('Commands: /name <name>, /where, /help. Press F1 for controls.', 'system');
+        this.logMsg(`Commands: /name <name>, /where, ${EMOTES.map((e) => `/${e.id}`).join(', ')}, /help.`
+          + ' Press F1 for controls.', 'system');
         break;
       default:
+        // An emote is its own command, so /wave reads the way anybody would
+        // guess it does rather than as an argument to something else.
+        if (EMOTE_BY_ID.has(name.toLowerCase())) {
+          this.emote(name.toLowerCase());
+          break;
+        }
         this.logMsg(`Unknown command: /${name}`, 'error');
     }
   }

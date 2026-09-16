@@ -349,6 +349,8 @@ export interface IslandHooks {
    * settlement. Reported as "placed campfire doesn't show": it was there.
    */
   built?: (ground: IslandGround) => void;
+  /** Somebody waved or hopped, which nothing but the renderer cares about. */
+  emote?: (uid: string, name: string, emote: string) => void;
   /**
    * Where the island says the body is, when that is not where we think.
    *
@@ -1060,6 +1062,21 @@ export class Island {
         this.people.set(b.uid, { ...(this.people.get(b.uid) ?? b), ...b });
         this.hooks.people([...this.people.values()]);
       });
+      /*
+       * And a wave, which rides the same channel as its own event.
+       *
+       * Not folded into `body`: that one only goes out when the position
+       * changed, so standing still and waving would have sent nothing at all.
+       * Like `body` it is a drawing message and the island is not told — there
+       * is no rule anywhere that reads whether somebody waved, so there is
+       * nothing for it to keep.
+       */
+      this.bodies.on('broadcast', { event: 'emote' }, (m) => {
+        if (!this.bodies) return;
+        const e = (m as { payload?: { uid?: string; name?: string; emote?: string } }).payload;
+        if (!e?.uid || !e.emote || e.uid === this.uid) return;
+        this.hooks.emote?.(e.uid, e.name ?? '', e.emote);
+      });
       this.bodies.subscribe();
     }
 
@@ -1358,6 +1375,15 @@ export class Island {
     });
     if (error || !data) return null;
     return data as { here: boolean; say: string };
+  }
+
+  /** Say you waved, to whoever is listening on this island. */
+  emote(id: string): void {
+    if (!this.bodies || !this.uid) return;
+    void this.bodies.send({
+      type: 'broadcast', event: 'emote',
+      payload: { uid: this.uid, name: this.me?.name ?? '', emote: id },
+    });
   }
 
   /** Ask somebody to come and live on your land. */

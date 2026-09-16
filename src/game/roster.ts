@@ -39,6 +39,15 @@ export interface Peer extends PeerState {
    * two of them, and it must not be re-decided from scratch every frame.
    */
   facing: number;
+  /**
+   * An emote they are part way through, and when it reached us.
+   *
+   * On the local clock, like `at` and for the same reason: an emote runs for a
+   * second or two and is drawn frame by frame, so it has to be timed by the
+   * clock the frames are timed by rather than by anybody else's.
+   */
+  emote?: string;
+  emoteAt?: number;
 }
 
 /** How far out of step a peer must be before they are snapped rather than walked. */
@@ -148,5 +157,19 @@ export class Roster {
   /** Where somebody should be drawn this frame, which is not quite where they are. */
   drawnAt(p: Peer): [number, number] {
     return p.span > 0 ? [p.fromX, p.fromY] : [p.x, p.y];
+  }
+
+  /**
+   * Somebody waved.
+   *
+   * Stamped on arrival rather than carried with the message: a sender's clock
+   * is not ours, and an emote a second and a half long timed against a clock a
+   * second out is an emote that is over before it is drawn.
+   */
+  emoted(id: number, emote: string): void {
+    const p = this.peers.get(id);
+    if (!p) return;
+    p.emote = emote;
+    p.emoteAt = clock();
   }
 }

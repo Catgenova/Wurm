@@ -49,6 +49,15 @@ export class Player {
    * off `player.look` when you come ashore somewhere you have been before.
    */
   look: Look = DEFAULT_LOOK;
+  /**
+   * An emote in progress, and when it started on the drawing clock.
+   *
+   * `performance.now()`, not `game.time`: the world clock runs at its own pace
+   * and a wave is a second and a half of *yours*. The roster stamps other
+   * people's the same way, off the same clock, so the two are drawn alike.
+   */
+  emote?: string;
+  emoteAt?: number;
   /** Last movement direction in world space; the renderer turns it into a screen facing. */
   dirX = 1;
   dirY = 0;

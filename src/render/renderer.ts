@@ -1,4 +1,5 @@
 import { Camera } from '../engine/camera';
+import { emoteAt } from '../game/emotes';
 import type { FullscreenCanvas } from '../engine/canvas';
 import type { Game } from '../game/game';
 import {
@@ -1144,6 +1145,10 @@ export class Renderer {
             tunic: dyeOf(this.game.worn('chest'))?.colour,
             trousers: dyeOf(this.game.worn('legs'))?.colour,
             look: player.look,
+            // Both clocks here are `performance.now()`: the one the emote was
+            // stamped on and the one the frames are drawn on.
+            emote: player.emote,
+            emoteT: emoteAt(player.emote, player.emoteAt, performance.now() / 1000) ?? undefined,
           }),
         );
         continue;
@@ -1168,6 +1173,8 @@ export class Renderer {
             tunic: peer.tunic,
             trousers: peer.trousers,
             look: peer.look,
+            emote: peer.emote,
+            emoteT: emoteAt(peer.emote, peer.emoteAt, performance.now() / 1000) ?? undefined,
           }),
         );
         // Somebody else is only somebody else if you can tell which one.

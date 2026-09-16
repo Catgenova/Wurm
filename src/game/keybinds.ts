@@ -69,6 +69,12 @@ export const BINDS: BindDef[] = [
   { id: 'win_help', label: 'Help', hint: 'How any of this works.', group: 'Windows', keys: ['F1', 'KeyH'] },
 
   { id: 'walk_home', label: 'Walk home', hint: 'Set off for your settlement token, or your bed.', group: 'Doing things', keys: ['Home'] },
+  /*
+   * One key for all of them rather than one each. Two emotes is a pair of
+   * keybindings; five is a keyboard nobody can remember, and the menu costs
+   * one keypress more than a bind and never runs out of room.
+   */
+  { id: 'emotes', label: 'Emotes', hint: 'Wave, hop, and whatever else there is to do with your hands.', group: 'Doing things', keys: ['KeyZ'] },
   { id: 'stop', label: 'Stop', hint: 'Drop the current job and forget what is queued behind it. Closes an open menu first.', group: 'Doing things', keys: ['Escape'] },
   { id: 'chat', label: 'Talk', hint: 'Put the cursor in the box at the bottom of the event log.', group: 'Doing things', keys: ['Enter'] },
 ];

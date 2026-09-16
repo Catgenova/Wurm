@@ -1,4 +1,5 @@
 import { Game } from '../game/game';
+import { EMOTE_BY_ID } from '../game/emotes';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { supabase } from './supabase';
@@ -444,6 +445,18 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * roster is reconciled from the table every twenty seconds, and Broadcast
    * carries the walking in between.
    */
+  /*
+   * Somebody waved. Stamped by the roster on arrival rather than carried, and
+   * written into the log as well as the world — half the point of waving at
+   * somebody is that they know you meant them.
+   */
+  island.hooks.emote = (uid: string, name: string, id: string) => {
+    const def = EMOTE_BY_ID.get(id);
+    if (!def) return;
+    game.roster.emoted(hashId(uid), id);
+    game.write(def.said.replace('{name}', name || 'Somebody'), 'event');
+  };
+  game.emoted = (id: string) => island.emote(id);
   island.hooks.people = (people: PlayerRow[]) => {
     game.roster.sawAll(people
       .filter((p) => p.uid !== island.uid)
