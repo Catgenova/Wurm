@@ -259,6 +259,9 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * on a live island was a row in `placed` and a blank patch of grass.
    */
   island.hooks.built = (ground) => game.sawGround(ground);
+  // Where the island put the body, which is only ever somewhere we did not put
+  // it ourselves — and the only thing that does that is dying.
+  island.hooks.moved = (x, y, level) => game.putBody(x, y, level);
   /*
    * And the crates our own ask touched, which come back with the answer to it.
    *

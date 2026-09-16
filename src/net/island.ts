@@ -5,7 +5,7 @@ import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
 import type { IslandCrate, IslandGround } from '../game/game';
-import { BODY_EVERY, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION } from '../game/keep';
+import { BODY_EVERY, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
 
 /**
@@ -248,6 +248,16 @@ export interface IslandHooks {
    * settlement. Reported as "placed campfire doesn't show": it was there.
    */
   built?: (ground: IslandGround) => void;
+  /**
+   * Where the island says the body is, when that is not where we think.
+   *
+   * `rpc_move` has answered with the island's own position since the day it
+   * was written and nothing has ever read the answer, so the one thing that
+   * moves a body without the browser doing it — dying, which puts you back
+   * where you first came ashore — left the browser walking about from where it
+   * fell until somebody refreshed the page.
+   */
+  moved?: (x: number, y: number, level: number) => void;
   /**
    * The crates your own ask touched, laid down without touching anything else.
    *
@@ -875,6 +885,19 @@ export class Island {
           // to and does not say any of it twice.
           if (typeof e.n === 'number') this.said = Math.max(this.said, e.n);
           this.hooks.say(e.text, e.kind);
+          /*
+           * A line of trouble means the island has done something to the body.
+           *
+           * Being bitten, burned or killed writes one of these and changes
+           * `stats` and `wounds` with it — and nothing on this side would ask
+           * about that until the next heartbeat, which is a minute away. A
+           * walk carries the body now, but standing still while something eats
+           * you is exactly the case a walk does not cover.
+           *
+           * Refusals come down this kind too, and a beat for one of those
+           * costs a settle that was due within the minute anyway.
+           */
+          if (e.kind === 'error') this.armBeat(0.5);
         })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: `holder_uid=eq.${this.uid}` },
         (m) => {
@@ -1110,7 +1133,36 @@ export class Island {
     if (now - this.lastMove < MOVE_EVERY) return;
     this.lastMove = now;
     this.lastSaid = said;
-    await supabase().rpc('rpc_move', { p_world: this.info.id, p_x: x, p_y: y, p_level: level });
+    const { data } = await supabase().rpc('rpc_move', {
+      p_world: this.info.id, p_x: x, p_y: y, p_level: level,
+    });
+    /*
+     * And what the island made of it, which nothing has ever read.
+     *
+     * The bars and the wounds first: they used to ride the heartbeat and
+     * nothing else, so a fight that takes ten seconds happened entirely
+     * between two answers and you watched a full bar the whole way down. A
+     * walk is half a second apart at worst.
+     *
+     * Then where it says the body is. Normally its word and ours are the same
+     * word — it is generous about a walking pace and only tugs a link that
+     * hiccups. `SNAP_GAP` is past any tug; what is left is dying, which puts
+     * you back at the spawn. A beat is asked for straight after, because the
+     * rest of what death did — the emptied hands, the cleared queue — is the
+     * beat's to say.
+     */
+    const went = data as {
+      x?: number; y?: number; level?: number;
+      stats?: Record<string, number> | null; wounds?: unknown[];
+    } | null;
+    if (!went) return;
+    if (went.stats || went.wounds) this.hooks.mine?.({ stats: went.stats, wounds: went.wounds });
+    if (typeof went.x === 'number' && typeof went.y === 'number'
+        && Math.hypot(went.x - x, went.y - y) > SNAP_GAP) {
+      this.hooks.moved?.(went.x, went.y, went.level ?? level);
+      this.lastSaid = '';
+      this.armBeat(0.5);
+    }
 
     // Walked out of the square of country the channel is listening to: take a
     // new one, and read whatever was dug in the blocks that are new to us.

@@ -73,6 +73,22 @@ export const IDLE_LOGOUT = 450;
  */
 export const HEARTBEAT = 60;
 
+/**
+ * How far the island's word on where you are may differ from ours before we
+ * take it, in tiles.
+ *
+ * Every walk is answered with the island's own position, and the two normally
+ * agree: the allowance over there is generous and a browser that walks at a
+ * walking pace is never pulled. They come apart for two reasons, and only one
+ * of them is worth a jump. A link that hiccups gets tugged back a fraction of
+ * a tile, and snapping to that would fight your own feet every step. Dying
+ * puts you back where you first came ashore, which is hundreds of tiles, and
+ * not jumping to *that* is walking around dead — which is what was reported.
+ *
+ * Four tiles is well past any tug and nowhere near any teleport.
+ */
+export const SNAP_GAP = 4;
+
 /** Lines of talk kept before they are swept up. Nobody reads their own backlog. */
 export const EVENT_KEEP = 24 * 3600;
 

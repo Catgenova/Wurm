@@ -5547,3 +5547,45 @@ select '740. and the two answers about a crate are one expression: '
      || ' functions read it — ' || (select string_agg(p.proname, ', ' order by p.proname)
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'public' and p.prosrc like '%crates_near(%' and p.proname <> 'crates_near');
+
+\echo ''
+\echo '--- watching yourself die'
+/*
+ * Reported: killed by a goblin with the health bar never moving once and no
+ * wound ever appearing, and then able to walk about dead until a refresh.
+ * Three complaints, one cause — the island did all of it and told the browser
+ * none of it in time.
+ *
+ * `stats` and `wounds` rode `rpc_settle`, which is a minute apart unless one
+ * of your own asks arms a shorter beat, and something eating you arms nothing.
+ * The reported fight ran two seconds. And `rpc_move` has answered with the
+ * island's own position since the day it was written, with nothing on the
+ * other side ever reading the answer — so a body put back at the spawn by
+ * `player_die` went on walking from where it fell.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set x = 2040.5, y = 2040.5, moved_at = now() - interval '10 seconds',
+    stats = jsonb_build_object('health', 1, 'stamina', 1, 'hunger', 1, 'thirst', 1), wounds = '[]'::jsonb
+  where world_id = :'big' and uid = :'ivar' \g /dev/null
+select hurt_player(:'big', :'ivar', 0.3, 'The goblin is on you', 'cut') \g /dev/null
+select (rpc_move(:'big', 2040.6, 2040.5, 0)) as bitten \gset
+select '741. bitten once, and then a step: the walk answers health '
+     || round(((:'bitten'::jsonb)->'stats'->>'health')::numeric, 2) || ' and '
+     || jsonb_array_length((:'bitten'::jsonb)->'wounds') || ' wound — '
+     || coalesce(((:'bitten'::jsonb)->'wounds'->0->>'kind') || ' to the '
+                 || ((:'bitten'::jsonb)->'wounds'->0->>'part'), 'NONE')
+     || ' — where it used to answer neither and the bar waited a minute';
+select hurt_player(:'big', :'ivar', 5, 'The goblin is on you', 'cut') \g /dev/null
+select (rpc_move(:'big', 2040.7, 2040.5, 0)) as died \gset
+select '742. and when it kills him, the next step answers '
+     || round(((:'died'::jsonb)->>'x')::numeric, 1) || ', ' || round(((:'died'::jsonb)->>'y')::numeric, 1)
+     || ' — he came ashore at ' || (select spawn_x + 0.5 || ', ' || spawn_y + 0.5 from world where id = :'big')
+     || ', and that is ' || round(sqrt(power(((:'died'::jsonb)->>'x')::numeric - 2040.7, 2)
+                                     + power(((:'died'::jsonb)->>'y')::numeric - 2040.5, 2)))
+     || ' tiles from where the browser thought it was standing';
+select '743. and what he woke up as: health '
+     || round(((:'died'::jsonb)->'stats'->>'health')::numeric, 2) || ', '
+     || jsonb_array_length((:'died'::jsonb)->'wounds') || ' wounds, nothing in hand ('
+     || coalesce((select act from player where world_id = :'big' and uid = :'ivar'), 'nothing')
+     || ') and nothing queued behind it ('
+     || (select jsonb_array_length(act_queue) from player where world_id = :'big' and uid = :'ivar') || ')';

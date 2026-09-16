@@ -4043,6 +4043,32 @@ export class Game {
     this.events.emit('stats');
   }
 
+  /**
+   * Where the island says the body is, when that is not where we thought.
+   *
+   * There is one thing that moves a body without this side doing it: dying.
+   * `player_die` fills the bars, empties the wounds and puts you back where
+   * you first came ashore — and `rpc_move` has answered with the island's own
+   * position since the day it was written, with nothing here ever reading the
+   * answer. So being killed left a body walking about from where it fell,
+   * which is exactly what was reported, and only a refresh put it right.
+   *
+   * The feet are stopped along with it: whatever it was walking to is hundreds
+   * of tiles away now, and a body that keeps walking is a body that claims its
+   * old ground again on the next call. What is in the hands and what was
+   * queued behind it are the beat's to say, and the beat is asked for as this
+   * lands.
+   */
+  putBody(x: number, y: number, level: number): void {
+    this.player.stop();
+    this.player.x = x;
+    this.player.y = y;
+    this.player.level = level;
+    this.player.visualLevel = level;
+    this.events.emit('world', Math.floor(x), Math.floor(y));
+    this.events.emit('stats');
+  }
+
   /** Light up the ore a prospector just read, for a while. */
   markProspected(tiles: number[]): void {
     this.prospected = tiles.length ? { tiles: new Set(tiles), until: this.time + PROSPECT_MARK_TIME } : null;
