@@ -5636,3 +5636,44 @@ select '746. and one that has only just started, with the leash tied where it st
           age_row((select born from creature where world_id = :'big' and id = :'chaser')))).hunting)::text,
         'NOBODY, AND IT IS STANDING ON HIM')
      || ' — a leash is a leash, not a truce';
+
+\echo ''
+\echo '--- everything the island kept about you and never spent'
+/*
+ * `skill_raise` applied one modifier — the reader's path — and nothing else,
+ * while `player` carried four columns the browser draws: `rested` banked by
+ * sleeping with `rest_bonus()` called by nothing, `boons` written by eating
+ * and read by nothing, and `knacks` and `titles` never written at all. No
+ * function on the island mentioned a title.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set rested = 0, boons = '[]'::jsonb, knacks = '{}'::jsonb, titles = '[]'::jsonb,
+    title = null, nutrition = '{}'::jsonb, way = null where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2) as plain \gset
+update player set rested = 600 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2) as slept \gset
+update player set knacks = '{"mining": 3}'::jsonb where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2) as knacked \gset
+update player set nutrition = '{"starch":1,"flesh":1,"fat":1,"greens":1}'::jsonb
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2) as fed \gset
+update player set boons = jsonb_build_array(jsonb_build_object('skill', 'mining', 'bonus', boon_bonus(),
+    'until', world_time(:'world2') + 600, 'from', 'stew')) where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select '747. what a trade goes in at: ×' || :'plain' || ' plain, ×' || :'slept'
+     || ' after a night in a bed, ×' || :'knacked' || ' with three knacks in it, ×' || :'fed'
+     || ' with a full table, and ×' || round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2)
+     || ' with a stew that favours it — where every one of the four was a column this island kept and never spent';
+select '748. and on a trade the stew does not favour: ×'
+     || round(skill_mult(:'world2', :'ivar', 'digging')::numeric, 2);
+update skill set value = 49.99 where world_id = :'world2' and uid = :'ivar' and id = 'mining' \g /dev/null
+delete from event where uid = :'ivar' \g /dev/null
+select skill_raise(:'world2', :'ivar', 'mining', 50) \g /dev/null
+select '749. taken past fifty: titles '
+     || (select titles from player where world_id = :'world2' and uid = :'ivar')::text
+     || ', wearing ' || coalesce((select title from player where world_id = :'world2' and uid = :'ivar'), 'NOTHING')
+     || ' — and he is told: '
+     || coalesce((select text from event where world_id = :'world2' and uid = :'ivar' and kind = 'skill'
+                  order by n limit 1), 'NOTHING, WHICH WAS THE BUG');
+select '750. and the beat carries all of it: ' || (select string_agg(k, ', ' order by k)
+         from jsonb_object_keys(rpc_settle(null, :'world2')) k
+         where k in ('rested', 'boons', 'knacks', 'titles', 'title', 'nutrition'));

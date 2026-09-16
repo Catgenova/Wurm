@@ -228,6 +228,17 @@ export interface IslandHooks {
     /** What you are carrying, which the island keeps and had never said. */
     wounds?: unknown[];
     marks?: { tiles: number[]; secs: number } | null;
+    /**
+     * And the rest of what you are, which the row kept and never sent: the
+     * rest banked by sleeping, the dishes favouring a trade, the knacks, the
+     * titles and what is on your table.
+     */
+    rested?: number;
+    boons?: unknown[];
+    knacks?: Record<string, number>;
+    titles?: string[];
+    title?: string | null;
+    nutrition?: Record<string, number>;
   }) => void;
   /**
    * Everything wild within sight, as the island has it.
@@ -717,6 +728,8 @@ export class Island {
         stats?: Record<string, number> | null; skills?: Record<string, number> | null;
         wounds?: unknown[] | null;
         marks?: { tiles?: number[]; secs?: number } | null;
+        rested?: number; boons?: unknown[]; knacks?: Record<string, number>;
+        titles?: string[]; title?: string | null; nutrition?: Record<string, number>;
         goes?: number | null; time?: number | null; night?: boolean | null;
         said?: Array<{ n: number; text: string; kind: string }> | null;
         saidTo?: number | null;
@@ -756,6 +769,8 @@ export class Island {
         skills: said.skills ?? null,
         wounds: Array.isArray(said.wounds) ? said.wounds : undefined,
         marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
+        rested: said.rested, boons: said.boons, knacks: said.knacks,
+        titles: said.titles, title: said.title, nutrition: said.nutrition,
       });
       this.hooks.doing?.({
         act: said.act ?? null,

@@ -1666,8 +1666,19 @@ export class Game {
       const places = gain < 0.0001 ? 6 : 4;
       this.logMsg(`${def.name} increased by ${gain.toFixed(places)} to ${now.toFixed(4)}.`, 'skill');
     }
-    this.earnKnacks(id);
-    this.earnTitles(id, before, now);
+    /*
+     * A knack and a title are the island's to hand out where there is one.
+     *
+     * Climbing and swimming are still earned off your own feet here, so this
+     * still runs on an island — and `earn_knacks` and `earn_titles` run over
+     * there for everything else. Both rolling would be two knacks for one go
+     * and a title announced twice, and then the next answer disagreeing with
+     * whichever of them wrote last.
+     */
+    if (!this.bodyFromIsland) {
+      this.earnKnacks(id);
+      this.earnTitles(id, before, now);
+    }
     this.events.emit('skill', id, gain);
     return gain;
   }

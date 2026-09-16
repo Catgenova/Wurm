@@ -335,6 +335,27 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
      * what it is told. An empty list is "they have all closed over".
      */
     if (what.wounds) game.sawWounds(what.wounds);
+    /*
+     * And the rest of what you are.
+     *
+     * Every one of these is a column the island has kept since the day the
+     * player row was made and has never once sent: the rest a night in a bed
+     * banks, the dishes favouring a trade, the knacks earned over a long day,
+     * the titles, and what is on your table. The hud and the Skills window
+     * draw all five off the browser's own copy, which on an island was
+     * whatever it came ashore with — so the rest bar counted down from
+     * nothing, the title box was empty however long anybody played, and a
+     * meal's favour showed for a browser that had granted it to itself.
+     */
+    if (typeof what.rested === 'number') game.player.rested = what.rested;
+    if (what.boons) game.player.boons = what.boons as typeof game.player.boons;
+    if (what.knacks) game.player.knacks = what.knacks;
+    if (what.titles) game.player.titles = what.titles;
+    if (what.title !== undefined) game.player.title = what.title;
+    if (what.nutrition) {
+      const n = game.player.nutrition as unknown as Record<string, number>;
+      for (const [k, v] of Object.entries(what.nutrition)) if (typeof v === 'number') n[k] = v;
+    }
     if (what.marks !== undefined) game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
   };
 
