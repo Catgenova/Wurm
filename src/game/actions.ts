@@ -377,7 +377,13 @@ export const ACTIONS: ActionDef[] = [
       if (!g.inventory.has('shovel')) return 'You need a shovel to dig.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      if (g.world.getHeight(t.cx, t.cy) <= 0) return 'You cannot dig below the water level.';
+      /*
+       * The same depth a pick works to. `<= 0` refused a corner standing
+       * exactly *at* the waterline, where no water is drawn — the same height
+       * and the same off-by-one that mining was fixed for, and digging was
+       * left with.
+       */
+      if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
       if (g.world.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock. Only a pickaxe will take it lower.';
       if (slopeAfter(g, t.cx, t.cy, -1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
       return null;
@@ -418,8 +424,9 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('shovel')) return 'You need a shovel to flatten.';
-      if (g.world.hasWater(t.x, t.y)) return 'You cannot flatten below the water level.';
-      if (flattenTarget(g, t.x, t.y) < 0) return 'The ground you stand on is below the water line.';
+      // Shallows are workable, to the depth a pick works to.
+      if (g.world.centerHeight(t.x, t.y) < -MINE_DEPTH) return 'The water is too deep here to work in.';
+      if (flattenTarget(g, t.x, t.y) < -MINE_DEPTH) return 'The ground you stand on is too deep to work from.';
       const under = underBuilding(g, t.x, t.y);
       if (under) return under;
       return null;
@@ -457,15 +464,23 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg('You move some dirt across the tile.', 'event');
       } else if (hi >= 0) {
         raise(hi, -1);
-        g.inventory.add('dirt', { ql: g.productQl('digging', g.toolQl('shovel')) });
-        g.logMsg('You scrape the ground down and pocket the dirt.', 'event');
+        // What the ground is made of, which digging has always read off the
+        // tile and flattening never did: scrape a clay bank and you have clay.
+        const got = TILE_DEFS[w.getTile(t.x, t.y)].digYield ?? 'dirt';
+        g.inventory.add(got, { ql: g.productQl('digging', g.toolQl('shovel')) });
+        g.logMsg(`You scrape the ground down and pocket the ${itemDef(got).name.toLowerCase()}.`, 'event');
       } else {
-        if (!g.inventory.consume('dirt')) {
-          g.logMsg('You need dirt to bring this ground up to your level.', 'error');
+        // Its own stuff first, and dirt after: dirt fills anything, and it
+        // would be a strange rule that let you take clay out of a bank and
+        // not put it back.
+        const want = TILE_DEFS[w.getTile(t.x, t.y)].digYield ?? 'dirt';
+        const used = g.inventory.consume(want) ? want : (g.inventory.consume('dirt') ? 'dirt' : null);
+        if (!used) {
+          g.logMsg(`You need ${itemDef(want).name.toLowerCase()} or dirt to bring this ground up to your level.`, 'error');
           return false;
         }
         raise(lo, 1);
-        g.logMsg('You pack dirt in to bring the ground up.', 'event');
+        g.logMsg(`You pack ${itemDef(used).name.toLowerCase()} in to bring the ground up.`, 'event');
       }
       if (TILE_DEFS[w.getTile(t.x, t.y)].turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
       if (!needsFlattening(g, t.x, t.y)) {

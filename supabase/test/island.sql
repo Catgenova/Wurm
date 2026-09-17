@@ -6417,6 +6417,99 @@ select '812. and one go at packing: paving '
      || coalesce((select string_agg(text, ' | ' order by n) from event
                    where uid = '77777777-7777-7777-7777-777777777777' and kind in ('event', 'skill')), 'nothing');
 
+
+\echo ''
+\echo '--- the ground answers for itself'
+/*
+ * A clay bank at the waterline, dug and flattened, and a penned wildermon
+ * beside a crate of the thing it eats.
+ */
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  delete from skill where world_id = w and uid = me and id = 'digging';
+  -- A patch of clay, standing four above the water and eight under it.
+  for j in 24..27 loop
+    for i in 24..27 loop
+      perform land_set_tile(w, i, j, tile_id('Clay'));
+      perform land_set_height(w, i, j, 4);
+      perform land_set_dirt(w, i, j, 20);
+    end loop;
+  end loop;
+  perform land_set_height(w, 26, 26, -8);
+  update player set x = 24.5, y = 24.5, stats = jsonb_set(stats, '{stamina}', '1'), body_at = now()
+    where world_id = w and uid = me;
+  -- A few goes, because a beginner with a shovel fails most of them.
+  for i in 1..12 loop
+    perform act_perform(w, me, 'dig', '{"kind":"tile","x":24,"y":24,"cx":24,"cy":24}'::jsonb);
+  end loop;
+end $$;
+select '814. digging a clay bank: ' ||
+       coalesce((select string_agg(i.def || ' ×' || i.count, ', ') from item i
+                  where i.holder_uid = '77777777-7777-7777-7777-777777777777'
+                    and i.def in ('clay', 'dirt', 'sand')), 'nothing')
+     || ' — `tile_def.dig_yield` says clay and the dig branch has always read it';
+
+-- Flattening the same bank, which read `dirt` whatever it was scraping.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- All four corners above the ground the body stands on, so there is only a
+  -- high corner to take down — which is the branch that hands you the spoil.
+  perform land_set_height(w, 25, 25, 9);
+  perform land_set_height(w, 26, 25, 9);
+  perform land_set_height(w, 26, 26, 9);
+  perform land_set_height(w, 25, 26, 9);
+  for i in 1..4 loop
+    perform act_perform(w, me, 'flatten', '{"kind":"tile","x":25,"y":25}'::jsonb);
+  end loop;
+end $$;
+select '815. and flattening it: ' ||
+       coalesce((select string_agg(i.def || ' ×' || i.count, ', ' order by i.def) from item i
+                  where i.holder_uid = '77777777-7777-7777-7777-777777777777'
+                    and i.def in ('clay', 'dirt', 'sand')), 'nothing')
+     || ', digging now ' || coalesce((select round(value::numeric, 3)::text from skill
+          where uid = '77777777-7777-7777-7777-777777777777' and id = 'digging'), 'untouched')
+     || ' — an hour of levelling ground used to teach nothing and hand back dirt';
+
+-- The waterline, on both of them.
+update player set x = 26.5, y = 26.5 where uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select coalesce(act_refusal(:'world3', '77777777-7777-7777-7777-777777777777', 'dig',
+          '{"kind":"tile","x":26,"y":26,"cx":26,"cy":26}'::jsonb), 'allowed') as shallowdig \gset
+select coalesce(ground_refusal(:'world3', '77777777-7777-7777-7777-777777777777', 'flatten',
+          '{"kind":"tile","x":26,"y":26}'::jsonb), 'allowed') as shallowflat \gset
+select land_set_height(:'world3', 26, 26, -20) \g /dev/null
+select coalesce(act_refusal(:'world3', '77777777-7777-7777-7777-777777777777', 'dig',
+          '{"kind":"tile","x":26,"y":26,"cx":26,"cy":26}'::jsonb), 'allowed') as deepdig \gset
+select '816. eight feet under, where a pick may still work: dig ' || :'shallowdig'
+     || ', flatten ' || :'shallowflat'
+     || ' — and at twenty under: dig ' || :'deepdig';
+
+-- And the penned animal beside its dinner.
+do $$
+declare w uuid; v_deed deed; v_id int;
+begin
+  select id into w from world where name = 'Hoarding';
+  select * into v_deed from deed where world_id = w limit 1;
+  insert into crate (world_id, id, kind, x, y)
+  values (w, 9001, 'plank', v_deed.x, v_deed.y);
+  insert into item (world_id, holder, crate, def, ql, count)
+  values (w, 'crate', 9001, 'potato', 40, 1), (w, 'crate', 9001, 'potato', 8, 4);
+  v_id := creature_spawn(w, 'rabba', v_deed.x + 0.5, v_deed.y + 0.5, 'deed');
+  update creature set hunger = 0.1 where world_id = w and id = v_id;
+end $$;
+select id as penned from creature where world_id = :'world3' and species = 'rabba' order by id desc limit 1 \gset
+select coalesce(worker_feed(:'world3', :'penned'), 'nothing') as ate \gset
+select '817. a rabba penned on a deed at hunger 0.1, with potatoes in the crate: it ate ' || :'ate'
+     || ', belly now ' || (select round(hunger::numeric, 2) from creature where id = :'penned' and world_id = :'world3')
+     || ', and what is left in the crate: '
+     || (select string_agg(def || ' ×' || count || ' at QL ' || round(ql::numeric, 0), ', ' order by ql)
+          from item where crate = 9001 and world_id = :'world3')
+     || ' — the plainest first, because the good stuff keeps for people';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6427,7 +6520,7 @@ select '812. and one go at packing: paving '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '813. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '818. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

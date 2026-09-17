@@ -1671,6 +1671,15 @@ const HUNGER_RATE: Record<Exclude<CreatureMode, 'stored'>, number> = {
   deed: 0.0004,
 };
 
+/**
+ * When a wildermon goes looking for food, and how much a meal is worth.
+ *
+ * Written out four times between the grazing, the bait and now the stores,
+ * which is three copies too many of a number that has to agree with itself.
+ */
+export const GRAZE_HUNGRY = 0.5;
+export const GRAZE_FILL = 0.5;
+
 /** How long a called creature keeps making its way over. */
 export const CALL_WINDOW = 12;
 /** How close it comes before standing still, well inside arm's reach. */
@@ -3446,7 +3455,7 @@ export class Creatures {
     if (c.state === 'forage') {
       if (game.time >= c.until) {
         const food = kind ? this.finishForage(game, c, kind) : null;
-        if (food && isBaitFor(def, food.id)) c.hunger = Math.min(1, c.hunger + 0.5);
+        if (food && isBaitFor(def, food.id)) c.hunger = Math.min(1, c.hunger + GRAZE_FILL);
         c.state = 'idle';
         c.until = game.time + 2 + game.rand() * 3;
       }
@@ -3461,7 +3470,7 @@ export class Creatures {
       return;
     }
     if (def.hunter && this.huntStep(game, c, def, dt)) return;
-    if (kind && c.hunger < 0.5 && game.time >= c.searchAt) {
+    if (kind && c.hunger < GRAZE_HUNGRY && game.time >= c.searchAt) {
       c.searchAt = game.time + 4;
       const t = this.findForageTile(game, c.x, c.y, 3, kind, c);
       if (t) {
@@ -3582,6 +3591,36 @@ export class Creatures {
     } else if (game.time >= c.until) this.wanderTarget(game, c, 1.5, p.x, p.y);
   }
 
+  /**
+   * A hungry wildermon on a deed helps itself from the stores.
+   *
+   * A wild one walks to a forage bed and grazes; one kept inside a border has
+   * no bed to walk to and, until now, nothing else either — a penned animal
+   * simply starved beside a crate of the very thing it eats. It takes the
+   * plainest thing in there first, because the good stuff keeps for people.
+   *
+   * Only what its own kind eats: `isBaitFor` is the same diet that decides
+   * what will tame one, and is crossed into `species_diet` for the island.
+   */
+  private feedFromStores(game: Game, c: Creature, site: { x: number; y: number; radius: number }): boolean {
+    const def = this.species(c);
+    for (const crate of game.crates.values()) {
+      if (Math.abs(crate.x - site.x) > site.radius || Math.abs(crate.y - site.y) > site.radius) continue;
+      let worst: Item | undefined;
+      for (const it of crate.items ?? []) {
+        if (!isBaitFor(def, it.id)) continue;
+        if (!worst || it.ql < worst.ql) worst = it;
+      }
+      if (!worst) continue;
+      if (worst.count > 1) worst.count -= 1;
+      else crate.items.splice(crate.items.indexOf(worst), 1);
+      c.hunger = Math.min(1, c.hunger + GRAZE_FILL);
+      game.events.emit('crate');
+      return true;
+    }
+    return false;
+  }
+
   private updateWorker(c: Creature, dt: number, game: Game): void {
     c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed * bloodMul(c, 'appetite'));
     // A post stands in for the token: the same loop, a different middle.
@@ -3589,6 +3628,12 @@ export class Creatures {
     if (!deed) {
       c.mode = 'wild';
       return;
+    }
+    // Hungry, and standing on land with stores on it. Looked for on the same
+    // clock the wild ones look for a forage bed on, so it costs no more.
+    if (c.hunger < GRAZE_HUNGRY && game.time >= c.searchAt) {
+      c.searchAt = game.time + 4;
+      this.feedFromStores(game, c, deed);
     }
     if (this.comeWhenCalled(c, dt, game)) return;
     const def = this.species(c);

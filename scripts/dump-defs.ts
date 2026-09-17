@@ -55,6 +55,7 @@ import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
+import { GRAZE_FILL, GRAZE_HUNGRY } from '../src/game/creatures';
 import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
@@ -884,6 +885,12 @@ for (const [fn, v] of [
    */
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
   ['swim_depth', SWIM_DEPTH], ['swim_learn', SWIM_LEARN], ['drown_warn', DROWN_WARN],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/* When a wildermon goes looking for food, and what a meal is worth. */
+for (const [fn, v] of [
+  ['graze_hungry', GRAZE_HUNGRY], ['graze_fill', GRAZE_FILL],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
