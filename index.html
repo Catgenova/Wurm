@@ -6,9 +6,9 @@
     <meta name="color-scheme" content="dark" />
     <title>Wildermon</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 30 11 16 19 2 11z' fill='%235c9a3e'/%3E%3Cpath d='M2 11v8l14 8v-8z' fill='%23795c3c'/%3E%3Cpath d='M30 11v8l-14 8v-8z' fill='%234f3c27'/%3E%3C/svg%3E" />
-    <script type="module" crossorigin src="./assets/main.js?v=ba23c2da"></script>
+    <script type="module" crossorigin src="./assets/main.js?v=377beb27"></script>
     <link rel="modulepreload" crossorigin href="./assets/accounts.js?v=67d54c73">
-    <link rel="stylesheet" crossorigin href="./assets/main.css?v=b4868c0d">
+    <link rel="stylesheet" crossorigin href="./assets/main.css?v=b85ea8ef">
   </head>
   <body>
     <!-- Edit src/index.html, not the generated index.html at the repository root. -->
@@ -16,7 +16,14 @@
     <!-- An island of a thousand tiles takes a moment to raise, and a blank
          screen while it does looks like a page that has failed. Painted before
          the script runs, and taken away by it once the world is up. -->
-    <div id="boot"><span>Raising an island&hellip;</span></div>
+    <div id="boot">
+      <div class="boot-card">
+        <div class="boot-name">Wildermon</div>
+        <div class="boot-bar"><i></i></div>
+        <div class="boot-now"><span>Raising an island&hellip;</span><b></b></div>
+        <ol class="boot-done"></ol>
+      </div>
+    </div>
     <div id="ui"></div>
   </body>
 </html>

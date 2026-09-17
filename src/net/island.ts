@@ -60,6 +60,15 @@ const MOVE_EVERY = 1.0;
 const rowsIn = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
 
 /**
+ * How many steps coming ashore has, for the bar on the boot screen.
+ *
+ * It said three and there were five, so the bar reached the end and then sat
+ * there while two more things happened in silence — which is exactly what
+ * "hung on catching up, 100%" was looking at.
+ */
+const JOIN_STEPS = 4;
+
+/**
  * When the island says a thing happened, in milliseconds.
  *
  * `timestamptz` arrives as an ISO string over the wire and as a number if
@@ -616,13 +625,13 @@ export class Island {
     const size = got.world.size;
     const seed = got.world.seed;
     const world = blankWorld(size, seed);
-    this.hooks.progress?.(1, 3, 'reading the chart');
+    this.hooks.progress?.(1, JOIN_STEPS, 'reading the chart');
     const atlas = await this.chart();
     world.streamFrom((x0, y0, w, h) => generateAtlasWindow(seed, atlas, x0, y0, w, h, size));
     // The ground under your own feet, before anything else asks for it.
     const here = got.you;
+    this.hooks.progress?.(2, JOIN_STEPS, 'working out the ground');
     world.ensureBox(Math.floor(here.x) - 64, Math.floor(here.y) - 64, Math.floor(here.x) + 64, Math.floor(here.y) + 64);
-    this.hooks.progress?.(2, 3, 'working out the ground');
 
     /*
      * Everything ever dug, in the order it happened — from the beginning, not
@@ -662,11 +671,28 @@ export class Island {
      */
     this.world = world;
     this.seenChange = 0;
+    this.hooks.progress?.(3, JOIN_STEPS, 'reading what has been dug');
     await this.catchUp();
-    this.hooks.progress?.(3, 3, 'catching up');
     world.groundTouched = false;
-    await this.restoreFog();
-    await this.watch(worldId);
+
+    /*
+     * And the two that do not have to be waited for.
+     *
+     * Reported from a phone: the boot screen sitting on the last step with
+     * nothing moving. Both of these come after the land and the body, which is
+     * everything the first frame needs — and both can take a while for reasons
+     * that are nobody's fault: the fog is a blob the size of wherever you have
+     * walked, and arming the channels asks the keeper for a fresh token.
+     *
+     * So they are started and not awaited. You come ashore on the same land
+     * either way; the fog fills in a moment later and the channels arm behind
+     * you, with the twenty-second reconcile as the net under both. A stall in
+     * either used to be a page that never opened. It is now a map that is dark
+     * for a moment.
+     */
+    this.hooks.progress?.(JOIN_STEPS, JOIN_STEPS, 'coming ashore');
+    void this.restoreFog();
+    void this.watch(worldId);
     this.armBeat(HEARTBEAT);
   }
 
@@ -819,7 +845,7 @@ export class Island {
         return { rows: rowsIn<TileChange & { n: number; world_id?: string }>(data) };
       },
       (c) => this.applyChange(c),
-      (seen) => this.hooks.progress?.(seen, 0, 'catching up'),
+      (seen) => this.hooks.progress?.(seen, 0, 'reading what has been dug'),
     );
   }
 

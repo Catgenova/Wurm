@@ -93,10 +93,57 @@ await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFr
  * which one you got and why; a page that cannot reach the island should still
  * have a game.
  */
-const tellBoot = (text: string): void => {
-  const notice = document.querySelector('#boot span');
-  if (notice) notice.textContent = text;
-};
+/**
+ * The boot screen, which says what it is doing and how long it has been at it.
+ *
+ * It used to be one line of text. That is fine while everything is quick and
+ * is the whole problem when one step is not: a screenshot came back of
+ * "catching up… 100%", which was a step that had *finished*, sitting there
+ * while two later ones ran in silence. A percentage of an unknown total, and
+ * no clock, and no way to tell a slow step from a dead page.
+ *
+ * So the bar is the steps, the line is the one it is on, the number beside it
+ * is how long — appearing only once a step has taken long enough to wonder
+ * about — and the list underneath is what it has already done and what each
+ * cost. `total` of nought means counting up towards nobody knows what, which
+ * is how the island's history is read; that shows the count instead of a
+ * fraction, because a fraction would be made up.
+ */
+const boot = ((): { say: (text: string, at?: number, of?: number) => void; stop: () => void } => {
+  const root = document.querySelector('#boot');
+  const bar = root?.querySelector('.boot-bar i') as HTMLElement | null;
+  const line = root?.querySelector('.boot-now span') as HTMLElement | null;
+  const clock = root?.querySelector('.boot-now b') as HTMLElement | null;
+  const past = root?.querySelector('.boot-done') as HTMLElement | null;
+  let step = '';
+  let since = performance.now();
+  const secs = (): number => (performance.now() - since) / 1000;
+  const tick = window.setInterval(() => {
+    if (clock) clock.textContent = secs() < 0.8 ? '' : `${secs().toFixed(1)}s`;
+  }, 100);
+  return {
+    say(text, at, of) {
+      if (text !== step) {
+        if (step && past) {
+          const was = document.createElement('li');
+          was.textContent = `${step} · ${secs().toFixed(1)}s`;
+          past.append(was);
+          // Four is enough to see where it has been without the card growing.
+          while (past.children.length > 4) past.firstElementChild?.remove();
+        }
+        step = text;
+        since = performance.now();
+        if (clock) clock.textContent = '';
+      }
+      if (line) line.textContent = of === 0 && at ? `${text} — ${at.toLocaleString()}` : text;
+      if (bar && of && of > 0 && at !== undefined) bar.style.width = `${Math.round((at / of) * 100)}%`;
+    },
+    stop() {
+      window.clearInterval(tick);
+    },
+  };
+})();
+const tellBoot = (text: string, done?: number, total?: number): void => boot.say(text, done, total);
 let started = null;
 let why = '';
 try {
@@ -354,6 +401,7 @@ followScreen(uiRoot, () => {
   ui.windows.clampAll();
 });
 
+boot.stop();
 document.getElementById('boot')?.remove();
 
 /*

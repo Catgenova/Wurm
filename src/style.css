@@ -39,8 +39,72 @@ body {
   z-index: 50;
 }
 
-#boot span {
+/*
+ * Coming ashore, said out loud.
+ *
+ * It was one line of text in the middle of a blue page, and a step that took a
+ * while was indistinguishable from a page that had died — reported from a
+ * phone as a hang, with a screenshot of a percentage that had been at a
+ * hundred since before the slow part began. So: which step, how long it has
+ * been on it, and what the steps before it cost. A stall now looks like a
+ * stall, and says which one.
+ */
+.boot-card {
+  width: min(28rem, calc(100vw - 3rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.boot-name {
+  font-size: 1.15rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.boot-bar {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.boot-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: #9ec37a;
+  transition: width 0.25s ease-out;
+}
+
+.boot-now {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.boot-now span {
   animation: boot-pulse 1.6s ease-in-out infinite;
+}
+
+/* The seconds, which only appear once a step has taken long enough to wonder. */
+.boot-now b {
+  font-weight: normal;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.boot-done {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  opacity: 0.4;
+  font-size: 0.85em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
 
 @keyframes boot-pulse {

@@ -39,7 +39,15 @@ export interface Started {
 const ASK_HOME_MS = 8000;
 
 /** A line on the loading screen, since founding an island is not instant. */
-type Telling = (text: string) => void;
+/**
+ * How the boot screen is told what is happening.
+ *
+ * `done` and `total` are given when the step is one of a known list, and left
+ * out for a plain line. A `total` of nought means "counting up towards nobody
+ * knows what", which is the island's history: a percentage of an unknown is
+ * the one number that looks exactly like being stuck.
+ */
+type Telling = (text: string, done?: number, total?: number) => void;
 
 /**
  * Which island this keeper keeps, if it keeps one.
@@ -131,9 +139,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
      * up, 100%": it was not hung, it was counting, and saying 100% the whole
      * way through was the only thing wrong with it.
      */
-    progress: (done, total, what) =>
-      tell(total > 0 ? `${what}… ${Math.round((done / total) * 100)}%`
-                     : `${what}… ${done.toLocaleString()}`),
+    progress: (done, total, what) => tell(what, done, total),
   });
 
   let id = joining ?? '';
