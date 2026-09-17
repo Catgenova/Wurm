@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
@@ -6,6 +7,9 @@ import { itemDef, itemName, type Item } from './items';
 import { BAIT_BY_ID, isBait } from './fishing';
 import { matOf } from './materials';
 import { world } from './pace';
+
+/** What getting something out of a trap teaches, bitten or not. */
+export const FREE_GAIN = 1.1;
 
 /**
  * Traps.
@@ -292,7 +296,7 @@ export const TRAP_ACTIONS: ActionDef[] = [
       const s = SPECIES[c.species];
       // It is held, not willing. Getting it out without being bitten is the skill.
       const clean = g.skillCheck('taming', s ? s.tameLevel + 10 : 10, trap.ql, g.mindEase());
-      g.gainSkill('taming', 1.1);
+      g.gainSkill('taming', tryGain(clean, FREE_GAIN));
       if (!clean) {
         g.logMsg(`The ${s?.name.toLowerCase() ?? 'thing'} thrashes and you cannot get a hand on it. It is still held.`, 'error');
         return;

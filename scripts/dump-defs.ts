@@ -27,6 +27,16 @@ import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
 import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
+import { CRAFT_HEAD } from '../src/game/recipes';
+import { SMITH_GAIN } from '../src/game/anvil';
+import { BREW_GAIN } from '../src/game/brewing';
+import { IMPROVE_GAIN } from '../src/game/improve';
+import { RESTORE_GAIN } from '../src/game/archaeology';
+import { FREE_GAIN } from '../src/game/traps';
+import { BANDAGE_GAIN, CLEAN_GAIN } from '../src/game/firstaid';
+import { SHOT_ARCHERY, SHOT_FIGHT, SWING_ARM, SWING_BODY, SWING_FIGHT, TAME_GAIN, TAME_NERVE } from '../src/game/creatureActions';
+import { NET_GAIN, ROD_GAIN } from '../src/game/fishing';
+import { BREED_GAIN } from '../src/game/husbandry';
 import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/game/gear';
 import { WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
@@ -907,6 +917,26 @@ for (const [fn, v] of [
    */
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
   ['swim_depth', SWIM_DEPTH], ['swim_learn', SWIM_LEARN], ['drown_warn', DROWN_WARN],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/*
+ * What one go at a trade is worth, named once and read by both sides.
+ *
+ * These were seventeen literals written out twice — once in the browser and
+ * once down here — and several of them had already drifted or been paid on the
+ * wrong side of the roll. `try_gain` multiplies whichever of these applies by
+ * one or by `try_learn`, so the only thing a call site decides is whether it
+ * came off.
+ */
+for (const [fn, v] of [
+  ['craft_head', CRAFT_HEAD], ['smith_gain', SMITH_GAIN], ['brew_gain', BREW_GAIN],
+  ['improve_gain', IMPROVE_GAIN], ['restore_gain', RESTORE_GAIN], ['free_gain', FREE_GAIN],
+  ['bandage_gain', BANDAGE_GAIN], ['clean_gain', CLEAN_GAIN],
+  ['tame_gain', TAME_GAIN], ['tame_nerve', TAME_NERVE],
+  ['swing_fight', SWING_FIGHT], ['swing_arm', SWING_ARM], ['swing_body', SWING_BODY],
+  ['shot_fight', SHOT_FIGHT], ['shot_archery', SHOT_ARCHERY],
+  ['rod_gain', ROD_GAIN], ['net_gain', NET_GAIN], ['breed_gain', BREED_GAIN],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

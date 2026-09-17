@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import {
   ageOf,
@@ -14,6 +15,9 @@ import { clockLeft } from './boons';
 import { itemName } from './items';
 import { workingQl } from './materials';
 import { bestTier, traitList, traitTier } from './traits';
+
+/** What one pairing teaches, whether or not it takes. */
+export const BREED_GAIN = 0.9;
 
 /**
  * Animal husbandry: the brush, and the breeding of a herd.
@@ -165,8 +169,9 @@ export const HUSBANDRY_ACTIONS: ActionDef[] = [
       const sire = dam === c ? mate : c;
       const skill = g.skills.get(HUSBANDRY);
       const care = (dam.care + sire.care) / 2;
-      g.gainSkill(HUSBANDRY, 0.9);
-      if (g.rand() >= breedChance(skill, care)) {
+      const took = g.rand() < breedChance(skill, care);
+      g.gainSkill(HUSBANDRY, tryGain(took, BREED_GAIN));
+      if (!took) {
         // A failed pairing costs both of them a rest, but only half of one.
         dam.bredAt = g.time - BREED_REST / 2;
         sire.bredAt = g.time - BREED_REST / 2;

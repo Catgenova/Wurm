@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { furnitureName, holdsLiquid, litresIn, type LiquidKind, type PlacedFurniture } from './furniture';
 import type { Game } from './game';
@@ -26,6 +27,9 @@ export interface BrewDef {
   difficulty: number;
   done: string;
 }
+
+/** What one go at a brew teaches, whichever way it comes out. */
+export const BREW_GAIN = 0.6;
 
 export const BREWS: BrewDef[] = [
   { id: 'ale', name: 'Ale', input: 'wheat', count: 12, litres: 15, time: world(15 * 60), difficulty: 12, done: 'You mash the wheat into the water and leave it to work. It will be ale.' },
@@ -90,7 +94,7 @@ export const BREWING_ACTIONS: ActionDef[] = [
       if (!g.skillCheck('brewing', brew.difficulty, 0, g.mindEase())) {
         f.litres = Math.max(0, litresIn(f) - brew.litres);
         if (f.litres <= 0) f.liquid = undefined;
-        g.gainSkill('brewing', 0.3);
+        g.gainSkill('brewing', tryGain(false, BREW_GAIN));
         g.logMsg(`It will not take. You tip the whole soured lot out of the ${furnitureName(f).toLowerCase()}.`, 'event');
         g.events.emit('crate');
         return;
@@ -99,7 +103,7 @@ export const BREWING_ACTIONS: ActionDef[] = [
       f.liquid = brew.id;
       f.ferment = brew.time;
       f.ql = Math.max(1, Math.min(100, (stockQl + g.skills.get('brewing')) / 2));
-      g.gainSkill('brewing', 0.6);
+      g.gainSkill('brewing', tryGain(true, BREW_GAIN));
       g.note('brew');
       g.note(`brew:${brew.id}`);
       g.logMsg(`${brew.done} (about ${Math.round(brew.time / 60)} minutes)`, 'event');

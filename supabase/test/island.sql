@@ -6688,3 +6688,79 @@ insert into skill (world_id, uid, id, value) values (:'world3', :'dane', 'animal
 select '831. and what the blood reads as: '
      || blood_read(:'world3', :'dane', (select c from creature c where c.world_id = :'world3' and c.id = :'plain'))
      || ' — it used to name the three of them and stop there';
+
+
+\echo ''
+\echo '--- a go that did not come off'
+/*
+ * From the island: *"review all actions to give experience even on fail, just
+ * less."* Twenty-three places, wrong in three directions: eight that taught
+ * nothing on a failure, eight that taught exactly what a success taught
+ * because the gain was written above the roll, and three that had the right
+ * idea and wrote the fraction out a second time.
+ */
+select '832. what a go is worth, landed against missed: ' || try_gain(true) || ' against ' || try_gain(false)
+     || ' — and the trades that had their own opinion about it: '
+     || 'smithing ' || round(try_gain(true, smith_gain())::numeric, 2) || '/' || round(try_gain(false, smith_gain())::numeric, 3)
+     || ', brewing ' || round(try_gain(true, brew_gain())::numeric, 2) || '/' || round(try_gain(false, brew_gain())::numeric, 3)
+     || ', taming ' || round(try_gain(true, tame_gain())::numeric, 2) || '/' || round(try_gain(false, tame_gain())::numeric, 3)
+     || ' — which used to be a hand-written half in all three';
+
+select '833. and the bases they are taken from, crossed off the browser rather than written twice: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prokind = 'f'
+            and p.proname in ('craft_head','smith_gain','brew_gain','improve_gain','restore_gain','free_gain',
+                              'bandage_gain','clean_gain','tame_gain','tame_nerve','swing_fight','swing_arm',
+                              'swing_body','shot_fight','shot_archery','rod_gain','net_gain','breed_gain'))
+     || ' of 18, and ' || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace,
+          lateral regexp_matches(pg_get_functiondef(p.oid), 'try_gain\(', 'g') m
+          where n.nspname = 'public' and p.prokind = 'f') || ' rules that ask the one question';
+
+/*
+ * And the two headline shapes, measured. A hatchet that glances off taught
+ * nothing at all; a swing that misses taught exactly what a landed one did.
+ */
+select setseed(0.3131) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  delete from skill where world_id = w and uid = me and id in ('woodcutting', 'fighting');
+  for i in 24..26 loop
+    perform land_set_tile(w, i, 24, tile_id('Tree'));
+    perform land_set_height(w, i, 24, 4);
+  end loop;
+  update player set x = 25.5, y = 24.5 where world_id = w and uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'hatchet', 5, 1);
+  for i in 1..12 loop
+    perform land_set_tile(w, 25, 24, tile_id('Tree'));
+    perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":25,"y":24}'::jsonb);
+  end loop;
+end $$;
+select '834. twelve goes at a tree with a quality-5 hatchet: '
+     || (select count(*) from event where uid = '77777777-7777-7777-7777-777777777777'
+          and text like '%glances off%') || ' glanced off, and woodcutting is '
+     || coalesce((select round(value::numeric, 3)::text from skill
+          where uid = '77777777-7777-7777-7777-777777777777' and id = 'woodcutting'), 'untouched')
+     || ' — a hatchet that found no headway used to teach nothing at all';
+
+select setseed(0.7171) \g /dev/null
+select creature_spawn(:'world3', 'rabba', 25.5, 25.5, 'wild', now() - interval '2 hours') as sparring \gset
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; cid int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  select id into cid from creature where world_id = w and species = 'rabba' order by id desc limit 1;
+  for i in 1..20 loop
+    update creature set health = 400 where world_id = w and id = cid;
+    perform act_perform(w, me, 'attack_creature', ('{"kind":"creature","id":' || cid || '}')::jsonb);
+  end loop;
+end $$;
+select '835. twenty swings at a rabba: '
+     || (select count(*) from event where uid = '77777777-7777-7777-7777-777777777777' and text like '%and miss.') || ' missed, '
+     || (select count(*) from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You strike%') || ' landed'
+     || ' — and fighting is ' || coalesce((select round(value::numeric, 3)::text from skill
+          where uid = '77777777-7777-7777-7777-777777777777' and id = 'fighting'), 'untouched')
+     || ', where a miss used to pay exactly what a landed blow paid';

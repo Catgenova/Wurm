@@ -1,3 +1,4 @@
+export { TRY_LEARN, tryGain } from './learn';
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData, SLAB_VARIANTS, SLAB_BY_ITEM, slabVariant } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -239,25 +240,6 @@ export const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
 /** How often a deliberate chip at a corner actually takes it down: one in four. */
 export const CHIP_CHANCE = 0.25;
 
-/**
- * What a swing that did not land is worth, against one that did.
- *
- * The two sides disagreed about this, in opposite directions and by the whole
- * amount. Over here `updateAction` gains the action's skill *after* `perform`
- * whatever `perform` did, so a failed dig, a failed swing at a face and a chip
- * that found no line in the rock all paid a full go. On the island every one
- * of those returns early and pays nothing at all.
- *
- * Nothing at all is the worse of the two, and `chip_corner` is where it shows:
- * its failure is a flat quarter rather than a skill check, so three swings in
- * four teach nothing however good you get, for ever, on the longest job on the
- * ground. Reported as chipping giving no mining at all, which from the island
- * is exactly what it looks like.
- *
- * So: a swing teaches you something, landing it teaches you more. One number,
- * crossed, and both sides now say it.
- */
-export const TRY_LEARN = 0.3;
 
 /** How far a prospector reads the ground: one tile further every ten levels. */
 export const prospectRadius = (skill: number): number => 3 + Math.floor(skill / 10);
@@ -342,6 +324,7 @@ export const ACTIONS: ActionDef[] = [
       const yieldId = def.digYield;
       if (!def.collect || !yieldId) return;
       if (!g.skillCheck('digging', 6, g.toolQl('shovel'))) {
+        g.missed();
         g.logMsg(`Your shovel comes up with nothing but a smear of ${def.name.toLowerCase()}.`, 'event');
         return;
       }
@@ -702,6 +685,7 @@ export const ACTIONS: ActionDef[] = [
       const w = g.world;
       const type = w.getTile(t.x, t.y);
       if (!g.skillCheck('woodcutting', 10, g.toolQl('hatchet'))) {
+        g.missed();
         g.logMsg('Your hatchet glances off and you fail to make headway.', 'event');
         return;
       }
@@ -732,6 +716,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       const def = TREE_DEFS[treeSpecies(g.world.getData(t.x, t.y))];
       if (!g.skillCheck('forestry', 15)) {
+        g.missed();
         g.logMsg('You find no sprout worth picking.', 'event');
         return;
       }
@@ -839,6 +824,7 @@ export const ACTIONS: ActionDef[] = [
         found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
       }
       if (!found.length) {
+        g.missed();
         g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing edible.` : 'You find nothing edible.', 'event');
         return;
       }
@@ -870,6 +856,7 @@ export const ACTIONS: ActionDef[] = [
         found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
       }
       if (!found.length) {
+        g.missed();
         g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing of interest.` : 'You find nothing of interest.', 'event');
         return;
       }
@@ -985,6 +972,7 @@ export const ACTIONS: ActionDef[] = [
       const kind = slab && SLAB_BY_ITEM.get(slab.id);
       if (!slab || kind === undefined) return;
       if (!g.skillCheck('paving', 10, slab.ql)) {
+        g.missed();
         g.logMsg('The slab rocks on its bed however you set it. You leave it for now.', 'event');
         return;
       }

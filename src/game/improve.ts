@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef } from './actions';
 import { ARMOUR_BY_ID, isShield, WEAPON_BY_ID } from './gear';
 import { FURNITURE_BY_ID } from './furniture';
@@ -5,6 +6,9 @@ import type { Game } from './game';
 import { itemDef, itemName, liftRarity, rarityOf, RARITIES, RARITY_LIFT, type Item } from './items';
 import { isMould } from './metal';
 import { materialOfItem, matOf } from './materials';
+
+/** What one pass with a file teaches, whichever way it comes out. */
+export const IMPROVE_GAIN = 0.4;
 
 /**
  * Improving: taking a finished thing and making it better than it was made.
@@ -157,10 +161,13 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       const stock = stockFor(g, what.material, made);
       if (!stock || !g.inventory.remove(stock.uid, 1)) return;
       const toolQl = Math.max(...what.material.tools.map((id) => g.toolQl(id)));
-      g.gainSkill(what.skill, 0.4);
       // A failed pass marks the piece rather than spoiling it outright. Oak
       // and the deep metals are stubborn under the file as under the saw.
-      if (!g.skillCheck(what.skill, 12 + item.ql / 3 + matOf(item.extra).difficulty, toolQl, g.mindEase())) {
+      // The gain used to be written above this line, which paid a marked piece
+      // exactly what a passed one is worth.
+      const ok = g.skillCheck(what.skill, 12 + item.ql / 3 + matOf(item.extra).difficulty, toolQl, g.mindEase());
+      g.gainSkill(what.skill, tryGain(ok, IMPROVE_GAIN));
+      if (!ok) {
         g.damageItem(item, 3 + g.rand() * 5);
         g.logMsg(`You work at the ${itemName(item).toLowerCase()} and mark it. (damage ${item.dmg.toFixed(1)})`, 'event');
         return item.dmg <= 10;

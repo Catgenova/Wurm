@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemDef, rollRarity, RARITY_WORD } from './items';
@@ -9,6 +10,9 @@ import { WOUND_KINDS } from './wounds';
 import { TRAPS } from './traps';
 import { BREWS } from './brewing';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
+
+/** What working a thing out with your hands teaches the head. */
+export const CRAFT_HEAD = 0.25;
 
 /**
  * Everything the player can make from what they carry. A recipe is a tool
@@ -556,6 +560,8 @@ export function recipeAction(r: Recipe): ActionDef {
           // the bucket.
           for (const [id, n] of r.salvage ?? r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
         }
+        g.missed();
+        g.gainSkill('mind_logic', tryGain(false, CRAFT_HEAD));
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         return more(t, g);
       }
@@ -574,7 +580,7 @@ export function recipeAction(r: Recipe): ActionDef {
       g.madeIt(r.result, item.ql, r.count ?? 1, rare);
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.
-      g.gainSkill('mind_logic', 0.25);
+      g.gainSkill('mind_logic', tryGain(true, CRAFT_HEAD));
       g.logMsg(`${r.done} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');
       return more(t, g);
     },

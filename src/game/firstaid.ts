@@ -1,8 +1,13 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { maxHealth, SPECIES, type Creature } from './creatures';
 import type { Game } from './game';
 import { itemName, type Item } from './items';
 import { PART_NAMES, worstWound, WOUND_KINDS, woundText, type Wound } from './wounds';
+
+/** What a dressing and a scour teach, well done or badly. */
+export const BANDAGE_GAIN = 0.35;
+export const CLEAN_GAIN = 0.8;
 
 /**
  * First aid. A wound closes on its own eventually, but a clean dressing is
@@ -72,7 +77,7 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       w.severity = Math.max(0, w.severity - healed);
       w.dressing = clean ? use.herb : w.dressing;
       if (clean) w.bleeding = false;
-      g.gainSkill('first_aid', 0.35);
+      g.gainSkill('first_aid', tryGain(clean, BANDAGE_GAIN));
       g.note('dressed');
       if (suits && clean) g.note('covered');
       g.logMsg(
@@ -110,7 +115,7 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       g.inventory.remove(lye.uid, 1);
       g.inventory.add('bucket', { ql: lye.ql });
       const done = g.skillCheck('first_aid', 26, lye.ql, g.mindEase());
-      g.gainSkill('first_aid', 0.8);
+      g.gainSkill('first_aid', tryGain(done, CLEAN_GAIN));
       if (!done) {
         g.logMsg(`You scour the ${WOUND_KINDS[w.kind].name} out and it is no better for it. The lye is gone.`, 'error');
         return;
@@ -150,6 +155,9 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       const ql = bandage.ql;
       if (!g.inventory.remove(bandage.uid, 1)) return;
       const clean = g.skillCheck('first_aid', 14, ql, g.mindEase());
+      // A dressing that goes on badly still heals a third and still teaches
+      // something; what it does not do is teach as much as a good one.
+      if (!clean) g.missed();
       const top = maxHealth(c, def);
       const healed = top * healAmount(g.skills.get('first_aid'), ql) * (clean ? 1 : 0.35);
       c.health = Math.min(top, c.health + healed);

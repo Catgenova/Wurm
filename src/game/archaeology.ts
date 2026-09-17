@@ -1,7 +1,11 @@
+import { tryGain } from './learn';
 import { TileType } from '../world/tiles';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
 import { itemName, type Item } from './items';
+
+/** What one go at putting a relic back together teaches. */
+export const RESTORE_GAIN = 0.4;
 
 /**
  * Archaeology and restoration. People lived on this island before you did and
@@ -114,11 +118,13 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       const skill = g.skills.get('archaeology');
       const toolQl = g.toolQl('trowel');
       if (g.rand() > findChance(skill, toolQl)) {
+        g.missed();
         g.logMsg('You go through the soil and turn up nothing but roots and small stones.', 'event');
         return;
       }
       const within = relicsWithin(skill);
       if (!within.length) {
+        g.missed();
         g.logMsg('You turn up a scrap of something worked, but you cannot tell what it was and it crumbles.', 'event');
         return;
       }
@@ -179,6 +185,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       const pieces = piecesHeld(g, f.relic);
       if (pieces.length < f.relic.parts) return;
       if (!g.skillCheck('restoration', f.relic.difficulty, 0, g.mindEase())) {
+        g.gainSkill('mind_logic', tryGain(false, RESTORE_GAIN));
         for (const p of pieces) g.damageItem(p, 5 + g.rand() * 9);
         g.logMsg(`The pieces of the ${f.relic.name} will not sit together and you mark them trying.`, 'event');
         return;
@@ -188,7 +195,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       const ql = Math.max(1, Math.min(100, avgQl * (0.72 + g.skills.get('restoration') / 260)));
       for (const p of pieces) g.inventory.remove(p.uid, 1);
       const made = g.inventory.add(f.relic.result, { ql });
-      g.gainSkill('mind_logic', 0.4);
+      g.gainSkill('mind_logic', tryGain(true, RESTORE_GAIN));
       g.logMsg(`The pieces go back together and the ${f.relic.name} is whole: ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
     },
   },

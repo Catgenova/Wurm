@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import { bestTier, traitList } from './traits';
@@ -6,6 +7,21 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { itemDef, itemName } from './items';
 import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 import { matOfItem } from './materials';
+
+/**
+ * What one offering and one blow teach, landed or not.
+ *
+ * Taming already paid less for a refusal — by a second set of numbers written
+ * out beside the first. A swing and a shot paid the same either way, because
+ * the gains sat above the roll.
+ */
+export const TAME_GAIN = 0.7;
+export const TAME_NERVE = 0.4;
+export const SWING_FIGHT = 0.3;
+export const SWING_ARM = 0.45;
+export const SWING_BODY = 0.05;
+export const SHOT_FIGHT = 0.2;
+export const SHOT_ARCHERY = 0.5;
 
 type CreatureTarget = Extract<Target, { kind: 'creature' }>;
 const isCreature = (t: Target): t is CreatureTarget => t.kind === 'creature';
@@ -152,8 +168,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         }
         forgetCoaxing(c);
         g.note('tamed');
-        g.gainSkill('taming', 0.7);
-        g.gainSkill('soul_strength', 0.4);
+        g.gainSkill('taming', tryGain(true, TAME_GAIN));
+        g.gainSkill('soul_strength', tryGain(true, TAME_NERVE));
       } else {
         // It refused, but it stayed for the offering, and that is worth
         // something to the next one.
@@ -162,8 +178,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         const won = coaxBonus(c, g.time);
         const warming = won > 0 ? ` It is growing used to you: ${(won * 100).toFixed(0)}% readier than the first time.` : '';
         g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.${warming}`, 'event');
-        g.gainSkill('taming', 0.35);
-        g.gainSkill('soul_strength', 0.2);
+        g.gainSkill('taming', tryGain(false, TAME_GAIN));
+        g.gainSkill('soul_strength', tryGain(false, TAME_NERVE));
         c.state = 'idle';
         c.until = g.time;
       }
@@ -375,12 +391,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const usable = wdef && !bow ? wdef : FIST;
       const item = wdef && !bow ? held : null;
       const before = c.health;
-      g.gainSkill('fighting', 0.3);
-      g.gainSkill(usable.kind, 0.45);
-      g.gainSkill('body_strength', 0.05);
+      const landed = g.rand() <= hitChance(g, usable);
+      g.gainSkill('fighting', tryGain(landed, SWING_FIGHT));
+      g.gainSkill(usable.kind, tryGain(landed, SWING_ARM));
+      g.gainSkill('body_strength', tryGain(landed, SWING_BODY));
       // And, if it is dark enough to matter, what it teaches you about noticing.
       g.fought(0.5);
-      if (g.rand() > hitChance(g, usable)) {
+      if (!landed) {
         g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'event');
       } else {
         // Silver's old virtue: what carries its own light hates a silver edge.
@@ -439,13 +456,14 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!arrow || !g.inventory.remove(arrow.uid, 1)) return;
       const def = SPECIES[c.species];
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
-      g.gainSkill('fighting', 0.2);
-      g.gainSkill('archery', 0.5);
       // Picking a target out of the dark at range is the hardest looking there is.
       g.fought(0.7);
       // The far end of a bow's range is a far harder shot than the near end.
       const reach = 1 - (d / (bow.range ?? 6)) * 0.35;
-      if (g.rand() > hitChance(g, bow) * reach) {
+      const landed = g.rand() <= hitChance(g, bow) * reach;
+      g.gainSkill('fighting', tryGain(landed, SHOT_FIGHT));
+      g.gainSkill('archery', tryGain(landed, SHOT_ARCHERY));
+      if (!landed) {
         g.logMsg(`Your arrow goes wide of the ${def.name.toLowerCase()}.`, 'event');
       } else {
         // The stave throws it; the head is what goes in. Both have a say.

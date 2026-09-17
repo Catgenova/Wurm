@@ -1,6 +1,11 @@
+import { tryGain } from './learn';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
 import { itemDef } from './items';
+
+/** What one cast and one sweep of the net teach, fish or no fish. */
+export const ROD_GAIN = 0.4;
+export const NET_GAIN = 0.55;
 
 /**
  * Fishing. A rod, a line and a bent strip of metal for a hook, and then the
@@ -184,11 +189,11 @@ export const FISHING_ACTIONS: ActionDef[] = [
       const spot = near ? { depth: waterDepth(g, t.x, t.y) } : bestWaterNear(g, 2);
       if (!spot) return;
       const netQl = g.toolQl('fishing_net');
-      g.gainSkill('fishing', 0.55);
       g.wearTool('fishing_net', 1.4);
       // A net takes numbers, not size: the big fish go round it or through it.
       const pool = fishHere(spot.depth, g.skills.get('fishing')).filter((f) => f.depth <= 8 || g.rand() < 0.12);
       if (!pool.length) {
+        g.gainSkill('fishing', tryGain(false, NET_GAIN));
         g.logMsg('The net comes up with nothing in it but weed.', 'event');
         return true;
       }
@@ -199,9 +204,11 @@ export const FISHING_ACTIONS: ActionDef[] = [
         if (f) got.set(f.id, (got.get(f.id) ?? 0) + 1);
       }
       if (!got.size) {
+        g.gainSkill('fishing', tryGain(false, NET_GAIN));
         g.logMsg('The net comes up empty.', 'event');
         return true;
       }
+      g.gainSkill('fishing', tryGain(true, NET_GAIN));
       const parts: string[] = [];
       for (const [id, n] of got) {
         g.inventory.add(id, { count: n, ql: g.productQl('fishing', netQl) });
@@ -246,7 +253,6 @@ export const FISHING_ACTIONS: ActionDef[] = [
       const spot = castAt(g, t.x, t.y);
       if (!spot) return;
       const rodQl = g.toolQl('fishing_rod');
-      g.gainSkill('fishing', 0.4);
       g.wearTool('fishing_rod', 0.5);
       // Something goes on the hook if anything worth using is in the pack.
       const bait = baitFor(g, spot.depth);
@@ -256,6 +262,9 @@ export const FISHING_ACTIONS: ActionDef[] = [
         else return true;
       }
       const got = catchFish(g, spot.depth, rodQl, bait?.id);
+      // Written below the cast rather than above it: what comes off the hook
+      // used to teach exactly what a landed fish taught.
+      g.gainSkill('fishing', tryGain(!!got, ROD_GAIN));
       if (!got) {
         g.logMsg(bait ? `Something takes the ${itemDef(bait.id).name.toLowerCase()} and comes off again.` : 'Something takes it and comes off again.', 'event');
         return true;

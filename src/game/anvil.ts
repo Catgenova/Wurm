@@ -1,3 +1,4 @@
+import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
@@ -29,6 +30,9 @@ export interface PlacedAnvil {
 }
 
 /** An anvil covers two subtiles each way: four in all. */
+/** What one go at the anvil teaches, whichever way it comes out. */
+export const SMITH_GAIN = 0.5;
+
 export const ANVIL_SUBTILES = 2;
 
 export const anvilCentre = (a: PlacedAnvil): [number, number] => [a.x + (a.sx + 1) / SUBTILES, a.y + (a.sy + 1) / SUBTILES];
@@ -145,12 +149,12 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       // The deeper the seam it came out of, the harder it is to beat into shape.
       const hard = def.difficulty + matOfItem(lump).difficulty;
       if (!g.skillCheck(def.skill, hard, anvilQl(a), g.mindEase())) {
-        g.gainSkill(def.skill, 0.25);
+        g.gainSkill(def.skill, tryGain(false, SMITH_GAIN));
         g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and you throw the metal back.${broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through.` : ''}`, 'event');
         return;
       }
       const ql = smithQl(g, def, mouldQl, lump.ql, a);
-      g.gainSkill(def.skill, 0.5);
+      g.gainSkill(def.skill, tryGain(true, SMITH_GAIN));
       const per = def.per ?? 1;
       const made = g.inventory.add(def.makes, { ql, extra: metal.name, count: per });
       const rare = rollRarity(g.rand);
