@@ -437,12 +437,15 @@ begin
   perform land_set_data(w, 11, 11, oak | (2 << 4));
 end $$;
 select '56. standing at 11,11: a ' || (select name from tree_def where id = tree_species(land_data(:'world2',11,11)))
-     || ', age ' || tree_age(land_data(:'world2',11,11)) || ' of 2, worth '
-     || ((select logs from tree_def where id = tree_species(land_data(:'world2',11,11))) + 1) || ' logs standing';
+     || ', ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world2',11,11))))
+     || ', worth ' || (select hits from tree_age_def where id = tree_age(land_data(:'world2',11,11))) || ' strokes and '
+     || (select logs from tree_age_def where id = tree_age(land_data(:'world2',11,11))) || ' logs';
 select '57. felling it: ' || coalesce(act_refusal(:'world2', :'ivar', 'cut_down', '{"kind":"tile","x":11,"y":11}'), 'allowed');
-update skill set value = 40 where uid = :'ivar' and id = 'woodcutting';
-insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'woodcutting', 40 where not exists (select 1 from skill where uid = :'ivar' and id = 'woodcutting');
-select rpc_act(:'world2', 'cut_down', '{"kind":"tile","x":11,"y":11}', 3) \g /dev/null
+update skill set value = 90 where uid = :'ivar' and id = 'woodcutting';
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'woodcutting', 90 where not exists (select 1 from skill where uid = :'ivar' and id = 'woodcutting');
+-- Six asked for where three will do: an old tree is three strokes, and the ask
+-- stops itself the moment there is nothing left standing to swing at.
+select rpc_act(:'world2', 'cut_down', '{"kind":"tile","x":11,"y":11}', 6) \g /dev/null
 update player set act_started = act_started - interval '300 seconds', act_ends = act_ends - interval '300 seconds' where uid = :'ivar';
 select settle(:'world2', :'ivar') \g /dev/null
 select '58. ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said');
@@ -6909,3 +6912,90 @@ end $$;
 select '843. and comes back as dirt when the soil does: '
      || (select name from tile_def t where t.id = land_tile(:'world5', 48, 48))
      || ' — which is the rule this one is for, and it is untouched';
+
+
+\echo ''
+\echo '--- a tree comes down in strokes'
+/*
+ * Asked from the island: a sapling is one stroke and no timber, a young tree
+ * two strokes and two logs, a mature one three and four, an old one three and
+ * three. Felling used to be one swing and a species — a birch a log, a pine
+ * two — so a tree you could step over came down for the same stroke as one the
+ * size of a house.
+ */
+select '844. what each age is worth: ' || string_agg(
+         lower(name) || ' ' || hits || case when hits = 1 then ' stroke, ' else ' strokes, ' end
+         || case when logs = 0 then 'no timber' else logs || ' logs' end, '; ' order by hits, logs)
+from tree_age_def;
+
+select id as world6 from world where name = 'Hoarding' \gset
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+
+-- One tree of each age, an oak apiece, and a hatchet good enough not to glance.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; a record; v_x int := 50;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def in ('hatchet', 'log');
+  delete from event where uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'hatchet', 90, 1);
+  update player set x = 50.5, y = 49.5, act = null, act_queue = '[]'::jsonb, seen_at = now(),
+      stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+  update skill set value = 90 where world_id = w and uid = me and id = 'woodcutting';
+  insert into skill (world_id, uid, id, value) values (w, me, 'woodcutting', 90)
+    on conflict (world_id, uid, id) do update set value = 90;
+  for a in select * from tree_age_def order by hits, logs loop
+    perform land_set_tile(w, v_x, 50, tile_id('Tree'));
+    perform land_set_height(w, v_x, 50, 4);
+    -- Species 2 is oak; the age goes in the two bits over it.
+    perform land_set_data(w, v_x, 50, 2 | (a.id << 4));
+    v_x := v_x + 1;
+  end loop;
+end $$;
+
+do $$
+-- `x` is a column on `player` as well as a loop variable, and inside an
+-- `update player` the column wins. The suite has been bitten by this before.
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; v_x int; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for v_x in 50..53 loop
+    update player set x = v_x + 0.5, y = 49.5 where world_id = w and uid = me;
+    -- Four swings at each, which is one more than the worst of them needs, and
+    -- stopping the moment there is nothing standing there — which is what
+    -- `act_refusal` does for a real swing and this loop has to do for itself.
+    for i in 1..4 loop
+      exit when land_tile(w, v_x, 50) <> tile_id('Tree');
+      perform act_perform(w, me, 'cut_down', ('{"kind":"tile","x":' || v_x || ',"y":50}')::jsonb);
+    end loop;
+  end loop;
+end $$;
+select '845. four swings at one tree of each age, oldest first: '
+     || (select string_agg(text, ' | ' order by n) from event
+          where uid = '77777777-7777-7777-7777-777777777777'
+            and (text like '%cut into%' or text like '%comes down%' or text like '%no timber%'));
+select '846. and the timber off the four of them: '
+     || coalesce((select sum(count)::text from item where world_id = :'world6'
+                   and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'log'), '0')
+     || ' logs — the sapling gave none of it, and every one of the four stands where it stood'
+     || ' until the last stroke lands';
+select '847. and the ground they stood on: ' || string_agg(
+         (select name from tile_def t where t.id = land_tile(:'world6', q.x, 50)), ', ' order by q.x)
+from (values (50),(51),(52),(53)) q(x);
+
+-- A notch is the tile's, not the woodcutter's.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  perform land_set_tile(w, 55, 50, tile_id('Tree'));
+  perform land_set_height(w, 55, 50, 4);
+  perform land_set_data(w, 55, 50, 2 | (1 << 4));   -- a mature oak
+  update player set x = 55.5, y = 49.5 where world_id = w and uid = me;
+  perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":55,"y":50}'::jsonb);
+end $$;
+select '848. one stroke into a mature oak, and what the tile remembers: '
+     || tree_cuts(land_data(:'world6', 55, 50)) || ' of ' ||
+        (select hits from tree_age_def where id = tree_age(land_data(:'world6', 55, 50)))
+     || ' — on the tile rather than on the woodcutter, so whoever comes by next finishes it';

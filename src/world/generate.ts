@@ -1,5 +1,5 @@
 import { hash2, mulberry32, Noise2D, smoothstep } from './noise';
-import { TileType, packTreeData } from './tiles';
+import { SAPLING_SHARE, TileType, packTreeData } from './tiles';
 import { oreKindFor, ORE_DENSITY, stoneKindAt } from './ore';
 import { World } from './world';
 
@@ -85,7 +85,10 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
       const p = patch.fbm(x * 0.085, y * 0.085, 2);
       const r = hash2(x, y, seed);
       const r2 = hash2(x, y, seed + 77);
-      const variant = Math.floor(hash2(x, y, seed + 3) * 3);
+      // A slice of any wood is scrub; the rest is spread over the three grown ages.
+      const treeRoll = hash2(x, y, seed + 3);
+      const variant = treeRoll < SAPLING_SHARE ? 3
+        : Math.floor(((treeRoll - SAPLING_SHARE) / (1 - SAPLING_SHARE)) * 3);
 
       let t: TileType = TileType.Grass;
       let data = 0;

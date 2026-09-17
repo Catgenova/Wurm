@@ -1,5 +1,5 @@
 import { hash2, mulberry32, Noise2D } from './noise';
-import { TileType, packTreeData } from './tiles';
+import { SAPLING_SHARE, TileType, packTreeData } from './tiles';
 import { ORE_DENSITY } from './ore';
 import { World } from './world';
 import { ATLAS_PNG } from './atlas-data';
@@ -346,7 +346,10 @@ export function generateAtlasWindow(
       const p = f.patch.fbm(wx * 0.085, wy * 0.085, 2);
       const r = hash2(wx, wy, seed);
       const r2 = hash2(wx, wy, seed + 77);
-      const variant = Math.floor(hash2(wx, wy, seed + 3) * 3);
+      // A slice of any wood is scrub; the rest is spread over the three grown ages.
+      const treeRoll = hash2(wx, wy, seed + 3);
+      const variant = treeRoll < SAPLING_SHARE ? 3
+        : Math.floor(((treeRoll - SAPLING_SHARE) / (1 - SAPLING_SHARE)) * 3);
 
       let t: TileType = TileType.Grass;
       let d = 0;

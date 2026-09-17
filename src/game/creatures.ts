@@ -1,4 +1,4 @@
-import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, packTreeData, treeAge, treeCuts, treeSpecies, treeVariant } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { mapFromBeast } from './treasure';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
@@ -2726,10 +2726,19 @@ export class Creatures {
     if (game.world.getTile(tx, ty) !== TileType.Tree) return null;
     const data = game.world.getData(tx, ty);
     const def = TREE_DEFS[treeSpecies(data)];
-    const logs = def.logs + (treeVariant(data) === 2 ? 1 : 0);
-    game.world.setTile(tx, ty, TileType.Grass);
+    const age = treeAge(data);
     const skill = c.skills[GATHER_SKILL.woodcut] ?? 1;
     this.gainSkill(game, c, GATHER_SKILL.woodcut, 0.225);
+    // A worker swings the same number of times a person would, and the notch
+    // it leaves is the same notch: anybody may finish the tree it started.
+    const cuts = treeCuts(data) + 1;
+    if (cuts < age.hits) {
+      game.world.setTile(tx, ty, TileType.Tree, packTreeData(treeSpecies(data), treeVariant(data), cuts));
+      return null;
+    }
+    game.world.setTile(tx, ty, TileType.Grass);
+    const logs = age.logs;
+    if (!logs) return null;
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
     // The rest of the tree is left at the stump; it can only carry one at a time.
     if (logs > 1) {

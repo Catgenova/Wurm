@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, BUSH_DEFS } from '../src/world/tiles';
+import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, TREE_AGES, BUSH_DEFS } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -474,11 +474,20 @@ out.push(`create table if not exists rock_def (
  * that goes looking for something worth mining.
  */
 out.push(`alter table rock_def add column if not exists seam boolean not null default false;`);
-/* What stands on a tile, and what it is worth felling. A tile's `data` byte
- * holds the species in its low four bits and the age in the next two. */
+/* What stands on a tile. A tile's `data` byte holds the species in its low four
+ * bits, the age in the next two, and how many cuts it has taken in the top two. */
 out.push(`create table if not exists tree_def (id int primary key, name text not null, logs int not null);`);
 /* What it bears, for whoever is standing under it in season. */
 out.push(`alter table tree_def add column if not exists fruit text;`);
+/* And not what it is worth felling: that is the age's to say now, not the
+ * species'. A birch and an oak of the same age come down for the same timber. */
+out.push(`alter table tree_def drop column if exists logs;`);
+/* How many landed cuts each age takes, what it leaves on the ground, and
+ * whether it is grown enough to fruit. */
+out.push(`create table if not exists tree_age_def (
+  id int primary key, name text not null, hits int not null, logs int not null,
+  bears boolean not null
+);`);
 out.push(`create table if not exists bush_def (id int primary key, name text not null);`);
 /* Weighted tables, shared by foraging people and foraging creatures. */
 out.push(`create table if not exists loot_table (
@@ -657,7 +666,7 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
   title_def, knack_kin, category_decay,
@@ -990,9 +999,12 @@ for (const c of CROP_LIST) {
   out.push(`insert into crop_def values (${q(c.id)}, ${q(c.name)}, ${q(c.seed)}, ${q(c.produce)}, ${q(c.stageSeconds)});`);
 }
 TREE_DEFS.forEach((t, i) => {
-  out.push(`insert into tree_def values (${q(i)}, ${q(t.name)}, ${q(t.logs)});`);
+  out.push(`insert into tree_def values (${q(i)}, ${q(t.name)});`);
   if (t.fruit) out.push(`update tree_def set fruit = ${q(t.fruit)} where id = ${q(i)};`);
 });
+for (const a of TREE_AGES) {
+  out.push(`insert into tree_age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.hits)}, ${q(a.logs)}, ${q(a.bears)});`);
+}
 SLAB_VARIANTS.forEach((v, i) => out.push(`insert into slab_def values (${q(i)}, ${q(v.name)}, ${q(v.item)});`));
 for (const [item, v] of Object.entries(VESSELS)) {
   out.push(`insert into vessel_def values (${q(item)}, ${q(v.liquid)}, ${q(v.empty)});`);

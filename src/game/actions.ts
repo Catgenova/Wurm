@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData, SLAB_VARIANTS, SLAB_BY_ITEM, slabVariant } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, treeAge, treeCuts, bushSpecies, packTreeData, SLAB_VARIANTS, SLAB_BY_ITEM, slabVariant } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
@@ -276,7 +276,7 @@ export const ACTIONS: ActionDef[] = [
       const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
       let text = `You see ${w.tileName(t.x, t.y).toLowerCase()} at (${t.x}, ${t.y}).`;
       if (type === TileType.Tree) {
-        const age = ['young', 'mature', 'old'][treeVariant(w.getData(t.x, t.y))];
+        const age = treeAge(w.getData(t.x, t.y)).name.toLowerCase();
         text = `You see a ${age} ${TREE_DEFS[treeSpecies(w.getData(t.x, t.y))].name.toLowerCase()} tree at (${t.x}, ${t.y}).`;
       } else if (type === TileType.Bush) {
         text = `You see a ${BUSH_DEFS[bushSpecies(w.getData(t.x, t.y))].name.toLowerCase()} at (${t.x}, ${t.y}).`;
@@ -694,13 +694,38 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg('You hack the bush down.', 'event');
         return;
       }
+      // Nothing standing is nothing to fell. `check` says so before the swing
+      // and this says so after it: reading a tree off a tile that has none
+      // gives you species 0 age 0 and a birch out of thin air, which is what
+      // the suite got the first time it swung one stroke too many.
+      if (type !== TileType.Tree) return;
+      /*
+       * A tree comes down in strokes, and how many depends on what it is.
+       *
+       * The count is kept in the tile rather than in the swinging, because a
+       * wood is not one woodcutter's: leave a half-felled oak and the notch is
+       * still in it tomorrow, for you or for whoever finds it. A cut that
+       * glances off is not one of them — that is what the skill check above is
+       * for, and it already returns before this line.
+       */
       const data = w.getData(t.x, t.y);
       const def = TREE_DEFS[treeSpecies(data)];
-      const logs = def.logs + (treeVariant(data) === 2 ? 1 : 0);
+      const age = treeAge(data);
+      const cuts = treeCuts(data) + 1;
+      const what = `${age.name.toLowerCase()} ${def.name.toLowerCase()}`;
+      if (cuts < age.hits) {
+        w.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), treeVariant(data), cuts));
+        g.logMsg(`You cut into the ${what}. ${age.hits - cuts} more like that and it comes down.`, 'event');
+        return;
+      }
       w.setTile(t.x, t.y, TileType.Grass);
-      const item = g.inventory.add('log', { count: logs, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
       g.note('tree');
-      g.logMsg(`The ${def.name.toLowerCase()} tree falls. You get ${logs} ${logs === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)})`, 'event');
+      if (!age.logs) {
+        g.logMsg(`You clear the ${what} away. There is no timber in one that size.`, 'event');
+        return;
+      }
+      const item = g.inventory.add('log', { count: age.logs, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
+      g.logMsg(`The ${what} comes down. You get ${age.logs} ${age.logs === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {
@@ -746,7 +771,7 @@ export const ACTIONS: ActionDef[] = [
       const def = TREE_DEFS[treeSpecies(data)];
       if (!def.fruit) return 'Nothing grows on this that you would eat.';
       // A sapling bears nothing; it has to have some years in it first.
-      if (treeVariant(data) === 0) return `The ${def.name.toLowerCase()} is too young to bear. Leave it to grow.`;
+      if (!treeAge(data).bears) return `The ${def.name.toLowerCase()} is too young to bear. Leave it to grow.`;
       if (g.isForaged(t.x, t.y, 'forage')) return `You have had what this ${def.name.toLowerCase()} has on it. Come back later.`;
       return null;
     },

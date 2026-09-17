@@ -164,24 +164,23 @@ export interface TreeDef {
   canopy: [light: string, mid: string, dark: string];
   /** Relative size of the full grown tree. */
   size: number;
-  logs: number;
   /** Fruit it bears once it is grown, for the three that bear any. */
   fruit?: string;
 }
 
 /** Tree species; stored in the low nibble of a tree tile's data byte. */
 export const TREE_DEFS: TreeDef[] = [
-  { name: 'Birch', shape: 'round', trunk: '#e8e4d8', canopy: ['#b6dc78', '#88b852', '#5f8c3a'], size: 0.85, logs: 1 },
-  { name: 'Pine', shape: 'conifer', trunk: '#6d4b32', canopy: ['#6fa06a', '#3f7048', '#2b4f34'], size: 1, logs: 2 },
-  { name: 'Oak', shape: 'round', trunk: '#5c4330', canopy: ['#9ac560', '#5f9438', '#3f6a27'], size: 1.1, logs: 2 },
-  { name: 'Maple', shape: 'round', trunk: '#6b4a34', canopy: ['#f0b053', '#d6782e', '#9c4a1c'], size: 0.95, logs: 1 },
-  { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#c4dc8c', '#93b864', '#6a8c48'], size: 1, logs: 1 },
-  { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#8fb87c', '#5a8a5c', '#3c6440'], size: 1.05, logs: 2 },
+  { name: 'Birch', shape: 'round', trunk: '#e8e4d8', canopy: ['#b6dc78', '#88b852', '#5f8c3a'], size: 0.85 },
+  { name: 'Pine', shape: 'conifer', trunk: '#6d4b32', canopy: ['#6fa06a', '#3f7048', '#2b4f34'], size: 1 },
+  { name: 'Oak', shape: 'round', trunk: '#5c4330', canopy: ['#9ac560', '#5f9438', '#3f6a27'], size: 1.1 },
+  { name: 'Maple', shape: 'round', trunk: '#6b4a34', canopy: ['#f0b053', '#d6782e', '#9c4a1c'], size: 0.95 },
+  { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#c4dc8c', '#93b864', '#6a8c48'], size: 1 },
+  { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#8fb87c', '#5a8a5c', '#3c6440'], size: 1.05 },
   // The three that bear. They grow wild only here and there; an orchard is
   // something you plant.
-  { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#8fc060', '#5f9440', '#41682c'], size: 0.8, logs: 1, fruit: 'apple' },
-  { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#a8cc70', '#74a047', '#4d7030'], size: 0.78, logs: 1, fruit: 'cherry' },
-  { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#9aae84', '#6f8a64', '#4f6448'], size: 0.75, logs: 1, fruit: 'olive' },
+  { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#8fc060', '#5f9440', '#41682c'], size: 0.8, fruit: 'apple' },
+  { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#a8cc70', '#74a047', '#4d7030'], size: 0.78, fruit: 'cherry' },
+  { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#9aae84', '#6f8a64', '#4f6448'], size: 0.75, fruit: 'olive' },
 ];
 
 export interface BushDef {
@@ -254,7 +253,70 @@ export const isSeam = (rock: { yields: string }): boolean => !rock.yields.endsWi
 
 export const rockVariant = (data: number): number => Math.min(ROCK_VARIANTS.length - 1, data & 15);
 
+/**
+ * What a tree is worth to bring down, by how far along it is.
+ *
+ * Felling used to be one swing and a species: birch one log, pine two, and an
+ * old one of anything a log more than a grown one. A tree the size of a house
+ * and a tree you could step over came down for the same single stroke.
+ *
+ * Now it is the age that decides both — how many landed cuts it takes, and what
+ * is left on the ground afterwards — and the species decides nothing. A sapling
+ * is one stroke and no timber, which is to say it is cleared rather than felled.
+ *
+ * ## Why the numbers are in this order
+ *
+ * The two bits over the species have held 0 young, 1 mature, 2 old since the
+ * day a tree had an age at all, and every tree standing on the island holds one
+ * of those three. Sapling is the *fourth* value rather than the first, so that
+ * adding a stage younger than any of them does not quietly make every wood on
+ * every island one age younger than the day before.
+ *
+ * So the table is indexed by the byte, not by seniority, and nothing reads it
+ * as an order. `bears` is what "old enough to fruit" used to ask as `=== 0`.
+ */
+export interface TreeAge {
+  /** The value in the age bits. Not a rank: see above. */
+  id: number;
+  name: string;
+  /** Landed cuts to bring it down. A cut that glances off is not one of them. */
+  hits: number;
+  /** What it leaves on the ground when it goes. */
+  logs: number;
+  /** Whether it is grown enough to fruit. */
+  bears: boolean;
+}
+
+export const TREE_AGES: TreeAge[] = [
+  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false },
+  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true },
+  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true },
+  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false },
+];
+
+/**
+ * How much of a wild wood is scrub too small to be worth a hatchet.
+ *
+ * Saplings have to come from somewhere, and the only other candidate was
+ * planting — which would make a planted sprout worth nothing for ever, since
+ * nothing on this island grows a tree from one age to the next. So they grow
+ * where the rest of the wood grew, and clearing one costs a stroke and returns
+ * a stroke's worth of nothing, which is what a sapling is.
+ */
+export const SAPLING_SHARE = 0.12;
+
 export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);
-export const treeVariant = (data: number): number => Math.min(2, (data >> 4) & 3);
+export const treeVariant = (data: number): number => (data >> 4) & 3;
+/** How far along the tree on this tile is. */
+export const treeAge = (data: number): TreeAge => TREE_AGES[treeVariant(data)];
+/**
+ * How many cuts it has already taken, in the two bits nothing else was using.
+ *
+ * On the tile rather than on the person, because a wood is not one woodcutter's:
+ * walk away from a half-felled oak and the notch is still in it when somebody
+ * else comes by.
+ */
+export const treeCuts = (data: number): number => (data >> 6) & 3;
 export const bushSpecies = (data: number): number => Math.min(BUSH_DEFS.length - 1, data & 15);
-export const packTreeData = (species: number, variant: number): number => (species & 15) | ((variant & 3) << 4);
+export const packTreeData = (species: number, variant: number, cuts = 0): number =>
+  (species & 15) | ((variant & 3) << 4) | ((cuts & 3) << 6);
