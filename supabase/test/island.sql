@@ -1377,27 +1377,48 @@ insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2
 select '230. a brick takes ' || round(fire_seconds('unfired_clay_brick', 55)) || ' seconds in a QL 55 kiln, '
      || round(fire_seconds('unfired_clay_brick', 20)) || ' in a rough one, and comes out at QL '
      || round(fired_ql(60, 55)::numeric, 1) || ' from QL 60 green ware';
-select '231. setting it down: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb), 'allowed');
-select act_perform(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb) \g /dev/null
+/*
+ * Asked both ways, and set down through the door the browser actually uses.
+ *
+ * A target names the thing in your hand under `itemUid` when the target is
+ * something else — here a tile — and under `uid` only when the thing is
+ * itself what you are aiming at. This line used to ask the second way, which
+ * is the one way nobody asks: the island refused every kiln anybody tried to
+ * put down, and this measurement went on saying `allowed` throughout, because
+ * it was asking itself a question it had made up.
+ */
+select '231. setting it down, asked the island''s way and the browser''s: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb), 'allowed')
+     || ' | ' || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"itemUid":' || :'kit' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"itemUid":' || :'kit' || '}')::jsonb) \g /dev/null
 select coalesce(max(id), 0) as kiln from placed where world_id = :'world2' and kind = 'kiln' \gset
 select '232. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
      || ' — it holds ' || furnace_capacity('kiln') || ' pieces at once';
 delete from event where uid = :'ivar';
 select '233. packing it with nothing to pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'load_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'unfired_clay_brick', 60, 8);
-insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 6, 'Pine');
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 6, 'Pine')
+  returning id as logs \gset
 select act_perform(:'world2', :'ivar', 'load_kiln', ('{"kind":"kiln","id":' || :'kiln' || ',"count":8}')::jsonb) \g /dev/null
 select '234. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
 select '235. lighting a kiln with a cold firebox: ' || coalesce(act_refusal(:'world2', :'ivar', 'light_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
 delete from event where uid = :'ivar';
-select act_perform(:'world2', :'ivar', 'fuel_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb) \g /dev/null
+/*
+ * And the fuel named, which is also what the browser does.
+ *
+ * With no name on it the rule takes whatever fuel comes to hand first, and
+ * for every run of this suite that was the shafts left over from the campfire
+ * two hundred measurements ago rather than the logs cut for it two lines up.
+ * It said so, in 236, run after run.
+ */
+select act_perform(:'world2', :'ivar', 'fuel_kiln', ('{"kind":"kiln","id":' || :'kiln' || ',"itemUid":' || :'logs' || '}')::jsonb) \g /dev/null
 select act_perform(:'world2', :'ivar', 'light_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb) \g /dev/null
 select '236. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
 select '237. and nothing out of it yet: ' || coalesce(act_refusal(:'world2', :'ivar', 'kiln_take_all', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
 /*
- * The budget, spent in order. Two hundred seconds go by, but there are only
- * six hundred of fuel in it and each brick wants twenty-three: what comes out
- * is what the arithmetic says came out, in one pass, with nobody there.
+ * The budget, spent in order. Two hundred seconds go by against an hour of
+ * logs, and each brick wants about a minute: what comes out is what the
+ * arithmetic says came out, in one pass, with nobody there.
  */
 select '238. fuel in it: ' || round((select fuel from placed where id = :'kiln')::numeric) || ' seconds';
 update placed set since = since - interval '200 seconds' where id = :'kiln';
@@ -7132,3 +7153,27 @@ select '857. and the dial that says where: two saplings where ' || tree_room_two
      || '+ of the twenty-four round the stump are open, one where ' || tree_room_one()
      || '+ are, none where the wood has closed over — and a roll averaging '
      || round((1 + tree_seed_both() - tree_seed_none())::numeric, 2) || ' under all of it';
+
+/*
+ * And the guard that would have caught all of it.
+ *
+ * Not "does placing a kiln work" — that was measured, and passed, and was
+ * wrong. The rules and the browser had two names for the thing in your hand,
+ * and any measurement that writes its own ask picks one of them and proves
+ * nothing about the other. So this one does not ask a question at all: it
+ * reads the rulebook and says whether anything in it still reaches into a
+ * target for an item by name instead of asking `target_item()`, which
+ * answers to both.
+ *
+ * A rule that goes back to doing it by hand is named here the same day.
+ */
+select '858. rules still reaching into a target for an item by name: '
+     || coalesce(string_agg(p.proname, ', ' order by p.proname),
+                 'none — all ' || (select count(*) from pg_proc q join pg_namespace m on m.oid = q.pronamespace
+                                    where m.nspname = 'public' and q.prokind = 'f'
+                                      and pg_get_functiondef(q.oid) like '%target\_item(p\_target)%')
+                 || ' of them ask target_item(), which answers to uid and itemUid alike')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.prokind = 'f' and p.proname <> 'target_item'
+   and (pg_get_functiondef(p.oid) like '%p_target->>''uid''%'
+     or pg_get_functiondef(p.oid) like '%p_target->>''itemUid''%');
