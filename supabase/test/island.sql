@@ -7177,3 +7177,72 @@ select '858. rules still reaching into a target for an item by name: '
  where n.nspname = 'public' and p.prokind = 'f' and p.proname <> 'target_item'
    and (pg_get_functiondef(p.oid) like '%p_target->>''uid''%'
      or pg_get_functiondef(p.oid) like '%p_target->>''itemUid''%');
+
+/*
+ * And the record of a day, which is the only thing a browser ever sees of one.
+ *
+ * The land does not travel: a join builds the ground from the seed and the
+ * chart and then lays `tile_change` over it. So a change the woods make and do
+ * not write down did not happen anywhere but here, and every browser draws the
+ * old ground for ever — which is how a sapling on a dirt tile became *"some
+ * dirt tiles return an error when trying to pack"*. The island had a tree
+ * there. Nobody else had been told.
+ *
+ * Measured with the island empty, because an island is empty most of the time
+ * and that is exactly when this went wrong.
+ */
+create or replace function pg_temp.faces(p_world uuid) returns bytea
+  language sql stable as $fn$
+  select string_agg(t.tiles, ''::bytea order by t.y) from land_tile t where t.world_id = p_world
+$fn$;
+create or replace function pg_temp.apart(a bytea, b bytea) returns int
+  language sql immutable as $fn$
+  select count(*)::int from generate_series(0, length(a) - 1) i where get_byte(a, i) <> get_byte(b, i)
+$fn$;
+
+update player set away = true where world_id = :'world7' \g /dev/null
+delete from tile_change where world_id = :'world7' \g /dev/null
+select pg_temp.faces(:'world7') as was \gset
+select pg_temp.one_day(:'world7') as turned \gset
+select pg_temp.faces(:'world7') as now \gset
+select pg_temp.apart(:'was'::bytea, :'now'::bytea) as moved \gset
+select count(*) as told from tile_change where world_id = :'world7' \gset
+-- Every tile whose face moved, against the record of it moving.
+select count(*) as untold from (
+  select g.x, g.y from generate_series(0, length(:'was'::bytea) - 1) i,
+    lateral (select i % (select size from world where id = :'world7') as x,
+                    i / (select size from world where id = :'world7') as y) g
+   where get_byte(:'was'::bytea, i) <> get_byte(:'now'::bytea, i)
+     and not exists (select 1 from tile_change c
+                      where c.world_id = :'world7' and c.x = g.x and c.y = g.y)) q \gset
+-- And that what the record says is what the land says.
+select count(*) as wrong from (
+  select distinct on (c.x, c.y) c.x, c.y, c.tile, c.data from tile_change c
+   where c.world_id = :'world7' order by c.x, c.y, c.n desc) last
+  join land_tile t on t.world_id = :'world7' and t.y = last.y
+ where get_byte(t.tiles, last.x) <> last.tile or get_byte(t.data, last.x) <> last.data \gset
+
+select '859. a day in the woods with nobody on the island: ' || :'turned' || ' trees turned over, '
+     || :'moved' || ' tiles changed face, ' || :'told' || ' written into the record'
+     || ' — and ' || :'untold' || ' of the changed tiles went unwritten, which is'
+     || ' the number that used to be all of them';
+select '860. and the record against the land it is a record of: ' || :'wrong'
+     || ' tiles where the last thing written down is not what the island holds';
+
+/*
+ * And the half that is only worth telling somebody who can see it.
+ *
+ * A birthday does not change what a tile is, only which of four pictures is
+ * drawn over it and how many logs the browser guesses. Writing every one of
+ * them down is four million rows a day on a full island to keep a picture in
+ * step; writing the stumps and the saplings is a quarter of a million and is
+ * what stops the ground itself being wrong. So the first is told to whoever
+ * is standing near enough to watch it happen, and the second to everybody.
+ */
+update player set away = false, seen_at = now(), x = 32.5, y = 32.5 where world_id = :'world7' \g /dev/null
+delete from tile_change where world_id = :'world7' \g /dev/null
+select pg_temp.one_day(:'world7') \g /dev/null
+select count(*) as watched from tile_change where world_id = :'world7' \gset
+select '861. and the same day with somebody standing in the middle of it: ' || :'watched'
+     || ' rows rather than ' || :'told' || ' — the difference is the birthdays,'
+     || ' which are told to whoever can see them and worked out by nobody';
