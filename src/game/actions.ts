@@ -1,4 +1,5 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, bushSpecies, packTreeData, SLAB_VARIANTS, SLAB_BY_ITEM, slabVariant } from '../world/tiles';
+import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
@@ -627,7 +628,9 @@ export const ACTIONS: ActionDef[] = [
           if (!w.inBounds(x, y)) continue;
           // Metal counts wherever it lies: bare, under soil, or below water.
           const rock = bedrockAt(w, x, y);
-          if (!rock.ore) continue;
+          // Anything worth mining, which is not the same as anything metal:
+          // a coal seam yields plain `coal` and so fails the `_ore` test.
+          if (!isSeam(rock)) continue;
           tiles.push(y * w.w + x);
           found.push(rock.name.toLowerCase());
         }
@@ -636,7 +639,7 @@ export const ACTIONS: ActionDef[] = [
       // Sampling where you stand tells you what that particular rock holds.
       const here = bedrockAt(w, t.x, t.y);
       const buried = w.getTile(t.x, t.y) === TileType.Rock ? '' : ` It lies under ${Math.max(1, w.getDirt(t.x, t.y))} of ground.`;
-      if (here.ore) {
+      if (isSeam(here)) {
         const can = g.skills.get('mining') >= here.level;
         g.logMsg(
           `You sample the ${here.name.toLowerCase()}. It needs mining ${here.level} to work${can ? ', which you have' : ''}, and will give up nothing finer than quality ${here.maxQl}.${buried}`,

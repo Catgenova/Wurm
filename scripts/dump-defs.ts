@@ -54,6 +54,7 @@ import { BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
+import { isSeam } from '../src/world/tiles';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import { GRAZE_FILL, GRAZE_HUNGRY } from '../src/game/creatures';
 import {
@@ -446,6 +447,15 @@ out.push(`create table if not exists rock_def (
   id int primary key, name text not null, yields text not null,
   level real not null default 1, ore boolean not null default false
 );`);
+/*
+ * And whether a face gives up anything but shards, which is not the same
+ * question as whether it is metal.
+ *
+ * `ore` is `yields` ending in `_ore` and nothing more — which makes a coal
+ * seam, yielding plain `coal`, indistinguishable from bare stone to every rule
+ * that goes looking for something worth mining.
+ */
+out.push(`alter table rock_def add column if not exists seam boolean not null default false;`);
 /* What stands on a tile, and what it is worth felling. A tile's `data` byte
  * holds the species in its low four bits and the age in the next two. */
 out.push(`create table if not exists tree_def (id int primary key, name text not null, logs int not null);`);
@@ -970,7 +980,8 @@ for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE
 }
 ROCK_VARIANTS.forEach((r, i) => {
   const rock = r as unknown as A;
-  out.push(`insert into rock_def values (${q(i)}, ${q(rock.name)}, ${q(rock.yields)}, ${q(rock.level ?? 1)}, ${q(String(rock.yields).endsWith('_ore'))});`);
+  out.push(`insert into rock_def values (${q(i)}, ${q(rock.name)}, ${q(rock.yields)}, ${q(rock.level ?? 1)}, `
+    + `${q(String(rock.yields).endsWith('_ore'))}, ${q(isSeam(rock))});`);
 });
 for (const f of FURNITURE as unknown as A[]) {
   out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);

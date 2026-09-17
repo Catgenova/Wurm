@@ -1,4 +1,5 @@
 import { TileType, TILE_DEFS, TREE_DEFS, treeSpecies, treeVariant } from '../world/tiles';
+import { isSeam } from '../world/tiles';
 import { mapFromBeast } from './treasure';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { DeedStore, Game } from './game';
@@ -2122,12 +2123,12 @@ export class Creatures {
     if (!def) return false;
     const w = game.world;
     if (def.onOre) {
-      if (!bedrockAt(w, x, y).ore) return false;
+      if (!isSeam(bedrockAt(w, x, y))) return false;
     } else if (def.onSand) {
       if (w.getTile(x, y) !== TileType.Sand) return false;
     } else if (def.onStone) {
       // Bare rock with nothing in it: the Mola takes the seams, the Quarra the rest.
-      if (w.getTile(x, y) !== TileType.Rock || bedrockAt(w, x, y).ore) return false;
+      if (w.getTile(x, y) !== TileType.Rock || isSeam(bedrockAt(w, x, y))) return false;
     } else if (!TILE_DEFS[w.getTile(x, y)].forage) return false;
     if (def.nearWater && !nearWater(game, x, y)) return false;
     if (def.nearTrees && !nearTrees(game, x, y)) return false;
@@ -2545,7 +2546,7 @@ export class Creatures {
     if (kind === 'quarry') {
       // Bare stone with no metal in it, and one cutter to a face.
       const rock = bedrockAt(game.world, x, y);
-      if (game.world.getTile(x, y) !== TileType.Rock || rock.ore) return false;
+      if (game.world.getTile(x, y) !== TileType.Rock || isSeam(rock)) return false;
       return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
     }
     if (kind === 'peat') {
@@ -2776,7 +2777,7 @@ export class Creatures {
   private finishQuarry(game: Game, c: Creature): Item | null {
     const w = game.world;
     const rock = bedrockAt(w, c.workX, c.workY);
-    if (w.getTile(c.workX, c.workY) !== TileType.Rock || rock.ore) return null;
+    if (w.getTile(c.workX, c.workY) !== TileType.Rock || isSeam(rock)) return null;
     const skill = c.skills[GATHER_SKILL.quarry] ?? 1;
     this.gainSkill(game, c, GATHER_SKILL.quarry, 0.225);
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));

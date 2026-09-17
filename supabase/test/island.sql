@@ -6510,6 +6510,55 @@ select '817. a rabba penned on a deed at hunger 0.1, with potatoes in the crate:
           from item where crate = 9001 and world_id = :'world3')
      || ' — the plainest first, because the good stuff keeps for people';
 
+
+\echo ''
+\echo '--- a coal seam is a seam'
+/*
+ * Reported from the island: *"I can't seem to find any Coal ore tiles on the
+ * crescent island."* They were there all along. `ore` is `yields` ending in
+ * `_ore`, coal yields plain `coal`, and every rule that goes looking for
+ * something worth mining asked `ore`.
+ */
+select '819. what the two columns say now: ' || string_agg(
+         r.name || ' ' || case when r.ore then 'metal' when r.seam then 'a seam, not metal' else 'stone' end,
+         ', ' order by r.id)
+from rock_def r where r.id in (0, 2, 4, 5, 15);
+
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  -- A hillside of bare rock with a coal seam under three tiles of it.
+  for j in 30..32 loop
+    for i in 30..32 loop
+      perform land_set_tile(w, i, j, tile_id('Rock'));
+      perform land_set_height(w, i, j, 20);
+      perform land_set_dirt(w, i, j, 0);
+      -- The rock under a tile is its own byte, not the `data` byte — and
+      -- `land_set_rock` is one of the rules this island keeps and never runs,
+      -- which is how a test came to set the wrong one.
+      perform land_set_rock(w, i, j, 5);
+    end loop;
+  end loop;
+  update player set x = 31.5, y = 31.5 where world_id = w and uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count)
+  values (w, 'player', me, 'pickaxe', 40, 1);
+  perform act_perform(w, me, 'prospect', '{"kind":"tile","x":31,"y":31}'::jsonb);
+end $$;
+select '820. prospecting a coal hillside: ' ||
+       (select string_agg(text, ' | ' order by n) from event
+         where uid = '77777777-7777-7777-7777-777777777777' and kind = 'event')
+     || ' — it used to say there was no sign of metal, and that the seam under your feet had none in it';
+
+select '821. and who may work it: a miner '
+     || worker_gatherable(:'world3', 31, 31, 'mine',
+          (select c from creature c where c.world_id = :'world3' and c.species = 'rabba' limit 1))
+     || ', a quarrier '
+     || worker_gatherable(:'world3', 31, 31, 'quarry',
+          (select c from creature c where c.world_id = :'world3' and c.species = 'rabba' limit 1))
+     || ' — a seam is a miner''s work, and it was the quarrier''s, who brought back rock shards';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6520,7 +6569,7 @@ select '817. a rabba penned on a deed at hunger 0.1, with potatoes in the crate:
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '818. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '822. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

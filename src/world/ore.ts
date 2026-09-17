@@ -1,5 +1,5 @@
 import { mulberry32, Noise2D } from './noise';
-import { ROCK_VARIANTS, TileType } from './tiles';
+import { isSeam, ROCK_VARIANTS, TileType } from './tiles';
 import type { World } from './world';
 
 /**
@@ -116,7 +116,7 @@ export function bedrockAt(world: World, x: number, y: number): OreInfo {
 export function oreAt(world: World, x: number, y: number): OreInfo | null {
   if (world.getTile(x, y) !== TileType.Rock) return null;
   const rock = bedrockAt(world, x, y);
-  return rock.ore ? rock : null;
+  return isSeam(rock) ? rock : null;
 }
 
 /** The index of the iron seam, which is what says whether a world knows about iron. */

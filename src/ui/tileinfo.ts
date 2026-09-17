@@ -1,4 +1,5 @@
 import { TILLABLE } from '../game/farming';
+import { isSeam } from '../world/tiles';
 import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
 import { bedrockAt } from '../world/ore';
@@ -26,7 +27,7 @@ export function groundReading(g: Game, x: number, y: number): string | null {
   const bare = w.getTile(x, y) === TileType.Rock;
   if (!bare && !g.isProspected(x, y)) return null;
   const rock = bedrockAt(w, x, y);
-  return `${rock.name}${rock.ore ? ` · mining ${rock.level}` : ''} · up to QL ${rock.maxQl}${bare ? '' : ', buried'}`;
+  return `${rock.name}${isSeam(rock) ? ` · mining ${rock.level}` : ''} · up to QL ${rock.maxQl}${bare ? '' : ', buried'}`;
 }
 
 /**

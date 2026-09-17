@@ -237,6 +237,21 @@ export const ROCK_VARIANTS: RockVariantDef[] = [
  * and the list above now holds exactly sixteen. A seventeenth needs another
  * bit before it needs a name.
  */
+/**
+ * Whether a face gives up anything but shards.
+ *
+ * Not the same question as `ore`, which is `yields` ending in `_ore` and
+ * nothing more. A coal seam yields plain `coal`, so it fails that test — and
+ * every rule that goes looking for something worth mining asks that test, so a
+ * coal seam was invisible to prospecting, said "no metal in it" when you stood
+ * on one, and was quarry work rather than a miner's. The ground had them all
+ * along; nothing could see them.
+ *
+ * Stated as what it is rather than as a list, so a rock added later is
+ * classified by what it gives up rather than by somebody remembering.
+ */
+export const isSeam = (rock: { yields: string }): boolean => !rock.yields.endsWith('_shards');
+
 export const rockVariant = (data: number): number => Math.min(ROCK_VARIANTS.length - 1, data & 15);
 
 export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);
