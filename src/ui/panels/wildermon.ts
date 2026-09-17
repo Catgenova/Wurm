@@ -1,6 +1,6 @@
 import { clockLeft } from '../../game/boons';
-import { ageOf, attackOf, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
-import { TIER_COLOUR, traitOf } from '../../game/traits';
+import { ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { CHANNELS, isGain, pct, TIER_COLOUR, traitOf, type TraitChannel } from '../../game/traits';
 import { TIER_LEVEL } from '../../game/husbandry';
 
 import type { Game } from '../../game/game';
@@ -293,9 +293,13 @@ export class WildermonPanel {
     card.append(bar('Health', c.health / top, 'bar-health', `${Math.ceil(c.health)}/${top}`));
     card.append(bar('Hunger', c.hunger, 'bar-hunger', `${Math.round(c.hunger * 100)}%`));
     const care = bar('Care', c.care, 'bar-care', `${Math.round(c.care * 100)}%`);
-    care.title = `${careWord(c.care)} \u2014 a brushed wildermon works and learns a quarter faster, and throws better young`;
+    // What brushing is worth, said as the figure the rules read rather than
+    // as “a quarter”, which was a number written in prose and never checked.
+    care.title = `${careWord(c.care)} \u2014 work and learning \u00d7${careMul(c).toFixed(2)} at this much care, up to \u00d7${(1 + CARE_BONUS).toFixed(2)} brushed to a shine, and it throws better young`;
     card.append(care);
     card.append(this.blood(c));
+    const worth = this.worth(c);
+    if (worth) card.append(worth);
 
     const info = document.createElement('div');
     info.className = 'pal-info';
@@ -323,9 +327,14 @@ export class WildermonPanel {
   }
 
   /**
-   * The three traits it was born with. What you can read off an animal depends
-   * on the husbandry behind your eyes: a common trait is plain to anybody, old
-   * blood takes a breeder to know.
+   * The three traits it was born with, with what each of them is worth.
+   *
+   * What you can read off an animal depends on the husbandry behind your eyes:
+   * a common trait is plain to anybody, old blood takes a breeder to know. What
+   * does *not* depend on anything is the figure beside a trait you can already
+   * read — it was in `effects` from the day the trait was written and the card
+   * printed the prose and threw the number away, which is what made a page of
+   * real multipliers read as flair.
    */
   private blood(c: Creature): HTMLDivElement {
     const row = document.createElement('div');
@@ -338,10 +347,23 @@ export class WildermonPanel {
       chip.className = 'trait-chip';
       const known = this.game.walks('knowledge', 3) || skill >= 1 + TIER_LEVEL[t.tier];
       if (known) {
-        chip.textContent = t.aura ? `\u25c9 ${t.name}` : t.name;
+        chip.textContent = t.aura ? `◉ ${t.name}` : t.name;
         chip.style.color = TIER_COLOUR[t.tier];
         chip.style.borderColor = TIER_COLOUR[t.tier];
-        chip.title = `${t.tier}${t.aura ? ', communal: it lifts the whole deed' : ''} \u2014 ${t.note}`;
+        // The figures, beside the name rather than behind a hover: a trait you
+        // have to point at to learn anything about is one you never read.
+        for (const ch of CHANNELS) {
+          const v = t.effects[ch.id];
+          if (v === undefined) continue;
+          const fig = document.createElement('span');
+          fig.className = `trait-fig ${isGain(ch.id, v) ? 'trait-up' : 'trait-down'}`;
+          fig.textContent = `${pct(v)} ${ch.label}`;
+          chip.append(' ', fig);
+        }
+        const says = CHANNELS.filter((ch) => t.effects[ch.id] !== undefined)
+          .map((ch) => `${pct(t.effects[ch.id] as number)} ${ch.label}: ${ch.note}`);
+        chip.title = `${t.tier}${t.aura ? ', communal: what it lifts, it lifts for every wildermon on the same deed or post, itself included' : ''}`
+          + ` — ${t.note}\n${says.join('\n')}`;
       } else {
         chip.textContent = 'something';
         chip.classList.add('trait-unread');
@@ -350,5 +372,54 @@ export class WildermonPanel {
       row.append(chip);
     }
     return row;
+  }
+
+  /**
+   * What the three of them come to, after the herd and the brush.
+   *
+   * The chips say what each trait is worth on its own; this says what the
+   * animal in front of you is worth, which is a different number and the one
+   * every rule actually reads. Three traits multiply, a lead beast standing in
+   * the same field multiplies again, and a well-brushed animal works and learns
+   * a quarter faster — and the card had been claiming that last one in a
+   * tooltip on the Care bar for as long as the bar has existed.
+   *
+   * Taken from `speedMul`, `workMul`, `learnMul` and `yieldMul` themselves
+   * rather than worked out again here. A number written twice is a number that
+   * drifts, and a card that works out its own answer is a card that can be
+   * wrong about the rules while agreeing with itself.
+   */
+  private worth(c: Creature): HTMLDivElement | null {
+    const beasts = this.game.creatures;
+    const net = (ch: TraitChannel): number =>
+      ch === 'speed' ? beasts.speedMul(c)
+      : ch === 'work' ? beasts.workMul(c)
+      : ch === 'learn' ? beasts.learnMul(c)
+      : ch === 'yield' ? beasts.yieldMul(c)
+      : bloodMul(c, ch);
+    const row = document.createElement('div');
+    row.className = 'pal-worth';
+    const label = document.createElement('span');
+    label.className = 'worth-label';
+    label.textContent = 'In all';
+    label.title = 'The three traits multiplied together, with the herd it stands in and the brush it has had';
+    row.append(label);
+    let any = false;
+    for (const ch of CHANNELS) {
+      const v = net(ch.id);
+      if (Math.abs(v - 1) < 0.005) continue;
+      any = true;
+      const tag = document.createElement('span');
+      tag.className = `worth-tag ${isGain(ch.id, v) ? 'trait-up' : 'trait-down'}`;
+      tag.textContent = `${pct(v)} ${ch.label}`;
+      // Where it came from, so a figure that moved has somewhere to have moved from.
+      const parts = [`${ch.note}.`, `Blood ${bloodMul(c, ch.id).toFixed(2)}×`];
+      const herd = beasts.aura(c, ch.id);
+      if (Math.abs(herd - 1) >= 0.005) parts.push(`herd ${herd.toFixed(2)}×`);
+      if ((ch.id === 'work' || ch.id === 'learn') && c.care > 0) parts.push(`brushing ${careMul(c).toFixed(2)}×`);
+      tag.title = parts.join(' · ');
+      row.append(tag);
+    }
+    return any ? row : null;
   }
 }

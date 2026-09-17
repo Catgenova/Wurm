@@ -198,6 +198,77 @@ export function auraMul(traits: string[] | undefined, channel: TraitChannel): nu
 /** Whether a set of traits carries anything communal at all. */
 export const hasAura = (traits: string[] | undefined): boolean => (traits ?? []).some((id) => TRAIT_BY_ID.get(id)?.aura);
 
+
+// ---- What a channel is, in the words a card uses ----
+
+/**
+ * The eleven things a trait can lift, written out.
+ *
+ * Every one of these was already declared on `TraitChannel` with a line of
+ * comment above it, and a comment is not something a card can print. Reported
+ * from the island: *"wildermon traits are useless flair text"* — and they read
+ * as flair because the only thing shown was the name and the note. The numbers
+ * were sitting in `effects` the whole time and nothing ever put them on a
+ * screen.
+ *
+ * `up` is which way is better, which is the whole of why `appetite` needs a
+ * row of its own: it is the one channel where a trait below one is the good
+ * one, and a card that prints "−20%" in the colour it prints "−20% speed" in
+ * has told you the opposite of what happened.
+ */
+export interface ChannelDef {
+  id: TraitChannel;
+  /** What a card calls it. */
+  label: string;
+  /** What it actually decides. */
+  note: string;
+  /** Whether more of it is better. False for appetite, and only appetite. */
+  up: boolean;
+}
+
+export const CHANNELS: ChannelDef[] = [
+  { id: 'speed', label: 'speed', up: true, note: 'how fast it moves — on its own feet, under a rider, in the traces' },
+  { id: 'work', label: 'work', up: true, note: 'how quickly it finishes a job on the deed' },
+  { id: 'learn', label: 'learning', up: true, note: 'how fast the work it does goes into it as skill' },
+  { id: 'haul', label: 'hauling', up: true, note: 'what its panniers hold and its share of a team’s pull' },
+  { id: 'yield', label: 'yield', up: true, note: 'what it brings back from a trip out' },
+  { id: 'appetite', label: 'upkeep', up: false, note: 'how fast its belly empties' },
+  { id: 'hardy', label: 'health', up: true, note: 'how much it can take' },
+  { id: 'tough', label: 'damage', up: true, note: 'what its attack lands for' },
+  { id: 'sight', label: 'sight', up: true, note: 'how far it sees for you' },
+  { id: 'range', label: 'range', up: true, note: 'how far from the token or the post it will work' },
+  { id: 'grow', label: 'regrowth', up: true, note: 'how fast fleece grows back and milk comes in' },
+];
+
+export const CHANNEL_BY_ID = new Map(CHANNELS.map((c) => [c.id, c]));
+export const channelOf = (id: TraitChannel): ChannelDef | undefined => CHANNEL_BY_ID.get(id);
+
+/**
+ * A multiplier as a card prints it: `1.32` is `+32%`, `0.8` is `-20%`.
+ *
+ * Rounded to whole percent, because the figures are all two decimal places and
+ * `+31.999999999999996%` is what floating point does to `1.32`.
+ */
+export function pct(mul: number): string {
+  const n = Math.round((mul - 1) * 100);
+  return `${n >= 0 ? '+' : '−'}${Math.abs(n)}%`;
+}
+
+/** Whether a figure on a channel is a gain, for the colour a card gives it. */
+export const isGain = (channel: TraitChannel, mul: number): boolean =>
+  (CHANNEL_BY_ID.get(channel)?.up ?? true) ? mul > 1 : mul < 1;
+
+/** "+32% learning", or "+32% learning, +20% yield" for a trait that does two things. */
+export function traitSays(t: TraitDef): string {
+  return CHANNELS.filter((ch) => t.effects[ch.id] !== undefined)
+    .map((ch) => `${pct(t.effects[ch.id] as number)} ${ch.label}`)
+    .join(', ');
+}
+
+/** Every channel a set of traits touches at all, in the order a card reads them. */
+export const channelsOf = (traits: string[] | undefined): ChannelDef[] =>
+  CHANNELS.filter((ch) => traitMul(traits, ch.id) !== 1);
+
 /** A trait written out for a log line or a card. */
 export const traitName = (id: string): string => TRAIT_BY_ID.get(id)?.name ?? id;
 export const traitTier = (id: string): TraitTier => TRAIT_BY_ID.get(id)?.tier ?? 'common';

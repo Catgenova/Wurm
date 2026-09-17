@@ -1624,6 +1624,24 @@ kbd {
 }
 .trait-chip.trait-unread { color: #6d7a72; border-style: dashed; font-style: italic; }
 
+/* What a trait is worth, printed beside its name rather than hidden in a hover. */
+.trait-fig { font-size: 10px; opacity: 0.92; }
+.trait-fig + .trait-fig::before { content: ' '; }
+.trait-up { color: #8fd49a; }
+.trait-down { color: #e0a06a; }
+/* And what the three of them come to once the herd and the brush are in. */
+.pal-worth { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 3px; }
+.worth-label { font-size: 10px; line-height: 1; padding: 3px 0; color: #7c8a80; text-transform: uppercase; letter-spacing: 0.04em; }
+.worth-tag {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid #3c4642;
+  white-space: nowrap;
+}
+
 /* Titles earned from the trades, worn one at a time. */
 .title-box { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px 6px; }
 .title-none { color: #7c8a80; font-size: 11px; font-style: italic; padding: 2px 0; }

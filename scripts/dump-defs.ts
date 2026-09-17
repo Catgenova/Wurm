@@ -26,7 +26,7 @@ import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } fro
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
-import { TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
+import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
 import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/game/gear';
 import { WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
@@ -57,7 +57,7 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
-import { GRAZE_FILL, GRAZE_HUNGRY } from '../src/game/creatures';
+import { CARE_BONUS, GRAZE_FILL, GRAZE_HUNGRY } from '../src/game/creatures';
 import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
@@ -403,6 +403,13 @@ out.push(`create table if not exists trait_def (
 out.push(`create table if not exists trait_effect (
   trait text not null, channel text not null, mul real not null, primary key (trait, channel)
 );`);
+/* And what each of those channels *is*, in the words a card prints. The
+ * channels were declared as a TypeScript union with a line of comment over
+ * each arm, and a comment is not something either side can read out. */
+out.push(`create table if not exists channel_def (
+  id text primary key, ord int not null, label text not null, note text not null,
+  up boolean not null default true
+);`);
 out.push(`create table if not exists age_def (
   id text primary key, name text not null, speed real not null, pull real not null,
   yield real not null, growth real not null, tame real not null, works boolean not null
@@ -640,7 +647,7 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
   title_def, knack_kin, category_decay,
@@ -772,6 +779,8 @@ for (const t of TRAITS) {
   out.push(`insert into trait_def values (${q(t.id)}, ${q(t.name)}, ${q(t.tier)}, ${q(!!t.aura)}, ${q(t.note)});`);
   for (const [channel, mul] of Object.entries(t.effects)) out.push(`insert into trait_effect values (${q(t.id)}, ${q(channel)}, ${q(mul)});`);
 }
+CHANNELS.forEach((ch, ord) =>
+  out.push(`insert into channel_def values (${q(ch.id)}, ${q(ord)}, ${q(ch.label)}, ${q(ch.note)}, ${q(ch.up)});`));
 for (const a of Object.values(AGES)) {
   out.push(`insert into age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.speed)}, ${q(a.pull)}, ${q(a.yield)}, ${q(a.growth)}, ${q(a.tame)}, ${q(a.works)});`);
 }
@@ -857,6 +866,8 @@ for (const [fn, v] of [
   ['mine_depth', MINE_DEPTH],
   /* And how many other people's settlements you may be a citizen of. */
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
+  /* And what a brush is worth, which the card had been claiming and no rule read. */
+  ['care_bonus', CARE_BONUS],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
   ['change_keep', CHANGE_KEEP], ['island_keep', ISLAND_KEEP],
   ['tick_worlds', TICK_WORLDS], ['tick_players', TICK_PLAYERS], ['calls_a_minute', CALLS_A_MINUTE],

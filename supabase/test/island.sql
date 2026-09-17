@@ -6615,3 +6615,76 @@ from (
      and not exists (select 1 from pg_proc q join pg_namespace m on m.oid = q.pronamespace
                      where m.nspname = 'public' and q.oid <> p.oid and q.prosrc like '%' || p.proname || '(%')
 ) q;
+
+
+\echo ''
+\echo '--- a trait that does nothing'
+/*
+ * Reported from the island: *"wildermon traits are useless flair text. provide
+ * the actual stats and benefits they provide."*
+ *
+ * The flair was half of it. The other half is that three of the things a trait
+ * card promised were not applied down here at all: the `learn` channel, the
+ * communal half of an aura trait, and the brush. The browser applied all three,
+ * so the two sides disagreed by the whole amount.
+ */
+select '826. what a trait may lift, and what down here reads it: ' || count(*) || ' channels, '
+     || count(*) filter (where seen) || ' read by a rule — unread: '
+     || coalesce(string_agg(id, ', ' order by ord) filter (where not seen), 'none')
+     || ' (fog of war is the browser''s own, so sight is applied where it is felt)'
+from (
+  select cd.id, cd.ord, exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prokind = 'f'
+      and strpos(pg_get_functiondef(p.oid), 'beast_mul(c, ''' || cd.id || '''') > 0
+  ) as seen from channel_def cd
+) q;
+
+-- Two workers on one deed, one of them worth standing next to.
+select creature_spawn(:'world3', 'rabba', 20.5, 20.5, 'deed', now() - interval '3 hours', :'dane') as plain \gset
+select creature_spawn(:'world3', 'rabba', 21.5, 20.5, 'deed', now() - interval '3 hours', :'dane') as boss \gset
+update creature set traits = '{willing}', care = 0, skills = '{}'::jsonb where world_id = :'world3' and id = :'plain';
+update creature set traits = '{lead_beast}', care = 0, skills = '{}'::jsonb where world_id = :'world3' and id = :'boss';
+select '827. a plain worker with a lead beast on the same deed: work ×'
+     || (select round(beast_mul(c, 'work')::numeric, 3) from creature c where c.world_id = :'world3' and c.id = :'plain')
+     || ' — its own willing 1.08 and the lead beast''s 1.16, which nothing down here had ever lent it';
+update creature set mode = 'stored' where world_id = :'world3' and id = :'boss';
+select '828. and with the lead beast stabled: work ×'
+     || (select round(beast_mul(c, 'work')::numeric, 3) from creature c where c.world_id = :'world3' and c.id = :'plain')
+     || ' — its own blood and nothing else, which is what it was worth either way before today';
+update creature set mode = 'deed' where world_id = :'world3' and id = :'boss';
+
+update creature set care = 1 where world_id = :'world3' and id = :'plain';
+select '829. brushed to a shine: work ×'
+     || (select round(beast_mul(c, 'work')::numeric, 3) from creature c where c.world_id = :'world3' and c.id = :'plain')
+     || ', learning ×' || (select round(beast_mul(c, 'learn')::numeric, 3) from creature c where c.world_id = :'world3' and c.id = :'plain')
+     || ', speed ×' || (select round(beast_mul(c, 'speed')::numeric, 3) from creature c where c.world_id = :'world3' and c.id = :'plain')
+     || ' — the card has claimed the brush since the Care bar was drawn and no rule read it';
+
+/*
+ * And what it is worth to be clever. The same base, the same draw — the seed is
+ * set again between them — and the only difference is the blood.
+ */
+update creature set traits = '{quick_witted}', care = 0, skills = '{}'::jsonb where world_id = :'world3' and id = :'plain';
+update creature set traits = '{willing}', care = 0, skills = '{}'::jsonb where world_id = :'world3' and id = :'boss';
+select setseed(0.5) \g /dev/null
+select worker_learn(:'world3', :'plain', 'foraging', 1.0) as quick \gset
+select setseed(0.5) \g /dev/null
+select worker_learn(:'world3', :'boss', 'foraging', 1.0) as slow \gset
+select '830. one go at the same job, quick-witted against plain: '
+     || round(:'quick'::numeric, 4) || ' against ' || round(:'slow'::numeric, 4)
+     || ' — ' || round((:'quick'::numeric / nullif(:'slow'::numeric, 0)), 2)
+     || '× the learning, where this side used to teach both of them the same';
+
+/*
+ * And the island's own examine line, which named the traits and stopped. It
+ * takes a breeder's eye to read a supreme trait at all, so Dane is given one:
+ * a figure you cannot earn is a figure you should not be shown either.
+ */
+update creature set traits = '{quick_witted,thrifty,scrappy}', care = 1
+  where world_id = :'world3' and id = :'plain';
+insert into skill (world_id, uid, id, value) values (:'world3', :'dane', 'animal_husbandry', 60)
+  on conflict (world_id, uid, id) do update set value = 60;
+select '831. and what the blood reads as: '
+     || blood_read(:'world3', :'dane', (select c from creature c where c.world_id = :'world3' and c.id = :'plain'))
+     || ' — it used to name the three of them and stop there';
