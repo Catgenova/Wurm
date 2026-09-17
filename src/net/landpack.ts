@@ -129,6 +129,15 @@ export async function layHistory<T extends { n: number }>(
 
 export interface LandRow {
   y: number;
+  /**
+   * Where in the row this slice starts, for a row that is not the whole width.
+   *
+   * Absent is nought, which is what the whole-island handover between two
+   * browsers has always sent. The island's own window door sends a box rather
+   * than a band, because a band of a 4096 island is six megabytes and the
+   * point of asking is not to download the island.
+   */
+  x0?: number;
   heights: string;
   dirt: string;
   /** Absent on the last row: there is one more row of corners than of tiles. */
@@ -174,7 +183,15 @@ export function rowsOf(world: World, y0: number, y1: number): LandRow[] {
   return out;
 }
 
-/** And the other way: rows off the wire laid into a world. */
+/**
+ * And the other way: rows off the wire laid into a world.
+ *
+ * A row may be the whole width, which is what one browser hands another, or a
+ * slice starting at `x0`, which is what the island's window door sends. The
+ * widths are checked rather than trusted either way: a row the wrong length
+ * laid at an offset would smear one line of the island across the next, and
+ * the wrongness would look like terrain.
+ */
 export function layRows(world: World, rows: LandRow[]): number {
   if (!LITTLE_ENDIAN) throw new Error('This machine stores numbers the other way round; the island format is little-endian.');
   const { w, cw } = world;
@@ -183,19 +200,28 @@ export function layRows(world: World, rows: LandRow[]): number {
   for (const row of rows) {
     const y = row.y;
     if (!Number.isInteger(y) || y < 0 || y > world.h) continue;
+    const x0 = row.x0 ?? 0;
+    if (!Number.isInteger(x0) || x0 < 0 || x0 >= cw) continue;
     const h = fromBase64(row.heights);
     const d = fromBase64(row.dirt);
-    if (h.length !== cw * 2 || d.length !== cw) throw new Error(`row ${y} is the wrong width`);
-    heightBytes.set(h, y * cw * 2);
-    world.dirt.set(d, y * cw);
+    // Corners: however many came, so long as they fit from x0 and the two
+    // arrays agree with each other about how many that is.
+    const corners = d.length;
+    if (h.length !== corners * 2 || corners < 1 || x0 + corners > cw) {
+      throw new Error(`row ${y} is the wrong width`);
+    }
+    heightBytes.set(h, (y * cw + x0) * 2);
+    world.dirt.set(d, y * cw + x0);
     if (y < world.h && row.tiles && row.data && row.rock) {
       const t = fromBase64(row.tiles);
       const dt = fromBase64(row.data);
       const r = fromBase64(row.rock);
-      if (t.length !== w || dt.length !== w || r.length !== w) throw new Error(`row ${y} is the wrong width`);
-      world.tiles.set(t, y * w);
-      world.data.set(dt, y * w);
-      world.rock.set(r, y * w);
+      if (t.length !== dt.length || t.length !== r.length || !t.length || x0 + t.length > w) {
+        throw new Error(`row ${y} is the wrong width`);
+      }
+      world.tiles.set(t, y * w + x0);
+      world.data.set(dt, y * w + x0);
+      world.rock.set(r, y * w + x0);
     }
     laid += 1;
   }

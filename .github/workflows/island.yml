@@ -244,6 +244,21 @@ jobs:
           npx esbuild supabase/test/tide.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/tide.mjs --log-level=error
           node node_modules/.cache/tide.mjs
+      - name: The land read is the same island as the history replayed
+        run: |
+          # Two roads to one place, which is the thing this island has been
+          # bitten by more than any other. A join used to work the island out
+          # from its seed and lay every row of `tile_change` over it, which
+          # costs the area that has ever been worked and climbs for ever; it
+          # reads the land itself now, which costs what the square is. Both are
+          # driven here over one island with the same digging done to it and
+          # compared byte for byte — heights, soil, tiles, data and rock — and
+          # so is the seam that makes the swap safe: the cursor the window is
+          # read at is taken before the land, so a spadeful turned in between
+          # is replayed as well as read rather than lost between the two.
+          npx esbuild supabase/test/window.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/window.mjs --log-level=error
+          node node_modules/.cache/window.mjs
 
   migrate:
     name: Push the migrations to the project

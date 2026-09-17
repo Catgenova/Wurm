@@ -1,11 +1,11 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { World } from '../world/world';
-import { blankWorld, layChange, layHistory, rowsOf, type TileChange } from './landpack';
+import { CHUNK, World } from '../world/world';
+import { blankWorld, layChange, layHistory, layRows, rowsOf, type LandRow, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
 import type { IslandCrate, IslandGround } from '../game/game';
-import { BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
 
 /**
@@ -696,7 +696,52 @@ export class Island {
      */
     this.world = world;
     this.seenChange = 0;
-    this.hooks.progress?.(3, JOIN_STEPS, 'reading what has been dug');
+    this.landCells.clear();
+
+    /*
+     * The land as it is, rather than the whole story of how it got that way.
+     *
+     * Reported from a phone, with the boot screen on it: "reading what has
+     * been dug — 126,396", twenty-five seconds of it, and the right question
+     * with it — could this read only what the player has actually seen, before
+     * it gets expensive for everybody logging in and out?
+     *
+     * It could, and the sharper answer is that it need not read the history at
+     * all for ground it can read the *land* of. `compact_changes` settles
+     * `tile_change` at about one row per tile anybody has ever touched, so
+     * replaying it costs the area that has been worked and climbs for ever;
+     * the island's own `land_tile` and `land_corner` have been kept current by
+     * every dig since the rules moved into Postgres, and a square of them
+     * costs what the square is. Four hundred tiles a side, about a megabyte
+     * before the transport gzips it, the same megabyte on a hillside nobody
+     * has touched and on a town a year old.
+     *
+     * So the square round the body is read, and the history is replayed only
+     * from the moment the island read it — which on a live island is nothing
+     * at all. What has been seen and is not near is read after the first
+     * frame, by `fillLand`, because the map draws real ground for everywhere
+     * this body has ever looked.
+     *
+     * If the door is not there — a keeper that has not taken this migration
+     * yet — the old road is still open and is taken instead. An island nobody
+     * can play is a worse outcome than a slow join.
+     */
+    const you = this.me;
+    let read = false;
+    if (you) {
+      this.hooks.progress?.(3, JOIN_STEPS, 'reading the land');
+      try {
+        const [bx0, by0, bx1, by1] = this.nearBox(you.x, you.y);
+        this.seenChange = await this.readLand(bx0, by0, bx1, by1);
+        read = true;
+      } catch {
+        this.seenChange = 0;
+        this.landCells.clear();
+      }
+    }
+    // Whatever has happened since the island read that land — and everything
+    // ever, when there was no land to read.
+    this.hooks.progress?.(3, JOIN_STEPS, read ? 'catching up' : 'reading what has been dug');
     await this.catchUp();
     world.groundTouched = false;
 
@@ -717,7 +762,9 @@ export class Island {
      */
     this.hooks.progress?.(JOIN_STEPS, JOIN_STEPS, 'coming ashore');
     this.settling = Promise.all([
-      this.restoreFog(),
+      // The fog first and then the rest of the land, in that order: the map of
+      // where this body has been is what says which squares are worth reading.
+      this.restoreFog().then(() => this.fillLand()).catch(() => undefined),
       this.watch(worldId).catch((e: unknown) => {
         this.hooks.say(`The island is not telling this machine what it does (${String(e)}).`, 'error');
       }),
@@ -912,6 +959,133 @@ export class Island {
    * session. The cursor has not moved past anything unapplied, so the next
    * one picks up exactly where this one stopped.
    */
+  /**
+   * Which squares of the island's own land have been read, on a grid of `CHUNK`.
+   *
+   * A cell goes in only when a read covered the whole of it, corners included,
+   * so a box that stops halfway through one leaves it to be read again. The
+   * alternative — marking whatever a box touched — leaves a stripe of the
+   * generator's guess down the edge of every window, and a stripe of wrong
+   * ground looks exactly like ground.
+   */
+  private readonly landCells = new Set<number>();
+  /** Whether a window is already on its way, so walking does not ask twice over. */
+  private reading = false;
+
+  /** Whether the island's own land has been read for the square this tile is in. */
+  private hasLand(x: number, y: number): boolean {
+    return this.landCells.has(Math.floor(y / CHUNK) * 1024 + Math.floor(x / CHUNK));
+  }
+
+  private markLand(x0: number, y0: number, x1: number, y1: number): void {
+    // Whole cells only: from the first that starts inside the box to the last
+    // that ends inside it. The corner row at y1 + 1 comes with the box, so the
+    // tiles up to y1 are covered and the cell containing y1 counts if it ends
+    // there.
+    for (let cy = Math.ceil(y0 / CHUNK); cy <= Math.floor((y1 + 1) / CHUNK) - 1; cy++) {
+      for (let cx = Math.ceil(x0 / CHUNK); cx <= Math.floor((x1 + 1) / CHUNK) - 1; cx++) {
+        this.landCells.add(cy * 1024 + cx);
+      }
+    }
+  }
+
+  /**
+   * A square of the island as it currently stands, laid straight into the world.
+   *
+   * The other road to the same place, and the cheaper one on any island that
+   * has been lived on. Replaying `tile_change` costs what has been *done* to
+   * the island and grows for ever; this costs what the square *is*, which is
+   * the same megabyte whether the ground was cut yesterday or has had a town
+   * on it for a year.
+   *
+   * What comes back with it is the cursor the island read the land at, and the
+   * order matters: the island takes it before it reads, so a change that lands
+   * in between is in the land *and* in the history that is replayed after.
+   * Laying a change twice is laying it once. Taking it after would put such a
+   * change in neither, and a tile that is never touched again would stay wrong
+   * for good.
+   */
+  private async readLand(x0: number, y0: number, x1: number, y1: number): Promise<number> {
+    const info = this.info;
+    const w = this.world;
+    if (!info || !w) return 0;
+    const { data, error } = await supabase().rpc('rpc_land_window', {
+      p_world: info.id, p_x0: x0, p_y0: y0, p_x1: x1, p_y1: y1,
+    });
+    if (error) throw new Error(error.message);
+    const got = data as { n?: number; x0?: number; y0?: number; x1?: number; y1?: number; rows?: LandRow[] } | null;
+    if (!got || !Array.isArray(got.rows)) throw new Error('the island sent no land');
+    layRows(w, got.rows);
+    this.markLand(got.x0 ?? x0, got.y0 ?? y0, got.x1 ?? x1, got.y1 ?? y1);
+    w.groundTouched = false;
+    return Number(got.n ?? 0);
+  }
+
+  /** The square read before anybody comes ashore: what the camera draws, and then some. */
+  private nearBox(x: number, y: number): [number, number, number, number] {
+    const size = this.info?.size ?? 0;
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    return [
+      Math.max(0, cx - LAND_NEAR), Math.max(0, cy - LAND_NEAR),
+      Math.min(size - 1, cx + LAND_NEAR), Math.min(size - 1, cy + LAND_NEAR),
+    ];
+  }
+
+  /**
+   * And the rest of what this body has already looked at, after the first frame.
+   *
+   * The map draws real ground for every tile anybody has ever seen, so a fog
+   * that reaches further than the square round the body is a map with the
+   * generator's hillside where a levelled yard is. This walks the box the fog
+   * falls inside in `LAND_ASK` squares, nearest to the body first, and reads
+   * the ones no window has covered. Nothing waits on it: the ground you are
+   * standing on came with the join, and the far corners of the map fill in
+   * behind you.
+   */
+  private async fillLand(): Promise<void> {
+    const w = this.world;
+    if (!w) return;
+    const b = w.knownBox;
+    if (b.x1 < b.x0 || b.y1 < b.y0) return;
+    const step = Math.floor(LAND_ASK / CHUNK) * CHUNK;
+    const here = this.me ?? { x: 0, y: 0 };
+    const boxes: Array<{ x0: number; y0: number; away: number }> = [];
+    for (let y0 = Math.floor(b.y0 / step) * step; y0 <= b.y1; y0 += step) {
+      for (let x0 = Math.floor(b.x0 / step) * step; x0 <= b.x1; x0 += step) {
+        boxes.push({ x0, y0, away: Math.hypot(x0 + step / 2 - here.x, y0 + step / 2 - here.y) });
+      }
+    }
+    boxes.sort((p, q) => p.away - q.away);
+    for (const box of boxes) {
+      const x1 = Math.min(w.w - 1, box.x0 + step - 1);
+      const y1 = Math.min(w.h - 1, box.y0 + step - 1);
+      // Every cell of it already read, or not one tile of it ever looked at:
+      // either way there is nothing here worth a request. The fog is read tile
+      // by tile rather than sampled — a path walked once is one tile wide, and
+      // a sample every sixty-four would miss it and leave the road home drawn
+      // from the seed.
+      let want = false;
+      for (let y = box.y0; y <= y1 && !want; y += CHUNK) {
+        for (let x = box.x0; x <= x1 && !want; x += CHUNK) if (!this.hasLand(x, y)) want = true;
+      }
+      if (!want) continue;
+      let looked = false;
+      for (let y = box.y0; y <= y1 && !looked; y++) {
+        for (let x = box.x0; x <= x1; x++) if (w.isKnown(x, y)) { looked = true; break; }
+      }
+      if (!looked) continue;
+      try {
+        await this.readLand(box.x0, box.y0, x1, y1);
+      } catch {
+        // A window that will not come is a corner of the map drawn from the
+        // seed rather than from the island. Walking there reads it again.
+        return;
+      }
+      this.hooks.ground(box.x0, box.y0);
+    }
+  }
+
   private async catchUpQuietly(): Promise<void> {
     try {
       await this.catchUp();
@@ -1515,6 +1689,22 @@ export class Island {
       this.me = { ...(this.me as PlayerRow), x, y };
       await this.watch(this.info.id);
       await this.catchUpQuietly();
+    }
+    /*
+     * And the land under the next few hundred tiles of walking.
+     *
+     * Not on the block change: a block is two hundred and fifty-six tiles and
+     * you can walk a long way into one that was read at its far corner. This
+     * asks the cheap question — has the square this body is standing in been
+     * read — on every move, and only sends anything when the answer is no.
+     */
+    if (!this.hasLand(Math.floor(x), Math.floor(y)) && !this.reading) {
+      this.reading = true;
+      const [bx0, by0, bx1, by1] = this.nearBox(x, y);
+      void this.readLand(bx0, by0, bx1, by1)
+        .then(() => this.hooks.ground(Math.floor(x), Math.floor(y)))
+        .catch(() => undefined)
+        .finally(() => { this.reading = false; });
     }
   }
 

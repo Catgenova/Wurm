@@ -7547,3 +7547,49 @@ select '878. building on a settlement you are a citizen of: "'
      || coalesce(act_refusal(:'world2', :'alice', 'place_smelter',
           ('{"kind":"tile","x":5,"y":8,"sx":1,"sy":1,"itemUid":' || :'out_smelter' || '}')::jsonb), 'ALLOWED')
      || '", which this island has never asked a deed about at all: the rule that refused a citizen was the browser''s own';
+
+/*
+ * And the door that hands over the land rather than the story of it.
+ *
+ * Asked from the island, looking at a boot screen reading "reading what has
+ * been dug — 126,396": could a join read only what the player has seen, before
+ * this gets expensive for everybody logging in and out?
+ *
+ * It reads the land now. `land_tile` and `land_corner` have been kept current
+ * by every dig since the rules moved into Postgres — `land_set_tile` and its
+ * neighbours write them — and `rpc_land_window` is the door a body may knock
+ * on for a square of them. What that costs is what the square *is*; what
+ * replaying `tile_change` costs is everything that has ever been *done* to the
+ * island, which only goes up. `supabase/test/window.ts` drives both roads over
+ * one island and compares them byte for byte; these are the door's own rules.
+ */
+\echo ''
+\echo '--- the land as it is, rather than the story of how it got there'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select land_set_tile(:'world2', 3, 3, 7), land_set_height(:'world2', 3, 3, -77) \g /dev/null
+select land_announce(:'world2', 3, 3) \g /dev/null
+select (rpc_land_window(:'world2', 2, 2, 4, 4)) as win \gset
+select '879. a square of the island, asked for as a body standing on it: '
+     || jsonb_array_length((:'win'::jsonb)->'rows') || ' rows for 3 of squares, because a row of squares '
+     || 'stands on the row of corners under it as well as its own; the tile just changed reads '
+     || land_tile(:'world2', 3, 3) || ' at height ' || land_height(:'world2', 3, 3)
+     || ', and the cursor it was read at is '
+     || case when ((:'win'::jsonb)->>'n')::bigint >= (select max(n) from tile_change where world_id = :'world2')
+             then 'the newest change there is' else 'BEHIND THE NEWEST CHANGE' end;
+select '880. and the corners come one wider than the squares: '
+     || octet_length(decode(((:'win'::jsonb)->'rows'->0->>'dirt'), 'base64')) || ' soil against '
+     || octet_length(decode(((:'win'::jsonb)->'rows'->0->>'tiles'), 'base64')) || ' tiles, with '
+     || octet_length(decode(((:'win'::jsonb)->'rows'->0->>'heights'), 'base64')) || ' bytes of height for two apiece'
+     || ' — and the row past the last one carries corners and no squares: '
+     || coalesce(((:'win'::jsonb)->'rows'->-1->>'tiles'), 'none');
+-- What it will not hand over is measured in `window.ts`, where an exception is
+-- an answer rather than the end of the run: a square bigger than `land_ask` a
+-- side, and anybody who is not on the island.
+select '881. and what one of these weighs against the road it replaces: '
+     || round(length((rpc_land_window(:'world2', 0, 0, 15, 15))::text) / 256.0, 1)
+     || ' bytes a tile of land, against '
+     || round((select avg(length(jsonb_build_object('n',n,'x',x,'y',y,'tile',tile,'data',data,
+                                                    'corners',corners,'soil',soil)::text))
+                from tile_change where world_id = :'world2'), 0)
+     || ' bytes for every spadeful ever turned — the first number is what the square is and does not move, '
+     || 'the second is what has been done to it and only goes up';

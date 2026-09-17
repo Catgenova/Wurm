@@ -2778,6 +2778,7 @@ create or replace function walk_samples() returns double precision language sql 
 create or replace function sweep_every() returns double precision language sql immutable as $fn$ select 300::double precision $fn$;
 create or replace function sweep_rows() returns double precision language sql immutable as $fn$ select 50000::double precision $fn$;
 create or replace function region_size() returns double precision language sql immutable as $fn$ select 256::double precision $fn$;
+create or replace function land_ask() returns double precision language sql immutable as $fn$ select 400::double precision $fn$;
 create or replace function chunk_size() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
 create or replace function found_max() returns double precision language sql immutable as $fn$ select 512::double precision $fn$;
 create or replace function peace_reach() returns double precision language sql immutable as $fn$ select 24::double precision $fn$;

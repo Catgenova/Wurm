@@ -171,6 +171,31 @@ export const BODY_EVERY = 0.2;
  */
 export const RECONCILE_EVERY = 20;
 
+/* ---- Reading the land rather than replaying how it got that way --------- */
+
+/**
+ * The side of the biggest square of land the island will hand over at once.
+ *
+ * Four hundred tiles is a hundred and sixty thousand of them — about a
+ * megabyte of tiles, data, rock, heights and soil before base64 and before the
+ * transport gzips it, which land does unusually well at. Big enough that
+ * coming ashore is one ask; small enough that no ask can be used to pull a
+ * 4096 island down a row at a time.
+ *
+ * The island enforces it; the browser splits anything bigger into several.
+ */
+export const LAND_ASK = 400;
+
+/**
+ * And the square read around the body before anybody comes ashore.
+ *
+ * Far past what the camera draws and far past a walk between reconciles, so
+ * the ground under you is the island's own and not the generator's guess at
+ * it. What has been seen but is not near gets read after the first frame, so
+ * the map fills in behind you rather than holding the page.
+ */
+export const LAND_NEAR = 192;
+
 /**
  * How many rows of the island's history come down in one request.
  *
