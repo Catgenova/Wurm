@@ -7398,8 +7398,20 @@ select '869. so an anvil, which is one weight of metal however you pour it: '
                              * (select weight from item_def d where d.id = m.lump))::numeric, 1) || 'kg)', ', '
                    order by m.level)
   from metal_def m where m.id in ('copper', 'iron', 'gold', 'mithril');
-select '870. and the stonework, per rock out of the seam: '
-     || (select count from recipe where id = 'make_stone_brick') || ' bricks from '
-     || (select count from recipe_input where recipe = 'make_stone_brick' and item = 'rock_shards') || ' rock, '
-     || (select count from recipe_input where recipe = 'make_stone_slab' and item = 'rock_shards') || ' rock to a slab, '
-     || (select count from recipe where id = 'make_mortar') || ' mortar from one sand and one clay';
+select '870. and the stonework, per block out of the seam, in every stone there is: '
+     || (select string_agg(r.count || ' ' || replace(replace(r.id, 'make_', ''), '_brick', '')
+                           || ' from ' || i.count, ', ' order by r.id)
+           from recipe r join recipe_input i on i.recipe = r.id
+          where r.id like 'make%\_brick' and r.id <> 'make_clay_brick')
+     || ' — and to a slab: '
+     || (select string_agg(i.count || ' ' || replace(replace(r.id, 'make_', ''), '_slab', ''), ', ' order by r.id)
+           from recipe r join recipe_input i on i.recipe = r.id where r.id like 'make%\_slab')
+     || ', with ' || (select count from recipe where id = 'make_mortar')
+     || ' mortar from one sand and one clay';
+select '871. and a lump of the common metals weighs the same kilogram whichever it is: '
+     || (select string_agg(m.id || ' ' || d.weight, ', ' order by m.level)
+           from metal_def m join item_def d on d.id = m.lump
+          where m.ore is not null and not m.rare)
+     || ' — against the rare six at '
+     || (select string_agg(distinct d.weight::text, ', ')
+           from metal_def m join item_def d on d.id = m.lump where m.rare);

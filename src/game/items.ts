@@ -149,7 +149,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   coal: { name: 'Coal', category: 'material', weight: 1, stackable: true, decay: 3, description: 'Burns long and hot. A campfire will take it happily.' },
   tin_lump: { name: 'Tin lump', category: 'material', weight: 1, stackable: true, decay: 2 },
   zinc_lump: { name: 'Zinc lump', category: 'material', weight: 1, stackable: true, decay: 2 },
-  lead_lump: { name: 'Lead lump', category: 'material', weight: 1.4, stackable: true, decay: 1 },
+  lead_lump: { name: 'Lead lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   silver_lump: { name: 'Silver lump', category: 'material', weight: 0.1, stackable: true, decay: 1 },
   gold_lump: { name: 'Gold lump', category: 'material', weight: 0.1, stackable: true, decay: 1 },
   adamantine_lump: { name: 'Adamantine lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5, description: 'A blue-grey metal that turns a hatchet edge. Twenty kilograms of ore give a tenth of this.' },
