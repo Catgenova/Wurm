@@ -6999,3 +6999,72 @@ select '848. one stroke into a mature oak, and what the tile remembers: '
      || tree_cuts(land_data(:'world6', 55, 50)) || ' of ' ||
         (select hits from tree_age_def where id = tree_age(land_data(:'world6', 55, 50)))
      || ' — on the tile rather than on the woodcutter, so whoever comes by next finishes it';
+
+
+\echo ''
+\echo '--- a wood that keeps itself'
+/*
+ * Asked from the island: *"trees need a life cycle. an old tree, when dying,
+ * plants two saplings nearby. have each cycle last a real life day."* Nothing
+ * here grew a tree from one age to the next before today: a wood was the wood
+ * the generator laid down, for ever, minus whatever had been cut out of it.
+ */
+select '849. a tree''s life, a day a stage: ' || string_agg(
+         lower(a.name) || ' → ' || coalesce(lower((select b.name from tree_age_def b where b.id = a.next)), 'gone'),
+         ', ' order by case a.id when 3 then 0 else a.id + 1 end)
+     || ' — and a stage is ' || (tree_stage() / 3600) || ' real hours'
+from tree_age_def a;
+
+select id as world7 from world where name = 'Hoarding' \gset
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- A clearing with one oak sapling in the middle of it.
+  for j in 58..62 loop for i in 58..62 loop
+    perform land_set_tile(w, i, j, tile_id('Grass'));
+    perform land_set_data(w, i, j, 0);
+    perform land_set_height(w, i, j, 4);
+  end loop; end loop;
+  perform land_set_tile(w, 60, 60, tile_id('Tree'));
+  perform land_set_data(w, 60, 60, 2 | (tree_first() << 4));
+end $$;
+select '850. an oak sapling at 60,60: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60))));
+
+-- A day and a bit of real time, and one whole walk down the island.
+create or replace function pg_temp.one_pass(p_world uuid, p_back interval) returns int
+  language plpgsql as $fn$
+declare sz int; i int; n int := 0;
+begin
+  select size into sz from world where id = p_world;
+  update world set trees_at = now() - p_back, trees_row = 0 where id = p_world;
+  for i in 1 .. ceil(sz::numeric / tree_rows())::int loop n := n + tree_sweep(p_world); end loop;
+  return n;
+end $fn$;
+select pg_temp.one_pass(:'world7', interval '30 hours') as grew1 \gset
+select '851. and a day later: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60))))
+     || ' — ' || :'grew1' || ' trees on the island had a birthday in that pass';
+select pg_temp.one_pass(:'world7', interval '30 hours') \g /dev/null
+select pg_temp.one_pass(:'world7', interval '30 hours') \g /dev/null
+select '852. and two days after that: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60)))) || ', which is as far as a tree goes';
+
+-- The fourth day is the last one.
+select pg_temp.one_pass(:'world7', interval '30 hours') \g /dev/null
+select '853. and on the fourth day: ' || (select name from tile_def where id = land_tile(:'world7',60,60))
+     || ' where it stood, and ' || (select count(*) from (
+          select q.gx, q.gy from (select 60 + dx as gx, 60 + dy as gy
+            from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
+          where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree')) t)
+     || ' saplings of its own kind standing within ' || tree_seed_reach() || ' tiles of the stump';
+select '854. and what they are: ' || coalesce(string_agg(distinct
+         lower((select name from tree_age_def a where a.id = tree_age(land_data(:'world7', q.gx, q.gy)))) || ' '
+         || lower((select name from tree_def d where d.id = tree_species(land_data(:'world7', q.gx, q.gy)))), ', '), 'nothing')
+from (select 60 + dx as gx, 60 + dy as gy from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
+where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree');
+
+select '855. and no two trees keep the same hour: '
+     || (select count(distinct round(tree_phase(w.seed, q.x, q.y) / 3600))
+         from world w, (select 60 + dx as x, 60 + dy as y from generate_series(-2,2) dx, generate_series(-2,2) dy) q
+         where w.id = :'world7')
+     || ' different hours of the day across twenty-five neighbouring tiles — a wood that turned over'
+     || ' all at once would die all at once';

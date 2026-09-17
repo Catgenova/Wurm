@@ -2,7 +2,8 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
+import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_ROWS, TREE_SEED_REACH, TREE_SEEDS, TREES_LOOK, treeAge, treeSpecies } from '../world/tiles';
+import { treeDue } from '../world/trees';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -165,6 +166,9 @@ export interface GameHooks {
 export interface GameInit {
   seed: number;
   world: World;
+  /** When the woods were last brought up to date, in real seconds, and how far down. */
+  treesAt?: number;
+  treesRow?: number;
   spawn: { x: number; y: number };
   deed?: Deed | null;
   buildings?: BuildingsJSON;
@@ -510,6 +514,19 @@ export class Game {
    * above and cleared there. On the row rather than a return value because
    * `perform` already uses its return to say whether to go round again.
    */
+  /**
+   * When the woods were last brought up to date, in real seconds, and how far
+   * down the island the pass has got.
+   *
+   * Real seconds and not the world's own faster hours: a stage was asked for as
+   * a real life day, so a tree planted on a Tuesday is a young tree on
+   * Wednesday whether or not this tab was open for any of it.
+   */
+  treesAt = Date.now() / 1000;
+  treesRow = 0;
+  /** When a slice was last looked at, so the walk is paced in seconds not frames. */
+  private treesLook = 0;
+
   private swingMissed = false;
 
   /** Said by a `perform` whose swing found nothing. */
@@ -633,6 +650,15 @@ export class Game {
     this.actors.set(this.local.id, this.local);
     // A new castaway washes ashore at eight in the morning, not at midnight.
     this.time = init.time ?? (8 / 24) * DAY_SECONDS;
+    /*
+     * And the woods' own clock, which is a real one.
+     *
+     * A save that has never held it starts from now rather than from nothing:
+     * a world opened for the first time should not find its whole forest a
+     * lifetime overdue on the first pass.
+     */
+    this.treesAt = init.treesAt ?? Date.now() / 1000;
+    this.treesRow = init.treesRow ?? 0;
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
     this.creatures = Creatures.fromJSON(init.creatures);
@@ -1985,6 +2011,8 @@ export class Game {
 
   update(dt: number): void {
     this.time += dt;
+    // A slice of the woods, which keep a real day rather than the world's own.
+    this.growTrees(Date.now() / 1000);
     // The fog is the one thing that stays on the machine it belongs to, so it
     // is advanced for the person sitting here and for nobody else.
     this.vision.update();
@@ -4890,6 +4918,93 @@ export class Game {
   isForaged(x: number, y: number, kind: string): boolean {
     const t = this.foraged.get(this.forageKey(x, y, kind));
     return t !== undefined && this.time - t < FORAGE_COOLDOWN;
+  }
+
+  /** The stage nothing else grows into: the beginning of a tree. */
+  private static readonly FIRST = TREE_AGES.find((a) => !TREE_AGES.some((b) => b.next === a.id))?.id ?? 0;
+
+  /**
+   * One pass of the woods, a slice of the island's lines at a time.
+   *
+   * The island keeps this for a live one and announces every tile it changes;
+   * this is the same rule for a game with nothing under it. A tree is due when
+   * a day of its own falls between the start of this pass and now, and it takes
+   * at most one step per pass — so a save left alone for a week does not come
+   * back a week older, it picks the cycle up from where it was opened.
+   */
+  growTrees(nowSeconds: number): void {
+    if (this.ask) return; // On a live island the woods are the island's.
+    /*
+     * A slice every few seconds, not every frame.
+     *
+     * A pass wants to come round in minutes, and a stage lasts a day: reading
+     * sixteen lines of a thousand-wide island sixty times a second to find out
+     * nothing has a birthday is a thousand times more looking than the answer
+     * is worth.
+     */
+    if (nowSeconds - this.treesLook < TREES_LOOK) return;
+    this.treesLook = nowSeconds;
+    const w = this.world;
+    const from = this.treesAt;
+    const last = Math.min(w.h - 1, this.treesRow + TREE_ROWS - 1);
+    /*
+     * The slice as it stood when the pass reached it: a stump seeds its
+     * neighbours, and a sapling dropped into a line this pass had not got to
+     * yet would have the same day counted against it and grow the moment it
+     * was born.
+     */
+    const was: number[][] = [];
+    for (let y = this.treesRow; y <= last; y++) {
+      const row: number[] = [];
+      for (let x = 0; x < w.w; x++) row.push(w.getTile(x, y) === TileType.Tree ? w.getData(x, y) : -1);
+      was.push(row);
+    }
+    for (let y = this.treesRow; y <= last; y++) {
+      const row = was[y - this.treesRow];
+      for (let x = 0; x < w.w; x++) {
+        const data = row[x];
+        if (data < 0 || !treeDue(this.seed, x, y, from, nowSeconds)) continue;
+        const age = treeAge(data);
+        if (age.next === null) {
+          w.setTile(x, y, TileType.Grass, 0);
+          this.seedTrees(x, y, treeSpecies(data));
+        } else {
+          // A year's growth closes whatever was cut into it.
+          w.setTile(x, y, TileType.Tree, packTreeData(treeSpecies(data), age.next, 0));
+        }
+      }
+    }
+    if (last >= w.h - 1) {
+      this.treesRow = 0;
+      this.treesAt = nowSeconds;
+    } else this.treesRow = last + 1;
+  }
+
+  /**
+   * What an old tree leaves behind it: its own kind, on ground a sprout could
+   * have been planted in, and not inside anybody's settlement. A wood is
+   * welcome to spread, and not over the place somebody levelled and built on.
+   */
+  private seedTrees(x: number, y: number, species: number): void {
+    const w = this.world;
+    const spots: Array<[number, number]> = [];
+    for (let dy = -TREE_SEED_REACH; dy <= TREE_SEED_REACH; dy++) {
+      for (let dx = -TREE_SEED_REACH; dx <= TREE_SEED_REACH; dx++) {
+        if (!dx && !dy) continue;
+        const gx = x + dx;
+        const gy = y + dy;
+        if (!w.inBounds(gx, gy) || !PLANTABLE.has(w.getTile(gx, gy))) continue;
+        if (this.deedAt(gx, gy)) continue;
+        spots.push([gx, gy]);
+      }
+    }
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rand() * (i + 1));
+      [spots[i], spots[j]] = [spots[j], spots[i]];
+    }
+    for (const [gx, gy] of spots.slice(0, TREE_SEEDS)) {
+      w.setTile(gx, gy, TileType.Tree, packTreeData(species, Game.FIRST, 0));
+    }
   }
 
   markForaged(x: number, y: number, kind: string): void {

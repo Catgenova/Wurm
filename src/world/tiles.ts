@@ -285,14 +285,57 @@ export interface TreeAge {
   logs: number;
   /** Whether it is grown enough to fruit. */
   bears: boolean;
+  /**
+   * What it becomes when its day is up, or null for the last of them.
+   *
+   * Written down rather than counted, because the stored values are in the
+   * order they were added and not the order a tree lives them: a sapling is 3
+   * and grows into 0. Nothing has to know that but this column.
+   */
+  next: number | null;
 }
 
 export const TREE_AGES: TreeAge[] = [
-  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false },
-  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true },
-  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true },
-  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false },
+  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false, next: 1 },
+  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true, next: 2 },
+  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true, next: null },
+  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false, next: 0 },
 ];
+
+/**
+ * A day apiece, and a real one.
+ *
+ * Asked for from the island as "a real life day" per stage, so this is wall
+ * clock seconds and not the world's own faster hours: a tree planted on a
+ * Tuesday is a young tree on Wednesday whether or not anybody was logged in
+ * for any of it. Four days from a sapling to a stump, and the stump leaves two
+ * saplings behind it.
+ */
+export const TREE_STAGE = 24 * 60 * 60;
+
+/** Saplings an old tree leaves behind it when its day is up. */
+export const TREE_SEEDS = 2;
+
+/** How far from the stump one of them may take, in tiles. */
+export const TREE_SEED_REACH = 2;
+
+/**
+ * How many lines of the map one pass of the woods looks at.
+ *
+ * The land is a row of bytes per northing, so a pass is a walk down the island
+ * a slice at a time. Most rows have no tree in them at all and are thrown out
+ * whole; only the ones that do are read byte by byte.
+ */
+export const TREE_ROWS = 16;
+
+/**
+ * How often a slice is looked at, in real seconds.
+ *
+ * The island has its own clock for this and takes a slice per round; a game
+ * with nothing under it would otherwise walk the woods on every frame, which
+ * is a thousand times more looking than a daily answer is worth.
+ */
+export const TREES_LOOK = 2;
 
 /**
  * How much of a wild wood is scrub too small to be worth a hatchet.

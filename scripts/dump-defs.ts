@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, TREE_AGES, BUSH_DEFS } from '../src/world/tiles';
+import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, TREE_AGES, TREE_ROWS, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, BUSH_DEFS } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -486,8 +486,11 @@ out.push(`alter table tree_def drop column if exists logs;`);
  * whether it is grown enough to fruit. */
 out.push(`create table if not exists tree_age_def (
   id int primary key, name text not null, hits int not null, logs int not null,
-  bears boolean not null
+  bears boolean not null, next int
 );`);
+/* And what each age becomes when its day is up, which came a change later than
+ * the table did. */
+out.push(`alter table tree_age_def add column if not exists next int;`);
 out.push(`create table if not exists bush_def (id int primary key, name text not null);`);
 /* Weighted tables, shared by foraging people and foraging creatures. */
 out.push(`create table if not exists loot_table (
@@ -883,6 +886,9 @@ for (const [fn, v] of [
   ['climb_per_level', CLIMB_PER_LEVEL],
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
+  /* And how long a tree stands at one age, in real seconds, and what it leaves. */
+  ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
+  ['tree_rows', TREE_ROWS],
   /* And how many other people's settlements you may be a citizen of. */
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   /* And what a brush is worth, which the card had been claiming and no rule read. */
@@ -1003,7 +1009,7 @@ TREE_DEFS.forEach((t, i) => {
   if (t.fruit) out.push(`update tree_def set fruit = ${q(t.fruit)} where id = ${q(i)};`);
 });
 for (const a of TREE_AGES) {
-  out.push(`insert into tree_age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.hits)}, ${q(a.logs)}, ${q(a.bears)});`);
+  out.push(`insert into tree_age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.hits)}, ${q(a.logs)}, ${q(a.bears)}, ${q(a.next)});`);
 }
 SLAB_VARIANTS.forEach((v, i) => out.push(`insert into slab_def values (${q(i)}, ${q(v.name)}, ${q(v.item)});`));
 for (const [item, v] of Object.entries(VESSELS)) {
