@@ -24,7 +24,17 @@ export class Camera {
   private cos = 1;
   private sin = 0;
   minZoom = 0.35;
-  maxZoom = 2.5;
+  /**
+   * How far in you may go. Asked for: five.
+   *
+   * The ground costs nothing to zoom — it is drawn as polygons and gets
+   * sharper. What has a resolution is the sprites: a tree or a body is a
+   * little pre-rendered canvas, and `SPRITE_SCALE` says how many pixels it
+   * holds per pixel at zoom 1. Past that it is being blown up, so the ceiling
+   * here and that number are one decision in two places, which is why the
+   * renderer reads this one to pick the other.
+   */
+  maxZoom = 5;
   /** When true the camera glides towards the focus target every frame. */
   follow = true;
   width = 1;

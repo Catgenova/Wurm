@@ -16,7 +16,49 @@ export interface Sprite {
   ay: number;
 }
 
-const SPRITE_SCALE = 2;
+/**
+ * How many pixels of sprite are held per pixel at zoom 1.
+ *
+ * A tree or a body is drawn once into a little canvas and then blitted, so
+ * this is the resolution it has for ever. Two was right when the camera
+ * stopped at 2.5×; asked to go to five, a body is being blown up two and a
+ * half times and the head goes soft, which is the one thing zooming in was
+ * for.
+ *
+ * So it follows the camera instead of being a constant. Three steps, and a
+ * gap between going up and coming back down: crossing a step throws the cache
+ * away and everything on screen is drawn again, which is a handful of
+ * milliseconds and not something to do twice a frame because the wheel is
+ * wobbling between 2.19 and 2.21.
+ *
+ * Nothing is paid until somebody zooms in. A sprite is made when it is first
+ * wanted, so the far-away island that never leaves 1× holds the same small
+ * canvases it always did.
+ */
+const SPRITE_STEPS = [2, 3, 5];
+/** How far past a step you must go before it takes, and how far back to drop. */
+const STEP_SLACK = 0.15;
+let SPRITE_SCALE = SPRITE_STEPS[0];
+
+/**
+ * Tell the sprites how close the camera is. Called once a frame by the
+ * renderer; does nothing at all unless the step has actually changed.
+ */
+export function spriteScaleFor(zoom: number): void {
+  let want = SPRITE_STEPS[0];
+  for (const step of SPRITE_STEPS) {
+    // A nudge past the step going up and a nudge under it coming back down,
+    // so the boundary is not a place where one notch of the wheel redraws
+    // everything and the next notch redraws it again.
+    if (zoom > step + (SPRITE_SCALE > step ? -STEP_SLACK : STEP_SLACK)) want = nextStep(step);
+  }
+  if (want === SPRITE_SCALE) return;
+  SPRITE_SCALE = want;
+  cache.clear();
+}
+
+const nextStep = (step: number): number => SPRITE_STEPS[Math.min(SPRITE_STEPS.length - 1, SPRITE_STEPS.indexOf(step) + 1)];
+
 /** World objects were designed for a 64 px tile; tiles are 96 px now. */
 export const WORLD_SCALE = 1.5;
 const TAU = Math.PI * 2;

@@ -48,7 +48,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { SWAY_MAX, swayAt } from './sway';
-import { bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
+import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -611,6 +611,9 @@ export class Renderer {
     const cam = this.camera;
     const world = this.game.world;
     const zoom = cam.zoom;
+    // How sharp the sprites want to be, which is a question about how close
+    // the camera is. Nothing happens here unless the answer has changed.
+    spriteScaleFor(zoom);
     cam.setViewport(W, H);
     canvas.begin();
     // Past the edge of the island is sky and distance rather than a hole. It
