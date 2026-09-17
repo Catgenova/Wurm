@@ -6378,6 +6378,45 @@ select rpc_act(:'world3', 'eat', ('{"kind":"item","uid":' || :'firstonion' || '}
 select '809. and asking again with the pack empty: ' || coalesce((:'gone'::jsonb)->>'why', 'ALLOWED')
      || ' — nothing is invented, and a job with nothing to do still says so in its own words';
 
+
+\echo ''
+\echo '--- packing is a paver''s job'
+/*
+ * The gain and the sentence about the gain, off the same column. Read as a
+ * pair, because the fault this guards against is not "packing trains the
+ * wrong skill" — it is the two of them disagreeing, which is what naming the
+ * skill in `perform_terrain` and reading `d.skill` in `skill_said` would have
+ * produced the moment the column changed.
+ */
+select '811. what each job on the ground trains, off `action_def` and nowhere else: '
+     || string_agg(a.id || ' → ' || a.skill, ', ' order by a.skill, a.id)
+from action_def a
+where a.id in ('mine', 'chip_corner', 'pack', 'cultivate', 'pave_gravel', 'pave_cobble', 'drop_dirt_here');
+
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  delete from skill where world_id = w and uid = me and id in ('paving', 'digging');
+  update player set x = 20.5, y = 20.5, stats = jsonb_set(stats, '{stamina}', '1'), body_at = now()
+    where world_id = w and uid = me;
+  perform land_set_tile(w, 20, 20, 1);
+  insert into item (world_id, holder, holder_uid, def, ql, count)
+  values (w, 'player', me, 'shovel', 40, 1);
+  perform act_perform(w, me, 'pack', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":20}'::jsonb);
+end $$;
+select '812. and one go at packing: paving '
+     || coalesce((select round(value::numeric, 4)::text from skill
+                   where world_id = :'world3' and uid = '77777777-7777-7777-7777-777777777777'
+                     and id = 'paving'), 'untouched')
+     || ', digging ' || coalesce((select round(value::numeric, 4)::text from skill
+                   where world_id = :'world3' and uid = '77777777-7777-7777-7777-777777777777'
+                     and id = 'digging'), 'untouched')
+     || ' — and the island said: '
+     || coalesce((select string_agg(text, ' | ' order by n) from event
+                   where uid = '77777777-7777-7777-7777-777777777777' and kind in ('event', 'skill')), 'nothing');
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6388,7 +6427,7 @@ select '809. and asking again with the pack empty: ' || coalesce((:'gone'::jsonb
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '810. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '813. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

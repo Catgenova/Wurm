@@ -851,7 +851,12 @@ export const ACTIONS: ActionDef[] = [
     id: 'pack',
     label: 'Pack',
     verb: 'packing',
-    skill: 'digging',
+    /*
+     * Paving, not digging. Treading a road flat is the first thing a paver
+     * does and none of it is digging — the shovel is in your hand to cut the
+     * turf off, which is the same reason a paver carries one.
+     */
+    skill: 'paving',
     tool: 'shovel',
     stamina: 0.03,
     baseTime: 4,
