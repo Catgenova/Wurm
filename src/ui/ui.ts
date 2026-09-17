@@ -950,7 +950,7 @@ export class UI {
         hint: reason ?? undefined,
         disabled: !!reason || !def || !material,
         onSelect: () => {
-          if (def && material) g.requestAction(def, { kind: 'item', uid: material.uid, count: st.max });
+          if (def && material) g.requestAction(def, { kind: 'item', uid: material.uid }, st.max);
         },
       };
     });

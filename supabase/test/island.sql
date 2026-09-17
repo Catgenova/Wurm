@@ -6764,3 +6764,66 @@ select '835. twenty swings at a rabba: '
      || ' — and fighting is ' || coalesce((select round(value::numeric, 3)::text from skill
           where uid = '77777777-7777-7777-7777-777777777777' and id = 'fighting'), 'untouched')
      || ', where a miss used to pay exactly what a landed blow paid';
+
+
+\echo ''
+\echo '--- craft all, all of it'
+/*
+ * Reported from the island: *"craft all still only does a single action"*.
+ *
+ * Nothing down here was wrong. `rpc_act` has always taken `p_times` and kept
+ * it in `act_goes`, and the window was sending its number the other way — tied
+ * *inside the target* as `count`, which is what a stack-mover uses ("how many
+ * of this pile") and which `perform_craft` does not read at all. So the island
+ * was asked for one craft with a meaningless 19 attached, and made one.
+ *
+ * Measured here because it is the half that has to keep working: the browser
+ * can only be believed about `p_times` if `p_times` does what it says.
+ */
+select id as world4 from world where name = 'Hoarding' \gset
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+delete from item where world_id = :'world4' and holder_uid = '77777777-7777-7777-7777-777777777777'
+  and def in ('clay', 'sand', 'mortar');
+insert into item (world_id, holder, holder_uid, def, ql, count) values
+  (:'world4', 'player', '77777777-7777-7777-7777-777777777777', 'clay', 30, 25),
+  (:'world4', 'player', '77777777-7777-7777-7777-777777777777', 'sand', 30, 25);
+update player set act = null, act_queue = '[]'::jsonb, seen_at = now(),
+    stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1')
+  where world_id = :'world4' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select id as clay from item where world_id = :'world4'
+  and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'clay' limit 1 \gset
+
+-- The ask the window used to make: the number inside the target, one go asked for.
+select rpc_act(:'world4', 'make_mortar', ('{"kind":"item","uid":' || :'clay' || ',"count":19}')::jsonb, 1) \g /dev/null
+select '836. nineteen tied inside the target, which is how the window used to ask: the island kept '
+     || coalesce((select act_goes::text from player where world_id = :'world4'
+                   and uid = '77777777-7777-7777-7777-777777777777'), 'nothing')
+     || ' go — a craft never read `count`, and a stack-mover is the only thing that does';
+update player set act = null, act_queue = '[]'::jsonb where world_id = :'world4'
+  and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+
+-- And the ask it makes now: the number where `rpc_act` looks for it.
+select rpc_act(:'world4', 'make_mortar', ('{"kind":"item","uid":' || :'clay' || '}')::jsonb, 19) \g /dev/null
+select '837. and asked as p_times: the island kept '
+     || coalesce((select act_goes::text from player where world_id = :'world4'
+                   and uid = '77777777-7777-7777-7777-777777777777'), 'nothing') || ' goes';
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for i in 1..40 loop
+    update player set act_ends = now() - interval '1 second',
+        stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1')
+      where world_id = w and uid = me;
+    perform settle(w, me);
+    exit when (select act from player where world_id = w and uid = me) is null;
+  end loop;
+end $$;
+select '838. and when the clock caught up: '
+     || coalesce((select sum(count)::text from item where world_id = :'world4'
+                   and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'mortar'), '0')
+     || ' mortar off nineteen goes at two a go, and the clay is down to '
+     || coalesce((select sum(count)::text from item where world_id = :'world4'
+                   and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'clay'), '0')
+     || ' of 25, with nothing left in hand: '
+     || (select (act is null)::text from player where world_id = :'world4' and uid = '77777777-7777-7777-7777-777777777777');

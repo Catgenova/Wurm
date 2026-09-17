@@ -200,6 +200,9 @@ export class CraftPanel {
     const stock = this.game.inventory.items;
     const material = (want ? stock.find((it) => it.id === r.inputs[0].item && it.extra === want) : undefined) ?? this.game.inventory.find(r.inputs[0].item);
     if (!def || !material) return;
-    this.game.requestAction(def, { kind: 'item', uid: material.uid, count: times });
+    // The number of goes, which is the island's `p_times`. It used to ride
+    // inside the target as `count`, where the island reads it as "how many of
+    // the stack" and a craft reads it not at all.
+    this.game.requestAction(def, { kind: 'item', uid: material.uid }, times);
   }
 }

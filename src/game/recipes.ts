@@ -521,12 +521,23 @@ function consumeAcross(g: Game, id: string, n: number, preferUid?: number, mat?:
 export function recipeAction(r: Recipe): ActionDef {
   const materials = r.inputs.map((i) => i.item);
   const toolQl = (g: Game): number => (r.tool ? g.toolQl(r.tool) : 0);
-  /** Keep going while more crafts were asked for and can still be made. */
-  const more = (t: Target, g: Game): boolean => {
-    if (t.kind !== 'item' || (t.count ?? 1) <= 1) return false;
-    t.count = (t.count ?? 1) - 1;
-    return recipeReason(r, g, t.uid) === null;
-  };
+  /**
+   * Whether another one can still be made.
+   *
+   * This used to count down a number carried *inside the target* — `t.count`,
+   * decremented on every go — which is the mechanism a stack-mover uses, where
+   * the number means "how many of this pile" and the island reads it off the
+   * target. A craft's number never meant that. It meant *how many goes*, which
+   * is `goes`, which travels through `rpc_act`'s `p_times` and which the craft
+   * window never sent: so the island was asked for one craft with a meaningless
+   * 19 tied to it, and made one.
+   *
+   * With `goes` doing the counting, all this has to answer is whether the
+   * bench can go round again. A recipe is no longer a `quantity` action, and
+   * the toolbelt will offer it by the handful like every other job.
+   */
+  const more = (t: Target, g: Game): boolean =>
+    t.kind === 'item' && recipeReason(r, g, t.uid) === null;
   return {
     id: r.id,
     label: r.label,
@@ -536,7 +547,6 @@ export function recipeAction(r: Recipe): ActionDef {
     stamina: r.stamina,
     baseTime: r.baseTime,
     difficulty: r.difficulty,
-    quantity: true,
     repeat: true,
     applies: (t, g) => t.kind === 'item' && materials.includes(g.inventory.get(t.uid)?.id ?? ''),
     check: (t, g) => recipeReason(r, g, t.kind === 'item' ? t.uid : undefined),
