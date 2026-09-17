@@ -1012,9 +1012,27 @@ export class Island {
         (m) => {
           const e = m.new as { n?: number; text: string; kind: string; uid: string | null };
           if (e.uid && e.uid !== this.uid) return;
-          // Counted on the way past, so the beat's catch-up knows where we got
-          // to and does not say any of it twice.
-          if (typeof e.n === 'number') this.said = Math.max(this.said, e.n);
+          /*
+           * The cursor, and this path obeys it too.
+           *
+           * It used to only *advance* `said` here and say the line regardless,
+           * so the beat's catch-up would not repeat what came down the
+           * subscription — but nothing stopped the subscription repeating
+           * itself. It can and does: the channel is rebuilt whenever the body
+           * walks into a new block, `removeChannel` is asynchronous, and for a
+           * moment two of them are listening to the same `event` filter. Every
+           * line in that window arrived twice, which is what was reported —
+           * "You eat the onion." and "It is gone." printed twice apiece, from
+           * an island that measurably said each of them once.
+           *
+           * So the rule is the same rule on both paths: a line at or below the
+           * cursor has been said. One statement of it, and neither can say
+           * what the other already has.
+           */
+          if (typeof e.n === 'number') {
+            if (e.n <= this.said) return;
+            this.said = e.n;
+          }
           this.hooks.say(e.text, e.kind);
           /*
            * A line of trouble means the island has done something to the body.

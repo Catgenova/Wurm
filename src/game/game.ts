@@ -506,7 +506,7 @@ export class Game {
   }
 
   /** Actions lined up behind the one in hand, oldest first. */
-  get queue(): Array<{ def: ActionDef; target: Target; goes?: number }> {
+  get queue(): Array<{ def: ActionDef; target: Target; goes?: number; was?: string }> {
     return this.acting.queue;
   }
   /** Items lying on tiles, keyed by "x,y". */
@@ -2585,7 +2585,10 @@ export class Game {
         this.logMsg(`You can only keep ${this.queueCapacity()} jobs in your head at once. Mind logic is what widens that.`, 'error');
         return;
       }
-      this.queue.push({ def, target, goes });
+      // What it was, while there is still something to ask. Once the row is
+      // gone there is nothing left to ask what kind of thing it had been.
+      const was = target.kind === 'item' ? this.inventory.get(target.uid)?.id : undefined;
+      this.queue.push({ def, target, goes, was });
       this.logMsg(`${def.label} is next, ${this.queue.length + 1} of ${this.queueCapacity()} in hand.`, 'info');
       this.events.emit('action');
       return;
@@ -2626,9 +2629,26 @@ export class Game {
     return def.check?.(target, this) ?? null;
   }
 
+  /**
+   * Point a queued job at another one like it, when the one it named is gone.
+   *
+   * Queueing three eats means eat three times; the row id was how you pointed
+   * at the onion, not which onion you had an appointment with. Nothing is
+   * invented — with no other onion in the pack the job is refused exactly as
+   * it was, in the same words.
+   */
+  private retarget(job: { target: Target; was?: string }): Target {
+    const t = job.target;
+    if (t.kind !== 'item' || !job.was) return t;
+    if (this.inventory.get(t.uid)) return t;
+    const other = this.inventory.items.find((it) => it.id === job.was && !it.locked);
+    return other ? { ...t, uid: other.uid } : t;
+  }
+
   private nextInQueue(): boolean {
     const next = this.queue.shift();
     if (!next) return false;
+    next.target = this.retarget(next);
     const reason = this.jobReason(next.def, next.target);
     if (reason) {
       this.logMsg(`${next.def.label}: ${reason}`, 'error');

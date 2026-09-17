@@ -61,7 +61,16 @@ export type Hearer = (text: string, kind: LogKind) => void;
 export class Actor {
   /** What they are in the middle of, and what is lined up behind it. */
   action: ActiveAction | null = null;
-  queue: Array<{ def: ActionDef; target: Target; goes?: number }> = [];
+  /**
+   * Jobs lined up behind the one in hand.
+   *
+   * `was` is the kind of thing the target was when it went on the queue, and
+   * it is here because a row id does not survive the row. Eat the last of a
+   * stack and the next job names an id that no longer exists — see
+   * `retarget`, and `act_retarget` on the island, which does the same thing
+   * for the same reason.
+   */
+  queue: Array<{ def: ActionDef; target: Target; goes?: number; was?: string }> = [];
   /** Clocks that belong to a body: time spent swimming, and the last warning given. */
   swimClock = 0;
   drownWarning = 0;

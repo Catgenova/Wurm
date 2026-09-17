@@ -6334,6 +6334,50 @@ select '806. and at ' || round(hour_of_day(:'world3')::numeric, 1) || ' o''clock
           where p.world_id = :'world3' and p.sub = 'brazier')
      || ' left, carried forward rather than started again';
 
+
+\echo ''
+\echo '--- another onion will do'
+/*
+ * Reported with a screenshot: *"when you queue eat, the next 2 queues try to
+ * eat the same food"*. They did: a queued job carries the row id it was asked
+ * with, and eating the last of a stack deletes the row.
+ */
+\set eater '77777777-7777-7777-7777-777777777777'
+select set_config('request.jwt.claims', json_build_object('sub', :'eater')::text, false) \g /dev/null
+select rpc_join(:'world3', 'Hunger') \g /dev/null
+update player set stats = jsonb_set(stats, '{stamina}', '1'), body_at = now() where uid = :'eater' \g /dev/null
+delete from event where uid = :'eater' \g /dev/null
+-- Three onions in one row, the way a pack holds them, and three eats asked for.
+insert into item (world_id, holder, holder_uid, def, ql, count)
+values (:'world3', 'player', :'eater', 'onion', 30, 2);
+insert into item (world_id, holder, holder_uid, def, ql, count)
+values (:'world3', 'player', :'eater', 'onion', 30, 1);
+select min(id) as firstonion from item where holder_uid = :'eater' and def = 'onion' \gset
+select rpc_act(:'world3', 'eat', ('{"kind":"item","uid":' || :'firstonion' || '}')::jsonb, 1) \g /dev/null
+select rpc_act(:'world3', 'eat', ('{"kind":"item","uid":' || :'firstonion' || '}')::jsonb, 1) \g /dev/null
+select rpc_act(:'world3', 'eat', ('{"kind":"item","uid":' || :'firstonion' || '}')::jsonb, 1) \g /dev/null
+do $$
+declare i int;
+begin
+  for i in 1..6 loop
+    update player set act_started = act_started - interval '60 seconds',
+                      act_ends = act_ends - interval '60 seconds'
+      where uid = '77777777-7777-7777-7777-777777777777';
+    perform settle((select id from world where name = 'Hoarding'),
+                   '77777777-7777-7777-7777-777777777777');
+  end loop;
+end $$;
+select '808. three eats queued at one row of two onions, with a third onion in another row: '
+     || (select count(*) from event where uid = :'eater' and text like 'You eat%')
+     || ' eaten, ' || (select count(*) from event where uid = :'eater' and kind = 'error')
+     || ' refused, and ' || coalesce((select sum(count)::text from item where holder_uid = :'eater' and def = 'onion'), '0')
+     || ' left — the second and third jobs were pointed at a row that had been eaten, and another onion did';
+
+-- And with nothing left to point at, the refusal stands and says what it said.
+select rpc_act(:'world3', 'eat', ('{"kind":"item","uid":' || :'firstonion' || '}')::jsonb, 1) as gone \gset
+select '809. and asking again with the pack empty: ' || coalesce((:'gone'::jsonb)->>'why', 'ALLOWED')
+     || ' — nothing is invented, and a job with nothing to do still says so in its own words';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6344,7 +6388,7 @@ select '806. and at ' || round(hour_of_day(:'world3')::numeric, 1) || ' o''clock
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '807. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '810. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'
