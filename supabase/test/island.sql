@@ -6827,3 +6827,85 @@ select '838. and when the clock caught up: '
                    and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'clay'), '0')
      || ' of 25, with nothing left in hand: '
      || (select (act is null)::text from player where world_id = :'world4' and uid = '77777777-7777-7777-7777-777777777777');
+
+
+\echo ''
+\echo '--- a bed is not soil'
+/*
+ * Reported from the island: *"dropping dirt on sand or clay tiles converts them
+ * to dirt tiles."* It did — and the step before it, which nobody saw, was worse:
+ * a bed worked down to its last spadeful went to bare rock, and `reconcile`
+ * knows exactly one thing to lay back down over rock.
+ */
+select id as world5 from world where name = 'Hoarding' \gset
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- One tile of each of the four beds, with a single spadeful left on them.
+  for j in 44..47 loop for i in 44..47 loop
+    perform land_set_height(w, i, j, 6);
+    perform land_set_dirt(w, i, j, 1);
+  end loop; end loop;
+  perform land_set_tile(w, 44, 44, tile_id('Clay'));
+  perform land_set_tile(w, 45, 44, tile_id('Sand'));
+  perform land_set_tile(w, 44, 45, tile_id('Peat'));
+  perform land_set_tile(w, 45, 45, tile_id('Tar'));
+end $$;
+select '839. four beds with one spadeful left on each: ' || string_agg(
+         (select name from tile_def t where t.id = land_tile(:'world5', q.x, q.y)), ', ' order by q.x, q.y)
+from (values (44,44),(45,44),(44,45),(45,45)) q(x, y);
+
+-- Dug out to the bedrock, which is what working a pit comes to in the end.
+do $$
+declare w uuid; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for j in 44..46 loop for i in 44..46 loop perform land_set_dirt(w, i, j, 0); end loop; end loop;
+  for j in 44..46 loop for i in 44..46 loop perform reconcile_around(w, i, j); end loop; end loop;
+end $$;
+select '840. and dug out to the rock: ' || string_agg(
+         (select name from tile_def t where t.id = land_tile(:'world5', q.x, q.y)), ', ' order by q.x, q.y)
+     || ' — every one of them used to read Rock here'
+from (values (44,44),(45,44),(44,45),(45,45)) q(x, y);
+
+-- And a spadeful of dirt put back on the corner they share.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  update player set x = 44.4, y = 44.4, act = null, act_queue = '[]'::jsonb, seen_at = now(),
+      stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+  delete from item where world_id = w and holder_uid = me and def = 'dirt';
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'dirt', 20, 5);
+  perform perform_terrain(w, me, 'drop_dirt_here', '{"kind":"item"}'::jsonb);
+end $$;
+select '841. and a spadeful of dirt put back on them: ' || string_agg(
+         (select name from tile_def t where t.id = land_tile(:'world5', q.x, q.y)), ', ' order by q.x, q.y)
+     || ' — this is where the clay used to become Dirt and stay Dirt'
+from (values (44,44),(45,44),(44,45),(45,45)) q(x, y);
+
+-- And the thing the rule is for, which still has to work: grass over bedrock.
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_tile(w, 48, 48, tile_id('Grass'));
+  perform land_set_height(w, 48, 48, 6);
+  perform land_set_dirt(w, 48, 48, 0); perform land_set_dirt(w, 49, 48, 0);
+  perform land_set_dirt(w, 49, 49, 0); perform land_set_dirt(w, 48, 49, 0);
+  perform reconcile(w, 48, 48);
+end $$;
+select '842. and grass with nothing left under it is still stripped: '
+     || (select name from tile_def t where t.id = land_tile(:'world5', 48, 48));
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_dirt(w, 48, 48, 1);
+  perform reconcile(w, 48, 48);
+end $$;
+select '843. and comes back as dirt when the soil does: '
+     || (select name from tile_def t where t.id = land_tile(:'world5', 48, 48))
+     || ' — which is the rule this one is for, and it is untouched';

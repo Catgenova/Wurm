@@ -352,10 +352,25 @@ export class World {
    * Bring a tile's type in line with the soil on its corners: strip the last
    * dirt off all four and the rock beneath is exposed; put soil back on any
    * corner and it is ground again.
+   *
+   * Except over a bed, which is the one thing this rule cannot put back.
+   *
+   * It strips a surface off and knows exactly one thing to lay down in its
+   * place, and that thing is dirt. Over grass that is right — grass grows back
+   * and dirt is what is under it. Over sand, clay, peat or tar it is the end of
+   * the bed: dig the last spadeful off a clay pit and the tile went to rock,
+   * drop one spadeful of dirt on it and the tile came back as *dirt*, and the
+   * clay was gone for good. Reported from the island as dropping dirt turning
+   * sand and clay into dirt, which is the second half of it.
+   *
+   * A bed is the ground itself rather than soil lying on rock — `collect` says
+   * so, and says it in the same words the shovel reads: "the tile is exactly as
+   * it was afterwards". So nothing here has any business touching it.
    */
   reconcile(x: number, y: number): void {
     if (!this.inBounds(x, y)) return;
     const t = this.getTile(x, y);
+    if (TILE_DEFS[t as TileType]?.collect) return;
     const bare = this.allBare(x, y);
     if (bare && t !== TileType.Rock && t !== TileType.Snow) {
       this.setTile(x, y, TileType.Rock, this.rockKind(x, y));
