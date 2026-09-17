@@ -102,10 +102,21 @@ export const EVENT_KEEP = 24 * 3600;
  * than this collapses to one row per tile, and a client replaying from any
  * cursor at all lands on exactly the same island as before.
  *
- * The week is for the intermediate states, which nothing needs and which are
- * cheap enough to keep for a while anyway.
+ * It was a week, and a week turned out to be the whole life of an island.
+ *
+ * Reported: a browser hung coming ashore. Nothing was broken by then — the
+ * read had just been fixed to page properly — but an island played on all day
+ * had every single change anybody had ever made still sitting in the table,
+ * because not one of them was seven days old yet. A morning of levelling and
+ * paving is a row per tile per spadeful, and the join was replaying every one
+ * of them to arrive at a state that a fraction of them describes.
+ *
+ * An hour. Long enough that somebody who dropped off over lunch still gets
+ * their own afternoon in the order it happened, short enough that the table
+ * settles at roughly one row per tile anybody has ever touched — which is
+ * what a join actually wants, and what it would have to download anyway.
  */
-export const CHANGE_KEEP = 7 * 24 * 3600;
+export const CHANGE_KEEP = 3600;
 
 /**
  * How often the keeper does the tidying, as against the settling.
@@ -117,8 +128,17 @@ export const CHANGE_KEEP = 7 * 24 * 3600;
  */
 export const SWEEP_EVERY = 300;
 
-/** Rows one sweep will delete, per island, per kind. */
-export const SWEEP_ROWS = 5000;
+/**
+ * Rows one sweep will delete, per island, per kind.
+ *
+ * Five thousand every five minutes is a thousand an hour more than a busy
+ * island makes, which is fine until an island has a backlog — and with a keep
+ * window of a week, every island has one the first time this runs against it.
+ * The work is a delete by primary key; fifty thousand of them is not a
+ * different kind of job from five, and it is the difference between a backlog
+ * that drains in an afternoon and one that never does.
+ */
+export const SWEEP_ROWS = 50000;
 
 /* ---- What Realtime carries, and to whom ---------------------------------- */
 
@@ -161,10 +181,11 @@ export const RECONCILE_EVERY = 20;
  * ever happened, what it looked like was every paved tile and every levelled
  * yard reverting to the hillside it was cut from.
  *
- * Five thousand is a page small enough to come back reliably and big enough
- * that a well-dug island is a handful of them.
+ * Twenty thousand is a page small enough to come back reliably and big enough
+ * that a well-dug island is a handful of them rather than a hundred round
+ * trips a phone has to make one after another.
  */
-export const CHANGE_PAGE = 5000;
+export const CHANGE_PAGE = 20000;
 
 /**
  * How often the browser asks what is moving about near it.

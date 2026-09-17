@@ -124,7 +124,16 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     ground: () => {},
     people: () => {},
     pack: () => {},
-    progress: (done, total, what) => tell(`${what}… ${Math.round((done / total) * 100)}%`),
+    /*
+     * A total of nought means nobody knows how many there are — the island's
+     * history is read until it runs out, and a percentage of an unknown is a
+     * lie that looks exactly like being stuck. Reported as "hung on catching
+     * up, 100%": it was not hung, it was counting, and saying 100% the whole
+     * way through was the only thing wrong with it.
+     */
+    progress: (done, total, what) =>
+      tell(total > 0 ? `${what}… ${Math.round((done / total) * 100)}%`
+                     : `${what}… ${done.toLocaleString()}`),
   });
 
   let id = joining ?? '';

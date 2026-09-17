@@ -802,7 +802,7 @@ export class Island {
         return { rows: rowsIn<TileChange & { n: number; world_id?: string }>(data) };
       },
       (c) => this.applyChange(c),
-      () => this.hooks.progress?.(3, 3, 'catching up'),
+      (seen) => this.hooks.progress?.(seen, 0, 'catching up'),
     );
   }
 
