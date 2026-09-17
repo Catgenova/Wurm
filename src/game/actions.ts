@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, treeSpecies, treeVariant, treeAge, treeCuts, bushSpecies, packTreeData, SLAB_VARIANTS, SLAB_BY_ITEM, slabVariant } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeCuts, treeSpecies, treeVariant } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
@@ -519,8 +519,7 @@ export const ACTIONS: ActionDef[] = [
       w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) + 1);
       w.setDirt(t.cx, t.cy, w.getDirt(t.cx, t.cy) + 1);
       g.exposeRock(t.cx, t.cy);
-      const type = w.getTile(t.x, t.y);
-      if (type === TileType.Grass || type === TileType.Lawn) w.setTile(t.x, t.y, TileType.Dirt);
+      if (BURYABLE.has(w.getTile(t.x, t.y))) w.setTile(t.x, t.y, TileType.Dirt);
       g.logMsg(`You drop the dirt on the ${cornerName(t)} corner, raising the ground.`, 'event');
     },
   },
@@ -1621,6 +1620,14 @@ export const ACTIONS: ActionDef[] = [
       const c = g.nearestCornerToPlayer();
       const w = g.world;
       w.setHeight(c.cx, c.cy, w.getHeight(c.cx, c.cy) + 1);
+      // The soil as well as the height, which the island has always written
+      // here and this side never did: a spadeful is a spadeful of something.
+      w.setDirt(c.cx, c.cy, w.getDirt(c.cx, c.cy) + 1);
+      g.exposeRock(c.cx, c.cy);
+      // And the ground it covered, which is the tile under your feet — the
+      // corner it raises belongs to as many as four of them.
+      const [fx, fy] = [g.player.tileX, g.player.tileY];
+      if (BURYABLE.has(w.getTile(fx, fy))) w.setTile(fx, fy, TileType.Dirt);
       g.logMsg('You drop the dirt at your feet, raising the ground.', 'event');
     },
   },

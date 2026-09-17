@@ -6907,7 +6907,10 @@ begin
 end $$;
 select '841. and a spadeful of dirt put back on them: ' || string_agg(
          (select name from tile_def t where t.id = land_tile(:'world5', q.x, q.y)), ', ' order by q.x, q.y)
-     || ' — this is where the clay used to become Dirt and stay Dirt'
+     || ' — the three nobody was standing on are untouched, which is the rule this'
+     || ' measures. The first is the tile under the shovel, and a spadeful buries'
+     || ' what it lands on: that is 862, and it is a person doing it rather than'
+     || ' the ground doing it to them.'
 from (values (44,44),(45,44),(44,45),(45,45)) q(x, y);
 
 -- And the thing the rule is for, which still has to work: grass over bedrock.
@@ -7246,3 +7249,77 @@ select count(*) as watched from tile_change where world_id = :'world7' \gset
 select '861. and the same day with somebody standing in the middle of it: ' || :'watched'
      || ' rows rather than ' || :'told' || ' — the difference is the birthdays,'
      || ' which are told to whoever can see them and worked out by nobody';
+
+/*
+ * And what a spadeful of dirt covers over.
+ *
+ * Reported from the island: *"dropping dirt on a clay/sand tile corner isn't
+ * properly changing those tiles to dirt."* The rule named grass and lawn out
+ * loud and nothing else, so a bank of clay took the dirt, rose a step and
+ * stayed a bank of clay.
+ *
+ * Both spadefuls are asked here, because there are two of them and only one
+ * was ever covering anything: `drop_dirt` aims at a corner and covers the tile
+ * it names, and `drop_dirt_here` aims at your feet and covered nothing at all.
+ *
+ * This is the opposite rule to 839-843 on purpose, and they are both wanted.
+ * `reconcile` leaves a bed alone, so the ground never turns your clay to dirt
+ * behind your back; a spadeful buries it, because you asked it to with a
+ * shovel in your hand.
+ */
+\echo ''
+\echo '--- a spadeful of dirt covers what it lands on'
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for j in 20..22 loop for i in 20..22 loop
+    perform land_set_height(w, i, j, 4);
+    perform land_set_dirt(w, i, j, 10);
+  end loop; end loop;
+  perform land_set_tile(w, 20, 20, tile_id('Clay'));
+  perform land_set_tile(w, 21, 20, tile_id('Sand'));
+  perform land_set_tile(w, 20, 21, tile_id('Peat'));
+  perform land_set_tile(w, 21, 21, tile_id('Cobblestone'));
+  update player set x = 20.4, y = 20.4, act = null, act_queue = '[]'::jsonb, seen_at = now(), away = false,
+      stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+  delete from item where world_id = w and holder_uid = me and def = 'dirt';
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'dirt', 20, 9);
+end $$;
+select '862. four faces to drop dirt on: ' || string_agg(
+         (select name from tile_def t where t.id = land_tile(:'world7', q.x, q.y)), ', ' order by q.y, q.x)
+from (values (20,20),(21,20),(20,21),(21,21)) q(x, y);
+
+-- A spadeful on each, aimed at the corner the way the browser aims one.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; q record;
+begin
+  select id into w from world where name = 'Hoarding';
+  for q in select * from (values (20,20),(21,20),(20,21),(21,21)) v(x, y) loop
+    update player set x = q.x + 0.4, y = q.y + 0.4,
+        stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+    perform act_perform(w, me, 'drop_dirt', jsonb_build_object(
+      'kind', 'tile', 'x', q.x, 'y', q.y, 'cx', q.x, 'cy', q.y));
+  end loop;
+end $$;
+select '863. and after one each: ' || string_agg(
+         (select name from tile_def t where t.id = land_tile(:'world7', q.x, q.y)), ', ' order by q.y, q.x)
+     || ' — the cobblestone is broken up rather than buried, which is why it is still there'
+from (values (20,20),(21,20),(20,21),(21,21)) q(x, y);
+
+-- And the other spadeful: the one you drop at your feet.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_tile(w, 22, 22, tile_id('Sand'));
+  perform land_set_height(w, 22, 22, 4);
+  update player set x = 22.4, y = 22.4, act = null, act_queue = '[]'::jsonb, seen_at = now(),
+      stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+  perform act_perform(w, me, 'drop_dirt_here', '{"kind":"item"}'::jsonb);
+end $$;
+select '864. and a spadeful dropped at your feet on sand: '
+     || (select name from tile_def t where t.id = land_tile(:'world7', 22, 22))
+     || ' — which used to raise the corner and leave the face exactly as it was';
+select '865. and the list both sides read: ' || string_agg(d.name, ', ' order by b.tile)
+  from buryable b join tile_def d on d.id = b.tile;

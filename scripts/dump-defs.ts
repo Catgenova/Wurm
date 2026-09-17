@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, BUSH_DEFS } from '../src/world/tiles';
+import { BURYABLE, BUSH_DEFS, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_STAGE } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -212,6 +212,8 @@ out.push(`alter table species_def add column if not exists glow real;`);
  */
 /** Ground a sprout takes, for the planter that puts the wood back. */
 out.push(`create table if not exists plantable (tile int primary key);`);
+/** Ground a spadeful of dirt covers over, leaving dirt. */
+out.push(`create table if not exists buryable (tile int primary key);`);
 out.push(`create table if not exists improve_material_def (
   id text primary key, name text not null, skill text not null
 );`);
@@ -671,7 +673,7 @@ for (const a of ACTIONS as unknown as A[]) {
 out.push('');
 out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
-  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable,
+  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
@@ -727,6 +729,7 @@ for (const id of [...unnamed].sort()) {
   out.push(`insert into item_def values (${q(id)}, ${q(id)}, 'misc', 1, false, null, null);`);
 }
 for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plantable values (${q(t)});`);
+for (const t of [...BURYABLE].sort((a, b) => a - b)) out.push(`insert into buryable values (${q(t)});`);
 /*
  * Only the three that have a name. The browser keys rarity by an index into a
  * list whose first entry is the ordinary one with an empty name, and a row

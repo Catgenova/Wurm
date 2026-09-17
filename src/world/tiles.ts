@@ -35,6 +35,31 @@ export type RGB = readonly [number, number, number];
  */
 export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone, TileType.Gravel]);
 
+/**
+ * Ground a spadeful of dirt covers over, leaving dirt.
+ *
+ * Reported from the island: *"dropping dirt on a clay/sand tile corner isn't
+ * properly changing those tiles to dirt."* It was not: the rule buried grass
+ * and lawn by name and nothing else, so a bank of clay took the dirt, rose a
+ * step and stayed clay.
+ *
+ * The principle, rather than a list of two: a spadeful covers soft ground and
+ * what grows flat on it, and it does not cover what is built, standing or
+ * bedrock. So grass, lawn and the three other growing faces; the four beds you
+ * dig out of — sand, clay, peat, tar — and marsh, which is ground you are
+ * filling in. Not paving, which is broken up rather than buried; not a crop,
+ * a tree or a bush, which are standing on the tile; not rock, which has no
+ * soil on it to be dirt.
+ *
+ * That the beds are in this list is deliberate and is the opposite of the rule
+ * above it: `reconcile` leaves a bed alone, so the ground will never turn your
+ * clay to dirt behind your back, and this will, because you asked it to with a
+ * shovel. A bed buried is a bed gone — nothing remembers what was under it.
+ */
+export const BURYABLE: ReadonlySet<number> = new Set<number>([
+  TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss,
+  TileType.Marsh, TileType.Sand, TileType.Clay, TileType.Peat, TileType.Tar,
+]);
 
 /**
  * How much a footfall raises off a given ground. Dry loose stuff — sand,
