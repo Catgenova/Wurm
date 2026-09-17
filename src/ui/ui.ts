@@ -35,7 +35,7 @@ import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sitting
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
-import { isLump, isMould, isOreItem, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft } from '../game/metal';
+import { METAL_BY_LUMP, MOULD_BY_ID, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
 import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
@@ -1295,8 +1295,12 @@ export class UI {
                   children: lumps.map((lump) => {
                     const t: Target = { ...at, mouldUid: mould.uid, itemUid: lump.uid };
                     const reason = smithDef.check?.(t, g) ?? null;
+                    // What this metal costs, which is not the same for all of
+                    // them: a lump of the rare six weighs a tenth of an iron
+                    // one, so a filling takes ten times as many.
+                    const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
                     return {
-                      label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count})`,
+                      label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count}) · ${need} needed`,
                       hint: reason ?? undefined,
                       disabled: !!reason,
                       onSelect: () => g.requestAction(smithDef, t),

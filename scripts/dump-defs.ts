@@ -41,7 +41,7 @@ import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/
 import { WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
-import { METALS, MOULDS } from '../src/game/metal';
+import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
 import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
 import { NUTRIENTS } from '../src/game/nutrition';
@@ -395,6 +395,8 @@ out.push(`create table if not exists metal_def (
   id text primary key, name text not null, ore text, lump text not null,
   level real not null, work real not null
 );`);
+/* The six that come out of the same charge of ore as a tenth of a lump. */
+out.push(`alter table metal_def add column if not exists rare boolean not null default false;`);
 out.push(`create table if not exists pottery_def (
   unfired text primary key, fired text not null, seconds real not null
 );`);
@@ -767,7 +769,7 @@ for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(
 for (const [skill, family] of FAMILY_OF) out.push(`insert into knack_kin values (${q(skill)}, ${q(family)});`);
 for (const [cat, per] of Object.entries(CATEGORY_DECAY)) out.push(`insert into category_decay values (${q(cat)}, ${q(per)});`);
 for (const m of METALS) {
-  out.push(`insert into metal_def values (${q(m.id)}, ${q(m.name)}, ${q(m.ore)}, ${q(m.lump)}, ${q(m.level)}, ${q(m.work)});`);
+  out.push(`insert into metal_def values (${q(m.id)}, ${q(m.name)}, ${q(m.ore)}, ${q(m.lump)}, ${q(m.level)}, ${q(m.work)}, ${q(RARE_METALS.has(m.id))});`);
 }
 for (const d of POTTERY) out.push(`insert into pottery_def values (${q(d.unfired)}, ${q(d.fired)}, ${q(d.seconds)});`);
 for (const d of MOULDS) {
@@ -897,6 +899,8 @@ for (const [fn, v] of [
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   /* And what a brush is worth, which the card had been claiming and no rule read. */
   ['care_bonus', CARE_BONUS],
+  /* What a lump costs in ore, and what a lump of the rare six is worth against one. */
+  ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
   ['change_keep', CHANGE_KEEP], ['island_keep', ISLAND_KEEP],
   ['tick_worlds', TICK_WORLDS], ['tick_players', TICK_PLAYERS], ['calls_a_minute', CALLS_A_MINUTE],

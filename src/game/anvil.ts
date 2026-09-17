@@ -4,7 +4,7 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, rollRarity, RARITY_WORD, type Item } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
-import { METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
+import { METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldLumps, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
 
 /**
  * An anvil: cast whole in a smelter, set down on four subtiles, and the place
@@ -127,7 +127,10 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (def.makes === 'anvil') return 'An anvil is cast in a smelter, not beaten out here.';
       const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined);
       if (!lump) return 'You have no metal to pour.';
-      if (lump.count < def.lumps) return `That takes ${def.lumps} lumps.`;
+      // A mould wants a weight of metal, and a lump of the rare six weighs a
+      // tenth of what an iron one does, so it takes ten times as many of them.
+      const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
+      if (lump.count < need) return `That takes ${need} lumps.`;
       return null;
     },
     perform: (t, g) => {
@@ -137,8 +140,9 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const def = mould && MOULD_BY_ID.get(mould.id);
       const lump = lumpFor(g, t.itemUid);
       const metal = lump && METAL_BY_LUMP.get(lump.id);
-      if (!mould || !def || !lump || !metal || lump.count < def.lumps) return;
-      if (!g.inventory.remove(lump.uid, def.lumps)) return;
+      const need = mouldLumps(def as MouldDef, metal?.id ?? '');
+      if (!mould || !def || !lump || !metal || lump.count < need) return;
+      if (!g.inventory.remove(lump.uid, need)) return;
       const mouldQl = Math.max(1, mould.ql - mould.dmg / 2);
       // Every filling wears the mould, and no mould can be mended. A hard
       // metal takes more out of it than a soft one.

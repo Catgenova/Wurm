@@ -57,6 +57,39 @@ export const isOreItem = (id: string): boolean => METAL_BY_ORE.has(id);
 export const NAIL_WEIGHT = 0.01;
 export const NAILS_PER_LUMP = 100;
 
+/**
+ * Ore a lump takes, counted in kilograms of what came out of the seam.
+ *
+ * Twenty kilograms of ore to a lump, and ore is two kilograms a piece, so ten
+ * of them go into the furnace for one lump out of it. It used to be one for
+ * one, which made a lump the same thing as a swing of a pickaxe and made every
+ * number downstream of it meaningless.
+ */
+export const ORE_PER_LUMP = 10;
+
+/**
+ * The metals that come out of the same twenty kilograms as a tenth of a lump.
+ *
+ * Rarity in the rock is only half of what makes a metal precious; the other
+ * half is how little of it a ton of ore holds. These six give 0.10 kg where
+ * iron gives 1, so the furnace takes the same charge and hands back a tenth as
+ * much metal.
+ */
+export const RARE_METALS: ReadonlySet<string> = new Set([
+  'silver', 'gold', 'adamantine', 'glimmersteel', 'mithril', 'seryll',
+]);
+
+/**
+ * How many more of those lumps a mould takes, which is not a penalty but the
+ * same arithmetic read from the other end: a mould wants a weight of metal,
+ * and a lump of these weighs a tenth of what an iron one does.
+ */
+export const RARE_LUMP_FACTOR = 10;
+
+/** Lumps of a given metal one filling of a mould takes. */
+export const mouldLumps = (mould: MouldDef, metalId: string): number =>
+  mould.lumps * (RARE_METALS.has(metalId) ? RARE_LUMP_FACTOR : 1);
+
 export interface MouldDef {
   id: string;
   name: string;
@@ -74,7 +107,7 @@ export interface MouldDef {
 }
 
 export const MOULDS: MouldDef[] = [
-  { id: 'anvil_mould', name: 'Anvil mould', makes: 'anvil', skill: 'blacksmithing', sand: 4, difficulty: 10, lumps: 4 },
+  { id: 'anvil_mould', name: 'Anvil mould', makes: 'anvil', skill: 'blacksmithing', sand: 4, difficulty: 10, lumps: 20 },
   { id: 'pan_mould', name: 'Pan mould', makes: 'frying_pan', skill: 'blacksmithing', sand: 2, difficulty: 8, lumps: 1 },
   { id: 'rake_head_mould', name: 'Rake head mould', makes: 'rake_head', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },
   { id: 'shovel_head_mould', name: 'Shovel head mould', makes: 'shovel_head', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },

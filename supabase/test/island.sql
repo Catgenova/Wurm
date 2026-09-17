@@ -1456,12 +1456,18 @@ insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2
 select act_perform(:'world2', :'ivar', 'place_smelter', ('{"kind":"tile","x":8,"y":8,"sx":2,"sy":2,"uid":' || :'skit' || '}')::jsonb) \g /dev/null
 select coalesce(max(id), 0) as furnace from placed where world_id = :'world2' and kind = 'smelter' \gset
 delete from event where uid = :'ivar';
-insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'iron_ore', 40, 5)
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'iron_ore', 40, 9)
   returning id as ore \gset
 select '244. charging it with a clay brick: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'clay_brick' limit 1) || '}')::jsonb), 'allowed');
-select '245. and with iron ore: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":5}')::jsonb), 'allowed');
-select act_perform(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":5}')::jsonb) \g /dev/null
-select '246. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
+select '245. and with nine iron ore, one short of a charge: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":9}')::jsonb), 'allowed');
+-- Twenty-five of them: two whole charges, and five left in the pack.
+update item set count = 25 where id = :'ore';
+select '245b. and with twenty-five: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":25}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":25}')::jsonb) \g /dev/null
+select '246. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — two charges out of twenty-five, and '
+     || (select coalesce(sum(count), 0) from item where holder_uid = :'ivar' and def = 'iron_ore')
+     || ' ore still in the pack, counting what was mined earlier';
 insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 4, 'Pine');
 select act_perform(:'world2', :'ivar', 'fuel_smelter', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
 select act_perform(:'world2', :'ivar', 'light_smelter', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
@@ -1477,9 +1483,9 @@ delete from event where uid = :'ivar';
 select '249. pouring an anvil with no mould: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'iron_lump' limit 1) || '}')::jsonb), 'allowed');
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'anvil_mould', 45, 1);
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'copper_lump', 50, 2);
-select '250. with two lumps where it takes four: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
-update item set count = 6 where holder_uid = :'ivar' and def = 'copper_lump';
-select '251. and with six: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
+select '250. with two lumps where it takes twenty: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
+update item set count = 22 where holder_uid = :'ivar' and def = 'copper_lump';
+select '251. and with twenty-two: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
 select act_perform(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb) \g /dev/null
 select '252. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
      || ' — lumps left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'copper_lump')
@@ -2583,8 +2589,8 @@ select '393. a shovel head mould at QL 60 has ' || mould_uses_left(60, 0) || ' f
      || ', and a rough one at QL 10 has ' || mould_uses_left(10, 0)
      || ' — smithing with no mould chosen: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
         ('{"kind":"anvil","id":' || :'anvil' || '}')::jsonb), 'allowed')
-     || ' | with an anvil mould: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
-        ('{"kind":"anvil","id":' || :'anvil' || ',"mould":' || (select give(:'world2', :'ivar', 'anvil_mould', 1, 50)) || '}')::jsonb), 'allowed');
+     || ' | with an anvil mould, named the browser''s way: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
+        ('{"kind":"anvil","id":' || :'anvil' || ',"mouldUid":' || (select give(:'world2', :'ivar', 'anvil_mould', 1, 50)) || '}')::jsonb), 'allowed');
 delete from event where uid = :'ivar';
 do $$
 declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
@@ -2594,8 +2600,11 @@ declare w uuid := (select id from world where name <> 'Rockhaven' order by made_
                        and def = 'shovel_head_mould' limit 1);
 begin
   for i in 1..6 loop
-    exit when act_refusal(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mould', m)) is not null;
-    perform act_perform(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mould', m));
+    -- `mouldUid`, which is what the browser sends and what the island read as
+    -- `mould` until this was found: every smith anybody ever tried answered
+    -- "Choose a mould." while this line, asking itself, passed.
+    exit when act_refusal(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mouldUid', m)) is not null;
+    perform act_perform(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mouldUid', m));
   end loop;
 end $$;
 select '394. six goes at it: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
@@ -7170,16 +7179,19 @@ select '857. and the dial that says where: two saplings where ' || tree_room_two
  *
  * A rule that goes back to doing it by hand is named here the same day.
  */
-select '858. rules still reaching into a target for an item by name: '
+select '858. rules still reaching into a target for an item or a mould by name: '
      || coalesce(string_agg(p.proname, ', ' order by p.proname),
                  'none — all ' || (select count(*) from pg_proc q join pg_namespace m on m.oid = q.pronamespace
                                     where m.nspname = 'public' and q.prokind = 'f'
-                                      and pg_get_functiondef(q.oid) like '%target\_item(p\_target)%')
-                 || ' of them ask target_item(), which answers to uid and itemUid alike')
+                                      and (pg_get_functiondef(q.oid) like '%target\_item(p\_target)%'
+                                        or pg_get_functiondef(q.oid) like '%target\_mould(p\_target)%'))
+                 || ' of them ask target_item() or target_mould(), which answer to either name')
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
- where n.nspname = 'public' and p.prokind = 'f' and p.proname <> 'target_item'
+ where n.nspname = 'public' and p.prokind = 'f' and p.proname not in ('target_item', 'target_mould')
    and (pg_get_functiondef(p.oid) like '%p_target->>''uid''%'
-     or pg_get_functiondef(p.oid) like '%p_target->>''itemUid''%');
+     or pg_get_functiondef(p.oid) like '%p_target->>''itemUid''%'
+     or pg_get_functiondef(p.oid) like '%p_target->>''mould''%'
+     or pg_get_functiondef(p.oid) like '%p_target->>''mouldUid''%');
 
 /*
  * And the record of a day, which is the only thing a browser ever sees of one.
@@ -7362,3 +7374,32 @@ select '867. and a line caught up on after a quiet channel: '
                     from jsonb_array_elements(rpc_settle(null, :'world2', :'heard' - 1) -> 'said') l
                    where l->>'kind' = 'event'), 'nothing said')
      || ' — the whole of what rpc_settle used to leave out';
+
+/*
+ * And the kilograms the craft numbers are supposed to follow.
+ *
+ * Asked from the island: a lump should be twenty kilograms of ore, an anvil
+ * twenty lumps, and the rare six should come out of the same charge at a
+ * tenth — so a mould takes ten times as many of them, which is the same
+ * weight of metal read from the other end.
+ */
+\echo ''
+\echo '--- what a thing costs in kilograms of what it came from'
+select '868. a charge of ore is ' || ore_per_lump()::int || ' × '
+     || (select weight from item_def where id = 'iron_ore') || 'kg = '
+     || (ore_per_lump() * (select weight from item_def where id = 'iron_ore'))::int
+     || 'kg, and comes out as one lump of '
+     || (select weight from item_def where id = 'iron_lump') || 'kg — against '
+     || (select weight from item_def where id = 'mithril_lump')
+     || 'kg for the same charge of mithril';
+select '869. so an anvil, which is one weight of metal however you pour it: '
+     || string_agg(mould_lumps('anvil_mould', m.id) || ' ' || lower(m.name) || ' ('
+                   || round((mould_lumps('anvil_mould', m.id)
+                             * (select weight from item_def d where d.id = m.lump))::numeric, 1) || 'kg)', ', '
+                   order by m.level)
+  from metal_def m where m.id in ('copper', 'iron', 'gold', 'mithril');
+select '870. and the stonework, per rock out of the seam: '
+     || (select count from recipe where id = 'make_stone_brick') || ' bricks from '
+     || (select count from recipe_input where recipe = 'make_stone_brick' and item = 'rock_shards') || ' rock, '
+     || (select count from recipe_input where recipe = 'make_stone_slab' and item = 'rock_shards') || ' rock to a slab, '
+     || (select count from recipe where id = 'make_mortar') || ' mortar from one sand and one clay';

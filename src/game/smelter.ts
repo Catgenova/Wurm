@@ -3,7 +3,7 @@ import { FIRE_CAPACITY, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campf
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
-import { castSeconds, isOreItem, METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, smeltSeconds } from './metal';
+import { METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, ORE_PER_LUMP, castSeconds, isOreItem, mouldLumps, smeltSeconds } from './metal';
 
 /**
  * A stone smelter: the deed's second building after the campfire. It fills a
@@ -220,6 +220,8 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
       const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (!item || !isOreItem(item.id)) return 'Smelters take ore.';
+      // A charge is twenty kilograms of ore, which is ten of them.
+      if (item.count < ORE_PER_LUMP) return `A charge is ${ORE_PER_LUMP} ore; you have ${item.count}.`;
       if (s.jobs.length >= SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
       return null;
     },
@@ -229,13 +231,24 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.itemUid);
       const metal = item && METAL_BY_ORE.get(item.id);
       if (!item || !metal) return;
-      const n = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), SMELTER_CAPACITY - s.jobs.length));
-      const taken = g.inventory.take(item.uid, n);
+      /*
+       * Charges, not ore. One charge is `ORE_PER_LUMP` of it and comes out as
+       * one lump, so "all" of a stack of fifty-seven is five charges and seven
+       * left over rather than fifty-seven lumps.
+       */
+      const want = Math.max(1, Math.floor((t.count ?? 1) / ORE_PER_LUMP));
+      const n = Math.min(want, Math.floor(item.count / ORE_PER_LUMP), SMELTER_CAPACITY - s.jobs.length);
+      if (n < 1) return;
+      const taken = g.inventory.take(item.uid, n * ORE_PER_LUMP);
       if (!taken) return;
       const seconds = smeltSeconds(metal.id, taken.ql, s.ql);
-      for (let i = 0; i < n; i++) s.jobs.push({ item: { ...taken, count: 1 }, makes: metal.lump, left: seconds, total: seconds, ql: taken.ql });
+      for (let i = 0; i < n; i++) {
+        s.jobs.push({ item: { ...taken, count: ORE_PER_LUMP }, makes: metal.lump, left: seconds, total: seconds, ql: taken.ql });
+      }
       g.events.emit('smelter');
-      g.logMsg(`You charge the smelter with ${n > 1 ? `${n} × ` : ''}${itemDef(taken.id).name.toLowerCase()}. Each takes about ${Math.round(seconds)} seconds of heat.`, 'event');
+      g.logMsg(`You charge the smelter with ${n * ORE_PER_LUMP} × ${itemDef(taken.id).name.toLowerCase()}`
+        + `${n > 1 ? `, ${n} charges of it` : ''}. Each charge is about ${Math.round(seconds)} seconds of heat`
+        + ` and comes out as one lump.`, 'event');
     },
   },
   {
@@ -256,7 +269,10 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const def = MOULD_BY_ID.get('anvil_mould');
       const lump = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (!lump || !METAL_BY_LUMP.has(lump.id)) return 'Choose the metal to pour.';
-      if (lump.count < (def?.lumps ?? 4)) return `An anvil takes ${def?.lumps ?? 4} lumps.`;
+      const metal = METAL_BY_LUMP.get(lump.id) as { id: string };
+      const need = def ? mouldLumps(def, metal.id) : 0;
+      if (!need) return 'You need an anvil mould.';
+      if (lump.count < need) return `An anvil takes ${need} lumps of ${lump.id.replace('_lump', '')}.`;
       return null;
     },
     perform: (t, g) => {
@@ -267,7 +283,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const metal = lump && METAL_BY_LUMP.get(lump.id);
       const def = MOULD_BY_ID.get('anvil_mould');
       if (!mould || !lump || !metal || !def) return;
-      const need = def.lumps;
+      const need = mouldLumps(def, metal.id);
       if (lump.count < need || !g.inventory.remove(lump.uid, need)) return;
       // The mould is spent by a piece this size, whatever quality it was.
       g.inventory.remove(mould.uid, 1);
