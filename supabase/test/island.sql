@@ -7052,7 +7052,9 @@ select '853. and on the fourth day: ' || (select name from tile_def where id = l
           select q.gx, q.gy from (select 60 + dx as gx, 60 + dy as gy
             from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
           where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree')) t)
-     || ' saplings of its own kind standing within ' || tree_seed_reach() || ' tiles of the stump';
+     || ' saplings of its own kind standing within ' || tree_seed_reach() || ' tiles of the stump'
+     || ' — nought to ' || tree_seeds() || ' of them, by a roll averaging '
+     || round((1 + tree_seed_both() - tree_seed_none())::numeric, 2) || ' and by the room it had';
 select '854. and what they are: ' || coalesce(string_agg(distinct
          lower((select name from tree_age_def a where a.id = tree_age(land_data(:'world7', q.gx, q.gy)))) || ' '
          || lower((select name from tree_def d where d.id = tree_species(land_data(:'world7', q.gx, q.gy)))), ', '), 'nothing')
@@ -7064,3 +7066,69 @@ select '855. and what a day costs the clock that is not the woods'' own: '
           and w.trees_at <= now() - make_interval(secs => tree_stage()))
      || ' islands due — which is the whole of what any other round has to ask,'
      || ' because the woods have a winding of their own now';
+
+/*
+ * And the thing the roll is for: a wood with somewhere to settle.
+ *
+ * Two saplings a stump is two offspring a tree, which is a doubling every four
+ * days until the island is full. A flat average of one is not replacement
+ * either — a seed with no room is a seed lost and nothing gives one back. So
+ * the roll is a shade over replacement and the *room* does the regulating, and
+ * the thing to show is not where it goes but that it goes there from both
+ * ends: a thin wood and a thick one, on the same ground, moving towards one
+ * another instead of to nothing or to everything.
+ */
+create or replace function pg_temp.wood(p_world uuid) returns numeric
+  language sql stable as $fn$
+  -- The whole island, not a window in it: a stump two tiles from the edge of a
+  -- window seeds outside it, and a count that stops at the edge reads that as a
+  -- wood shrinking when it is only a wood moving.
+  select round(100.0 * count(*) filter (where get_byte(t.tiles, g.i) = tile_id('Tree'))
+               / greatest(1, count(*)), 1)
+    from world w, land_tile t, generate_series(0, w.size - 1) g(i)
+   where w.id = p_world and t.world_id = p_world
+$fn$;
+
+create or replace function pg_temp.sow(p_world uuid, p_share double precision) returns void
+  language plpgsql as $fn$
+declare i int; j int; sz int;
+begin
+  perform setseed(0.9191);
+  select size into sz from world where id = p_world;
+  for j in 0 .. sz - 1 loop for i in 0 .. sz - 1 loop
+    perform land_set_height(p_world, i, j, 4);
+    if random() < p_share then
+      perform land_set_tile(p_world, i, j, tile_id('Tree'));
+      perform land_set_data(p_world, i, j, 2 | ((floor(random() * 4)::int) << 4));
+    else
+      perform land_set_tile(p_world, i, j, tile_id('Grass'));
+      perform land_set_data(p_world, i, j, 0);
+    end if;
+  end loop; end loop;
+end $fn$;
+
+create or replace function pg_temp.years(p_world uuid, p_days int) returns numeric
+  language plpgsql as $fn$
+declare d int;
+begin
+  for d in 1 .. p_days loop perform pg_temp.one_day(p_world); end loop;
+  return pg_temp.wood(p_world);
+end $fn$;
+
+-- Nobody about, so this measures the wood rather than the telling of it.
+update player set away = true where world_id = :'world7' \g /dev/null
+select pg_temp.sow(:'world7', 0.2) \g /dev/null
+select pg_temp.wood(:'world7') as thin0 \gset
+select pg_temp.years(:'world7', 40) as thin40 \gset
+select pg_temp.sow(:'world7', 0.8) \g /dev/null
+select pg_temp.wood(:'world7') as thick0 \gset
+select pg_temp.years(:'world7', 40) as thick40 \gset
+select '856. the whole island sown thin and sown thick, forty days each: '
+     || :'thin0' || '% → ' || :'thin40' || '%, and ' || :'thick0' || '% → ' || :'thick40' || '%'
+     || ' — one up and one down, towards one another. Two apiece only ever went up,'
+     || ' and a roll averaging 1.02 only ever went down: measured to three hundred days it'
+     || ' took a fifth of the island to a twentieth and kept going.';
+select '857. and the dial that says where: two saplings where ' || tree_room_two()
+     || '+ of the twenty-four round the stump are open, one where ' || tree_room_one()
+     || '+ are, none where the wood has closed over — and a roll averaging '
+     || round((1 + tree_seed_both() - tree_seed_none())::numeric, 2) || ' under all of it';

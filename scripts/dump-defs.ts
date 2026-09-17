@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, TREE_AGES, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, BUSH_DEFS } from '../src/world/tiles';
+import { TILE_DEFS, ROCK_VARIANTS, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, BUSH_DEFS } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -888,6 +888,8 @@ for (const [fn, v] of [
   ['mine_depth', MINE_DEPTH],
   /* And how long a tree stands at one age, in real seconds, and what it leaves. */
   ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
+  ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],
+  ['tree_room_two', TREE_ROOM_TWO], ['tree_room_one', TREE_ROOM_ONE],
   /* And how many other people's settlements you may be a citizen of. */
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   /* And what a brush is worth, which the card had been claiming and no rule read. */

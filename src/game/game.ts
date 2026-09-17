@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies } from '../world/tiles';
+import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -4974,7 +4974,17 @@ export class Game {
       const j = Math.floor(this.rand() * (i + 1));
       [spots[i], spots[j]] = [spots[j], spots[i]];
     }
-    for (const [gx, gy] of spots.slice(0, TREE_SEEDS)) {
+    /*
+     * What it wants, and what the ground will have.
+     *
+     * The roll averages a shade over replacement; the room is what keeps a
+     * thick wood from running away, because a stump with nothing open round it
+     * leaves nothing. Neither alone settles anywhere — together they do.
+     */
+    const roll = this.rand();
+    const wants = roll < TREE_SEED_NONE ? 0 : roll < 1 - TREE_SEED_BOTH ? 1 : TREE_SEEDS;
+    const room = spots.length >= TREE_ROOM_TWO ? TREE_SEEDS : spots.length >= TREE_ROOM_ONE ? 1 : 0;
+    for (const [gx, gy] of spots.slice(0, Math.min(wants, room))) {
       w.setTile(gx, gy, TileType.Tree, packTreeData(species, Game.FIRST, 0));
     }
   }

@@ -313,13 +313,59 @@ export const TREE_AGES: TreeAge[] = [
  */
 export const TREE_STAGE = 24 * 60 * 60;
 
-/** Saplings an old tree leaves behind it when its day is up. */
+/** The most an old tree leaves behind it when its day is up. */
 export const TREE_SEEDS = 2;
+
+/**
+ * How many it actually leaves, and how much room it wants to leave them.
+ *
+ * Two apiece is two offspring per tree per life, which is a doubling every four
+ * days until there is no plantable ground left on the island — measured: a wood
+ * at a quarter density is the whole map inside three weeks.
+ *
+ * What stops that is not a smaller number. A flat average of one is not
+ * replacement either, because a seed that finds no room is a seed lost and
+ * nothing ever gives one back: measured, a wood at a quarter thins to a sixth
+ * over eight months and keeps going. There is no flat average that holds — a
+ * hair over one fills the island slowly, a hair under empties it slowly.
+ *
+ * So the roll is a little over replacement and the *room* does the regulating.
+ * A stump in the open leaves 1.1 on average; a stump hemmed in leaves fewer or
+ * none. That gives a wood somewhere to settle rather than somewhere to run to,
+ * and it settles there from either side — measured on a real island, the same
+ * ground sown at a fifth and at four fifths, forty days each:
+ *
+ *     mean 1.02    a fifth -> 17%, four fifths -> 32%    both down
+ *     mean 1.10    a fifth -> 30%, four fifths -> 46%    <- this one
+ *     mean 1.30    a fifth -> 68%, four fifths -> 69%
+ *     mean 1.50    a fifth -> 78%, four fifths -> 78%
+ *
+ * A shade over one is not enough. 1.02 with the same room cap was built and
+ * run, and both ends fall: the thin wood is still falling at three hundred
+ * days, by which point a fifth of the island has become a twentieth. The room
+ * cap cannot save it, because at low density there is always room and the cap
+ * never fires — moving the thresholds anywhere between 3+ and 8+ barely
+ * touched it.
+ *
+ * The reason is worth keeping: seeds are lost to more than crowding. Two stumps
+ * that pick the same tile plant one tree between them, a stump at the island's
+ * edge has fewer neighbours to try, and a stump beside a settlement may have
+ * nowhere at all. Every one of those is a seed gone and none of them ever gives
+ * one back, so the surplus has to cover them before it can hold a wood up.
+ *
+ * 1.10 is the gentlest that does. The ones above it settle at two thirds of the
+ * island and better, which is a wood with no clearings in it and a daily
+ * turnover three times the size.
+ */
+export const TREE_SEED_NONE = 0.2;
+export const TREE_SEED_BOTH = 0.3;
+
+/** Free ground round the stump, of the twenty-four tiles near it, for two and for one. */
+export const TREE_ROOM_TWO = 8;
+export const TREE_ROOM_ONE = 4;
 
 /** How far from the stump one of them may take, in tiles. */
 export const TREE_SEED_REACH = 2;
-
-
 
 /**
  * How much of a wild wood is scrub too small to be worth a hatchet.
