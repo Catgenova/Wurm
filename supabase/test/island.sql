@@ -7415,3 +7415,101 @@ select '871. and a lump of the common metals weighs the same kilogram whichever 
      || ' — against the rare six at '
      || (select string_agg(distinct d.weight::text, ', ')
            from metal_def m join item_def d on d.id = m.lump where m.rare);
+
+/*
+ * And the citizen, who had a settlement everywhere but in the rules that
+ * needed one.
+ *
+ * Asked from the island: for now every citizen of a deed should be able to
+ * place items and modify everything except the totem.
+ *
+ * Half of that was already true. `deeds_of` has counted citizens since the day
+ * they landed, so `my_deed`, `deed_here` and `on_my_deed` — and through them
+ * the planning, the paving, the crates and the buildings, measured at 770 and
+ * 772 — have always known one. Eighteen rules did not use it: they asked
+ *
+ *     exists (select 1 from deed where world_id = p_world and founded_by = p_uid)
+ *
+ * by hand, which is not "have you a settlement" but "did you found one". A
+ * citizen got a browser that offered the work and an island that answered no.
+ *
+ * Hild is a citizen of Ivar's Lambfold and founded nothing. Alice founded
+ * nothing and was asked nowhere, and stands beside her as the control: the
+ * only thing that differs between the two lines below is citizenship.
+ */
+\echo ''
+\echo '--- a citizen of the settlement, and the token that is still the founder''s'
+update player set x = 5.5, y = 8.5, favour = 60, favour_at = now()
+  where world_id = :'world2' and uid in (:'hild', :'alice') \g /dev/null
+insert into skill (world_id, uid, id, value)
+values (:'world2', :'hild', 'prayer', 45), (:'world2', :'alice', 'prayer', 45)
+  on conflict (world_id, uid, id) do update set value = 45 \g /dev/null
+select creature_spawn(:'world2', 'bevere', 5.5, 8.5, 'active', now() - interval '3 hours', :'hild') as cit_doe \gset
+select creature_spawn(:'world2', 'bevere', 5.6, 8.6, 'active', now() - interval '3 hours', :'hild') as cit_buck \gset
+select creature_spawn(:'world2', 'bevere', 5.4, 8.4, 'active', now() - interval '3 hours', :'alice') as out_doe \gset
+-- Sexes by hand: what is being measured is the settlement, not the coin the
+-- spawner tosses, and breeding wants one of each standing there.
+update creature set sex = 'female', until = now() + interval '1 hour'
+  where world_id = :'world2' and id in (:'cit_doe', :'out_doe') \g /dev/null
+update creature set sex = 'male', until = now() + interval '1 hour'
+  where world_id = :'world2' and id = :'cit_buck' \g /dev/null
+select '872. a citizen and a stranger side by side at the token of Lambfold — keeping a wildermon at it: "'
+     || coalesce(creature_refusal(:'world2', :'hild', 'store_creature', ('{"id":' || :'cit_doe' || '}')::jsonb), 'ALLOWED')
+     || '" against "'
+     || coalesce(creature_refusal(:'world2', :'alice', 'store_creature', ('{"id":' || :'out_doe' || '}')::jsonb), 'ALLOWED')
+     || '", and setting one to work: "'
+     || coalesce(creature_refusal(:'world2', :'hild', 'assign_deed', ('{"id":' || :'cit_doe' || '}')::jsonb), 'ALLOWED')
+     || '" against "'
+     || coalesce(creature_refusal(:'world2', :'alice', 'assign_deed', ('{"id":' || :'out_doe' || '}')::jsonb), 'ALLOWED') || '"';
+select '873. and breeding: "'
+     || coalesce(last_refusal(:'world2', :'hild', 'pair_creature', ('{"id":' || :'cit_doe' || '}')::jsonb), 'ALLOWED')
+     || '" against "'
+     || coalesce(last_refusal(:'world2', :'alice', 'pair_creature', ('{"id":' || :'out_doe' || '}')::jsonb), 'ALLOWED')
+     || '"; the harvest: "' || coalesce(cast_reason(:'world2', :'hild', 'bounty', null), 'ALLOWED')
+     || '" against "' || coalesce(cast_reason(:'world2', :'alice', 'bounty', null), 'ALLOWED')
+     || '"; and the walk home: "' || work_ability(:'world2', :'hild', 'recall')
+     || '" against "' || work_ability(:'world2', :'alice', 'recall') || '"';
+select '874. and the hands she may set to it: ' || worker_cap(:'world2', :'hild') || ' against '
+     || worker_cap(:'world2', :'alice') || ', working out of '
+     || coalesce((select x || ',' || y || ' within ' || radius || ' tiles'
+                    from work_site(:'world2', (select c from creature c where c.world_id = :'world2' and c.id = :'cit_doe'))),
+                 'nowhere')
+     || ' against '
+     || coalesce((select x || ',' || y || ' within ' || radius || ' tiles'
+                    from work_site(:'world2', (select c from creature c where c.world_id = :'world2' and c.id = :'out_doe'))),
+                 'nowhere')
+     || ' — a beast keyed to a citizen has a token to work out of, and one keyed to nobody has none';
+-- And the eighteenth site, which was not in the first pass: a beast called off
+-- a work post was sent to its keeper's *founded* deed, so a citizen's was left
+-- standing where the post was.
+update player set x = 6.5, y = 8.5 where world_id = :'world2' and uid = :'hild' \g /dev/null
+select give(:'world2', :'hild', 'work_post', 1, 30, 'Pine') \g /dev/null
+select id as cit_post_item from item where world_id = :'world2' and holder_uid = :'hild' and def = 'work_post'
+  order by id desc limit 1 \gset
+select act_perform(:'world2', :'hild', 'place_post',
+  ('{"kind":"tile","x":6,"y":8,"sx":1,"sy":1,"itemUid":' || :'cit_post_item' || '}')::jsonb) \g /dev/null
+select id as cit_post from placed where world_id = :'world2' and kind = 'post' order by id desc limit 1 \gset
+select act_perform(:'world2', :'hild', 'assign_post',
+  ('{"kind":"post","id":' || :'cit_post' || ',"creature":' || :'cit_doe' || '}')::jsonb) \g /dev/null
+select '875. and a citizen''s wildermon called off the post at 6,8 walks to '
+     || (select floor(to_x) || ',' || floor(to_y) from creature where world_id = :'world2' and id = :'cit_doe')
+     || ' — the post, until it is called off: '
+     || coalesce((select post::text from creature where world_id = :'world2' and id = :'cit_doe'), 'none');
+select act_perform(:'world2', :'hild', 'unassign_post',
+  ('{"kind":"post","id":' || :'cit_post' || '}')::jsonb) \g /dev/null
+select '875b. and once it is: ' || (select floor(to_x) || ',' || floor(to_y) from creature where world_id = :'world2' and id = :'cit_doe')
+     || ', which is the token of Lambfold at '
+     || (select x || ',' || y from deed where world_id = :'world2' and name = 'Lambfold')
+     || ' rather than the post it was standing at';
+select '876. and the token itself, which is not hers to touch: "'
+     || coalesce(settlement_refusal(:'world2', :'hild', 'upgrade_deed', '{}'::jsonb), 'ALLOWED') || '", "'
+     || coalesce(settlement_refusal(:'world2', :'hild', 'rename_deed', '{"name":"Hildfold"}'::jsonb), 'ALLOWED') || '", "'
+     || coalesce(settlement_refusal(:'world2', :'hild', 'disband_deed', '{}'::jsonb), 'ALLOWED') || '"';
+select '877. and what is left deciding a settlement by who founded it: '
+     || (select string_agg(p.proname, ', ' order by p.proname)
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prokind = 'f' and p.prosrc like '%founded_by = p_uid%')
+     || ' — the token, the crate beside it and the roll of citizens; and rules that send a beast to its keeper''s founded deed: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prokind = 'f'
+            and p.prosrc ~ 'founded_by = [a-z_]+\.(keeper|made_by)');
