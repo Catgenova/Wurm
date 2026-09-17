@@ -480,7 +480,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       .filter((p) => p.uid !== island.uid)
       .map((p) => ({
         id: hashId(p.uid), uid: p.uid, name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1,
-        level: p.level, moving: false, swimming: false, working: !!p.act, look: cleanLook(p.look),
+        level: p.level, moving: false, swimming: false, working: !!p.act,
+        act: p.act ?? undefined, look: cleanLook(p.look),
       })));
   };
   for (const [text, kind, at] of log) game.write(text, kind as Parameters<Game['write']>[1], at);

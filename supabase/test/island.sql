@@ -7513,3 +7513,37 @@ select '877. and what is left deciding a settlement by who founded it: '
      || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
           where n.nspname = 'public' and p.prokind = 'f'
             and p.prosrc ~ 'founded_by = [a-z_]+\.(keeper|made_by)');
+/*
+ * And the door I assumed rather than asked.
+ *
+ * Reported from the island while the above was going live: *"i'm a citizen of
+ * your deed but i'm unable to place down a smelter"* — with the refusal in the
+ * screenshot reading "Smelters stand on your own deed."
+ *
+ * That line is the browser's, not this island's: `place_smelter` has no deed
+ * check at all, which 878 says out loud. What the island does check is
+ * `plan_reason`, and that has known a citizen all along. So the rule that
+ * refused was the browser's own copy, and the reason it refused is that the
+ * browser held *one* settlement — `my_deed`, which is founder first — where
+ * the island holds the list. Somebody who founded a stake of their own and was
+ * then asked onto another's had their own held and the other one ignored.
+ *
+ * Asked here anyway, because "the island already allows it" was a thing I
+ * believed rather than measured, and the believing is what cost the afternoon.
+ */
+select give(:'world2', :'hild', 'smelter', 1, 30, 'Stone') \g /dev/null
+select give(:'world2', :'alice', 'smelter', 1, 30, 'Stone') \g /dev/null
+select id as cit_smelter from item where world_id = :'world2' and holder_uid = :'hild' and def = 'smelter'
+  order by id desc limit 1 \gset
+select id as out_smelter from item where world_id = :'world2' and holder_uid = :'alice' and def = 'smelter'
+  order by id desc limit 1 \gset
+select '878. building on a settlement you are a citizen of: "'
+     || coalesce(plan_reason(:'world2', :'hild', 5, 8), 'ALLOWED')
+     || '" against "' || coalesce(plan_reason(:'world2', :'alice', 5, 8), 'ALLOWED')
+     || '" — and setting a smelter down there: "'
+     || coalesce(act_refusal(:'world2', :'hild', 'place_smelter',
+          ('{"kind":"tile","x":5,"y":8,"sx":1,"sy":1,"itemUid":' || :'cit_smelter' || '}')::jsonb), 'ALLOWED')
+     || '" against "'
+     || coalesce(act_refusal(:'world2', :'alice', 'place_smelter',
+          ('{"kind":"tile","x":5,"y":8,"sx":1,"sy":1,"itemUid":' || :'out_smelter' || '}')::jsonb), 'ALLOWED')
+     || '", which this island has never asked a deed about at all: the rule that refused a citizen was the browser''s own';

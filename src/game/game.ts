@@ -943,7 +943,7 @@ export class Game {
   hastenCrops(): number {
     let n = 0;
     for (const crop of this.crops.values()) {
-      if (!this.deed || !this.onDeed(crop.x, crop.y)) continue;
+      if (!this.onDeed(crop.x, crop.y)) continue;
       if (crop.stage >= RIPE) continue;
       crop.stage += 1;
       crop.stageAt = this.time;
@@ -1009,7 +1009,49 @@ export class Game {
     return null;
   }
 
+  /**
+   * Every settlement this body may work: its own, and any it was asked into.
+   *
+   * The island has held a list since citizens landed — `deeds_of` is founder
+   * first, citizen otherwise, and `deed_here` asks it about a tile. This
+   * browser held one deed and one only: `ground.deed` is `my_deed`, which is
+   * the *first* of that list. For anybody who founded a stake of their own and
+   * was then asked onto somebody else's, the one it held was their own, and
+   * every rule that asked "is this my land" said no while standing in the
+   * middle of the settlement they are a citizen of. Reported from the island:
+   * "i'm a citizen of your deed but i'm unable to place down a smelter."
+   *
+   * `ground.deeds` has carried the rest all along, each marked `mine` — it was
+   * drawn on the map and read by nothing else.
+   */
+  myDeeds(): Deed[] {
+    const out: Deed[] = [];
+    if (this.deed) out.push(this.deed);
+    for (const d of this.neighbourDeeds) if (d.mine) out.push(d);
+    return out;
+  }
+
+  /** Which settlement of ours covers this tile, when one does. */
+  deedOfMineAt(x: number, y: number): Deed | null {
+    for (const d of this.myDeeds()) {
+      if (Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius) return d;
+    }
+    return null;
+  }
+
   onDeed(x: number, y: number): boolean {
+    return !!this.deedOfMineAt(x, y);
+  }
+
+  /**
+   * On the one settlement this browser calls its own, and no other.
+   *
+   * What an upgrade is counted against. `onDeed` is "may I work here" and is
+   * rightly the whole list; this is "does this count towards *this* token",
+   * and a crate on a settlement you are a citizen of does not buy the founder
+   * of another one their next level.
+   */
+  onOwnDeed(x: number, y: number): boolean {
     const d = this.deed;
     return !!d && Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius;
   }
@@ -1024,8 +1066,9 @@ export class Game {
     return deedWorkersAt(this.deedLevel);
   }
 
+  /** The token tile of any settlement of ours — nobody builds on one. */
   isToken(x: number, y: number): boolean {
-    return !!this.deed && this.deed.x === x && this.deed.y === y;
+    return this.myDeeds().some((d) => d.x === x && d.y === y);
   }
 
   insideBuilding(): Building | undefined {
@@ -1034,7 +1077,7 @@ export class Game {
 
   /** Why a tile cannot take a building plan, or null when it can. */
   planReason(x: number, y: number): string | null {
-    if (!this.deed || !this.onDeed(x, y)) return 'You may only build on your own deed.';
+    if (!this.onDeed(x, y)) return 'You may only build on your own deed.';
     if (this.isToken(x, y)) return 'The settlement token stands here.';
     if (this.buildings.buildingAt(x, y)) return 'That tile is already part of a building.';
     if (this.world.getTile(x, y) !== TileType.PackedDirt) return 'Buildings need flat packed dirt. Pack the tile first.';

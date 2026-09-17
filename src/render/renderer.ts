@@ -1,5 +1,6 @@
 import { Camera } from '../engine/camera';
 import { emoteAt } from '../game/emotes';
+import { ACTION_BY_ID } from '../game/actions';
 import type { FullscreenCanvas } from '../engine/canvas';
 import type { Game } from '../game/game';
 import {
@@ -1182,15 +1183,35 @@ export class Renderer {
         );
         // Somebody else is only somebody else if you can tell which one.
         if (zoom >= 0.5) {
-          ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'alphabetic';
           const ty = ent.sy - 30 * zoom;
           ctx.strokeStyle = 'rgba(10,10,12,0.85)';
           ctx.lineWidth = 3;
+          ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
           ctx.strokeText(peer.name, ent.sx, ty);
           ctx.fillStyle = '#cfe6ff';
           ctx.fillText(peer.name, ent.sx, ty);
+          /*
+           * And what they are at, over the name.
+           *
+           * The figure already bends over when somebody is working, which says
+           * that they are busy and nothing about what at — so a yard with four
+           * people in it was four people bending over. The id crosses the wire
+           * and the words are looked up here, out of the same table this
+           * browser names its own actions from: an id we have never heard of
+           * draws nothing rather than drawing whatever it says.
+           *
+           * Smaller and dimmer than the name, and above it, so a crowd reads
+           * as names with a note over each rather than as two rows of text.
+           */
+          const doing = peer.act ? ACTION_BY_ID.get(peer.act)?.verb : undefined;
+          if (doing) {
+            ctx.font = `${Math.round(9 * zoom)}px system-ui, sans-serif`;
+            ctx.strokeText(doing, ent.sx, ty - 11 * zoom);
+            ctx.fillStyle = 'rgba(207,230,255,0.72)';
+            ctx.fillText(doing, ent.sx, ty - 11 * zoom);
+          }
           ctx.lineWidth = 1;
           ctx.textAlign = 'left';
         }

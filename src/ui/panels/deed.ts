@@ -134,10 +134,10 @@ export class DeedPanel {
     }
 
     // Everything standing inside the border, so nothing has to be hunted for.
-    const on = <T extends { x: number; y: number }>(m: Map<number, T>): T[] => [...m.values()].filter((v) => g.onDeed(v.x, v.y));
+    const on = <T extends { x: number; y: number }>(m: Map<number, T>): T[] => [...m.values()].filter((v) => g.onOwnDeed(v.x, v.y));
     const buildings = [...g.buildings.list.values()].filter((b) => {
       const [bx, by] = (b.tiles[0] ?? '').split(',').map(Number);
-      return Number.isFinite(bx) && g.onDeed(bx, by);
+      return Number.isFinite(bx) && g.onOwnDeed(bx, by);
     });
     const pieces = on(g.furniture);
     const altars = pieces.filter((f) => furnitureDef(f.kind).altar);
@@ -179,7 +179,7 @@ export class DeedPanel {
     for (const p of on(g.posts)) marks.push({ name: postName(p), x: p.x, y: p.y });
     for (const b of [...g.bridges.values()]) {
       const first = b.spans[0];
-      if (first && g.onDeed(first.x, first.y)) marks.push({ name: bridgeName(b), x: first.x, y: first.y });
+      if (first && g.onOwnDeed(first.x, first.y)) marks.push({ name: bridgeName(b), x: first.x, y: first.y });
     }
     if (marks.length) {
       this.body.append(this.head(`Walk to (${marks.length})`));

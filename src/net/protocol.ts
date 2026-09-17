@@ -73,6 +73,16 @@ export interface PeerState {
   swimming: boolean;
   /** Mid-action, so they are drawn working rather than standing. */
   working: boolean;
+  /**
+   * *What* they are mid-action on, as an id out of our own table of actions.
+   *
+   * `working` says somebody is busy and the figure bends over; this says what
+   * at, and it is drawn over their head. Sent as the id rather than as the
+   * words for the same reason `look` is sent as ids: what arrives from
+   * somebody else's machine and goes on this one's canvas has to be something
+   * we wrote, not something they typed. An id we do not know draws nothing.
+   */
+  act?: string;
   /** Dyed cloth, so people are told apart by more than a name over their head. */
   tunic?: string;
   trousers?: string;

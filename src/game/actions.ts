@@ -283,8 +283,9 @@ export const ACTIONS: ActionDef[] = [
       }
       const water = w.hasWater(t.x, t.y) ? ' Water laps over it.' : '';
       let extra = '';
-      if (g.isToken(t.x, t.y) && g.deed) extra += ` The settlement token of ${g.deed.name} stands here.`;
-      else if (g.onDeed(t.x, t.y) && g.deed) extra += ` This is part of ${g.deed.name}.`;
+      const here = g.deedOfMineAt(t.x, t.y);
+      if (here && g.isToken(t.x, t.y)) extra += ` The settlement token of ${here.name} stands here.`;
+      else if (here) extra += ` This is part of ${here.name}.`;
       const b = g.buildings.buildingAt(t.x, t.y);
       if (b) extra += ` It belongs to ${b.name}, ${b.levels === 1 ? 'a single-storey building' : `${b.levels} storeys tall`}.`;
       const crates = g.cratesOnTile(t.x, t.y);

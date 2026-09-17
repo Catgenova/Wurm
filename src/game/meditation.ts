@@ -114,7 +114,7 @@ export function sittingWorth(g: Game): { gain: number; where: string } {
   const y = g.player.tileY;
   let quiet = 1;
   let where = 'You sit down and let the day go past.';
-  const onDeed = g.deed && g.onDeed(x, y);
+  const onDeed = g.onDeed(x, y);
   if (onDeed) {
     quiet *= 0.7;
     where = 'You sit in your own yard. It is hard to empty your head where there is so much to do.';

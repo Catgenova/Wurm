@@ -458,9 +458,9 @@ export class UI {
     lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);
     if (reading) lines.push(reading);
-    const deed = this.game.deed;
-    if (deed && this.game.isToken(pick.x, pick.y)) lines.push(`Settlement token of ${deed.name}`);
-    else if (deed && this.game.onDeed(pick.x, pick.y)) lines.push(`Part of ${deed.name}`);
+    const mine = this.game.deedOfMineAt(pick.x, pick.y);
+    if (mine && this.game.isToken(pick.x, pick.y)) lines.push(`Settlement token of ${mine.name}`);
+    else if (mine) lines.push(`Part of ${mine.name}`);
     const b = this.game.buildings.buildingAt(pick.x, pick.y);
     if (b) {
       const level = workLevel(b);
@@ -582,7 +582,7 @@ export class UI {
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     entries.push(...this.settlementEntry(pick));
-    if (this.game.deed && this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
+    if (this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
     // Laying a campfire on the block of subtiles under the cursor.
     const fireDef = ACTION_BY_ID.get('build_campfire');
     if (fireDef && this.game.inventory.count('shaft') >= FIRE_COST) {
@@ -1581,7 +1581,7 @@ export class UI {
           });
         }
       }
-      if (!g.deed || !g.onDeed(x, y)) return entries;
+      if (!g.onDeed(x, y)) return entries;
       const nb = bld.neighbourBuilding(x, y);
       if (nb) entries.push(item(act('add_to_building'), base, `Add to ${nb.name}`));
       entries.push(item(act('plan_building'), base));

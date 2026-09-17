@@ -200,7 +200,20 @@ async function main(): Promise<void> {
 
     const t1 = Date.now();
     await island.join(id, 'The Machine');
-    check('came ashore', !!island.world && !!island.me, `${((Date.now() - t1) / 1000).toFixed(1)}s`);
+    const ashore = Date.now();
+    /*
+     * And the two the join sets going and does not wait for.
+     *
+     * The fog and the channels come after everything the first frame needs, so
+     * a page does not wait for them and neither does `join`. Out here there is
+     * no frame and nobody walking, and the next hundred checks ask about the
+     * fog and the channel — so this waits for what the page does not, and says
+     * what the waiting cost.
+     */
+    await island.ashore();
+    check('came ashore', !!island.world && !!island.me,
+      `${((ashore - t1) / 1000).toFixed(1)}s to the first frame, `
+      + `${((Date.now() - t1) / 1000).toFixed(1)}s to the fog and the channels`);
 
     /*
      * And came ashore, rather than into the sea.
@@ -841,6 +854,7 @@ async function main(): Promise<void> {
         chart: async () => readAtlas(),
       });
       await second.join(id, 'Smoke again');
+      await second.ashore();
       const arrived = second.world?.getHeight(cx, cy);
       check('somebody arriving afterwards sees the hole too', arrived !== undefined && arrived < before,
         `${before} before the dig, ${arrived} to somebody who has only just got here`);

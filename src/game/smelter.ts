@@ -97,7 +97,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile' || t.sx === undefined || t.sy === undefined) return 'Choose a spot.';
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('smelter');
       if (!item || item.id !== 'smelter') return 'You are not carrying a smelter. Build one at the crafting window.';
-      if (!g.deed || !g.onDeed(t.x, t.y)) return 'Smelters stand on your own deed.';
+      if (!g.onDeed(t.x, t.y)) return 'Smelters stand on a settlement of yours.';
       return g.smelterPlaceReason(t.x, t.y, t.sx, t.sy);
     },
     perform: (t, g) => {

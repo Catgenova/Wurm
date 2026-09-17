@@ -13,12 +13,12 @@ export interface DeedRequirement {
 
 const crates = (n: number): DeedRequirement => ({
   label: n === 1 ? 'A crate on the deed' : `${n} crates on the deed`,
-  met: (g) => [...g.crates.values()].filter((c) => g.onDeed(c.x, c.y)).length >= n,
+  met: (g) => [...g.crates.values()].filter((c) => g.onOwnDeed(c.x, c.y)).length >= n,
 });
 
 const campfires = (n: number): DeedRequirement => ({
   label: n === 1 ? 'A campfire on the deed' : `${n} campfires on the deed`,
-  met: (g) => [...g.campfires.values()].filter((f) => g.onDeed(f.x, f.y)).length >= n,
+  met: (g) => [...g.campfires.values()].filter((f) => g.onOwnDeed(f.x, f.y)).length >= n,
 });
 
 const buildings = (n: number): DeedRequirement => ({
@@ -26,18 +26,18 @@ const buildings = (n: number): DeedRequirement => ({
   met: (g) =>
     [...g.buildings.list.values()].filter((b) => {
       const [bx, by] = (b.tiles[0] ?? '').split(',').map(Number);
-      return Number.isFinite(bx) && g.onDeed(bx, by) && g.buildings.levelComplete(b, 0);
+      return Number.isFinite(bx) && g.onOwnDeed(bx, by) && g.buildings.levelComplete(b, 0);
     }).length >= n,
 });
 
 const smelters = (n: number): DeedRequirement => ({
   label: n === 1 ? 'A stone smelter on the deed' : `${n} stone smelters on the deed`,
-  met: (g) => [...g.smelters.values()].filter((s) => g.onDeed(s.x, s.y)).length >= n,
+  met: (g) => [...g.smelters.values()].filter((s) => g.onOwnDeed(s.x, s.y)).length >= n,
 });
 
 const anvils = (n: number): DeedRequirement => ({
   label: n === 1 ? 'An anvil set down on the deed' : `${n} anvils set down on the deed`,
-  met: (g) => [...g.anvils.values()].filter((a) => g.onDeed(a.x, a.y)).length >= n,
+  met: (g) => [...g.anvils.values()].filter((a) => g.onOwnDeed(a.x, a.y)).length >= n,
 });
 
 const workers = (n: number): DeedRequirement => ({

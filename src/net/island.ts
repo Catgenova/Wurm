@@ -451,11 +451,36 @@ export class Island {
    * that has moved on without it.
    */
   channelState = 'not asked';
+  /**
+   * The work a join starts and does not wait for.
+   *
+   * The fog and the channels come after the land and the body, which is
+   * everything the first frame needs, so `join` sets them going and returns.
+   * That is right for a page coming ashore and wrong for anybody who wants to
+   * *know* — a test asking whether the fog came back, or a `leave` that has to
+   * tear down what the join set up. Started and not awaited is not the same as
+   * unknowable: this is the handle, and `ashore()` is how you take it.
+   */
+  private settling: Promise<void> | null = null;
+  /**
+   * Which go at listening is the current one.
+   *
+   * `watch` awaits a token halfway through, and in that gap the island can be
+   * left or asked to listen somewhere else. It used to read `this.channel`
+   * back afterwards and call `subscribe` on it, which is null on a left island
+   * — the live run died of exactly that. Worse when it did not throw: the
+   * channel it went on to arm was armed *after* `leave` had torn down, so an
+   * island nobody was on kept a live channel. Each go takes a number, and a
+   * go that is no longer the current one puts its own channel away.
+   */
+  private watchGen = 0;
   private atlas: Atlas | null = null;
   private lastMove = 0;
   private lastMobs = 0;
   private lastGround = 0;
   private lastSaid = '';
+  /** Where the body was and what it was at, the last time that went out over Broadcast. */
+  private lastShown = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
   private seenChange = 0;
   /**
@@ -691,9 +716,24 @@ export class Island {
      * for a moment.
      */
     this.hooks.progress?.(JOIN_STEPS, JOIN_STEPS, 'coming ashore');
-    void this.restoreFog();
-    void this.watch(worldId);
+    this.settling = Promise.all([
+      this.restoreFog(),
+      this.watch(worldId).catch((e: unknown) => {
+        this.hooks.say(`The island is not telling this machine what it does (${String(e)}).`, 'error');
+      }),
+    ]).then(() => undefined);
     this.armBeat(HEARTBEAT);
+  }
+
+  /**
+   * Wait for what the join started but did not wait for.
+   *
+   * Nothing in the page calls this — the whole point of not awaiting it is
+   * that the page does not have to. It is for anybody who needs the answer
+   * rather than the frame: the fog actually back, the channels actually armed.
+   */
+  async ashore(): Promise<void> {
+    await this.settling;
   }
 
   /**
@@ -980,6 +1020,7 @@ export class Island {
         titles: said.titles, title: said.title, nutrition: said.nutrition,
         tally: said.tally, ledger: said.ledger, ticked: said.ticked,
       });
+      this.doing = said.act ?? null;
       this.hooks.doing?.({
         act: said.act ?? null,
         total: said.total ?? 0,
@@ -1086,6 +1127,7 @@ export class Island {
      * `removeChannel` is the one that tears the old one down and takes it out
      * of the list, which `unsubscribe` on its own does not.
      */
+    const gen = (this.watchGen += 1);
     const stale = this.channel;
     this.channel = null;
     if (stale) void sb.removeChannel(stale);
@@ -1150,6 +1192,10 @@ export class Island {
           }
           this.hooks.pack([...this.pack.values()]);
         });
+    // Held from here rather than read back off `this.channel` below: there is
+    // an await between the two, and what comes out the far side of an await is
+    // whatever the island has been asked to do since.
+    const armed = this.channel;
 
     /*
      * Bodies, on the one name everybody on the island agrees on.
@@ -1204,10 +1250,21 @@ export class Island {
       // whether it mattered.
     }
 
+    /*
+     * Still the current go? The token above is awaited, and a `leave` or a
+     * walk into the next block during that await leaves this one holding a
+     * channel nobody wants. Put it away rather than arming it.
+     */
+    if (gen !== this.watchGen) {
+      if (this.channel === armed) this.channel = null;
+      void sb.removeChannel(armed);
+      return;
+    }
+
     // Wait for the channel to actually say it is listening. `subscribe()`
     // hands back the channel immediately, so awaiting it proves nothing at
     // all: the status arrives later, through the callback, or never.
-    const channel = this.channel;
+    const channel = armed;
     this.channelState = await new Promise<string>((resolve) => {
       let answered = false;
       const settle = (why: string): void => {
@@ -1222,6 +1279,11 @@ export class Island {
       });
       setTimeout(() => settle('never answered'), 20000);
     });
+    if (gen !== this.watchGen) {
+      if (this.channel === armed) this.channel = null;
+      void sb.removeChannel(armed);
+      return;
+    }
     if (this.channelState !== 'listening') {
       this.hooks.say(`The island is not telling this machine what it does (${this.channelState}).`, 'error');
     }
@@ -1377,11 +1439,20 @@ export class Island {
      * subscriber every second — the single largest thing on the bill, and it
      * was people walking rather than people digging.
      */
-    if (said !== this.lastSaid && now - this.lastBody >= BODY_EVERY && this.bodies) {
+    /*
+     * Keyed on the work as well as the place, because a body standing still at
+     * a forge is as much a thing to draw as one walking. Keyed on the position
+     * alone, starting a job without moving your feet sent nothing at all, and
+     * what everybody else saw over your head was whatever the twenty-second
+     * reconcile had last read off the row.
+     */
+    const shown = `${said}|${this.doing ?? ''}`;
+    if (shown !== this.lastShown && now - this.lastBody >= BODY_EVERY && this.bodies) {
       this.lastBody = now;
+      this.lastShown = shown;
       void this.bodies.send({
         type: 'broadcast', event: 'body',
-        payload: { uid: this.uid, name: this.me?.name ?? '', x, y, level, look: this.me?.look, act: this.me?.act ?? null },
+        payload: { uid: this.uid, name: this.me?.name ?? '', x, y, level, look: this.me?.look, act: this.doing },
       });
     }
 
@@ -1580,6 +1651,7 @@ export class Island {
     // settled then rather than at the next heartbeat — and put the clock on
     // the screen now rather than a heartbeat from now.
     if (result.started && !result.done && result.seconds) {
+      this.doing = action;
       this.hooks.doing?.({ act: action, total: result.seconds, secs: result.seconds, left: times, goes: times, queued: 0 });
     }
     /*
@@ -1731,9 +1803,33 @@ export class Island {
 
   private islandNight: boolean | null = null;
 
+  /**
+   * What this body is doing, as the browser knows it rather than as the row does.
+   *
+   * `me.act` is a column, and a column is only as fresh as the last read of
+   * it: the roster reconciles every twenty seconds, so a row would have had
+   * other people watching you start a job a third of a minute after you
+   * started it, and stop one that long after you stopped. This is set the
+   * moment the island answers — at the settle and at the act itself — and it
+   * is what rides the body broadcast.
+   */
+  private doing: string | null = null;
+
   async leave(): Promise<void> {
     if (this.beat) clearTimeout(this.beat);
     this.beat = null;
+    /*
+     * Every go at listening is stood down, not merely the one we can see.
+     *
+     * A join sets `watch` going and does not wait for it, so leaving can land
+     * in the middle of one — and the one in flight would arm its channel after
+     * this ran and leave it armed on an island nobody is on. Bumping the
+     * number is how it is told; it puts its own channel away at its next look.
+     * Bumped rather than awaited, because a channel that never answers takes
+     * twenty seconds to say so and leaving should not.
+     */
+    this.watchGen += 1;
+    this.settling = null;
     // Where we have been, before the world it was worked out on goes.
     if (this.world?.fogTouched) await this.saveFog();
     const sb = supabase();

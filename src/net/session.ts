@@ -46,6 +46,7 @@ export function bodyOf(game: Game): Omit<PeerState, 'id' | 'name'> {
     moving: p.moving,
     swimming: p.swimming,
     working: game.action?.state === 'performing',
+    act: game.action?.state === 'performing' ? game.action.def.id : undefined,
     look: p.look,
   };
 }
