@@ -2745,7 +2745,6 @@ create or replace function mine_depth() returns double precision language sql im
 create or replace function tree_stage() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
 create or replace function tree_seeds() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function tree_seed_reach() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
-create or replace function tree_rows() returns double precision language sql immutable as $fn$ select 16::double precision $fn$;
 create or replace function deeds_joined() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function crowd_hides() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function care_bonus() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;

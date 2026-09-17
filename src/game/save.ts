@@ -210,9 +210,8 @@ interface SaveData {
   ground?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
-  /** When the woods were last brought up to date, in real seconds, and how far down. */
+  /** When the woods were last turned over, in real seconds. */
   treesAt?: number;
-  treesRow?: number;
   settings: { grid: boolean; rotation?: number; eighths?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean; fog?: boolean; follow?: boolean; edgePan?: boolean };
   savedAt: number;
   deed?: Deed | null;
@@ -280,7 +279,6 @@ function meta(game: Game): SaveMeta {
     skills: game.skills.toJSON(),
     time: game.time,
     treesAt: game.treesAt,
-    treesRow: game.treesRow,
     // The view used to turn in quarters and now turns in eighths. Written
     // under a name that says which, so a save from before is still read as
     // the angle it was left at rather than half of it.
@@ -522,7 +520,6 @@ function finish(world: World, m: SaveMeta): Game {
     seed: m.seed,
     world,
     treesAt: m.treesAt,
-    treesRow: m.treesRow,
     spawn: m.spawn,
     player: m.player,
     inventory: m.inventory,

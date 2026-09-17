@@ -319,23 +319,7 @@ export const TREE_SEEDS = 2;
 /** How far from the stump one of them may take, in tiles. */
 export const TREE_SEED_REACH = 2;
 
-/**
- * How many lines of the map one pass of the woods looks at.
- *
- * The land is a row of bytes per northing, so a pass is a walk down the island
- * a slice at a time. Most rows have no tree in them at all and are thrown out
- * whole; only the ones that do are read byte by byte.
- */
-export const TREE_ROWS = 16;
 
-/**
- * How often a slice is looked at, in real seconds.
- *
- * The island has its own clock for this and takes a slice per round; a game
- * with nothing under it would otherwise walk the woods on every frame, which
- * is a thousand times more looking than a daily answer is worth.
- */
-export const TREES_LOOK = 2;
 
 /**
  * How much of a wild wood is scrub too small to be worth a hatchet.

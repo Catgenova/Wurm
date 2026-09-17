@@ -7031,25 +7031,22 @@ begin
 end $$;
 select '850. an oak sapling at 60,60: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60))));
 
--- A day and a bit of real time, and one whole walk down the island.
-create or replace function pg_temp.one_pass(p_world uuid, p_back interval) returns int
+-- A day of real time, and the island turns over once.
+create or replace function pg_temp.one_day(p_world uuid) returns int
   language plpgsql as $fn$
-declare sz int; i int; n int := 0;
 begin
-  select size into sz from world where id = p_world;
-  update world set trees_at = now() - p_back, trees_row = 0 where id = p_world;
-  for i in 1 .. ceil(sz::numeric / tree_rows())::int loop n := n + tree_sweep(p_world); end loop;
-  return n;
+  update world set trees_at = now() - make_interval(secs => tree_stage() + 60) where id = p_world;
+  return tree_day(p_world);
 end $fn$;
-select pg_temp.one_pass(:'world7', interval '30 hours') as grew1 \gset
+select pg_temp.one_day(:'world7') as grew1 \gset
 select '851. and a day later: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60))))
-     || ' — ' || :'grew1' || ' trees on the island had a birthday in that pass';
-select pg_temp.one_pass(:'world7', interval '30 hours') \g /dev/null
-select pg_temp.one_pass(:'world7', interval '30 hours') \g /dev/null
+     || ' — ' || :'grew1' || ' trees on the island turned over that day';
+select pg_temp.one_day(:'world7') \g /dev/null
+select pg_temp.one_day(:'world7') \g /dev/null
 select '852. and two days after that: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60)))) || ', which is as far as a tree goes';
 
 -- The fourth day is the last one.
-select pg_temp.one_pass(:'world7', interval '30 hours') \g /dev/null
+select pg_temp.one_day(:'world7') \g /dev/null
 select '853. and on the fourth day: ' || (select name from tile_def where id = land_tile(:'world7',60,60))
      || ' where it stood, and ' || (select count(*) from (
           select q.gx, q.gy from (select 60 + dx as gx, 60 + dy as gy
@@ -7062,9 +7059,8 @@ select '854. and what they are: ' || coalesce(string_agg(distinct
 from (select 60 + dx as gx, 60 + dy as gy from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
 where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree');
 
-select '855. and no two trees keep the same hour: '
-     || (select count(distinct round(tree_phase(w.seed, q.x, q.y) / 3600))
-         from world w, (select 60 + dx as x, 60 + dy as y from generate_series(-2,2) dx, generate_series(-2,2) dy) q
-         where w.id = :'world7')
-     || ' different hours of the day across twenty-five neighbouring tiles — a wood that turned over'
-     || ' all at once would die all at once';
+select '855. and what a day costs the clock that is not the woods'' own: '
+     || (select count(*) from world w where w.ready
+          and w.trees_at <= now() - make_interval(secs => tree_stage()))
+     || ' islands due — which is the whole of what any other round has to ask,'
+     || ' because the woods have a winding of their own now';

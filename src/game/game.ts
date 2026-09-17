@@ -2,8 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_ROWS, TREE_SEED_REACH, TREE_SEEDS, TREES_LOOK, treeAge, treeSpecies } from '../world/tiles';
-import { treeDue } from '../world/trees';
+import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -166,9 +165,8 @@ export interface GameHooks {
 export interface GameInit {
   seed: number;
   world: World;
-  /** When the woods were last brought up to date, in real seconds, and how far down. */
+  /** When the woods were last turned over, in real seconds. */
   treesAt?: number;
-  treesRow?: number;
   spawn: { x: number; y: number };
   deed?: Deed | null;
   buildings?: BuildingsJSON;
@@ -515,17 +513,13 @@ export class Game {
    * `perform` already uses its return to say whether to go round again.
    */
   /**
-   * When the woods were last brought up to date, in real seconds, and how far
-   * down the island the pass has got.
+   * When the woods were last turned over, in real seconds.
    *
    * Real seconds and not the world's own faster hours: a stage was asked for as
    * a real life day, so a tree planted on a Tuesday is a young tree on
    * Wednesday whether or not this tab was open for any of it.
    */
   treesAt = Date.now() / 1000;
-  treesRow = 0;
-  /** When a slice was last looked at, so the walk is paced in seconds not frames. */
-  private treesLook = 0;
 
   private swingMissed = false;
 
@@ -658,7 +652,6 @@ export class Game {
      * lifetime overdue on the first pass.
      */
     this.treesAt = init.treesAt ?? Date.now() / 1000;
-    this.treesRow = init.treesRow ?? 0;
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
     this.creatures = Creatures.fromJSON(init.creatures);
@@ -4924,60 +4917,39 @@ export class Game {
   private static readonly FIRST = TREE_AGES.find((a) => !TREE_AGES.some((b) => b.next === a.id))?.id ?? 0;
 
   /**
-   * One pass of the woods, a slice of the island's lines at a time.
+   * A day in the woods: every tree one stage older, the old ones gone, and two
+   * saplings out of each stump.
    *
-   * The island keeps this for a live one and announces every tile it changes;
-   * this is the same rule for a game with nothing under it. A tree is due when
-   * a day of its own falls between the start of this pass and now, and it takes
-   * at most one step per pass — so a save left alone for a week does not come
-   * back a week older, it picks the cycle up from where it was opened.
+   * Once a day and not a moment otherwise. The first cut of this crept — a
+   * slice of the map every few seconds, each tree carrying its own hour so the
+   * wood would not turn over all at once — and on the island that cost a tenth
+   * of a second every second to answer a question that changes once a day, and
+   * showed up as a second of input delay. A day's rule does not want a second's
+   * clock. What is left here is one comparison, which is free.
    */
   growTrees(nowSeconds: number): void {
     if (this.ask) return; // On a live island the woods are the island's.
-    /*
-     * A slice every few seconds, not every frame.
-     *
-     * A pass wants to come round in minutes, and a stage lasts a day: reading
-     * sixteen lines of a thousand-wide island sixty times a second to find out
-     * nothing has a birthday is a thousand times more looking than the answer
-     * is worth.
-     */
-    if (nowSeconds - this.treesLook < TREES_LOOK) return;
-    this.treesLook = nowSeconds;
+    if (nowSeconds - this.treesAt < TREE_STAGE) return;
+    this.treesAt = nowSeconds;
     const w = this.world;
-    const from = this.treesAt;
-    const last = Math.min(w.h - 1, this.treesRow + TREE_ROWS - 1);
-    /*
-     * The slice as it stood when the pass reached it: a stump seeds its
-     * neighbours, and a sapling dropped into a line this pass had not got to
-     * yet would have the same day counted against it and grow the moment it
-     * was born.
-     */
-    const was: number[][] = [];
-    for (let y = this.treesRow; y <= last; y++) {
-      const row: number[] = [];
-      for (let x = 0; x < w.w; x++) row.push(w.getTile(x, y) === TileType.Tree ? w.getData(x, y) : -1);
-      was.push(row);
-    }
-    for (let y = this.treesRow; y <= last; y++) {
-      const row = was[y - this.treesRow];
+    const stumps: Array<[number, number, number]> = [];
+    for (let y = 0; y < w.h; y++) {
       for (let x = 0; x < w.w; x++) {
-        const data = row[x];
-        if (data < 0 || !treeDue(this.seed, x, y, from, nowSeconds)) continue;
+        if (w.getTile(x, y) !== TileType.Tree) continue;
+        const data = w.getData(x, y);
         const age = treeAge(data);
         if (age.next === null) {
           w.setTile(x, y, TileType.Grass, 0);
-          this.seedTrees(x, y, treeSpecies(data));
+          stumps.push([x, y, treeSpecies(data)]);
         } else {
           // A year's growth closes whatever was cut into it.
           w.setTile(x, y, TileType.Tree, packTreeData(treeSpecies(data), age.next, 0));
         }
       }
     }
-    if (last >= w.h - 1) {
-      this.treesRow = 0;
-      this.treesAt = nowSeconds;
-    } else this.treesRow = last + 1;
+    // The stumps seed after the whole island has turned, so a sapling dropped
+    // into ground the walk had not reached yet cannot be aged the same day.
+    for (const [x, y, species] of stumps) this.seedTrees(x, y, species);
   }
 
   /**
