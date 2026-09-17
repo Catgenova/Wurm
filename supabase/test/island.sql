@@ -6559,6 +6559,44 @@ select '821. and who may work it: a miner '
           (select c from creature c where c.world_id = :'world3' and c.species = 'rabba' limit 1))
      || ' — a seam is a miner''s work, and it was the quarrier''s, who brought back rock shards';
 
+
+\echo ''
+\echo '--- a swing that missed'
+/*
+ * Reported from the island: *"chipping rock corner should give mining exp"*.
+ * It did, on the quarter of swings that land — and its failure is a flat
+ * quarter rather than a skill check, so three in four taught nothing however
+ * good you got.
+ *
+ * Forty swings at a face with a fixed roll, so what is measured is the rule
+ * and not the dice.
+ */
+select setseed(0.4242) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  delete from skill where world_id = w and uid = me and id = 'mining';
+  update player set x = 31.5, y = 31.5 where world_id = w and uid = me;
+  for i in 1..40 loop
+    perform land_set_height(w, 31, 31, 20);
+    perform act_perform(w, me, 'chip_corner',
+      '{"kind":"tile","x":31,"y":31,"cx":31,"cy":31}'::jsonb);
+  end loop;
+end $$;
+select '823. forty swings at a coal face: '
+     || (select count(*) from event where uid = '77777777-7777-7777-7777-777777777777'
+          and text like 'The corner breaks%') || ' landed, '
+     || (select count(*) from event where uid = '77777777-7777-7777-7777-777777777777'
+          and text like '%no line in it%') || ' found no line — and mining is now '
+     || coalesce((select round(value::numeric, 3)::text from skill
+          where uid = '77777777-7777-7777-7777-777777777777' and id = 'mining'), 'untouched')
+     || ', where the ones that missed used to teach nothing at all';
+
+select '824. and what a miss is worth against a landing: ' || try_learn()
+     || ' of a go, said by both sides off the one number — the browser paid a full go for a miss and this side paid none';
+
 /*
  * And the sweep that would have found most of today's work without anybody
  * reporting anything: rules the island keeps and never runs.
@@ -6569,7 +6607,7 @@ select '821. and who may work it: a miner '
  * rule is written and nothing runs it" was the shape of the sleep bonus, the
  * knacks, the titles, swimming, the walking wind and everything going off.
  */
-select '822. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
+select '825. rules this island keeps and never runs: ' || count(*) || ' — ' || string_agg(proname, ', ' order by proname)
 from (
   select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'rpc\_%'

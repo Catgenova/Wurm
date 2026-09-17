@@ -239,6 +239,26 @@ export const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
 /** How often a deliberate chip at a corner actually takes it down: one in four. */
 export const CHIP_CHANCE = 0.25;
 
+/**
+ * What a swing that did not land is worth, against one that did.
+ *
+ * The two sides disagreed about this, in opposite directions and by the whole
+ * amount. Over here `updateAction` gains the action's skill *after* `perform`
+ * whatever `perform` did, so a failed dig, a failed swing at a face and a chip
+ * that found no line in the rock all paid a full go. On the island every one
+ * of those returns early and pays nothing at all.
+ *
+ * Nothing at all is the worse of the two, and `chip_corner` is where it shows:
+ * its failure is a flat quarter rather than a skill check, so three swings in
+ * four teach nothing however good you get, for ever, on the longest job on the
+ * ground. Reported as chipping giving no mining at all, which from the island
+ * is exactly what it looks like.
+ *
+ * So: a swing teaches you something, landing it teaches you more. One number,
+ * crossed, and both sides now say it.
+ */
+export const TRY_LEARN = 0.3;
+
 /** How far a prospector reads the ground: one tile further every ten levels. */
 export const prospectRadius = (skill: number): number => 3 + Math.floor(skill / 10);
 
@@ -394,6 +414,7 @@ export const ACTIONS: ActionDef[] = [
       const w = g.world;
       const def = TILE_DEFS[w.getTile(t.x, t.y)];
       if (!g.skillCheck('digging', 8, g.toolQl('shovel'))) {
+        g.missed();
         g.logMsg('You fail to dig anything useful.', 'event');
         return;
       }
@@ -544,6 +565,7 @@ export const ACTIONS: ActionDef[] = [
       const w = g.world;
       const pickQl = g.toolQl('pickaxe');
       if (!g.skillCheck('mining', 12, pickQl)) {
+        g.missed();
         g.logMsg('The rock is hard and you fail to loosen anything.', 'event');
         return;
       }
@@ -593,6 +615,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       const w = g.world;
       if (g.rand() >= CHIP_CHANCE) {
+        g.missed();
         g.logMsg(`You work at the ${cornerName(t)} corner and find no line in it. The face holds.`, 'event');
         return;
       }

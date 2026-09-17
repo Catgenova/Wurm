@@ -55,6 +55,7 @@ import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DAY_SECONDS } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
+import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import { GRAZE_FILL, GRAZE_HUNGRY } from '../src/game/creatures';
 import {
@@ -895,6 +896,12 @@ for (const [fn, v] of [
    */
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
   ['swim_depth', SWIM_DEPTH], ['swim_learn', SWIM_LEARN], ['drown_warn', DROWN_WARN],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/* How often a chip finds a line in the rock, and what a swing that misses teaches. */
+for (const [fn, v] of [
+  ['chip_chance', CHIP_CHANCE], ['try_learn', TRY_LEARN],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

@@ -2759,6 +2759,8 @@ create or replace function exhausted() returns double precision language sql imm
 create or replace function swim_depth() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
 create or replace function swim_learn() returns double precision language sql immutable as $fn$ select 0.09::double precision $fn$;
 create or replace function drown_warn() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
+create or replace function chip_chance() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
+create or replace function try_learn() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
 create or replace function graze_hungry() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function graze_fill() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function brazier_capacity() returns double precision language sql immutable as $fn$ select 9000::double precision $fn$;

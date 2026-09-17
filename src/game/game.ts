@@ -5,7 +5,7 @@ import type { Hoard } from './treasure';
 import { packTreeData, TileType, TREE_DEFS } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
-import { ACTIONS, ACTION_BY_ID, type ActionDef, type Target } from './actions';
+import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
@@ -503,6 +503,18 @@ export class Game {
 
   set action(a: ActiveAction | null) {
     this.acting.action = a;
+  }
+
+  /**
+   * Set by a `perform` that swung and did not land, read once by the gain
+   * above and cleared there. On the row rather than a return value because
+   * `perform` already uses its return to say whether to go round again.
+   */
+  private swingMissed = false;
+
+  /** Said by a `perform` whose swing found nothing. */
+  missed(): void {
+    this.swingMissed = true;
   }
 
   /** Actions lined up behind the one in hand, oldest first. */
@@ -2331,7 +2343,17 @@ export class Game {
     if (a.def.tool) this.wearTool(a.def.tool);
     const cost = this.staminaCost(a.def.stamina);
     this.player.stats.stamina = Math.max(0, this.player.stats.stamina - cost);
-    if (a.def.skill) this.gainSkill(a.def.skill);
+    /*
+     * The skill for the go, whether or not the go landed.
+     *
+     * It was a full measure either way, which made a failed dig and a chip
+     * that found no line in the rock worth exactly as much as a good one — and
+     * the island pays nothing at all for those, so the two sides disagreed
+     * about it by the whole amount. Both say `TRY_LEARN` now: a swing teaches
+     * you something, landing it teaches you more.
+     */
+    if (a.def.skill) this.gainSkill(a.def.skill, this.swingMissed ? TRY_LEARN : 1);
+    this.swingMissed = false;
     // The body learns from the work itself: wind from spending it, control from doing it.
     if (cost > 0) this.gainSkill('body_stamina', 0.05 + cost * 0.6);
     this.gainSkill('body_control', 0.05);
