@@ -40,6 +40,11 @@ on:
       seed:
         description: 'Its seed; blank rolls one'
         default: ''
+      reconcile:
+        description: 'Put the island and the browsers back on the same ground'
+        type: choice
+        options: ['off', 'report', 'write']
+        default: 'off'
 
 jobs:
   rules:
@@ -162,6 +167,19 @@ jobs:
           npx esbuild supabase/test/agree.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/agree.mjs --log-level=error
           node node_modules/.cache/agree.mjs
+      - name: The ground a seed makes is the ground it made before
+        run: |
+          # The land travelled once, at founding, and Postgres has held that
+          # copy ever since while every browser works the same ground out from
+          # the seed. So the generator is a wire format with one message in it,
+          # sent on founding day: change it and the ground moves under every
+          # island already standing, silently, for tiles nobody has touched.
+          # Measured against builds this repo shipped, one 256 window: c04881e
+          # differs from today in 1367 of 65536 faces, 239 of them soft ground
+          # the island would then refuse to let anybody pack.
+          npx esbuild supabase/test/ground.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/ground.mjs --log-level=error
+          node node_modules/.cache/ground.mjs
       - name: The ground is the one on the chart
         run: |
           # And that the ground both generators agree on is the ground that was
@@ -312,6 +330,43 @@ jobs:
             --name "$ISLAND" --size "$SIZE" ${SEED:+--seed "$SEED"} | tee found.log
           echo "### The island" >> "$GITHUB_STEP_SUMMARY"
           tail -2 found.log >> "$GITHUB_STEP_SUMMARY"
+
+  reconcile:
+    name: Put the island and the browsers back on the same ground
+    if: github.event_name == 'workflow_dispatch' && inputs.live && inputs.reconcile != 'off'
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: AI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Read the land, work the same ground out, and say where they differ
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://glebtboagnafcgwjjvfy.supabase.co' }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ISLAND: ${{ inputs.island_name }}
+          MODE: ${{ inputs.reconcile }}
+        run: |
+          # The land travelled once. Every browser has worked it out from the
+          # seed ever since — with whatever generator it was built with. This
+          # compares the island's own copy against what a browser would draw
+          # today and, with `write`, puts every disagreement into tile_change,
+          # which is the one thing every browser reads on every join.
+          set -o pipefail
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Set SUPABASE_SERVICE_KEY in the 'AI' environment: this reads and writes land."
+            exit 1
+          fi
+          npx esbuild tools/reconcile-land.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/reconcile.mjs --log-level=error
+          node --max-old-space-size=4096 node_modules/.cache/reconcile.mjs \
+            --name "$ISLAND" ${MODE:+$([ "$MODE" = write ] && echo --write)} | tee reconcile.log
+          echo "### The ground" >> "$GITHUB_STEP_SUMMARY"
+          tail -20 reconcile.log >> "$GITHUB_STEP_SUMMARY"
 
   smoke:
     name: Play on the real island
