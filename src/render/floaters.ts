@@ -25,6 +25,18 @@ export interface Floater {
   at: number;
   /** What it is counting, so more of the same finds it. */
   key: string;
+  /**
+   * Which row it sits in over its spot.
+   *
+   * Merging only ever caught *the same thing happening twice* — one key, one
+   * running total. Two different things in the same instant have nothing to
+   * merge: one craft raises its own trade, mind logic, stamina and control all
+   * at once, every one of them over the player's head at the same moment, with
+   * the same age and so the same climb. They were drawn exactly on top of one
+   * another, which is how "Masonry +0.10" and "Mind logic +0.10" came out as
+   * `Mindlogic++0.10`.
+   */
+  lane: number;
 }
 
 /** Seconds from appearing to gone. */
@@ -38,6 +50,18 @@ const FLOAT_MAX = 16;
 
 /** How high one climbs, in screen pixels at 1x zoom. */
 export const FLOAT_RISE = 34;
+
+/** How near two of them have to be, in tiles, to want rows of their own. */
+const LANE_REACH = 1.2;
+
+/** A row's height, in the same screen pixels at 1x that `FLOAT_RISE` is in. */
+const LANE_ROW = 16;
+
+/** How many rows there are before a spot has to start writing over itself. */
+const LANE_ROWS = 7;
+
+/** How long a row counts as just-used, for when the column is full. */
+const LANE_FRESH = 0.35;
 
 export class Floaters {
   private list: Floater[] = [];
@@ -57,8 +81,53 @@ export class Floaters {
       found.y = y;
       return;
     }
-    this.list.push({ x, y, kind, key, value, at: now, text: write(value) });
+    this.list.push({ x, y, kind, key, value, at: now, text: write(value), lane: this.laneFor(x, y, now) });
     if (this.list.length > FLOAT_MAX) this.list.shift();
+  }
+
+  /**
+   * A row clear of everything already standing over this spot.
+   *
+   * Not the lowest empty one, which was the first answer and the wrong one:
+   * they *climb*, so a row emptied a moment ago has the thing that was in it
+   * hanging just above, and a newcomer put back at the bottom is overtaken
+   * before either of them has faded. What it wants is the top of the stack —
+   * where the highest of them has got to by now, and one row above that.
+   *
+   * A spot with nothing over it starts again at the bottom, so a single gain
+   * is where it has always been rather than floating at the top of a column
+   * that is no longer there.
+   *
+   * Over *this spot*: two wildermon being hit at opposite ends of the field
+   * are not in each other's way, and giving them rows off one another's count
+   * would push a number into the sky for no reason.
+   */
+  private laneFor(x: number, y: number, now: number): number {
+    let top = -1;
+    const fresh = new Set<number>();
+    for (const f of this.list) {
+      const age = (now - f.at) / FLOAT_LIFE;
+      if (age > 1) continue;
+      if (Math.abs(f.x - x) > LANE_REACH || Math.abs(f.y - y) > LANE_REACH) continue;
+      top = Math.max(top, f.lane + Floaters.rows(age));
+      if (now - f.at < LANE_FRESH) fresh.add(f.lane);
+    }
+    if (top < 0) return 0;
+    const want = Math.ceil(top + 0.001);
+    if (want < LANE_ROWS) return want;
+    /*
+     * The column is as tall as it is allowed to get, so it starts again at the
+     * bottom rather than piling everything into the top row. Anything still
+     * down there is the oldest and faintest of them, and on its way out.
+     */
+    for (let i = 0; i < LANE_ROWS; i++) if (!fresh.has(i)) return i;
+    return 0;
+  }
+
+  /** How many rows something of this age has climbed under its own steam. */
+  private static rows(age: number): number {
+    const k = Math.max(0, Math.min(1, age));
+    return (FLOAT_RISE / LANE_ROW) * (1 - (1 - k) * (1 - k));
   }
 
   /** Everything still up, oldest first, with what has faded dropped as we go. */

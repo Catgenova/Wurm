@@ -2026,7 +2026,12 @@ export class Renderer {
       const { lift, alpha, scale } = Floaters.rise(f, this.time);
       if (alpha <= 0.01) continue;
       const sx = cam.worldToScreenX(f.x, f.y);
-      const sy = cam.worldToScreenY(f.x, f.y, w.heightAt(f.x, f.y)) - 26 * zoom - lift * zoom;
+      // A row apiece for whatever went up together, so two things that happened
+      // in the same instant over the same spot are two lines rather than one
+      // unreadable one. The row is in screen pixels because that is where the
+      // overlap is: it has to clear the glyphs, not the ground.
+      const sy = cam.worldToScreenY(f.x, f.y, w.heightAt(f.x, f.y))
+        - 26 * zoom - lift * zoom - f.lane * (size + 3);
       ctx.font = `600 ${Math.round(size * scale)}px system-ui, sans-serif`;
       // Written twice: a dark surround first, so it stays legible over grass,
       // over sand, over water and over a wildermon.
