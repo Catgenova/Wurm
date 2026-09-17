@@ -879,7 +879,24 @@ export class Island {
     this.seenChange = await layHistory(
       this.seenChange, CHANGE_PAGE,
       async (after, take) => {
-        const { data, error } = await supabase().from('tile_change').select('*')
+        /*
+         * The seven columns the replay reads, rather than the eleven there are.
+         *
+         * `select('*')` also sent `world_id`, `at` and `region` on every row —
+         * the island's own name for the island we already asked about, a
+         * timestamp nothing reads, and the block number the Realtime filter
+         * uses. Measured on real rows: 186 bytes of JSON a row against 105.
+         * On an island with a hundred and twenty-six thousand changes on it
+         * that is eight megabytes a login, for three columns that are thrown
+         * away on arrival.
+         *
+         * `applyChange` checks `world_id` when it is there and skips the check
+         * when it is not, which is right: a row that came down this read was
+         * asked for by island, and the belt is for the Realtime path, where
+         * one channel can carry more than one island's blocks.
+         */
+        const { data, error } = await supabase().from('tile_change')
+          .select('n,x,y,tile,data,corners,soil')
           .eq('world_id', info.id).gt('n', after).order('n').limit(take);
         if (error) return { rows: [], error: error.message };
         return { rows: rowsIn<TileChange & { n: number; world_id?: string }>(data) };
