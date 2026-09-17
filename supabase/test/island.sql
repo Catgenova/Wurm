@@ -7323,3 +7323,42 @@ select '864. and a spadeful dropped at your feet on sand: '
      || ' — which used to raise the corner and leave the face exactly as it was';
 select '865. and the list both sides read: ' || string_agg(d.name, ', ' order by b.tile)
   from buryable b join tile_def d on d.id = b.tile;
+
+/*
+ * And the hour a line was said at, which is not the hour you read it.
+ *
+ * Reported from the island: *"when logging in, all prior world chats default
+ * to the login timestamp."* They did, on the browser's side — every line went
+ * through one door that stamped it `Date.now()`, which for anything said
+ * before you opened the page is the moment you opened the page.
+ *
+ * The hour was never lost. `event.at` has been on every row since the table
+ * was written and `rpc_chat` has sent it since the day it was written; the
+ * browser read the `n` and the `text` and let the `at` fall on the floor.
+ * `rpc_settle` was the one end with nothing to drop, and it is the catch-up
+ * for a channel that went quiet — the lines most likely to be hours old by
+ * the time they land.
+ */
+\echo ''
+\echo '--- a line keeps the hour it was said at'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from event where world_id = :'world2' and kind = 'chat';
+insert into event (world_id, uid, text, kind, at)
+  values (:'world2', null, 'Anybody selling nails?', 'chat', now() - interval '7 hours'),
+         (:'world2', null, 'Three hundred, at the token.', 'chat', now() - interval '6 hours');
+select '866. the chat book, read now, for a line said seven hours ago: '
+     || coalesce((select string_agg(round(extract(epoch from now() - (l->>'at')::timestamptz) / 3600)::text
+                                    || 'h ago', ', ' order by (l->>'n')::bigint)
+                    from jsonb_array_elements(rpc_chat(:'world2', 60)) l), 'nothing')
+     || ' — and not "0h ago, 0h ago", which is what a line stamped on arrival reads as';
+
+-- And the catch-up, which is the one that was sending no hour at all.
+insert into event (world_id, uid, text, kind, at)
+  values (:'world2', :'ivar', 'Your hatchet is worn to the haft.', 'event', now() - interval '90 minutes')
+  returning n as heard \gset
+select '867. and a line caught up on after a quiet channel: '
+     || coalesce((select string_agg(round(extract(epoch from now() - (l->>'at')::timestamptz) / 60)::text
+                                    || ' minutes ago', ', ')
+                    from jsonb_array_elements(rpc_settle(null, :'world2', :'heard' - 1) -> 'said') l
+                   where l->>'kind' = 'event'), 'nothing said')
+     || ' — the whole of what rpc_settle used to leave out';

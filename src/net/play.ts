@@ -118,9 +118,9 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     return new Promise<never>(() => {});
   }
   const name = account;
-  const log: Array<[string, string]> = [];
+  const log: Array<[string, string, number | undefined]> = [];
   const island = new Island({
-    say: (text, kind) => log.push([text, kind]),
+    say: (text, kind, at) => log.push([text, kind, at]),
     ground: () => {},
     people: () => {},
     pack: () => {},
@@ -439,7 +439,10 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * carrying anything, so nothing lands twice.
    */
   void island.recentChat().then((lines) => {
-    for (const line of lines) game.write(line.text, 'chat');
+    // With the hour each was said at, which the island has always sent and
+    // this line used to drop: sixty lines stamped with the second you opened
+    // the page is not a chat you can scroll back through.
+    for (const line of lines) game.write(line.text, 'chat', line.at);
   });
   island.hooks.ground = (x, y) => game.events.emit('world', x, y);
   island.hooks.pack = (items: ItemRow[]) => {
@@ -474,7 +477,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
         level: p.level, moving: false, swimming: false, working: !!p.act, look: cleanLook(p.look),
       })));
   };
-  for (const [text, kind] of log) game.write(text, kind as Parameters<Game['write']>[1]);
+  for (const [text, kind, at] of log) game.write(text, kind as Parameters<Game['write']>[1], at);
   game.write(`You are on ${info.name}. Send somebody this page's address and they can join you.`, 'system');
   game.write(
     account

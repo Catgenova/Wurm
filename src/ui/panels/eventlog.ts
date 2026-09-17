@@ -3,11 +3,27 @@ import type { LogEntry, LogKind } from '../../game/events';
 import type { Game } from '../../game/game';
 import type { UIWindow } from '../windows';
 
+/**
+ * When a line was said.
+ *
+ * The hour alone until it is not today's hour. Lines used to be stamped with
+ * the moment they reached this machine, so every one of them was from the
+ * session you were sitting in and the day never needed saying; they carry
+ * the island's own hour now, and a chat scrolled back far enough reaches
+ * yesterday — where `09:14:02` on its own is a time that could be any day at
+ * all.
+ */
 function stamp(t: number): string {
   const d = new Date(t);
   const two = (n: number): string => String(n).padStart(2, '0');
-  return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+  const clock = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate();
+  return sameDay ? clock : `${d.getDate()} ${MONTHS[d.getMonth()]} ${clock}`;
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** The tabs along the top of the log, and which kinds of line each keeps. */
 const TABS: Array<{ id: string; label: string; title: string; kinds: LogKind[] | null }> = [

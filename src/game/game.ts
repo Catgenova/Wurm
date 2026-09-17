@@ -1910,9 +1910,20 @@ export class Game {
     this.acting.hear(text, kind);
   }
 
-  /** Put a line on this machine's own screen. Where the local player's news ends up. */
-  write(text: string, kind: LogKind = 'info'): void {
-    const entry: LogEntry = { time: Date.now(), text, kind };
+  /**
+   * Put a line on this machine's own screen. Where the local player's news
+   * ends up.
+   *
+   * `at` is when the island says it was said, in milliseconds. Left out for
+   * anything this machine came up with itself, which is now.
+   *
+   * Reported: *"when logging in, all prior world chats default to the login
+   * timestamp."* They did — every line came through here and was stamped with
+   * the moment it arrived, so a conversation from this morning read back as
+   * sixty lines all said at once, at the second somebody opened the page.
+   */
+  write(text: string, kind: LogKind = 'info', at?: number): void {
+    const entry: LogEntry = { time: at ?? Date.now(), text, kind };
     this.log.push(entry);
     if (this.log.length > MAX_LOG) this.log.splice(0, this.log.length - MAX_LOG);
     this.events.emit('log', entry);

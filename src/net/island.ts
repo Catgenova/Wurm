@@ -60,6 +60,19 @@ const MOVE_EVERY = 1.0;
 const rowsIn = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
 
 /**
+ * When the island says a thing happened, in milliseconds.
+ *
+ * `timestamptz` arrives as an ISO string over the wire and as a number if
+ * anybody ever sends one; anything else — a column that was not asked for, an
+ * older island that does not carry it — is `undefined`, and the caller falls
+ * back to now, which is what everything used to do for everything.
+ */
+const whenSaid = (at: unknown): number | undefined => {
+  const t = typeof at === 'string' ? Date.parse(at) : typeof at === 'number' ? at : NaN;
+  return Number.isFinite(t) ? t : undefined;
+};
+
+/**
  * Who is holding a share of a topic that has to be shared.
  *
  * One `Island` per page is the only thing that ever ships, and then this is a
@@ -271,7 +284,11 @@ export interface Letter {
 
 export interface IslandHooks {
   /** A line for the log, from the island rather than from here. */
-  say: (text: string, kind: string) => void;
+  /**
+   * A line for the log. `at` is when the island wrote it, in milliseconds —
+   * left out only for a line this browser came up with itself.
+   */
+  say: (text: string, kind: string, at?: number) => void;
   /** The ground changed under somebody's feet, possibly ours. */
   ground: (x: number, y: number) => void;
   /** Somebody moved, arrived or left. */
@@ -895,7 +912,7 @@ export class Island {
         titles?: string[]; title?: string | null; nutrition?: Record<string, number>;
         tally?: Record<string, number>; ledger?: Record<string, unknown>; ticked?: string[];
         goes?: number | null; time?: number | null; night?: boolean | null;
-        said?: Array<{ n: number; text: string; kind: string }> | null;
+        said?: Array<{ n: number; text: string; kind: string; at?: string }> | null;
         saidTo?: number | null;
       };
       // The hour, on the beat every browser makes anyway. Nothing else has to
@@ -910,7 +927,7 @@ export class Island {
       for (const line of said.said ?? []) {
         if (line.n <= this.said) continue;
         this.said = line.n;
-        this.hooks.say(line.text, line.kind);
+        this.hooks.say(line.text, line.kind, whenSaid(line.at));
       }
       /*
        * And, on the first beat, where the talk had got to before we arrived.
@@ -1082,7 +1099,7 @@ export class Island {
             if (e.n <= this.said) return;
             this.said = e.n;
           }
-          this.hooks.say(e.text, e.kind);
+          this.hooks.say(e.text, e.kind, whenSaid((e as { at?: unknown }).at));
           /*
            * A line of trouble means the island has done something to the body.
            *
@@ -1617,10 +1634,12 @@ export class Island {
   }
 
   /** What has been said lately, oldest first, for somebody just arriving. */
-  async recentChat(limit = 60): Promise<Array<{ n: number; text: string }>> {
+  async recentChat(limit = 60): Promise<Array<{ n: number; text: string; at?: number }>> {
     if (!this.info) return [];
     const { data } = await supabase().rpc('rpc_chat', { p_world: this.info.id, p_limit: limit });
-    return rowsIn<{ n: number; text: string }>(data);
+    // `rpc_chat` has sent `at` since the day it was written and nothing read it.
+    return rowsIn<{ n: number; text: string; at?: string }>(data)
+      .map((l) => ({ n: l.n, text: l.text, at: whenSaid(l.at) }));
   }
 
   /**
