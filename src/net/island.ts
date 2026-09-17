@@ -1,11 +1,11 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { World } from '../world/world';
-import { blankWorld, layChange, rowsOf, type TileChange } from './landpack';
+import { blankWorld, layChange, layHistory, rowsOf, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
 import type { IslandCrate, IslandGround } from '../game/game';
-import { BODY_EVERY, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
 
 /**
@@ -761,14 +761,63 @@ export class Island {
    * block walked into between one subscription and the next — is caught here
    * within twenty seconds rather than never. Applying a change twice is
    * nothing: it sets the tile to what the tile already is.
+   *
+   * ## And on a join it is the whole history, so it is read a page at a time
+   *
+   * Reported from the island: *"all my paved tiles and levelled terrain from
+   * this morning reverted."* Nothing had been lost. The browser builds the
+   * ground from the seed and lays this over it, so **a join that fails to read
+   * this table draws an island nobody has ever touched** — a road unpaved, a
+   * levelled yard back to the hillside it was cut from, and no sign at all
+   * that anything went wrong.
+   *
+   * Two things made that possible, and they are the same mistake twice.
+   *
+   * It asked for every row in one request. `select('*')` with no range over a
+   * table that grows with every spadeful anybody has ever turned: fine on a
+   * young island, and at some point during a morning's paving it stops being
+   * fine — a statement timeout, a response too big, a cap on rows — and which
+   * of those it is hardly matters.
+   *
+   * And it threw the error away. `const { data } =` with no `error`, and
+   * `rowsIn` turns the `null` into an empty list, so a failed read and an
+   * island where nothing has ever happened are the same thing to everything
+   * downstream. The one case that must never pass quietly passed quietly.
+   *
+   * So: pages, with the cursor moved per page, so a read that dies half way
+   * through resumes from where it got to rather than starting again; and the
+   * error is thrown. What the caller does with it depends on the caller —
+   * during a join it must stop the join, and on the twenty-second reconcile it
+   * is a thing to try again shortly.
    */
   private async catchUp(): Promise<void> {
-    if (!this.info) return;
-    const { data } = await supabase().from('tile_change').select('*')
-      .eq('world_id', this.info.id).gt('n', this.seenChange).order('n');
-    const rows = rowsIn<{ n: number; x: number; y: number; tile: number; data: number; corners: number[]; soil?: number[] }>(data);
-    for (const c of rows) this.applyChange(c);
-    if (rows.length) this.seenChange = Math.max(this.seenChange, rows[rows.length - 1].n);
+    const info = this.info;
+    if (!info) return;
+    this.seenChange = await layHistory(
+      this.seenChange, CHANGE_PAGE,
+      async (after, take) => {
+        const { data, error } = await supabase().from('tile_change').select('*')
+          .eq('world_id', info.id).gt('n', after).order('n').limit(take);
+        if (error) return { rows: [], error: error.message };
+        return { rows: rowsIn<TileChange & { n: number; world_id?: string }>(data) };
+      },
+      (c) => this.applyChange(c),
+      () => this.hooks.progress?.(3, 3, 'catching up'),
+    );
+  }
+
+  /**
+   * The same read, for the callers that are not a join: a failure is worth a
+   * line in the log and another go in twenty seconds, not the end of the
+   * session. The cursor has not moved past anything unapplied, so the next
+   * one picks up exactly where this one stopped.
+   */
+  private async catchUpQuietly(): Promise<void> {
+    try {
+      await this.catchUp();
+    } catch (e) {
+      this.hooks.say(`The island's history is not coming through (${String(e)}). Trying again shortly.`, 'error');
+    }
   }
 
   /** The nine blocks of country around a point, as Realtime filter values. */
@@ -1154,7 +1203,7 @@ export class Island {
     this.groundSlow = true;
     await this.refreshPeople();
     await this.refreshPack();
-    await this.catchUp();
+    await this.catchUpQuietly();
   }
 
   /**
@@ -1334,7 +1383,7 @@ export class Island {
     if (block !== this.block) {
       this.me = { ...(this.me as PlayerRow), x, y };
       await this.watch(this.info.id);
-      await this.catchUp();
+      await this.catchUpQuietly();
     }
   }
 

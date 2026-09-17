@@ -78,6 +78,55 @@ export function layChange(world: World, c: TileChange): boolean {
   return true;
 }
 
+/**
+ * Lay the whole of an island's history down, a page at a time.
+ *
+ * Out here rather than in the client for the same reason `layChange` is: the
+ * client cannot be made to do this without a network, and this is the part
+ * that failed. Reported from the island as *"all my paved tiles and levelled
+ * terrain from this morning reverted"* — nothing had been lost. A join builds
+ * the ground from the seed and lays the record over it, so a read of the
+ * record that comes back empty is an island nobody has ever touched, and a
+ * read that *fails* came back empty.
+ *
+ * Two mistakes, the same one twice. It asked for every row in one request, of
+ * a table that grows with every spadeful anybody has ever turned; and it threw
+ * the error away, so a failure and an untouched island were the same thing to
+ * everything downstream.
+ *
+ * `read` is given the cursor and a page size and answers with rows or an
+ * error. The cursor moves per page, so a read that dies half way through has
+ * kept what it read and the next one carries on from there. An error is
+ * thrown, never swallowed: what to do about it belongs to the caller, and
+ * during a join the answer is to stop rather than to draw the wrong island.
+ */
+export async function layHistory<T extends { n: number }>(
+  from: number,
+  limit: number,
+  read: (after: number, take: number) => Promise<{ rows: T[]; error?: string }>,
+  lay: (c: T) => void,
+  onPage?: (seen: number) => void,
+): Promise<number> {
+  let seen = from;
+  for (let page = 0; ; page++) {
+    const { rows, error } = await read(seen, limit);
+    if (error) throw new Error(`the island's history would not come: ${error}`);
+    for (const c of rows) lay(c);
+    /*
+     * Empty is the end of it, not short.
+     *
+     * A page smaller than the one asked for looks like the end and is not: a
+     * server may have a cap of its own below what was asked, and then every
+     * page is short and the first one ends the read — which is the bug this
+     * whole function exists to be rid of, put back in a new place. An extra
+     * request to hear "nothing more" costs one round trip and cannot be wrong.
+     */
+    if (!rows.length) return seen;
+    seen = Math.max(seen, rows[rows.length - 1].n);
+    onPage?.(seen);
+  }
+}
+
 export interface LandRow {
   y: number;
   heights: string;

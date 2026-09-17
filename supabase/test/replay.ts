@@ -16,7 +16,7 @@
  */
 import { generateAtlasWindow } from '../../src/world/atlas-world';
 import { CHUNK, World } from '../../src/world/world';
-import { layChange, type TileChange } from '../../src/net/landpack';
+import { layChange, layHistory, type TileChange } from '../../src/net/landpack';
 import { readAtlas } from '../../tools/atlas-node';
 
 const atlas = readAtlas();
@@ -283,6 +283,67 @@ const check = (what: string, passed: boolean, detail = ''): void => {
   check('and a corner somebody dug is still not written back over',
     w2.getHeight(101, 128) === deep.corners[0],
     `${w2.getHeight(101, 128)} against the ${deep.corners[0]} that was dug`);
+}
+
+/*
+ * And the whole history coming down, which is the part that failed.
+ *
+ * Reported from the island: *"all my paved tiles and levelled terrain from
+ * this morning reverted."* Nothing had been lost. A join builds the ground
+ * from the seed and lays the record over it, so a read of the record that
+ * comes back empty is an island nobody has ever touched — and a read that
+ * *fails* came back empty, because the error was thrown away and `null`
+ * became `[]`.
+ *
+ * The read is a page at a time now, so this asks the three things that can go
+ * wrong with paging: that every page is laid, that a server capping pages
+ * below what was asked does not look like the end, and that a failure is loud
+ * and keeps what it had already read.
+ */
+{
+  const HISTORY = 12_000;
+  const PAGE = 5000;
+  const all: Array<TileChange & { n: number }> = [];
+  for (let i = 0; i < HISTORY; i++) {
+    all.push({ ...dug(10 + (i % 200), 10 + Math.floor(i / 200), 30 + (i % 7)), n: i + 1 });
+  }
+  /** A reader that answers from `all`, capping each page at `cap` of its own. */
+  const reader = (cap: number, failAt?: number) => {
+    let calls = 0;
+    return async (after: number, take: number) => {
+      calls++;
+      if (failAt && calls === failAt) return { rows: [], error: 'statement timeout' };
+      const from = all.findIndex((c) => c.n > after);
+      const rows = from < 0 ? [] : all.slice(from, from + Math.min(take, cap));
+      return { rows };
+    };
+  };
+
+  let laid = 0;
+  let seen = await layHistory(0, PAGE, reader(PAGE), () => { laid++; });
+  check('every page of a long history is laid down', laid === HISTORY && seen === HISTORY,
+    `${laid} of ${HISTORY} laid, cursor at ${seen}`);
+
+  // A server with a cap of its own, below the page asked for: every page comes
+  // back short, and short must not mean the end.
+  laid = 0;
+  seen = await layHistory(0, PAGE, reader(1000), () => { laid++; });
+  check('a server capping pages below the page asked for is not the end of it',
+    laid === HISTORY && seen === HISTORY, `${laid} of ${HISTORY} laid, cursor at ${seen}`);
+
+  // And a read that dies: loud, and what it had already read is kept.
+  laid = 0;
+  let threw = '';
+  let kept = -1;
+  try {
+    kept = await layHistory(0, PAGE, reader(PAGE, 2), () => { laid++; });
+  } catch (e) {
+    threw = String(e);
+  }
+  check('a history that will not come is thrown rather than swallowed',
+    threw.includes('would not come'), threw || `it returned ${kept} quietly`);
+  check('and the page it did read is not read again',
+    laid === PAGE, `${laid} laid before it gave up`);
 }
 
 for (const l of ok) console.log(l);

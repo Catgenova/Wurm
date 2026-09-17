@@ -152,6 +152,21 @@ export const BODY_EVERY = 0.2;
 export const RECONCILE_EVERY = 20;
 
 /**
+ * How many rows of the island's history come down in one request.
+ *
+ * It used to be all of them: `select('*')` over a table that grows with every
+ * spadeful anybody has ever turned, in one go, on every join. That works on a
+ * young island and stops working at some point during a morning's paving —
+ * and because a failed read looks exactly like an island where nothing has
+ * ever happened, what it looked like was every paved tile and every levelled
+ * yard reverting to the hillside it was cut from.
+ *
+ * Five thousand is a page small enough to come back reliably and big enough
+ * that a well-dug island is a handful of them.
+ */
+export const CHANGE_PAGE = 5000;
+
+/**
  * How often the browser asks what is moving about near it.
  *
  * Its own beat rather than the reconcile's, because a wild thing crossing a
