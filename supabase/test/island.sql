@@ -7593,3 +7593,50 @@ select '881. and what one of these weighs against the road it replaces: '
                 from tile_change where world_id = :'world2'), 0)
      || ' bytes for every spadeful ever turned — the first number is what the square is and does not move, '
      || 'the second is what has been done to it and only goes up';
+
+/*
+ * And peat, which burns.
+ *
+ * Asked from the island: "allow peat as fuel." It is the one thing here dug
+ * straight out of the ground and worth nothing at all — a bed of it, a shovel
+ * that fills off the top of one, and a bogga whose whole trade is cutting it
+ * and carrying it home, with nowhere for any of it to go.
+ *
+ * Asked the browser's way, through `fuel_campfire` with a lump of it in hand,
+ * rather than by asking `fuel_value` what it thinks: the door is what refused.
+ */
+\echo ''
+\echo '--- peat burns'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select coalesce((select id::text from placed where world_id = :'world2' and kind = 'campfire' order by id limit 1), '0') as peatfire \gset
+update placed set fuel = 0, since = now() where id = :'peatfire' \g /dev/null
+select give(:'world2', :'ivar', 'peat', 3, 30) \g /dev/null
+select id as peat_uid from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'peat'
+  order by id desc limit 1 \gset
+select give(:'world2', :'ivar', 'iron_ore', 1, 30) \g /dev/null
+select id as notfuel_uid from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'iron_ore'
+  order by id desc limit 1 \gset
+select '882. a lump of peat offered to a cold fire: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'fuel_campfire',
+          ('{"kind":"campfire","id":' || :'peatfire' || ',"itemUid":' || :'peat_uid' || '}')::jsonb), 'ALLOWED')
+     || '" — and the same fire offered a lump of iron ore: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'fuel_campfire',
+          ('{"kind":"campfire","id":' || :'peatfire' || ',"itemUid":' || :'notfuel_uid' || '}')::jsonb), 'ALLOWED')
+     || '", which is the list said once rather than typed into every rule that needs it';
+select rpc_act(:'world2', 'fuel_campfire',
+  ('{"kind":"campfire","id":' || :'peatfire' || ',"itemUid":' || :'peat_uid' || '}')::jsonb, 1) \g /dev/null
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select settle(:'world2', :'ivar') \g /dev/null
+select '883. and three of them fed to it: ' || burns_for((select fuel from placed where id = :'peatfire'))
+     || ' of fuel, with ' || coalesce((select sum(count)::text from item where world_id = :'world2'
+                                        and holder_uid = :'ivar' and def = 'peat'), '0')
+     || ' peat left in hand — ' || (select text from event where world_id = :'world2' and uid = :'ivar'
+                                      and kind = 'event' order by n desc limit 1);
+select '884. and where peat sits in what burns: '
+     || (select string_agg(d.id || ' ' || fuel_value(d.id)::int || 's', ', ' order by fuel_value(d.id))
+           from item_def d where fuel_value(d.id) is not null)
+     || ' — one table, in the browser, generated down here: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prokind = 'f' and p.prosrc like '%shafts, thatch%')
+     || ' rules still spell the list out by hand';

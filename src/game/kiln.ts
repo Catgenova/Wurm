@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { FIRE_CAPACITY, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
+import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
@@ -162,7 +162,7 @@ export const KILN_ACTIONS: ActionDef[] = [
       if (!k) return 'It is gone.';
       if (!nearKiln(g, k)) return 'Stand next to the kiln.';
       const item = t.kind === 'kiln' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return 'A kiln burns wood and coal.';
+      if (!item || !isFuel(item.id)) return `A kiln burns ${FUEL_SAID}.`;
       if (k.fuel >= FIRE_CAPACITY) return 'The firebox is full.';
       return null;
     },

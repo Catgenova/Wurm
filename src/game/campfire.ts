@@ -54,19 +54,58 @@ export const FIRE_CAPACITY = world(3600);
 export const FIRE_COST = 2;
 const FIRE_LAID_FUEL = 120;
 
+/**
+ * What burns, how long for, and what to call it in a list.
+ *
+ * Asked from the island: peat should burn. It is the one thing here that is
+ * dug straight out of the ground and is worth nothing at all — a bed of it, a
+ * shovel, and a gatherer whose whole trade is cutting it and carrying it home,
+ * and then nowhere for it to go.
+ *
+ * Three minutes. The wood in this table is priced by the work in it rather
+ * than by what it weighs — a log is the raw thing at twenty-five seconds a
+ * kilogram and thatch is the worked one at a hundred and twenty — so a
+ * kilogram is not the ladder to hang peat off. What peat is, is dense fuel you
+ * dig: longer in the fire than a plank, well short of a timber, a fifth of a
+ * charge of coal. Two kilograms of it at ninety seconds the kilogram, which is
+ * a shaft's rate for something nobody had to make.
+ *
+ * `said` is here rather than worked out from the name, because thatch, peat
+ * and coal are the sort of nouns that do not take an s and the other four are
+ * not. A list that says "peats and coals" is a list somebody wrote by rule
+ * instead of reading.
+ *
+ * The island's `fuel_value()` and `fuel_said()` are generated from this. They
+ * used to be typed out over there as well, in three separate migrations, which
+ * is the arrangement where the browser offers a fire something the island will
+ * not burn.
+ */
+export const FUELS: Array<{ id: string; secs: number; said: string }> = [
+  { id: 'thatch', secs: 60, said: 'thatch' },
+  { id: 'shaft', secs: 90, said: 'shafts' },
+  { id: 'plank', secs: 120, said: 'planks' },
+  { id: 'peat', secs: 180, said: 'peat' },
+  { id: 'timber', secs: 240, said: 'timbers' },
+  { id: 'log', secs: 600, said: 'logs' },
+  { id: 'coal', secs: 900, said: 'coal' },
+];
+
 /** Seconds of burning each thing is worth. */
-export const FUEL_VALUES: Record<string, number> = {
-  shaft: 90,
-  thatch: 60,
-  plank: 120,
-  timber: 240,
-  log: 600,
-  coal: 900,
-};
+export const FUEL_VALUES: Record<string, number> = Object.fromEntries(FUELS.map((f) => [f.id, f.secs]));
+
+/**
+ * What a fire will take, in words, worst first.
+ *
+ * Built from the table rather than written under it: the sentence named six
+ * things and the table held six, and the only reason those were the same six
+ * is that nobody had added one yet.
+ */
+export const FUEL_SAID = `${FUELS.slice(0, -1).map((f) => f.said).join(', ')} or ${FUELS[FUELS.length - 1].said}`;
 
 /**
  * What comes back out of a fire that is taken apart. Coal burns but is never
- * recovered, so a pile of logs cannot be turned into coal by rebuilding it.
+ * recovered, so a pile of logs cannot be turned into coal by rebuilding it —
+ * and peat is not on the list for the same reason, being dug rather than made.
  */
 const RECOVERABLE = ['log', 'timber', 'plank', 'shaft', 'thatch'];
 
@@ -171,7 +210,7 @@ export const CAMPFIRE_ACTIONS: ActionDef[] = [
       if (!f) return 'It is gone.';
       if (!nearFire(g, f)) return 'Stand next to the fire.';
       const item = t.kind === 'campfire' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return 'Fires take wood and coal: shafts, thatch, planks, timbers, logs or coal.';
+      if (!item || !isFuel(item.id)) return `Fires take ${FUEL_SAID}.`;
       if (f.fuel >= FIRE_CAPACITY) return 'It is already piled as high as it will take.';
       return null;
     },

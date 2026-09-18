@@ -80,6 +80,7 @@ import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
+import { FUELS, FUEL_SAID } from '../src/game/campfire';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -977,6 +978,25 @@ for (const [fn, v] of [
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
+/*
+ * What burns, and for how long.
+ *
+ * `fuel_value` was typed out by hand on this side, in three separate
+ * migrations, beside a `FUEL_VALUES` in `campfire.ts` that said the same six
+ * things. A number written twice is a number that drifts, and the drift this
+ * one would produce is a browser offering the fire something the island will
+ * not burn — so the browser lays the fuel, the island refuses, and what you
+ * see is a fire that quietly will not take what you are holding.
+ *
+ * One table now, in the browser, generated down here.
+ */
+out.push(`create or replace function fuel_value(p_item text) returns double precision language sql immutable as $fn$
+  select case p_item
+${FUELS.map((f) => `    when ${q(f.id)} then ${q(f.secs)}`).join('\n')}
+  end::double precision
+$fn$;`);
+out.push(`create or replace function fuel_said() returns text language sql immutable as $fn$ select ${q(FUEL_SAID)} $fn$;`);
+
 /* What a brazier is: how much it holds, and how fast it goes by how well it was built. */
 for (const [fn, v] of [
   ['brazier_capacity', BRAZIER_CAPACITY],

@@ -359,8 +359,10 @@ function helpText(): string {
     &mdash; which is what lets a Seavic keep one running on its own.</p>
     <h3>Campfires and cooking</h3>
     <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from two shafts; it
-    fills a two by two block of the tile's spots. Feed it wooden things &mdash; shafts, thatch, planks,
-    timbers, logs &mdash; and each is worth so many minutes of burning, then <b>Light</b> it. A burning
+    fills a two by two block of the tile's spots. Feed it anything that burns &mdash; thatch, shafts,
+    planks, peat, timbers, logs or coal &mdash; and each is worth so many minutes of burning, then
+    <b>Light</b> it. Peat is dug off a peat bed with a shovel and costs nothing but the digging, which
+    makes it the first fuel worth stacking. A burning
     fire is the place to <b>Cook</b>: raw meat becomes cooked meat worth twice the meal, potatoes bake
     in the embers, onions and nuts roast, and with a <b>clay bowl</b> you can stew berries into compote
     or simmer meat and vegetables into a proper stew. Cooking recipes sit in the crafting window with
@@ -379,7 +381,7 @@ function helpText(): string {
     <h3>The oven</h3>
     <p>A campfire will cook, but it burns as much as it bakes. An <b>oven</b> is laid by a
     <b>mason</b> from ten stone bricks and four lots of mortar with a trowel, set down on a block of
-    four spots like a smelter. Feed it the same wood and coal a fire takes &mdash; it holds two hours of
+    four spots like a smelter. Feed it anything a fire takes, peat and coal included &mdash; it holds two hours of
     it &mdash; and light it. A lit oven is a cooking fire for every purpose: everything on the Cook menu
     is there, and anything that would have burnt over an open flame comes out right, and better, because
     the bricks hold their heat evenly. It leaves ashes like any other fire, and they rake out the same
@@ -919,8 +921,8 @@ function helpText(): string {
     <b>Pottery</b> shapes clay into <b>unfired</b> bricks, bowls, pots and jars, and green ware is no use
     to anybody: it will not hold a stew and it will not hold up a wall. Build a <b>kiln</b> from six
     stone bricks and two mortar with a trowel, carry it, and set it down anywhere the ground is dry and
-    flat; take it up again when it is cold and empty. Feed it the same wood and coal a
-    fire takes, pack the green ware in, and light it: each piece needs its own time at heat, and a
+    flat; take it up again when it is cold and empty. Feed it anything a fire takes, peat and coal
+    included, pack the green ware in, and light it: each piece needs its own time at heat, and a
     well-built kiln works faster and keeps more of the potter's quality. Take the fired ware out and the
     bowl will cook, the pot makes pottage, the jar puts up preserves, and the brick will build.</p>
     <h3>Digging up the past</h3>

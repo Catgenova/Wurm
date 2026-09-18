@@ -2825,6 +2825,18 @@ create or replace function chip_chance() returns double precision language sql i
 create or replace function try_learn() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
 create or replace function graze_hungry() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function graze_fill() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
+create or replace function fuel_value(p_item text) returns double precision language sql immutable as $fn$
+  select case p_item
+    when 'thatch' then 60
+    when 'shaft' then 90
+    when 'plank' then 120
+    when 'peat' then 180
+    when 'timber' then 240
+    when 'log' then 600
+    when 'coal' then 900
+  end::double precision
+$fn$;
+create or replace function fuel_said() returns text language sql immutable as $fn$ select 'thatch, shafts, planks, peat, timbers, logs or coal' $fn$;
 create or replace function brazier_capacity() returns double precision language sql immutable as $fn$ select 9000::double precision $fn$;
 create or replace function brazier_burn_one() returns double precision language sql immutable as $fn$ select 1.55::double precision $fn$;
 create or replace function brazier_burn_hundred() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;

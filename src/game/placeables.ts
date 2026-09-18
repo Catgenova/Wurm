@@ -1,6 +1,6 @@
 import { drinkable, isBrew, isWorking } from './brewing';
 import type { ActionDef, Target } from './actions';
-import { FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
+import { FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import {
   BUCKET_LITRES,
   BUCKET_OF,
@@ -167,7 +167,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (!f || !isOven(f)) return 'That is not something you can light a fire in.';
       if (!nearPiece(g, f)) return `Stand next to the ${hearthName(f)}.`;
       const item = t.kind === 'furniture' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return 'Ovens take the same wood and coal a fire does.';
+      if (!item || !isFuel(item.id)) return `An oven takes what a fire takes: ${FUEL_SAID}.`;
       if ((f.fuel ?? 0) >= hearthCapacity(f)) return 'It is packed as full as it will take.';
       return null;
     },

@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { FIRE_CAPACITY, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
+import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
@@ -147,7 +147,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (!s) return 'It is gone.';
       if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
       const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return 'A smelter burns wood and coal.';
+      if (!item || !isFuel(item.id)) return `A smelter burns ${FUEL_SAID}.`;
       if (s.fuel >= FIRE_CAPACITY) return 'The firebox is full.';
       return null;
     },
