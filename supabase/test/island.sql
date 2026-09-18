@@ -1414,7 +1414,9 @@ delete from event where uid = :'ivar';
  * two hundred measurements ago rather than the logs cut for it two lines up.
  * It said so, in 236, run after run.
  */
-select act_perform(:'world2', :'ivar', 'fuel_kiln', ('{"kind":"kiln","id":' || :'kiln' || ',"itemUid":' || :'logs' || '}')::jsonb) \g /dev/null
+-- And the whole armful, asked for as six: fuelling feeds what it is told to
+-- feed now, and told nothing it feeds one.
+select act_perform(:'world2', :'ivar', 'fuel_kiln', ('{"kind":"kiln","id":' || :'kiln' || ',"itemUid":' || :'logs' || ',"count":6}')::jsonb) \g /dev/null
 select act_perform(:'world2', :'ivar', 'light_kiln', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb) \g /dev/null
 select '236. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
 select '237. and nothing out of it yet: ' || coalesce(act_refusal(:'world2', :'ivar', 'kiln_take_all', ('{"kind":"kiln","id":' || :'kiln' || '}')::jsonb), 'allowed');
@@ -1472,6 +1474,19 @@ select '246. ' || (select text from event where uid = :'ivar' order by n desc li
      || (select coalesce(sum(count), 0) from item where holder_uid = :'ivar' and def = 'iron_ore')
      || ' ore still in the pack, counting what was mined earlier';
 insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 4, 'Pine');
+/*
+ * One log, asked for as one. Reported as "attempting to feed one coal to a
+ * smelter puts four coal in": this fed as much as would fit whatever it was
+ * told, and a cold firebox has room for the lot.
+ */
+select id as logs from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'log' order by id desc limit 1 \gset
+select count as had_logs from item where id = :'logs' \gset
+select act_perform(:'world2', :'ivar', 'fuel_smelter',
+  ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'logs' || ',"count":1}')::jsonb) \g /dev/null
+select '246b. a stack of ' || :'had_logs' || ' logs, one of them asked for: '
+     || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — ' || (:'had_logs' - coalesce((select count from item where id = :'logs'), 0))
+     || ' gone out of the stack, not the lot';
 select act_perform(:'world2', :'ivar', 'fuel_smelter', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
 select act_perform(:'world2', :'ivar', 'light_smelter', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
 update placed set since = since - interval '90 seconds' where id = :'furnace';
@@ -2109,6 +2124,62 @@ end $$;
 select '329. ' || (select string_agg(distinct text, ' | ') from event where uid = :'ivar' and kind = 'event')
      || ' — the tile is now ' || tile_slope(:'world2', 10, 9) || ' out of true';
 
+/*
+ * A tile with one shoulder of bare rock on it.
+ *
+ * Flattening used to stop dead at that corner — "The high corner is bare rock.
+ * Mine it down instead." on the first go, and the run over, while the other
+ * three corners still had a foot of dirt to move between them. The rock is
+ * stepped round now, and named only when there is nothing else left to shift.
+ */
+-- Standing on the tile itself, so it is worked towards its own lowest corner
+-- and stays in reach of the shovel for the whole of it.
+update player set x = 14.5, y = 4.5 where world_id = :'world2' and uid = :'ivar';
+select land_set_tile(:'world2', 14, 4, 1) \g /dev/null
+select land_set_height(:'world2', 14, 4, 103), land_set_dirt(:'world2', 14, 4, 0),
+       land_set_height(:'world2', 15, 4, 102), land_set_dirt(:'world2', 15, 4, 20),
+       land_set_height(:'world2', 14, 5, 98),  land_set_dirt(:'world2', 14, 5, 20),
+       land_set_height(:'world2', 15, 5, 100), land_set_dirt(:'world2', 15, 5, 20) \g /dev/null
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..8 loop
+    exit when act_refusal(w, me, 'flatten', '{"kind":"tile","x":14,"y":4}'::jsonb) is not null;
+    perform act_perform(w, me, 'flatten', '{"kind":"tile","x":14,"y":4}'::jsonb);
+  end loop;
+end $$;
+select '329b. a tile with a shoulder of bare rock, worked to its lowest corner: '
+     || land_height(:'world2', 14, 4) || ', ' || land_height(:'world2', 15, 4) || ', '
+     || land_height(:'world2', 14, 5) || ', ' || land_height(:'world2', 15, 5)
+     || ' — the three of soil are level and the rock stands where it did, and it says: '
+     || coalesce((select text from event where uid = :'ivar' and kind = 'error' order by n desc limit 1), 'NOTHING');
+
+/*
+ * And what a slope refusal says now, which used to be "too steep for your
+ * digging skill" and nothing else: the slope the cut would leave, the slope
+ * you are good for, and the skill it would take. The digging is pinned for
+ * the length of this so the numbers are the same every run.
+ */
+select value as dug from skill where world_id = :'world2' and uid = :'ivar' and id = 'digging' \gset
+update skill set value = 20 where world_id = :'world2' and uid = :'ivar' and id = 'digging';
+select land_set_height(:'world2', 9, 3, 100), land_set_dirt(:'world2', 9, 3, 20),
+       land_set_height(:'world2', 10, 3, 39), land_set_height(:'world2', 9, 4, 100),
+       land_set_height(:'world2', 10, 4, 100) \g /dev/null
+select '329c. digging at 20, which allows a slope of ' || max_dig_slope(:'world2', :'ivar') || ': "'
+     || coalesce(slope_refusal(:'world2', :'ivar', 'digging', 9, 3, -1), 'NOTHING')
+     || '" — and the same corner for a mason: "'
+     || coalesce(slope_refusal(:'world2', :'ivar', 'masonry', 9, 3, 1), 'nothing, his masonry carries it') || '"';
+update skill set value = :'dug' where world_id = :'world2' and uid = :'ivar' and id = 'digging';
+-- And back where the rest of this subject expects him to be standing.
+update player set x = 9.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
+
+/*
+ * And whose ground it is. Nothing asked before: a visitor could cut a trench
+ * through somebody's token. A stake of Hild's is planted on ground no other
+ * deed covers, and the same shovel is put to it from both sides.
+ */
 -- Dirt, dropped on a named corner rather than under your own feet.
 delete from event where uid = :'ivar';
 select give(:'world2', :'ivar', 'dirt', 3, 20) \g /dev/null
@@ -2527,9 +2598,11 @@ select id as oven from placed where world_id = :'world2' and sub = 'oven' order 
 select '379. an oven set down at 7,8, firebox ' || oven_capacity() || ' seconds against a campfire''s '
      || fire_capacity() || ' — and lighting it with nothing in it: '
      || coalesce(act_refusal(:'world2', :'ivar', 'light_oven', ('{"kind":"furniture","id":' || :'oven' || '}')::jsonb), 'allowed');
-select give(:'world2', :'ivar', 'log', 6, 40, 'Pine') \g /dev/null
+-- Named, so that the rule takes these logs rather than whatever fuel happens
+-- to sort first: with nothing named it has taken leftover shafts before now.
+select give(:'world2', :'ivar', 'log', 6, 40, 'Pine') as ovenlogs \gset
 delete from event where uid = :'ivar';
-select act_perform(:'world2', :'ivar', 'fuel_oven', ('{"kind":"furniture","id":' || :'oven' || ',"count":6}')::jsonb) \g /dev/null
+select act_perform(:'world2', :'ivar', 'fuel_oven', ('{"kind":"furniture","id":' || :'oven' || ',"itemUid":' || :'ovenlogs' || ',"count":6}')::jsonb) \g /dev/null
 select '380. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'light_oven', ('{"kind":"furniture","id":' || :'oven' || '}')::jsonb) \g /dev/null
@@ -2798,6 +2871,25 @@ delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'throw_away', ('{"kind":"item","uid":' || :'rot' || ',"count":2}')::jsonb) \g /dev/null
 select '407. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
      || ' — the trash crate holds ' || furniture_units((select p from placed p where p.id = :'bin_trash'));
+/*
+ * And what the chest holds, as the ground read hands it over.
+ *
+ * Reported as "i opened it and dragged my dirt into it and the dirt
+ * vanished". It had not: the island had it and said so to nobody, so every
+ * chest, bin and larder on an island read as empty in a browser and anything
+ * put away went out of the pack and was never seen again.
+ */
+-- Something in the chest to be told about, the hatchet having been taken
+-- back out at 406.
+select act_perform(:'world2', :'ivar', 'store_in_furniture', ('{"kind":"item","uid":' || :'hatchet2' || '}')::jsonb) \g /dev/null
+select '407b. the ground read on the chest: ' ||
+       coalesce((select p.value->>'things' from jsonb_array_elements(rpc_ground(:'world2', 40, true)->'placed') p
+                  where (p.value->>'id')::bigint = :'chest'), 'NOTHING')
+     || ' — and on the bin beside it, which holds nothing: '
+     || coalesce((select p.value->>'things' from jsonb_array_elements(rpc_ground(:'world2', 40, true)->'placed') p
+                  where (p.value->>'id')::bigint = :'bin'), 'NOTHING');
+-- And back out of it, so the stores are as the next subject found them.
+select act_perform(:'world2', :'ivar', 'furniture_take_all', ('{"kind":"furniture","id":' || :'chest' || '}')::jsonb) \g /dev/null
 
 \echo ''
 -- A body rests between one subject and the next. This suite runs hundreds of
@@ -5254,6 +5346,23 @@ select '702. and well clear of it: '
 select act_perform(:'big', :'hild', 'found_settlement', '{"kind":"item","name":"Hildstead"}') \g /dev/null
 select '703. so the island holds ' || (select count(*) from deed where world_id = :'big')
      || ' settlements: ' || (select string_agg(name, ' and ' order by founded_at) from deed where world_id = :'big');
+
+/*
+ * And whose ground it is, which no door on this island asked until now: a
+ * visitor could cut a trench through somebody's token. Here at last are two
+ * settlements belonging to two people, which is the only place in the suite
+ * that the question means anything.
+ */
+select '703b. ivar puts a shovel to hild''s ground: "'
+     || coalesce(ground_deed_refusal(:'big', :'ivar', 'dig', '{"kind":"tile","x":2070,"y":2070,"cx":2070,"cy":2070}'::jsonb), 'NOTHING')
+     || '" | packing it: "' || coalesce(ground_deed_refusal(:'big', :'ivar', 'pack', '{"kind":"tile","x":2070,"y":2070}'::jsonb), 'NOTHING')
+     || '" | mining it: "' || coalesce(ground_deed_refusal(:'big', :'ivar', 'mine', '{"kind":"tile","x":2070,"y":2070,"cx":2070,"cy":2070}'::jsonb), 'NOTHING')
+     || '" | cutting its grass, which shapes nothing: "' || coalesce(ground_deed_refusal(:'big', :'ivar', 'cut_grass', '{"kind":"tile","x":2070,"y":2070}'::jsonb), 'nothing')
+     || '" | hild on her own: "' || coalesce(ground_deed_refusal(:'big', :'hild', 'dig', '{"kind":"tile","x":2070,"y":2070,"cx":2070,"cy":2070}'::jsonb), 'nothing')
+     || '" | ivar at his own token: "' || coalesce(ground_deed_refusal(:'big', :'ivar', 'dig', '{"kind":"tile","x":2040,"y":2040,"cx":2040,"cy":2040}'::jsonb), 'nothing')
+     || '" | and open country between them: "' || coalesce(ground_deed_refusal(:'big', :'ivar', 'dig', '{"kind":"tile","x":2055,"y":2055,"cx":2055,"cy":2055}'::jsonb), 'nothing')
+     || '" — of the island''s ' || (select count(*) from action_def) || ' jobs, '
+     || (select count(*) from action_def where shapes_ground(id)) || ' shape the ground';
 
 -- What each of them is handed. `deed` is yours or nothing; `deeds` is whose
 -- ground you are near enough to be standing on, and lights nothing.

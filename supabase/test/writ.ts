@@ -97,6 +97,23 @@ say(missing.length === 0, missing.length
 const unread = [...literals].filter((k) => !wanted.has(k) && !OURS[k]).sort();
 if (unread.length) console.log(`  noted and not counted by any goal: ${unread.join(', ')}`);
 
+/*
+ * And the one goal that is not a key at all.
+ *
+ * Reported: the note for smelting ore "didn't trigger on smelting copper or
+ * tin into lumps, but did trigger simultaneously with the note for mixing my
+ * first bronze lump". It was hung on the smelting skill passing 2, which is
+ * hours of work and lands nowhere near the thing it is named after. It reads
+ * the ledger now: any metal that comes out of ore, which is every one but the
+ * five that are mixed.
+ */
+const smelt = ALL_GOALS.find((g) => g.id === 'smelt');
+const met = (tally: Record<string, number>): boolean => !!smelt?.met({ tally, skills: { get: () => 0 } } as never);
+say(!met({}), 'a body that has smelted nothing has not smelted ore');
+say(met({ 'made:copper_lump': 1 }), 'a copper lump out of the furnace is smelting ore');
+say(met({ 'made:tin_lump': 1 }), 'and so is a tin one');
+say(!met({ 'made:bronze_lump': 1 }), 'and a bronze lump, which is mixed rather than smelted, is not');
+
 if (bad) {
   console.error(`${bad} of them are not what they should be`);
   process.exit(1);

@@ -476,7 +476,7 @@ insert into item_def values ('dirt', 'Dirt', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'dirt';
 insert into item_def values ('sand', 'Sand', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'sand';
-insert into item_def values ('clay', 'Clay', 'material', 2, true, null, null);
+insert into item_def values ('clay', 'Clay', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'clay';
 insert into item_def values ('peat', 'Peat', 'material', 2, true, null, null);
 update item_def set raw = true where id = 'peat';

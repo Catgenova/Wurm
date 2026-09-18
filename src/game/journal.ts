@@ -2,6 +2,7 @@ import { FISH } from './fishing';
 import type { Game } from './game';
 import { isBoat } from './furniture';
 import { isDone } from './building';
+import { METALS } from './metal';
 import { canImprove } from './improve';
 import { traitTier } from './traits';
 
@@ -47,7 +48,16 @@ export const JOURNAL: Chapter[] = [
     name: 'The trades',
     goals: [
       { id: 'ore', text: 'Mine some ore', met: did('ore') },
-      { id: 'smelt', text: 'Smelt ore into a metal lump', met: skill('smelting', 2) },
+      /*
+       * Reported: the note "didn't trigger on smelting copper or tin into
+       * lumps, but did trigger simultaneously with the note for mixing my
+       * first bronze lump". It was hung on the smelting skill passing 2,
+       * which is a couple of hours of work and lands nowhere near the thing
+       * it is named after. It is the lump itself now: any metal that comes
+       * out of ore, which is every one but the five that are mixed.
+       */
+      { id: 'smelt', text: 'Smelt ore into a metal lump',
+        met: (g) => METALS.some((m) => m.ore !== null && (g.tally[`made:${m.lump}`] ?? 0) > 0) },
       { id: 'anvil', text: 'Cast an anvil and place it', met: (g) => ours(g.anvils.values()).length > 0 },
       { id: 'smith', text: 'Smith a casting at an anvil', met: did('smithed') },
       { id: 'bronze', text: 'Smelt a bronze lump', hint: 'Copper and tin together in a smelter', met: did('made:bronze_lump') },

@@ -141,7 +141,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lye_bucket: { name: 'Bucket of lye', category: 'tool', weight: 6, decay: 10, description: 'Ash water, and it will take the hair off a hide. One bucket tans one skin.' },
   dirt: { name: 'Dirt', category: 'material', weight: 20, stackable: true, raw: true, description: 'A pile of dirt. Drop it to raise the ground.' },
   sand: { name: 'Sand', category: 'material', weight: 20, stackable: true, raw: true },
-  clay: { name: 'Clay', category: 'material', weight: 2, stackable: true, raw: true },
+  clay: { name: 'Clay', category: 'material', weight: 20, stackable: true, raw: true },
   peat: { name: 'Peat', category: 'material', weight: 2, stackable: true, raw: true },
   ash: { name: 'Ashes', category: 'material', weight: 0.3, stackable: true, decay: 4, description: 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' },
   tar: { name: 'Tar', category: 'material', weight: 2, stackable: true, raw: true },

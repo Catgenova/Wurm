@@ -322,6 +322,15 @@ jobs:
           npx esbuild supabase/test/anvil.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/anvil.mjs --log-level=error
           node node_modules/.cache/anvil.mjs
+
+      - name: What the ground says about a cut it will not take
+        run: |
+          # A slope refusal carries its numbers on both sides, ground inside
+          # somebody else's stake is refused, and flattening steps round a
+          # corner of bare rock instead of stopping at it.
+          npx esbuild supabase/test/ground.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/ground.mjs --log-level=error
+          node node_modules/.cache/ground.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

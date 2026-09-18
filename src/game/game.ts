@@ -4412,7 +4412,13 @@ export class Game {
         this.placed.traps.add(t);
       } else if (r.kind === 'furniture') {
         this.furniture.set(r.id, {
-          ...at, kind: r.sub ?? 'chest', ql: r.ql ?? 20, items: [],
+          ...at, kind: r.sub ?? 'chest', ql: r.ql ?? 20,
+          // What the island says is in it, and empty for one too far off to
+          // reach into, which is the only reason this is ever short.
+          items: (r.things ?? []).map((it) => ({
+            uid: it.id, id: it.def, ql: it.ql, dmg: it.dmg, count: it.count,
+            extra: it.extra ?? undefined,
+          })),
           name: r.name ?? undefined,
           fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
@@ -5441,6 +5447,19 @@ export interface IslandPlaced {
   caught: number | null;
   state: { jobs?: unknown[]; output?: unknown[] } | null;
   mine: boolean;
+  /**
+   * What is in it, for a piece of furniture near enough to reach into.
+   *
+   * Reported as "i opened it and dragged my dirt into it and the dirt
+   * vanished". It had not: the island had it in the bin and said so to
+   * nobody. Every chest, bin, larder and cart on an island read as empty
+   * here, because this read filled `items` with a bare `[]` and nothing ever
+   * filled it again — so anything put away went out of the pack and was
+   * never seen again. It rides with the row now, the way a crate's contents
+   * have since crates crossed, and only within reach, since a yard of full
+   * chests is not worth a phone's second.
+   */
+  things?: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null }>;
 }
 
 /** A crate, likewise. */

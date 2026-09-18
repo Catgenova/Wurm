@@ -318,6 +318,54 @@ function maxMasonSlope(g: Game): number {
 }
 
 /**
+ * The skill a slope wants, which is the cap read backwards.
+ *
+ * `max(40, floor(skill * 3))` allows a slope the moment three times the skill
+ * reaches it, so a third of the slope is what it takes, and a tenth of a point
+ * is as fine as a skill is ever shown.
+ */
+export const slopeNeeds = (slope: number): number => Math.ceil((slope / 3) * 10) / 10;
+
+/**
+ * Why a cut is too steep, in numbers, or null when it is not.
+ *
+ * It used to say "The slope would be too steep for your digging skill" and
+ * stop there, which tells you neither how far over you are nor what would
+ * carry it — so the only way to find either was to dig somewhere else and see.
+ * Now it says the slope the cut would leave, the slope you are good for, and
+ * the skill that would do it. The island says the same in `slope_refusal`.
+ */
+export function slopeRefusal(g: Game, skill: 'digging' | 'masonry', cx: number, cy: number, delta: number): string | null {
+  const would = slopeAfter(g, cx, cy, delta);
+  const cap = skill === 'digging' ? maxDigSlope(g) : maxMasonSlope(g);
+  if (would <= cap) return null;
+  return `That would leave a slope of ${would}. Your ${skill} allows ${cap}; it would take ${skill} ${slopeNeeds(would).toFixed(1)}.`;
+}
+
+/**
+ * Ground inside a settlement that is not yours.
+ *
+ * Nothing stopped a visitor cutting a trench through somebody's token: the
+ * doors asked what the ground was made of and never whose it was. A corner is
+ * shared by as many as four tiles and is refused if any of them is on a
+ * settlement you are not of; a tile action asks about its own tile alone; and
+ * a spadeful dropped at your feet asks about the tile you stand on. The island
+ * reads the same rule off the same `corner` column, in the same words.
+ */
+export function foreignGround(g: Game, def: ActionDef, t: Target): string | null {
+  const tiles: Array<[number, number]> = t.kind !== 'tile'
+    ? [[g.player.tileX, g.player.tileY]]
+    : def.corner
+      ? [[t.cx - 1, t.cy - 1], [t.cx, t.cy - 1], [t.cx - 1, t.cy], [t.cx, t.cy]]
+      : [[t.x, t.y]];
+  for (const [x, y] of tiles) {
+    const d = g.deedAt(x, y);
+    if (d && !g.onDeed(x, y)) return `That ground is part of ${d.name}. Only its citizens may shape it.`;
+  }
+  return null;
+}
+
+/**
  * Whether a corner holds up a seam: any of the four tiles round it over a
  * vein, or the coal. Asked for: "only allow raising a rock corner with
  * concrete, not an ore / seam corner" — a vein raised with concrete would
@@ -486,8 +534,7 @@ export const ACTIONS: ActionDef[] = [
        */
       if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
       if (g.world.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock. Only a pickaxe will take it lower.';
-      if (slopeAfter(g, t.cx, t.cy, -1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
-      return null;
+      return slopeRefusal(g, 'digging', t.cx, t.cy, -1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -536,8 +583,7 @@ export const ACTIONS: ActionDef[] = [
       if (w.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock down there. A shovel will not bite on it.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      if (slopeAfter(g, t.cx, t.cy, -1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
-      return null;
+      return slopeRefusal(g, 'digging', t.cx, t.cy, -1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -584,26 +630,34 @@ export const ACTIONS: ActionDef[] = [
       const own = g.player.tileX === t.x && g.player.tileY === t.y;
       const target = flattenTarget(g, t.x, t.y);
       const cs = tileCorners(t.x, t.y);
-      // The corners furthest above and below the height we are working towards.
+      /*
+       * The corners furthest above and below the height we are working
+       * towards — and the high one has to be soil, because a shovel does not
+       * move rock. It used to be the highest corner whatever it was made of,
+       * and a tile with one rock shoulder on it stopped the whole run dead
+       * with "Mine it down instead" while the other three corners still had
+       * work in them. The rock is stepped round now and named at the end.
+       */
       let hi = -1;
       let lo = -1;
+      let rock = false;
       for (let i = 0; i < 4; i++) {
         const h = w.getHeight(cs[i][0], cs[i][1]);
-        if (h > target && (hi < 0 || h > w.getHeight(cs[hi][0], cs[hi][1]))) hi = i;
+        if (h > target && w.getDirt(cs[i][0], cs[i][1]) <= 0) rock = true;
+        if (h > target && w.getDirt(cs[i][0], cs[i][1]) > 0
+            && (hi < 0 || h > w.getHeight(cs[hi][0], cs[hi][1]))) hi = i;
         if (h < target && (lo < 0 || h < w.getHeight(cs[lo][0], cs[lo][1]))) lo = i;
       }
-      if (hi < 0 && lo < 0) return false;
+      if (hi < 0 && lo < 0) {
+        g.logMsg(rock ? 'What is still standing high here is bare rock. Mine it down.' : 'There is nothing left to move here.', 'error');
+        return false;
+      }
       const raise = (i: number, by: number): void => {
         const [cx, cy] = cs[i];
         w.setHeight(cx, cy, w.getHeight(cx, cy) + by);
         w.setDirt(cx, cy, w.getDirt(cx, cy) + by);
         g.exposeRock(cx, cy);
       };
-      // Only soil can be moved with a shovel; bedrock needs a pickaxe.
-      if (hi >= 0 && w.getDirt(cs[hi][0], cs[hi][1]) <= 0) {
-        g.logMsg('The high corner is bare rock. Mine it down instead.', 'error');
-        return false;
-      }
       if (hi >= 0 && lo >= 0) {
         // One corner down and one up: the dirt simply moves across the tile.
         raise(hi, -1);
@@ -656,8 +710,7 @@ export const ACTIONS: ActionDef[] = [
       if (!it) return t.itemUid !== undefined ? 'That is not dirt, clay or sand.' : 'You have no dirt, clay or sand to drop.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      if (slopeAfter(g, t.cx, t.cy, 1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
-      return null;
+      return slopeRefusal(g, 'digging', t.cx, t.cy, 1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -694,8 +747,8 @@ export const ACTIONS: ActionDef[] = [
       if (seamUnder(w, t.cx, t.cy)) return 'That corner is on a seam. Concrete goes on plain rock.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      if (slopeAfter(g, t.cx, t.cy, 1) > maxMasonSlope(g)) return 'The slope would be too steep for your masonry skill.';
-      return g.inventory.has('trowel') ? null : 'You need a trowel to lay concrete.';
+      if (!g.inventory.has('trowel')) return 'You need a trowel to lay concrete.';
+      return slopeRefusal(g, 'masonry', t.cx, t.cy, 1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -1988,8 +2041,7 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'dirt',
     check: (_t, g) => {
       const c = g.nearestCornerToPlayer();
-      if (slopeAfter(g, c.cx, c.cy, 1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
-      return null;
+      return slopeRefusal(g, 'digging', c.cx, c.cy, 1);
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
@@ -2009,5 +2061,20 @@ export const ACTIONS: ActionDef[] = [
     },
   },
 ];
+
+/**
+ * The jobs that change the shape or the surface of the ground, and so the ones
+ * a settlement's border speaks for. Wrapped once here rather than written into
+ * fourteen doors, so there is one rule and one wording, and every place that
+ * asks a door — the menu, the belt, a job coming off the queue — is covered by
+ * having asked it.
+ */
+const SHAPES_GROUND = new Set(['dig', 'dredge', 'flatten', 'drop_dirt', 'drop_dirt_here', 'raise_rock',
+  'mine', 'chip_corner', 'pack', 'cultivate', 'pave_gravel', 'pave_cobble', 'pave_slabs', 'remove_paving']);
+for (const def of ACTIONS) {
+  if (!SHAPES_GROUND.has(def.id)) continue;
+  const was = def.check;
+  def.check = (t, g) => foreignGround(g, def, t) ?? was?.(t, g) ?? null;
+}
 
 export const ACTION_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
