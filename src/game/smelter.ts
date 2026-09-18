@@ -221,7 +221,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
       const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (!item || !isOreItem(item.id)) return 'Smelters take ore.';
-      // A charge is twenty kilograms of ore, which is ten of them.
+      // A charge is one ore, which comes out as one lump.
       if (item.count < ORE_PER_LUMP) return `A charge is ${ORE_PER_LUMP} ore; you have ${item.count}.`;
       if (s.jobs.length >= SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
       return null;
@@ -234,8 +234,8 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (!item || !metal) return;
       /*
        * Charges, not ore. One charge is `ORE_PER_LUMP` of it and comes out as
-       * one lump, so "all" of a stack of fifty-seven is five charges and seven
-       * left over rather than fifty-seven lumps.
+       * one lump; that is one for one now, so "all" of a stack is the whole
+       * stack, up to what the furnace will hold.
        */
       const want = Math.max(1, Math.floor((t.count ?? 1) / ORE_PER_LUMP));
       const n = Math.min(want, Math.floor(item.count / ORE_PER_LUMP), SMELTER_CAPACITY - s.jobs.length);

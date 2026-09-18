@@ -69,14 +69,16 @@ export const NAIL_WEIGHT = 0.01;
 export const NAILS_PER_LUMP = 100;
 
 /**
- * Ore a lump takes, counted in kilograms of what came out of the seam.
+ * Ore a lump takes.
  *
- * Twenty kilograms of ore to a lump, and ore is two kilograms a piece, so ten
- * of them go into the furnace for one lump out of it. It used to be one for
- * one, which made a lump the same thing as a swing of a pickaxe and made every
- * number downstream of it meaningless.
+ * One: every piece of ore out of the seam is one lump out of the furnace.
+ * What differs between the metals is the lump, not the ore — a lump of iron
+ * is a kilo and a lump of gold or silver a tenth of one, which is the item
+ * table's to say. It was ten for one for a while, on the argument that a
+ * lump should not be a swing of a pickaxe; asked for back, with the lump's
+ * size carrying the difference instead. The island reads the same number.
  */
-export const ORE_PER_LUMP = 10;
+export const ORE_PER_LUMP = 1;
 
 /**
  * The metals that come out of the same twenty kilograms as a tenth of a lump.

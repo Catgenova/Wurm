@@ -1459,13 +1459,13 @@ delete from event where uid = :'ivar';
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'iron_ore', 40, 9)
   returning id as ore \gset
 select '244. charging it with a clay brick: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'clay_brick' limit 1) || '}')::jsonb), 'allowed');
-select '245. and with nine iron ore, one short of a charge: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":9}')::jsonb), 'allowed');
--- Twenty-five of them: two whole charges, and five left in the pack.
+select '245. and with nine iron ore, nine charges now that a charge is one: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":9}')::jsonb), 'allowed');
+-- Twenty-five of them: the smelter takes twenty, and five are left in the pack.
 update item set count = 25 where id = :'ore';
 select '245b. and with twenty-five: ' || coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":25}')::jsonb), 'allowed');
 select act_perform(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'ore' || ',"count":25}')::jsonb) \g /dev/null
 select '246. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
-     || ' — two charges out of twenty-five, and '
+     || ' — twenty charges out of twenty-five, and '
      || (select coalesce(sum(count), 0) from item where holder_uid = :'ivar' and def = 'iron_ore')
      || ' ore still in the pack, counting what was mined earlier';
 insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 4, 'Pine');
@@ -9133,3 +9133,59 @@ select '983. after everything above, things in a crate or a piece of furniture w
 update item set holder = 'player', holder_uid = :'ivar', gx = null, gy = null where id = :'bag' \g /dev/null
 update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
 delete from item where world_id = :'world2' and def = 'cabbage_seed' \g /dev/null
+
+/*
+ * A furnace runs on the island's clock.
+ *
+ * Its work used to move only when somebody asked it a question; the clock's
+ * round sweeps it now, and a log fed mid-job loses nothing.
+ */
+\echo ''
+\echo '--- a furnace runs on the island''s clock'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select id as oven2, x as ox, y as oy from placed where world_id = :'world2' and kind = 'smelter' order by id limit 1 \gset
+select x as was_x, y as was_y from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set x = :ox + 0.5, y = :oy + 0.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+update placed set lit = true, fuel = 3600, since = now(), ash = 0, state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb) where id = :oven2 \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('iron_ore', 'iron_lump', 'log') \g /dev/null
+delete from event where uid = :'ivar' \g /dev/null
+select give(:'world2', :'ivar', 'iron_ore', 2, 40) as ore2 \gset
+select act_perform(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :oven2 || ',"itemUid":' || :'ore2' || ',"count":2}')::jsonb) \g /dev/null
+select jsonb_array_length(state->'jobs') as jobs_in, round((state->'jobs'->0->>'total')::numeric) as secs_each from placed where id = :oven2 \gset
+-- Half a charge's heat passes with nobody asking; the clock's own sweep finds it.
+update placed set since = since - make_interval(secs => :secs_each / 2.0) where id = :oven2 \g /dev/null
+select furnace_sweep(:'world2') as swept_1 \gset
+select round((state->'jobs'->0->>'left')::numeric) as left_half from placed where id = :oven2 \gset
+-- A log goes in mid-job, the way the browser asks: the door first, then the deed. Nothing of the heat so far is lost.
+select give(:'world2', :'ivar', 'log', 1, 50, 'Oak') as log2 \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'fuel_smelter', ('{"kind":"smelter","id":' || :oven2 || ',"itemUid":' || :'log2' || '}')::jsonb), 'ALLOWED') as fuel_door \gset
+select act_perform(:'world2', :'ivar', 'fuel_smelter', ('{"kind":"smelter","id":' || :oven2 || ',"itemUid":' || :'log2' || '}')::jsonb) \g /dev/null
+select round((state->'jobs'->0->>'left')::numeric) as left_fuelled from placed where id = :oven2 \gset
+-- And two charges' worth of heat later, the sweep alone has finished both.
+update placed set since = since - make_interval(secs => :secs_each * 2.0) where id = :oven2 \g /dev/null
+select furnace_sweep(:'world2') as swept_2 \gset
+select '984. two iron ore in a lit smelter: ' || :jobs_in || ' jobs of ' || :secs_each || ' s each; half a charge''s heat later the clock''s sweep alone brings the first to ' || :left_half || ' s left'
+     || '; a log fed mid-job (' || :'fuel_door' || ') leaves it at ' || :left_fuelled || ' s, nothing lost'
+     || '; two charges'' heat later the sweep finishes ' || :swept_2 || ' with nobody asking: ' || jsonb_array_length(state->'jobs') || ' jobs left and '
+     || jsonb_array_length(state->'output') || ' lumps waiting, told "' || coalesce((select text from event where uid = :'ivar' and text like 'The smelter finishes%' order by n desc limit 1), 'nothing') || '"'
+  from placed where id = :oven2;
+
+/*
+ * One ore is one lump.
+ */
+\echo ''
+\echo '--- one ore, one lump'
+update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb), fuel = 3600, since = now(), lit = true where id = :oven2 \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('iron_ore', 'iron_lump') \g /dev/null
+select give(:'world2', :'ivar', 'iron_ore', 3, 40) as ore3 \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :oven2 || ',"itemUid":' || :'ore3' || ',"count":3}')::jsonb), 'ALLOWED') as ore_door \gset
+select act_perform(:'world2', :'ivar', 'smelt_ore', ('{"kind":"smelter","id":' || :oven2 || ',"itemUid":' || :'ore3' || ',"count":3}')::jsonb) \g /dev/null
+select jsonb_array_length(state->'jobs') as jobs3 from placed where id = :oven2 \gset
+update placed set since = since - make_interval(secs => :secs_each * 3.0 + 1) where id = :oven2 \g /dev/null
+select furnace_sweep(:'world2') as swept_3 \gset
+select act_perform(:'world2', :'ivar', 'smelter_take_all', ('{"kind":"smelter","id":' || :oven2 || '}')::jsonb) \g /dev/null
+select '985. a charge is ' || ore_per_lump()::int || ' ore on the island as in the browser: three iron ore (' || :'ore_door' || ') are ' || :jobs3 || ' jobs, three charges'' heat later ' || :swept_3 || ' lumps, and drawn out '
+     || coalesce((select sum(count) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'iron_lump'), 0) || ' iron lumps in the pack with '
+     || coalesce((select sum(count) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'iron_ore'), 0) || ' ore left'
+     || '; the lump is what the metal makes of it: an iron lump weighs ' || (select weight from item_def where id = 'iron_lump') || ' and a gold lump ' || (select weight from item_def where id = 'gold_lump');
+update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null

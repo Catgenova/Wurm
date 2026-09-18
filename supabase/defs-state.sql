@@ -2995,7 +2995,7 @@ create or replace function tree_room_one() returns double precision language sql
 create or replace function deeds_joined() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function crowd_hides() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function care_bonus() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
-create or replace function ore_per_lump() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
+create or replace function ore_per_lump() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function rare_lump_factor() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function tick_seconds() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function idle_logout() returns double precision language sql immutable as $fn$ select 450::double precision $fn$;

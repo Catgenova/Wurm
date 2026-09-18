@@ -4911,6 +4911,14 @@ export class Game {
       if (!job || burn <= 0) continue;
       job.left -= burn;
       if (job.left > 0) continue;
+      /*
+       * On an island the furnace is the island's. The count runs down here so
+       * the menu reads right between two looks at the ground, but what came
+       * out is the island's to say: it settles the furnace on its own clock
+       * and the next look brings the lump. A browser that made the lump
+       * itself made one the island had never heard of.
+       */
+      if (this.islandClock) { job.left = 0; continue; }
       s.jobs.shift();
       const made: Item =
         job.makes === 'anvil'
@@ -4940,6 +4948,8 @@ export class Game {
       if (!job || burn <= 0) continue;
       job.left -= burn;
       if (job.left > 0) continue;
+      // As for the smelter: on an island the ware is the island's to fire.
+      if (this.islandClock) { job.left = 0; continue; }
       k.jobs.shift();
       const made: Item = { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
       k.output.push(made);
