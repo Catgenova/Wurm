@@ -7835,3 +7835,55 @@ select '897. and what Realtime hands a browser off that row: '
      || (select array_to_string(attnames, ', ') from pg_publication_tables
           where pubname = 'supabase_realtime' and tablename = 'event')
      || ' — `said_by` among them, or the bubbles stop with nothing to say why';
+
+/*
+ * And what is growing, which nobody had been told to look for.
+ *
+ * Reported from the island: "farming is broken, planting crops doesn't change
+ * from an unfarmed field", and with it: make all the stages work with correct
+ * timers.
+ *
+ * One omission under both. `rpc_ground` has never carried a row of `crop` — it
+ * was found and wired up for `placed` and `crates` and the crops beside them
+ * were missed — so sowing wrote a row nothing on the other side would ever
+ * read. And `crop_settle` was only ever called by somebody touching that exact
+ * tile, so a stage advanced when you interacted with it and at no other time.
+ */
+\echo ''
+\echo '--- what is growing, and when it turns'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from crop where world_id = :'world2' \g /dev/null
+update player set x = 12.5, y = 12.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'till', '{"kind":"tile","x":12,"y":12}'::jsonb) \g /dev/null
+select give(:'world2', :'ivar', 'cotton_seed', 1, 40) \g /dev/null
+select act_perform(:'world2', :'ivar', 'plant_seed',
+  ('{"kind":"tile","x":12,"y":12,"itemUid":' || (select id from item where world_id = :'world2'
+     and holder_uid = :'ivar' and def = 'cotton_seed' order by id desc limit 1) || '}')::jsonb) \g /dev/null
+select jsonb_array_length((rpc_ground(:'world2', 40, true))->'crops') as sown_seen \gset
+select '898. sown on a tilled field at 12,12: the island holds '
+     || (select count(*) from crop where world_id = :'world2' and x = 12 and y = 12)
+     || ' crop there, and what a browser reading the ground is handed: ' || :'sown_seen'
+     || ' — which was 0 for every crop ever sown on this island, because the read never carried one';
+select ((rpc_ground(:'world2', 40, true))->'crops'->0)::text as sown_row \gset
+select '899. and what it says: ' || :'sown_row'
+     || ' — the stage, and how long it has been in it, which is what the browser counts from';
+-- Four stages at the crop's own pace, each one turned by the clock alone.
+select stage_seconds as per from crop_def where id = 'cotton' \gset
+select stage as s0 from crop where world_id = :'world2' and x = 12 and y = 12 \gset
+update crop set stage_at = stage_at - make_interval(secs => :per) where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
+select crops_settle(:'world2', 12.5, 12.5, 40) \g /dev/null
+select stage as s1 from crop where world_id = :'world2' and x = 12 and y = 12 \gset
+update crop set stage_at = stage_at - make_interval(secs => :per) where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
+select crops_settle(:'world2', 12.5, 12.5, 40) \g /dev/null
+select stage as s2 from crop where world_id = :'world2' and x = 12 and y = 12 \gset
+update crop set stage_at = stage_at - make_interval(secs => :per * 4) where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
+select crops_settle(:'world2', 12.5, 12.5, 40) \g /dev/null
+select '900. a stage of cotton is ' || :'per' || ' seconds, and standing the clock back one at a time: '
+     || :'s0' || ' → ' || :'s1' || ' → ' || :'s2' || ' → '
+     || (select stage from crop where world_id = :'world2' and x = 12 and y = 12)
+     || ' of ' || crop_ripe()
+     || ' — the last jump was four stages'' worth of waiting and it stops at ripe rather than running past it';
+select '901. and ripe is what the doors say it is: tending "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'tend_crop', '{"kind":"tile","x":12,"y":12}'::jsonb), 'ALLOWED')
+     || '", harvesting "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'harvest_crop', '{"kind":"tile","x":12,"y":12}'::jsonb), 'ALLOWED') || '"';

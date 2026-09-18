@@ -4267,6 +4267,7 @@ export class Game {
    * comes back as the same fire.
    */
   sawGround(ground: IslandGround): void {
+    this.crops.clear();
     this.crates.clear();
     this.campfires.clear();
     this.smelters.clear();
@@ -4377,6 +4378,29 @@ export class Game {
         if (d) this.events.emit('world', d.x, d.y);
         else if (was) this.events.emit('world', was.x, was.y);
       }
+    }
+    /*
+     * And what is growing, which was the last thing on the ground nobody had
+     * been told to look for.
+     *
+     * `placed` and `crates` were found and wired up when this read was built —
+     * the note at the top of this function is about exactly that — and `crop`
+     * sat in Postgres beside them and was missed. The whole of farming on an
+     * island is that miss: sowing wrote a row nothing ever read, so the field
+     * stayed bare, no stage was ever drawn, and `cropAt` answering nothing
+     * meant Sow went on being offered while Tend and Harvest never were.
+     *
+     * The stage is the island's. `growCrops` still moves one along between
+     * reads so a field looks alive rather than stepping every twenty seconds,
+     * and this puts it right each time — the same arrangement the wildlife's
+     * legs are drawn under.
+     */
+    for (const c of ground.crops ?? []) {
+      this.crops.set(`${c.x},${c.y}`, {
+        x: c.x, y: c.y, id: c.id, stage: c.stage,
+        stageAt: this.time - (Number.isFinite(c.ago) ? c.ago : 0),
+        tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
+      });
     }
     this.placed.crates.reset(this.crates.values());
     this.placed.campfires.reset(this.campfires.values());
@@ -5234,6 +5258,15 @@ export interface IslandCrate {
 export interface IslandGround {
   placed: IslandPlaced[];
   crates: IslandCrate[];
+  /**
+   * What is growing, and how far along.
+   *
+   * `ago` is seconds since the stage it is in began rather than the hour it
+   * began at: the island keeps `stage_at` as a timestamp and this browser
+   * counts in its own world seconds, and the one thing the two agree on
+   * without any arrangement is how long a second is.
+   */
+  crops?: Array<{ x: number; y: number; id: string; stage: number; ago: number; tended: number; tendedNow: boolean; ql: number }>;
   deed: { name: string; x: number; y: number; radius: number; level: number; mine: boolean } | null;
   /**
    * Other people's settlements, and only those near enough to be standing in.
