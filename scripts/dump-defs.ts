@@ -27,7 +27,7 @@ import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } fro
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
-import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS } from '../src/game/traits';
+import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS, FIGHT_SHARE } from '../src/game/traits';
 import { CRAFT_HEAD } from '../src/game/recipes';
 import { SMITH_GAIN } from '../src/game/anvil';
 import { BREW_GAIN } from '../src/game/brewing';
@@ -357,6 +357,8 @@ out.push(`create table if not exists dyeable_item (id text primary key);`);
 out.push(`create table if not exists dyeable_class (cls text primary key);`);
 /* The husbandry it takes to read a trait off an animal. */
 out.push(`alter table tier_odds add column if not exists level real not null default 0;`);
+/* The name a fighting trait's four grades share. */
+out.push(`alter table trait_def add column if not exists family text;`);
 /*
  * What a prayer buys, and the three ways of looking at the island.
  *
@@ -845,7 +847,7 @@ for (const [item, content] of Object.entries(METAL_CONTENT).sort()) out.push(`in
 for (const [id, weight] of WILD_SPECIES) out.push(`insert into wild_table values (${q(id)}, ${q(weight)}, false, null);`);
 for (const [id, weight] of MONSTERS) out.push(`insert into wild_table values (${q(id)}, ${q(weight)}, true, ${q(MONSTER_CAP[id] ?? 1)});`);
 for (const t of TRAITS) {
-  out.push(`insert into trait_def values (${q(t.id)}, ${q(t.name)}, ${q(t.tier)}, ${q(!!t.aura)}, ${q(t.note)});`);
+  out.push(`insert into trait_def values (${q(t.id)}, ${q(t.name)}, ${q(t.tier)}, ${q(!!t.aura)}, ${q(t.note)}, ${q(t.family ?? null)});`);
   for (const [channel, mul] of Object.entries(t.effects)) out.push(`insert into trait_effect values (${q(t.id)}, ${q(channel)}, ${q(mul)});`);
 }
 CHANNELS.forEach((ch, ord) =>
@@ -858,6 +860,8 @@ for (const a of Object.values(AGES)) {
 // The two loose numbers, as functions rather than a row with no table to be in.
 out.push(`create or replace function monster_share() returns double precision language sql immutable as $fn$ select ${q(MONSTER_SHARE)}::double precision $fn$;`);
 out.push(`create or replace function trait_slots() returns int language sql immutable as $fn$ select ${q(TRAIT_SLOTS)} $fn$;`);
+/* And the share of a wild roll that is fighting blood, which then rolls its own grade. */
+out.push(`create or replace function fight_share() returns double precision language sql immutable as $fn$ select ${q(FIGHT_SHARE)}::double precision $fn$;`);
 /* A gap worth bridging, two banks that will carry one deck, and a pair that
  * will stand close enough to be put together. */
 for (const [fn, v] of [

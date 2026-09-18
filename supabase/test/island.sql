@@ -9578,3 +9578,68 @@ select '1002. Ivar swings at a wild orse (' || :'swing_door' || '), which comes 
      || ', and Fang, defensive and standing by, '
      || (select case when enemy = :'kicker' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID') || '"'
                      else 'STANDS' end from creature where world_id = :'world2' and id = :'heel');
+
+/*
+ * Thirty traits for a fight, each with a roll of its own for the grade.
+ *
+ * A plain trait is its tier; fighting blood is a name and a grade, and the
+ * grade is rolled for it. And a line climbs: the browser's breeding had the
+ * chance of a trait coming through a tier better since the day it was
+ * written, and the island's never did, until now.
+ */
+\echo ''
+\echo '--- fighting blood, and the grade it comes in'
+select '1003. on the table: ' || (select count(*) from trait_def) || ' traits, '
+     || (select count(*) from trait_def where family is null) || ' plain and '
+     || (select count(*) from trait_def where family is not null) || ' fighting — '
+     || (select count(distinct family) from trait_def where family is not null) || ' names in '
+     || (select count(distinct tier) from trait_def where family is not null) || ' grades each; '
+     || fight_share() || ' of a wild roll is fighting blood; ' || (select count(*) from channel_def) || ' channels, the four for a fight '
+     || (select string_agg(id || ' (' || label || case when up then ', more is better' else ', less is better' end || ')', ', ' order by ord)
+         from channel_def where id in ('soak', 'evade', 'haste', 'mend'))
+     || '; plated in its four grades: ' || (select string_agg(d.name || ' ' || e.mul, ', ' order by o.ord)
+         from trait_def d join trait_effect e on e.trait = d.id join tier_odds o on o.tier = d.tier where d.family = 'plated')
+     || '; read off a card: ' || trait_worth('{plated_fantastic}') || ' | ' || trait_worth('{fanged_supreme,quick_jawed}')
+     || '; and named: ' || trait_names('{fanged_supreme,quick_jawed,shield_wall_rare}');
+-- Three thousand animals out of the wild, and what their blood is.
+create temp table blood_rolls as select roll_traits(0) as t from generate_series(1, 3000);
+select '1004. three thousand animals out of the wild: ' || (select count(*) from blood_rolls where array_length(t, 1) = 3) || ' with three traits, '
+     || (select count(*) from blood_rolls r where (select count(distinct trait_family(u)) from unnest(r.t) u) < 3) || ' carrying one name twice; of '
+     || (select count(*) from blood_rolls r cross join unnest(r.t) u) || ' traits, '
+     || (select count(*) from blood_rolls r cross join unnest(r.t) u join trait_def d on d.id = u where d.family is not null) || ' are fighting blood ('
+     || (select round(100.0 * count(*) filter (where d.family is not null) / count(*), 1) from blood_rolls r cross join unnest(r.t) u join trait_def d on d.id = u)
+     || '% against a share of ' || round(fight_share() * 100) || '%), graded '
+     || (select string_agg(g.tier || ' ' || g.n, ', ' order by g.ord) from (
+           select o.tier, o.ord, count(*) as n from blood_rolls r cross join unnest(r.t) u
+           join trait_def d on d.id = u join tier_odds o on o.tier = d.tier where d.family is not null group by o.tier, o.ord) g)
+     || ' — the wild odds being ' || (select string_agg(tier || ' ' || weight, ', ' order by ord) from tier_odds);
+-- A thousand foals, and what a line does.
+create temp table blood_foals as select breed_traits('{fanged_rare,thick_hided,fleet}', '{fanged_supreme,plated,swift}', 100, 1) as t from generate_series(1, 1000);
+select '1005. a thousand foals of a fanged (rare) sire and a fanged (supreme) dam at husbandry 100, well brushed: '
+     || (select count(*) from blood_foals where array_length(t, 1) = 3) || ' with three traits, '
+     || (select count(*) from blood_foals f where (select count(distinct trait_family(u)) from unnest(f.t) u) < 3) || ' carrying a name twice, '
+     || (select count(*) from blood_foals f where 'fanged_fantastic' = any(f.t)) || ' fanged (fantastic), which neither parent was — a grade climbed of its own name — '
+     || (select count(*) from blood_foals f where exists (select 1 from unnest(f.t) u join trait_def d on d.id = u where d.family = 'fanged')) || ' fanged at all, and '
+     || (select count(*) from blood_foals f where exists (select 1 from unnest(f.t) u join trait_def d on d.id = u where d.family is null and d.tier = 'fantastic'))
+     || ' with a fantastic plain trait, climbed into from swift';
+-- And the rules read the blood.
+delete from creature where world_id = :'world2' and mode in ('wild', 'active') \g /dev/null
+select creature_spawn(:'world2', 'rabba', 9.5, 6.5, 'wild', now() - interval '2 hours') as brute \gset
+update creature set traits = '{plated_fantastic,big_boned_fantastic,fanged_fantastic}', until = now() + interval '1 hour'
+  where world_id = :'world2' and id = :'brute' \g /dev/null
+select max_health(c) as brute_top, round(attack_of(c)::numeric, 1) as brute_hits from creature c where c.world_id = :'world2' and c.id = :'brute' \gset
+update creature set health = :'brute_top' where world_id = :'world2' and id = :'brute' \g /dev/null
+select wound_beast(:'world2', :'brute', 10) \g /dev/null
+select round(health::numeric, 1) as brute_left from creature where world_id = :'world2' and id = :'brute' \gset
+-- Ten seconds of healing on the same rabba, quick-healing (fantastic) in place of the fangs and the plate.
+update creature set traits = '{quick_healing_fantastic,big_boned_fantastic}', hurt_at = now() - interval '20 seconds',
+    settled_at = now() - interval '10 seconds' where world_id = :'world2' and id = :'brute' \g /dev/null
+select creature_settle(:'world2', :'brute') \g /dev/null
+select '1006. a rabba of 20 that is plated, big-boned and fanged, all fantastic: it can take ' || :'brute_top'
+     || ', hits for ' || :'brute_hits'
+     || ' where a plain one hits for 3, and a blow of 10 costs it ' || round(:'brute_top'::numeric - :'brute_left'::numeric, 1) || ' (' || :'brute_left' || ' left)'
+     || '; quick-healing (fantastic) in place of the fangs and the plate, ten seconds close '
+     || (select round((health - :'brute_left'::real)::numeric, 1) from creature where world_id = :'world2' and id = :'brute')
+     || ' of that where a plain rabba closes 2.5; slippery (fantastic) would be hit '
+     || (select round((trait_mul('{slippery_fantastic}', 'evade') * 100)::numeric) ) || ' times where a plain one is hit 100, and quick-jawed (fantastic) at heel would strike every '
+     || round((companion_blow() / trait_mul('{quick_jawed_fantastic}', 'haste'))::numeric, 2) || ' seconds against ' || companion_blow();

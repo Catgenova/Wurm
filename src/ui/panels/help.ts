@@ -1185,10 +1185,18 @@ function helpText(): string {
     better. Traits lift how fast it <b>moves</b>, how quickly it <b>works</b>, how fast what it does
     goes into it as <b>skill</b>, what it can <b>carry and pull</b>, what it <b>brings back</b>, how
     little it <b>eats</b>, how much it can <b>take</b>, how hard it <b>hits</b>, how far it
-    <b>sees</b>, how far it will <b>range</b>, and how fast <b>fleece and milk</b> come back on it.</p>
+    <b>sees</b>, how far it will <b>range</b>, how fast <b>fleece and milk</b> come back on it &mdash; and in a
+    fight, what a blow <b>costs</b> it, how often a swing at it <b>lands</b>, how quickly its own <b>blows</b>
+    come and how fast its wounds <b>close</b>.</p>
     <p>A few traits are <b>communal</b> (marked &#9673;): what they lift, they lift for every wildermon
     working the same settlement or the same post, the bearer included. One <i>pack leader</i> standing
     in the field makes a whole deed quicker and brighter.</p>
+    <p>Thirty of the traits are <b>fighting blood</b> &mdash; fanged, plated, slippery, quick-jawed,
+    quick-healing and the rest &mdash; and those come in all four tiers of the one name. When one rolls,
+    its <b>grade</b> is a roll of its own off the same odds, so a fanged animal may be fanged, fanged
+    (rare), fanged (supreme) or fanged (fantastic), each worth steeply more than the last, and a line
+    is bred up a grade at a time under the same husbandry. About a third of what the wild throws up is
+    fighting blood, and no animal carries two grades of one name.</p>
     <p>What is walking about in the wild is almost all common. Better blood is <b>bred</b>, and that is
     what <b>animal husbandry</b> is for. Make a <b>brush</b> (a plank and two wool, with a carving
     knife) and <b>brush a wildermon down</b>: it puts <b>care</b> into the animal, and a cared-for beast

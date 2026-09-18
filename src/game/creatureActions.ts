@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
@@ -402,7 +402,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const usable = wdef && !bow ? wdef : FIST;
       const item = wdef && !bow ? held : null;
       const before = c.health;
-      const landed = g.rand() <= hitChance(g, usable);
+      // Its blood has a say in whether you connect at all.
+      const landed = g.rand() <= hitChance(g, usable) * bloodMul(c, 'evade');
       g.gainSkill('fighting', tryGain(landed, SWING_FIGHT));
       g.gainSkill(usable.kind, tryGain(landed, SWING_ARM));
       g.gainSkill('body_strength', tryGain(landed, SWING_BODY));
@@ -471,7 +472,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.fought(DARK_SHOT);
       // The far end of a bow's range is a far harder shot than the near end.
       const reach = 1 - (d / (bow.range ?? 6)) * 0.35;
-      const landed = g.rand() <= hitChance(g, bow) * reach;
+      const landed = g.rand() <= hitChance(g, bow) * reach * bloodMul(c, 'evade');
       g.gainSkill('fighting', tryGain(landed, SHOT_FIGHT));
       g.gainSkill('archery', tryGain(landed, SHOT_ARCHERY));
       if (!landed) {

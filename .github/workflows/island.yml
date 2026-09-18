@@ -341,6 +341,15 @@ jobs:
             --outfile=node_modules/.cache/orchard.mjs --log-level=error
           node node_modules/.cache/orchard.mjs
 
+      - name: Thirty traits for a fight, each in four grades
+        run: |
+          # Fighting blood is a name and a grade rolled for it: thirty names in
+          # all four tiers, a share of the wild's rolls, never two grades of one
+          # name on an animal, and a line that climbs a grade of its own name.
+          npx esbuild supabase/test/blood.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/blood.mjs --log-level=error
+          node node_modules/.cache/blood.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

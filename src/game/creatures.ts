@@ -2220,6 +2220,11 @@ export class Creatures {
     return bloodMul(c, 'yield') * this.aura(c, 'yield');
   }
 
+  /** Its blood and its herd together on one channel: what a fight rule reads. */
+  mul(c: Creature, channel: TraitChannel): number {
+    return bloodMul(c, channel) * this.aura(c, channel);
+  }
+
   /** The player's companion. */
   active(): Creature | undefined {
     for (const c of this.list.values()) if (c.mode === 'active') return c;
@@ -2534,7 +2539,7 @@ export class Creatures {
     c.moving = false;
     const top = maxHealth(c, def);
     if (c.health > top) c.health = top;
-    else if (c.health < top && game.time - c.attackedAt > 6) c.health = Math.min(top, c.health + elapsed * (c.mode === 'wild' ? 0.25 : 0.6));
+    else if (c.health < top && game.time - c.attackedAt > 6) c.health = Math.min(top, c.health + elapsed * (c.mode === 'wild' ? 0.25 : 0.6) * bloodMul(c, 'mend'));
     // A yearling grows no fleece and gives no milk; an old one is slower at both.
     const growth = ageDef(c, game.time).growth;
     if (def.fleece && growth > 0 && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece * growth * bloodMul(c, 'grow'));
@@ -3432,7 +3437,7 @@ export class Creatures {
         if (Math.hypot(e.x - c.x, e.y - c.y) <= 1) {
           if (c.cooldown <= 0) {
             this.attack(game, c, e);
-            c.cooldown = 1.2;
+            c.cooldown = 1.2 / this.mul(c, 'haste');
           }
         } else if (this.stepToward(game, c, e.x, e.y, dt, 1.3) === 'blocked') c.enemy = null;
         return true;
@@ -3483,7 +3488,7 @@ export class Creatures {
         if (d <= 1.1) {
           if (c.cooldown <= 0) {
             this.attack(game, c, e);
-            c.cooldown = 1.1;
+            c.cooldown = 1.1 / this.mul(c, 'haste');
           }
         } else if (this.stepToward(game, c, e.x, e.y, dt, 1.4) === 'blocked') c.enemy = null;
         return true;
@@ -3569,7 +3574,7 @@ export class Creatures {
         if (d <= 1) {
           if (c.cooldown <= 0) {
             this.attack(game, c, e);
-            c.cooldown = 1.2;
+            c.cooldown = 1.2 / this.mul(c, 'haste');
           }
         } else if (this.stepToward(game, c, e.x, e.y, dt, 1.3) === 'blocked') c.enemy = null;
         return;
@@ -3737,7 +3742,7 @@ export class Creatures {
     }
     if (d <= 1.1) {
       if (c.cooldown <= 0) {
-        c.cooldown = 1.4;
+        c.cooldown = 1.4 / this.mul(c, 'haste');
         p.attackedBy = c.id;
         p.attackedAt = game.time;
         game.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} is on you`, def.wound ?? 'bite');
@@ -3794,7 +3799,7 @@ export class Creatures {
         if (d <= COMPANION_REACH) {
           if (c.cooldown <= 0) {
             this.attack(game, c, e);
-            c.cooldown = COMPANION_BLOW;
+            c.cooldown = COMPANION_BLOW / this.mul(c, 'haste');
           }
         } else if (this.stepToward(game, c, e.x, e.y, dt, COMPANION_PACE) === 'blocked') {
           c.enemy = null;
@@ -4050,7 +4055,8 @@ export class Creatures {
   attack(game: Game, a: Creature, t: Creature): void {
     // A hunter hits harder the more hunting it has done: half again at mastery.
     const trained = 1 + (a.skills[FIGHT_SKILL] ?? 0) / 200;
-    const dmg = this.species(a).attack * trained * (0.7 + game.rand() * 0.6);
+    // Its blood has a say in what it lands for, as it does in what it bites you for.
+    const dmg = this.species(a).attack * this.mul(a, 'tough') * trained * (0.7 + game.rand() * 0.6);
     this.hurt(game, t, dmg, a);
     if (a.skills[FIGHT_SKILL] !== undefined) this.gainSkill(game, a, FIGHT_SKILL, 0.05);
   }
@@ -4059,7 +4065,8 @@ export class Creatures {
   hurt(game: Game, t: Creature, dmg: number, by: Creature | 'player'): void {
     const from = by === 'player' ? game.player : by;
     const before = t.health;
-    t.health -= dmg;
+    // What a blow costs it is its blood's to say, and its herd's.
+    t.health -= dmg * this.mul(t, 'soak');
     t.attackedBy = by === 'player' ? PLAYER_ATTACKER : by.id;
     t.attackedAt = game.time;
     game.events.emit('hit', t.x, t.y, Math.max(0, before - Math.max(0, t.health)), 'dealt');

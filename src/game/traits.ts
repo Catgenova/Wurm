@@ -11,6 +11,11 @@
  * almost all common, and the only way to put a fantastic trait into a herd is
  * to breed for it, generation after generation, with animal husbandry behind
  * you and a brush in your hand.
+ *
+ * Thirty of them are **fighting blood** (`FIGHTING`): one name in all four
+ * tiers, so a fanged animal may be fanged, fanged (rare), fanged (supreme) or
+ * fanged (fantastic), and which of those it is born with is a roll of its
+ * own, off the same odds as the rest.
  */
 
 export type TraitTier = 'common' | 'rare' | 'supreme' | 'fantastic';
@@ -41,7 +46,15 @@ export type TraitChannel =
   /** How far from the token or the post it will work. */
   | 'range'
   /** How fast fleece grows back and milk comes in. */
-  | 'grow';
+  | 'grow'
+  /** What a blow costs it once it lands; below one is armour. */
+  | 'soak'
+  /** How often a swing at it lands; below one is hard to hit. */
+  | 'evade'
+  /** How quickly its blows come. */
+  | 'haste'
+  /** How fast its wounds close. */
+  | 'mend';
 
 export interface TraitDef {
   id: string;
@@ -55,6 +68,11 @@ export interface TraitDef {
    * makes a whole deed quicker.
    */
   aura?: boolean;
+  /**
+   * The fighting trait this is one grade of. Fighting blood comes in all four
+   * tiers of the one name, and which grade an animal gets is its own roll.
+   */
+  family?: string;
   note: string;
 }
 
@@ -67,7 +85,7 @@ export const TIER_COLOUR: Record<TraitTier, string> = {
   fantastic: '#f0c060',
 };
 
-export const TRAITS: TraitDef[] = [
+const PLAIN_TRAITS: TraitDef[] = [
   // ---- Common: a few percent apiece, and most of what the wild holds. ----
   { id: 'light_footed', name: 'light-footed', tier: 'common', effects: { speed: 1.08 }, note: 'It picks its way quickly.' },
   { id: 'willing', name: 'willing', tier: 'common', effects: { work: 1.08 }, note: 'It sets to work without being asked twice.' },
@@ -108,13 +126,103 @@ export const TRAITS: TraitDef[] = [
   { id: 'ironsides', name: 'ironsides', tier: 'fantastic', effects: { hardy: 2, tough: 1.6 }, note: 'It has been through worse than you can arrange.' },
 ];
 
+// ---- Fighting blood ----
+
+/**
+ * Thirty traits for a fight, each in all four tiers.
+ *
+ * Asked for: "add 30 combat traits that can roll on wildermon, each with its
+ * own rarity roll as well". A plain trait *is* its tier — scrappy is common
+ * and ironsides fantastic — so the tier roll and the trait roll are one
+ * roll. Fighting blood is a name and a grade: the roll picks the name, and
+ * then rolls the grade for it off the same wild odds, lifted by husbandry
+ * like the rest. What it is worth climbs with the grade by `GRADE_STEP`, so
+ * a fanged animal hits for a tenth more and a fanged (fantastic) one for
+ * seven tenths more, the same steep climb the plain tiers keep.
+ *
+ * Every one of them goes into `TRAITS` as four rows, one a tier, so a card,
+ * a roll, a breeding and the island's tables read them like any other
+ * trait; `family` on the row is the name they share, and an animal never
+ * carries two grades of one name.
+ */
+export interface FightingTraitDef {
+  id: string;
+  name: string;
+  /** What it lifts at the common grade, as a share: 0.1 is a tenth. */
+  gains: Partial<Record<TraitChannel, number>>;
+  aura?: boolean;
+  note: string;
+}
+
+export const FIGHTING: FightingTraitDef[] = [
+  // What its blows land for.
+  { id: 'fanged', name: 'fanged', gains: { tough: 0.1 }, note: 'Long teeth, and it uses them.' },
+  { id: 'heavy_pawed', name: 'heavy-pawed', gains: { tough: 0.12 }, note: 'There is weight behind everything it lands.' },
+  { id: 'hook_clawed', name: 'hook-clawed', gains: { tough: 0.09 }, note: 'What it catches, it opens.' },
+  { id: 'hard_biting', name: 'hard-biting', gains: { tough: 0.11 }, note: 'It does not let go until something gives.' },
+  { id: 'horned', name: 'horned', gains: { tough: 0.08, hardy: 0.03 }, note: 'It meets what comes at it head first.' },
+  // How much it can take.
+  { id: 'thick_hided', name: 'thick-hided', gains: { hardy: 0.1 }, note: 'There is a lot of it between a blow and anything that matters.' },
+  { id: 'big_boned', name: 'big-boned', gains: { hardy: 0.12 }, note: 'Built heavier than its kind.' },
+  { id: 'broad_chested', name: 'broad-chested', gains: { hardy: 0.09, mend: 0.03 }, note: 'Room in it for a long fight.' },
+  { id: 'stout', name: 'stout', gains: { hardy: 0.11 }, note: 'It takes a great deal of stopping.' },
+  { id: 'long_lived', name: 'long-lived', gains: { hardy: 0.08, mend: 0.05 }, note: 'Old wounds and old years sit lightly on it.' },
+  // What a blow costs it.
+  { id: 'tough_skinned', name: 'tough-skinned', gains: { soak: 0.1 }, note: 'A blow lands, and less of it goes in.' },
+  { id: 'plated', name: 'plated', gains: { soak: 0.12 }, note: 'The hide over its back is nearer shell than skin.' },
+  { id: 'scarred', name: 'scarred', gains: { soak: 0.08, tough: 0.03 }, note: 'It has been in fights before, and learned from them.' },
+  { id: 'bristled', name: 'bristled', gains: { soak: 0.09 }, note: 'Everything about it says do not.' },
+  { id: 'stone_backed', name: 'stone-backed', gains: { soak: 0.11 }, note: 'Strike it and it is your hand that hurts.' },
+  // How often a swing at it lands.
+  { id: 'slippery', name: 'slippery', gains: { evade: 0.1 }, note: 'It is never quite where the blow lands.' },
+  { id: 'wary', name: 'wary', gains: { evade: 0.11 }, note: 'It sees a swing coming a long way off.' },
+  { id: 'nimble', name: 'nimble', gains: { evade: 0.08, speed: 0.03 }, note: 'Light on its feet in a fight.' },
+  { id: 'low_slung', name: 'low-slung', gains: { evade: 0.1 }, note: 'It goes under what was meant for it.' },
+  { id: 'sharp_eyed', name: 'sharp-eyed', gains: { evade: 0.09 }, note: 'Nothing gets to it unseen.' },
+  // How quickly its blows come.
+  { id: 'quick_jawed', name: 'quick-jawed', gains: { haste: 0.1 }, note: 'It bites twice where another bites once.' },
+  { id: 'snappish', name: 'snappish', gains: { haste: 0.11 }, note: 'It does not wait to be sure.' },
+  { id: 'twitchy', name: 'twitchy', gains: { haste: 0.08, evade: 0.03 }, note: 'Never still, and never where it was.' },
+  { id: 'sudden', name: 'sudden', gains: { haste: 0.1 }, note: 'It is on you before you have decided about it.' },
+  { id: 'wild_eyed', name: 'wild-eyed', gains: { haste: 0.09, tough: 0.03 }, note: 'Something in it does not know when to stop.' },
+  // How fast its wounds close.
+  { id: 'quick_healing', name: 'quick-healing', gains: { mend: 0.12 }, note: 'It closes in a day what would lay another up for a week.' },
+  { id: 'clean_blooded', name: 'clean-blooded', gains: { mend: 0.1 }, note: 'Its wounds do not go bad.' },
+  { id: 'hard_to_kill', name: 'hard to kill', gains: { mend: 0.08, hardy: 0.04 }, note: 'It has been left for dead before.' },
+  // And two that fight for the herd.
+  { id: 'war_leader', name: 'war leader', gains: { tough: 0.04, haste: 0.02 }, aura: true, note: 'The others fight harder with it in the line.' },
+  { id: 'shield_wall', name: 'shield wall', gains: { soak: 0.04 }, aura: true, note: 'Beside it the herd stands closer and takes less.' },
+];
+
+/** What each grade multiplies the common gain by: the same steep climb the plain tiers keep. */
+export const GRADE_STEP: Record<TraitTier, number> = { common: 1, rare: 2.5, supreme: 4.5, fantastic: 7 };
+/** The channels where less is better. `CHANNELS` says the same of each, and the blood test checks they agree. */
+export const DOWN_CHANNELS = new Set<TraitChannel>(['appetite', 'soak', 'evade']);
+/** The row id of one grade of a name: the plain name for common, and the tier hung on it above that. */
+export const gradeId = (family: string, tier: TraitTier): string => tier === 'common' ? family : `${family}_${tier}`;
+/** What a gain is worth at a grade: a tenth more, or on a channel where less is better, a tenth less of it. */
+export function gradeMul(channel: TraitChannel, gain: number, tier: TraitTier): number {
+  const g = gain * GRADE_STEP[tier];
+  return Math.round((DOWN_CHANNELS.has(channel) ? 1 / (1 + g) : 1 + g) * 1000) / 1000;
+}
+export const FIGHTING_TRAITS: TraitDef[] = FIGHTING.flatMap((f) => TIERS.map((tier): TraitDef => {
+  const effects: Partial<Record<TraitChannel, number>> = {};
+  for (const [ch, g] of Object.entries(f.gains)) effects[ch as TraitChannel] = gradeMul(ch as TraitChannel, g as number, tier);
+  return { id: gradeId(f.id, tier), name: tier === 'common' ? f.name : `${f.name} (${tier})`, tier, family: f.id, aura: f.aura, effects, note: f.note };
+}));
+/** The share of what the wild throws up, per slot, that is fighting blood. */
+export const FIGHT_SHARE = 0.3;
+
+export const TRAITS: TraitDef[] = [...PLAIN_TRAITS, ...FIGHTING_TRAITS];
+
 export const TRAIT_BY_ID = new Map(TRAITS.map((t) => [t.id, t]));
 export const traitOf = (id: string): TraitDef | undefined => TRAIT_BY_ID.get(id);
+/** The plain traits by tier: what a roll that is not fighting blood draws from, and what a plain trait climbs into. */
 export const BY_TIER: Record<TraitTier, TraitDef[]> = {
-  common: TRAITS.filter((t) => t.tier === 'common'),
-  rare: TRAITS.filter((t) => t.tier === 'rare'),
-  supreme: TRAITS.filter((t) => t.tier === 'supreme'),
-  fantastic: TRAITS.filter((t) => t.tier === 'fantastic'),
+  common: PLAIN_TRAITS.filter((t) => t.tier === 'common'),
+  rare: PLAIN_TRAITS.filter((t) => t.tier === 'rare'),
+  supreme: PLAIN_TRAITS.filter((t) => t.tier === 'supreme'),
+  fantastic: PLAIN_TRAITS.filter((t) => t.tier === 'fantastic'),
 };
 
 /** Traits every wildermon carries. */
@@ -139,10 +247,16 @@ function rollTier(odds: Record<TraitTier, number>, rand: () => number): TraitTie
   return 'common';
 }
 
+/** The name a row answers to in a roll: a fighting trait's family, or the plain trait itself. */
+export const familyOf = (id: string): string => TRAIT_BY_ID.get(id)?.family ?? id;
+/** Whether a set already carries a name, in any grade. */
+const holds = (taken: string[], id: string): boolean => taken.some((t) => familyOf(t) === familyOf(id));
+
 /**
  * One fresh trait out of the wild, avoiding what is already there. Husbandry
  * tilts the table: a keeper who knows what they are looking at finds better
- * blood in the wild as well as breeding it.
+ * blood in the wild as well as breeding it. A share of what comes up is
+ * fighting blood, and that is two rolls: the name, and then its own grade.
  */
 export function rollTrait(rand: () => number, taken: string[] = [], husbandry = 0): string | null {
   const lift = Math.max(0, Math.min(100, husbandry)) / 100;
@@ -153,10 +267,12 @@ export function rollTrait(rand: () => number, taken: string[] = [], husbandry = 
     fantastic: WILD_ODDS.fantastic * (1 + lift * 5),
   };
   for (let i = 0; i < 12; i++) {
-    const t = pick(BY_TIER[rollTier(odds, rand)], rand);
-    if (!taken.includes(t.id)) return t.id;
+    const id = rand() < FIGHT_SHARE
+      ? gradeId(pick(FIGHTING, rand).id, rollTier(odds, rand))
+      : pick(BY_TIER[rollTier(odds, rand)], rand).id;
+    if (!holds(taken, id)) return id;
   }
-  const rest = TRAITS.filter((t) => !taken.includes(t.id));
+  const rest = TRAITS.filter((t) => !holds(taken, t.id));
   return rest.length ? pick(rest, rand).id : null;
 }
 
@@ -202,7 +318,7 @@ export const hasAura = (traits: string[] | undefined): boolean => (traits ?? [])
 // ---- What a channel is, in the words a card uses ----
 
 /**
- * The eleven things a trait can lift, written out.
+ * The fifteen things a trait can lift, written out.
  *
  * Every one of these was already declared on `TraitChannel` with a line of
  * comment above it, and a comment is not something a card can print. Reported
@@ -222,7 +338,7 @@ export interface ChannelDef {
   label: string;
   /** What it actually decides. */
   note: string;
-  /** Whether more of it is better. False for appetite, and only appetite. */
+  /** Whether more of it is better. False for appetite, and for the two fighting channels where less is better: what a blow costs and how often one lands. */
   up: boolean;
 }
 
@@ -238,6 +354,10 @@ export const CHANNELS: ChannelDef[] = [
   { id: 'sight', label: 'sight', up: true, note: 'how far it sees for you' },
   { id: 'range', label: 'range', up: true, note: 'how far from the token or the post it will work' },
   { id: 'grow', label: 'regrowth', up: true, note: 'how fast fleece grows back and milk comes in' },
+  { id: 'soak', label: 'damage taken', up: false, note: 'what a blow costs it once it lands' },
+  { id: 'evade', label: 'chance to be hit', up: false, note: 'how often a swing at it lands' },
+  { id: 'haste', label: 'speed of blows', up: true, note: 'how quickly its blows come' },
+  { id: 'mend', label: 'healing', up: true, note: 'how fast its wounds close' },
 ];
 
 export const CHANNEL_BY_ID = new Map(CHANNELS.map((c) => [c.id, c]));
@@ -331,7 +451,8 @@ export function breedTraits(
   const lift = Math.max(0, Math.min(100, husbandry)) / 100;
   const out: string[] = [];
   for (let slot = 0; slot < TRAIT_SLOTS; slot++) {
-    const left = pool.filter((id) => !out.includes(id));
+    // What the pair carry that the foal does not, by name: two grades of one name are one name.
+    const left = pool.filter((id) => !holds(out, id));
     let id: string | null = null;
     if (left.length && rand() < keep) {
       // A good keeper's eye falls on the best of what the pair carry.
@@ -349,13 +470,18 @@ export function breedTraits(
       id = rollTrait(rand, out, husbandry);
     }
     if (!id) continue;
-    // And then the chance that it comes through better than it went in.
+    // And then the chance that it comes through better than it went in. Fighting
+    // blood climbs a grade of its own name; a plain trait climbs into the tier above.
     if (rand() < up) {
       const above = nextTier(traitTier(id));
-      const room = above ? BY_TIER[above].filter((t) => !out.includes(t.id)) : [];
-      if (room.length) id = pick(room, rand).id;
+      const fam = TRAIT_BY_ID.get(id)?.family;
+      if (above && fam) id = gradeId(fam, above);
+      else {
+        const room = above ? BY_TIER[above].filter((t) => !holds(out, t.id)) : [];
+        if (room.length) id = pick(room, rand).id;
+      }
     }
-    if (!out.includes(id)) out.push(id);
+    if (!holds(out, id)) out.push(id);
   }
   // A short straw in the draw never leaves a foal with fewer than three.
   while (out.length < TRAIT_SLOTS) {
