@@ -52,6 +52,7 @@ import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
 import { MELT_HEAT, MELT_KEEP, MELT_SHARE, METAL_CONTENT } from '../src/game/melt';
+import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR } from '../src/game/metal';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
@@ -404,6 +405,8 @@ out.push(`create table if not exists metal_def (
 );`);
 /* The six that come out of the same charge of ore as a tenth of a lump. */
 out.push(`alter table metal_def add column if not exists rare boolean not null default false;`);
+/* Which metals a coin is struck from. */
+out.push(`alter table metal_def add column if not exists coins boolean not null default false;`);
 out.push(`create table if not exists pottery_def (
   unfired text primary key, fired text not null, seconds real not null
 );`);
@@ -788,6 +791,7 @@ for (const [cat, per] of Object.entries(CATEGORY_DECAY)) out.push(`insert into c
 for (const m of METALS) {
   out.push(`insert into metal_def values (${q(m.id)}, ${q(m.name)}, ${q(m.ore)}, ${q(m.lump)}, ${q(m.level)}, ${q(m.work)}, ${q(RARE_METALS.has(m.id))});`);
 }
+for (const id of COIN_METALS) out.push(`update metal_def set coins = true where id = ${q(id)};`);
 for (const d of POTTERY) out.push(`insert into pottery_def values (${q(d.unfired)}, ${q(d.fired)}, ${q(d.seconds)});`);
 for (const d of MOULDS) {
   out.push(`insert into mould_def values (${q(d.id)}, ${q(d.name)}, ${q(d.makes)}, ${q(d.skill)}, ${q(d.sand)}, ${q(d.difficulty)}, ${q(d.lumps)}, ${q(d.per ?? 1)});`);
@@ -914,6 +918,8 @@ for (const [fn, v] of [
   ['dredge_depth', DREDGE_DEPTH],
   /* What the fire gives back of a thing melted down, and the heat it takes. */
   ['melt_share', MELT_SHARE], ['melt_keep', MELT_KEEP], ['melt_heat', MELT_HEAT],
+  /* Coins: how many a lump strikes, what a strike costs the die, and how hard a strike is. */
+  ['coins_per_lump', COINS_PER_LUMP], ['die_wear', DIE_WEAR], ['coin_difficulty', COIN_DIFFICULTY],
   /* And how long a tree stands at one age, in real seconds, and what it leaves. */
   ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
   ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],

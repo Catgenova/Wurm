@@ -4,7 +4,7 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, rollRarity, RARITY_WORD, type Item } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
-import { METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldLumps, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
+import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldLumps, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
 
 /**
  * An anvil: cast whole in a smelter, set down on four subtiles, and the place
@@ -106,6 +106,65 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       g.inventory.add('anvil', { ql: a.ql, extra: a.metal });
       g.logMsg(`You heave the ${anvilName(a).toLowerCase()} up onto your shoulder.`, 'event');
       g.events.emit('world', a.x, a.y);
+    },
+  },
+  {
+    id: 'strike_coins',
+    label: 'Strike coins',
+    verb: 'striking coins',
+    hidden: true,
+    stamina: 0.05,
+    baseTime: 8,
+    applies: (t, g) => anvilOf(g, t) !== undefined,
+    check: (t, g) => {
+      const a = anvilOf(g, t);
+      if (!a) return 'It is gone.';
+      const [cx, cy] = anvilCentre(a);
+      if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return 'Stand at the anvil.';
+      if (!g.inventory.has('coin_die')) return 'You need a coin die.';
+      const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined);
+      if (!lump) return 'You have no metal to strike.';
+      if (!COIN_METALS.includes(METAL_BY_LUMP.get(lump.id)?.id ?? '')) return 'Coins are struck from silver or gold.';
+      return null;
+    },
+    perform: (t, g) => {
+      const a = anvilOf(g, t);
+      if (!a || t.kind !== 'anvil') return;
+      const die = g.inventory.find('coin_die');
+      const lump = lumpFor(g, t.itemUid);
+      const metal = lump && METAL_BY_LUMP.get(lump.id);
+      if (!die || !lump || !metal || !COIN_METALS.includes(metal.id)) return;
+      if (!g.inventory.remove(lump.uid, 1)) return;
+      // The die wears with every strike, good or bad, and no die can be mended.
+      const dieQl = Math.max(1, die.ql - die.dmg / 2);
+      die.dmg = Math.min(100, die.dmg + DIE_WEAR);
+      const broke = die.dmg >= 100;
+      if (broke) g.inventory.remove(die.uid, 1);
+      g.events.emit('inventory');
+      const hard = COIN_DIFFICULTY + matOfItem(lump).difficulty;
+      if (!g.skillCheck('blacksmithing', hard, anvilQl(a), g.mindEase())) {
+        g.gainSkill('blacksmithing', tryGain(false, SMITH_GAIN));
+        g.logMsg(`The blanks come out smeared and you throw the metal back.${broke ? ' The die is worn through.' : ''}`, 'event');
+        return;
+      }
+      const ql = smithQl(g, { skill: 'blacksmithing' } as MouldDef, dieQl, lump.ql, a);
+      g.gainSkill('blacksmithing', tryGain(true, SMITH_GAIN));
+      const made = g.inventory.add('coin', { ql, extra: metal.name, count: COINS_PER_LUMP });
+      const rare = rollRarity(g.rand);
+      if (rare) {
+        made.rare = rare;
+        made.maker = g.player.name;
+        g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
+        g.logMsg(RARITY_WORD[rare], 'skill');
+      }
+      g.note('minted');
+      g.madeIt('coin', made.ql, COINS_PER_LUMP, rare);
+      g.logMsg(
+        `You strike ${COINS_PER_LUMP} ${metal.name.toLowerCase()} coins on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
+          broke ? ' The die is worn through and done.' : ` The die has ${Math.ceil((100 - die.dmg) / DIE_WEAR)} strikes left.`
+        }`,
+        'event',
+      );
     },
   },
   {

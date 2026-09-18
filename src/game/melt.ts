@@ -1,5 +1,5 @@
 import type { Item } from './items';
-import { METALS, MOULDS, type MetalDef } from './metal';
+import { COINS_PER_LUMP, METALS, MOULDS, type MetalDef } from './metal';
 import { RECIPES } from './recipes';
 
 /**
@@ -21,6 +21,8 @@ export const MELT_HEAT = 0.5;
 export const METAL_CONTENT: Record<string, number> = (() => {
   const out: Record<string, number> = {};
   for (const m of MOULDS) out[m.makes] = m.lumps / (m.per ?? 1);
+  // A coin is a twentieth of the lump it was struck from.
+  out.coin = 1 / COINS_PER_LUMP;
   // A haft fitted to a cast head holds the head's metal; the nails do not count.
   for (const r of RECIPES) {
     if (out[r.result] !== undefined) continue;

@@ -8815,3 +8815,54 @@ update placed set lit = true, fuel = 100000, since = now() - interval '1 hour' w
 select furnace_settle(:'world2', :'scrapper') as melted \gset
 select '964. an hour of heat later, ' || :'melted' || ' finished: ' || (select string_agg(o->>'def' || ' QL ' || round((o->>'ql')::numeric, 1), ', ' order by o->>'def')
        from jsonb_array_elements(furnace_output((select p from placed p where p.id = :'scrapper'))) o);
+
+/*
+ * Coins and a die.
+ *
+ * A coin die is cast at the anvil; with it a lump of silver or gold is
+ * struck into twenty coins, and the die wears with every strike.
+ */
+\echo ''
+\echo '--- coins and a die'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+-- An anvil of Ivar's own to strike on: the earlier one was taken up again.
+select give(:'world2', :'ivar', 'anvil', 1, 70, 'Iron') \g /dev/null
+update player set x = 8.5, y = 7.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_anvil',
+  ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1) || '}')::jsonb) \g /dev/null
+select id as mint from placed where world_id = :'world2' and kind = 'anvil' order by id desc limit 1 \gset
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('coin', 'coin_die', 'silver_lump', 'copper_lump') \g /dev/null
+select give(:'world2', :'ivar', 'copper_lump', 3, 60, 'Copper') as base \gset
+select give(:'world2', :'ivar', 'silver_lump', 3, 60, 'Silver') as bullion \gset
+select '965. off the table: a ' || (select name from mould_def where id = 'coin_die_mould') || ' makes a ' || (select name from item_def where id = (select makes from mould_def where id = 'coin_die_mould'))
+     || ' from ' || (select lumps from mould_def where id = 'coin_die_mould') || ' lumps; a lump strikes ' || coins_per_lump() || ' coins, a strike wears the die '
+     || die_wear() || ', and the metals that coin are ' || (select string_agg(name, ' and ' order by level) from metal_def where coins)
+     || '; a coin holds ' || (select content from melt_def where item = 'coin') || ' of a lump; ported ' || act_ported('strike_coins')
+     || ' — with no die: "' || coalesce(act_refusal(:'world2', :'ivar', 'strike_coins', ('{"kind":"anvil","id":' || :'mint' || ',"itemUid":' || :'bullion' || '}')::jsonb), 'ALLOWED') || '"';
+select give(:'world2', :'ivar', 'coin_die', 1, 60, 'Iron') as die \gset
+delete from event where uid = :'ivar' \g /dev/null
+select '966. with a die — copper: "' || coalesce(act_refusal(:'world2', :'ivar', 'strike_coins', ('{"kind":"anvil","id":' || :'mint' || ',"itemUid":' || :'base' || '}')::jsonb), 'ALLOWED')
+     || '"; silver: "' || coalesce(act_refusal(:'world2', :'ivar', 'strike_coins', ('{"kind":"anvil","id":' || :'mint' || ',"itemUid":' || :'bullion' || '}')::jsonb), 'ALLOWED') || '"';
+-- Struck until it takes, on the island the suite names rather than one
+-- found again: `world limit 1` is a different island by this point.
+update skill set value = 70 where world_id = :'world2' and uid = :'ivar' and id = 'blacksmithing' \g /dev/null
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'blacksmithing', 70
+  where not exists (select 1 from skill where world_id = :'world2' and uid = :'ivar' and id = 'blacksmithing') \g /dev/null
+create or replace function pg_temp.strike_until(p_world uuid, p_uid uuid, p_anvil bigint) returns int
+  language plpgsql as $fn$
+declare l bigint; i int; n int := 0;
+begin
+  for i in 1..12 loop
+    select id into l from item where world_id = p_world and holder_uid = p_uid and def = 'silver_lump' limit 1;
+    exit when l is null or exists (select 1 from item where world_id = p_world and holder_uid = p_uid and def = 'coin');
+    perform act_perform(p_world, p_uid, 'strike_coins', jsonb_build_object('kind', 'anvil', 'id', p_anvil, 'itemUid', l));
+    n := n + 1;
+  end loop;
+  return n;
+end $fn$;
+select pg_temp.strike_until(:'world2', :'ivar', :'mint') as strikes \gset
+select '967. ' || :'strikes' || ' strikes at blacksmithing 70: ' || coalesce((select count || ' coins (' || extra || ') at QL ' || round(ql::numeric, 1) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'coin' limit 1), 'no coins')
+     || ', silver lumps left ' || coalesce((select count from item where id = :'bullion'), 0) || ', the die worn to ' || (select dmg from item where id = :'die')
+     || ' — "' || coalesce((select text from event where uid = :'ivar' and text like 'You strike%' order by n desc limit 1), 'no strike landed')
+     || '" — and the coins melt back: ' || melt_lumps('coin', 20) || ' lump from twenty, "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || (select coalesce(max(id), 0) from placed where world_id = :'world2' and kind = 'smelter') || ',"itemUid":' || coalesce((select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'coin' limit 1), 0) || ',"count":20}')::jsonb), 'ALLOWED') || '"';

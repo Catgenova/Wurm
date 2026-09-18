@@ -35,7 +35,7 @@ import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sitting
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
-import { METAL_BY_LUMP, MOULD_BY_ID, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
+import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
 import { meltable } from '../game/melt';
 import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
@@ -1363,6 +1363,26 @@ export class UI {
                     };
                   }),
                 };
+              })
+            : undefined,
+      });
+    }
+    // Coins: a die in the pack, and a lump of silver or gold named off the menu.
+    const strikeDef = ACTION_BY_ID.get('strike_coins');
+    const die = g.inventory.find('coin_die');
+    const precious = lumps.filter((it) => COIN_METALS.includes(METAL_BY_LUMP.get(it.id)?.id ?? ''));
+    if (strikeDef) {
+      entries.push({
+        label: 'Strike coins',
+        disabled: !die || !precious.length,
+        hint: !die ? 'You need a coin die.' : !precious.length ? 'Coins are struck from silver or gold.' : undefined,
+        note: die ? `${Math.ceil((100 - die.dmg) / DIE_WEAR)} strikes left in the die` : undefined,
+        children:
+          die && precious.length
+            ? precious.map((lump) => {
+                const t: Target = { ...at, itemUid: lump.uid };
+                const reason = strikeDef.check?.(t, g) ?? null;
+                return { label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(strikeDef, t) };
               })
             : undefined,
       });

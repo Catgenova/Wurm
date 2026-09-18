@@ -54,6 +54,17 @@ export const isLump = (id: string): boolean => METAL_BY_LUMP.has(id);
 export const isOreItem = (id: string): boolean => METAL_BY_ORE.has(id);
 
 /** Metal a single nail takes, in kilograms, and so how many come off one lump. */
+/**
+ * Coins: a lump of silver or gold struck into twenty under a die, at the
+ * anvil. A compact store of metal that goes in a pocket, and comes back out
+ * of the fire as a lump when it is melted down. The die wears with every
+ * strike. The island reads the same three.
+ */
+export const COINS_PER_LUMP = 20;
+export const DIE_WEAR = 2;
+export const COIN_DIFFICULTY = 12;
+/** The metals a coin is struck from. */
+export const COIN_METALS = ['silver', 'gold'];
 export const NAIL_WEIGHT = 0.01;
 export const NAILS_PER_LUMP = 100;
 
@@ -131,6 +142,7 @@ export const MOULDS: MouldDef[] = [
   { id: 'spear_head_mould', name: 'Spear head mould', makes: 'spear_head', skill: 'weaponsmithing', sand: 2, difficulty: 16, lumps: 1 },
   { id: 'shield_boss_mould', name: 'Shield boss mould', makes: 'shield_boss', skill: 'armorsmithing', sand: 3, difficulty: 14, lumps: 2 },
   { id: 'file_mould', name: 'File mould', makes: 'file', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
+  { id: 'coin_die_mould', name: 'Coin die mould', makes: 'coin_die', skill: 'blacksmithing', sand: 2, difficulty: 16, lumps: 2 },
   // Chain: rings drawn from a mould and riveted up.
   { id: 'chain_coif_mould', name: 'Chain coif mould', makes: 'chain_coif', skill: 'chainsmithing', sand: 3, difficulty: 18, lumps: 2 },
   { id: 'chain_hauberk_mould', name: 'Chain hauberk mould', makes: 'chain_hauberk', skill: 'chainsmithing', sand: 5, difficulty: 26, lumps: 5 },
