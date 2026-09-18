@@ -287,6 +287,10 @@ const PROSPECT_STRIDE = 4;
 export const PLANTABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
 
 /** Central simulation state: the world, the player and everything they do. */
+/** What a back takes before it tells on you, in kilos, and what each point of body strength adds. */
+export const CARRY_BASE = 120;
+export const CARRY_PER_STRENGTH = 5;
+
 export class Game {
   readonly seed: number;
   readonly world: World;
@@ -1433,12 +1437,15 @@ export class Game {
   }
 
   /**
-   * What you can carry before it tells on you: a plain forty kilos, and most
-   * of a kilo more for every point of body strength. Nothing stops you going
-   * over it; going over it simply costs.
+   * What you can carry before it tells on you: `CARRY_BASE` kilos, and
+   * `CARRY_PER_STRENGTH` more for every point of body strength. Nothing stops
+   * you going over it; going over it simply costs. Asked for: "change base kg
+   * players can carry to 120kg, increased 5kg per body strength point" — it
+   * was forty and most of a kilo. The island does not read this: what you are
+   * carrying is the browser's to weigh, and the drag of it is drawn here.
    */
   carryLimit(): number {
-    return 40 + this.skills.get('body_strength') * 0.9;
+    return CARRY_BASE + this.skills.get('body_strength') * CARRY_PER_STRENGTH;
   }
 
   /** How far past the limit you are, 0 when you are inside it. */

@@ -136,9 +136,11 @@ export const MOULDS: MouldDef[] = [
   { id: 'knife_blade_mould', name: 'Knife blade mould', makes: 'knife_blade', skill: 'blacksmithing', sand: 2, difficulty: 14, lumps: 1 },
   { id: 'sword_blade_mould', name: 'Sword blade mould', makes: 'sword_blade', skill: 'weaponsmithing', sand: 3, difficulty: 18, lumps: 2 },
   { id: 'helm_mould', name: 'Helm mould', makes: 'helm', skill: 'platesmithing', sand: 3, difficulty: 16, lumps: 2 },
-  // Gang moulds: one lump of metal runs out as a great many small things.
+  // A gang mould: one lump of metal runs out as a great many small things.
   { id: 'nail_mould', name: 'Nail mould', makes: 'nail', skill: 'blacksmithing', sand: 2, difficulty: 6, lumps: 1, per: NAILS_PER_LUMP },
-  { id: 'ribbon_mould', name: 'Ribbon mould', makes: 'ribbon', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1, per: 4 },
+  // A ribbon is a lump beaten flat, one to a filling. It ran four, so a
+  // lantern's four ribbons were one lump of iron; asked to be one.
+  { id: 'ribbon_mould', name: 'Ribbon mould', makes: 'ribbon', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },
   // The one part of a vehicle that is metal all the way through.
   { id: 'axle_mould', name: 'Axle mould', makes: 'big_axle', skill: 'blacksmithing', sand: 3, difficulty: 20, lumps: 3 },
   { id: 'arrow_head_mould', name: 'Arrow head mould', makes: 'arrow_head', skill: 'weaponsmithing', sand: 2, difficulty: 8, lumps: 1, per: 25 },

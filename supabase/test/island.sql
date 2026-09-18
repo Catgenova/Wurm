@@ -8626,6 +8626,16 @@ select '946. the doors: bare rock "'
 update player set x = 47.5, y = 42.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
 select :'doors1' || ', a corner under water "'
      || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'raise_rock', '{"kind":"tile","x":47,"y":42,"cx":48,"cy":43}'::jsonb), 'ALLOWED') || '"';
+-- And a seam: the tile at 48,40 made a copper vein, which the corner at 48,41 holds up.
+select land_set_rock(:'world6', 48, 40, (select min(id) from rock_def where seam)) \g /dev/null
+update player set x = 47.5, y = 40.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'raise_rock', '{"kind":"tile","x":48,"y":40,"cx":48,"cy":41}'::jsonb), 'ALLOWED') as seam_door \gset
+select land_set_rock(:'world6', 48, 40, (select min(id) from rock_def where not seam)) \g /dev/null
+select '946b. a corner with a ' || (select lower(name) from rock_def where id = (select min(id) from rock_def where seam)) || ' under one of its four tiles: "' || :'seam_door'
+     || '" — and the same corner once the vein is plain rock again: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'raise_rock', '{"kind":"tile","x":48,"y":40,"cx":48,"cy":41}'::jsonb), 'ALLOWED')
+     || '"; the seams on the table: ' || (select string_agg(lower(name), ', ' order by id) from rock_def where seam) || ' — a vein raised would be ore for ever';
+update player set x = 46.5, y = 40.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
 -- Laid until it sets: concrete that slumps off is concrete gone.
 do $$
 declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
@@ -9660,3 +9670,8 @@ select '1007. asked for the ground, the fast half: ' || jsonb_array_length(:'lyi
          from jsonb_array_elements(:'lying'::jsonb) l where (l->>'id')::bigint = :'carcass')
      || ' — the row a browser now draws as a pile and asks to butcher; and one across the island at 60,60: '
      || case when exists (select 1 from jsonb_array_elements(:'lying'::jsonb) l where (l->>'gx')::int = 60) then 'CARRIED' else 'left out, being out of range' end;
+
+-- A ribbon is one to a filling now, not four.
+select '1008. the ribbon mould runs ' || (select per from mould_def where id = 'ribbon_mould') || ' ribbon to a filling of '
+     || (select lumps from mould_def where id = 'ribbon_mould') || ' lump, where a nail mould runs ' || (select per from mould_def where id = 'nail_mould')
+     || ' — and a ribbon melts back to ' || (select content from melt_def where item = 'ribbon') || ' of a lump';

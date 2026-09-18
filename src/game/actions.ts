@@ -1,6 +1,7 @@
 export { TRY_LEARN, tryGain } from './learn';
 import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, TREE_STAGE, type TreeAge, LAWN_AFTER, MOWN_TODAY, mownDays, mownToday } from '../world/tiles';
 import { isSeam } from '../world/tiles';
+import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
@@ -311,6 +312,21 @@ function maxDigSlope(g: Game): number {
 /** The same rule for a mason raising rock as for a digger moving soil. */
 function maxMasonSlope(g: Game): number {
   return Math.max(40, Math.floor(g.skills.get('masonry') * 3));
+}
+
+/**
+ * Whether a corner holds up a seam: any of the four tiles round it over a
+ * vein, or the coal. Asked for: "only allow raising a rock corner with
+ * concrete, not an ore / seam corner" — a vein raised with concrete would
+ * be ore for ever, mined down a step, laid up a step and mined again.
+ * `isSeam` is the one word for it on both sides; the island reads it off
+ * `rock_def.seam`, which is generated from it.
+ */
+function seamUnder(w: World, cx: number, cy: number): boolean {
+  for (const [x, y] of [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]]) {
+    if (w.inBounds(x, y) && isSeam(bedrockAt(w, x, y))) return true;
+  }
+  return false;
 }
 
 /** Slope around a corner if its height were changed by `delta`. */
@@ -672,6 +688,7 @@ export const ACTIONS: ActionDef[] = [
       // *up* on rock without dirt, which slides off it.
       if (w.getDirt(t.cx, t.cy) > 0) return 'There is soil on that corner. Concrete goes on bare rock.';
       if (w.getHeight(t.cx, t.cy) < 0) return 'Concrete will not set under water.';
+      if (seamUnder(w, t.cx, t.cy)) return 'That corner is on a seam. Concrete goes on plain rock.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
       if (slopeAfter(g, t.cx, t.cy, 1) > maxMasonSlope(g)) return 'The slope would be too steep for your masonry skill.';

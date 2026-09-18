@@ -284,6 +284,15 @@ jobs:
           npx esbuild supabase/test/lying.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/lying.mjs --log-level=error
           node node_modules/.cache/lying.mjs
+
+      - name: Concrete goes on plain rock, never on a seam
+        run: |
+          # A corner holds up four tiles, and a vein under any of them raised
+          # with concrete would be ore for ever. The browser's door, asked about
+          # a shelf of bare rock with a vein, the coal, and plain rock under it.
+          npx esbuild supabase/test/seam.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/seam.mjs --log-level=error
+          node node_modules/.cache/seam.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

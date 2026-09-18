@@ -728,10 +728,10 @@ function helpText(): string {
     quietly eating it &mdash; and <b>Put it back in the pack</b> undoes it. Kept things read
     <i>kept back</i> in the list.</p>
     <h3>What your back will take</h3>
-    <p>You carry <b>forty kilos</b> plus most of a kilo for every point of <b>body strength</b>, so about
-    58 at the start and 129 at ninety-nine. Nothing stops you going over it; going over it costs, and the
-    cost climbs &mdash; thirty kilos past the mark is worth about as much drag as a suit of plate. The
-    inventory footer turns red and says by how much, and the bars say so too.</p>
+    <p>You carry <b>120 kilos</b> plus <b>five kilos</b> for every point of <b>body strength</b>, so about
+    220 at the start and 615 at ninety-nine. Nothing stops you going over it; going over it costs, and the
+    cost climbs with how far over you are &mdash; a hundred kilos past the mark is about the drag of two
+    pieces of plate. The inventory footer turns red and says by how much, and the bars say so too.</p>
     <p>The damage column turns <b>amber past 75</b> and <b>red past 90</b>, so a tool about to go to
     pieces says so where you are looking rather than only in the log.</p>
     <h3>Eating, and keeping your things</h3>
