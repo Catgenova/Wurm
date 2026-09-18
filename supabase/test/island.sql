@@ -8716,3 +8716,25 @@ select land_set_height(:'world6', 20, 21, -98) \g /dev/null
 select '958. the boat''s tile dug ' || tile_slope(:'world6', 20, 20) || ' steep under it: aboard, Hunger gets '
      || walk_share(:'world6', :'eater', 0, 19.5, 20.5, 20.5, 20.5) || ' of the way onto it; Dane on his feet, climbing 50, gets '
      || walk_share(:'world6', :'dane', 0, 19.5, 20.5, 20.5, 20.5);
+
+/*
+ * Giving up an island waits for the clock.
+ *
+ * The delete that gives an island up cascades through everything on it, and
+ * the clock's round is at the same rows every second; on the real project the
+ * two met in a deadlock. The abandon now holds the clock's two keys for its
+ * transaction, so a round and a delete never share a moment.
+ */
+\echo ''
+\echo '--- giving up an island waits for the clock'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+insert into world (id, name, seed, size, spawn_x, spawn_y, made_by, ready) values ('0000000f-0000-0000-0000-00000000000f', 'Fleeting', 1, 8, 4, 4, :'ivar', true)
+  on conflict (id) do nothing;
+begin;
+select rpc_abandon('0000000f-0000-0000-0000-00000000000f') as gone \gset
+select '959. Fleeting given up: ' || :'gone' || ' — and until the delete is done its transaction holds '
+     || (select count(*) from pg_locks l where l.locktype = 'advisory' and l.pid = pg_backend_pid() and l.granted)
+     || ' advisory locks, the clock''s two keys, so a round that starts now finds the clock busy and goes back to bed';
+commit;
+select '960. and afterwards the island is gone: ' || (select count(*) from world where name = 'Fleeting')
+     || ' left, and the keys let go: ' || (select count(*) from pg_locks l where l.locktype = 'advisory' and l.pid = pg_backend_pid());
