@@ -312,6 +312,14 @@ export const ROCK_VARIANTS: RockVariantDef[] = [
  */
 export const isSeam = (rock: { yields: string }): boolean => !rock.yields.endsWith('_shards');
 
+/**
+ * The kind of rock in the data byte of a Rock tile.
+ *
+ * Not what a face is *drawn* as — that is `World.rockFace`, off the bedrock
+ * array, because a face the generator laid down carries no kind in its byte.
+ * This is the byte itself, which both sides still write when a tile is dug
+ * bare and which `supabase/test/agree.ts` compares across the wire.
+ */
 export const rockVariant = (data: number): number => Math.min(ROCK_VARIANTS.length - 1, data & 15);
 
 /**

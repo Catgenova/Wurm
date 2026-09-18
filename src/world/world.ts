@@ -1,4 +1,4 @@
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS, treeSpecies, bushSpecies, rockVariant, slabVariant } from './tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS, treeSpecies, bushSpecies, slabVariant } from './tiles';
 
 export type WorldListener = (x: number, y: number) => void;
 
@@ -316,6 +316,31 @@ export class World {
     if (!this.inBounds(x, y)) return 0;
     this.ensure(x, y);
     return this.rock[y * this.w + x];
+  }
+
+  /**
+   * Which rock a bare face shows, for drawing it and for naming it.
+   *
+   * The data byte of a Rock tile holds its kind, and everything that *turns* a
+   * tile to rock writes it there — `reconcile` here, `land_set_data` on the
+   * island. What the generator lays down does not: `generateAtlasWindow` puts
+   * the kind in the rock array, which is the bedrock under every tile bare or
+   * buried, and leaves the tile's own byte at nought. So every seam that broke
+   * the surface when an island was made drew as plain grey stone, and said
+   * "Rock" when you pointed at it — while the rules underneath knew perfectly
+   * well what it was: `bedrockAt` reads the rock array, so mining one of those
+   * faces has always given up copper or coal, and prospecting has always found
+   * it. Only the picture lied. Reported exactly so: "ore and seams that spawn
+   * on bare rock spots should display as the actual ore or seams".
+   *
+   * So the picture asks what the rules ask. The bedrock is the same answer the
+   * data byte carries wherever the byte was ever set, and the right one where
+   * it was not; the generator's `data` stays as it is, because that array is a
+   * wire format sent on founding day and moving it moves the ground under
+   * every island already standing (`supabase/test/ground.ts`).
+   */
+  rockFace(x: number, y: number): number {
+    return Math.min(ROCK_VARIANTS.length - 1, this.rockKind(x, y));
   }
 
   setRockKind(x: number, y: number, kind: number): void {
@@ -694,7 +719,7 @@ export class World {
     if (t === TileType.Tree) return `${TREE_DEFS[treeSpecies(this.getData(x, y))].name} tree`;
     if (t === TileType.Bush) return BUSH_DEFS[bushSpecies(this.getData(x, y))].name;
     if (t === TileType.Stump) return `${TREE_DEFS[treeSpecies(this.getData(x, y))].name} stump`;
-    if (t === TileType.Rock) return ROCK_VARIANTS[rockVariant(this.getData(x, y))].name;
+    if (t === TileType.Rock) return ROCK_VARIANTS[this.rockFace(x, y)].name;
     if (t === TileType.Slabs) return SLAB_VARIANTS[slabVariant(this.getData(x, y))].name;
     return TILE_DEFS[t].name;
   }

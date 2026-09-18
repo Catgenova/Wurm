@@ -21,7 +21,7 @@ import {
   floorBill,
 } from '../game/building';
 import { hash2 } from '../world/noise';
-import { bareRock, dustiness, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, dustiness, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
@@ -488,7 +488,7 @@ export class Renderer {
     let shade = 0.48 + 0.6 * Math.max(0, dot);
     const base =
       type === TileType.Rock
-        ? ROCK_VARIANTS[rockVariant(data)].color
+        ? ROCK_VARIANTS[w.rockFace(x, y)].color
         : type === TileType.Slabs
           ? SLAB_VARIANTS[slabVariant(data)].color
           : def.color;

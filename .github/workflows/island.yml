@@ -180,6 +180,17 @@ jobs:
           npx esbuild supabase/test/ground.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/ground.mjs --log-level=error
           node node_modules/.cache/ground.mjs
+      - name: A bare face shows the rock it is made of
+        run: |
+          # Reported: ore and seams that break the surface drew as plain grey
+          # rock. A tile dug bare gets the kind written into its data byte, on
+          # both sides; a tile the generator lays down as rock does not — the
+          # kind goes in the rock array and the byte stays at nought. The
+          # drawing read the byte, so a thousand seams a window were invisible
+          # while mining and prospecting knew about them all along.
+          npx esbuild supabase/test/face.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/face.mjs --log-level=error
+          node node_modules/.cache/face.mjs
       - name: The ground is the one on the chart
         run: |
           # And that the ground both generators agree on is the ground that was
