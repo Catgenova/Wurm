@@ -61,10 +61,14 @@ const marks = {
 /**
  * What the ground has come out as since the relief landed on 15 September.
  * Change these only alongside a reconcile of every island already founded.
+ *
+ * `data` moved on 18 September, when eight fruit trees were held to their
+ * islands: every face stayed and the species byte of one tree in fifty
+ * changed, which the reconcile compares now as well as the face.
  */
 const PINNED: Record<keyof typeof marks, string> = {
   tiles: '07fcda3bbd161f34',
-  data: '22a0605959856c92',
+  data: '61700fae33936ef8',
   rock: 'bafd32f32da1ef6a',
   heights: '561c219755d4479c',
   dirt: '2c0887dc7256457a',

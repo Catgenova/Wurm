@@ -1,5 +1,5 @@
 import { hash2, mulberry32, Noise2D, smoothstep } from './noise';
-import { SAPLING_SHARE, TileType, packTreeData } from './tiles';
+import { ISLAND_FRUIT, SAPLING_SHARE, TileType, packTreeData } from './tiles';
 import { oreKindFor, ORE_DENSITY, stoneKindAt } from './ore';
 import { World } from './world';
 
@@ -16,7 +16,13 @@ function pickSpecies(avgHeight: number, moisture: number, r: number): number {
   if (avgHeight < 7 && moisture > 0.1) return r < 0.7 ? 4 : 0;
   // The three that bear turn up wild here and there in the warm low country,
   // one tree in fifty or so. An orchard is something you plant.
-  if (r > 0.978 && avgHeight < 60) return moisture > 0.2 ? 6 : r > 0.992 ? 8 : 7;
+  if (r > 0.978 && avgHeight < 60) {
+    // Half of them the eight kinds the chart holds to an island each: an
+    // island of your own has no chart, so it has them all.
+    const f = (r * 997) % 1;
+    if (f < 0.5) return ISLAND_FRUIT[Math.floor(f * 2 * ISLAND_FRUIT.length)];
+    return moisture > 0.2 ? 6 : r > 0.992 ? 8 : 7;
+  }
   if (r < 0.32) return 0; // birch
   if (r < 0.6) return 2; // oak
   if (r < 0.78) return 3; // maple

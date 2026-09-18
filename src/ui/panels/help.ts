@@ -334,17 +334,23 @@ function helpText(): string {
     <p>The <b>Wadd</b>, being the one thing on the island that swims, now fishes: set one to a deed or a
     work post and it works the banks in its range and carries the catch home.</p>
     <h3>Fruit trees</h3>
-    <p>Three of the nine trees bear: <b>apple</b>, <b>cherry</b> and <b>olive</b>. They grow wild here
-    and there in the warm low country &mdash; about one tree in a hundred &mdash; and you can tell them
-    across a field by what is hanging in them. Take a <b>sprout</b> off one with forestry and plant it,
-    and you have the beginnings of an orchard.</p>
+    <p>Eleven of the seventeen trees bear. <b>Apple</b> and <b>olive</b> grow wild here and there in
+    the warm low country of any island &mdash; about one tree in a hundred &mdash; and the other nine are
+    each held to one island of the chart, where they grow past that: <b>cherry</b> on East Isle,
+    <b>pear</b> and <b>quince</b> on the Crescent, <b>pomegranate</b> and <b>apricot</b> on the Northwest
+    Steppe, <b>plum</b> in the lowland of the Northeast Tundra, <b>lemon</b> on Volcano Isle, <b>peach</b>
+    on Middle Isle and <b>fig</b> on West Skerry. An island of your own has no chart and grows them all.
+    You can tell a fruit tree across a field by what is hanging in it. Take a <b>sprout</b> off one
+    with forestry and plant it, and you have the beginnings of an orchard, wherever the sprout came
+    from. A <b>plucka</b> set to work on a deed picks what the bearing trees have on them and carries
+    it to the crate.</p>
     <p>A sapling bears nothing; leave it to grow. A mature tree gives three or four of its fruit to a
     picking and an old one five or six, more as your forestry rises, and a picked tree needs a few
     minutes before there is anything on it again. Four apples and a dough bake into two <b>apple
     pies</b>, the best food on the island; a dozen cherries boil down into two jars of <b>preserves</b>;
     and ten olives crushed under a <b>quern</b> give two measures of <b>olive oil</b>, which keeps almost
     for ever.</p>
-    <p>All three are also <b>woods</b>, and good ones: apple is as hard-wearing as oak and takes a finer
+    <p>All of them are also <b>woods</b>, and good ones: apple is as hard-wearing as oak and takes a finer
     edge, cherry is the best handle wood on the island, and olive is murder to work and outlasts
     everything. You get one log a tree, so an orchard felled is an orchard gone.</p>
     <h3>Farming</h3>

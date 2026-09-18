@@ -61,6 +61,16 @@ const WOOD_PROPS: Record<string, Props> = {
   Apple: { difficulty: 3, weight: 1.18, wear: 0.74, decay: 0.95, edge: 1.08, soak: 1.1, hold: 1.06, bite: 1.02, note: 'Close, hard and heavy for a small tree. Wears like oak and takes a finer edge.' },
   Cherry: { difficulty: 2, weight: 1.02, wear: 0.82, decay: 0.9, edge: 1.06, soak: 1.06, bite: 1.1, hold: 1.04, note: 'Fine in the grain and stable with it. The best wood on the island for a tool handle.' },
   Olive: { difficulty: 6, weight: 1.3, wear: 0.6, decay: 0.55, edge: 1.14, soak: 1.2, bite: 0.9, hold: 1.08, note: 'Wild grained, oily and nearly unsplittable. Murder to work and it outlasts everything.' },
+  // And the eight held to their islands, which are orchard woods too: close
+  // grained, hard for their size, and little of any of them off one tree.
+  Pear: { difficulty: 3, weight: 1.16, wear: 0.76, decay: 0.95, edge: 1.06, soak: 1.08, bite: 1.06, hold: 1.05, note: 'Close and pink-brown, and it carves cleaner than apple. The turner\'s wood.' },
+  Plum: { difficulty: 3, weight: 1.12, wear: 0.78, decay: 0.9, edge: 1.08, soak: 1.06, bite: 1.02, hold: 1.04, note: 'Hard and streaked with red. Handsome in a handle, and it holds a polish.' },
+  Peach: { difficulty: 1, weight: 1, wear: 0.94, decay: 1.05, edge: 1.02, soak: 1, bite: 1.02, hold: 1, note: 'Soft for an orchard wood and quick to rot. Good for what you mean to replace.' },
+  Fig: { difficulty: 0, weight: 0.86, wear: 1.05, decay: 1.15, edge: 0.96, soak: 0.94, bite: 1, hold: 0.98, note: 'Light, spongy and not much good for anything but the fruit. Plant it for that.' },
+  Lemon: { difficulty: 2, weight: 1.06, wear: 0.86, decay: 0.85, edge: 1.04, soak: 1.04, bite: 1.04, hold: 1.02, note: 'Pale, even and faintly scented on the saw. A fine wood for small work.' },
+  Pomegranate: { difficulty: 4, weight: 1.2, wear: 0.72, decay: 0.8, edge: 1.1, soak: 1.1, bite: 0.98, hold: 1.06, note: 'Dense and twisted, off a small tree. Stubborn to work and very hard-wearing.' },
+  Apricot: { difficulty: 2, weight: 1.08, wear: 0.84, decay: 0.9, edge: 1.06, soak: 1.04, bite: 1.04, hold: 1.02, note: 'Hard and golden, close to plum. Little of it, and worth keeping for a handle.' },
+  Quince: { difficulty: 3, weight: 1.14, wear: 0.78, decay: 0.92, edge: 1.06, soak: 1.06, bite: 1.02, hold: 1.04, note: 'Close-grained like pear and a shade harder. It takes a fine edge.' },
 };
 
 /**

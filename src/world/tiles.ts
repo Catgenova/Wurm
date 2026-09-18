@@ -204,11 +204,14 @@ export interface TreeDef {
   canopy: [light: string, mid: string, dark: string];
   /** Relative size of the full grown tree. */
   size: number;
-  /** Fruit it bears once it is grown, for the three that bear any. */
+  /** Fruit it bears once it is grown, for the eleven that bear any. */
   fruit?: string;
 }
 
-/** Tree species; stored in the low nibble of a tree tile's data byte. */
+/**
+ * Tree species; stored in a tree tile's data byte, the low nibble and the top
+ * bit (`packTreeData`). The order is storage: never reorder these.
+ */
 export const TREE_DEFS: TreeDef[] = [
   { name: 'Birch', shape: 'round', trunk: '#e8e4d8', canopy: ['#b6dc78', '#88b852', '#5f8c3a'], size: 0.85 },
   { name: 'Pine', shape: 'conifer', trunk: '#6d4b32', canopy: ['#6fa06a', '#3f7048', '#2b4f34'], size: 1 },
@@ -221,7 +224,23 @@ export const TREE_DEFS: TreeDef[] = [
   { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#8fc060', '#5f9440', '#41682c'], size: 0.8, fruit: 'apple' },
   { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#a8cc70', '#74a047', '#4d7030'], size: 0.78, fruit: 'cherry' },
   { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#9aae84', '#6f8a64', '#4f6448'], size: 0.75, fruit: 'olive' },
+  // Eight more that bear, asked for, each held to one island of the chart
+  // (regions.ts) the way the cherry is, and sprinkled anywhere on an island
+  // of your own. Past the ninth the species needs a fifth bit: see below.
+  { name: 'Pear', shape: 'round', trunk: '#6b4f38', canopy: ['#a9d070', '#79a84c', '#527a34'], size: 0.82, fruit: 'pear' },
+  { name: 'Plum', shape: 'round', trunk: '#4e3a36', canopy: ['#8fb46a', '#5f8848', '#3f6034'], size: 0.76, fruit: 'plum' },
+  { name: 'Peach', shape: 'round', trunk: '#7a5a44', canopy: ['#b7d47a', '#86ad55', '#5a7c3a'], size: 0.74, fruit: 'peach' },
+  { name: 'Fig', shape: 'round', trunk: '#8c8270', canopy: ['#96b878', '#6a9058', '#476840'], size: 0.7, fruit: 'fig' },
+  { name: 'Lemon', shape: 'round', trunk: '#7c6a4e', canopy: ['#b8d67e', '#8db457', '#5f8a3b'], size: 0.68, fruit: 'lemon' },
+  { name: 'Pomegranate', shape: 'round', trunk: '#6e4a3c', canopy: ['#9cc06c', '#6d9a48', '#4b6e32'], size: 0.66, fruit: 'pomegranate' },
+  { name: 'Apricot', shape: 'round', trunk: '#6f5040', canopy: ['#b4cf72', '#84a84e', '#587834'], size: 0.74, fruit: 'apricot' },
+  { name: 'Quince', shape: 'round', trunk: '#6a5646', canopy: ['#a6c47e', '#78985a', '#526e42'], size: 0.72, fruit: 'quince' },
 ];
+
+/** The trees that bear, by index. */
+export const FRUIT_TREES: number[] = TREE_DEFS.map((t, i) => (t.fruit ? i : -1)).filter((i) => i >= 0);
+/** The eight of them the chart holds to an island each: everything past the olive. */
+export const ISLAND_FRUIT: number[] = FRUIT_TREES.filter((i) => i > TREE_DEFS.findIndex((t) => t.name === 'Olive'));
 
 export interface BushDef {
   name: string;
@@ -466,9 +485,19 @@ export const LAWN_AFTER = 3;
 export const mownDays = (data: number): number => data & MOWN_DAYS;
 export const mownToday = (data: number): boolean => (data & MOWN_TODAY) !== 0;
 
-export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);
 /**
- * The age, in the four bits over the species.
+ * The species, in the low nibble and the top bit of the byte.
+ *
+ * Nine species fit a nibble and seventeen do not. The age over the species
+ * only ever reaches five, so the top bit was never written, and it is the
+ * fifth bit of the species now: a byte from before reads exactly as it did,
+ * a pear is 9 with nothing set and a quince is 16 with the top bit. The
+ * island packs and reads the same way (`tree_pack`, `tree_species`,
+ * `tree_age`), and nothing on either side takes the byte apart by hand.
+ */
+export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, (data & 15) | ((data >> 7) << 4));
+/**
+ * The age, in the three bits over the species; the fourth is the species' own.
  *
  * Two of them for a long time, with the felling notch in the two above. Four
  * values was one short the day a fifth stage was wanted, and of the two
@@ -481,8 +510,8 @@ export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length -
  * save to carry: one from before has its top two bits cleared on the way in.
  */
 export const TREE_DATA_LAYOUT = 2;
-export const treeVariant = (data: number): number => (data >> 4) & 15;
+export const treeVariant = (data: number): number => (data >> 4) & 7;
 /** How far along the tree on this tile is. A value no stage answers to reads as young. */
 export const treeAge = (data: number): TreeAge => TREE_AGES[treeVariant(data)] ?? TREE_AGES[0];
 export const bushSpecies = (data: number): number => Math.min(BUSH_DEFS.length - 1, data & 15);
-export const packTreeData = (species: number, variant: number): number => (species & 15) | ((variant & 15) << 4);
+export const packTreeData = (species: number, variant: number): number => (species & 15) | ((variant & 7) << 4) | ((species >> 4) << 7);

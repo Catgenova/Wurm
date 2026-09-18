@@ -150,10 +150,18 @@ async function main(): Promise<void> {
         // The browser's own answer: the change if there is one, the seed if not.
         const drawn = told.has(k) ? (told.get(k) as number) : win.tiles[j * world.size + x];
         const truth = stored[x];
-        if (drawn === truth) continue;
+        /*
+         * And the byte under the face, which a change carries as well. The
+         * same face with a different byte is a different tree: the day the
+         * eight fruit trees were held to their islands, the generator kept
+         * every face and moved the species of one tree in fifty, which this
+         * used to look straight through.
+         */
+        const byteApart = !told.has(k) && win.data[j * world.size + x] !== storedData[x];
+        if (drawn === truth && !byteApart) continue;
         apart++;
         if (SOFT.has(drawn) && !SOFT.has(truth)) refuses++;
-        const name = `${faceName(drawn)} drawn, ${faceName(truth)} held`;
+        const name = drawn === truth ? `${faceName(truth)} both, the byte apart` : `${faceName(drawn)} drawn, ${faceName(truth)} held`;
         kinds.set(name, (kinds.get(name) ?? 0) + 1);
         if (!write) continue;
         const c = await bandCorners();

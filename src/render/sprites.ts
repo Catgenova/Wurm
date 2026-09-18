@@ -2761,6 +2761,8 @@ const BEASTS: Record<string, BeastShape> = {
   snedda: { body: [8.5, 5], ride: 5.5, leg: 6.5, legW: 2.2, span: 6, head: 3.6, neck: [10, -4.2], muzzle: 2.8, ear: 'long', tail: 'brush', gait: 1.15 },
   // Shoulders over the head, and the head at the ground.
   grubba: { body: [10, 6], ride: 3, leg: 3.8, legW: 3.4, span: 7, head: 4.2, neck: [10.5, 1.4], muzzle: 3.6, ear: 'round', tail: 'stub', hump: 4, gait: 0.9 },
+  // Arms as long as its body, and a tail to hang by.
+  plucka: { body: [7.5, 4.2], ride: 4.5, leg: 5.8, legW: 1.8, span: 5.4, head: 3.4, neck: [9, -3], muzzle: 2, ear: 'round', tail: 'brush', gait: 1.35 },
   cobbe: { body: [10, 6], ride: 4, leg: 5, legW: 3.6, span: 7.5, head: 4.4, neck: [11, 0], muzzle: 2.2, ear: 'point', tail: 'stub', hump: 4.5, gait: 0.85 },
   tinka: { body: [6, 4], ride: 3.4, leg: 4, legW: 1.8, span: 4.2, head: 3.6, neck: [6.8, -2.2], muzzle: 1.6, ear: 'point', tail: 'brush', whisker: true, gait: 1.5 },
   middun: { body: [9, 4.6], ride: 3, leg: 3.6, legW: 2.2, span: 6.4, head: 3.4, neck: [10, 0.4], muzzle: 3.6, ear: 'round', tail: 'brush', gait: 1.1 },

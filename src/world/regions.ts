@@ -31,6 +31,16 @@ const BIRCH = speciesOf('Birch');
 const WILLOW = speciesOf('Willow');
 const APPLE = speciesOf('Apple');
 const CHERRY = speciesOf('Cherry');
+const PEAR = speciesOf('Pear');
+const PLUM = speciesOf('Plum');
+const PEACH = speciesOf('Peach');
+const FIG = speciesOf('Fig');
+const LEMON = speciesOf('Lemon');
+const POMEGRANATE = speciesOf('Pomegranate');
+const APRICOT = speciesOf('Apricot');
+const QUINCE = speciesOf('Quince');
+/** The trees that bear, by index: a fruit rolled anywhere is one of these. */
+const FRUIT = new Set(TREE_DEFS.map((t, i) => (t.fruit ? i : -1)).filter((i) => i >= 0));
 
 export interface Region {
   key: string;
@@ -62,7 +72,7 @@ export const REGIONS: Region[] = [
     snow: false,
     stone: 'rock_shards',
     ores: [],
-    trees: [],
+    trees: [PEAR, QUINCE],
   },
   {
     key: 'NorthwestSteppe',
@@ -74,7 +84,7 @@ export const REGIONS: Region[] = [
     snow: false,
     stone: 'sandstone_shards',
     ores: ['lead_ore', 'adamantine_ore'],
-    trees: [],
+    trees: [POMEGRANATE, APRICOT],
   },
   {
     key: 'NortheastTundra',
@@ -86,7 +96,7 @@ export const REGIONS: Region[] = [
     snow: true,
     stone: 'marble_shards',
     ores: ['glimmersteel_ore'],
-    trees: [],
+    trees: [PLUM],
   },
   {
     key: 'Volcano',
@@ -98,7 +108,7 @@ export const REGIONS: Region[] = [
     snow: false,
     stone: 'slate_shards',
     ores: ['seryll_ore'],
-    trees: [],
+    trees: [LEMON],
   },
   {
     key: 'MiddleIsle',
@@ -110,7 +120,7 @@ export const REGIONS: Region[] = [
     snow: false,
     stone: 'rock_shards',
     ores: ['zinc_ore'],
-    trees: [WILLOW],
+    trees: [WILLOW, PEACH],
   },
   {
     key: 'EastIsle',
@@ -134,7 +144,7 @@ export const REGIONS: Region[] = [
     snow: false,
     stone: 'rock_shards',
     ores: [],
-    trees: [],
+    trees: [FIG],
   },
 ];
 
@@ -183,7 +193,11 @@ export function rockKindFor(seed: number, region: number, x: number, y: number, 
 /**
  * The species that actually grows, given the one the climate asked for.
  * Willow and cherry are held to their islands; a cherry rolled anywhere else
- * comes up as an apple, which grows in the same warm low country.
+ * comes up as an apple, which grows in the same warm low country. And the
+ * eight fruit trees asked for are held to an island each the same way: where
+ * the climate rolled a fruit tree, half of them come up as one of the kinds
+ * that are this island's own rather than the apple and olive that grow
+ * anywhere, so a pear is the Crescent's and a fig the skerry's.
  */
 export function speciesFor(region: number, base: number, avg: number, r: number): number {
   const R = REGIONS[region];
@@ -193,6 +207,13 @@ export function speciesFor(region: number, base: number, avg: number, r: number)
   // On its own island a cherry is worth the crossing, so it grows past the one
   // tree in fifty that the fruit trees manage elsewhere.
   if (R.trees.indexOf(CHERRY) >= 0 && r > 0.93 && avg < 162) return CHERRY;
+  const own = R.trees.filter((s) => FRUIT.has(s) && s !== CHERRY);
+  if (own.length && FRUIT.has(base)) {
+    // The roll that chose a fruit tree is spent above 0.978; what is left of
+    // it under the hundredths is as good as a second roll.
+    const f = (r * 997) % 1;
+    if (f < 0.5) return own[Math.floor(f * 2 * own.length)] as number;
+  }
   return base;
 }
 

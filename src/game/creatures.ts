@@ -56,7 +56,9 @@ export type GatherKind =
   | 'fish'
   // A snedda prunes what would otherwise die; a grubba digs out stumps.
   | 'prune'
-  | 'stump';
+  | 'stump'
+  // A plucka picks what a bearing tree has on it and carries it home.
+  | 'fruit';
 /**
  * How far a wild thing will drift from where it stands, and how long it stands.
  *
@@ -77,11 +79,11 @@ export const WILD_REACH = 1.5;
 export const WILD_REST = 8;
 export const WILD_REST_SPREAD = 22;
 
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing', prune: 'forestry', stump: 'digging' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing', prune: 'pruning the wood', stump: 'digging out stumps' };
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing', prune: 'forestry', stump: 'digging', fruit: 'forestry' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing', prune: 'pruning the wood', stump: 'digging out stumps', fruit: 'picking fruit' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig', fish: 'fish the water round the deed and carry the catch home', prune: 'prune what would otherwise die', stump: 'dig out stumps' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [], fish: [], prune: [], stump: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig', fish: 'fish the water round the deed and carry the catch home', prune: 'prune what would otherwise die', stump: 'dig out stumps', fruit: 'pick what the fruit trees have on them and carry it home' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [], fish: [], prune: [], stump: [], fruit: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather' | 'tusk' | 'sinew' | 'scale' | 'hoard';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -779,6 +781,31 @@ export const SPECIES: Record<string, SpeciesDef> = {
     leaves: 'shoulders into the undergrowth and is gone',
     nearTrees: true,
   },
+  plucka: {
+    id: 'plucka',
+    name: 'Plucka',
+    description: 'A long-armed climber of the orchard\'s edge with hands like a child\'s and a tail it hangs by. It goes up a bearing tree and comes down with the fruit, and kept on a deed it picks what the trees have on them and carries it home to the crate.',
+    health: 18,
+    attack: 1,
+    speed: 1.7,
+    tameLevel: 10,
+    tameChance: 0.12,
+    diet: ['apple', 'cherry', 'olive', 'pear', 'plum', 'peach', 'fig', 'lemon', 'pomegranate', 'apricot', 'quince', 'nuts'],
+    baitHint: 'fruit off a tree',
+    timid: true,
+    gathers: 'fruit',
+    workRange: 8,
+    variants: [
+      ['#7a5a3a', '#e0c79a'],
+      ['#5c4a3c', '#c9b58e'],
+      ['#8a6a44', '#efd9ac'],
+      ['#4e4238', '#b8a88a'],
+    ],
+    butcher: { meat: 2, fur: 2, leather: 1, bone: 2, gland: 1 },
+    tameFail: 'takes the {food} in both hands, eats it in three bites and is back up the tree before you have moved',
+    leaves: 'swings up into the canopy and is gone hand over hand',
+    nearTrees: true,
+  },
   cobbe: {
     id: 'cobbe',
     name: 'Cobbe',
@@ -1295,6 +1322,7 @@ export const WILD_SPECIES: Array<[string, number]> = [
   ['sappa', 8],
   ['snedda', 5],
   ['grubba', 5],
+  ['plucka', 5],
   ['bogga', 6],
   ['holla', 6],
   ['cobbe', 6],
@@ -2677,6 +2705,13 @@ export class Creatures {
       const age = treeAge(game.world.getData(x, y));
       return age.pruned !== null && age.next !== null && !TREE_AGES[age.next].alive;
     }
+    if (kind === 'fruit') {
+      // A bearing tree with something on it, and a tile beside it to stand on.
+      if (game.world.getTile(x, y) !== TileType.Tree || !this.beside(game, x, y)) return false;
+      const data = game.world.getData(x, y);
+      const age = treeAge(data);
+      return !!TREE_DEFS[treeSpecies(data)].fruit && age.bears && age.alive && !game.isForaged(x, y, 'forage') && !this.claimed(x, y, c);
+    }
     if (kind === 'stump') return game.world.getTile(x, y) === TileType.Stump && this.tileOk(game, x, y);
     const def = TILE_DEFS[game.world.getTile(x, y)];
     return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
@@ -2799,6 +2834,7 @@ export class Creatures {
     if (kind === 'quarry') return this.finishQuarry(game, c);
     if (kind === 'peat') return this.finishPeat(game, c);
     if (kind === 'reed') return this.finishReed(game, c);
+    if (kind === 'fruit') return this.finishFruit(game, c);
     if (kind === 'fish') return this.finishFish(game, c);
     if (kind === 'seek') return this.finishSeek(game, c);
     if (kind === 'fetch') return this.finishFetch(game, c);
@@ -2963,6 +2999,25 @@ export class Creatures {
       }
     }
     return { uid: game.inventory.nextUid++, id: got.id, ql: Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1)), dmg: 0, count: 1 };
+  }
+
+  /**
+   * Pick what a bearing tree has on it, as many as a person's hands would
+   * take: an old tree carries more than one only just come into bearing.
+   * The tree is left picked for the day, as it is behind a person.
+   */
+  private finishFruit(game: Game, c: Creature): Item | null {
+    if (game.world.getTile(c.workX, c.workY) !== TileType.Tree) return null;
+    const data = game.world.getData(c.workX, c.workY);
+    const def = TREE_DEFS[treeSpecies(data)];
+    const age = treeAge(data);
+    if (!def.fruit || !age.bears || !age.alive) return null;
+    const skill = c.skills[GATHER_SKILL.fruit] ?? 1;
+    this.gainSkill(game, c, GATHER_SKILL.fruit, 0.225);
+    game.markForaged(c.workX, c.workY, 'forage');
+    const old = age.id === 2 || age.id === 4;
+    const count = Math.max(1, Math.round((old ? 5 : 3) * (0.5 + skill / 130) * (0.7 + game.rand() * 0.6)));
+    return { uid: game.inventory.nextUid++, id: def.fruit, ql: Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1)), dmg: 0, count };
   }
 
   /** Shear a stand of reeds back to the water, as the player's knife would. */
@@ -3857,7 +3912,7 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        const stands = kind === 'woodcut' || kind === 'fish';
+        const stands = kind === 'woodcut' || kind === 'fish' || kind === 'fruit';
         const wx = stands ? c.workX : Math.floor(c.x);
         const wy = stands ? c.workY : Math.floor(c.y);
         if (kind && this.gatherable(game, wx, wy, kind, c)) this.beginForage(game, c, kind);
@@ -3883,7 +3938,7 @@ export class Creatures {
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
         // A tree cannot be stood on and neither can the water: both are worked from beside.
-        const spot = kind === 'woodcut' || kind === 'prune' || kind === 'fish' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
+        const spot = kind === 'woodcut' || kind === 'prune' || kind === 'fish' || kind === 'fruit' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
         if (kind === 'mine') c.job = null;
         if (spot) {
           c.job = kind === 'farm' ? this.farmJobAt(game, c, t.x, t.y) : null;

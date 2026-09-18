@@ -7804,7 +7804,7 @@ select act_perform(:'world2', :'ivar', 'plant',
   ('{"kind":"tile","x":9,"y":9,"itemUid":' || :'chosen_sprout' || '}')::jsonb) \g /dev/null
 select '891. a pack holding a ' || lower(:'old_tree') || ' sprout and a ' || lower(:'new_tree')
      || ', with the ' || lower(:'new_tree') || ' asked for by name: what goes in the ground is '
-     || coalesce((select lower(name) from tree_def where id = (land_data(:'world2', 9, 9) & 15)), 'nothing')
+     || coalesce((select lower(name) from tree_def where id = tree_species(land_data(:'world2', 9, 9))), 'nothing')
      || ', and what is left in the pack is '
      || coalesce((select lower(extra) from item where world_id = :'world2' and holder_uid = :'ivar'
                     and def = 'sprout' limit 1), 'none')
@@ -9373,3 +9373,54 @@ select '993. off the table: a nail mould runs one lump out as ' || (select per f
      || (select name from item_def where id = 'arrow_head_mould') || '" and weighing ' || (select weight from item_def where id = 'arrow_head_mould');
 update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb) where id = :oven3 \g /dev/null
 update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
+
+/*
+ * Eight more trees that bear, held to their islands, and a plucka to pick them.
+ *
+ * The species of a tree was the low nibble of its byte and nine fit; the top
+ * bit, which the age never reached, is the fifth bit of the species now, so
+ * every byte from before reads as it did. And a new wildermon picks what a
+ * bearing tree has on it and carries it home.
+ */
+\echo ''
+\echo '--- eight more trees that bear, and a plucka to pick them'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '994. ' || (select count(*) from tree_def) || ' trees on the table, ' || (select count(*) from tree_def where fruit is not null) || ' of them bearing: '
+     || (select string_agg(name || ' (' || fruit || ')', ', ' order by id) from tree_def where id > 8)
+     || '; an old pear is byte ' || tree_pack(9, 2) || ', read back as species ' || tree_species(tree_pack(9, 2)) || ' age ' || tree_age(tree_pack(9, 2))
+     || ', a very old quince (' || (select id from tree_def where name = 'Quince') || ') is byte ' || tree_pack(16, 4) || ', read back as ' || tree_species(tree_pack(16, 4)) || '/' || tree_age(tree_pack(16, 4))
+     || ', and a byte from before, an old oak ' || (2 | (2 << 4)) || ', still reads ' || tree_species(2 | (2 << 4)) || '/' || tree_age(2 | (2 << 4))
+     || '; a shrivelled quince left a day is a stump of ' || lower((select name from tree_def where id = tree_species(tree_pack(16, 5) & 143)));
+select '995. the plucka: ' || (select name || ' gathers ' || gathers || ', near trees ' || near_trees || ', work range ' || work_range from species_def where id = 'plucka')
+     || ' — the trade as the island knows it: ' || (select id || ' (' || skill || ', ' || plain || ')' from gather_def where id = 'fruit')
+     || ' — ported: ' || worker_job_ported('fruit')
+     || ' — wild: ' || (select species || ' ' || weight from wild_table where species = 'plucka')
+     || ' — and it eats ' || (select count(*) from species_diet where species = 'plucka') || ' things, every fruit among them: '
+     || (select bool_and(exists (select 1 from species_diet sd where sd.species = 'plucka' and sd.item = t.fruit)) from tree_def t where t.fruit is not null);
+-- Room on the deed, and a pear and a fig in bearing beside the token where the snedda's oaks stood.
+update creature set mode = 'stored', job = null where world_id = :'world2' and keeper = :'ivar' and mode = 'deed' \g /dev/null
+select x as tok_x, y as tok_y from deed where world_id = :'world2' and founded_by = :'ivar' \gset
+select pg_temp.stand_the_wood(:'world2', :'ivar') \g /dev/null
+select land_set_data(:'world2', :tok_x + 3, :tok_y, tree_pack((select id from tree_def where name = 'Pear'), 2)) \g /dev/null
+select land_set_data(:'world2', :tok_x + 4, :tok_y, tree_pack((select id from tree_def where name = 'Fig'), 4)) \g /dev/null
+select land_set_tile(:'world2', :tok_x + 3, :tok_y + 2, tile_id('Grass')) \g /dev/null
+delete from foraged where world_id = :'world2' and y = :tok_y and x in (:tok_x + 3, :tok_x + 4) \g /dev/null
+delete from item where world_id = :'world2' and holder = 'crate' and crate = (deed_crate(:'world2', :'ivar')).id and def in ('pear', 'fig') \g /dev/null
+select creature_spawn(:'world2', 'plucka', :tok_x + 0.5, :tok_y + 1.5, 'stored', now() - interval '3 hours', :'ivar') as picker \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'picker' || ',"job":"fruit"}')::jsonb), 'ALLOWED') as pick_door \gset
+select 'a pear ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world2', :tok_x + 3, :tok_y)))) || ' and a fig ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world2', :tok_x + 4, :tok_y)))) as stand \gset
+select worker_gatherable(:'world2', :tok_x + 3, :tok_y, 'fruit', (select c from creature c where c.world_id = :'world2' and c.id = :'picker')) as pear_ok \gset
+select worker_gatherable(:'world2', :tok_x + 2, :tok_y, 'fruit', (select c from creature c where c.world_id = :'world2' and c.id = :'picker')) as grass_ok \gset
+delete from event where uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'picker' || '}')::jsonb) \g /dev/null
+update creature set until = until - interval '1200 seconds', leg_at = leg_at - interval '1200 seconds',
+    leg_ends = leg_ends - interval '1200 seconds', settled_at = settled_at - interval '1200 seconds'
+  where id = :'picker';
+select worker_settle(:'world2', :'picker') as pick_rounds \gset
+select '996. ' || :'stand' || ' beside the token: setting the plucka to fruit (' || :'pick_door' || '), the pear is worth a climb: ' || :'pear_ok' || ', and the grass beside it: ' || :'grass_ok'
+     || '; set to work it holds job = ' || (select job from creature where world_id = :'world2' and id = :'picker')
+     || '; twenty minutes of it, ' || :'pick_rounds' || ' rounds: in the deed crate ' || coalesce((select sum(count) from item where world_id = :'world2' and holder = 'crate' and crate = (deed_crate(:'world2', :'ivar')).id and def = 'pear'), 0) || ' pears and '
+     || coalesce((select sum(count) from item where world_id = :'world2' and holder = 'crate' and crate = (deed_crate(:'world2', :'ivar')).id and def = 'fig'), 0) || ' figs'
+     || ', the pear tree picked for the day: ' || is_foraged(:'world2', :tok_x + 3, :tok_y, 'forage') || ' and still a ' || lower((select name from tree_def where id = tree_species(land_data(:'world2', :tok_x + 3, :tok_y))))
+     || ', and the plucka told of nothing but its work: ' || coalesce((select string_agg(distinct left(text, 40), ' | ') from event where uid = :'ivar' and text ilike '%plucka%'), 'nothing');
+update creature set mode = 'stored', job = null where world_id = :'world2' and id = :'picker' \g /dev/null

@@ -331,6 +331,16 @@ jobs:
             --outfile=node_modules/.cache/wood.mjs --log-level=error
           node node_modules/.cache/wood.mjs
 
+      - name: Eight more trees that bear, held to their islands
+        run: |
+          # The species of a tree is the low nibble and the top bit of its tile
+          # byte now, and every byte from before has to read as it did; the
+          # chart's regions each grow their own kinds and never another's; an
+          # island of your own grows them all.
+          npx esbuild supabase/test/orchard.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/orchard.mjs --log-level=error
+          node node_modules/.cache/orchard.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live
