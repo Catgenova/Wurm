@@ -455,6 +455,7 @@ insert into item_def values ('unfired_clay_jar', 'Unfired clay jar', 'material',
 insert into item_def values ('clay_brick', 'Clay brick', 'material', 3, true, 6, null);
 insert into item_def values ('adobe', 'Adobe', 'material', 3, true, 10, null);
 insert into item_def values ('mortar', 'Mortar', 'material', 2, true, 40, null);
+insert into item_def values ('concrete', 'Concrete', 'material', 2.5, true, 40, null);
 insert into item_def values ('copper_ore', 'Copper ore', 'material', 2, true, 2, null);
 insert into item_def values ('iron_ore', 'Iron ore', 'material', 2, true, 2, null);
 insert into item_def values ('tin_ore', 'Tin ore', 'material', 2, true, 2, null);
@@ -800,6 +801,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig', 'Dig', 'digging', 'digging', 'shovel', true, null, 0.05, 6, 8, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('flatten', 'Flatten', 'flattening', 'digging', 'shovel', false, null, 0.03, 3.5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt', 'Drop dirt', 'dropping dirt', 'digging', null, true, null, 0.02, 2, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('raise_rock', 'Raise the rock with concrete', 'laying concrete', 'masonry', 'trowel', true, null, 0.04, 5, 10, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('mine', 'Mine', 'mining', 'mining', 'pickaxe', true, null, 0.06, 8, 12, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('chip_corner', 'Chip corner', 'chipping at the face', 'mining', 'pickaxe', true, null, 0.07, 9, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('prospect', 'Prospect', 'prospecting', 'prospecting', 'pickaxe', false, null, 0.03, 5, null, false, false);
@@ -940,6 +942,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_slate_slab', 'Cut a slate slab', 'cutting a slab', 'stonecutting', 'chisel', false, null, 0.05, 9, 14, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_marble_slab', 'Cut a marble slab', 'cutting a slab', 'stonecutting', 'chisel', false, null, 0.05, 10, 20, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_sandstone_slab', 'Cut a sandstone slab', 'cutting a slab', 'stonecutting', 'chisel', false, null, 0.05, 9, 15, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('mix_concrete', 'Mix concrete', 'mixing concrete', 'masonry', null, false, null, 0.03, 4, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_mortar', 'Mix mortar', 'mixing mortar', 'masonry', null, false, null, 0.03, 4, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_clay_brick', 'Shape clay brick', 'shaping clay', 'pottery', null, false, null, 0.02, 4, 6, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_clay_pot', 'Shape a pot', 'shaping a pot', 'pottery', null, false, null, 0.03, 8, 12, false, true);
@@ -1716,6 +1719,7 @@ update item_def set description = 'Green ware. It will not hold a stew until it 
 update item_def set description = 'Green ware, waiting on a kiln.' where id = 'unfired_clay_pot';
 update item_def set description = 'Green ware, waiting on a kiln.' where id = 'unfired_clay_jar';
 update item_def set description = 'Clay and grass pressed into a block.' where id = 'adobe';
+update item_def set description = 'Mortar worked stiff with ashes. A lot of it raises a bare rock corner by one; it will not set on soil or under water.' where id = 'concrete';
 update item_def set description = 'Burns long and hot. A campfire will take it happily.' where id = 'coal';
 update item_def set description = 'A blue-grey metal that turns a hatchet edge. Twenty kilograms of ore give a tenth of this.' where id = 'adamantine_lump';
 update item_def set description = 'Pale metal that holds a light of its own. Twenty kilograms of ore give a tenth of this.' where id = 'glimmersteel_lump';
@@ -3247,6 +3251,9 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_marble_slab', 0, 'marble_shards', 5);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_sandstone_slab', 'sandstone_slab', 1, 'chisel', null, 'stonecutting', 'Cut a sandstone slab', 'cutting a slab', 9, 0.05, 15, false, false, null, null, null, 'You cut a sandstone slab.', 'The sandstone crumbles at the edge. You fail to cut a slab.');
 insert into recipe_input values ('make_sandstone_slab', 0, 'sandstone_shards', 5);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('mix_concrete', 'concrete', 1, null, null, 'masonry', 'Mix concrete', 'mixing concrete', 4, 0.03, null, false, false, null, null, null, 'You work ashes into the mortar and it stiffens into concrete.', null);
+insert into recipe_input values ('mix_concrete', 0, 'mortar', 1);
+insert into recipe_input values ('mix_concrete', 1, 'ash', 1);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_mortar', 'mortar', 5, null, null, 'masonry', 'Mix mortar', 'mixing mortar', 4, 0.03, null, false, false, null, null, null, 'You mix clay and sand into five lots of mortar.', null);
 insert into recipe_input values ('make_mortar', 0, 'clay', 1);
 insert into recipe_input values ('make_mortar', 1, 'sand', 1);

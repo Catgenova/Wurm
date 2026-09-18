@@ -298,6 +298,11 @@ function maxDigSlope(g: Game): number {
   return Math.max(40, Math.floor(g.skills.get('digging') * 3));
 }
 
+/** The same rule for a mason raising rock as for a digger moving soil. */
+function maxMasonSlope(g: Game): number {
+  return Math.max(40, Math.floor(g.skills.get('masonry') * 3));
+}
+
 /** Slope around a corner if its height were changed by `delta`. */
 function slopeAfter(g: Game, cx: number, cy: number, delta: number): number {
   const w = g.world;
@@ -588,6 +593,46 @@ export const ACTIONS: ActionDef[] = [
       // What the spadeful covers becomes what was in it: dirt, clay or sand.
       if (BURYABLE.has(w.getTile(t.x, t.y))) w.setTile(t.x, t.y, SPOIL_TILE[it.id]);
       g.logMsg(`You drop the ${itemDef(it.id).name.toLowerCase()} on the ${cornerName(t)} corner, raising the ground.`, 'event');
+    },
+  },
+  {
+    id: 'raise_rock',
+    label: 'Raise the rock with concrete',
+    verb: 'laying concrete',
+    skill: 'masonry',
+    tool: 'trowel',
+    corner: true,
+    stamina: 0.04,
+    baseTime: 5,
+    difficulty: 10,
+    applies: (t, g) => t.kind === 'tile' && g.inventory.has('concrete'),
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('concrete')) return 'You have no concrete.';
+      const w = g.world;
+      // Concrete goes on bare rock, above the water: the only way to build
+      // *up* on rock without dirt, which slides off it.
+      if (w.getDirt(t.cx, t.cy) > 0) return 'There is soil on that corner. Concrete goes on bare rock.';
+      if (w.getHeight(t.cx, t.cy) < 0) return 'Concrete will not set under water.';
+      const under = cornerUnderBuilding(g, t.cx, t.cy);
+      if (under) return under;
+      if (slopeAfter(g, t.cx, t.cy, 1) > maxMasonSlope(g)) return 'The slope would be too steep for your masonry skill.';
+      return g.inventory.has('trowel') ? null : 'You need a trowel to lay concrete.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      // Spent either way: concrete that slumps off is concrete gone.
+      if (!g.inventory.consume('concrete')) return;
+      if (!g.skillCheck('masonry', 10, g.toolQl('trowel'))) {
+        g.missed();
+        g.logMsg('The concrete slumps off the rock before it sets, and is lost.', 'event');
+        return;
+      }
+      const w = g.world;
+      // The rock rises: the height goes up and the soil over it stays nought.
+      w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) + 1);
+      g.exposeRock(t.cx, t.cy);
+      g.logMsg(`You lay concrete on the ${cornerName(t)} corner and the rock stands a step higher.`, 'event');
     },
   },
   {

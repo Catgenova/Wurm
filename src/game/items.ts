@@ -133,6 +133,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   clay_brick: { name: 'Clay brick', category: 'material', weight: 3, stackable: true, decay: 6 },
   adobe: { name: 'Adobe', category: 'material', weight: 3, stackable: true, decay: 10, description: 'Clay and grass pressed into a block.' },
   mortar: { name: 'Mortar', category: 'material', weight: 2, stackable: true, decay: 40 },
+  concrete: { name: 'Concrete', category: 'material', weight: 2.5, stackable: true, decay: 40, description: 'Mortar worked stiff with ashes. A lot of it raises a bare rock corner by one; it will not set on soil or under water.' },
   // Ore comes out of the seam; the smelter turns it into lumps.
   copper_ore: { name: 'Copper ore', category: 'material', weight: 2, stackable: true, decay: 2 },
   iron_ore: { name: 'Iron ore', category: 'material', weight: 2, stackable: true, decay: 2 },

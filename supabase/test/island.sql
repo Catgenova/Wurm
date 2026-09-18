@@ -8510,3 +8510,61 @@ update item set holder_uid = '00000000-0000-0000-0000-000000000000' where world_
 select :'named_log' || ' — and with none of the three in the pack: "'
      || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'drop_dirt', '{"kind":"tile","x":41,"y":41,"cx":41,"cy":41}'::jsonb), 'ALLOWED') || '"';
 update item set holder_uid = '77777777-7777-7777-7777-777777777777' where world_id = :'world6' and holder_uid = '00000000-0000-0000-0000-000000000000' and def in ('dirt', 'clay', 'sand') \g /dev/null
+
+/*
+ * Raising rock with concrete.
+ *
+ * Asked from the island. The only way to build up on rock was dirt, which
+ * slides off it. Mortar worked stiff with ashes is concrete, and a lot of it
+ * raises a bare rock corner by one: on soil it is refused, under water it
+ * will not set, and the slope it would make is the mason's to answer for as
+ * a digger answers for a spadeful.
+ */
+\echo ''
+\echo '--- raising rock with concrete'
+select '945. concrete, off the tables: "' || (select label from recipe where id = 'mix_concrete') || '" — '
+     || (select string_agg(item || ' × ' || count, ' + ' order by ord) from recipe_input where recipe = 'mix_concrete')
+     || ' → ' || (select result from recipe where id = 'mix_concrete') || ' (' || (select skill from recipe where id = 'mix_concrete') || ')'
+     || ' — and what raising the rock asks for: ' || (select tool from action_def where id = 'raise_rock') || ', ' || (select skill from action_def where id = 'raise_rock');
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def in ('concrete', 'trowel');
+  delete from event where uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'trowel', 80, 1);
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'concrete', 50, 6);
+  insert into skill (world_id, uid, id, value) values (w, me, 'masonry', 70) on conflict (world_id, uid, id) do update set value = 70;
+  -- Bare rock at four, and one corner of soil beside it, and a corner under water.
+  for j in 40..43 loop for i in 45..48 loop
+    perform land_set_tile(w, i, j, tile_id('Rock')); perform land_set_data(w, i, j, 0);
+    perform land_set_height(w, i, j, 4); perform land_set_dirt(w, i, j, 0);
+  end loop; end loop;
+  perform land_set_dirt(w, 47, 41, 2);
+  perform land_set_height(w, 48, 43, -3);
+  update player set x = 46.5, y = 40.5 where world_id = w and uid = me;
+end $$;
+select land_height(:'world6', 46, 41) as r0 \gset
+select '946. the doors: bare rock "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'raise_rock', '{"kind":"tile","x":46,"y":41,"cx":46,"cy":41}'::jsonb), 'ALLOWED')
+     || '", a corner with soil on it "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'raise_rock', '{"kind":"tile","x":46,"y":41,"cx":47,"cy":41}'::jsonb), 'ALLOWED')
+     || '"' as doors1 \gset
+update player set x = 47.5, y = 42.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select :'doors1' || ', a corner under water "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'raise_rock', '{"kind":"tile","x":47,"y":42,"cx":48,"cy":43}'::jsonb), 'ALLOWED') || '"';
+-- Laid until it sets: concrete that slumps off is concrete gone.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  update player set x = 46.5, y = 40.5 where world_id = w and uid = me;
+  for i in 1..6 loop
+    exit when land_height(w, 46, 41) > 4;
+    perform act_perform(w, me, 'raise_rock', '{"kind":"tile","x":46,"y":41,"cx":46,"cy":41}'::jsonb);
+  end loop;
+end $$;
+select '947. laid: the corner is ' || land_height(:'world6', 46, 41) || ' from ' || :'r0' || ', with ' || land_dirt(:'world6', 46, 41)
+     || ' soil over it — "' || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You lay concrete%' order by n desc limit 1)
+     || '" — concrete spent: ' || (6 - coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'concrete'), 0)) || ' of 6';
