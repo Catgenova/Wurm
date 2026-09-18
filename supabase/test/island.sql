@@ -9028,3 +9028,35 @@ select '979. what it is made of decides how stubborn the work is: setting a diam
      || ', which is the recipe''s ' || (select difficulty from recipe where id = :'woodrec') || ' and the wood''s ' || (mat_of('Oak')).difficulty || ' or ' || (mat_of('Pine')).difficulty
      || ', where the island used to read the recipe alone';
 update player set equipped = equipped - 'jewel' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+
+/*
+ * A stack taken out is yours.
+ *
+ * Farce's seeds: put in the crate and taken out again, they joined the
+ * lowest-numbered stack of seeds on the island, which was somebody else's.
+ */
+\echo ''
+\echo '--- a stack taken out is yours'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select id as box, x as bx, y as by from crate where world_id = :'world2' order by id limit 1 \gset
+delete from item where world_id = :'world2' and def = 'cabbage_seed' \g /dev/null
+-- Alice holds seeds first, so hers is the lowest-numbered stack ashore; Ivar puts one in the crate and takes it out.
+select give(:'world2', :'alice', 'cabbage_seed', 3, 50) \g /dev/null
+select give(:'world2', :'ivar', 'cabbage_seed', 1, 50) as seed \gset
+select x as was_x, y as was_y from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set x = :bx + 0.5, y = :by + 0.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'seed' || ',"count":1}')::jsonb) \g /dev/null
+select id as stored from item where world_id = :'world2' and holder = 'crate' and crate = :box and def = 'cabbage_seed' \gset
+select act_perform(:'world2', :'ivar', 'take_from_store', ('{"kind":"item","uid":' || :'stored' || ',"count":1}')::jsonb) \g /dev/null
+-- And a split stack keeps its maker's mark: one of Ivar's three rare seeds handed to Alice, who has none like it.
+select give(:'world2', :'ivar', 'cabbage_seed', 3, 60, null, 'rare', 'Ivar') as marked \gset
+select move_part(:'marked', 1, 'player', :'alice', null, null) as split \gset
+select '980. Farce''s seed, put in the crate and taken out again, with Alice''s stack of them the lowest-numbered ashore: Ivar holds '
+     || coalesce((select sum(count) from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' and def = 'cabbage_seed' and rare is null), 0)
+     || ' and Alice ' || coalesce((select sum(count) from item where world_id = :'world2' and holder = 'player' and holder_uid = :'alice' and def = 'cabbage_seed' and rare is null), 0)
+     || ', the crate ' || coalesce((select sum(count) from item where world_id = :'world2' and holder = 'crate' and crate = :box and def = 'cabbage_seed'), 0)
+     || ', and Ivar told "' || (select text from event where uid = :'ivar' and text like 'You take%' order by n desc limit 1) || '"'
+     || '; and one of three rare seeds split off to Alice keeps its mark: ' || (select coalesce(maker, 'nobody') || ', ' || coalesce(rare, 'plain') from item where id = :'split')
+     || ', with ' || (select count from item where id = :'marked') || ' left marked in Ivar''s pack';
+update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item where world_id = :'world2' and def = 'cabbage_seed' \g /dev/null
