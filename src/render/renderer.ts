@@ -18,6 +18,7 @@ import {
   type FloorTile,
   type Side,
   type Wall,
+  floorBill,
 } from '../game/building';
 import { hash2 } from '../world/noise';
 import { bareRock, dustiness, HARD_EDGED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, rockVariant, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
@@ -30,10 +31,10 @@ import { ageDef } from '../game/creatures';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
-import { furnitureCentre, furnitureDef, type PlacedFurniture } from '../game/furniture';
+import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
+import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT, mirroredAt } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -53,6 +54,15 @@ import { SWAY_MAX, swayAt } from './sway';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
+/**
+ * What is on its way to the ground: a piece of furniture following the
+ * cursor, or a staircase on its tile, turned the way Q and E have turned it.
+ * `ok` is whether it can go where it is.
+ */
+export type Ghost =
+  | { kind: 'furniture'; piece: string; x: number; y: number; sx: number; sy: number; facing: Side; ok: boolean }
+  | { kind: 'stairs'; x: number; y: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; ok: boolean };
+
 export interface Pick {
   x: number;
   y: number;
@@ -258,6 +268,8 @@ export class Renderer {
   readonly camera = new Camera();
   time = 0;
   hover: Pick | null = null;
+  /** What is being set down, drawn after everything that stands. */
+  ghost: Ghost | null = null;
   /** The tile the tile window is looking at, outlined so you can see which it is. */
   selected: { x: number; y: number } | null = null;
   fps = 0;
@@ -1254,7 +1266,7 @@ export class Renderer {
       }
       if (ent.kind === 'furniture' && ent.piece) {
         const piece = ent.piece;
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece)));
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), mirroredAt(pieceFacing(piece), cam.rotation)));
         const [W, D] = furnitureSpan(piece.kind);
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
         // A sign is a board made to be read, so what is written on it stands
@@ -1353,6 +1365,7 @@ export class Renderer {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
     }
+    if (this.ghost) this.drawGhost(ctx, zoom, this.ghost);
   }
 
   /**
@@ -1367,6 +1380,43 @@ export class Renderer {
    * is what a wall seen end on looks like. Which of the pair is claimed still
    * matters: claim both sides of one border and it is drawn twice.
    */
+  /** The ghost of what is being set down, over everything, and washed red where it will not go. */
+  private drawGhost(ctx: CanvasRenderingContext2D, zoom: number, ghost: Ghost): void {
+    const cam = this.camera;
+    const world = this.game.world;
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    if (ghost.kind === 'furniture') {
+      const [w, h] = furnitureFootprint(ghost.piece, ghost.facing);
+      const wx = ghost.x + (ghost.sx + w / 2) / SUBTILES;
+      const wy = ghost.y + (ghost.sy + h / 2) / SUBTILES;
+      const px = cam.worldToScreenX(wx, wy);
+      const py = cam.worldToScreenY(wx, wy, world.heightAt(wx, wy));
+      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, mirroredAt(ghost.facing, cam.rotation));
+      if (!ghost.ok) {
+        const [W, D] = furnitureSpan(ghost.piece);
+        ctx.fillStyle = 'rgba(214, 58, 42, 0.5)';
+        ctx.beginPath();
+        ctx.ellipse(px, py, W * zoom, D * zoom, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      const tile: FloorTile = { building: 0, level: ghost.level, x: ghost.x, y: ghost.y, material: ghost.material, kind: ghost.floorKind, facing: ghost.side, ...floorBill(ghost.material, ghost.floorKind) };
+      const base = world.getHeight(ghost.x, ghost.y);
+      if (ghost.floorKind === 'stairs') this.drawStairs(tile, ghost.x, ghost.y, base, 0.6);
+      else this.drawLadder(tile, ghost.x, ghost.y, base, 0.6);
+      if (!ghost.ok) {
+        const px = cam.worldToScreenX(ghost.x + 0.5, ghost.y + 0.5);
+        const py = cam.worldToScreenY(ghost.x + 0.5, ghost.y + 0.5, base + (ghost.level - 1) * WALL_HEIGHT);
+        ctx.fillStyle = 'rgba(214, 58, 42, 0.5)';
+        ctx.beginPath();
+        ctx.ellipse(px, py, 18 * zoom, 9 * zoom, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
   private drawStructures(x: number, y: number, V: View, inFront: boolean): void {
     const bld = this.game.buildings;
     const w = this.game.world;

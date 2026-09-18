@@ -63,6 +63,8 @@ export type Target =
       sx?: number;
       sy?: number;
       itemUid?: number;
+      /** Which way a piece being set down faces. */
+      facing?: Side;
       /** Which cast is being called for, when one is. */
       spell?: string;
     }

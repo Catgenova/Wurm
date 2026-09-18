@@ -18,6 +18,7 @@ import {
   WALL_TYPE_BY_ID,
   WALL_TYPES,
   workLevel,
+  type Side,
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
@@ -39,7 +40,7 @@ import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, isLump, isMould, isO
 import { meltable } from '../game/melt';
 import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture, turnedFacing } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
@@ -91,6 +92,15 @@ export interface UICallbacks {
 }
 
 /** Builds and updates every HTML overlay above the canvas. */
+/**
+ * Something on its way to the ground. A piece of furniture follows the cursor
+ * until it is clicked down; a staircase or a ladder sits on its tile until
+ * the side to climb from is chosen. Q and E turn either.
+ */
+type Placing =
+  | { kind: 'furniture'; itemUid: number; piece: string; facing: Side }
+  | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side };
+
 export class UI {
   readonly windows: WindowManager;
   readonly menu: ContextMenu;
@@ -112,6 +122,8 @@ export class UI {
   private readonly island: Island | null;
   /** What every key does, so the window menu can name them. */
   private readonly keys: Keybinds;
+  /** Something on its way to the ground, or nothing. */
+  placing: Placing | null = null;
 
   constructor(
     private readonly game: Game,
@@ -384,6 +396,88 @@ export class UI {
   useLoop(loop: number): void {
     const pick = this.renderer.hover;
     this.game.useLoop(loop, pick ? this.targetOf(pick) : null);
+  }
+
+  /** Pick up a piece to set down: it follows the cursor from here, and Q and E turn it. */
+  startPlacing(item: Item): void {
+    this.placing = { kind: 'furniture', itemUid: item.uid, piece: item.id, facing: 's' };
+    this.game.logMsg(`The ${itemName(item).toLowerCase()} follows the cursor: Q and E turn it, a click sets it down, Escape keeps it.`, 'info');
+  }
+
+  /** Plan a staircase or a ladder on a tile: the side to climb from turns with Q and E. */
+  startPlacingStairs(base: Target, level: number, material: string, floorKind: 'stairs' | 'ladder', side: Side): void {
+    if (base.kind !== 'tile') return;
+    this.placing = { kind: 'stairs', x: base.x, y: base.y, cx: base.cx, cy: base.cy, level, material, floorKind, side };
+    this.game.logMsg('Q and E choose the side to climb from, a click plans it, Escape lets it go.', 'info');
+  }
+
+  /** A quarter turn of what is being placed: to the right for +1, to the left for -1. */
+  rotatePlacing(step: number): void {
+    const p = this.placing;
+    if (!p) return;
+    if (p.kind === 'furniture') p.facing = turnedFacing(p.facing, step);
+    else p.side = turnedFacing(p.side, step);
+  }
+
+  cancelPlacing(): void {
+    this.placing = null;
+    this.renderer.ghost = null;
+  }
+
+  /** The ghost the renderer draws for what is being placed, worked out from where the cursor is. */
+  syncGhost(pick: Pick | null): void {
+    const p = this.placing;
+    if (!p) {
+      this.renderer.ghost = null;
+      return;
+    }
+    if (p.kind === 'stairs') {
+      const plan = ACTION_BY_ID.get('plan_floor');
+      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind };
+      this.renderer.ghost = { kind: 'stairs', x: p.x, y: p.y, level: p.level, material: p.material, floorKind: p.floorKind, side: p.side, ok: !(plan?.check?.(target, this.game) ?? null) };
+      return;
+    }
+    if (!pick) {
+      this.renderer.ghost = null;
+      return;
+    }
+    const [s0, t0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+    const [ax, ay] = furnitureAnchor(p.piece, s0, t0, p.facing);
+    this.renderer.ghost = { kind: 'furniture', piece: p.piece, x: pick.x, y: pick.y, sx: ax, sy: ay, facing: p.facing, ok: !this.game.furniturePlaceReason(p.piece, pick.x, pick.y, ax, ay, p.facing) };
+  }
+
+  /** A click while something is being placed: the left button sets it down where the cursor is, any other keeps it. */
+  placeClick(pick: Pick | null, button: number): void {
+    const p = this.placing;
+    if (!p) return;
+    if (button !== 0) {
+      this.cancelPlacing();
+      return;
+    }
+    if (p.kind === 'stairs') {
+      const plan = ACTION_BY_ID.get('plan_floor');
+      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind };
+      const reason = plan?.check?.(target, this.game) ?? null;
+      if (reason) {
+        this.game.logMsg(reason, 'error');
+        return;
+      }
+      if (plan) this.game.requestAction(plan, target);
+      this.cancelPlacing();
+      return;
+    }
+    if (!pick) return;
+    const def = ACTION_BY_ID.get('place_furniture');
+    const [s0, t0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+    const [ax, ay] = furnitureAnchor(p.piece, s0, t0, p.facing);
+    const target: Target = { kind: 'tile', x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy, sx: ax, sy: ay, itemUid: p.itemUid, facing: p.facing };
+    const reason = def?.check?.(target, this.game) ?? null;
+    if (reason) {
+      this.game.logMsg(reason, 'error');
+      return;
+    }
+    if (def) this.game.requestAction(def, target);
+    this.cancelPlacing();
   }
 
   setHover(pick: Pick | null, sx: number, sy: number): void {
@@ -727,22 +821,14 @@ export class UI {
     const placeFurnitureDef = ACTION_BY_ID.get('place_furniture');
     const carried = this.game.inventory.items.filter((it) => isFurniture(it.id));
     if (placeFurnitureDef && carried.length) {
-      const [s0, t0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
+      // The piece follows the cursor from here: Q and E turn it, a click sets it down.
       entries.push({
-        label: 'Set furniture down here',
-        children: carried.map((it) => {
-          const def = furnitureDef(it.id);
-          const [ax, ay] = furnitureAnchor(it.id, s0, t0);
-          const ft: Target = { ...target, sx: ax, sy: ay, itemUid: it.uid };
-          const reason = placeFurnitureDef.check?.(ft, this.game) ?? null;
-          return {
-            label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
-            note: reason ? undefined : `spots ${ax + 1},${ay + 1} to ${ax + def.w},${ay + def.h}`,
-            hint: reason ?? undefined,
-            disabled: !!reason,
-            onSelect: () => this.game.requestAction(placeFurnitureDef, ft),
-          };
-        }),
+        label: 'Set furniture down',
+        children: carried.map((it) => ({
+          label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+          note: 'follows the cursor · Q and E turn it · click to set down',
+          onSelect: () => this.startPlacing(it),
+        })),
       });
     }
     // Sowing on a tilled field: pick from the seeds you carry.
@@ -1741,18 +1827,19 @@ export class UI {
           const stairs = plan.check?.({ ...withSide, material: 'log', floorKind: 'stairs' }, g) ?? null;
           if (stairs) entries.push({ label: `Plan staircase (up from the ${sideName})`, hint: stairs, disabled: true });
           else {
+            // The side to climb from is chosen on the tile: Q and E turn it, a click plans it.
             entries.push({
-              label: `Plan staircase (up from the ${sideName})`,
+              label: 'Plan staircase',
               children: MATERIALS.map((m) => ({
                 label: m.name,
-                note: describeNeeds(floorBill(m.id, 'stairs'), materialName),
-                onSelect: () => g.requestAction(plan, { ...withSide, material: m.id, floorKind: 'stairs' }),
+                note: `${describeNeeds(floorBill(m.id, 'stairs'), materialName)} · Q and E choose the side`,
+                onSelect: () => this.startPlacingStairs(base, level, m.id, 'stairs', side),
               })),
             });
             entries.push({
-              label: `Plan ladder (on the ${sideName} side)`,
-              note: describeNeeds(floorBill('plank', 'ladder'), materialName),
-              onSelect: () => g.requestAction(plan, { ...withSide, material: 'plank', floorKind: 'ladder' }),
+              label: 'Plan ladder',
+              note: `${describeNeeds(floorBill('plank', 'ladder'), materialName)} · Q and E choose the side`,
+              onSelect: () => this.startPlacingStairs(base, level, 'plank', 'ladder', side),
             });
           }
         }

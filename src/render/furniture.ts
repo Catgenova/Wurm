@@ -1,4 +1,5 @@
 import { furnitureDef } from '../game/furniture';
+import type { Side } from '../game/building';
 
 /**
  * Furniture is drawn out of iso boxes: a top rhombus and the two faces you can
@@ -847,12 +848,28 @@ function wheel(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, 
 }
 
 /** Draw one piece with its floor contact at (sx, sy). */
-export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number): void {
+/**
+ * Which way round a piece is drawn.
+ *
+ * The drawings have one face, and it is the south face at the first
+ * viewpoint. A piece turned a quarter across the tile shows that face in the
+ * mirror, since the two diagonals of the tile are each other's reflection on
+ * screen; turned a half it shows the face again. Eight viewpoints and four
+ * facings meet here, so a quarter turn of the view or of the piece flips it,
+ * which is what keeps a piece standing the way it was set while the view goes
+ * round it. The eighth turns fall on the nearer of the two.
+ */
+const FACING_TURN: Record<Side, number> = { s: 0, w: 2, n: 4, e: 6 };
+export const mirroredAt = (facing: Side, rotation: number): boolean =>
+  (((((FACING_TURN[facing] - rotation) % 8) + 8) % 8) >> 1) % 2 === 1;
+
+export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, mirror = false): void {
   const [W, D] = furnitureSpan(kind);
   const h = FURNITURE_HEIGHT[kind] ?? 14;
   ctx.save();
   ctx.translate(sx, sy);
   ctx.scale(zoom, zoom);
+  if (mirror) ctx.scale(-1, 1);
   ctx.fillStyle = 'rgba(0,0,0,0.26)';
   ctx.beginPath();
   ctx.ellipse(0, 0, W * 0.95, D * 0.95, 0, 0, TAU);

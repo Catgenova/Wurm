@@ -209,6 +209,12 @@ Object.assign(window as unknown as Record<string, unknown>, { catchFish, windAt,
 window.wurm = { game, renderer, camera, ACTIONS, RECIPES, FURNITURE, MATERIALS, RELICS, TRAITS, TITLES, DYES, WOUND_KINDS, TRAPS, BRIDGES, bridgeDone, BAITS, FISH_IDS: FISH.map((f) => f.id), SPECIES, WEAPON_BY_ID, itemName, arch: { partsMissing, piecesHeld }, ui, island, save: () => saveGame(game) };
 
 input.onClick = (x, y, button) => {
+  // Something on its way to the ground takes the click: down it goes, or back into the pack.
+  if (ui.placing) {
+    ui.menu.hide();
+    ui.placeClick(renderer.pick(x, y), button);
+    return;
+  }
   // A press that closed an open menu is spent, unless it is asking for a new menu.
   if (ui.menu.consumeSwallow() && button !== 2) return;
   ui.menu.hide();
@@ -249,8 +255,9 @@ const PRESSES: Record<string, () => void> = {
     game.settings.follow = true;
     camera.follow = true;
   },
-  turn_left: () => turnView(-1),
-  turn_right: () => turnView(1),
+  // While something is being set down, the turn keys turn that instead of the view.
+  turn_left: () => (ui.placing ? ui.rotatePlacing(-1) : turnView(-1)),
+  turn_right: () => (ui.placing ? ui.rotatePlacing(1) : turnView(1)),
   zoom_in: () => camera.zoomAt(canvas.width / 2, canvas.height / 2, 1.25),
   zoom_out: () => camera.zoomAt(canvas.width / 2, canvas.height / 2, 0.8),
   storey_up: () => ui.hud.stepStorey(1),
@@ -293,6 +300,10 @@ input.onKey = (code, ev) => {
    */
   if (ui.grabKey(code)) {
     ev.preventDefault();
+    return;
+  }
+  if (code === 'Escape' && ui.placing) {
+    ui.cancelPlacing();
     return;
   }
   // The number keys: the selection window when it is looking at something,
@@ -364,9 +375,11 @@ const loop = new GameLoop(
     if (input.pointer.overCanvas && !input.dragging && !ui.menu.isOpen) {
       renderer.hover = renderer.pick(input.pointer.x, input.pointer.y);
       ui.setHover(renderer.hover, input.pointer.x, input.pointer.y);
+      ui.syncGhost(renderer.hover);
     } else {
       renderer.hover = null;
       ui.setHover(null, 0, 0);
+      ui.syncGhost(null);
     }
   },
   (dt) => {

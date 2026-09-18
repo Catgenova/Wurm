@@ -9191,3 +9191,47 @@ select '985. a charge is ' || ore_per_lump()::int || ' ore on the island as in t
      || coalesce((select sum(count) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'iron_ore'), 0) || ' ore left'
      || '; the lump is what the metal makes of it: an iron lump weighs ' || (select weight from item_def where id = 'iron_lump') || ' and a gold lump ' || (select weight from item_def where id = 'gold_lump');
 update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
+
+/*
+ * A piece faces the way it was set, and turns.
+ *
+ * A bed set down facing west stands across the tile, its footprint swapped;
+ * the ground hands a browser the facing; and a quarter turn at a time walks
+ * it round, refused when something is in the way.
+ */
+\echo ''
+\echo '--- a piece faces the way it was set, and turns'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select x as was_x, y as was_y from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set x = 12.5, y = 12.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from placed where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
+delete from crate where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('furniture_bed', 'furniture_stool') \g /dev/null
+select give(:'world2', :'ivar', 'furniture_bed', 1, 50, 'Oak') as bed \gset
+select act_perform(:'world2', :'ivar', 'place_furniture', ('{"kind":"tile","x":12,"y":12,"cx":12,"cy":12,"sx":3,"sy":0,"itemUid":' || :'bed' || ',"facing":"w"}')::jsonb) \g /dev/null
+select id as bedrow, facing as bed_facing, sx as bed_sx, sy as bed_sy from placed where world_id = :'world2' and x = 12 and y = 12 and sub = 'bed' \gset
+select '986. a bed set down at 12,12 facing west: the row says ' || :'bed_facing' || ', standing across the tile at spots ' || :bed_sx || ',' || :bed_sy
+     || ' with a footprint of ' || (placed_size('furniture', 'bed', :'bed_facing'))[1] || '×' || (placed_size('furniture', 'bed', :'bed_facing'))[2]
+     || ' where facing south it is ' || (placed_size('furniture', 'bed', 's'))[1] || '×' || (placed_size('furniture', 'bed', 's'))[2]
+     || '; the ground hands a browser facing ' || coalesce((select x->>'facing' from jsonb_array_elements(rpc_ground(:'world2', 4, false)->'placed') x where (x->>'id')::bigint = :bedrow), 'nothing')
+     || '; and set down with no facing said, a piece faces ' || turned_facing(null, 0) || ', the way everything stood before';
+-- A quarter turn, then a stool where the bed would swing, then the stool gone and the rest of the way round.
+delete from event where uid = :'ivar' \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb), 'ALLOWED') as door1 \gset
+select act_perform(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb) \g /dev/null
+select facing as f1, sx as sx1, sy as sy1 from placed where id = :bedrow \gset
+select give(:'world2', :'ivar', 'furniture_stool', 1, 50, 'Oak') as stool \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'place_furniture', ('{"kind":"tile","x":12,"y":12,"cx":12,"cy":12,"sx":2,"sy":1,"itemUid":' || :'stool' || ',"facing":"s"}')::jsonb), 'ALLOWED') as onbed \gset
+select act_perform(:'world2', :'ivar', 'place_furniture', ('{"kind":"tile","x":12,"y":12,"cx":12,"cy":12,"sx":2,"sy":2,"itemUid":' || :'stool' || ',"facing":"s"}')::jsonb) \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb), 'ALLOWED') as door2 \gset
+delete from placed where world_id = :'world2' and x = 12 and y = 12 and sub = 'stool' \g /dev/null
+select act_perform(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb) \g /dev/null
+select facing as f2 from placed where id = :bedrow \gset
+select act_perform(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb) \g /dev/null
+select facing as f3 from placed where id = :bedrow \gset
+select act_perform(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb) \g /dev/null
+select '987. turning it: ' || :'door1' || ', and the bed faces ' || :'f1' || ' at spots ' || :sx1 || ',' || :sy1 || ', told "' || (select text from event where uid = :'ivar' and text like 'You turn%' order by n limit 1) || '"'
+     || '; a stool set down on the bed: "' || :'onbed' || '", and set beside it where the bed would swing: "' || :'door2' || '"; the stool gone, ' || :'f2' || ' then ' || :'f3' || ' then ' || (select facing from placed where id = :bedrow) || ', which is the way it was set'
+     || '; a turn is a ' || (select base_time from action_def where id = 'turn_furniture') || ' second job, and ' || (select count(*) from event where uid = :'ivar' and text like 'You turn%') || ' were told';
+delete from placed where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
+update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null

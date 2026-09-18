@@ -10,13 +10,13 @@ import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
-import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall } from './building';
+import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, isShod, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { knackable, type Station } from './recipes';
@@ -4343,6 +4343,7 @@ export class Game {
           fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
           ferment: r.ferment ?? undefined,
+          facing: (r.facing ?? 's') as Side,
         });
       }
     }
@@ -4631,9 +4632,9 @@ export class Game {
     return null;
   }
 
-  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = [], material?: string): PlacedFurniture {
-    const [ax, ay] = furnitureAnchor(kind, sx, sy);
-    const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items, material };
+  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = [], material?: string, facing: Side = 's'): PlacedFurniture {
+    const [ax, ay] = furnitureAnchor(kind, sx, sy, facing);
+    const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items, material, facing };
     this.furniture.set(f.id, f);
     this.placed.furniture.add(f);
     this.events.emit('crate');
@@ -4652,23 +4653,24 @@ export class Game {
   }
 
   /** Why a piece of furniture cannot stand on this block of subtiles, or null. */
-  furniturePlaceReason(kind: string, x: number, y: number, sx: number, sy: number): string | null {
+  furniturePlaceReason(kind: string, x: number, y: number, sx: number, sy: number, facing: Side = 's', except?: number): string | null {
     const def = furnitureDef(kind);
-    const [ax, ay] = furnitureAnchor(kind, sx, sy);
+    const [fw, fh] = furnitureFootprint(kind, facing);
+    const [ax, ay] = furnitureAnchor(kind, sx, sy, facing);
     if (def.boat) {
       // A hull goes in the water and nowhere else, and you have to be able to
       // reach the water you are putting it in.
       if (!this.launchSpot(kind, x, y)) return `There is not ${def.boat.draught} deep of water there. Launch her off a bank with some depth to it.`;
       if (Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y) > 4) return 'Stand at the water you mean to launch her into.';
-      for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already in the water there.';
+      for (let dy = 0; dy < fh; dy++) for (let dx = 0; dx < fw; dx++) if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already in the water there.';
       return null;
     }
     if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'Furniture needs dry, solid ground.';
     if (this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
     if (this.isToken(x, y)) return 'Not on the token.';
-    for (let dy = 0; dy < def.h; dy++) {
-      for (let dx = 0; dx < def.w; dx++) {
-        if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
+    for (let dy = 0; dy < fh; dy++) {
+      for (let dx = 0; dx < fw; dx++) {
+        if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already standing there.';
       }
     }
     return null;
@@ -4882,12 +4884,13 @@ export class Game {
     return out;
   }
 
-  occupiedSubtile(x: number, y: number, sx: number, sy: number): boolean {
+  /** Whether a spot is taken, leaving out one piece of furniture when it is that piece asking about its own turn. */
+  occupiedSubtile(x: number, y: number, sx: number, sy: number, exceptFurniture?: number): boolean {
     if (this.crateAt(x, y, sx, sy)) return true;
     if (this.campfireAt(x, y, sx, sy)) return true;
     for (const s of this.placed.smelters.at(x, y)) if (smelterCovers(s, sx, sy)) return true;
     for (const k of this.placed.kilns.at(x, y)) if (kilnCovers(k, sx, sy)) return true;
-    for (const f of this.placed.furniture.at(x, y)) if (furnitureCovers(f, sx, sy)) return true;
+    for (const f of this.placed.furniture.at(x, y)) if (f.id !== exceptFurniture && furnitureCovers(f, sx, sy)) return true;
     for (const a of this.placed.anvils.at(x, y)) if (anvilCovers(a, sx, sy)) return true;
     for (const p of this.placed.posts.at(x, y)) if (p.sx === sx && p.sy === sy) return true;
     return false;
@@ -5330,6 +5333,8 @@ export interface IslandPlaced {
   dmg: number | null;
   name: string | null;
   material: string | null;
+  /** Which way a piece faces, for furniture; absent from older islands. */
+  facing?: string | null;
   litres: number | null;
   liquid: string | null;
   ferment: number | null;

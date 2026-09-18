@@ -1,4 +1,5 @@
 import type { ActionDef, Target } from './actions';
+import { SIDE_NAMES, type Side } from './building';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
@@ -228,6 +229,12 @@ export interface PlacedFurniture {
   /** Top-left subtile of the block it covers. */
   sx: number;
   sy: number;
+  /**
+   * Which way it faces: the side its front is turned to. It stands that way
+   * whichever way the view is turned. Absent means south, which is how every
+   * piece stood before pieces could be turned.
+   */
+  facing?: Side;
   /** Which of the twenty it is. */
   kind: string;
   ql: number;
@@ -283,14 +290,25 @@ export const furnitureName = (f: PlacedFurniture): string =>
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const furnitureCapacity = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold);
+/** The four ways a piece can face, in the order a turn to the right takes them: south, west, north, east. */
+export const FACINGS: readonly Side[] = ['s', 'w', 'n', 'e'];
+/** Which way a piece faces; everything stood facing south before pieces could be turned. */
+export const facingOf = (f: { facing?: Side }): Side => f.facing ?? 's';
+/** The facing a quarter turn away: to the right for +1, to the left for -1. */
+export const turnedFacing = (facing: Side, step: number): Side => FACINGS[(((FACINGS.indexOf(facing) + step) % 4) + 4) % 4];
+/** The block of subtiles a piece covers: its width and depth, swapped when it stands across the tile. */
+export function furnitureFootprint(kind: string, facing: Side = 's'): [number, number] {
+  const def = furnitureDef(kind);
+  return facing === 'e' || facing === 'w' ? [def.h, def.w] : [def.w, def.h];
+}
 export const furnitureCentre = (f: PlacedFurniture): [number, number] => {
-  const def = furnitureDef(f.kind);
-  return [f.x + (f.sx + def.w / 2) / SUBTILES, f.y + (f.sy + def.h / 2) / SUBTILES];
+  const [w, h] = furnitureFootprint(f.kind, facingOf(f));
+  return [f.x + (f.sx + w / 2) / SUBTILES, f.y + (f.sy + h / 2) / SUBTILES];
 };
 
-export function furnitureCovers(f: { kind: string; sx: number; sy: number }, sx: number, sy: number): boolean {
-  const def = furnitureDef(f.kind);
-  return sx >= f.sx && sx < f.sx + def.w && sy >= f.sy && sy < f.sy + def.h;
+export function furnitureCovers(f: { kind: string; sx: number; sy: number; facing?: Side }, sx: number, sy: number): boolean {
+  const [w, h] = furnitureFootprint(f.kind, facingOf(f));
+  return sx >= f.sx && sx < f.sx + w && sy >= f.sy && sy < f.sy + h;
 }
 
 /** Whether a piece is a rack whose footprint is its crate spots. */
@@ -304,17 +322,17 @@ export const rackSpots = (f: { kind: string }): number => furnitureDef(f.kind).c
  * is three full looks three full from any side rather than showing a gap where
  * the fourth ought to be.
  */
-export function rackDeck(f: { kind: string; sx: number; sy: number }): Array<[number, number]> {
-  const def = furnitureDef(f.kind);
+export function rackDeck(f: { kind: string; sx: number; sy: number; facing?: Side }): Array<[number, number]> {
+  const [w, h] = furnitureFootprint(f.kind, facingOf(f));
   const out: Array<[number, number]> = [];
-  for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) out.push([f.sx + dx, f.sy + dy]);
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) out.push([f.sx + dx, f.sy + dy]);
   return out;
 }
 
 /** Top-left subtile of the block a piece would take, kept inside the tile. */
-export function furnitureAnchor(kind: string, sx: number, sy: number): [number, number] {
-  const def = furnitureDef(kind);
-  return [Math.max(0, Math.min(SUBTILES - def.w, sx)), Math.max(0, Math.min(SUBTILES - def.h, sy))];
+export function furnitureAnchor(kind: string, sx: number, sy: number, facing: Side = 's'): [number, number] {
+  const [w, h] = furnitureFootprint(kind, facing);
+  return [Math.max(0, Math.min(SUBTILES - w, sx)), Math.max(0, Math.min(SUBTILES - h, sy))];
 }
 
 /** The vehicle a piece is, if it is one. */
@@ -396,15 +414,51 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile' || t.itemUid === undefined || t.sx === undefined || t.sy === undefined) return 'Choose a piece and a spot.';
       const item = g.inventory.get(t.itemUid);
       if (!item || !isFurniture(item.id)) return 'That is not furniture.';
-      return g.furniturePlaceReason(item.id, t.x, t.y, t.sx, t.sy);
+      return g.furniturePlaceReason(item.id, t.x, t.y, t.sx, t.sy, t.facing ?? 's');
     },
     perform: (t, g) => {
       if (t.kind !== 'tile' || t.itemUid === undefined || t.sx === undefined || t.sy === undefined) return;
       const item = g.inventory.get(t.itemUid);
       if (!item || !isFurniture(item.id) || !g.inventory.remove(item.uid, 1)) return;
-      const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra);
+      const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra, t.facing ?? 's');
       if (item.dye) f.dye = item.dye;
       g.logMsg(`You set the ${furnitureName(f).toLowerCase()} down.`, 'event');
+      g.events.emit('world', f.x, f.y);
+    },
+  },
+  {
+    // A quarter turn to the right, in place. A piece standing across the tile
+    // takes its width and depth swapped, and is walked to the nearest spot it
+    // fits; what it would swing into stops it.
+    id: 'turn_furniture',
+    label: 'Turn it',
+    verb: 'turning it round',
+    stamina: 0.03,
+    baseTime: 10,
+    applies: (t) => t.kind === 'furniture',
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      if (f.lit) return 'Put it out first.';
+      if (f.hitched) return 'Let go of it first.';
+      if (teamOf(f).length) return 'Unhitch the team first.';
+      if (f.driven) return 'Get down off it first.';
+      if (rackSpots(f) && g.cratesOn(f).length) return 'Take the crates off it first.';
+      const facing = turnedFacing(facingOf(f), 1);
+      const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
+      const why = g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id);
+      return why ? 'Something is in the way of turning it.' : null;
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return;
+      const facing = turnedFacing(facingOf(f), 1);
+      const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
+      if (g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id)) return;
+      f.facing = facing;
+      f.sx = ax;
+      f.sy = ay;
+      g.logMsg(`You turn the ${furnitureName(f).toLowerCase()} to face ${SIDE_NAMES[facing]}.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
   },

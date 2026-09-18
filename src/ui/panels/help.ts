@@ -462,8 +462,11 @@ function helpText(): string {
     a mallet, planks, timbers, shafts and nails it builds twenty pieces &mdash; stool, chair, bench,
     table, long table, writing desk, bed, cot, chest, coffer, cupboard, wardrobe, shelves, bookshelf,
     larder, barrel, lectern, coat rack, planter and firewood rack. Each is carried like a crate and
-    <b>set down</b> on the block of subtiles under your cursor: right-click a tile and choose
-    <b>Set furniture down here</b>.</p>
+    <b>set down</b> on a block of subtiles: right-click a tile and choose <b>Set furniture down</b>, and
+    the piece follows the cursor until you click it down &mdash; <b>Q</b> and <b>E</b> turn it a quarter, Escape
+    keeps it. A piece stands the way it was set however the view is turned, and <b>Turn it</b> on a standing
+    piece turns it a quarter round in ten seconds. Staircases and ladders are planned the same way, Q and E
+    choosing the side you climb from.</p>
     <p>Ten of the twenty hold things, and hold far more than a crate does: a coffer takes 25, a barrel or
     a firewood rack 40, a chest 60, a cupboard 80, a bookshelf 90, a wardrobe 100, shelves 120 and a
     <b>larder</b> 150, the largest storage there is. Right-click one and <b>Open</b> it to see inside, or
