@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeCuts, treeSpecies, treeVariant } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
@@ -711,10 +711,10 @@ export const ACTIONS: ActionDef[] = [
       const data = w.getData(t.x, t.y);
       const def = TREE_DEFS[treeSpecies(data)];
       const age = treeAge(data);
-      const cuts = treeCuts(data) + 1;
+      const cuts = w.notchAt(t.x, t.y) + 1;
       const what = `${age.name.toLowerCase()} ${def.name.toLowerCase()}`;
       if (cuts < age.hits) {
-        w.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), treeVariant(data), cuts));
+        w.setNotch(t.x, t.y, cuts);
         g.logMsg(`You cut into the ${what}. ${age.hits - cuts} more like that and it comes down.`, 'event');
         return;
       }
@@ -780,10 +780,11 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg(`You cut at the ${def.name.toLowerCase()} and take off nothing that matters.`, 'event');
         return;
       }
-      // The age bits and nothing else. The species stays, and so does the
-      // notch a hatchet has left in the trunk: pruning is the crown's
-      // business, and a half-felled tree pruned back is still half felled.
-      g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), to.id, treeCuts(data)));
+      // The age and nothing else. The species stays, and so does the notch a
+      // hatchet has left in the trunk — it is beside the land, and the tile
+      // is still a tree: pruning is the crown's business, and a half-felled
+      // tree pruned back is still half felled.
+      g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), to.id));
       g.logMsg(`You prune the ${age.name.toLowerCase()} ${def.name.toLowerCase()} back. It stands as a ${to.name.toLowerCase()} ${def.name.toLowerCase()} now.`, 'event');
     },
   },

@@ -606,7 +606,32 @@ export class World {
     this.ensure(x, y);
     this.tiles[y * this.w + x] = t;
     this.data[y * this.w + x] = data;
+    // A tile that stops being a tree forgets its notch, here, at the one door
+    // every tile change goes through.
+    if (t !== TileType.Tree && this.notches.size) this.notches.delete(`${x},${y}`);
     this.notify(x, y);
+  }
+
+  /**
+   * The felling notch in each half-felled tree, keyed "x,y": how many landed
+   * cuts it has taken.
+   *
+   * Beside the land rather than in it — the tree's data byte is species and
+   * age now, all eight bits of it — and the tile's rather than any
+   * woodcutter's: walk away from a half-felled oak and the notch is still in
+   * it when somebody else comes by. A year's growth closes it; so does the
+   * tree coming down, through `setTile`.
+   */
+  readonly notches = new Map<string, number>();
+
+  notchAt(x: number, y: number): number {
+    return this.notches.get(`${x},${y}`) ?? 0;
+  }
+
+  /** Cut this far into the tree here, or at nought close the notch over. */
+  setNotch(x: number, y: number, cuts: number): void {
+    if (cuts > 0) this.notches.set(`${x},${y}`, cuts);
+    else this.notches.delete(`${x},${y}`);
   }
 
   /** Corner heights of a tile in the order north (x,y), east (x+1,y), south (x+1,y+1), west (x,y+1). */

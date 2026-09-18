@@ -1,3 +1,4 @@
+import { TileType, TREE_DATA_LAYOUT } from '../world/tiles';
 import { needsIron, oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
 import type { LandBlob } from '../net/protocol';
 import { World } from '../world/world';
@@ -213,6 +214,14 @@ interface SaveData {
   time: number;
   /** When the woods were last turned over, in real seconds. */
   treesAt?: number;
+  /**
+   * Which layout the tree bytes were written under, and the felling notches
+   * as [x, y, cuts]. A save from before `TREE_DATA_LAYOUT` was 2 kept the
+   * notch in the byte's top two bits; those are cleared on the way in, and a
+   * half-felled tree, once, is the one thing such a save loses.
+   */
+  trees?: number;
+  notches?: Array<[number, number, number]>;
   settings: { grid: boolean; rotation?: number; eighths?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean; fog?: boolean; follow?: boolean; edgePan?: boolean };
   savedAt: number;
   deed?: Deed | null;
@@ -280,6 +289,11 @@ function meta(game: Game): SaveMeta {
     skills: game.skills.toJSON(),
     time: game.time,
     treesAt: game.treesAt,
+    trees: TREE_DATA_LAYOUT,
+    notches: [...w.notches].map(([at, cuts]) => {
+      const [x, y] = at.split(',').map(Number);
+      return [x, y, cuts] as [number, number, number];
+    }),
     // The view used to turn in quarters and now turns in eighths. Written
     // under a name that says which, so a save from before is still read as
     // the angle it was left at rather than half of it.
@@ -517,6 +531,12 @@ export async function loadGame(): Promise<Game | null> {
  * did not exist when it was written down.
  */
 function finish(world: World, m: SaveMeta): Game {
+  // Tree bytes from before the age had all four bits carry the notch in the
+  // top two, which would read as ages that do not exist.
+  if (m.trees !== TREE_DATA_LAYOUT) {
+    for (let i = 0; i < world.tiles.length; i++) if (world.tiles[i] === TileType.Tree) world.data[i] &= 63;
+  }
+  for (const [x, y, cuts] of m.notches ?? []) world.setNotch(x, y, cuts);
   const game = new Game({
     seed: m.seed,
     world,

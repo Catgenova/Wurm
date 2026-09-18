@@ -1,7 +1,7 @@
 import type { Game } from '../game/game';
 import { EMOTES } from '../game/emotes';
 import type { Pick, Renderer } from '../render/renderer';
-import { TileType, TREE_DEFS, treeSpecies, treeVariant , SLAB_BY_ITEM } from '../world/tiles';
+import { TileType, TREE_DEFS, treeAge, treeSpecies, SLAB_BY_ITEM } from '../world/tiles';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { BUILD_ACTION_BY_ID, materialName } from '../game/buildActions';
 import {
@@ -447,7 +447,7 @@ export class UI {
     const t = w.getTile(pick.x, pick.y);
     if (t === TileType.Tree) {
       const data = w.getData(pick.x, pick.y);
-      lines.push(`${['Young', 'Mature', 'Old'][treeVariant(data)]} ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} tree`);
+      lines.push(`${treeAge(data).name} ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} tree`);
     } else if (growing) {
       lines.push(`${cropDef(growing.id).name} field`);
     } else {

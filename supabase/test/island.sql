@@ -7029,7 +7029,7 @@ begin
   perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":55,"y":50}'::jsonb);
 end $$;
 select '848. one stroke into a mature oak, and what the tile remembers: '
-     || tree_cuts(land_data(:'world6', 55, 50)) || ' of ' ||
+     || tree_cuts(:'world6', 55, 50) || ' of ' ||
         (select hits from tree_age_def where id = tree_age(land_data(:'world6', 55, 50)))
      || ' — on the tile rather than on the woodcutter, so whoever comes by next finishes it';
 
@@ -7973,7 +7973,8 @@ begin
   select id into w from world where name = 'Hoarding';
   perform land_set_tile(w, 55, 52, tile_id('Tree'));
   perform land_set_height(w, 55, 52, 4);
-  perform land_set_data(w, 55, 52, 2 | (1 << 4) | (1 << 6));   -- a mature oak with one stroke in it
+  perform land_set_data(w, 55, 52, 2 | (1 << 4));   -- a mature oak
+  perform tree_notch(w, 55, 52, 1);                 -- with one stroke in it
   perform land_set_tile(w, 56, 52, tile_id('Bush'));
   perform land_set_height(w, 56, 52, 4);
   perform land_set_data(w, 56, 52, 0);
@@ -7981,7 +7982,7 @@ end $$;
 select pg_temp.prune_until(55, 0) \g /dev/null
 select '906. a mature oak with a stroke in it, pruned: '
      || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 55, 52))))
-     || ' with ' || tree_cuts(land_data(:'world6', 55, 52)) || ' of '
+     || ' with ' || tree_cuts(:'world6', 55, 52) || ' of '
      || (select hits from tree_age_def where id = tree_age(land_data(:'world6', 55, 52)))
      || ' strokes still in the trunk — a half-felled tree pruned back is still half felled';
 update player set x = 56.5, y = 51.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
@@ -8012,3 +8013,56 @@ select '908. an old oak pruned and one beside it left alone, and a day later: th
              then lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 58, 52))))
              else 'gone' end
      || ' — which is what pruning is for';
+
+
+/*
+ * And where the notch is kept: beside the land rather than in it.
+ *
+ * A tree's byte had four ages in two bits and the felling notch in the two
+ * above, and a fifth stage was wanted. The notch is a row now, one per
+ * half-felled tree, and the age has all four bits over the species.
+ */
+\echo ''
+\echo '--- the notch beside the land'
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  perform land_set_tile(w, 60, 52, tile_id('Tree'));
+  perform land_set_height(w, 60, 52, 4);
+  perform land_set_data(w, 60, 52, 2 | (1 << 4));   -- a mature oak
+  update player set x = 60.5, y = 51.5 where world_id = w and uid = me;
+  update skill set value = 90 where world_id = w and uid = me and id = 'woodcutting';
+  -- One stroke that lands: swung at until it does.
+  for i in 1..8 loop
+    exit when tree_cuts(w, 60, 52) > 0;
+    perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":60,"y":52}'::jsonb);
+  end loop;
+end $$;
+select '909. one stroke into a mature oak: the notch says ' || tree_cuts(:'world6', 60, 52)
+     || ' of ' || (select hits from tree_age_def where id = tree_age(land_data(:'world6', 60, 52)))
+     || ', kept in ' || (select count(*) from tree_notch where world_id = :'world6' and x = 60 and y = 52)
+     || ' row beside the land, and the byte holds species ' || tree_species(land_data(:'world6', 60, 52))
+     || ' and age ' || tree_age(land_data(:'world6', 60, 52))
+     || ' with its top two bits ' || case when land_data(:'world6', 60, 52) >= 64 then 'set' else 'clear' end;
+-- A day closes it.
+select pg_temp.one_day(:'world6') \g /dev/null
+select '910. and a day later the notch is ' || tree_cuts(:'world6', 60, 52)
+     || ' and the tree is ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 60, 52))))
+     || ' — a year''s growth closes whatever was cut into it';
+-- And the tree coming down takes it with it.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  perform tree_notch(w, 60, 52, 2);
+  for i in 1..8 loop
+    exit when land_tile(w, 60, 52) <> tile_id('Tree');
+    perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":60,"y":52}'::jsonb);
+  end loop;
+end $$;
+select '911. notched to 2 of 3 and felled: the tile is '
+     || (select name from tile_def where id = land_tile(:'world6', 60, 52))
+     || ' and the notch rows left for it: ' || (select count(*) from tree_notch where world_id = :'world6' and x = 60 and y = 52)
+     || ' — forgotten at the one door every tile change goes through';

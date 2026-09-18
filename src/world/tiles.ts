@@ -414,17 +414,22 @@ export const TREE_SEED_REACH = 2;
 export const SAPLING_SHARE = 0.12;
 
 export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);
-export const treeVariant = (data: number): number => (data >> 4) & 3;
-/** How far along the tree on this tile is. */
-export const treeAge = (data: number): TreeAge => TREE_AGES[treeVariant(data)];
 /**
- * How many cuts it has already taken, in the two bits nothing else was using.
+ * The age, in the four bits over the species.
  *
- * On the tile rather than on the person, because a wood is not one woodcutter's:
- * walk away from a half-felled oak and the notch is still in it when somebody
- * else comes by.
+ * Two of them for a long time, with the felling notch in the two above. Four
+ * values was one short the day a fifth stage was wanted, and of the two
+ * things sharing the byte the notch was the one with somewhere else to be: a
+ * half-felled tree is rare and brief, and the byte is every tree on the
+ * island. So the notch lives beside the land rather than in it — `World.notches`
+ * here, `tree_notch` on the island — and the age has room for sixteen stages.
+ *
+ * `TREE_DATA_LAYOUT` says which layout a byte was written under, for a solo
+ * save to carry: one from before has its top two bits cleared on the way in.
  */
-export const treeCuts = (data: number): number => (data >> 6) & 3;
+export const TREE_DATA_LAYOUT = 2;
+export const treeVariant = (data: number): number => (data >> 4) & 15;
+/** How far along the tree on this tile is. A value no stage answers to reads as young. */
+export const treeAge = (data: number): TreeAge => TREE_AGES[treeVariant(data)] ?? TREE_AGES[0];
 export const bushSpecies = (data: number): number => Math.min(BUSH_DEFS.length - 1, data & 15);
-export const packTreeData = (species: number, variant: number, cuts = 0): number =>
-  (species & 15) | ((variant & 3) << 4) | ((cuts & 3) << 6);
+export const packTreeData = (species: number, variant: number): number => (species & 15) | ((variant & 15) << 4);

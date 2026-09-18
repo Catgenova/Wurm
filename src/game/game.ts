@@ -5064,11 +5064,12 @@ export class Game {
           w.setTile(x, y, TileType.Grass, 0);
           stumps.push([x, y, treeSpecies(data)]);
         } else {
-          // A year's growth closes whatever was cut into it.
-          w.setTile(x, y, TileType.Tree, packTreeData(treeSpecies(data), age.next, 0));
+          w.setTile(x, y, TileType.Tree, packTreeData(treeSpecies(data), age.next));
         }
       }
     }
+    // A year's growth closes whatever was cut into anything.
+    w.notches.clear();
     // The stumps seed after the whole island has turned, so a sapling dropped
     // into ground the walk had not reached yet cannot be aged the same day.
     for (const [x, y, species] of stumps) this.seedTrees(x, y, species);
@@ -5107,7 +5108,7 @@ export class Game {
     const wants = roll < TREE_SEED_NONE ? 0 : roll < 1 - TREE_SEED_BOTH ? 1 : TREE_SEEDS;
     const room = spots.length >= TREE_ROOM_TWO ? TREE_SEEDS : spots.length >= TREE_ROOM_ONE ? 1 : 0;
     for (const [gx, gy] of spots.slice(0, Math.min(wants, room))) {
-      w.setTile(gx, gy, TileType.Tree, packTreeData(species, Game.FIRST, 0));
+      w.setTile(gx, gy, TileType.Tree, packTreeData(species, Game.FIRST));
     }
   }
 
