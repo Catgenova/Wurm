@@ -53,7 +53,7 @@ export type GatherKind =
   | 'compost'
   | 'seek'
   | 'fish'
-  // The forester's two other trades: a bevere is set to one of the three.
+  // A snedda prunes what would otherwise die; a grubba digs out stumps.
   | 'prune'
   | 'stump';
 /**
@@ -259,7 +259,6 @@ export const SPECIES: Record<string, SpeciesDef> = {
     baitHint: 'a vegetable or something starchy',
     timid: true,
     gathers: 'woodcut',
-    trades: ['woodcut', 'prune', 'stump'],
     workRange: 8,
     /** It will not settle more than this far from water. */
     variants: [
@@ -727,6 +726,56 @@ export const SPECIES: Record<string, SpeciesDef> = {
     butcher: { meat: 3, fur: 3, leather: 2, bone: 2, gland: 1 },
     tameFail: 'buries the {food} instead of eating it and wanders off pleased with itself',
     leaves: 'goes up the nearest trunk and out of sight among the leaves',
+    nearTrees: true,
+  },
+  snedda: {
+    id: 'snedda',
+    name: 'Snedda',
+    description: 'A long-necked browser of the wood\'s edge with a mouth like a pair of shears. It nips the dead wood out of a tree and leaves the live, and kept on a deed it prunes what would otherwise die, and nothing else.',
+    health: 24,
+    attack: 2,
+    speed: 1.6,
+    tameLevel: 14,
+    tameChance: 0.1,
+    diet: ['apple', 'cherry', 'olive', 'sprout', 'nuts'],
+    baitHint: 'fruit off a tree, or a sprout',
+    timid: true,
+    gathers: 'prune',
+    workRange: 8,
+    variants: [
+      ['#6e7d4a', '#c9cf9a'],
+      ['#807a52', '#d9d2a4'],
+      ['#556343', '#a9b58c'],
+      ['#8a7f5c', '#e2d8b2'],
+    ],
+    butcher: { meat: 2, fur: 2, leather: 2, bone: 2, gland: 1 },
+    tameFail: 'takes the {food} at the very tips of its teeth, chews it a long while, and goes back to nipping at a branch',
+    leaves: 'reaches up into the branches and is a branch itself by the time you look again',
+    nearTrees: true,
+  },
+  grubba: {
+    id: 'grubba',
+    name: 'Grubba',
+    description: 'A squat, hump-shouldered rooter with claws like mattock blades. It digs for what lives under old stumps and takes the stump with it; kept on a deed it clears the ground behind your axe.',
+    health: 30,
+    attack: 4,
+    speed: 1.4,
+    tameLevel: 8,
+    tameChance: 0.12,
+    diet: ['worm', 'acorn', 'nuts', 'potato', 'carrot', 'onion'],
+    baitHint: 'worms, or a root out of the ground',
+    timid: true,
+    gathers: 'stump',
+    workRange: 8,
+    variants: [
+      ['#5a4a3a', '#a08a6a'],
+      ['#6b5040', '#b89a7a'],
+      ['#4a4640', '#948c80'],
+      ['#7a5a3e', '#c9a880'],
+    ],
+    butcher: { meat: 4, fur: 2, leather: 3, bone: 3, gland: 1 },
+    tameFail: 'snuffles the {food} out of your hand and goes straight back to its digging',
+    leaves: 'shoulders into the undergrowth and is gone',
     nearTrees: true,
   },
   cobbe: {
@@ -1243,6 +1292,8 @@ export const WILD_SPECIES: Array<[string, number]> = [
   ['cudda', 9],
   ['sedra', 8],
   ['sappa', 8],
+  ['snedda', 5],
+  ['grubba', 5],
   ['bogga', 6],
   ['holla', 6],
   ['cobbe', 6],
@@ -1962,7 +2013,7 @@ export class Creatures {
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
       // And what it was set to, if that is not what its kind does anyway.
-      if (r.job !== undefined) c.trade = r.job && r.job !== SPECIES[c.species]?.gathers && r.job in GATHER_SKILL ? (r.job as GatherKind) : null;
+      if (r.job !== undefined) c.trade = r.job && r.job !== SPECIES[c.species]?.gathers && (SPECIES[c.species]?.trades ?? []).includes(r.job as GatherKind) ? (r.job as GatherKind) : null;
       // The working life, which comes for yours and for nobody else's.
       if (r.care !== undefined) c.care = r.care;
       if (r.xp !== undefined) c.xp = r.xp;
@@ -4023,7 +4074,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, trade: j.trade ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

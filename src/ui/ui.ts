@@ -1459,8 +1459,8 @@ export class UI {
     push(item('untack_creature'));
     push(item('hitch_creature'));
     push(item('unhitch_creature'));
-    // A species with more than one trade is set to one of them by name: a
-    // bevere fells, prunes or digs out stumps, and which is your say.
+    // A species with more than one trade is set to one of them by name, and
+    // which is your say. None has more than one at the moment; the door stays.
     {
       const def = CREATURE_ACTION_BY_ID.get('assign_deed');
       const trades = SPECIES[c.species]?.trades;

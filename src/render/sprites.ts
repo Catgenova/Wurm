@@ -2757,6 +2757,10 @@ const BEASTS: Record<string, BeastShape> = {
   holla: { body: [11, 7], ride: 5, leg: 6, legW: 3.2, span: 8, head: 4.6, neck: [12, -1], muzzle: 2.6, ear: 'round', tail: 'stub', pouch: 4, gait: 0.8 },
   dowse: { body: [7.5, 4.4], ride: 2.6, leg: 3.2, legW: 2, span: 5, head: 3.4, neck: [8.5, 0.6], muzzle: 2.8, ear: 'round', tail: 'stub', whisker: true, gait: 1.3 },
   sappa: { body: [9, 5.4], ride: 5, leg: 6, legW: 2.4, span: 6.5, head: 4, neck: [10, -1.4], muzzle: 2, ear: 'long', tail: 'brush', moss: true, gait: 1.1 },
+  // Neck up in the branches, and a head that is mostly mouth.
+  snedda: { body: [8.5, 5], ride: 5.5, leg: 6.5, legW: 2.2, span: 6, head: 3.6, neck: [10, -4.2], muzzle: 2.8, ear: 'long', tail: 'brush', gait: 1.15 },
+  // Shoulders over the head, and the head at the ground.
+  grubba: { body: [10, 6], ride: 3, leg: 3.8, legW: 3.4, span: 7, head: 4.2, neck: [10.5, 1.4], muzzle: 3.6, ear: 'round', tail: 'stub', hump: 4, gait: 0.9 },
   cobbe: { body: [10, 6], ride: 4, leg: 5, legW: 3.6, span: 7.5, head: 4.4, neck: [11, 0], muzzle: 2.2, ear: 'point', tail: 'stub', hump: 4.5, gait: 0.85 },
   tinka: { body: [6, 4], ride: 3.4, leg: 4, legW: 1.8, span: 4.2, head: 3.6, neck: [6.8, -2.2], muzzle: 1.6, ear: 'point', tail: 'brush', whisker: true, gait: 1.5 },
   middun: { body: [9, 4.6], ride: 3, leg: 3.6, legW: 2.2, span: 6.4, head: 3.4, neck: [10, 0.4], muzzle: 3.6, ear: 'round', tail: 'brush', gait: 1.1 },

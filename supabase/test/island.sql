@@ -8314,37 +8314,50 @@ select '927. and with no sickle in hand, pruning: "'
 update item set holder_uid = '77777777-7777-7777-7777-777777777777' where world_id = :'world6' and holder_uid = '00000000-0000-0000-0000-000000000000' and def = 'sickle' \g /dev/null
 
 /*
- * A forester set to prune, and one set to dig out stumps.
+ * A snedda set to prune, and a grubba set to dig out stumps.
  *
- * Asked from the island: wildermon foresters, set to prune; and a stumping
- * wildermon. A bevere fells; it may be set to prune or to dig out stumps
- * instead, and you say which when you set it to work. A pruner prunes only
- * what would otherwise die — a stage that prunes back and whose next stage
- * has no life in it — and nothing else, because a mature tree pruned stops
- * bearing and a sapling pruned is a shrub for good.
+ * Asked from the island: wildermon foresters set to prune, and a stumping
+ * wildermon — each its own kind. A snedda prunes only what would otherwise
+ * die — a stage that prunes back and whose next stage has no life in it — and
+ * nothing else, because a mature tree pruned stops bearing and a sapling
+ * pruned is a shrub for good. A grubba digs out stumps. A bevere fells, and is
+ * set to nothing else.
  */
 \echo ''
-\echo '--- a forester set to prune, and one set to dig out stumps'
+\echo '--- a snedda set to prune, and a grubba set to dig out stumps'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
-select '928. what a bevere may be set to: ' || array_to_string((select trades from species_def where id = 'bevere'), ', ')
-     || ' — the two new trades as the island knows them: '
+select '928. the two new wildermon: ' || (select string_agg(name || ' gathers ' || gathers || ', near trees ' || near_trees, '; ' order by id) from species_def where id in ('snedda', 'grubba'))
+     || ' — and a bevere is set to nothing but felling: trades ' || coalesce(array_to_string((select trades from species_def where id = 'bevere'), ', '), 'none')
+     || ' — the two trades as the island knows them: '
      || (select string_agg(id || ' (' || skill || ', ' || plain || ')', '; ' order by id) from gather_def where id in ('prune', 'stump'))
-     || ' — ported: ' || worker_job_ported('prune') || ' and ' || worker_job_ported('stump');
--- Room on the deed: every worker of Ivar's stood down, and a fresh bevere kept at the token.
+     || ' — ported: ' || worker_job_ported('prune') || ' and ' || worker_job_ported('stump')
+     || ' — and wild: ' || (select string_agg(species || ' ' || weight, ', ' order by species) from wild_table where species in ('snedda', 'grubba'));
+-- Room on the deed: every worker of Ivar's stood down, and a fresh snedda, a
+-- grubba and a bevere kept at the token.
 update creature set mode = 'stored', job = null where world_id = :'world2' and keeper = :'ivar' and mode = 'deed' \g /dev/null
 select x as tok_x, y as tok_y from deed where world_id = :'world2' and founded_by = :'ivar' \gset
-select creature_spawn(:'world2', 'bevere', :tok_x + 0.5, :tok_y + 1.5, 'stored', now() - interval '3 hours', :'ivar') as forester \gset
-select '929. setting it to farm: "'
-     || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'forester' || ',"job":"farm"}')::jsonb), 'ALLOWED')
-     || '", and to prune: "'
-     || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'forester' || ',"job":"prune"}')::jsonb), 'ALLOWED') || '"';
+select creature_spawn(:'world2', 'snedda', :tok_x + 0.5, :tok_y + 1.5, 'stored', now() - interval '3 hours', :'ivar') as pruner \gset
+select creature_spawn(:'world2', 'grubba', :tok_x + 0.5, :tok_y + 1.5, 'stored', now() - interval '3 hours', :'ivar') as stumper \gset
+select creature_spawn(:'world2', 'bevere', :tok_x + 0.5, :tok_y + 1.5, 'stored', now() - interval '3 hours', :'ivar') as feller2 \gset
+select '929. setting the snedda to farm: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'pruner' || ',"job":"farm"}')::jsonb), 'ALLOWED')
+     || '", to prune: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'pruner' || ',"job":"prune"}')::jsonb), 'ALLOWED')
+     || '" — and the bevere to prune: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'feller2' || ',"job":"prune"}')::jsonb), 'ALLOWED') || '"';
 -- A very old oak and an old oak within reach of the token, and a stump, with
 -- grass either side to stand on.
 create or replace function pg_temp.stand_the_wood(p_world uuid, p_uid uuid) returns void
   language plpgsql as $fn$
-declare dd deed;
+declare dd deed; gx int; gy int;
 begin
   dd := my_deed(p_world, p_uid);
+  -- Level ground under the whole stand, so a worker can stand beside a tree:
+  -- since a body has had a slope it can stand on, one corner set to four
+  -- against corners at fifty made every tile round it a cliff face.
+  for gx in dd.x + 1 .. dd.x + 6 loop for gy in dd.y - 1 .. dd.y + 3 loop
+    perform land_set_height(p_world, gx, gy, 4);
+  end loop; end loop;
   perform land_set_tile(p_world, dd.x + 3, dd.y, tile_id('Tree')); perform land_set_height(p_world, dd.x + 3, dd.y, 4); perform land_set_data(p_world, dd.x + 3, dd.y, 2 | (4 << 4));
   perform land_set_tile(p_world, dd.x + 4, dd.y, tile_id('Tree')); perform land_set_height(p_world, dd.x + 4, dd.y, 4); perform land_set_data(p_world, dd.x + 4, dd.y, 2 | (2 << 4));
   perform land_set_tile(p_world, dd.x + 3, dd.y + 2, tile_id('Stump')); perform land_set_height(p_world, dd.x + 3, dd.y + 2, 4); perform land_set_data(p_world, dd.x + 3, dd.y + 2, 2);
@@ -8354,26 +8367,32 @@ begin
 end $fn$;
 select pg_temp.stand_the_wood(:'world2', :'ivar') \g /dev/null
 delete from event where uid = :'ivar' \g /dev/null
-select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'forester' || ',"job":"prune"}')::jsonb) \g /dev/null
-select '930. set to prune: the island holds job = ' || (select job from creature where world_id = :'world2' and id = :'forester')
+select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'pruner' || '}')::jsonb) \g /dev/null
+select '930. the snedda set to work, no trade named: the island holds job = ' || (select job from creature where world_id = :'world2' and id = :'pruner')
      || ', and says "' || (select text from event where uid = :'ivar' order by n desc limit 1) || '"';
 update creature set until = until - interval '1200 seconds', leg_at = leg_at - interval '1200 seconds',
     leg_ends = leg_ends - interval '1200 seconds', settled_at = settled_at - interval '1200 seconds'
-  where id = :'forester';
-select worker_settle(:'world2', :'forester') as prune_rounds \gset
+  where id = :'pruner';
+select worker_settle(:'world2', :'pruner') as prune_rounds \gset
 select '931. twenty minutes of it, ' || :'prune_rounds' || ' rounds: the very old oak is '
      || lower((select name from tree_age_def where id = tree_age(land_data(:'world2', :tok_x + 3, :tok_y))))
      || ' and the old oak beside it is still '
      || lower((select name from tree_age_def where id = tree_age(land_data(:'world2', :tok_x + 4, :tok_y))))
-     || ' — a forester prunes what would otherwise die, and nothing else';
-select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'forester' || ',"job":"stump"}')::jsonb) \g /dev/null
+     || ' — a snedda prunes what would otherwise die, and nothing else';
+update creature set mode = 'stored', job = null where world_id = :'world2' and id = :'pruner' \g /dev/null
+select act_perform(:'world2', :'ivar', 'assign_deed', ('{"kind":"creature","id":' || :'stumper' || '}')::jsonb) \g /dev/null
 update creature set until = until - interval '1200 seconds', leg_at = leg_at - interval '1200 seconds',
     leg_ends = leg_ends - interval '1200 seconds', settled_at = settled_at - interval '1200 seconds'
-  where id = :'forester';
-select worker_settle(:'world2', :'forester') as stump_rounds \gset
-select '932. set to dig out stumps instead, job = ' || (select job from creature where world_id = :'world2' and id = :'forester') || ', twenty minutes of it: the stump is '
+  where id = :'stumper';
+select worker_settle(:'world2', :'stumper') as stump_rounds \gset
+update creature set job = 'prune' where world_id = :'world2' and id = :'feller2' \g /dev/null
+select trades_settled(:'world2') as settled \gset
+select '932. the grubba set to work, job = ' || (select job from creature where world_id = :'world2' and id = :'stumper') || ', twenty minutes of it: the stump is '
      || (select name from tile_def where id = land_tile(:'world2', :tok_x + 3, :tok_y + 2))
-     || ' — and what a browser is handed for it: job ' || coalesce((select x->>'job' from jsonb_array_elements(rpc_creatures(:'world2', 40)) x where (x->>'id')::int = :'forester'), 'NOTHING');
+     || ' — and what a browser is handed for it: job ' || coalesce((select x->>'job' from jsonb_array_elements(rpc_creatures(:'world2', 40)) x where (x->>'id')::int = :'stumper'), 'NOTHING')
+     || '. And a bevere left set to prune from before its trades went: put back to felling, '
+     || :'settled' || ' settled, job now ' || coalesce((select job from creature where world_id = :'world2' and id = :'feller2'), 'none') as m932 \gset
+select :'m932';
 
 /*
  * Grafting: a fruit sprout onto a wild tree.
