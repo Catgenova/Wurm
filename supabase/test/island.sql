@@ -5011,6 +5011,36 @@ select '681. which is the same three the bar would draw: in hand '
      || ' of ' || queue_capacity(:'world2', :'ivar') || ', which is what the log line says too';
 
 /*
+ * And a line with a refusal in it. Reported: "queued up multiple chopping
+ * actions, then after the tree was felled and no actions were running I'd
+ * dig up the stump and it would show a cutting action following that I
+ * didn't queue." Three cuts at a sapling: the one in hand fells it, the
+ * second is refused and put out — and the third used to stay, behind an
+ * empty hand, until the next thing asked for started and it came up as
+ * "then".
+ */
+update player set act = null, act_target = null, act_started = null, act_ends = null,
+       act_left = null, act_queue = '[]', x = 3.5, y = 4.5, stats = jsonb_set(stats, '{stamina}', '1'), body_at = now()
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select give(:'world2', :'ivar', 'hatchet', 1, 50) as axe \gset
+select land_set_tile(:'world2', 3, 3, tile_id('Tree')), land_set_data(:'world2', 3, 3, 2 | (3 << 4)) \g /dev/null
+delete from tree_notch where world_id = :'world2' and x = 3 and y = 3;
+select coalesce((rpc_act(:'world2', 'cut_down', '{"kind":"tile","x":3,"y":3}', 1))->>'started', 'no') as c1 \gset
+select coalesce((rpc_act(:'world2', 'cut_down', '{"kind":"tile","x":3,"y":3}', 1))->>'queued', 'no') as c2 \gset
+select coalesce((rpc_act(:'world2', 'cut_down', '{"kind":"tile","x":3,"y":3}', 1))->>'queued', 'no') as c3 \gset
+delete from event where uid = :'ivar';
+update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds'
+  where world_id = :'world2' and uid = :'ivar';
+select settle(:'world2', :'ivar') \g /dev/null
+select '681b. three cuts at a sapling, ' || :'c1' || ' / ' || :'c2' || ' / ' || :'c3' || ' — one go and it is '
+     || lower((select name from tile_def where id = land_tile(:'world2', 3, 3))) || ', in hand '
+     || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'nothing')
+     || ', ' || (select jsonb_array_length(act_queue) from player where world_id = :'world2' and uid = :'ivar') || ' left in the line, and told: '
+     || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'error'), 'nothing');
+-- The hatchet lent for it goes back.
+delete from item where id = :'axe';
+
+/*
  * And how many goes each of them is for, which nothing wrote down.
  *
  * "Action queue bar is screwed up, especially when interacting with actions
