@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeCuts, treeSpecies, treeVariant } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeCuts, treeSpecies, treeVariant } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
@@ -747,6 +747,44 @@ export const ACTIONS: ActionDef[] = [
       }
       g.inventory.add('sprout', { ql: g.productQl('forestry'), extra: def.name });
       g.logMsg(`You pick a ${def.name.toLowerCase()} sprout.`, 'event');
+    },
+  },
+  {
+    id: 'prune',
+    label: 'Prune',
+    verb: 'pruning',
+    skill: 'forestry',
+    tool: 'hatchet',
+    stamina: 0.03,
+    baseTime: 6,
+    difficulty: 20,
+    applies: (t, g) => tile(t, g) === TileType.Tree,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Tree) return 'There is no tree here to prune.';
+      const data = g.world.getData(t.x, t.y);
+      // Only a grown tree is pruned: a stage back apiece for old and mature,
+      // and a young one or a sapling is left to grow. The table says which.
+      if (treeAge(data).pruned === null) return `The ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} is too young to prune. Let it grow.`;
+      return g.inventory.has('hatchet') ? null : 'You need a hatchet to prune.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const data = g.world.getData(t.x, t.y);
+      const def = TREE_DEFS[treeSpecies(data)];
+      const age = treeAge(data);
+      const to = age.pruned === null ? undefined : TREE_AGES[age.pruned];
+      if (!to) return;
+      if (!g.skillCheck('forestry', 20, g.toolQl('hatchet'))) {
+        g.missed();
+        g.logMsg(`You cut at the ${def.name.toLowerCase()} and take off nothing that matters.`, 'event');
+        return;
+      }
+      // The age bits and nothing else. The species stays, and so does the
+      // notch a hatchet has left in the trunk: pruning is the crown's
+      // business, and a half-felled tree pruned back is still half felled.
+      g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), to.id, treeCuts(data)));
+      g.logMsg(`You prune the ${age.name.toLowerCase()} ${def.name.toLowerCase()} back. It stands as a ${to.name.toLowerCase()} ${def.name.toLowerCase()} now.`, 'event');
     },
   },
   {

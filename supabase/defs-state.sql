@@ -259,6 +259,7 @@ create table if not exists tree_age_def (
   bears boolean not null, next int
 );
 alter table tree_age_def add column if not exists next int;
+alter table tree_age_def add column if not exists pruned int;
 create table if not exists bush_def (id int primary key, name text not null);
 create table if not exists loot_table (
   id text not null, item text not null, weight real not null, primary key (id, item)
@@ -795,6 +796,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('prospect', 'Prospect', 'prospecting', 'prospecting', 'pickaxe', false, null, 0.03, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cut_down', 'Cut down', 'cutting down', 'woodcutting', 'hatchet', false, null, 0.07, 8, 10, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_sprout', 'Pick sprout', 'picking a sprout', 'forestry', null, false, null, 0.02, 4, 15, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('prune', 'Prune', 'pruning', 'forestry', 'hatchet', false, null, 0.03, 6, 20, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_fruit', 'Pick fruit', 'picking fruit', 'forestry', null, false, null, 0.02, 4, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plant', 'Plant sprout', 'planting', 'forestry', null, false, null, 0.03, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('forage', 'Forage', 'foraging', 'foraging', null, false, null, 0.03, 5, null, false, false);
@@ -2954,10 +2956,10 @@ insert into tree_def values (7, 'Cherry');
 update tree_def set fruit = 'cherry' where id = 7;
 insert into tree_def values (8, 'Olive');
 update tree_def set fruit = 'olive' where id = 8;
-insert into tree_age_def values (0, 'Young', 2, 2, false, 1);
-insert into tree_age_def values (1, 'Mature', 3, 4, true, 2);
-insert into tree_age_def values (2, 'Old', 3, 3, true, null);
-insert into tree_age_def values (3, 'Sapling', 1, 0, false, 0);
+insert into tree_age_def values (0, 'Young', 2, 2, false, 1, null);
+insert into tree_age_def values (1, 'Mature', 3, 4, true, 2, 0);
+insert into tree_age_def values (2, 'Old', 3, 3, true, null, 1);
+insert into tree_age_def values (3, 'Sapling', 1, 0, false, 0, null);
 insert into slab_def values (0, 'Stone slabs', 'stone_slab');
 insert into slab_def values (1, 'Slate slabs', 'slate_slab');
 insert into slab_def values (2, 'Marble slabs', 'marble_slab');

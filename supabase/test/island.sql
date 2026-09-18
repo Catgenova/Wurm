@@ -7887,3 +7887,128 @@ select '901. and ripe is what the doors say it is: tending "'
      || coalesce(act_refusal(:'world2', :'ivar', 'tend_crop', '{"kind":"tile","x":12,"y":12}'::jsonb), 'ALLOWED')
      || '", harvesting "'
      || coalesce(act_refusal(:'world2', :'ivar', 'harvest_crop', '{"kind":"tile","x":12,"y":12}'::jsonb), 'ALLOWED') || '"';
+
+/*
+ * And a tree pruned back a stage.
+ *
+ * Asked from the island: add Prune on trees to take their age back one stage,
+ * only on old and mature trees. A stage back apiece, so an old tree that would
+ * be gone when its day is up is a mature one instead — which is what pruning
+ * is for — and a mature one is young again and stops bearing until it grows.
+ */
+\echo ''
+\echo '--- a tree pruned back a stage'
+select '902. what each age prunes to: ' || string_agg(
+         lower(a.name) || ' → ' || coalesce(lower(b.name), 'left to grow'), '; ' order by a.hits, a.logs)
+from tree_age_def a left join tree_age_def b on b.id = a.pruned;
+
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+-- One oak of each age in a row, a forester who knows the work, and a hatchet.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; a record; v_x int := 50;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def = 'hatchet';
+  delete from event where uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'hatchet', 90, 1);
+  update player set act = null, act_queue = '[]'::jsonb, seen_at = now(),
+      stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+  insert into skill (world_id, uid, id, value) values (w, me, 'forestry', 90)
+    on conflict (world_id, uid, id) do update set value = 90;
+  for a in select * from tree_age_def order by hits, logs loop
+    perform land_set_tile(w, v_x, 52, tile_id('Tree'));
+    perform land_set_height(w, v_x, 52, 4);
+    -- Species 2 is oak; the age goes in the two bits over it.
+    perform land_set_data(w, v_x, 52, 2 | (a.id << 4));
+    v_x := v_x + 1;
+  end loop;
+end $$;
+-- What the door says to each of the four, standing beside it.
+create temp table prune_door (ord int, age text, said text);
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; v_x int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for v_x in 50..53 loop
+    update player set x = v_x + 0.5, y = 51.5 where world_id = w and uid = me;
+    insert into prune_door values (v_x,
+      lower((select name from tree_age_def where id = tree_age(land_data(w, v_x, 52)))),
+      coalesce(act_refusal(w, me, 'prune', ('{"kind":"tile","x":' || v_x || ',"y":52}')::jsonb), 'ALLOWED'));
+  end loop;
+end $$;
+select '903. and what the door says to each: ' || string_agg(age || ' "' || said || '"', ' | ' order by ord)
+from prune_door;
+
+-- A stroke can glance even at ninety, so each pruning is swung at until the
+-- age turns, which is what a forester does too.
+create or replace function pg_temp.prune_until(p_x int, p_age int) returns int
+  language plpgsql as $fn$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  update player set x = p_x + 0.5, y = 51.5 where world_id = w and uid = me;
+  for i in 1..8 loop
+    exit when tree_age(land_data(w, p_x, 52)) = p_age;
+    perform act_perform(w, me, 'prune', ('{"kind":"tile","x":' || p_x || ',"y":52}')::jsonb);
+  end loop;
+  return i;
+end $fn$;
+delete from event where uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select pg_temp.prune_until(52, 1) \g /dev/null
+select '904. pruning the old oak: "'
+     || (select text from event where uid = '77777777-7777-7777-7777-777777777777'
+          and text like 'You prune%' order by n desc limit 1)
+     || '" — the tile says ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 52, 52))))
+     || ', and it is still an ' || lower((select name from tree_def where id = tree_species(land_data(:'world6', 52, 52))));
+select pg_temp.prune_until(52, 0) \g /dev/null
+select '905. and again: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 52, 52))))
+     || ', which no longer bears — and a third time: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'prune', '{"kind":"tile","x":52,"y":52}'::jsonb), 'ALLOWED')
+     || '"';
+
+-- A notch is the trunk's, and pruning is the crown's.
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_tile(w, 55, 52, tile_id('Tree'));
+  perform land_set_height(w, 55, 52, 4);
+  perform land_set_data(w, 55, 52, 2 | (1 << 4) | (1 << 6));   -- a mature oak with one stroke in it
+  perform land_set_tile(w, 56, 52, tile_id('Bush'));
+  perform land_set_height(w, 56, 52, 4);
+  perform land_set_data(w, 56, 52, 0);
+end $$;
+select pg_temp.prune_until(55, 0) \g /dev/null
+select '906. a mature oak with a stroke in it, pruned: '
+     || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 55, 52))))
+     || ' with ' || tree_cuts(land_data(:'world6', 55, 52)) || ' of '
+     || (select hits from tree_age_def where id = tree_age(land_data(:'world6', 55, 52)))
+     || ' strokes still in the trunk — a half-felled tree pruned back is still half felled';
+update player set x = 56.5, y = 51.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select '907. and a bush: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'prune', '{"kind":"tile","x":56,"y":52}'::jsonb), 'ALLOWED')
+     || '"';
+
+-- An old oak pruned and an old oak left alone, and the day that comes for both.
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_tile(w, 57, 52, tile_id('Tree'));
+  perform land_set_height(w, 57, 52, 4);
+  perform land_set_data(w, 57, 52, 2 | (2 << 4));
+  perform land_set_tile(w, 58, 52, tile_id('Tree'));
+  perform land_set_height(w, 58, 52, 4);
+  perform land_set_data(w, 58, 52, 2 | (2 << 4));
+end $$;
+select pg_temp.prune_until(57, 1) \g /dev/null
+select pg_temp.one_day(:'world6') \g /dev/null
+select '908. an old oak pruned and one beside it left alone, and a day later: the pruned one is '
+     || case when land_tile(:'world6', 57, 52) = tile_id('Tree')
+             then lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 57, 52))))
+             else 'gone' end
+     || ' and the other is '
+     || case when land_tile(:'world6', 58, 52) = tile_id('Tree')
+             then lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 58, 52))))
+             else 'gone' end
+     || ' — which is what pruning is for';

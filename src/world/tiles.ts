@@ -318,13 +318,23 @@ export interface TreeAge {
    * and grows into 0. Nothing has to know that but this column.
    */
   next: number | null;
+  /**
+   * What a hatchet prunes it back to, or null for one too young to prune.
+   *
+   * Asked for as "only old and mature trees": a stage back apiece, so an old
+   * tree that would be gone when its day is up is a mature one instead, and a
+   * mature one is young and stops bearing until it grows again. Written down
+   * like `next` rather than worked backwards from it, so that either side of
+   * the wire reads it off the table and neither has to know the order.
+   */
+  pruned: number | null;
 }
 
 export const TREE_AGES: TreeAge[] = [
-  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false, next: 1 },
-  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true, next: 2 },
-  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true, next: null },
-  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false, next: 0 },
+  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false, next: 1, pruned: null },
+  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true, next: 2, pruned: 0 },
+  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true, next: null, pruned: 1 },
+  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false, next: 0, pruned: null },
 ];
 
 /**

@@ -499,6 +499,8 @@ out.push(`create table if not exists tree_age_def (
 /* And what each age becomes when its day is up, which came a change later than
  * the table did. */
 out.push(`alter table tree_age_def add column if not exists next int;`);
+/* And what a hatchet prunes each back to, a change later again. */
+out.push(`alter table tree_age_def add column if not exists pruned int;`);
 out.push(`create table if not exists bush_def (id int primary key, name text not null);`);
 /* Weighted tables, shared by foraging people and foraging creatures. */
 out.push(`create table if not exists loot_table (
@@ -1057,7 +1059,7 @@ TREE_DEFS.forEach((t, i) => {
   if (t.fruit) out.push(`update tree_def set fruit = ${q(t.fruit)} where id = ${q(i)};`);
 });
 for (const a of TREE_AGES) {
-  out.push(`insert into tree_age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.hits)}, ${q(a.logs)}, ${q(a.bears)}, ${q(a.next)});`);
+  out.push(`insert into tree_age_def values (${q(a.id)}, ${q(a.name)}, ${q(a.hits)}, ${q(a.logs)}, ${q(a.bears)}, ${q(a.next)}, ${q(a.pruned)});`);
 }
 SLAB_VARIANTS.forEach((v, i) => out.push(`insert into slab_def values (${q(i)}, ${q(v.name)}, ${q(v.item)});`));
 for (const [item, v] of Object.entries(VESSELS)) {
