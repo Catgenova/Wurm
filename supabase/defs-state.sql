@@ -158,6 +158,7 @@ create table if not exists bridge_bill (
   kind text not null, item text not null, count int not null, primary key (kind, item)
 );
 alter table furniture_def add column if not exists bed real;
+alter table furniture_def add column if not exists crates int;
 create table if not exists brew_def (
   id text primary key, name text not null, input text not null, count int not null,
   litres real not null, seconds real not null, difficulty real not null, done text not null
@@ -631,6 +632,7 @@ insert into item_def values ('wardrobe', 'Wardrobe', 'misc', 42, false, 4, null)
 insert into item_def values ('shelves', 'Shelves', 'misc', 34, false, 4, null);
 insert into item_def values ('bookshelf', 'Bookshelf', 'misc', 30, false, 4, null);
 insert into item_def values ('larder', 'Larder', 'misc', 48, false, 4, null);
+insert into item_def values ('crate_shelf', 'Crate shelf', 'misc', 64, false, 4, null);
 insert into item_def values ('barrel', 'Barrel', 'misc', 14, false, 4, null);
 insert into item_def values ('lectern', 'Lectern', 'misc', 12, false, 4, null);
 insert into item_def values ('coat_rack', 'Coat rack', 'misc', 6, false, 4, null);
@@ -1072,6 +1074,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_coat_rack', 'Build coat rack', 'building a coat rack', 'fine_carpentry', 'mallet', false, null, 0.05, 6, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_planter', 'Build planter', 'building a planter', 'fine_carpentry', 'mallet', false, null, 0.05, 7, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_firewood_rack', 'Build firewood rack', 'building a firewood rack', 'fine_carpentry', 'mallet', false, null, 0.05, 8, 12, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_crate_shelf', 'Build crate shelf', 'building a crate shelf', 'fine_carpentry', 'mallet', false, null, 0.05, 22, 24, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_hive', 'Build hive', 'building a hive', 'fine_carpentry', 'mallet', false, null, 0.05, 13, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_spindle', 'Build spindle', 'building a spindle', 'fine_carpentry', 'mallet', false, null, 0.05, 9, 14, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_loom', 'Build loom', 'building a loom', 'fine_carpentry', 'mallet', false, null, 0.05, 18, 22, false, true);
@@ -1613,6 +1616,7 @@ insert into improvable_def values ('wardrobe', 'wood', 'fine_carpentry');
 insert into improvable_def values ('shelves', 'wood', 'fine_carpentry');
 insert into improvable_def values ('bookshelf', 'wood', 'fine_carpentry');
 insert into improvable_def values ('larder', 'wood', 'fine_carpentry');
+insert into improvable_def values ('crate_shelf', 'wood', 'fine_carpentry');
 insert into improvable_def values ('barrel', 'wood', 'fine_carpentry');
 insert into improvable_def values ('lectern', 'wood', 'carpentry');
 insert into improvable_def values ('coat_rack', 'wood', 'fine_carpentry');
@@ -1869,6 +1873,7 @@ update item_def set description = 'Tall enough to hang a cloak full length. Hold
 update item_def set description = 'A long open rack of shelves. Holds 120 things.' where id = 'shelves';
 update item_def set description = 'Shelves with a back and a cornice. Holds 90 things.' where id = 'bookshelf';
 update item_def set description = 'A deep cool cupboard for a kitchen. The largest storage there is: 150 things.' where id = 'larder';
+update item_def set description = 'A decked rack two spots across and four deep. It holds nothing itself: eight plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' where id = 'crate_shelf';
 update item_def set description = 'Staves and hoops. Holds 80 litres of one liquid, and nothing solid.' where id = 'barrel';
 update item_def set description = 'A slanted stand to read from.' where id = 'lectern';
 update item_def set description = 'Pegs on a post, by the door.' where id = 'coat_rack';
@@ -3079,6 +3084,8 @@ insert into furniture_def values ('lectern', 'Lectern', 1, 1, null, false, false
 insert into furniture_def values ('coat_rack', 'Coat rack', 1, 1, null, false, false);
 insert into furniture_def values ('planter', 'Planter', 2, 1, null, false, false);
 insert into furniture_def values ('firewood_rack', 'Firewood rack', 2, 1, 40, false, false);
+insert into furniture_def values ('crate_shelf', 'Crate shelf', 2, 4, null, false, false);
+update furniture_def set crates = 8 where id = 'crate_shelf';
 insert into furniture_def values ('hive', 'Hive', 2, 1, null, false, false);
 update furniture_def set hive = 40 where id = 'hive';
 insert into furniture_def values ('spindle', 'Spindle', 1, 1, null, false, false);
@@ -3645,6 +3652,10 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_firewood_rack', 0, 'plank', 2);
 insert into recipe_input values ('make_firewood_rack', 1, 'shaft', 6);
 insert into recipe_input values ('make_firewood_rack', 2, 'nail', 10);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_crate_shelf', 'crate_shelf', 1, 'mallet', null, 'fine_carpentry', 'Build crate shelf', 'building a crate shelf', 22, 0.05, 24, false, false, 'wood', null, null, 'You frame the rack, deck it over and set the runners. It will take eight crates. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the crate shelf apart again.');
+insert into recipe_input values ('make_crate_shelf', 0, 'plank', 20);
+insert into recipe_input values ('make_crate_shelf', 1, 'timber', 8);
+insert into recipe_input values ('make_crate_shelf', 2, 'nail', 44);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_hive', 'hive', 1, 'mallet', null, 'fine_carpentry', 'Build hive', 'building a hive', 13, 0.05, 18, false, false, 'wood', null, null, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the hive apart again.');
 insert into recipe_input values ('make_hive', 0, 'plank', 6);
 insert into recipe_input values ('make_hive', 1, 'shaft', 2);

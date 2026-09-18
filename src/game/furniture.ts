@@ -56,6 +56,18 @@ export interface FurnitureDef {
    * before the swarm stops and waits for it to be emptied.
    */
   hive?: number;
+  /**
+   * Crate spots on its deck: one to a subtile, so a rack of `w` by `h` holds
+   * `w * h` of them.
+   *
+   * Nothing is stored *in* a piece with this on it. What stands on the deck is
+   * an ordinary placed crate at an ordinary subtile — the same crate, with the
+   * same contents, the same name and the same deed flag it would have on bare
+   * ground. The rack's footprint simply *is* its crate spots, which is why
+   * this needs no store of its own on either side of the wire and why a crate
+   * on it survives the rack being a browser's idea rather than an island's.
+   */
+  crates?: number;
 }
 
 /**
@@ -131,6 +143,21 @@ export const FURNITURE: FurnitureDef[] = [
   piece('coat_rack', 'Coat rack', 1, 1, [['plank', 1], ['shaft', 4], ['nail', 6]], 10, 6, 'You nail up a rack of pegs for the door.'),
   piece('planter', 'Planter', 2, 1, [['plank', 6], ['nail', 10]], 10, 7, 'You nail up a planter and fill it with earth.'),
   piece('firewood_rack', 'Firewood rack', 2, 1, [['plank', 2], ['shaft', 6], ['nail', 10]], 12, 8, 'You nail up a rack to keep firewood off the wet.', 40),
+  /*
+   * The biggest thing a carpenter builds, and the only one whose footprint is
+   * the point of it: two subtiles across and four deep, and every one of the
+   * eight takes a plank crate.
+   *
+   * It holds nothing itself. Eight crates stand on it and each is its own
+   * crate — a crate of iron ore beside a crate of wheat, named, filled and
+   * emptied exactly as they are on the floor. What the rack gives is that they
+   * stand in one place, in a row, and you can see across a warehouse how much
+   * of it is full.
+   */
+  piece('crate_shelf', 'Crate shelf', 2, 4,
+    [['plank', 20], ['timber', 8], ['nail', 44]], 24, 22,
+    'You frame the rack, deck it over and set the runners. It will take eight crates.',
+    undefined, { crates: 8 }),
   piece('hive', 'Hive', 2, 1, [['plank', 6], ['shaft', 2], ['cloth', 1], ['nail', 12]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
   // The two the cloth trade is built on. Stand at one to spin or weave.
   piece('spindle', 'Spindle', 1, 1, [['plank', 2], ['shaft', 3], ['nail', 8]], 14, 9, 'You turn a spindle and set it on its stand.'),
@@ -258,6 +285,24 @@ export function furnitureCovers(f: { kind: string; sx: number; sy: number }, sx:
   return sx >= f.sx && sx < f.sx + def.w && sy >= f.sy && sy < f.sy + def.h;
 }
 
+/** Whether a piece is a rack whose footprint is its crate spots. */
+export const rackSpots = (f: { kind: string }): number => furnitureDef(f.kind).crates ?? 0;
+
+/**
+ * The subtiles of a rack's deck, in the order its spots fill.
+ *
+ * Front to back and left to right, which is the order somebody loading one
+ * would actually work in and the order the model draws them — so a rack that
+ * is three full looks three full from any side rather than showing a gap where
+ * the fourth ought to be.
+ */
+export function rackDeck(f: { kind: string; sx: number; sy: number }): Array<[number, number]> {
+  const def = furnitureDef(f.kind);
+  const out: Array<[number, number]> = [];
+  for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) out.push([f.sx + dx, f.sy + dy]);
+  return out;
+}
+
 /** Top-left subtile of the block a piece would take, kept inside the tile. */
 export function furnitureAnchor(kind: string, sx: number, sy: number): [number, number] {
   const def = furnitureDef(kind);
@@ -366,6 +411,13 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
       if (f.items.length) return 'Empty it first.';
+      // A rack holds nothing of its own, so `items` is empty however loaded it
+      // is: what stands on it are eight crates of somebody else's, and lifting
+      // the rack out from under them would leave them standing in the air.
+      if (rackSpots(f)) {
+        const on = g.cratesOn(f).length;
+        if (on) return `Take the ${on === 1 ? 'crate' : `${on} crates`} off it first.`;
+      }
       if (f.lit) return 'Not while it is alight.';
       if (litresIn(f) > 0) return 'Empty it out first.';
       if (f.hitched) return 'Let go of it first.';
@@ -376,6 +428,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length) return;
+      if (rackSpots(f) && g.cratesOn(f).length) return;
       g.removeFurniture(f.id);
       const back = g.inventory.add(f.kind, { ql: f.ql, extra: f.material });
       if (f.dye) back.dye = f.dye;

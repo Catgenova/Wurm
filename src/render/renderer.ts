@@ -36,7 +36,7 @@ import { DAWN, DUSK } from '../game/game';
 import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
-import { FURNITURE_BY_ID } from '../game/furniture';
+import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
@@ -917,6 +917,10 @@ export class Renderer {
         }
         if (this.game.crates.size) {
           for (const crate of this.game.cratesOnTile(x, y)) {
+            // A crate standing on a rack is drawn by the rack, up on its deck
+            // where it actually is. Drawn here as well it would be a second
+            // crate on the floor underneath the first.
+            if (this.game.rackAt(crate.x, crate.y, crate.sx, crate.sy)) continue;
             const [wx, wy] = crateCentre(crate);
             this.ents.push({ kind: 'crate', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: crateSprite(crate.kind), crateId: crate.id });
           }
@@ -1240,7 +1244,7 @@ export class Renderer {
       }
       if (ent.kind === 'furniture' && ent.piece) {
         const piece = ent.piece;
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.sailTrim(piece)));
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece)));
         const [W, D] = furnitureSpan(piece.kind);
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
         // A sign is a board made to be read, so what is written on it stands
@@ -2506,6 +2510,26 @@ export class Renderer {
    * How a sail is set: which side it is out on and how full it is. A hull
    * nobody is sailing sits with the sail slack.
    */
+  /**
+   * The one number a piece carries into its own model.
+   *
+   * A sail wants how hard it is drawing; a crate rack wants which of its eight
+   * spots have a crate on them, as a mask. Two pieces, one channel, because
+   * nothing else has ever needed one and a second parameter for the second
+   * user would be a parameter for every piece that has no use for either.
+   */
+  private pieceTrim(f: PlacedFurniture): number | undefined {
+    if (rackSpots(f)) {
+      let mask = 0;
+      const deck = rackDeck(f);
+      for (let n = 0; n < deck.length; n++) {
+        if (this.game.crateAt(f.x, f.y, deck[n][0], deck[n][1])) mask |= 1 << n;
+      }
+      return mask;
+    }
+    return this.sailTrim(f);
+  }
+
   private sailTrim(f: PlacedFurniture): number | undefined {
     const def = FURNITURE_BY_ID.get(f.kind)?.boat;
     if (!def?.sail) return undefined;

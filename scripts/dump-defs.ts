@@ -329,6 +329,8 @@ out.push(`create table if not exists bridge_bill (
 );`);
 /* Something to sleep in, and how much of a night it is worth. */
 out.push(`alter table furniture_def add column if not exists bed real;`);
+/* Crate spots on a rack's deck: its footprint is what it carries. */
+out.push(`alter table furniture_def add column if not exists crates int;`);
 /* What a barrel of water becomes if you leave it alone. */
 out.push(`create table if not exists brew_def (
   id text primary key, name text not null, input text not null, count int not null,
@@ -1103,6 +1105,7 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);
   if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);
   if (f.bed !== undefined) out.push(`update furniture_def set bed = ${q(f.bed)} where id = ${q(f.id)};`);
+  if (f.crates !== undefined) out.push(`update furniture_def set crates = ${q(f.crates)} where id = ${q(f.id)};`);
   if (f.cart) out.push(`update furniture_def set cart = true where id = ${q(f.id)};`);
   const v = f.vehicle as A | undefined;
   if (v) out.push(`insert into vehicle_def values (${q(f.id)}, ${q(v.yokes)}, ${q(v.needs)}, ${q(v.seat)});`);

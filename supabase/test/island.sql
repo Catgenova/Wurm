@@ -7749,3 +7749,61 @@ select '891. a pack holding a ' || lower(:'old_tree') || ' sprout and a ' || low
      || coalesce((select lower(extra) from item where world_id = :'world2' and holder_uid = :'ivar'
                     and def = 'sprout' limit 1), 'none')
      || ' — asked for nothing in particular it still plants the oldest to hand, which is what it always did';
+
+/*
+ * And the crate rack, whose footprint is what it carries.
+ *
+ * Asked from the island: a shelf two subtiles across and four deep, holding
+ * eight plank crates, drawn with however many of its spots are occupied.
+ *
+ * It holds nothing. Its eight subtiles *are* its eight crate spots, and a
+ * crate standing on one is an ordinary crate at an ordinary subtile — the same
+ * row in the same table, with its own contents and its own name. So there is
+ * no new store anywhere and nothing to keep in step; what changes is the two
+ * rules that would otherwise be in its way.
+ */
+\echo ''
+\echo '--- a rack whose footprint is what it carries'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from crate where world_id = :'world2' and x = 11 and y = 11 \g /dev/null
+delete from placed where world_id = :'world2' and sub = 'crate_shelf' \g /dev/null
+update player set x = 11.5, y = 11.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select give(:'world2', :'ivar', 'crate_shelf', 1, 40) \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar'
+      and def = 'crate_shelf' order by id desc limit 1) || ',"x":11,"y":11,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as rack from placed where world_id = :'world2' and sub = 'crate_shelf' order by id desc limit 1 \gset
+select '892. a crate shelf set down at 11,11: ' || (select w || ' spots across and ' || h || ' deep, ' || crates
+         || ' crate spots' from furniture_def where id = 'crate_shelf')
+     || ', standing on subtiles ' || (select p.sx || ',' || p.sy from placed p where p.id = :'rack')
+     || ' — and what the rack itself holds: '
+     || (select count(*) from item where world_id = :'world2' and holder = 'furniture' and placed = :'rack') || ' things';
+-- A log crate will not sit on the runners; a plank crate will.
+select give(:'world2', :'ivar', 'crate_log', 1, 30) \g /dev/null
+select give(:'world2', :'ivar', 'crate_plank', 8, 30) \g /dev/null
+select id as logcrate from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'crate_log'
+  order by id desc limit 1 \gset
+select id as plankcrate from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'crate_plank'
+  order by id desc limit 1 \gset
+select '893. offering the rack a log crate: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'place_crate',
+          ('{"kind":"tile","x":11,"y":11,"sx":0,"sy":0,"itemUid":' || :'logcrate' || '}')::jsonb), 'ALLOWED')
+     || '", and a plank crate: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'place_crate',
+          ('{"kind":"tile","x":11,"y":11,"sx":0,"sy":0,"itemUid":' || :'plankcrate' || '}')::jsonb), 'ALLOWED') || '"';
+-- Load all eight spots, the browser's way, one at a time.
+select act_perform(:'world2', :'ivar', 'place_crate',
+  ('{"kind":"tile","x":11,"y":11,"sx":' || (n % 2) || ',"sy":' || (n / 2) || ',"itemUid":'
+   || (select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'crate_plank' limit 1) || '}')::jsonb)
+  from generate_series(0, 7) n \g /dev/null
+select '894. and loaded a spot at a time: ' || crates_on_rack(:'world2', :'rack') || ' of '
+     || (select crates from furniture_def where id = 'crate_shelf') || ' spots taken, which is '
+     || (select count(*) from crate where world_id = :'world2' and x = 11 and y = 11)
+     || ' crates standing at 11,11 — each its own crate in the ordinary table, at an ordinary subtile';
+select '895. and lifting the rack out from under them: "'
+     || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
+          ('{"kind":"furniture","id":' || :'rack' || '}')::jsonb), 'ALLOWED')
+     || '" — with one taken off again: ' as lifting \gset
+delete from crate where world_id = :'world2' and x = 11 and y = 11 and sx = 1 and sy = 3 \g /dev/null
+select :'lifting' || '"' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
+          ('{"kind":"furniture","id":' || :'rack' || '}')::jsonb), 'ALLOWED') || '"';

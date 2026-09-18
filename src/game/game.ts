@@ -16,7 +16,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { knackable, type Station } from './recipes';
@@ -4787,6 +4787,30 @@ export class Game {
   }
 
   /** Whether anything already stands on one subtile. */
+  /**
+   * The crate rack whose deck covers this subtile, when one does.
+   *
+   * A rack's footprint *is* its crate spots — eight subtiles, eight crates —
+   * so this is the one question everything about it turns on: whether the spot
+   * somebody is pointing at is a rack's deck or bare ground.
+   */
+  rackAt(x: number, y: number, sx: number, sy: number): PlacedFurniture | undefined {
+    for (const f of this.placed.furniture.at(x, y)) {
+      if (rackSpots(f) && furnitureCovers(f, sx, sy)) return f;
+    }
+    return undefined;
+  }
+
+  /** The crates standing on a rack, in the order its spots fill. */
+  cratesOn(f: PlacedFurniture): PlacedCrate[] {
+    const out: PlacedCrate[] = [];
+    for (const [sx, sy] of rackDeck(f)) {
+      const crate = this.crateAt(f.x, f.y, sx, sy);
+      if (crate) out.push(crate);
+    }
+    return out;
+  }
+
   occupiedSubtile(x: number, y: number, sx: number, sy: number): boolean {
     if (this.crateAt(x, y, sx, sy)) return true;
     if (this.campfireAt(x, y, sx, sy)) return true;

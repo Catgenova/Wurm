@@ -58,6 +58,7 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   coat_rack: 30,
   planter: 10,
   firewood_rack: 17,
+  crate_shelf: 18,
   hive: 22,
   spindle: 18,
   loom: 26,
@@ -585,6 +586,85 @@ const DRAW: Record<string, Draw> = {
       ctx.beginPath();
       ctx.ellipse(bx, -h - 3 + Math.abs(t) * D * 0.4, 1.8, 3.6, t * 0.55, 0, TAU);
       ctx.fill();
+    }
+  },
+  /*
+   * The crate rack, and the eight spots on its deck.
+   *
+   * Two subtiles across and four deep, and the model has to say at a glance
+   * how much of it is full — that is the whole point of building one, and it
+   * is what was asked for: a picture for every count from nought to eight.
+   *
+   * The spots are not a count though, they are places. `trim` carries a mask
+   * of which of the eight subtiles has a crate on it, so a rack with the far
+   * pair loaded and the near six empty looks like that rather than like two
+   * crates at the front. Every count from 0 to 8 still draws, which is what
+   * the nine models were for; this simply also tells the truth about where.
+   *
+   * Drawn back to front, so a crate nearer the viewer laps the one behind it.
+   */
+  crate_shelf: (ctx, W, D, h, _lit, _tint, trim) => {
+    const frame = WOODS.dark;
+    const deck = WOODS.oak;
+    legs(ctx, W, D, h - 3, frame, 0.9);
+    box(ctx, 0, 0, W * 0.97, D * 0.97, 2.6, deck, h - 3);
+
+    /*
+     * The eight spots, at the middle of the eight subtiles they are.
+     *
+     * A block of `w` by `h` subtiles spans `(w + h)` steps of half-width
+     * between its far corners, and `W` is that whole half-width — so one
+     * subtile is `W / 3` across for a two-by-four, and `D / 3` down. Stepping
+     * along the two-wide axis moves right and down; along the four-deep axis,
+     * left and down. That is the whole of the arithmetic, and getting it half
+     * right is how eight crates end up huddled in the middle of a deck built
+     * for eight.
+     */
+    const stepX = W / 3;
+    const stepY = D / 3;
+    const spots: Array<[number, number, number]> = [];
+    for (let j = 0; j < 4; j++) {
+      for (let i = 0; i < 2; i++) {
+        spots.push([(i - j) * stepX + stepX, (i + j + 1) * stepY - D, j * 2 + i]);
+      }
+    }
+
+    // Back to front, so a crate nearer the viewer laps the one behind it.
+    const mask = trim ?? 0;
+    const top = h - 0.4;
+    const s = W * 0.22;
+    const order = spots.sort((a, b) => a[1] - b[1]);
+    /*
+     * A pair of runners under every spot, filled or not.
+     *
+     * Without them an empty rack is a table, and a rack with two crates on it
+     * is a table with two crates on it — there is nothing to say the other six
+     * places exist. They are also the thing the refusal talks about when a log
+     * crate is offered: it will not sit on the runners.
+     */
+    for (const [cx, cy] of order) {
+      box(ctx, cx, cy, s * 1.06, s * 0.53, 1.1, WOODS.grey, top);
+    }
+    for (const [cx, cy, n] of order) {
+      if (!(mask & (1 << n))) continue;
+      box(ctx, cx, cy, s, s * 0.5, s * 1.25, WOODS.pale, top + 1.1);
+      /*
+       * A band round the middle and a line down the corner, which is what
+       * makes a pale block read as a crate at the size these are drawn. The
+       * ground crate has the same two marks for the same reason.
+       */
+      const lid = cy - top - 1.1 - s * 1.25;
+      ctx.strokeStyle = 'rgba(64,44,26,0.45)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(cx - s, lid + s * 0.5 + s * 0.62);
+      ctx.lineTo(cx, lid + s * 0.5 * 2 + s * 0.62);
+      ctx.lineTo(cx + s, lid + s * 0.5 + s * 0.62);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, lid + s);
+      ctx.lineTo(cx, lid + s + s * 1.25);
+      ctx.stroke();
     }
   },
   firewood_rack: (ctx, W, D, h) => {

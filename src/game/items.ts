@@ -319,6 +319,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   shelves: { name: 'Shelves', category: 'misc', weight: 34, decay: 4, description: 'A long open rack of shelves. Holds 120 things.' },
   bookshelf: { name: 'Bookshelf', category: 'misc', weight: 30, decay: 4, description: 'Shelves with a back and a cornice. Holds 90 things.' },
   larder: { name: 'Larder', category: 'misc', weight: 48, decay: 4, description: 'A deep cool cupboard for a kitchen. The largest storage there is: 150 things.' },
+  crate_shelf: { name: 'Crate shelf', category: 'misc', weight: 64, decay: 4, description: 'A decked rack two spots across and four deep. It holds nothing itself: eight plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' },
   barrel: { name: 'Barrel', category: 'misc', weight: 14, decay: 4, description: 'Staves and hoops. Holds 80 litres of one liquid, and nothing solid.' },
   lectern: { name: 'Lectern', category: 'misc', weight: 12, decay: 4, description: 'A slanted stand to read from.' },
   coat_rack: { name: 'Coat rack', category: 'misc', weight: 6, decay: 4, description: 'Pegs on a post, by the door.' },

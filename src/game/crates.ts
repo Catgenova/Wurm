@@ -96,9 +96,22 @@ export const CRATE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile' || t.itemUid === undefined || t.sx === undefined || t.sy === undefined) return 'Choose a crate and a spot.';
       const item = g.inventory.get(t.itemUid);
-      if (!item || !crateKindOfItem(item.id)) return 'That is not a crate.';
-      if (!g.world.isPassable(t.x, t.y) || g.world.hasWater(t.x, t.y)) return 'Crates need dry, open ground.';
-      if (g.world.slope(t.x, t.y) > 20) return 'The ground is too steep for a crate to stand.';
+      const kind = item && crateKindOfItem(item.id);
+      if (!item || !kind) return 'That is not a crate.';
+      /*
+       * A rack's deck is a crate spot, and the ground under it is the rack's
+       * business rather than the crate's: whoever put the rack there already
+       * answered for the footing. So the ground rules below are skipped on a
+       * deck and asked on bare earth, which is the only difference between the
+       * two — a crate on a rack is an ordinary crate at an ordinary subtile.
+       */
+      const rack = g.rackAt(t.x, t.y, t.sx, t.sy);
+      if (rack) {
+        if (kind !== 'plank') return `A ${CRATE_DEFS[kind].name.toLowerCase()} will not sit on the runners. The rack takes plank crates.`;
+      } else {
+        if (!g.world.isPassable(t.x, t.y) || g.world.hasWater(t.x, t.y)) return 'Crates need dry, open ground.';
+        if (g.world.slope(t.x, t.y) > 20) return 'The ground is too steep for a crate to stand.';
+      }
       if (g.crateAt(t.x, t.y, t.sx, t.sy)) return 'There is already a crate on that spot.';
       if (g.isToken(t.x, t.y)) return 'Not on the token.';
       return null;
