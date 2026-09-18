@@ -202,6 +202,16 @@ jobs:
           npx esbuild supabase/test/wild.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/wild.mjs --log-level=error
           node node_modules/.cache/wild.mjs
+      - name: A rack takes eight crates and says which spots are full
+        run: |
+          # Reported as no way to add crates to a crate shelf. The rules knew
+          # about racks; the only way to reach the placing was the tile menu,
+          # and a click on a tile with furniture on it opens the piece's menu
+          # instead — so eight spots nobody could load, holding crates nobody
+          # could click.
+          npx esbuild supabase/test/rack.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/rack.mjs --log-level=error
+          node node_modules/.cache/rack.mjs
       - name: The ground is the one on the chart
         run: |
           # And that the ground both generators agree on is the ground that was

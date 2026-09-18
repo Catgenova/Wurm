@@ -40,7 +40,7 @@ import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, MOULD_BY_MAKES, isCa
 import { meltable } from '../game/melt';
 import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture, turnedFacing } from '../game/furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
@@ -1240,6 +1240,55 @@ export class UI {
     }
     if (furnitureCapacity(f)) {
       entries.push({ label: 'Open', note: `${furnitureUnits(f)} / ${furnitureCapacity(f)} things`, onSelect: () => this.cratePanel.openFurniture(f.id) });
+    }
+    /*
+     * A rack, and the crates standing on it.
+     *
+     * Reported as "no way to add crates to crate shelf", and there was not:
+     * the rules have known about racks since the thing was built —
+     * `place_crate` skips the ground rules on a deck and refuses anything but
+     * a plank crate on the runners — but the only way to reach that action was
+     * the *tile* menu, and a click on a tile with furniture on it never gets
+     * that far. The same went for what was standing on it: a crate on a deck
+     * is drawn by the rack rather than as an entity of its own, so there was
+     * nothing to click.
+     *
+     * So the rack's own menu is where it is loaded and where what is on it is
+     * reached. Spots fill in `rackDeck` order, which is the order the model
+     * draws them in, so a rack three full looks three full.
+     */
+    if (rackSpots(f)) {
+      const deck = rackDeck(f);
+      const on = g.cratesOn(f);
+      const free = deck.find(([sx, sy]) => !g.crateAt(f.x, f.y, sx, sy));
+      entries.push({ label: `${on.length} of ${rackSpots(f)} spots full`, disabled: true });
+      const placeDef = ACTION_BY_ID.get('place_crate');
+      const carried = g.inventory.items.filter((it) => crateKindOfItem(it.id));
+      if (placeDef) {
+        for (const it of carried) {
+          const pt: Target = { kind: 'tile', x: f.x, y: f.y, cx: f.x, cy: f.y, sx: free?.[0] ?? 0, sy: free?.[1] ?? 0, itemUid: it.uid };
+          const reason = free ? placeDef.check?.(pt, g) ?? null : 'Every spot on it is taken.';
+          entries.push({
+            label: `Put ${itemName(it).toLowerCase()} on it`,
+            note: reason ? undefined : `spot ${on.length + 1} of ${rackSpots(f)}`,
+            hint: reason ?? undefined,
+            disabled: !!reason,
+            onSelect: () => g.requestAction(placeDef, pt),
+          });
+        }
+      }
+      for (const c of on) {
+        const ct: Target = { kind: 'crate', id: c.id };
+        const children: MenuItem[] = [{ label: 'Open', onSelect: () => this.cratePanel.open(c.id) }];
+        for (const id of ['crate_take_all', 'pick_up_crate']) {
+          const d = ACTION_BY_ID.get(id);
+          if (!d) continue;
+          const reason = d.check?.(ct, g) ?? null;
+          children.push({ label: d.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(d, ct) });
+        }
+        children.push(...this.nameEntry(ct));
+        entries.push({ label: crateName(c), note: `${crateUnits(c)} / ${crateCapacity(c)} things`, children });
+      }
     }
     // An oven is fed and lit like a fire, and cooks like one.
     if (def.hearth) {

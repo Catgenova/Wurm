@@ -59,7 +59,7 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   coat_rack: 30,
   planter: 10,
   firewood_rack: 17,
-  crate_shelf: 18,
+  crate_shelf: 32,
   hive: 22,
   spindle: 18,
   loom: 26,
@@ -590,82 +590,83 @@ const DRAW: Record<string, Draw> = {
     }
   },
   /*
-   * The crate rack, and the eight spots on its deck.
+   * The crate rack: four bays, two decks, eight crates.
    *
-   * Two subtiles across and four deep, and the model has to say at a glance
-   * how much of it is full — that is the whole point of building one, and it
-   * is what was asked for: a picture for every count from nought to eight.
+   * It was one deck of eight, and it was reported as looking "more like a
+   * table than a double decker shelf with box slots" — which it did, because
+   * that is what a deck on four legs is. It stands as racking now: posts at
+   * the corners, a board at each of two levels in each of four bays, and a
+   * divider between the bays so an empty slot still says a crate goes there.
    *
-   * The spots are not a count though, they are places. `trim` carries a mask
-   * of which of the eight subtiles has a crate on it, so a rack with the far
-   * pair loaded and the near six empty looks like that rather than like two
-   * crates at the front. Every count from 0 to 8 still draws, which is what
-   * the nine models were for; this simply also tells the truth about where.
+   * The eight spots are still eight subtiles on the ground — two across and
+   * four deep, which is what the rules place crates on and what the rack
+   * stands on. Which subtile is drawn where is this model's own business: the
+   * pair across each bay are the bay's two levels, so the far pair loaded and
+   * the near six empty looks like that rather than like two crates at the
+   * front. `trim` carries the mask of which of the eight are full.
    *
-   * Drawn back to front, so a crate nearer the viewer laps the one behind it.
+   * Drawn back to front and bottom to top, so what is nearer laps what is
+   * behind and above laps below.
    */
   crate_shelf: (ctx, W, D, h, _lit, _tint, trim) => {
     const frame = WOODS.dark;
     const deck = WOODS.oak;
-    legs(ctx, W, D, h - 3, frame, 0.9);
-    box(ctx, 0, 0, W * 0.97, D * 0.97, 2.6, deck, h - 3);
-
+    const mask = trim ?? 0;
     /*
-     * The eight spots, at the middle of the eight subtiles they are.
-     *
      * A block of `w` by `h` subtiles spans `(w + h)` steps of half-width
-     * between its far corners, and `W` is that whole half-width — so one
-     * subtile is `W / 3` across for a two-by-four, and `D / 3` down. Stepping
-     * along the two-wide axis moves right and down; along the four-deep axis,
-     * left and down. That is the whole of the arithmetic, and getting it half
-     * right is how eight crates end up huddled in the middle of a deck built
-     * for eight.
+     * between its far corners, so one subtile of a two-by-four is `W / 3`
+     * across and `D / 3` down. Stepping along the four-deep axis moves left
+     * and down by one step, which is the run the rack is built along.
      */
     const stepX = W / 3;
     const stepY = D / 3;
-    const spots: Array<[number, number, number]> = [];
-    for (let j = 0; j < 4; j++) {
-      for (let i = 0; i < 2; i++) {
-        spots.push([(i - j) * stepX + stepX, (i + j + 1) * stepY - D, j * 2 + i]);
-      }
-    }
+    /** The middle of bay `j`: the pair of subtiles across the run. */
+    const bayX = (j: number): number => (1.5 - j) * stepX;
+    const bayY = (j: number): number => (j + 1.5) * stepY - D;
 
-    // Back to front, so a crate nearer the viewer laps the one behind it.
-    const mask = trim ?? 0;
-    const top = h - 0.4;
-    const s = W * 0.22;
-    const order = spots.sort((a, b) => a[1] - b[1]);
-    /*
-     * A pair of runners under every spot, filled or not.
-     *
-     * Without them an empty rack is a table, and a rack with two crates on it
-     * is a table with two crates on it — there is nothing to say the other six
-     * places exist. They are also the thing the refusal talks about when a log
-     * crate is offered: it will not sit on the runners.
-     */
-    for (const [cx, cy] of order) {
-      box(ctx, cx, cy, s * 1.06, s * 0.53, 1.1, WOODS.grey, top);
-    }
-    for (const [cx, cy, n] of order) {
-      if (!(mask & (1 << n))) continue;
-      box(ctx, cx, cy, s, s * 0.5, s * 1.25, WOODS.pale, top + 1.1);
-      /*
-       * A band round the middle and a line down the corner, which is what
-       * makes a pale block read as a crate at the size these are drawn. The
-       * ground crate has the same two marks for the same reason.
-       */
-      const lid = cy - top - 1.1 - s * 1.25;
+    const floors = [2.6, h * 0.52];
+    const board = 1.2;
+    const s = W * 0.17;
+    const crateH = s * 1.3;
+
+    /** One crate in a slot, with the band and corner line that make it read as one. */
+    const crate = (cx: number, cy: number, base: number): void => {
+      box(ctx, cx, cy, s, s * 0.5, crateH, WOODS.pale, base);
+      const lid = cy - base - crateH;
       ctx.strokeStyle = 'rgba(64,44,26,0.45)';
-      ctx.lineWidth = 1.1;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(cx - s, lid + s * 0.5 + s * 0.62);
-      ctx.lineTo(cx, lid + s * 0.5 * 2 + s * 0.62);
-      ctx.lineTo(cx + s, lid + s * 0.5 + s * 0.62);
+      ctx.moveTo(cx - s, lid + s * 0.5 + crateH * 0.5);
+      ctx.lineTo(cx, lid + s + crateH * 0.5);
+      ctx.lineTo(cx + s, lid + s * 0.5 + crateH * 0.5);
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(cx, lid + s);
-      ctx.lineTo(cx, lid + s + s * 1.25);
+      ctx.lineTo(cx, lid + s + crateH * 0.6);
       ctx.stroke();
+    };
+
+    /*
+     * Four bays, back to front, and each bay a shelf of its own rather than
+     * one long deck: four boards in a row read as racking, and one board the
+     * length of the run reads as the table this was reported as looking like.
+     * Within a bay the top shelf goes on before the bottom one — what is lower
+     * on the screen is nearer the eye and goes on last, or the shelf above
+     * would be painted over the crate standing under it.
+     */
+    for (let j = 0; j < 4; j++) {
+      const x = bayX(j);
+      const y = bayY(j);
+      // The far upright and the beam across the top of the bay, then what
+      // stands in the bay, then the near upright, which laps it all.
+      post(ctx, x - stepX * 0.72, y - stepY * 0.72, h, frame, 1.5);
+      box(ctx, x, y, stepX * 0.8, stepY * 0.8, 1.1, frame, h - 1.1);
+      for (let level = 1; level >= 0; level--) {
+        const floor = floors[level];
+        box(ctx, x, y, stepX * 0.82, stepY * 0.82, board, deck, floor - board);
+        if (mask & (1 << (j * 2 + level))) crate(x, y, floor);
+      }
+      post(ctx, x + stepX * 0.72, y + stepY * 0.72, h, frame, 1.5);
     }
   },
   firewood_rack: (ctx, W, D, h) => {
