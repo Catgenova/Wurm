@@ -721,6 +721,26 @@ async function main(): Promise<void> {
           if (back.getDirt(x, y) <= 0 || back.getHeight(x, y) <= 0) continue;
           if (!TILE_DEFS[back.getTile(x, y)]?.digYield) continue;
           /*
+           * And somewhere the ground will take the spadeful.
+           *
+           * Digging has a slope door of its own now: drop a corner beside a
+           * cliff and the face it leaves is steeper than the skill can cut, so
+           * the island refuses — "that would leave a slope of 52. Your digging
+           * allows 40". Perfectly correct, and nothing whatever to do with
+           * whether digging works, which is what this is measuring. A live run
+           * picked exactly such a corner and failed on it. So the corner this
+           * reaches for is one with nothing steep around it: twenty units is a
+           * long way inside the forty a beginner is allowed.
+           */
+          const here = back.getHeight(x, y);
+          let steep = false;
+          for (let ny = y - 1; ny <= y + 1 && !steep; ny++) {
+            for (let nx = x - 1; nx <= x + 1; nx++) {
+              if (Math.abs(back.getHeight(nx, ny) - here) > 20) { steep = true; break; }
+            }
+          }
+          if (steep) continue;
+          /*
            * And somewhere a body can actually stand.
            *
            * This looked at the soil and not at what was on top of it, so it
