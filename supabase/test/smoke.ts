@@ -21,6 +21,8 @@ import { readAtlas } from '../../tools/atlas-node';
 import { ACTION_PACE } from '../../src/game/pace';
 import { WILD_REST, WILD_REST_SPREAD } from '../../src/game/creatures';
 import { pathOptions } from '../../src/game/player';
+import { LIQUID_NAME, type LiquidKind } from '../../src/game/furniture';
+import { drinkable } from '../../src/game/brewing';
 import { findPath } from '../../src/world/pathfinding';
 import type { World } from '../../src/world/world';
 
@@ -472,10 +474,19 @@ async function main(): Promise<void> {
       vesselErr ? vesselErr.message
         : ((vessels ?? []) as Array<{ id: string; liquid: number | null; well: number | null }>)
             .map((v) => `${v.id} ${v.liquid ?? v.well}L`).join(', '));
+    /*
+     * Measured against the browser's own table rather than a number: this said
+     * seven, and the day juice became the eighth liquid the real island was
+     * failed for knowing it.
+     */
+    const liquidKinds = Object.keys(LIQUID_NAME) as LiquidKind[];
+    const drinks = liquidKinds.filter((l) => drinkable(l)).length;
     const { data: liquids, error: liquidErr } = await supabase().from('liquid_def').select('id,drinkable,brew');
-    check('and what each of them may be full of', !liquidErr && (liquids ?? []).length === 7,
+    const drinkRows = ((liquids ?? []) as Array<{ drinkable: boolean }>).filter((l) => l.drinkable).length;
+    check('and what each of them may be full of',
+      !liquidErr && (liquids ?? []).length === liquidKinds.length && drinkRows === drinks,
       liquidErr ? liquidErr.message
-        : `${(liquids ?? []).length}, of which ${((liquids ?? []) as Array<{ drinkable: boolean }>).filter((l) => l.drinkable).length} you would drink`);
+        : `${(liquids ?? []).length} of the browser's ${liquidKinds.length}, of which ${drinkRows} you would drink, as the browser says ${drinks}`);
     const dry = await island.act('fill_bucket', { kind: 'item', uid: 1 }, 1);
     check('filling a bucket we have not got is refused in its own words',
       !dry.started && /gone|bucket/i.test(dry.why ?? ''), dry.why ?? 'IT STARTED');
