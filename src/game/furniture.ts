@@ -50,6 +50,12 @@ export interface FurnitureDef {
   bed?: number;
   /** A stone table to kneel at. Praying at one banks favour. */
   altar?: boolean;
+  /** Rung on a settlement: every wildermon of the deed comes, and every citizen hears where it hangs. */
+  bell?: boolean;
+  /** On the map from the day it is set up. */
+  landmark?: boolean;
+  /** What the piece is of, when it is not the wood it was built from. */
+  material?: 'wood' | 'metal';
   /**
    * A swarm's own house. Nobody puts anything into a hive: a tamed Vesp on
    * the deed fills it with comb, and the number is how much it will hold
@@ -158,6 +164,8 @@ export const FURNITURE: FurnitureDef[] = [
     [['plank', 20], ['timber', 8], ['nail', 44]], 24, 22,
     'You frame the rack, deck it over and set the runners. It will take eight crates.',
     undefined, { crates: 8 }),
+  piece('bell', 'Bell', 1, 1, [['bell_casting', 1], ['timber', 2], ['thick_rope', 1], ['nail', 8]], 22, 18, 'You hang the bell in its frame and knot the rope to the tongue. Rung on your settlement, every wildermon of the deed comes and every citizen hears where it hangs.', undefined, { bell: true, material: 'metal' }),
+  piece('statue', 'Statue', 1, 1, [['statue_casting', 1], ['stone_slab', 1]], 24, 20, 'You set the casting on its slab and it stands, and will go on standing. It is on the map from here on.', undefined, { landmark: true, material: 'metal', skill: 'masonry', tool: 'trowel' }),
   piece('hive', 'Hive', 2, 1, [['plank', 6], ['shaft', 2], ['cloth', 1], ['nail', 12]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
   // The two the cloth trade is built on. Stand at one to spin or weave.
   piece('spindle', 'Spindle', 1, 1, [['plank', 2], ['shaft', 3], ['nail', 8]], 14, 9, 'You turn a spindle and set it on its stand.'),

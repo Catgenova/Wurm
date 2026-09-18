@@ -589,6 +589,40 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       g.logMsg(`You make up the ${furnitureName(f).toLowerCase()}. This is where you will wake, whatever happens to you.`, 'event');
     },
   },
+  // ---- The bell. ----
+  {
+    id: 'ring_bell',
+    label: 'Ring the bell',
+    verb: 'ringing the bell',
+    stamina: 0.02,
+    baseTime: 3,
+    applies: (t, g) => {
+      const f = pieceOf(g, t);
+      return !!f && !!furnitureDef(f.kind).bell;
+    },
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f || !furnitureDef(f.kind).bell) return 'That is not a bell.';
+      if (!nearPiece(g, f)) return 'Stand next to it.';
+      if (!g.onDeed(f.x, f.y)) return 'Ring it on a settlement of yours; a bell in the wild calls nobody.';
+      return null;
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f || !g.deed) return;
+      // Every wildermon working the deed drops what it is doing and comes to
+      // whoever rang, the way one called over does.
+      let came = 0;
+      for (const c of g.creatures.list.values()) {
+        if (c.mode !== 'deed') continue;
+        c.calledAt = g.time;
+        c.enemy = null;
+        came++;
+      }
+      g.note('rang');
+      g.logMsg(`You ring the ${furnitureName(f).toLowerCase()} and it sounds over ${g.deed.name}. ${came ? `${came} wildermon ${came === 1 ? 'comes' : 'come'} at the sound` : 'Nothing is working the deed to come'}, and every citizen hears where it hangs: ${f.x}, ${f.y}.`, 'event');
+    },
+  },
 ];
 
 export const PLACEABLE_ACTION_BY_ID = new Map(PLACEABLE_ACTIONS.map((a) => [a.id, a]));

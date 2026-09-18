@@ -1,5 +1,6 @@
 import type { Game } from '../../game/game';
 import { MARK_COLOURS, MARK_CSS } from '../../game/marks';
+import { furnitureDef, furnitureName } from '../../game/furniture';
 import type { Renderer } from '../../render/renderer';
 import { ROCK_VARIANTS, TileType, TILE_DEFS, rockVariant } from '../../world/tiles';
 import { UNSEEN, VISIBLE } from '../../game/vision';
@@ -411,6 +412,34 @@ export class MinimapPanel {
       ctx.fillRect(bx, my - 20, w + 6, 17);
       ctx.fillStyle = css;
       ctx.fillText(m.name, bx + 3, my - 11);
+    }
+    // Landmarks: a statue is on the map from the day it is set up, a stone
+    // diamond with its name, drawn under the people and over the marks.
+    for (const f of this.game.furniture.values()) {
+      if (!furnitureDef(f.kind).landmark) continue;
+      const lx = (f.x + 0.5 - ox) * scale;
+      const ly = (f.y + 0.5 - oy) * scale;
+      if (lx < -20 || ly < -20 || lx > this.view.width + 20 || ly > this.view.height + 20) continue;
+      ctx.fillStyle = '#e8dcc0';
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(lx, ly - 6);
+      ctx.lineTo(lx + 5, ly);
+      ctx.lineTo(lx, ly + 6);
+      ctx.lineTo(lx - 5, ly);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (!this.names) continue;
+      const label = furnitureName(f);
+      const w = ctx.measureText(label).width;
+      const right = lx + 8 + w + 6 <= this.view.width;
+      const bx = right ? lx + 8 : Math.max(0, lx - 8 - w - 6);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(bx, ly - 9, w + 6, 17);
+      ctx.fillStyle = '#e8dcc0';
+      ctx.fillText(label, bx + 3, ly);
     }
     /*
      * Everybody else, while the island is quiet enough to say where they are.

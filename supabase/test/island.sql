@@ -8866,3 +8866,40 @@ select '967. ' || :'strikes' || ' strikes at blacksmithing 70: ' || coalesce((se
      || ' — "' || coalesce((select text from event where uid = :'ivar' and text like 'You strike%' order by n desc limit 1), 'no strike landed')
      || '" — and the coins melt back: ' || melt_lumps('coin', 20) || ' lump from twenty, "'
      || coalesce(act_refusal(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || (select coalesce(max(id), 0) from placed where world_id = :'world2' and kind = 'smelter') || ',"itemUid":' || coalesce((select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'coin' limit 1), 0) || ',"count":20}')::jsonb), 'ALLOWED') || '"';
+
+/*
+ * A bell and a statue, cast in bronze.
+ *
+ * Two big castings off the mould table, hung or set up as furniture. A bell
+ * rung on a settlement calls its wildermon to the ringer and tells every
+ * citizen where it hangs; a statue is on the map from the day it stands.
+ */
+\echo ''
+\echo '--- a bell and a statue, cast in bronze'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '968. off the table: a ' || (select name from mould_def where id = 'bell_mould') || ' takes ' || (select lumps from mould_def where id = 'bell_mould')
+     || ' lumps and a ' || (select name from mould_def where id = 'statue_mould') || ' ' || (select lumps from mould_def where id = 'statue_mould')
+     || '; a bell is hung from ' || (select string_agg(item || ' ×' || count, ', ' order by ord) from recipe_input where recipe = 'make_bell')
+     || ' and a statue set up from ' || (select string_agg(item || ' ×' || count, ', ' order by ord) from recipe_input where recipe = 'make_statue')
+     || '; the bell rings ' || (select bell from furniture_def where id = 'bell') || ', the statue is a landmark ' || (select landmark from furniture_def where id = 'statue')
+     || '; ported ' || act_ported('ring_bell');
+-- A bell hung on Ivar's deed, Ivar beside it, and a worker of the deed away at its work.
+select x as tok_x, y as tok_y from deed where world_id = :'world2' and founded_by = :'ivar' \gset
+insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by, material)
+  values (:'world2', 'furniture', 'bell', :tok_x + 1, :tok_y, 0, 0, :tok_x + 1.5, :tok_y + 0.5, 60, :'ivar', 'Bronze') returning id as chime \gset
+update player set x = :tok_x + 1.5, y = :tok_y + 1.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+update player set x = :tok_x + 0.5, y = :tok_y + 1.5 where world_id = :'world2' and uid = :'alice' \g /dev/null
+update creature set mode = 'deed', keeper = :'ivar', job = 'stump', phase = 'idle', enemy = null,
+    from_x = :tok_x + 5.5, from_y = :tok_y + 5.5, to_x = :tok_x + 5.5, to_y = :tok_y + 5.5,
+    leg_at = now(), leg_ends = now(), until = now()
+  where world_id = :'world2' and id = :'stumper' \g /dev/null
+delete from event where uid = :'ivar' or text like 'The bell rings out%' \g /dev/null
+select '969. Alice, no citizen, at the rope: "' || coalesce(act_refusal(:'world2', :'alice', 'ring_bell', ('{"kind":"furniture","id":' || :'chime' || '}')::jsonb), 'ALLOWED')
+     || '"; Ivar: "' || coalesce(act_refusal(:'world2', :'ivar', 'ring_bell', ('{"kind":"furniture","id":' || :'chime' || '}')::jsonb), 'ALLOWED') || '"';
+select act_perform(:'world2', :'ivar', 'ring_bell', ('{"kind":"furniture","id":' || :'chime' || '}')::jsonb) \g /dev/null
+select '970. "' || (select text from event where uid = :'ivar' order by n desc limit 1) || '" — the grubba is walking to '
+     || (select round(to_x::numeric, 1) || ',' || round(to_y::numeric, 1) from creature where world_id = :'world2' and id = :'stumper')
+     || ', there in ' || (select round(extract(epoch from (leg_ends - now()))::numeric, 1) from creature where world_id = :'world2' and id = :'stumper')
+     || ' s and standing a while after — and the citizens of ' || (select name from deed where world_id = :'world2' and founded_by = :'ivar') || ' told: '
+     || (select count(*) from event where kind = 'system' and text like 'The bell rings out%') || ' of '
+     || (select count(*) from deed_member where world_id = :'world2' and founder = :'ivar');

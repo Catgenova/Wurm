@@ -256,7 +256,7 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
   tool: f.tool ?? 'mallet',
   skill: f.skill ?? 'fine_carpentry',
   // A carpenter's piece is of the wood it is built from; a mason's is brick.
-  material: f.skill === 'masonry' ? undefined : ('wood' as const),
+  material: f.material ?? (f.skill === 'masonry' ? undefined : ('wood' as const)),
   label: `Build ${f.name.toLowerCase()}`,
   verb: `building a ${f.name.toLowerCase()}`,
   baseTime: f.time,

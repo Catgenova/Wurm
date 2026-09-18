@@ -285,6 +285,8 @@ create table if not exists furniture_def (
   id text primary key, name text not null, w int not null, h int not null,
   capacity real, hearth boolean not null default false, altar boolean not null default false
 );
+alter table furniture_def add column if not exists bell boolean not null default false;
+alter table furniture_def add column if not exists landmark boolean not null default false;
 create table if not exists recipe_input (
   recipe text not null references recipe on delete cascade,
   ord int not null, item text not null, count int not null default 1,
@@ -381,6 +383,10 @@ insert into item_def values ('whetstone', 'Whetstone', 'tool', 1.2, false, null,
 insert into item_def values ('file', 'File', 'tool', 0.8, false, null, null);
 insert into item_def values ('coin_die', 'Coin die', 'tool', 1.5, false, null, null);
 insert into item_def values ('coin_die_mould', 'Coin die mould', 'tool', 1.2, false, 1, null);
+insert into item_def values ('bell_casting', 'Bell casting', 'misc', 16, false, null, null);
+insert into item_def values ('statue_casting', 'Statue casting', 'misc', 24, false, null, null);
+insert into item_def values ('bell_mould', 'Bell mould', 'tool', 3, false, 1, null);
+insert into item_def values ('statue_mould', 'Statue mould', 'tool', 4, false, 1, null);
 insert into item_def values ('coin', 'Coins', 'misc', 0.005, true, null, null);
 insert into item_def values ('needle', 'Needle', 'tool', 0.05, false, null, null);
 insert into item_def values ('awl', 'Awl', 'tool', 0.2, false, null, null);
@@ -924,6 +930,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('throw_away', 'Throw it in the trash', 'throwing it out', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('sleep', 'Sleep until morning', 'sleeping', null, null, false, null, 0, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('set_home', 'Make this your home', 'making your bed', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('ring_bell', 'Ring the bell', 'ringing the bell', null, null, false, null, 0.02, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('place_crate', 'Place crate', 'placing the crate', null, null, false, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_up_crate', 'Pick up crate', 'lifting the crate', null, null, false, null, 0.03, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('crate_take_all', 'Take everything', 'emptying the crate', null, null, false, null, 0.01, 1, null, false, false);
@@ -1066,6 +1073,8 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_shield_boss_mould', 'Fire a shield boss mould', 'firing a mould', 'armorsmithing', null, false, null, 0.03, 11, 8, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_file_mould', 'Fire a file mould', 'firing a mould', 'blacksmithing', null, false, null, 0.03, 10, 7, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_coin_die_mould', 'Fire a coin die mould', 'firing a mould', 'blacksmithing', null, false, null, 0.03, 10, 10, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_bell_mould', 'Fire a bell mould', 'firing a mould', 'blacksmithing', null, false, null, 0.03, 14, 16, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_statue_mould', 'Fire a statue mould', 'firing a mould', 'blacksmithing', null, false, null, 0.03, 16, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_chain_coif_mould', 'Fire a chain coif mould', 'firing a mould', 'chainsmithing', null, false, null, 0.03, 11, 11, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_chain_hauberk_mould', 'Fire a chain hauberk mould', 'firing a mould', 'chainsmithing', null, false, null, 0.03, 13, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_chain_sleeves_mould', 'Fire a chain sleeves mould', 'firing a mould', 'chainsmithing', null, false, null, 0.03, 11, 12, false, true);
@@ -1101,6 +1110,8 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_planter', 'Build planter', 'building a planter', 'fine_carpentry', 'mallet', false, null, 0.05, 7, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_firewood_rack', 'Build firewood rack', 'building a firewood rack', 'fine_carpentry', 'mallet', false, null, 0.05, 8, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_crate_shelf', 'Build crate shelf', 'building a crate shelf', 'fine_carpentry', 'mallet', false, null, 0.05, 22, 24, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_bell', 'Build bell', 'building a bell', 'fine_carpentry', 'mallet', false, null, 0.05, 18, 22, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_statue', 'Build statue', 'building a statue', 'masonry', 'trowel', false, null, 0.05, 20, 24, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_hive', 'Build hive', 'building a hive', 'fine_carpentry', 'mallet', false, null, 0.05, 13, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_spindle', 'Build spindle', 'building a spindle', 'fine_carpentry', 'mallet', false, null, 0.05, 9, 14, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_loom', 'Build loom', 'building a loom', 'fine_carpentry', 'mallet', false, null, 0.05, 18, 22, false, true);
@@ -1504,6 +1515,7 @@ update species_def set glow = 5 where id = 'dragon';
 insert into item_def values ('altar', 'altar', 'misc', 1, false, null, null);
 insert into item_def values ('arrow_head_mould', 'arrow_head_mould', 'misc', 1, false, null, null);
 insert into item_def values ('axe_head_mould', 'axe_head_mould', 'misc', 1, false, null, null);
+insert into item_def values ('bell', 'bell', 'misc', 1, false, null, null);
 insert into item_def values ('brazier', 'brazier', 'misc', 1, false, null, null);
 insert into item_def values ('chain_boots_mould', 'chain_boots_mould', 'misc', 1, false, null, null);
 insert into item_def values ('chain_coif_mould', 'chain_coif_mould', 'misc', 1, false, null, null);
@@ -1520,6 +1532,7 @@ insert into item_def values ('plate_legs_mould', 'plate_legs_mould', 'misc', 1, 
 insert into item_def values ('shield_boss_mould', 'shield_boss_mould', 'misc', 1, false, null, null);
 insert into item_def values ('short_sword_blade_mould', 'short_sword_blade_mould', 'misc', 1, false, null, null);
 insert into item_def values ('spear_head_mould', 'spear_head_mould', 'misc', 1, false, null, null);
+insert into item_def values ('statue', 'statue', 'misc', 1, false, null, null);
 insert into plantable values (0);
 insert into plantable values (1);
 insert into plantable values (5);
@@ -1693,6 +1706,10 @@ update item_def set description = 'A shaped block of stone. Takes the burr off m
 update item_def set description = 'Cast at an anvil and cut with teeth. Needed to improve anything metal or wooden.' where id = 'file';
 update item_def set description = 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is twenty coins. It wears with every strike.' where id = 'coin_die';
 update item_def set description = 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' where id = 'coin_die_mould';
+update item_def set description = 'A bell cast whole, tongue and all, wanting a frame to hang in. Eight lumps went into it.' where id = 'bell_casting';
+update item_def set description = 'A figure cast whole in a big mould. Set it on a slab and it stands.' where id = 'statue_casting';
+update item_def set description = 'A sand mould, big enough for a bell. It wears a little every time it is filled, and no mould can be mended.' where id = 'bell_mould';
+update item_def set description = 'A sand mould the size of a person. It wears a little every time it is filled, and no mould can be mended.' where id = 'statue_mould';
 update item_def set description = 'Struck from a lump of silver or gold under a die, twenty to the lump. Metal that goes in a pocket, and comes back out of the fire as a lump.' where id = 'coin';
 update item_def set description = 'Carved from bone. Needed to improve cloth and leather.' where id = 'needle';
 update item_def set description = 'A bone spike for punching holes in hide. Needed to improve leather.' where id = 'awl';
@@ -2372,6 +2389,8 @@ insert into mould_def values ('spear_head_mould', 'Spear head mould', 'spear_hea
 insert into mould_def values ('shield_boss_mould', 'Shield boss mould', 'shield_boss', 'armorsmithing', 3, 14, 2, 1);
 insert into mould_def values ('file_mould', 'File mould', 'file', 'blacksmithing', 2, 12, 1, 1);
 insert into mould_def values ('coin_die_mould', 'Coin die mould', 'coin_die', 'blacksmithing', 2, 16, 2, 1);
+insert into mould_def values ('bell_mould', 'Bell mould', 'bell_casting', 'blacksmithing', 6, 26, 8, 1);
+insert into mould_def values ('statue_mould', 'Statue mould', 'statue_casting', 'blacksmithing', 8, 30, 12, 1);
 insert into mould_def values ('chain_coif_mould', 'Chain coif mould', 'chain_coif', 'chainsmithing', 3, 18, 2, 1);
 insert into mould_def values ('chain_hauberk_mould', 'Chain hauberk mould', 'chain_hauberk', 'chainsmithing', 5, 26, 5, 1);
 insert into mould_def values ('chain_sleeves_mould', 'Chain sleeves mould', 'chain_sleeves', 'chainsmithing', 3, 20, 3, 1);
@@ -2668,6 +2687,8 @@ insert into melt_def values ('anvil', 20);
 insert into melt_def values ('arrow_head', 0.04);
 insert into melt_def values ('axe_head', 2);
 insert into melt_def values ('battle_axe', 2);
+insert into melt_def values ('bell', 8);
+insert into melt_def values ('bell_casting', 8);
 insert into melt_def values ('big_axle', 3);
 insert into melt_def values ('butchering_knife', 1);
 insert into melt_def values ('chain_boots', 2);
@@ -2709,6 +2730,8 @@ insert into melt_def values ('sickle', 1);
 insert into melt_def values ('sickle_blade', 1);
 insert into melt_def values ('spear', 1);
 insert into melt_def values ('spear_head', 1);
+insert into melt_def values ('statue', 12);
+insert into melt_def values ('statue_casting', 12);
 insert into melt_def values ('sword', 2);
 insert into melt_def values ('sword_blade', 2);
 insert into wild_table values ('rabba', 27, false, null);
@@ -3218,6 +3241,10 @@ insert into furniture_def values ('planter', 'Planter', 2, 1, null, false, false
 insert into furniture_def values ('firewood_rack', 'Firewood rack', 2, 1, 40, false, false);
 insert into furniture_def values ('crate_shelf', 'Crate shelf', 2, 4, null, false, false);
 update furniture_def set crates = 8 where id = 'crate_shelf';
+insert into furniture_def values ('bell', 'Bell', 1, 1, null, false, false);
+update furniture_def set bell = true where id = 'bell';
+insert into furniture_def values ('statue', 'Statue', 1, 1, null, false, false);
+update furniture_def set landmark = true where id = 'statue';
 insert into furniture_def values ('hive', 'Hive', 2, 1, null, false, false);
 update furniture_def set hive = 40 where id = 'hive';
 insert into furniture_def values ('spindle', 'Spindle', 1, 1, null, false, false);
@@ -3681,6 +3708,10 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_file_mould', 0, 'sand', 2);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_coin_die_mould', 'coin_die_mould', 1, null, 'smelter', 'blacksmithing', 'Fire a coin die mould', 'firing a mould', 10, 0.03, 10, true, false, null, null, null, 'You fire a coin die mould from the sand.', 'The sand slumps as it heats and the mould is spoiled.');
 insert into recipe_input values ('make_coin_die_mould', 0, 'sand', 2);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_bell_mould', 'bell_mould', 1, null, 'smelter', 'blacksmithing', 'Fire a bell mould', 'firing a mould', 14, 0.03, 16, true, false, null, null, null, 'You fire a bell mould from the sand.', 'The sand slumps as it heats and the mould is spoiled.');
+insert into recipe_input values ('make_bell_mould', 0, 'sand', 6);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_statue_mould', 'statue_mould', 1, null, 'smelter', 'blacksmithing', 'Fire a statue mould', 'firing a mould', 16, 0.03, 18, true, false, null, null, null, 'You fire a statue mould from the sand.', 'The sand slumps as it heats and the mould is spoiled.');
+insert into recipe_input values ('make_statue_mould', 0, 'sand', 8);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_chain_coif_mould', 'chain_coif_mould', 1, null, 'smelter', 'chainsmithing', 'Fire a chain coif mould', 'firing a mould', 11, 0.03, 11, true, false, null, null, null, 'You fire a chain coif mould from the sand.', 'The sand slumps as it heats and the mould is spoiled.');
 insert into recipe_input values ('make_chain_coif_mould', 0, 'sand', 3);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_chain_hauberk_mould', 'chain_hauberk_mould', 1, null, 'smelter', 'chainsmithing', 'Fire a chain hauberk mould', 'firing a mould', 13, 0.03, 16, true, false, null, null, null, 'You fire a chain hauberk mould from the sand.', 'The sand slumps as it heats and the mould is spoiled.');
@@ -3799,6 +3830,14 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_crate_shelf', 0, 'plank', 20);
 insert into recipe_input values ('make_crate_shelf', 1, 'timber', 8);
 insert into recipe_input values ('make_crate_shelf', 2, 'nail', 44);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_bell', 'bell', 1, 'mallet', null, 'fine_carpentry', 'Build bell', 'building a bell', 18, 0.05, 22, false, false, 'metal', null, null, 'You hang the bell in its frame and knot the rope to the tongue. Rung on your settlement, every wildermon of the deed comes and every citizen hears where it hangs. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the bell apart again.');
+insert into recipe_input values ('make_bell', 0, 'bell_casting', 1);
+insert into recipe_input values ('make_bell', 1, 'timber', 2);
+insert into recipe_input values ('make_bell', 2, 'thick_rope', 1);
+insert into recipe_input values ('make_bell', 3, 'nail', 8);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_statue', 'statue', 1, 'trowel', null, 'masonry', 'Build statue', 'building a statue', 20, 0.05, 24, false, false, 'metal', null, null, 'You set the casting on its slab and it stands, and will go on standing. It is on the map from here on. Set it down on any spot of a tile.', 'The courses will not run true and you knock the statue down again.');
+insert into recipe_input values ('make_statue', 0, 'statue_casting', 1);
+insert into recipe_input values ('make_statue', 1, 'stone_slab', 1);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_hive', 'hive', 1, 'mallet', null, 'fine_carpentry', 'Build hive', 'building a hive', 13, 0.05, 18, false, false, 'wood', null, null, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the hive apart again.');
 insert into recipe_input values ('make_hive', 0, 'plank', 6);
 insert into recipe_input values ('make_hive', 1, 'shaft', 2);
