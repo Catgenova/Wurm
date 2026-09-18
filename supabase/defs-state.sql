@@ -3424,7 +3424,7 @@ create or replace function shoes_per_mount() returns double precision language s
 create or replace function shoe_days() returns double precision language sql immutable as $fn$ select 7::double precision $fn$;
 create or replace function shoe_pace() returns double precision language sql immutable as $fn$ select 1.15::double precision $fn$;
 create or replace function shoe_step() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
-create or replace function tree_stage() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
+create or replace function tree_dawn_utc() returns double precision language sql immutable as $fn$ select 13::double precision $fn$;
 create or replace function tree_seeds() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function tree_seed_reach() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function tree_seed_none() returns double precision language sql immutable as $fn$ select 0.2::double precision $fn$;

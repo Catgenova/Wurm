@@ -395,15 +395,28 @@ export const TREE_AGES: TreeAge[] = [
 ];
 
 /**
- * A day apiece, and a real one.
+ * A day apiece, and a real one, turning at dawn.
  *
  * Asked for from the island as "a real life day" per stage, so this is wall
- * clock seconds and not the world's own faster hours: a tree planted on a
- * Tuesday is a young tree on Wednesday whether or not anybody was logged in
- * for any of it. Six days from a sapling to a stump — the last two of them
- * very old and then shrivelled — and the stump leaves two saplings behind it.
+ * clock and not the world's own faster hours: a tree planted on a Tuesday is a
+ * young tree on Wednesday whether or not anybody was logged in for any of it.
+ * Six days from a sapling to a stump — the last two of them very old and then
+ * shrivelled — and the stump leaves two saplings behind it.
+ *
+ * Asked for next: "make the tree tick fire at 6am UTC-7 every day". The day
+ * used to be measured from the last turnover, so it crept ten minutes a day
+ * and fell at a different hour on every island. It turns at dawn now, the same
+ * moment everywhere: thirteen hundred UTC, six in the morning at UTC-7 — a
+ * fixed offset rather than a place, so it does not move with the clocks. The
+ * island's `tree_tick` reads the same hour off `tree_dawn_utc()`, and both
+ * sides' Look says when the next one is.
  */
-export const TREE_STAGE = 24 * 60 * 60;
+export const TREE_DAWN_UTC = 13;
+const DAY = 24 * 60 * 60;
+/** The most recent dawn at or before `now`, in epoch seconds. */
+export const lastDawn = (now: number): number => Math.floor((now - TREE_DAWN_UTC * 3600) / DAY) * DAY + TREE_DAWN_UTC * 3600;
+/** The first dawn after `now`. */
+export const nextDawn = (now: number): number => lastDawn(now) + DAY;
 
 /** The most an old tree leaves behind it when its day is up. */
 export const TREE_SEEDS = 2;

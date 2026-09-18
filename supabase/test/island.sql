@@ -2009,7 +2009,9 @@ select act_perform(:'world2', :'ivar', 'examine', '{"kind":"tile","x":5,"y":7}':
 select '313. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
 select x as treex, y as treey from generate_series(0, 15) x cross join generate_series(0, 15) y
   where land_tile(:'world2', x, y) = (select id from tile_def where name = 'Tree') order by x, y limit 1 \gset
-select '314. and a tree, which says what sort and how old: ' || examine_tile_text(:'world2', :'treex', :'treey');
+-- The hours to the next dawn depend on the hour this runs, so they are folded.
+select '314. and a tree, which says what sort and how old: '
+     || regexp_replace(examine_tile_text(:'world2', :'treex', :'treey'), 'turn over (in \d+ (hours|minutes)|any moment)', 'turn over at the next dawn');
 
 select pack_count(:'world2', :'ivar', 'log') as logs_before \gset
 select '315. picking the logs up: ' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up',
@@ -7134,7 +7136,10 @@ select '848. one stroke into a mature oak, and what the tile remembers: '
 select '849. a tree''s life, a day a stage: ' || string_agg(
          lower(a.name) || ' → ' || coalesce(lower((select b.name from tree_age_def b where b.id = a.next)), 'gone'),
          ', ' order by case a.id when 3 then 0 else a.id + 1 end)
-     || ' — and a stage is ' || (tree_stage() / 3600) || ' real hours'
+     || ' — and a stage is a day, turning at dawn: ' || tree_dawn_utc() || ':00 UTC, six in the morning at UTC-7; the last dawn was at '
+     || to_char(tree_last_dawn() at time zone 'UTC', 'HH24:MI') || ' UTC, '
+     || case when tree_last_dawn() <= now() and tree_last_dawn() > now() - interval '1 day' then 'within the day' else 'NOT WITHIN THE DAY' end
+     || ', and the next is ' || (tree_next_dawn() - tree_last_dawn()) || ' after it'
 from tree_age_def a;
 
 select id as world7 from world where name = 'Hoarding' \gset
@@ -7157,7 +7162,7 @@ select '850. an oak sapling at 60,60: ' || lower((select name from tree_age_def 
 create or replace function pg_temp.one_day(p_world uuid) returns int
   language plpgsql as $fn$
 begin
-  update world set trees_at = now() - make_interval(secs => tree_stage() + 60) where id = p_world;
+  update world set trees_at = tree_last_dawn() - interval '1 minute' where id = p_world;
   return tree_day(p_world);
 end $fn$;
 select pg_temp.one_day(:'world7') as grew1 \gset
@@ -7191,11 +7196,22 @@ select '854. and what they are: ' || coalesce(string_agg(distinct
 from (select 60 + dx as gx, 60 + dy as gy from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
 where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree');
 
+-- A suite that straddles dawn would find the islands it founded before it due;
+-- they are stamped, so the count below is the tick's question and nothing else.
+update world set trees_at = now() where trees_at < tree_last_dawn() \g /dev/null
 select '855. and what a day costs the clock that is not the woods'' own: '
-     || (select count(*) from world w where w.ready
-          and w.trees_at <= now() - make_interval(secs => tree_stage()))
+     || (select count(*) from world w where w.ready and w.trees_at < tree_last_dawn())
      || ' islands due — which is the whole of what any other round has to ask,'
      || ' because the woods have a winding of their own now';
+-- The tick's rule: due is "not since dawn", and dawn is a fixed hour.
+update world set trees_at = tree_last_dawn() - interval '1 minute' where id = :'world7';
+select (tree_tick())->>'isles' as tock1 \gset
+select (tree_tick())->>'isles' as tock2 \gset
+update world set trees_at = tree_last_dawn() + interval '1 minute' where id = :'world7';
+select (tree_tick())->>'isles' as tock3 \gset
+select '855b. the tick, with Hoarding last turned a minute before dawn: ' || :'tock1' || ' island turned; again, now that it has: ' || :'tock2'
+     || '; and with it turned a minute after dawn: ' || :'tock3' || ' — the woods turn at ' || tree_dawn_utc() || ':00 UTC and not a moment otherwise'
+     || ', and Hoarding is stamped ' || case when (select trees_at from world where id = :'world7') = tree_last_dawn() + interval '1 minute' then 'as it was left' else 'WRONG' end;
 
 /*
  * And the thing the roll is for: a wood with somewhere to settle.
@@ -8558,20 +8574,27 @@ do $$
 declare w uuid;
 begin
   select id into w from world where name = 'Hoarding';
-  -- The woods turned over nine hours ago, so they turn again in fifteen.
-  update world set trees_at = now() - interval '9 hours' where id = w;
+  -- The woods turned over a minute after the last dawn, so they turn again at the next.
+  update world set trees_at = tree_last_dawn() + interval '1 minute' where id = w;
   perform land_set_tile(w, 50, 62, tile_id('Tree')); perform land_set_height(w, 50, 62, 4); perform land_set_data(w, 50, 62, 2 | (4 << 4));   -- a very old oak
   perform land_set_tile(w, 51, 62, tile_id('Tree')); perform land_set_height(w, 51, 62, 4); perform land_set_data(w, 51, 62, 2 | (1 << 4)); perform tree_notch(w, 51, 62, 2);   -- a mature oak, two strokes in
   perform land_set_tile(w, 52, 62, tile_id('Tree')); perform land_set_height(w, 52, 62, 4); perform land_set_data(w, 52, 62, 2 | (6 << 4));   -- clipped
   perform land_set_tile(w, 53, 62, tile_id('Tree')); perform land_set_height(w, 53, 62, 4); perform land_set_data(w, 53, 62, 1 | (5 << 4));   -- a shrivelled pine
   update player set x = 51.5, y = 61.5 where world_id = w and uid = '77777777-7777-7777-7777-777777777777';
 end $$;
-select '937. a very old oak: "' || examine_tile_text(:'world6', 50, 62) || '"';
-select '938. a mature oak with two strokes in it: "' || examine_tile_text(:'world6', 51, 62) || '"';
+-- The hours to the next dawn depend on the hour this runs, so the sentence is
+-- read with them folded, and 936b holds them against the clock.
+select '936b. and when the woods turn: the oak says "' || substring(examine_tile_text(:'world6', 50, 62) from 'turn over ([^,]+),')
+     || '", the next dawn is ' || hours_hence(extract(epoch from (tree_next_dawn() - now()))) || ' — '
+     || case when substring(examine_tile_text(:'world6', 50, 62) from 'turn over ([^,]+),') = hours_hence(extract(epoch from (tree_next_dawn() - now()))) then 'the same' else 'NOT THE SAME' end;
+select '937. a very old oak: "' || regexp_replace(examine_tile_text(:'world6', 50, 62), 'turn over (in \d+ (hours|minutes)|any moment)', 'turn over at the next dawn') || '"';
+select '938. a mature oak with two strokes in it: "' || regexp_replace(examine_tile_text(:'world6', 51, 62), 'turn over (in \d+ (hours|minutes)|any moment)', 'turn over at the next dawn') || '"';
 select '939. a clipped oak: "' || examine_tile_text(:'world6', 52, 62) || '"';
-select '940. a shrivelled pine: "' || examine_tile_text(:'world6', 53, 62) || '"';
+select '940. a shrivelled pine: "' || regexp_replace(examine_tile_text(:'world6', 53, 62), 'turn over (in \d+ (hours|minutes)|any moment)', 'turn over at the next dawn') || '"';
 select '941. and what the ground read hands a browser for it: notches ' || ((rpc_ground(:'world6', 40, true))->'notches')::text
-     || ', the woods turned over ' || round(((rpc_ground(:'world6', 40, true))->>'treesAgo')::numeric / 3600) || ' hours ago'
+     || ', the woods turned over ' || case when abs(((rpc_ground(:'world6', 40, true))->>'treesAgo')::numeric
+                                                  - extract(epoch from (now() - (select trees_at from world where id = :'world6')))) < 5
+                                        then 'as long ago as the island has it' else 'AT SOME OTHER TIME' end
      || ' — and the fast half says nothing about either: ' || coalesce(((rpc_ground(:'world6', 40, false))->'notches')::text, 'nothing');
 
 /*

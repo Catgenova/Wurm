@@ -6,11 +6,13 @@
  * browser, `tree_outlook` and `hours_hence` on the island. A solo world hears
  * the browser's; an island hears the island's; a player who plays both should
  * never be able to tell which. So every stage of the age table is put to both,
- * on an island whose woods turned over nine hours ago, and a spread of seconds
- * is put to the hour-words — including the thresholds, where a sentence turns.
+ * on an island whose woods turned over a minute after the last dawn — so the
+ * next is the next dawn, however far off that is at the hour this runs — and
+ * a spread of seconds is put to the hour-words, including the thresholds,
+ * where a sentence turns.
  */
 import { execFileSync } from 'node:child_process';
-import { TREE_AGES } from '../../src/world/tiles';
+import { lastDawn, TREE_AGES } from '../../src/world/tiles';
 import { hoursHence, treeOutlook } from '../../src/game/actions';
 
 const psql = (sql: string): string =>
@@ -35,10 +37,9 @@ const check = (what: string, passed: boolean, detail = ''): void => {
   (passed ? ok : bad).push(`${passed ? 'ok  ' : 'FAIL'} ${what}${detail ? ` — ${detail}` : ''}`);
 };
 
-// The island the suite left with its woods turned over nine hours ago.
-const HOURS_AGO = 9;
-psql(`update world set trees_at = now() - interval '${HOURS_AGO} hours' where name = 'Hoarding'`);
-const treesAt = Date.now() / 1000 - HOURS_AGO * 3600;
+// The island the suite left, its woods turned over a minute after the last dawn.
+psql(`update world set trees_at = tree_last_dawn() + interval '1 minute' where name = 'Hoarding'`);
+const treesAt = lastDawn(Date.now() / 1000) + 60;
 
 for (const age of TREE_AGES) {
   const island = psql(`select tree_outlook(w.id, a) from tree_age_def a, world w where w.name = 'Hoarding' and a.id = ${age.id}`);

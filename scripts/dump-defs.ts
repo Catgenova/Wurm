@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { BURYABLE, BUSH_DEFS, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_STAGE } from '../src/world/tiles';
+import { BURYABLE, BUSH_DEFS, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
 import { SKILL_DEFS } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -957,8 +957,8 @@ for (const [fn, v] of [
   ['coins_per_lump', COINS_PER_LUMP], ['die_wear', DIE_WEAR], ['coin_difficulty', COIN_DIFFICULTY],
   /* Horseshoes: four to a mount, a week on, a share quicker on stone and a step higher. */
   ['shoes_per_mount', SHOES_PER_MOUNT], ['shoe_days', SHOE_DAYS], ['shoe_pace', SHOE_PACE], ['shoe_step', SHOE_STEP],
-  /* And how long a tree stands at one age, in real seconds, and what it leaves. */
-  ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
+  /* The hour, UTC, at which the woods turn over — six in the morning at UTC-7 — and what a tree leaves. */
+  ['tree_dawn_utc', TREE_DAWN_UTC], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
   ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],
   ['tree_room_two', TREE_ROOM_TWO], ['tree_room_one', TREE_ROOM_ONE],
   /* And how many other people's settlements you may be a citizen of. */

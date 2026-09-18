@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, TREE_STAGE, type TreeAge, LAWN_AFTER, MOWN_TODAY, mownDays, mownToday } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, lastDawn, nextDawn, type TreeAge, LAWN_AFTER, MOWN_TODAY, mownDays, mownToday } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -189,12 +189,15 @@ export function hoursHence(seconds: number): string {
 
 /**
  * What is coming for a tree, and what to do about it: the woods turn over
- * once a day, so the next stage is a matter of hours and the sentence says
- * which. A stage whose next stage is itself has nothing coming.
+ * once a day, at dawn, so the next stage is a matter of hours and the
+ * sentence says which. Woods not yet turned since the last dawn turn any
+ * moment; otherwise at the next. A stage whose next stage is itself has
+ * nothing coming.
  */
 export function treeOutlook(age: TreeAge, treesAt: number): string {
   if (age.next === age.id) return ' It is clipped, and will stay as it is.';
-  const when = hoursHence(TREE_STAGE - (Date.now() / 1000 - treesAt));
+  const now = Date.now() / 1000;
+  const when = hoursHence((treesAt < lastDawn(now) ? now : nextDawn(now)) - now);
   const then = age.next === null ? 'it will be gone' : `it will be ${TREE_AGES[age.next].name.toLowerCase()}`;
   let out = ` The woods turn over ${when}, and ${then}.`;
   if (!age.alive) out += ' Fell it for what timber is in it before then.';

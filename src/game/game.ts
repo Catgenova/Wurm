@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
+import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -5154,10 +5154,16 @@ export class Game {
    * of a second every second to answer a question that changes once a day, and
    * showed up as a second of input delay. A day's rule does not want a second's
    * clock. What is left here is one comparison, which is free.
+   *
+   * The day turns at dawn (`TREE_DAWN_UTC`), the same moment on every island
+   * and in every game of your own, rather than a day after the last turnover:
+   * once the last dawn is past what was stamped, the woods move on, and are
+   * stamped with now. A game shut for a week turns over once when it is
+   * opened, and again at the next dawn.
    */
   growTrees(nowSeconds: number): void {
     if (this.ask) return; // On a live island the woods are the island's.
-    if (nowSeconds - this.treesAt < TREE_STAGE) return;
+    if (this.treesAt >= lastDawn(nowSeconds)) return;
     this.treesAt = nowSeconds;
     const w = this.world;
     const stumps: Array<[number, number, number]> = [];
