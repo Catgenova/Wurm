@@ -3463,7 +3463,7 @@ export class Creatures {
     }
     if (!best) return false;
     c.enemy = best.id;
-    game.logMsg(`${c.name} breaks off and goes for the ${this.species(best).name.toLowerCase()} on the deed.`, 'event');
+    game.logMsg(`${c.name} breaks off and goes for the ${this.species(best).name.toLowerCase()} on the deed.`, 'fight');
     return true;
   }
 
@@ -3738,7 +3738,7 @@ export class Creatures {
       c.enemy = PLAYER_ATTACKER;
       c.huntX = c.x;
       c.huntY = c.y;
-      game.logMsg(`A ${def.name.toLowerCase()} has your scent.`, 'error');
+      game.logMsg(`A ${def.name.toLowerCase()} has your scent.`, 'fight');
     }
     if (d <= 1.1) {
       if (c.cooldown <= 0) {
@@ -3787,7 +3787,7 @@ export class Creatures {
       }
       if (found) {
         c.enemy = found.id;
-        game.logMsg(`${c.name} goes for the ${this.species(found).name.toLowerCase()}.`, 'event');
+        game.logMsg(`${c.name} goes for the ${this.species(found).name.toLowerCase()}.`, 'fight');
       }
     }
     if (c.enemy !== null) {
@@ -4081,7 +4081,7 @@ export class Creatures {
       t.state = 'flee';
       t.until = game.time + 3;
     }
-    if (t.mode === 'active' && by !== 'player' && game.time - (t.busyUntil ?? 0) > 0) game.logMsg(`${t.name} is hurt by a ${this.species(by).name.toLowerCase()}!`, 'error');
+    if (t.mode === 'active' && by !== 'player' && game.time - (t.busyUntil ?? 0) > 0) game.logMsg(`${t.name} is hurt by a ${this.species(by).name.toLowerCase()}!`, 'fight');
     if (t.health <= 0) this.kill(game, t, by);
   }
 
@@ -4103,7 +4103,7 @@ export class Creatures {
     // Killing one of the bad things is worth writing down.
     if (def.monster && killer === 'player') {
       game.note(`slew:${def.id}`);
-      game.logMsg(`The ${def.name.toLowerCase()} goes down. Butcher it before it rots: there is a great deal on it.`, 'system');
+      game.logMsg(`The ${def.name.toLowerCase()} goes down. Butcher it before it rots: there is a great deal on it.`, 'fight');
     }
     const x = Math.floor(t.x);
     const y = Math.floor(t.y);
@@ -4117,9 +4117,9 @@ export class Creatures {
      * dragon carries a dragon's.
      */
     if (killer === 'player' && def.monster) mapFromBeast(game, def.health, x, y);
-    if (killer === 'player') game.logMsg(`You kill the wild ${def.name.toLowerCase()}. Its corpse lies where it fell.`, 'event');
-    else if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'error');
-    else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'event');
+    if (killer === 'player') game.logMsg(`You kill the wild ${def.name.toLowerCase()}. Its corpse lies where it fell.`, 'fight');
+    else if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'fight');
+    else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'fight');
   }
 
   describe(c: Creature): string {

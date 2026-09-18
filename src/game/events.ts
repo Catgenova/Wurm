@@ -1,4 +1,9 @@
-export type LogKind = 'info' | 'event' | 'skill' | 'error' | 'chat' | 'system';
+/**
+ * What sort of line it is, which is the tab of the log it lands on. `fight`
+ * is every blow given and taken, what is coming for you, and what went down:
+ * asked for as a combat log, and the island files its own lines the same way.
+ */
+export type LogKind = 'info' | 'event' | 'skill' | 'error' | 'chat' | 'system' | 'fight';
 
 export interface LogEntry {
   time: number;

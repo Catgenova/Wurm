@@ -1389,9 +1389,10 @@ export class Island {
            * you is exactly the case a walk does not cover.
            *
            * Refusals come down this kind too, and a beat for one of those
-           * costs a settle that was due within the minute anyway.
+           * costs a settle that was due within the minute anyway. A blow
+           * taken is filed under `fight` now, and wants the same beat.
            */
-          if (e.kind === 'error') this.armBeat(0.5);
+          if (e.kind === 'error' || e.kind === 'fight') this.armBeat(0.5);
         })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: `holder_uid=eq.${this.uid}` },
         (m) => {

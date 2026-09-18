@@ -29,6 +29,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const TABS: Array<{ id: string; label: string; title: string; kinds: LogKind[] | null }> = [
   { id: 'all', label: 'All', title: 'Everything, as it happens', kinds: null },
   { id: 'event', label: 'Work', title: 'What your hands have been doing', kinds: ['event', 'info'] },
+  { id: 'fight', label: 'Combat', title: 'Blows given and taken, and what is coming for you', kinds: ['fight'] },
   { id: 'skill', label: 'Skills', title: 'What you have learned', kinds: ['skill'] },
   { id: 'chat', label: 'Talk', title: 'What has been said', kinds: ['chat', 'system'] },
   { id: 'error', label: 'Trouble', title: 'What went wrong, and why', kinds: ['error'] },

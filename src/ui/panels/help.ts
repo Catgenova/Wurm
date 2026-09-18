@@ -35,6 +35,7 @@ function helpText(): string {
     </table>
     <h3>The event log, and finding things in it</h3>
     <p>The log is cut into tabs: <b>All</b>, <b>Work</b> (what your hands have been doing),
+    <b>Combat</b> (every blow given and taken, what has your scent, and what went down),
     <b>Skills</b> (what you have learned), <b>Talk</b> and <b>Trouble</b> (what went wrong, and why).
     A tab with lines waiting on it says how many, and opening it clears the count. The box beside the
     tabs searches whatever tab you are on, and <kbd>Esc</kbd> in it clears the search.</p>

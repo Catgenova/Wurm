@@ -9532,7 +9532,7 @@ select coalesce(enemy, 0) as foe, round(to_x::numeric, 1) as leg_x, round(to_y::
   from creature where world_id = :'world2' and id = :'heel' \gset
 select '999. Fang the ulva at heel and a rabba three tiles off — defensive, with nothing struck at anybody, it ' || :'calm_says'
      || '; the rabba bites Ivar, and passive it ' || :'passive_says' || '; defensive it '
-     || case when :'foe' = :'prey' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID')
+     || case when :'foe' = :'prey' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'fight' order by n desc limit 1), 'NOTHING SAID')
              || '", a leg to ' || :'leg_x' || ',' || :'leg_y' || ' with ' || :'leg_left' || ' s of it left'
         else 'STANDS' end;
 select round(health::numeric) as prey_health from creature where world_id = :'world2' and id = :'prey' \gset
@@ -9541,7 +9541,7 @@ update creature set until = until - interval '20 seconds', leg_at = leg_at - int
     leg_ends = leg_ends - interval '20 seconds', settled_at = settled_at - interval '20 seconds'
   where world_id = :'world2' and id = :'heel' \g /dev/null
 select creature_settle(:'world2', :'heel') \g /dev/null
-select '1000. twenty seconds on: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said')
+select '1000. twenty seconds on: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'fight'), 'nothing said')
      || ' — the rabba is ' || case when exists (select 1 from creature where world_id = :'world2' and id = :'prey')
                                    then 'still alive at ' || (select round(health::numeric) from creature where world_id = :'world2' and id = :'prey') || ' of ' || :'prey_health'
                                    else 'dead' end
@@ -9557,7 +9557,7 @@ update creature set stance = 'aggressive' where world_id = :'world2' and id = :'
 delete from event where uid = :'ivar' \g /dev/null
 select creature_settle(:'world2', :'heel') \g /dev/null
 select coalesce(enemy, 0) as foe2 from creature where world_id = :'world2' and id = :'heel' \gset
-select coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID') as unasked \gset
+select coalesce((select text from event where uid = :'ivar' and kind = 'fight' order by n desc limit 1), 'NOTHING SAID') as unasked \gset
 -- Ivar walks off ten tiles, which is past the leash, and the leg Fang was on ends.
 update player set x = 19.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
 update creature set until = until - interval '2 seconds', leg_at = leg_at - interval '2 seconds',
@@ -9583,10 +9583,10 @@ select act_perform(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","
 select coalesce(stats->>'hurtBy', 'nobody') as hurt_by from player where world_id = :'world2' and uid = :'ivar' \gset
 select creature_settle(:'world2', :'heel') \g /dev/null
 select '1002. Ivar swings at a wild orse (' || :'swing_door' || '), which comes straight back at him: "'
-     || coalesce((select split_part(text, '. You have', 1) from event where uid = :'ivar' and kind = 'error' order by n desc limit 1), 'NOTHING SAID')
+     || coalesce((select split_part(text, '. You have', 1) from event where uid = :'ivar' and kind = 'fight' and text like 'The orse%' order by n desc limit 1), 'NOTHING SAID')
      || '" — he is marked as struck by ' || case when :'hurt_by' = :'kicker' then 'the orse' else :'hurt_by' end
      || ', and Fang, defensive and standing by, '
-     || (select case when enemy = :'kicker' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID') || '"'
+     || (select case when enemy = :'kicker' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'fight' order by n desc limit 1), 'NOTHING SAID') || '"'
                      else 'STANDS' end from creature where world_id = :'world2' and id = :'heel');
 
 /*
@@ -9675,3 +9675,26 @@ select '1007. asked for the ground, the fast half: ' || jsonb_array_length(:'lyi
 select '1008. the ribbon mould runs ' || (select per from mould_def where id = 'ribbon_mould') || ' ribbon to a filling of '
      || (select lumps from mould_def where id = 'ribbon_mould') || ' lump, where a nail mould runs ' || (select per from mould_def where id = 'nail_mould')
      || ' — and a ribbon melts back to ' || (select content from melt_def where item = 'ribbon') || ' of a lump';
+
+/*
+ * A combat log: every blow lands on its own tab. The log keeps lines by kind,
+ * and a fight's were filed three ways; they are `fight` now, on both sides.
+ */
+\echo ''
+\echo '--- a combat log'
+delete from creature where world_id = :'world2' and mode in ('wild', 'active') \g /dev/null
+update player set x = 6.5, y = 6.5, act = null, act_queue = '[]'::jsonb, equipped = '{}'::jsonb,
+    stats = jsonb_set(jsonb_set(stats - 'hurtBy' - 'hurtAt', '{health}', '1'), '{stamina}', '1')
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select creature_spawn(:'world2', 'orse', 7.5, 6.5, 'wild', now() - interval '1 day') as kicker2 \gset
+update creature set until = now() + interval '1 hour' where world_id = :'world2' and id = :'kicker2' \g /dev/null
+delete from event where uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'kicker2' || '}')::jsonb) \g /dev/null
+select '1009. a swing at a wild orse, which comes straight back, by the tab each line lands on: '
+     || (select string_agg(kind || ' — "' || left(text, 18) || '…"', ' | ' order by n) from event where uid = :'ivar' and kind <> 'skill')
+     || '; ' || (select count(*) from event where uid = :'ivar' and kind = 'fight') || ' lines of the fight on the Combat tab and '
+     || (select count(*) from event where uid = :'ivar' and kind in ('event', 'error', 'system')) || ' filed with the work, the trouble or the talk'
+     || '; and the island''s rules that tell of a fight file it there: '
+     || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.prokind = 'f' and p.proname in ('perform_fight', 'hurt_player', 'hunt_settle', 'companion_settle', 'wound_beast')
+           and p.prosrc like '%''fight'')%') || ' of 5';

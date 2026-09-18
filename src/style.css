@@ -1551,6 +1551,9 @@ kbd {
 .log-error {
   color: #ef8a7a;
 }
+.log-fight {
+  color: #f0b060;
+}
 .log-chat {
   color: #9fc9ef;
 }

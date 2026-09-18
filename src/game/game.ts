@@ -1509,7 +1509,7 @@ export class Game {
     if (item.dmg >= 100) {
       this.inventory.remove(item.uid, 1);
       this.player.equipped[part] = null;
-      this.logMsg(`Your ${itemName(item).toLowerCase()} is beaten to pieces and falls away.`, 'error');
+      this.logMsg(`Your ${itemName(item).toLowerCase()} is beaten to pieces and falls away.`, 'fight');
     }
     this.events.emit('inventory');
     const hide = this.walks('power', 5) ? 1.1 : 1;
@@ -1528,7 +1528,7 @@ export class Game {
     if (hit.blocked) {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
-      this.logMsg(`You take ${what} on your ${itemName(hit.worn as Item).toLowerCase()}.`, 'error');
+      this.logMsg(`You take ${what} on your ${itemName(hit.worn as Item).toLowerCase()}.`, 'fight');
       return;
     }
     this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
@@ -1536,7 +1536,7 @@ export class Game {
     this.events.emit('hit', this.player.x, this.player.y, hit.taken, 'taken');
     const wound = this.wound(kind, hit.part, hit.taken);
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
-    this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'error');
+    this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'fight');
   }
 
   /** Open a wound, or deepen one of the same kind already in that place. */

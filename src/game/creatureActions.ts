@@ -410,7 +410,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       // And, if it is dark enough to matter, what it teaches you about noticing.
       g.fought(DARK_SWING);
       if (!landed) {
-        g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'event');
+        g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'fight');
       } else {
         // Silver's old virtue: what carries its own light hates a silver edge.
         const bane = banes(item) && def.glow ? BANE_BONUS : 1;
@@ -419,7 +419,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         if (item) g.damageItem(item, 0.35);
         g.logMsg(
           `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.` : ''}`,
-          'event',
+          'fight',
         );
       }
       if (c.health <= 0) return false;
@@ -476,7 +476,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.gainSkill('fighting', tryGain(landed, SHOT_FIGHT));
       g.gainSkill('archery', tryGain(landed, SHOT_ARCHERY));
       if (!landed) {
-        g.logMsg(`Your arrow goes wide of the ${def.name.toLowerCase()}.`, 'event');
+        g.logMsg(`Your arrow goes wide of the ${def.name.toLowerCase()}.`, 'fight');
       } else {
         // The stave throws it; the head is what goes in. Both have a say.
         const head = matOfItem(arrow);
@@ -484,7 +484,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
         g.creatures.hurt(g, c, dmg, 'player');
         g.damageItem(held, 0.25);
-        g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'event');
+        g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');
       }
       if (c.health <= 0) return false;
       return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= (bow.range ?? 6);
