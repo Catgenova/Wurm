@@ -1327,6 +1327,52 @@ select '216. ' || (select text from event where uid = :'ivar' order by n desc li
 select '217. and another on the same spot: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb), 'allowed');
 select id as box from crate where world_id = :'world2' and x = 4 and y = 7 \gset
 
+/*
+ * Three crates, three placings, all asked for off the one row.
+ *
+ * Reported: "error placing a crate says it's not a crate". A crate does not
+ * stack, so three crates in a pack are three rows, and three placings queued
+ * off one menu entry all name the first of them. The first went down and took
+ * its row with it, and the rest were pointed at nothing. The stamp for this
+ * has been taken since somebody queued three eats and ate a different onion;
+ * it was the spending that read one key where the stamping reads two.
+ */
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1); i int; j int;
+begin
+  for i in 10..13 loop for j in 10..13 loop
+    perform land_set_tile(w, i, j, 2); perform land_set_height(w, i, j, 100); perform land_set_dirt(w, i, j, 20);
+  end loop; end loop;
+  delete from crate where world_id = w and x between 10 and 13 and y between 10 and 13;
+end $$;
+update player set x = 11.5, y = 11.5, act = null, act_target = null, act_started = null, act_ends = null,
+       act_left = null, act_goes = null, act_queue = '[]'::jsonb, stats = jsonb_set(stats, '{stamina}', '1')
+  where world_id = :'world2' and uid = :'ivar';
+select give(:'world2', :'ivar', 'crate_plank', 1, 30, 'Pine') as c1 \gset
+select give(:'world2', :'ivar', 'crate_plank', 1, 30, 'Pine') \g /dev/null
+select give(:'world2', :'ivar', 'crate_plank', 1, 30, 'Pine') \g /dev/null
+select rpc_act(:'world2', 'place_crate', ('{"kind":"tile","x":11,"y":11,"sx":0,"sy":0,"itemUid":' || :'c1' || '}')::jsonb, 1) \g /dev/null
+select rpc_act(:'world2', 'place_crate', ('{"kind":"tile","x":11,"y":11,"sx":2,"sy":0,"itemUid":' || :'c1' || '}')::jsonb, 1) \g /dev/null
+select rpc_act(:'world2', 'place_crate', ('{"kind":"tile","x":11,"y":11,"sx":0,"sy":2,"itemUid":' || :'c1' || '}')::jsonb, 1) \g /dev/null
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..3 loop
+    update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds'
+      where world_id = w and uid = me;
+    perform settle(w, me);
+  end loop;
+end $$;
+select '217b. three crates asked for off the one row: '
+     || (select count(*) from crate where world_id = :'world2' and x = 11 and y = 11) || ' standing, '
+     || (select coalesce(sum(count), 0) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'crate_plank')
+     || ' left in the pack, and told: '
+     || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'error'), 'nothing that went wrong');
+delete from crate where world_id = :'world2' and x = 11 and y = 11;
+update player set x = 4.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
+
 delete from event where uid = :'ivar';
 insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 45, 12, 'Pine')
   returning id as pine \gset

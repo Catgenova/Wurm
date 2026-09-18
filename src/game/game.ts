@@ -2760,9 +2760,21 @@ export class Game {
         this.logMsg(`You can only keep ${this.queueCapacity()} jobs in your head at once. Mind logic is what widens that.`, 'error');
         return;
       }
-      // What it was, while there is still something to ask. Once the row is
-      // gone there is nothing left to ask what kind of thing it had been.
-      const was = target.kind === 'item' ? this.inventory.get(target.uid)?.id : undefined;
+      /*
+       * What it was, while there is still something to ask. Once the row is
+       * gone there is nothing left to ask what kind of thing it had been.
+       *
+       * Both ways a target can name a thing, which is the whole of the bug
+       * reported as "error placing a crate says it's not a crate": a crate
+       * does not stack, so five crates are five rows, and five placings
+       * queued off one menu entry all named the first of them. The first went
+       * down and took its row with it, and the other four were pointed at
+       * nothing. `kind: 'item'` carries `uid`; a tile with a thing to put on
+       * it carries `itemUid`, and that is what every placing uses.
+       */
+      const named = target.kind === 'item' ? target.uid
+        : 'itemUid' in target ? target.itemUid : undefined;
+      const was = named !== undefined ? this.inventory.get(named)?.id : undefined;
       this.queue.push({ def, target, goes, was });
       this.logMsg(`${def.label} is next, ${this.queue.length + 1} of ${this.queueCapacity()} in hand.`, 'info');
       this.events.emit('action');
@@ -2814,10 +2826,14 @@ export class Game {
    */
   private retarget(job: { target: Target; was?: string }): Target {
     const t = job.target;
-    if (t.kind !== 'item' || !job.was) return t;
-    if (this.inventory.get(t.uid)) return t;
+    if (!job.was) return t;
+    const uid = t.kind === 'item' ? t.uid : 'itemUid' in t ? t.itemUid : undefined;
+    if (uid === undefined || this.inventory.get(uid)) return t;
     const other = this.inventory.items.find((it) => it.id === job.was && !it.locked);
-    return other ? { ...t, uid: other.uid } : t;
+    if (!other) return t;
+    if (t.kind === 'item') return { ...t, uid: other.uid };
+    // Only the shapes that carry one: `itemUid` is not a field every kind has.
+    return { ...t, itemUid: other.uid } as Target;
   }
 
   private nextInQueue(): boolean {
