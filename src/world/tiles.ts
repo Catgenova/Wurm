@@ -311,6 +311,11 @@ export interface TreeAge {
   /** Whether it is grown enough to fruit. */
   bears: boolean;
   /**
+   * Whether there is life in it. A shrivelled tree is timber standing up:
+   * nothing hangs on it, nothing sprouts from it, and there is no pruning it.
+   */
+  alive: boolean;
+  /**
    * What it becomes when its day is up, or null for the last of them.
    *
    * Written down rather than counted, because the stored values are in the
@@ -328,13 +333,29 @@ export interface TreeAge {
    * the wire reads it off the table and neither has to know the order.
    */
   pruned: number | null;
+  /** How big it is drawn, as a share of the species' own size. */
+  size: number;
+  /**
+   * How it is drawn: grown as its species is; worn, the same with a thinned
+   * and browning crown and bare wood showing through; bare, a dead trunk and
+   * branches with no crown at all; clipped, a low flat-topped shrub.
+   */
+  look: 'grown' | 'worn' | 'bare' | 'clipped';
 }
 
 export const TREE_AGES: TreeAge[] = [
-  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false, next: 1, pruned: null },
-  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true, next: 2, pruned: 0 },
-  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true, next: null, pruned: 1 },
-  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false, next: 0, pruned: null },
+  { id: 0, name: 'Young', hits: 2, logs: 2, bears: false, alive: true, next: 1, pruned: null, size: 0.7, look: 'grown' },
+  { id: 1, name: 'Mature', hits: 3, logs: 4, bears: true, alive: true, next: 2, pruned: 0, size: 0.92, look: 'grown' },
+  { id: 2, name: 'Old', hits: 3, logs: 3, bears: true, alive: true, next: 4, pruned: 1, size: 1.12, look: 'grown' },
+  { id: 3, name: 'Sapling', hits: 1, logs: 0, bears: false, alive: true, next: 0, pruned: 6, size: 0.4, look: 'grown' },
+  // The last two days. A very old tree is the biggest timber there is and the
+  // last stage a hatchet can take back; a shrivelled one is dead wood standing
+  // up, felled for what is in it, and gone when its day is up.
+  { id: 4, name: 'Very old', hits: 4, logs: 5, bears: true, alive: true, next: 5, pruned: 2, size: 1.2, look: 'worn' },
+  { id: 5, name: 'Shrivelled', hits: 2, logs: 2, bears: false, alive: false, next: null, pruned: null, size: 1.05, look: 'bare' },
+  // A sapling pruned back: a shrub for good. Its next stage is itself, which
+  // is how a stage that never turns over is written down.
+  { id: 6, name: 'Clipped', hits: 1, logs: 0, bears: false, alive: true, next: 6, pruned: null, size: 0.48, look: 'clipped' },
 ];
 
 /**
@@ -343,8 +364,8 @@ export const TREE_AGES: TreeAge[] = [
  * Asked for from the island as "a real life day" per stage, so this is wall
  * clock seconds and not the world's own faster hours: a tree planted on a
  * Tuesday is a young tree on Wednesday whether or not anybody was logged in
- * for any of it. Four days from a sapling to a stump, and the stump leaves two
- * saplings behind it.
+ * for any of it. Six days from a sapling to a stump — the last two of them
+ * very old and then shrivelled — and the stump leaves two saplings behind it.
  */
 export const TREE_STAGE = 24 * 60 * 60;
 

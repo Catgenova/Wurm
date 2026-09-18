@@ -4,7 +4,7 @@ import {
   BUILDS, DEFAULT_LOOK, darken, eyeColour, hairColour, shirtColour, skinColour, trouserColour,
   type Gender, type Look,
 } from '../game/look';
-import { BUSH_DEFS, TREE_DEFS } from '../world/tiles';
+import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
 export interface Sprite {
@@ -110,33 +110,87 @@ const SPRITE_W = 88;
 const SPRITE_H = 120;
 const AX = SPRITE_W / 2;
 const AY = SPRITE_H - 8;
-const VARIANT_SIZE = [0.7, 0.92, 1.12];
-
 /** What hangs in each of the bearing trees. */
 const FRUIT_COLOUR: Record<string, string> = { apple: '#d8443c', cherry: '#b41f3e', olive: '#4a5a2c' };
+
+/** A leaf colour gone some of the way to dead leaf: `t` of the way, 0 to 1. */
+function dulled(hex: string, t: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number, to: number): number => Math.round(c + (to - c) * t);
+  return `rgb(${mix((n >> 16) & 255, 142)},${mix((n >> 8) & 255, 124)},${mix(n & 255, 92)})`;
+}
+
+/** Bare wood: a few branches off the top of the trunk, in the trunk's colour. */
+function branches(ctx: CanvasRenderingContext2D, bx: number, top: number, size: number, color: string, n: number): void {
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const dir = (t - 0.5) * 2;
+    const len = (22 + ((i * 5) % 3) * 4) * size;
+    ctx.lineWidth = Math.max(1, 2.6 * size - i * 0.2);
+    ctx.beginPath();
+    ctx.moveTo(bx, top + 4 * size);
+    ctx.quadraticCurveTo(bx + dir * len * 0.35, top - len * 0.55, bx + dir * len * 0.8, top - len * (0.75 + 0.25 * (1 - Math.abs(dir))));
+    ctx.stroke();
+    ctx.lineWidth = Math.max(0.8, 1.4 * size);
+    ctx.beginPath();
+    ctx.moveTo(bx + dir * len * 0.45, top - len * 0.5);
+    ctx.lineTo(bx + dir * len * 0.3, top - len * 0.9);
+    ctx.stroke();
+  }
+}
 
 export function treeSprite(species: number, variant: number): Sprite {
   const key = `tree:${species}:${variant}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const def = TREE_DEFS[species];
-  const size = def.size * VARIANT_SIZE[variant];
+  // The age's size and look are the table's, so a stage added there is drawn
+  // here without anybody remembering to. A value off the table draws as young.
+  const age = TREE_AGES[variant] ?? TREE_AGES[0];
+  const size = def.size * age.size;
+  // A worn crown has gone a third of the way to dead leaf.
+  const canopy = age.look === 'worn' ? def.canopy.map((c) => dulled(c, 0.38)) as [string, string, string] : def.canopy;
   spr = makeSprite(SPRITE_W, SPRITE_H, AX, AY, (ctx) => {
     const bx = AX;
     const by = AY;
     shadow(ctx, bx, by, 15 * size, 6 * size);
+    if (age.look === 'bare') {
+      // Dead wood standing up: the trunk, a few branches, no crown at all.
+      const th = 34 * size;
+      trunk(ctx, bx, by, 6.5 * size, th, dulled(def.trunk, 0.35));
+      branches(ctx, bx, by - th, size, dulled(def.trunk, 0.45), 4);
+      return;
+    }
+    if (age.look === 'clipped') {
+      // A sapling kept as a shrub: low, wide, and flat across the top.
+      const r = 24 * size;
+      trunk(ctx, bx, by, 4 * size, 8 * size, def.trunk);
+      ctx.fillStyle = canopy[2];
+      ctx.beginPath();
+      ctx.ellipse(bx, by - 8 * size - r * 0.42, r * 1.25, r * 0.55, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = canopy[1];
+      ctx.fillRect(bx - r * 1.15, by - 8 * size - r * 0.95, r * 2.3, r * 0.55);
+      ctx.fillStyle = canopy[0];
+      ctx.fillRect(bx - r * 0.95, by - 8 * size - r * 0.95, r * 1.2, r * 0.18);
+      return;
+    }
     if (def.shape === 'round') {
       const th = 30 * size;
       const tw = 7 * size;
       const r = 22 * size;
       trunk(ctx, bx, by, tw, th, def.trunk);
       const cy = by - th - r * 0.5;
-      blob(ctx, bx, cy, r, def.canopy[2]);
-      blob(ctx, bx - r * 0.14, cy - r * 0.16, r * 0.8, def.canopy[1]);
-      blob(ctx, bx - r * 0.3, cy - r * 0.34, r * 0.46, def.canopy[0]);
+      if (age.look === 'worn') branches(ctx, bx, cy - r * 0.2, size * 0.9, dulled(def.trunk, 0.3), 3);
+      blob(ctx, bx, cy, r, canopy[2]);
+      blob(ctx, bx - r * 0.14, cy - r * 0.16, r * 0.8, canopy[1]);
+      if (age.look !== 'worn') blob(ctx, bx - r * 0.3, cy - r * 0.34, r * 0.46, canopy[0]);
       // The three that bear are told apart across a field by what is hanging
-      // in them, once they are old enough to hang anything.
-      if (def.fruit && variant > 0) {
+      // in them, once they are old enough to hang anything — which is the
+      // table's to say, not the variant number's: a sapling is 3.
+      if (def.fruit && age.bears) {
         ctx.fillStyle = FRUIT_COLOUR[def.fruit] ?? '#d05040';
         for (let i = 0; i < 9; i++) {
           const a = (i / 9) * Math.PI * 2 + species;
@@ -150,25 +204,26 @@ export function treeSprite(species: number, variant: number): Sprite {
       const th = 18 * size;
       const r = 19 * size;
       trunk(ctx, bx, by, 6 * size, th, def.trunk);
+      if (age.look === 'worn') branches(ctx, bx, by - th - r * 2.2, size * 0.7, dulled(def.trunk, 0.3), 2);
       for (let i = 0; i < 3; i++) {
         const ly = by - th * 0.7 - i * r * 0.95;
         const lw = r * (1.15 - i * 0.3);
         const lh = r * 1.35 * (1 - i * 0.1);
-        ctx.fillStyle = def.canopy[1];
+        ctx.fillStyle = canopy[1];
         ctx.beginPath();
         ctx.moveTo(bx, ly - lh);
         ctx.lineTo(bx + lw, ly);
         ctx.lineTo(bx - lw, ly);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = def.canopy[2];
+        ctx.fillStyle = canopy[2];
         ctx.beginPath();
         ctx.moveTo(bx, ly - lh);
         ctx.lineTo(bx + lw, ly);
         ctx.lineTo(bx + lw * 0.1, ly);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = def.canopy[0];
+        ctx.fillStyle = canopy[0];
         ctx.beginPath();
         ctx.moveTo(bx - lw * 0.1, ly - lh * 0.85);
         ctx.lineTo(bx - lw * 0.55, ly - lh * 0.2);
@@ -181,15 +236,16 @@ export function treeSprite(species: number, variant: number): Sprite {
       const r = 20 * size;
       trunk(ctx, bx, by, 7 * size, th, def.trunk);
       const cy = by - th - r * 0.35;
-      ctx.fillStyle = def.canopy[2];
+      if (age.look === 'worn') branches(ctx, bx, cy - r * 0.3, size * 0.8, dulled(def.trunk, 0.3), 3);
+      ctx.fillStyle = canopy[2];
       ctx.beginPath();
       ctx.ellipse(bx, cy, r * 1.35, r * 0.85, 0, 0, TAU);
       ctx.fill();
-      ctx.fillStyle = def.canopy[1];
+      ctx.fillStyle = canopy[1];
       ctx.beginPath();
       ctx.ellipse(bx - r * 0.15, cy - r * 0.2, r * 1.05, r * 0.6, 0, 0, TAU);
       ctx.fill();
-      ctx.strokeStyle = def.canopy[0];
+      ctx.strokeStyle = canopy[0];
       ctx.lineWidth = 2 * size;
       ctx.lineCap = 'round';
       for (let k = 0; k <= 9; k++) {
@@ -202,7 +258,7 @@ export function treeSprite(species: number, variant: number): Sprite {
         ctx.quadraticCurveTo(x + sway, cy + drop * 0.6, x + sway * 0.4, cy + drop);
         ctx.stroke();
       }
-      blob(ctx, bx - r * 0.35, cy - r * 0.4, r * 0.4, def.canopy[0]);
+      if (age.look !== 'worn') blob(ctx, bx - r * 0.35, cy - r * 0.4, r * 0.4, canopy[0]);
     }
   });
   cache.set(key, spr);

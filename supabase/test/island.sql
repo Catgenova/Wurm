@@ -7076,11 +7076,18 @@ select '851. and a day later: ' || lower((select name from tree_age_def where id
      || ' — ' || :'grew1' || ' trees on the island turned over that day';
 select pg_temp.one_day(:'world7') \g /dev/null
 select pg_temp.one_day(:'world7') \g /dev/null
-select '852. and two days after that: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60)))) || ', which is as far as a tree goes';
-
--- The fourth day is the last one.
+select lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60)))) as day3 \gset
 select pg_temp.one_day(:'world7') \g /dev/null
-select '853. and on the fourth day: ' || (select name from tile_def where id = land_tile(:'world7',60,60))
+select lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60)))) as day4 \gset
+select pg_temp.one_day(:'world7') \g /dev/null
+select '852. and two days after that: ' || :'day3' || '; a fourth: ' || :'day4'
+     || ', the last a hatchet can take back; a fifth: '
+     || lower((select name from tree_age_def where id = tree_age(land_data(:'world7',60,60))))
+     || ', which is as far as a living tree goes';
+
+-- The sixth day is the last one.
+select pg_temp.one_day(:'world7') \g /dev/null
+select '853. and on the sixth day: ' || (select name from tile_def where id = land_tile(:'world7',60,60))
      || ' where it stood, and ' || (select count(*) from (
           select q.gx, q.gy from (select 60 + dx as gx, 60 + dy as gy
             from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
@@ -8066,3 +8073,114 @@ select '911. notched to 2 of 3 and felled: the tile is '
      || (select name from tile_def where id = land_tile(:'world6', 60, 52))
      || ' and the notch rows left for it: ' || (select count(*) from tree_notch where world_id = :'world6' and x = 60 and y = 52)
      || ' — forgotten at the one door every tile change goes through';
+
+
+/*
+ * The last two days of a tree, and a shrub.
+ *
+ * Asked from the island: a very old stage between old and gone — one more day
+ * of life, the biggest timber, and a look that says prune me or lose me; a
+ * shrivelled stage after it, a dead trunk for a day, felled for what timber is
+ * in it and nothing else; and a sapling pruned into a shrub that never grows
+ * and never dies. Every one of them is a row of the one table.
+ */
+\echo ''
+\echo '--- the last two days of a tree, and a shrub'
+with recursive life as (
+  select a.*, 0 as step from tree_age_def a where a.id = tree_first()
+  union all
+  select b.*, l.step + 1 from life l join tree_age_def b on b.id = l.next and b.id <> l.id
+)
+select '912. the ladder, walked from the first stage: ' || string_agg(
+         lower(name) || ' (' || hits || ' strokes, ' || logs || ' logs'
+         || case when bears then ', bears' else '' end
+         || case when alive then '' else ', dead' end
+         || case when pruned is not null then ', prunes to ' || lower((select name from tree_age_def p where p.id = life.pruned)) else '' end
+         || ')', ' → ' order by step)
+     || ' → gone — and off the ladder: '
+     || (select string_agg(lower(name) || ', whose next stage is itself', ', ') from tree_age_def where next = id)
+from life;
+
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  -- A sapling oak, a very old oak, a shrivelled oak and a shrivelled apple, in a row.
+  perform land_set_tile(w, 50, 54, tile_id('Tree')); perform land_set_height(w, 50, 54, 4); perform land_set_data(w, 50, 54, 2 | (3 << 4));
+  perform land_set_tile(w, 51, 54, tile_id('Tree')); perform land_set_height(w, 51, 54, 4); perform land_set_data(w, 51, 54, 2 | (4 << 4));
+  perform land_set_tile(w, 52, 54, tile_id('Tree')); perform land_set_height(w, 52, 54, 4); perform land_set_data(w, 52, 54, 2 | (5 << 4));
+  perform land_set_tile(w, 53, 54, tile_id('Tree')); perform land_set_height(w, 53, 54, 4); perform land_set_data(w, 53, 54, 6 | (5 << 4));
+  perform land_set_tile(w, 54, 54, tile_id('Tree')); perform land_set_height(w, 54, 54, 4); perform land_set_data(w, 54, 54, 6 | (4 << 4));
+end $$;
+create or replace function pg_temp.prune_row(p_x int, p_y int, p_age int) returns int
+  language plpgsql as $fn$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  update player set x = p_x + 0.5, y = p_y - 0.5 where world_id = w and uid = me;
+  for i in 1..8 loop
+    exit when tree_age(land_data(w, p_x, p_y)) = p_age;
+    perform act_perform(w, me, 'prune', ('{"kind":"tile","x":' || p_x || ',"y":' || p_y || '}')::jsonb);
+  end loop;
+  return i;
+end $fn$;
+select pg_temp.prune_row(50, 54, 6) \g /dev/null
+select '913. a sapling oak pruned: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 50, 54))))
+     || ' — "' || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You prune%' order by n desc limit 1) || '"';
+select pg_temp.one_day(:'world6') \g /dev/null
+select pg_temp.one_day(:'world6') \g /dev/null
+select '914. and two days later it is ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 50, 54))))
+     || ', and asked to prune it again: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'prune', '{"kind":"tile","x":50,"y":54}'::jsonb), 'ALLOWED')
+     || '" — a shrub for good';
+-- Two days have passed for the whole row: the very old oak is gone and the shrivelled ones with it. Set them again.
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_tile(w, 51, 54, tile_id('Tree')); perform land_set_data(w, 51, 54, 2 | (4 << 4));
+  perform land_set_tile(w, 52, 54, tile_id('Tree')); perform land_set_data(w, 52, 54, 2 | (5 << 4));
+  perform land_set_tile(w, 53, 54, tile_id('Tree')); perform land_set_data(w, 53, 54, 6 | (5 << 4));
+  perform land_set_tile(w, 54, 54, tile_id('Tree')); perform land_set_data(w, 54, 54, 6 | (4 << 4));
+  update player set x = 51.5, y = 53.5 where world_id = w and uid = '77777777-7777-7777-7777-777777777777';
+end $$;
+select '915. a very old oak, the door: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'prune', '{"kind":"tile","x":51,"y":54}'::jsonb), 'ALLOWED')
+     || '"' as very_old_door \gset
+select pg_temp.prune_row(51, 54, 2) \g /dev/null
+select :'very_old_door' || ', and pruned: ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 51, 54))))
+     || ' — the last day it could be taken back, taken back';
+update player set x = 52.5, y = 53.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select '916. a shrivelled oak: pruning "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'prune', '{"kind":"tile","x":52,"y":54}'::jsonb), 'ALLOWED')
+     || '", a sprout "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'pick_sprout', '{"kind":"tile","x":52,"y":54}'::jsonb), 'ALLOWED')
+     || '", felling "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'cut_down', '{"kind":"tile","x":52,"y":54}'::jsonb), 'ALLOWED')
+     || '"';
+update player set x = 53.5, y = 53.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'pick_fruit', '{"kind":"tile","x":53,"y":54}'::jsonb), 'ALLOWED') as dead_fruit \gset
+update player set x = 54.5, y = 53.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select '917. and a shrivelled apple beside a very old one: fruit off the dead one "' || :'dead_fruit'
+     || '", and off the very old one "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'pick_fruit', '{"kind":"tile","x":54,"y":54}'::jsonb), 'ALLOWED')
+     || '"';
+-- Felling the dead oak: dead wood, still timber.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def = 'log';
+  delete from event where uid = me;
+  update player set x = 52.5, y = 53.5 where world_id = w and uid = me;
+  for i in 1..8 loop
+    exit when land_tile(w, 52, 54) <> tile_id('Tree');
+    perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":52,"y":54}'::jsonb);
+  end loop;
+end $$;
+select '918. felling it: "' || (select string_agg(text, '" "' order by n) from event
+          where uid = '77777777-7777-7777-7777-777777777777' and (text like '%cut into%' or text like '%comes down%'))
+     || '" — ' || coalesce((select sum(count) from item where world_id = :'world6'
+          and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'log'), 0) || ' logs of dead wood';

@@ -737,6 +737,11 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 4,
     difficulty: 15,
     applies: (t, g) => tile(t, g) === TileType.Tree,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Tree) return 'There is no tree here.';
+      return treeAge(g.world.getData(t.x, t.y)).alive ? null : 'There is no life in it to sprout.';
+    },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const def = TREE_DEFS[treeSpecies(g.world.getData(t.x, t.y))];
@@ -763,9 +768,13 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return null;
       if (g.world.getTile(t.x, t.y) !== TileType.Tree) return 'There is no tree here to prune.';
       const data = g.world.getData(t.x, t.y);
-      // Only a grown tree is pruned: a stage back apiece for old and mature,
-      // and a young one or a sapling is left to grow. The table says which.
-      if (treeAge(data).pruned === null) return `The ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} is too young to prune. Let it grow.`;
+      const age = treeAge(data);
+      if (!age.alive) return 'There is no pruning a dead tree.';
+      // What each stage prunes to is the table's: a stage back for a grown
+      // tree, a shrub for good out of a sapling, and a young tree left to grow.
+      // A stage whose next stage is itself is a shrub already kept.
+      if (age.pruned === null && age.next === age.id) return 'It is clipped as far as it goes.';
+      if (age.pruned === null) return `The ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} is too young to prune. Let it grow.`;
       return g.inventory.has('hatchet') ? null : 'You need a hatchet to prune.';
     },
     perform: (t, g) => {
@@ -809,6 +818,7 @@ export const ACTIONS: ActionDef[] = [
       const data = g.world.getData(t.x, t.y);
       const def = TREE_DEFS[treeSpecies(data)];
       if (!def.fruit) return 'Nothing grows on this that you would eat.';
+      if (!treeAge(data).alive) return 'Nothing hangs on a dead tree.';
       // A sapling bears nothing; it has to have some years in it first.
       if (!treeAge(data).bears) return `The ${def.name.toLowerCase()} is too young to bear. Leave it to grow.`;
       if (g.isForaged(t.x, t.y, 'forage')) return `You have had what this ${def.name.toLowerCase()} has on it. Come back later.`;
@@ -819,8 +829,9 @@ export const ACTIONS: ActionDef[] = [
       const data = g.world.getData(t.x, t.y);
       const def = TREE_DEFS[treeSpecies(data)];
       if (!def.fruit) return;
-      // An old tree carries more than one only just come into bearing.
-      const old = treeVariant(data) === 2;
+      // An old tree carries more than one only just come into bearing, and a
+      // very old one as much as an old one.
+      const old = treeVariant(data) === 2 || treeVariant(data) === 4;
       const skill = g.skills.get('forestry');
       const count = Math.max(1, Math.round((old ? 5 : 3) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
       const made = g.inventory.add(def.fruit, { count, ql: g.productQl('forestry'), });

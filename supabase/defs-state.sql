@@ -260,6 +260,7 @@ create table if not exists tree_age_def (
 );
 alter table tree_age_def add column if not exists next int;
 alter table tree_age_def add column if not exists pruned int;
+alter table tree_age_def add column if not exists alive boolean not null default true;
 create table if not exists bush_def (id int primary key, name text not null);
 create table if not exists loot_table (
   id text not null, item text not null, weight real not null, primary key (id, item)
@@ -2956,10 +2957,13 @@ insert into tree_def values (7, 'Cherry');
 update tree_def set fruit = 'cherry' where id = 7;
 insert into tree_def values (8, 'Olive');
 update tree_def set fruit = 'olive' where id = 8;
-insert into tree_age_def values (0, 'Young', 2, 2, false, 1, null);
-insert into tree_age_def values (1, 'Mature', 3, 4, true, 2, 0);
-insert into tree_age_def values (2, 'Old', 3, 3, true, null, 1);
-insert into tree_age_def values (3, 'Sapling', 1, 0, false, 0, null);
+insert into tree_age_def values (0, 'Young', 2, 2, false, 1, null, true);
+insert into tree_age_def values (1, 'Mature', 3, 4, true, 2, 0, true);
+insert into tree_age_def values (2, 'Old', 3, 3, true, 4, 1, true);
+insert into tree_age_def values (3, 'Sapling', 1, 0, false, 0, 6, true);
+insert into tree_age_def values (4, 'Very old', 4, 5, true, 5, 2, true);
+insert into tree_age_def values (5, 'Shrivelled', 2, 2, false, null, null, false);
+insert into tree_age_def values (6, 'Clipped', 1, 0, false, 6, null, true);
 insert into slab_def values (0, 'Stone slabs', 'stone_slab');
 insert into slab_def values (1, 'Slate slabs', 'slate_slab');
 insert into slab_def values (2, 'Marble slabs', 'marble_slab');
