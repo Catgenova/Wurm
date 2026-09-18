@@ -618,6 +618,11 @@ async function main(): Promise<void> {
           const wet = Math.min(back.getHeight(x, y), back.getHeight(x + 1, y),
             back.getHeight(x + 1, y + 1), back.getHeight(x, y + 1)) < 0;
           if (wet) continue;
+          // And a way onto it from where we stand, the same path the walk takes.
+          // Run 363 on the real island chose a tile a step from the spawn with
+          // no path to it, and the walk that followed could not get there — the
+          // same gap the dig corner had, closed the same way.
+          if ((dx || dy) && !findPath(back, Math.floor(at.x), Math.floor(at.y), 0, x, y, pathOptions(back))) continue;
           sx = x; sy = y; done = true;
         }
       }
