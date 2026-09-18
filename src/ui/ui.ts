@@ -36,9 +36,9 @@ import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sitting
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
-import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
+import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, MOULD_BY_MAKES, isCasting, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
 import { meltable } from '../game/melt';
-import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
+import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture, turnedFacing } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
@@ -1143,6 +1143,40 @@ export class UI {
           : undefined,
       });
     }
+    // Every other mould is poured here too, and cools into a casting for the anvil.
+    const pourDef = ACTION_BY_ID.get('pour_mould');
+    const moulds = g.inventory.items.filter((it) => isMould(it.id) && MOULD_BY_ID.get(it.id)?.makes !== 'anvil');
+    if (pourDef) {
+      entries.push({
+        label: 'Pour a mould',
+        disabled: !moulds.length || !lumps.length,
+        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? 'You carry no metal.' : undefined,
+        children:
+          moulds.length && lumps.length
+            ? moulds.map((mould) => {
+                const def = MOULD_BY_ID.get(mould.id)!;
+                return {
+                  label: itemName(mould),
+                  note: `${itemDef(def.makes).name.toLowerCase()} · ${def.lumps} lump${def.lumps > 1 ? 's' : ''} · ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left`,
+                  children: lumps.map((lump) => {
+                    const t: Target = { ...st, mouldUid: mould.uid, itemUid: lump.uid };
+                    const reason = pourDef.check?.(t, g) ?? null;
+                    // What this metal costs, which is not the same for all of
+                    // them: a lump of the rare six weighs a tenth of an iron
+                    // one, so a filling takes ten times as many.
+                    const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
+                    return {
+                      label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count}) · ${need} needed`,
+                      hint: reason ?? undefined,
+                      disabled: !!reason,
+                      onSelect: () => g.requestAction(pourDef, t),
+                    };
+                  }),
+                };
+              })
+            : undefined,
+      });
+    }
     for (const id of ['light_smelter', 'damp_smelter', 'smelter_take_all', 'take_ashes_smelter', 'pick_up_smelter']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(st, g)) continue;
@@ -1151,7 +1185,7 @@ export class UI {
     }
     if (s.jobs.length) {
       const job = s.jobs[0];
-      entries.push({ label: `In the furnace: ${itemDef(job.makes).name.toLowerCase()}`, note: `${Math.ceil(job.left)}s left, ${s.jobs.length} in all`, disabled: true });
+      entries.push({ label: `In the furnace: ${jobName(job)}`, note: `${Math.ceil(job.left)}s left, ${s.jobs.length} in all`, disabled: true });
     }
     if (s.output.length) entries.push({ label: `Finished: ${s.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
     return entries;
@@ -1420,37 +1454,28 @@ export class UI {
     const at: Target = { kind: 'anvil', id: a.id };
     const entries: MenuItem[] = [];
     const smithDef = ACTION_BY_ID.get('smith');
-    const moulds = g.inventory.items.filter((it) => isMould(it.id) && MOULD_BY_ID.get(it.id)?.makes !== 'anvil');
+    // Castings poured at the smelter, each named for the piece it is of.
+    const castings = g.inventory.items.filter(isCasting);
     const lumps = g.inventory.items.filter((it) => isLump(it.id));
     if (smithDef) {
       entries.push({
         label: 'Smith',
-        disabled: !moulds.length || !lumps.length,
-        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? 'You carry no metal.' : undefined,
-        children:
-          moulds.length && lumps.length
-            ? moulds.map((mould) => {
-                const def = MOULD_BY_ID.get(mould.id)!;
-                return {
-                  label: itemName(mould),
-                  note: `${itemDef(def.makes).name.toLowerCase()} · ${def.lumps} lump${def.lumps > 1 ? 's' : ''} · ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left`,
-                  children: lumps.map((lump) => {
-                    const t: Target = { ...at, mouldUid: mould.uid, itemUid: lump.uid };
-                    const reason = smithDef.check?.(t, g) ?? null;
-                    // What this metal costs, which is not the same for all of
-                    // them: a lump of the rare six weighs a tenth of an iron
-                    // one, so a filling takes ten times as many.
-                    const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
-                    return {
-                      label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count}) · ${need} needed`,
-                      hint: reason ?? undefined,
-                      disabled: !!reason,
-                      onSelect: () => g.requestAction(smithDef, t),
-                    };
-                  }),
-                };
-              })
-            : undefined,
+        disabled: !castings.length,
+        hint: castings.length ? undefined : 'Pour a mould at the smelter first.',
+        children: castings.length
+          ? castings.map((c) => {
+              const def = MOULD_BY_MAKES.get(c.piece as string);
+              const t: Target = { ...at, itemUid: c.uid };
+              const reason = smithDef.check?.(t, g) ?? null;
+              return {
+                label: `${itemName(c)} (${c.count})`,
+                note: def ? `${def.per && def.per > 1 ? `${def.per} ` : 'a '}${itemDef(def.makes).name.toLowerCase()} · QL ${c.ql.toFixed(0)}` : undefined,
+                hint: reason ?? undefined,
+                disabled: !!reason,
+                onSelect: () => g.requestAction(smithDef, t),
+              };
+            })
+          : undefined,
       });
     }
     // Coins: a die in the pack, and a lump of silver or gold named off the menu.

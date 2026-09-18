@@ -1,8 +1,9 @@
 import { world } from './pace';
 /**
  * Metal, from the seam to the finished tool. Ore is mined, smelted into lumps,
- * lumps are mixed into alloys, sand is fired into moulds, and a mould filled
- * with metal is beaten out on an anvil.
+ * lumps are mixed into alloys, sand is fired into moulds, a mould is poured
+ * at the smelter and cools into a casting, and a casting is beaten true on
+ * an anvil.
  */
 export type SmithSkill = 'blacksmithing' | 'weaponsmithing' | 'armorsmithing' | 'chainsmithing' | 'platesmithing' | 'jewellery';
 
@@ -170,6 +171,10 @@ export const MOULDS: MouldDef[] = [
 
 export const MOULD_BY_ID = new Map(MOULDS.map((m) => [m.id, m]));
 export const isMould = (id: string): boolean => MOULD_BY_ID.has(id);
+/** The mould a piece comes out of, by the piece: what a casting is of, read back to its mould. */
+export const MOULD_BY_MAKES = new Map(MOULDS.map((m) => [m.makes, m]));
+/** A casting: what a poured mould cools into, carrying the piece it is of. */
+export const isCasting = (it: { id: string; piece?: string }): boolean => it.id === 'casting' && !!it.piece;
 
 /**
  * How much damage a mould takes each time it is filled. A finer mould lasts
@@ -189,6 +194,14 @@ export function smeltSeconds(metalId: string, oreQl: number, smelterQl: number):
 /** Seconds for a filled anvil mould to cool into an anvil. */
 export const castSeconds = (metalId: string, ql: number): number =>
   world(Math.max(20, 70 * (METAL_BY_ID.get(metalId)?.work ?? 1) * (0.7 + ql / 130)));
+
+/**
+ * Seconds for any other filled mould to cool into a casting: the anvil's
+ * cooling time scaled by the metal in it, an anvil being twenty lumps, and
+ * never under eight seconds' worth. The island reads the same sum.
+ */
+export const pourSeconds = (mould: MouldDef, metalId: string, ql: number): number =>
+  Math.max(world(8), (castSeconds(metalId, ql) * mould.lumps) / 20);
 
 /** Tool heads that become a tool once fitted to a shaft. */
 export const HEAD_TO_TOOL: Record<string, string> = {

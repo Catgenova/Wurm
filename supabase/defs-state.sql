@@ -410,6 +410,7 @@ insert into item_def values ('horseshoe', 'Horseshoes', 'material', 0.25, true, 
 insert into item_def values ('horseshoe_mould', 'Horseshoe mould', 'tool', 1.2, false, 1, null);
 insert into item_def values ('coin_die', 'Coin die', 'tool', 1.5, false, null, null);
 insert into item_def values ('coin_die_mould', 'Coin die mould', 'tool', 1.2, false, 1, null);
+insert into item_def values ('casting', 'Casting', 'material', 1, true, 3, null);
 insert into item_def values ('bell_casting', 'Bell casting', 'misc', 16, false, null, null);
 insert into item_def values ('statue_casting', 'Statue casting', 'misc', 24, false, null, null);
 insert into item_def values ('bell_mould', 'Bell mould', 'tool', 3, false, 1, null);
@@ -1215,6 +1216,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('smelt_ore', 'Smelt', 'charging the smelter', 'smelting', null, false, null, 0.01, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('melt_down', 'Melt down', 'charging the smelter', 'smelting', null, false, null, 0.01, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cast_anvil', 'Cast an anvil', 'filling the anvil mould', 'blacksmithing', null, false, null, 0.04, 6, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pour_mould', 'Pour a mould', 'pouring the mould', 'smelting', null, false, null, 0.04, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('smelter_take_all', 'Take what is done', 'emptying the smelter', null, null, false, null, 0.01, 1, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_ashes_smelter', 'Rake out the ashes', 'raking out ashes', null, null, false, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('place_kiln', 'Set the kiln down', 'setting the kiln down', null, null, false, null, 0.04, 5, null, false, false);
@@ -1768,6 +1770,7 @@ update item_def set description = 'Four to a lump. Nailed onto a mount by a farr
 update item_def set description = 'A sand mould, four shoes to a filling. It wears a little every time it is filled, and no mould can be mended.' where id = 'horseshoe_mould';
 update item_def set description = 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is twenty coins. It wears with every strike.' where id = 'coin_die';
 update item_def set description = 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' where id = 'coin_die_mould';
+update item_def set description = 'Metal poured into a mould at a smelter and cooled: the rough shape of a piece, wanting an anvil to beat it true.' where id = 'casting';
 update item_def set description = 'A bell cast whole, tongue and all, wanting a frame to hang in. Eight lumps went into it.' where id = 'bell_casting';
 update item_def set description = 'A figure cast whole in a big mould. Set it on a slab and it stands.' where id = 'statue_casting';
 update item_def set description = 'A sand mould, big enough for a bell. It wears a little every time it is filled, and no mould can be mended.' where id = 'bell_mould';

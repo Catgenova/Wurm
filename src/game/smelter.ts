@@ -4,7 +4,8 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
 import { MELT_HEAT, meltLumps, meltQl, meltRefusal, metalOfItem } from './melt';
-import { METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, ORE_PER_LUMP, castSeconds, isOreItem, mouldLumps, smeltSeconds } from './metal';
+import { matOf } from './materials';
+import { METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, ORE_PER_LUMP, castSeconds, isOreItem, mouldLumps, mouldUsesLeft, mouldWear, pourSeconds, smeltSeconds } from './metal';
 
 /**
  * A stone smelter: the deed's second building after the campfire. It fills a
@@ -22,6 +23,10 @@ export interface SmeltJob {
   total: number;
   /** Quality the piece will carry. */
   ql: number;
+  /** What the piece will say it is made of, when it says: the metal's name. */
+  extra?: string;
+  /** The piece a casting is of, when what comes out is a casting. */
+  piece?: string;
 }
 
 export interface PlacedSmelter {
@@ -63,6 +68,10 @@ export const smelterBurnsFor = (s: PlacedSmelter): string => {
   const m = Math.round(s.fuel / 60);
   return m >= 60 ? `${(m / 60).toFixed(1)} hours` : m >= 1 ? `${m} minutes` : `${Math.round(s.fuel)} seconds`;
 };
+
+/** What a job in the furnace is making, said plainly: a shovel head casting, an iron lump, an anvil. */
+export const jobName = (job: SmeltJob): string =>
+  job.makes === 'casting' && job.piece ? `${itemDef(job.piece).name.toLowerCase()} casting` : itemDef(job.makes).name.toLowerCase();
 
 export function smelterState(s: PlacedSmelter): string {
   const heat = s.lit ? `hot, ${smelterBurnsFor(s)} of fuel` : s.fuel > 0 ? `banked and cold, ${smelterBurnsFor(s)} of fuel` : 'cold and empty';
@@ -338,6 +347,69 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       s.jobs.push({ item: { ...lump, count: need }, makes: 'anvil', left: seconds, total: seconds, ql });
       g.events.emit('smelter');
       g.logMsg(`You pour ${need} lumps of ${metal.name.toLowerCase()} into the anvil mould. It needs about ${Math.round(seconds)} seconds to cool.`, 'event');
+    },
+  },
+  {
+    id: 'pour_mould',
+    label: 'Pour a mould',
+    verb: 'pouring the mould',
+    skill: 'smelting',
+    hidden: true,
+    stamina: 0.04,
+    baseTime: 5,
+    applies: (t, g) => smelterOf(g, t) !== undefined,
+    check: (t, g) => {
+      const s = smelterOf(g, t);
+      if (!s) return 'It is gone.';
+      if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
+      const mould = t.kind === 'smelter' && t.mouldUid !== undefined ? g.inventory.get(t.mouldUid) : undefined;
+      const def = mould && MOULD_BY_ID.get(mould.id);
+      if (!mould || !def) return 'Choose a mould.';
+      if (def.makes === 'anvil') return 'An anvil is cast whole: pour it with Cast an anvil.';
+      const lump = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const metal = lump && METAL_BY_LUMP.get(lump.id);
+      if (!lump || !metal) return 'You have no metal to pour.';
+      // A mould wants a weight of metal, and a lump of the rare six weighs a
+      // tenth of what an iron one does, so it takes ten times as many of them.
+      const need = mouldLumps(def, metal.id);
+      if (lump.count < need) return `That takes ${need} lumps.`;
+      if (s.jobs.length >= SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
+      return null;
+    },
+    perform: (t, g) => {
+      const s = smelterOf(g, t);
+      if (!s || t.kind !== 'smelter' || t.mouldUid === undefined || t.itemUid === undefined) return;
+      const mould = g.inventory.get(t.mouldUid);
+      const def = mould && MOULD_BY_ID.get(mould.id);
+      const lump = g.inventory.get(t.itemUid);
+      const metal = lump && METAL_BY_LUMP.get(lump.id);
+      if (!mould || !def || def.makes === 'anvil' || !lump || !metal || s.jobs.length >= SMELTER_CAPACITY) return;
+      const need = mouldLumps(def, metal.id);
+      if (lump.count < need || !g.inventory.remove(lump.uid, need)) return;
+      const mouldQl = Math.max(1, mould.ql - mould.dmg / 2);
+      // Every filling wears the mould, and no mould can be mended. A hard
+      // metal takes more out of it than a soft one.
+      mould.dmg = Math.min(100, mould.dmg + mouldWear(mould.ql) * (1 + matOf(metal.name).difficulty / 30));
+      const broke = mould.dmg >= 100;
+      if (broke) g.inventory.remove(mould.uid, 1);
+      g.events.emit('inventory');
+      // The pour is the smelter's work: the metal, the mould and the hands at the furnace.
+      const ql = Math.max(1, Math.min(100, (lump.ql + mouldQl + g.productQl('smelting')) / 3));
+      const seconds = pourSeconds(def, metal.id, ql);
+      // A bell or a statue is a casting already and wants no anvil; everything
+      // else comes out as a casting of the piece, for the anvil to beat true.
+      const whole = def.makes.endsWith('_casting');
+      s.jobs.push({
+        item: { ...lump, count: need }, makes: whole ? def.makes : 'casting', left: seconds, total: seconds, ql,
+        extra: metal.name, piece: whole ? undefined : def.makes,
+      });
+      g.events.emit('smelter');
+      g.logMsg(
+        `You pour ${need > 1 ? `${need} lumps` : 'a lump'} of ${metal.name.toLowerCase()} into the ${itemDef(mould.id).name.toLowerCase()}. It needs about ${Math.round(seconds)} seconds to cool.${
+          broke ? ' The mould cracks through and is done.' : ` The mould has ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left.`
+        }`,
+        'event',
+      );
     },
   },
   {

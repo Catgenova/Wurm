@@ -4,12 +4,13 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, rollRarity, RARITY_WORD, type Item } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
-import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_ID, mouldLumps, mouldUsesLeft, mouldWear, type MouldDef } from './metal';
+import { metalOfItem } from './melt';
+import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_MAKES, type MouldDef } from './metal';
 
 /**
  * An anvil: cast whole in a smelter, set down on four subtiles, and the place
- * every mould is beaten out. What it is made of shows in its colour and in how
- * kindly it treats the work.
+ * every casting is beaten true. What it is made of shows in its colour and in
+ * how kindly it treats the work.
  */
 export interface PlacedAnvil {
   id: number;
@@ -50,7 +51,16 @@ const anvilOf = (g: Game, t: Target): PlacedAnvil | undefined => (t.kind === 'an
 /** A name said of more than one, without doubling an s that is already there. */
 const plural = (name: string, n: number): string => (n > 1 && !name.endsWith('s') ? `${name}s` : name);
 
-/** The metal a mould would be filled with: whichever lump the player chose. */
+/** The casting to beat out: the one the player chose, or any in the pack when none was. */
+function castingFor(g: Game, uid?: number): Item | undefined {
+  if (uid !== undefined) {
+    const it = g.inventory.get(uid);
+    return it && isCasting(it) ? it : undefined;
+  }
+  return g.inventory.items.find(isCasting);
+}
+
+/** The metal to strike: whichever lump the player chose. */
 function lumpFor(g: Game, uid?: number): Item | undefined {
   if (uid !== undefined) {
     const it = g.inventory.get(uid);
@@ -62,7 +72,11 @@ function lumpFor(g: Game, uid?: number): Item | undefined {
 /** What the anvil is worth to beat on: its quality, and how hard its own metal is. */
 export const anvilQl = (a: PlacedAnvil): number => workingQl(a.ql, METAL_BY_ID.get(a.metal)?.name);
 
-/** How good a piece comes out: the smith, the mould, the metal and the anvil all have a say. */
+/**
+ * How good a piece comes out: the smith, the mould, the metal and the anvil
+ * all have a say. A casting carries the mould and the metal it was poured
+ * from in its one quality, which stands for both here.
+ */
 export function smithQl(g: Game, def: MouldDef, mouldQl: number, lumpQl: number, anvil: PlacedAnvil): number {
   const skill = g.skills.get(def.skill);
   return Math.max(1, Math.min(100, (g.productQl(def.skill) + mouldQl + lumpQl + anvilQl(anvil)) / 4 + skill / 25));
@@ -88,7 +102,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('anvil');
       if (!item || item.id !== 'anvil' || !g.inventory.remove(item.uid, 1)) return;
       const a = g.addAnvil(t.x, t.y, t.sx, t.sy, item.extra ?? 'copper', item.ql);
-      g.logMsg(`You set the ${anvilName(a).toLowerCase()} down. Bring a filled mould to it.`, 'event');
+      g.logMsg(`You set the ${anvilName(a).toLowerCase()} down. Bring a casting to it.`, 'event');
       g.events.emit('world', a.x, a.y);
     },
   },
@@ -180,46 +194,35 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (!a) return 'It is gone.';
       const [cx, cy] = anvilCentre(a);
       if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return 'Stand at the anvil.';
-      const mould = t.kind === 'anvil' && t.mouldUid !== undefined ? g.inventory.get(t.mouldUid) : undefined;
-      const def = mould && MOULD_BY_ID.get(mould.id);
-      if (!mould || !def) return 'Choose a mould.';
-      if (def.makes === 'anvil') return 'An anvil is cast in a smelter, not beaten out here.';
-      const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined);
-      if (!lump) return 'You have no metal to pour.';
-      // A mould wants a weight of metal, and a lump of the rare six weighs a
-      // tenth of what an iron one does, so it takes ten times as many of them.
-      const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
-      if (lump.count < need) return `That takes ${need} lumps.`;
+      // A casting poured at the smelter, which is the only thing an anvil takes.
+      const named = t.kind === 'anvil' ? t.itemUid : undefined;
+      const casting = castingFor(g, named);
+      if (!casting) return named !== undefined ? 'Choose a casting.' : 'Pour a mould at the smelter first.';
+      if (!MOULD_BY_MAKES.has(casting.piece as string)) return 'Choose a casting.';
       return null;
     },
     perform: (t, g) => {
       const a = anvilOf(g, t);
-      if (!a || t.kind !== 'anvil' || t.mouldUid === undefined) return;
-      const mould = g.inventory.get(t.mouldUid);
-      const def = mould && MOULD_BY_ID.get(mould.id);
-      const lump = lumpFor(g, t.itemUid);
-      const metal = lump && METAL_BY_LUMP.get(lump.id);
-      const need = mouldLumps(def as MouldDef, metal?.id ?? '');
-      if (!mould || !def || !lump || !metal || lump.count < need) return;
-      if (!g.inventory.remove(lump.uid, need)) return;
-      const mouldQl = Math.max(1, mould.ql - mould.dmg / 2);
-      // Every filling wears the mould, and no mould can be mended. A hard
-      // metal takes more out of it than a soft one.
-      mould.dmg = Math.min(100, mould.dmg + mouldWear(mould.ql) * (1 + matOf(metal.name).difficulty / 30));
-      const broke = mould.dmg >= 100;
-      if (broke) g.inventory.remove(mould.uid, 1);
+      if (!a || t.kind !== 'anvil') return;
+      const casting = castingFor(g, t.itemUid);
+      const def = casting && MOULD_BY_MAKES.get(casting.piece as string);
+      if (!casting || !def) return;
+      const metal = metalOfItem(casting);
+      const metalWord = (metal?.name ?? casting.extra ?? 'metal').toLowerCase();
+      if (!g.inventory.remove(casting.uid, 1)) return;
       g.events.emit('inventory');
       // The deeper the seam it came out of, the harder it is to beat into shape.
-      const hard = def.difficulty + matOfItem(lump).difficulty;
+      const hard = def.difficulty + matOf(casting.extra).difficulty;
       if (!g.skillCheck(def.skill, hard, anvilQl(a), g.mindEase())) {
         g.gainSkill(def.skill, tryGain(false, SMITH_GAIN));
-        g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and you throw the metal back.${broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through.` : ''}`, 'event');
+        g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and you throw the metal back.`, 'event');
         return;
       }
-      const ql = smithQl(g, def, mouldQl, lump.ql, a);
+      // The casting carries the mould and the metal it was poured from, so it stands for both.
+      const ql = smithQl(g, def, casting.ql, casting.ql, a);
       g.gainSkill(def.skill, tryGain(true, SMITH_GAIN));
       const per = def.per ?? 1;
-      const made = g.inventory.add(def.makes, { ql, extra: metal.name, count: per });
+      const made = g.inventory.add(def.makes, { ql, extra: casting.extra, count: per });
       const rare = rollRarity(g.rand);
       if (rare) {
         made.rare = rare;
@@ -229,11 +232,9 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       }
       g.note('smithed');
       g.madeIt(def.makes, made.ql, per, rare);
-      if (['adamantine', 'glimmersteel', 'mithril', 'seryll'].includes(metal.id)) g.note('moonmetal');
+      if (metal && ['adamantine', 'glimmersteel', 'mithril', 'seryll'].includes(metal.id)) g.note('moonmetal');
       g.logMsg(
-        `You beat out ${per > 1 ? `${per} ` : 'a '}${metal.name.toLowerCase()} ${plural(itemDef(def.makes).name.toLowerCase(), per)} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})${
-          broke ? ` The ${itemDef(mould.id).name.toLowerCase()} cracks through and is done.` : ` The mould has ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left.`
-        }`,
+        `You beat out ${per > 1 ? `${per} ` : 'a '}${metalWord} ${plural(itemDef(def.makes).name.toLowerCase(), per)} on the ${anvilName(a).toLowerCase()}. (QL ${made.ql.toFixed(1)})`,
         'event',
       );
     },

@@ -70,10 +70,10 @@ export type Target =
     }
   | { kind: 'crate'; id: number }
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
-  | { kind: 'smelter'; id: number; itemUid?: number; count?: number }
+  | { kind: 'smelter'; id: number; itemUid?: number; count?: number; mouldUid?: number }
   | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
   | { kind: 'furniture'; id: number; itemUid?: number; count?: number; brew?: string }
-  | { kind: 'anvil'; id: number; itemUid?: number; mouldUid?: number }
+  | { kind: 'anvil'; id: number; itemUid?: number }
   | { kind: 'post'; id: number; creatureId?: number }
   | { kind: 'trap'; id: number }
   | { kind: 'bridge'; id: number }

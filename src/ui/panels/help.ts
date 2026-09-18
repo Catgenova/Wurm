@@ -404,12 +404,14 @@ function helpText(): string {
     filled and <b>cannot be mended</b>; a fine one is simply good for more fillings before it cracks
     through. Pour metal into an <b>anvil mould</b> at the smelter and it cools into an anvil of that
     metal, which you set down on four spots of a tile.</p>
-    <p>Every other mould is taken to an <b>anvil</b>, filled with the metal of your choosing, and beaten
-    out using <b>blacksmithing</b>, <b>weaponsmithing</b> or <b>armoursmithing</b>, whichever that piece
-    calls for. The skill decides whether the piece comes out at all and how good it is, alongside the
-    mould, the metal and the anvil. Tool heads and blades are finished by fitting a shaft to them. A
-    sword hits far harder than any working tool, and a helm turns aside most of what a cornered animal
-    does to you when you attack it.</p>
+    <p>Every other mould is <b>poured at the smelter</b> too, with the metal of your choosing, and cools
+    into a <b>casting</b> of the piece &mdash; a shovel head casting, a nail casting &mdash; that comes out
+    with the lumps. A casting is carried to an <b>anvil</b> and beaten true there, using
+    <b>blacksmithing</b>, <b>weaponsmithing</b> or <b>armoursmithing</b>, whichever that piece calls for.
+    The skill decides whether the piece comes out at all and how good it is, alongside the casting, which
+    carries the quality of the mould and the metal it was poured from, and the anvil. Tool heads and
+    blades are finished by fitting a shaft to them. A sword hits far harder than any working tool, and a
+    helm turns aside most of what a cornered animal does to you when you attack it.</p>
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a
@@ -455,7 +457,7 @@ function helpText(): string {
     <h3>Nails, furniture and storage</h3>
     <p>Anything that is nailed together needs <b>nails</b>, and nails need metal. Fire a <b>nail mould</b>
     from sand at a smelter: it is a gang mould with a hundred little channels in it, so one lump of metal
-    beaten out on an anvil gives a hundred nails at ten grams apiece. Crates, tool heads fitted to their
+    poured into it there and beaten out on an anvil gives a hundred nails at ten grams apiece. Crates, tool heads fitted to their
     shafts and every piece of furniture take them; sawing planks, carving shafts and bundling thatch do
     not, so the early game needs no smith.</p>
     <p><b>Fine carpentry</b> is the furniture hand, separate from the carpentry that cuts the wood. With
@@ -593,7 +595,7 @@ function helpText(): string {
     <p>Both are <b>rough carpentry</b> rather than fine, and both are built out of parts:</p>
     <ul>
       <li><b>Large wheel</b> &mdash; 4 planks, 6 shafts, a metal ribbon and 12 nails, with a mallet.</li>
-      <li><b>Big axle</b> &mdash; cast in an <b>axle mould</b> on an anvil, three lumps to one.</li>
+      <li><b>Big axle</b> &mdash; poured in an <b>axle mould</b> at the smelter and beaten out on an anvil, three lumps to one.</li>
       <li><b>Metal ribbon</b> &mdash; a <b>ribbon mould</b> runs one lump out as four.</li>
       <li><b>Yoke</b> &mdash; a shaft, two leathers and four nails, stitched with an awl. One per hitch.</li>
     </ul>
@@ -797,7 +799,8 @@ function helpText(): string {
     </table>
     <p>A <b>whetstone</b> is chiselled from two rock shards, and a <b>needle</b> and an <b>awl</b> are
     carved from bone with a knife, so cloth, leather, wood and stone can all be bettered long before you
-    have a forge. A <b>file</b> is cast from its own mould at an anvil, which is what gates metal.</p>
+    have a forge. A <b>file</b> is poured from its own mould at the smelter and beaten out at an anvil,
+    which is what gates metal.</p>
     <p>The skill the work is judged by is the one that would have made the thing &mdash; blacksmithing
     for tools, weaponsmithing for weapons, chain and plate armoursmithing for their armour, bowyery for
     bows, tailoring, leatherworking, carpentry, fine carpentry and stonecutting for the rest &mdash; and
@@ -885,8 +888,8 @@ function helpText(): string {
     <b>Wear or wield</b>; the inventory marks what is on you.</p>
     <p>There are four kinds, each with a skill of its own that rises <b>by being hit in it</b>:
     <b>cloth</b>, sewn by tailoring, which turns aside about a sixth and weighs nothing;
-    <b>leather</b>, cut from tanned hide with a knife by leatherworking, about a third; <b>chain</b>, riveted
-    from moulds at an anvil by chain armoursmithing, about a half; and <b>plate</b>, beaten out whole
+    <b>leather</b>, cut from tanned hide with a knife by leatherworking, about a third; <b>chain</b>, poured
+    from moulds and riveted up at an anvil by chain armoursmithing, about a half; and <b>plate</b>, beaten out whole
     by plate armoursmithing, near two thirds. Quality and the skill behind it raise all of those, and
     damage lowers them: armour wears where it is struck, and a piece beaten to nothing falls off you.
     Weight is the price &mdash; a full suit of plate slows you by a quarter and makes every action cost
@@ -901,7 +904,7 @@ function helpText(): string {
     A weapon's own numbers matter as much: a hunting knife is quick and light, a maul or a battle axe is
     slow and ends things, a spear reaches a tile further than anything else, and the two-handed ones
     take the shield off your arm.</p>
-    <p>Heads are cast from <b>moulds</b> at an anvil and fitted to shafts: short and long sword blades,
+    <p>Heads are poured from <b>moulds</b> at the smelter, beaten true at an anvil and fitted to shafts: short and long sword blades,
     axe and maul heads, spear heads, and a gang mould that turns one lump of metal into twenty-five
     <b>arrow heads</b>. A club is simply carved from a log, which is what most people start with.</p>
     <p>Bows are tillered with <b>bowyery</b> from shafts and a bowstring, in three sizes: a

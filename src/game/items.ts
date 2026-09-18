@@ -66,6 +66,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   horseshoe_mould: { name: 'Horseshoe mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, four shoes to a filling. It wears a little every time it is filled, and no mould can be mended.' },
   coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is twenty coins. It wears with every strike.' },
   coin_die_mould: { name: 'Coin die mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
+  // What a poured mould cools into, named for its piece by `itemName` and
+  // stacked by it: a shovel head casting is not a hatchet head casting.
+  casting: { name: 'Casting', category: 'material', weight: 1, stackable: true, decay: 3, description: 'Metal poured into a mould at a smelter and cooled: the rough shape of a piece, wanting an anvil to beat it true.' },
   bell_casting: { name: 'Bell casting', category: 'misc', weight: 16, description: 'A bell cast whole, tongue and all, wanting a frame to hang in. Eight lumps went into it.' },
   statue_casting: { name: 'Statue casting', category: 'misc', weight: 24, description: 'A figure cast whole in a big mould. Set it on a slab and it stands.' },
   bell_mould: { name: 'Bell mould', category: 'tool', weight: 3, decay: 1, description: 'A sand mould, big enough for a bell. It wears a little every time it is filled, and no mould can be mended.' },
@@ -438,6 +441,12 @@ export interface Item {
    * is the only way to keep your last good hatchet out of the next recipe.
    */
   locked?: boolean;
+  /**
+   * The piece a casting is of: the id of what it becomes at the anvil. A
+   * mould poured at a smelter gives one of these rather than the piece
+   * itself, and the anvil beats it true. The island keeps the same column.
+   */
+  piece?: string;
 }
 
 /**
@@ -583,7 +592,7 @@ export function bagAdd(bag: Item, item: Item): boolean {
   if (bagRefuses(bag, item)) return false;
   if (!bag.inside) bag.inside = [];
   const def = ITEM_DEFS[item.id];
-  const stack = def?.stackable ? bag.inside.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye) : undefined;
+  const stack = def?.stackable ? bag.inside.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye && it.piece === item.piece) : undefined;
   if (stack) {
     stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
     stack.count += item.count;
@@ -606,7 +615,9 @@ export function itemName(item: Item): string {
   // cloth tunic reads the way somebody would actually say it.
   const colour = dyeWord(item.dye);
   const words = [colour, rare].filter(Boolean).join(' ');
-  const base = words ? `${words.charAt(0).toUpperCase()}${words.slice(1)} ${def.name.toLowerCase()}` : def.name;
+  // A casting is named for the piece it is of: a shovel head casting, not a casting.
+  const plain = item.piece ? `${itemDef(item.piece).name} casting` : def.name;
+  const base = words ? `${words.charAt(0).toUpperCase()}${words.slice(1)} ${plain.toLowerCase()}` : plain;
   let name = item.extra ? `${base} (${item.extra.toLowerCase()})` : base;
   if (def.charges) name += ` (${item.charges ?? 0}/${def.charges})`;
   return name;
@@ -651,12 +662,13 @@ export class Inventory {
     this.well.next = v;
   }
 
-  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean } = {}): Item {
+  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean; piece?: string } = {}): Item {
     const def = itemDef(id);
     const count = opts.count ?? 1;
     const ql = Math.max(1, Math.min(100, opts.ql ?? 20));
     const item: Item = { uid: this.nextUid++, id, ql, dmg: 0, count, extra: opts.extra };
     if (opts.issued) item.issued = true;
+    if (opts.piece) item.piece = opts.piece;
     if (def.charges) item.charges = def.charges;
     return this.addItem(item);
   }
@@ -671,7 +683,7 @@ export class Inventory {
     const def = itemDef(item.id);
     if (item.uid >= this.nextUid) this.nextUid = item.uid + 1;
     if (def.stackable) {
-      const existing = this.items.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye && it.uid !== item.uid);
+      const existing = this.items.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye && it.piece === item.piece && it.uid !== item.uid);
       if (existing) {
         existing.ql = (existing.ql * existing.count + item.ql * item.count) / (existing.count + item.count);
         existing.count += item.count;

@@ -1,5 +1,5 @@
 import type { Item } from './items';
-import { COINS_PER_LUMP, METALS, MOULDS, type MetalDef } from './metal';
+import { COINS_PER_LUMP, METALS, MOULD_BY_MAKES, MOULDS, type MetalDef } from './metal';
 import { RECIPES } from './recipes';
 
 /**
@@ -37,7 +37,11 @@ const METAL_BY_NAME = new Map(METALS.map((m) => [m.name.toLowerCase(), m]));
 /** The metal a thing is made of, off what it was cast from. */
 export const metalOfItem = (item: Item): MetalDef | undefined => (item.extra ? METAL_BY_NAME.get(item.extra.toLowerCase()) : undefined);
 
-export const meltable = (item: Item): boolean => !!metalOfItem(item) && METAL_CONTENT[item.id] !== undefined;
+/** Lumps of metal in one of a thing: a casting holds its whole filling, anything else what the table says. */
+export const metalContent = (item: Item): number | undefined =>
+  item.id === 'casting' && item.piece ? MOULD_BY_MAKES.get(item.piece)?.lumps : METAL_CONTENT[item.id];
+
+export const meltable = (item: Item): boolean => !!metalOfItem(item) && metalContent(item) !== undefined;
 
 export function meltRefusal(item: Item): string | null {
   if (item.locked) return 'It is put by. Unlock it first.';
@@ -46,7 +50,7 @@ export function meltRefusal(item: Item): string | null {
 }
 
 /** Lumps that come back from this many of a thing: half its metal, and never none. */
-export const meltLumps = (item: Item, count: number): number => Math.max(1, Math.round(METAL_CONTENT[item.id] * count * MELT_SHARE));
+export const meltLumps = (item: Item, count: number): number => Math.max(1, Math.round((metalContent(item) ?? 0) * count * MELT_SHARE));
 
 /** The quality of what comes back: seven tenths, less the damage the thing carried. */
 export const meltQl = (item: Item): number => Math.max(1, item.ql * MELT_KEEP * (1 - item.dmg / 100));

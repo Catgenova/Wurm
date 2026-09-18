@@ -2586,36 +2586,82 @@ select '392. and another on the same four subtiles: ' || coalesce(anvil_place_re
 select give(:'world2', :'ivar', 'shovel_head_mould', 1, 60) \g /dev/null
 select give(:'world2', :'ivar', 'iron_lump', 8, 55, 'Iron') \g /dev/null
 select id as mould from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'shovel_head_mould' limit 1 \gset
+select id as lump8 from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'iron_lump' limit 1 \gset
 insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'blacksmithing', 55)
   on conflict (world_id, uid, id) do update set value = 55;
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'casting' \g /dev/null
+-- The smelter hot and empty, so what is poured is the only thing in it; a
+-- mould is poured there now and beaten out at the anvil once poured.
+update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb), fuel = 3600, lit = true, since = now() where id = :'furnace' \g /dev/null
+select set_config('suite.furnace', :'furnace'::text, false) \g /dev/null
+select set_config('suite.lump', :'lump8'::text, false) \g /dev/null
 select '393. a shovel head mould at QL 60 has ' || mould_uses_left(60, 0) || ' fillings in it'
      || ', and a rough one at QL 10 has ' || mould_uses_left(10, 0)
-     || ' — smithing with no mould chosen: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
+     || ' — smithing with nothing poured: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
         ('{"kind":"anvil","id":' || :'anvil' || '}')::jsonb), 'allowed')
-     || ' | with an anvil mould, named the browser''s way: ' || coalesce(act_refusal(:'world2', :'ivar', 'smith',
-        ('{"kind":"anvil","id":' || :'anvil' || ',"mouldUid":' || (select give(:'world2', :'ivar', 'anvil_mould', 1, 50)) || '}')::jsonb), 'allowed');
+     || ' | pouring with no mould chosen: ' || coalesce(act_refusal(:'world2', :'ivar', 'pour_mould',
+        ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || :'lump8' || '}')::jsonb), 'allowed')
+     || ' | the anvil mould, named the browser''s way: ' || coalesce(act_refusal(:'world2', :'ivar', 'pour_mould',
+        ('{"kind":"smelter","id":' || :'furnace' || ',"mouldUid":' || (select give(:'world2', :'ivar', 'anvil_mould', 1, 50)) || ',"itemUid":' || :'lump8' || '}')::jsonb), 'allowed')
+     || ' | the shovel head mould with no metal named: ' || coalesce(act_refusal(:'world2', :'ivar', 'pour_mould',
+        ('{"kind":"smelter","id":' || :'furnace' || ',"mouldUid":' || :'mould' || '}')::jsonb), 'allowed')
+     || ' | and with the iron: ' || coalesce(act_refusal(:'world2', :'ivar', 'pour_mould',
+        ('{"kind":"smelter","id":' || :'furnace' || ',"mouldUid":' || :'mould' || ',"itemUid":' || :'lump8' || '}')::jsonb), 'allowed');
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+        f bigint := current_setting('suite.furnace')::bigint;
+        m bigint := (select id from item where holder_uid = '11111111-1111-1111-1111-111111111111'
+                       and def = 'shovel_head_mould' limit 1);
+        l bigint := current_setting('suite.lump')::bigint;
+begin
+  for i in 1..6 loop
+    -- `mouldUid`, which is what the browser sends: the door first, then the deed.
+    exit when act_refusal(w, me, 'pour_mould', jsonb_build_object('kind', 'smelter', 'id', f, 'mouldUid', m, 'itemUid', l)) is not null;
+    perform act_perform(w, me, 'pour_mould', jsonb_build_object('kind', 'smelter', 'id', f, 'mouldUid', m, 'itemUid', l));
+  end loop;
+end $$;
+select '394. six pours: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — ' || (select jsonb_array_length(state->'jobs') from placed where id = :'furnace') || ' cooling in the furnace, the first a '
+     || (select made_name(state->'jobs'->0->>'makes', state->'jobs'->0->>'piece') || ' of ' || lower(state->'jobs'->0->>'extra')
+           || ' at QL ' || round((state->'jobs'->0->>'ql')::numeric, 1) || ', ' || round((state->'jobs'->0->>'total')::numeric) || ' s of heat'
+         from placed where id = :'furnace')
+     || ' (' || round(pour_seconds('shovel_head_mould', 'iron', 40)) || ' s for a lump of iron at QL 40 against ' || round(cast_seconds('iron', 40)) || ' for an anvil''s twenty)'
+     || ', lumps left ' || pack_count(:'world2', :'ivar', 'iron_lump')
+     || ', and the mould is at ' || coalesce((select round(dmg::numeric, 1)::text from item where id = :'mould'), 'cracked through')
+     || ' damage with ' || coalesce((select mould_uses_left(ql, dmg)::text from item where id = :'mould'), '0')
+     || ' fillings left — no mould can be mended';
+-- The heat gone through, the castings drawn, and six goes at the anvil.
+update placed set since = since - make_interval(secs => (select sum((j->>'total')::double precision) + 1 from jsonb_array_elements(state->'jobs') j)) where id = :'furnace' \g /dev/null
+select furnace_settle(:'world2', :'furnace') as cooled \gset
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'smelter_take_all', ('{"kind":"smelter","id":' || :'furnace' || '}')::jsonb) \g /dev/null
+select text as drawn from event where uid = :'ivar' and kind = 'event' order by n desc limit 1 \gset
+select id as casting, count as castings, item_name(i) as casting_name from item i where world_id = :'world2' and holder_uid = :'ivar' and def = 'casting' order by id limit 1 \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'smith', ('{"kind":"anvil","id":' || :'anvil' || ',"itemUid":' || :'casting' || '}')::jsonb), 'allowed') as smith_door \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'smith', ('{"kind":"anvil","id":' || :'anvil' || ',"itemUid":' || :'lump8' || '}')::jsonb), 'allowed') as lump_door \gset
 delete from event where uid = :'ivar';
 do $$
 declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
         me uuid := '11111111-1111-1111-1111-111111111111'; i int;
         a bigint := (select id from placed where kind = 'anvil' order by id desc limit 1);
-        m bigint := (select id from item where holder_uid = '11111111-1111-1111-1111-111111111111'
-                       and def = 'shovel_head_mould' limit 1);
+        c bigint := (select id from item where holder_uid = '11111111-1111-1111-1111-111111111111'
+                       and def = 'casting' order by id limit 1);
 begin
   for i in 1..6 loop
-    -- `mouldUid`, which is what the browser sends and what the island read as
-    -- `mould` until this was found: every smith anybody ever tried answered
-    -- "Choose a mould." while this line, asking itself, passed.
-    exit when act_refusal(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mouldUid', m)) is not null;
-    perform act_perform(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'mouldUid', m));
+    exit when act_refusal(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'itemUid', c)) is not null;
+    perform act_perform(w, me, 'smith', jsonb_build_object('kind', 'anvil', 'id', a, 'itemUid', c));
   end loop;
 end $$;
-select '394. six goes at it: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
-select '395. shovel heads in the pack: ' || pack_count(:'world2', :'ivar', 'shovel_head')
-     || ', lumps left ' || pack_count(:'world2', :'ivar', 'iron_lump')
-     || ', and the mould is at ' || coalesce((select round(dmg::numeric, 1)::text from item where id = :'mould'), 'cracked through')
-     || ' damage with ' || coalesce((select mould_uses_left(ql, dmg)::text from item where id = :'mould'), '0')
-     || ' fillings left — no mould can be mended';
+select '395. the heat gone through: ' || :cooled || ' cooled, and drawn out "' || :'drawn' || '" — one stack of ' || :castings
+     || ' in the pack, named "' || :'casting_name' || '"; smithing one named the browser''s way: ' || :'smith_door'
+     || ', and a lump named instead: ' || :'lump_door'
+     || ' | six goes at the anvil: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
+     || ' — shovel heads in the pack: ' || pack_count(:'world2', :'ivar', 'shovel_head') || ', castings left ' || pack_count(:'world2', :'ivar', 'casting')
+     || ', lumps left ' || pack_count(:'world2', :'ivar', 'iron_lump') || ', and nothing at the anvil touches the mould: it is still at '
+     || coalesce((select round(dmg::numeric, 1)::text from item where id = :'mould'), 'cracked through') || ' damage'
+     || '; and what the last go taught, said: "' || coalesce((select text from event where uid = :'ivar' and kind = 'skill' and text like 'Blacksmithing increased by%' order by n desc limit 1), 'NOTHING SAID') || '"';
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'pick_up_anvil', ('{"kind":"anvil","id":' || :'anvil' || '}')::jsonb) \g /dev/null
 select '396. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
@@ -9273,3 +9319,45 @@ select '988. a reed bed at 24,24, dirt dropped on its corner (' || :'reed_door' 
 update player set x = 25.4, y = 24.4 where world_id = :'world7' and uid = :'eater' \g /dev/null
 select act_perform(:'world7', :'eater', 'drop_dirt_here', ('{"kind":"item","uid":' || (select id from item where world_id = :'world7' and holder_uid = :'eater' and def = 'dirt' limit 1) || '}')::jsonb) \g /dev/null
 select '989. and dropped at the feet on the bed beside: it is ' || (select name from tile_def where id = land_tile(:'world7', 25, 24)) || ', with ' || coalesce((select sum(count) from item where world_id = :'world7' and holder_uid = :'eater' and def = 'dirt'), 0) || ' dirt left of four';
+
+/*
+ * A casting is a thing in its own right: named for its piece, stacked by it
+ * wherever it goes, and melted down for the whole of its filling.
+ */
+\echo ''
+\echo '--- a casting, named for its piece'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'casting' \g /dev/null
+select give(:'world2', :'ivar', 'casting', 1, 40, 'Iron', null, null, 'shovel_head') as c1 \gset
+select give(:'world2', :'ivar', 'casting', 1, 60, 'Iron', null, null, 'shovel_head') as c2 \gset
+select give(:'world2', :'ivar', 'casting', 1, 50, 'Iron', null, null, 'hatchet_head') as c3 \gset
+select give(:'world2', :'ivar', 'casting', 1, 50, 'Copper', null, null, 'shovel_head') as c4 \gset
+select id as bin from crate where world_id = :'world2' order by id limit 1 \gset
+delete from item where world_id = :'world2' and holder = 'crate' and crate = :bin and def = 'casting' \g /dev/null
+select crate_add(:'world2', :bin, 'casting', 1, 50, 'Iron', 'shovel_head') as binned \gset
+select id as in_bin from item where world_id = :'world2' and holder = 'crate' and crate = :bin and def = 'casting' limit 1 \gset
+select '990. four castings given, two of them shovel heads of iron: ' || (select count(*) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'casting') || ' rows'
+     || ' — the iron shovel head stack is ' || (select count || ' at QL ' || round(ql::numeric, 1) from item where id = :'c1')
+     || ' (' || case when :'c1' = :'c2' then 'the second went into the first' else 'the second stands apart' end || ')'
+     || ', named "' || item_name((select i from item i where i.id = :'c1')) || '", "' || item_name((select i from item i where i.id = :'c3'))
+     || '" and "' || item_name((select i from item i where i.id = :'c4')) || '"'
+     || '; one put in a crate (' || :'binned' || ') keeps its piece: ' || coalesce((select piece from item where id = :'in_bin'), 'nothing')
+     || ', and taken out again it goes into the stack: row ' || move_part(:'in_bin', 1, 'player', :'ivar', null, null) || ' is row ' || :'c1'
+     || ', now ' || (select count from item where id = :'c1');
+-- Melted down, a casting gives back half of the whole filling its mould took.
+select give(:'world2', :'ivar', 'casting', 1, 50, 'Iron', null, null, 'plate_breastplate') as plate \gset
+select id as oven3, x as ox3, y as oy3 from placed where world_id = :'world2' and kind = 'smelter' order by id limit 1 \gset
+select x as was_x, y as was_y from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set x = :ox3 + 0.5, y = :oy3 + 0.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb) where id = :oven3 \g /dev/null
+select item_metal(i) as plate_metal from item i where i.id = :'plate' \gset
+delete from event where uid = :'ivar' \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :oven3 || ',"itemUid":' || :'plate' || '}')::jsonb), 'allowed') as melt_door \gset
+select act_perform(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :oven3 || ',"itemUid":' || :'plate' || '}')::jsonb) \g /dev/null
+select '991. a breastplate casting holds ' || :plate_metal || ' lumps, the whole filling, where a breastplate on the melt table holds '
+     || (select content from melt_def where item = 'plate_breastplate') || '; melted down (' || :'melt_door' || '): "'
+     || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'nothing') || '", '
+     || (select jsonb_array_length(state->'jobs') from placed where id = :oven3) || ' lumps in the furnace and '
+     || pack_count(:'world2', :'ivar', 'casting') || ' castings left in the pack';
+update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb) where id = :oven3 \g /dev/null
+update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null

@@ -3439,7 +3439,7 @@ export class Game {
   crateAdd(crate: PlacedCrate, item: Item): boolean {
     if (crateUnits(crate) + item.count > crateCapacity(crate)) return false;
     const def = ITEM_DEFS[item.id];
-    const stack = def?.stackable ? crate.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    const stack = def?.stackable ? crate.items.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
     if (stack) {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
@@ -4787,7 +4787,7 @@ export class Game {
     const used = c.pannier.reduce((n, it) => n + it.count, 0);
     if (!cap || used + item.count > cap) return false;
     const def = ITEM_DEFS[item.id];
-    const stack = def?.stackable ? c.pannier.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    const stack = def?.stackable ? c.pannier.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
     if (stack) {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
@@ -4809,7 +4809,7 @@ export class Game {
   furnitureAdd(f: PlacedFurniture, item: Item): boolean {
     if (furnitureUnits(f) + item.count > furnitureCapacity(f)) return false;
     const def = ITEM_DEFS[item.id];
-    const stack = def?.stackable ? f.items.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    const stack = def?.stackable ? f.items.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
     if (stack) {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
@@ -4926,9 +4926,9 @@ export class Game {
       const made: Item =
         job.makes === 'anvil'
           ? { uid: this.inventory.nextUid++, id: 'anvil', ql: job.ql, dmg: 0, count: 1, extra: job.item.id.replace('_lump', '') }
-          : { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
+          : { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1, extra: job.extra, piece: job.piece };
       s.output.push(made);
-      this.logMsg(`The smelter finishes a ${ITEM_DEFS[made.id]?.name.toLowerCase() ?? made.id}. (QL ${made.ql.toFixed(1)})`, 'event');
+      this.logMsg(`The smelter finishes a ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
       this.events.emit('smelter');
     }
   }
@@ -5003,7 +5003,7 @@ export class Game {
     const key = `${x},${y}`;
     const pile = this.ground.get(key) ?? [];
     const def = ITEM_DEFS[item.id];
-    const stack = def?.stackable ? pile.find((it) => it.id === item.id && it.extra === item.extra) : undefined;
+    const stack = def?.stackable ? pile.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
     if (stack) {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
@@ -5291,7 +5291,7 @@ export class Game {
  */
 export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Item[] {
   return (rows ?? []).map((raw, i) => {
-    const o = raw as { id?: string; def?: string; ql?: number; dmg?: number; count?: number; extra?: string | null; uid?: number };
+    const o = raw as { id?: string; def?: string; ql?: number; dmg?: number; count?: number; extra?: string | null; piece?: string | null; uid?: number };
     return {
       uid: typeof o.uid === 'number' ? o.uid : -(furnace * 1000 + i + 1),
       id: o.id ?? o.def ?? 'lump',
@@ -5299,6 +5299,7 @@ export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Ite
       dmg: o.dmg ?? 0,
       count: o.count ?? 1,
       extra: o.extra ?? undefined,
+      piece: o.piece ?? undefined,
     };
   });
 }
@@ -5306,7 +5307,7 @@ export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Ite
 /** And the jobs, each with something in the `item` a local finish would read. */
 export function furnaceJobs(rows: unknown[] | undefined): SmeltJob[] {
   return (rows ?? []).map((raw) => {
-    const j = raw as { makes?: string; left?: number; total?: number; ql?: number; extra?: string | null; item?: Item };
+    const j = raw as { makes?: string; left?: number; total?: number; ql?: number; extra?: string | null; piece?: string | null; item?: Item };
     const ql = j.ql ?? 1;
     return {
       item: j.item ?? { uid: 0, id: j.extra ? `${j.extra.toLowerCase()}_lump` : (j.makes ?? ''), ql, dmg: 0, count: 1 },
@@ -5314,6 +5315,8 @@ export function furnaceJobs(rows: unknown[] | undefined): SmeltJob[] {
       left: j.left ?? 0,
       total: j.total ?? j.left ?? 0,
       ql,
+      extra: j.extra ?? undefined,
+      piece: j.piece ?? undefined,
     };
   });
 }

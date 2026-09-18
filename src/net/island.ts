@@ -204,6 +204,8 @@ export interface ItemRow {
   bless: number | null;
   /** Who made it, for rare work and better. */
   maker: string | null;
+  /** The piece a casting is of, for a casting; null for everything else. */
+  piece: string | null;
   /** Alight, for the things that burn, and when it was set going. */
   lit: boolean;
   lit_at: string | null;

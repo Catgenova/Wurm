@@ -31,7 +31,7 @@ function say(what: string, got: unknown, want: unknown): void {
 function row(over: Partial<ItemRow> = {}): ItemRow {
   return {
     id: 1, def: 'water_skin', ql: 50, dmg: 0, count: 1, extra: null, holder: 'player',
-    charges: null, locked: false, issued: false, rare: null, dye: null, bless: null, maker: null,
+    charges: null, locked: false, issued: false, rare: null, dye: null, bless: null, maker: null, piece: null,
     lit: false, lit_at: null, inside: null, ...over,
   };
 }
@@ -127,6 +127,11 @@ say('a blue supreme tunic',
   'Blue supreme cloth tunic');
 say('which the old map called a', itemName(asItWas(row({ def: 'cloth_tunic', rare: 'supreme', dye: 'woad' }))),
   'Cloth tunic');
+// A casting is named for the piece it is of, which is a column of its own.
+const cast = row({ def: 'casting', extra: 'Iron', piece: 'shovel_head' });
+say('a shovel head casting', itemName(packed(cast, still)), 'Shovel head casting (iron)');
+say('and its piece crosses', packed(cast, still).piece, 'shovel_head');
+say('which the old map called a', itemName(asItWas(cast)), 'Casting (iron)');
 
 console.log('\n--- a lantern, which is charges that burn');
 
