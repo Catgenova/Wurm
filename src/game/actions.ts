@@ -76,7 +76,7 @@ export type Target =
   | { kind: 'bridge'; id: number }
   | { kind: 'item'; uid: number; count?: number; spell?: string }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
-  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number };
+  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string };
 
 /**
  * A name an action cannot go anywhere without.

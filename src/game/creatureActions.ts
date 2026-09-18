@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
+import { ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
@@ -288,6 +288,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (c && c.mode !== 'deed' && working >= g.workerCap) {
         return `${g.deed.name} has work for ${g.workerCap} wildermon at level ${g.deedLevel}. Upgrade the settlement to take on more.`;
       }
+      // A trade it was asked for by name has to be one of its own.
+      const want = t.kind === 'creature' ? t.job : undefined;
+      if (c && want) {
+        const def = SPECIES[c.species];
+        const trades: string[] = def.trades ?? (def.gathers ? [def.gathers] : []);
+        if (!trades.includes(want)) return `A ${def.name.toLowerCase()} cannot be set to that.`;
+      }
       return null;
     },
     perform: (t, g) => {
@@ -295,6 +302,10 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const d = g.deed;
       if (!c || !d) return;
       g.clearPost(c);
+      // The trade it was set to, remembered only when it is not what its kind
+      // does anyway.
+      const want = t.kind === 'creature' ? t.job : undefined;
+      c.trade = want && want !== SPECIES[c.species].gathers ? (want as GatherKind) : null;
       if (c.mode === 'stored') {
         c.x = d.x + 0.5;
         c.y = d.y + 1.5;
@@ -303,7 +314,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.enemy = null;
       c.state = 'idle';
       c.until = g.time;
-      const gathers = SPECIES[c.species].gathers;
+      const gathers = c.trade ?? SPECIES[c.species].gathers;
       const job = gathers ? `${GATHER_DO[gathers]} within ${workRangeOf(c, SPECIES[c.species])} tiles of the token and bring what it finds to the crate` : 'stay around the settlement';
       g.logMsg(`${c.name} will ${job}.`, 'system');
     },

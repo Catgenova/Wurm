@@ -1431,7 +1431,25 @@ export class UI {
     push(item('untack_creature'));
     push(item('hitch_creature'));
     push(item('unhitch_creature'));
-    push(item('assign_deed'));
+    // A species with more than one trade is set to one of them by name: a
+    // bevere fells, prunes or digs out stumps, and which is your say.
+    {
+      const def = CREATURE_ACTION_BY_ID.get('assign_deed');
+      const trades = SPECIES[c.species]?.trades;
+      if (def && trades && trades.length > 1 && def.applies(target, g)) {
+        entries.push({
+          label: def.label,
+          children: trades.map((trade) => {
+            const tt: Target = { ...target, job: trade };
+            const why = def.check?.(tt, g) ?? null;
+            const does = GATHER_DO[trade];
+            return { label: does.charAt(0).toUpperCase() + does.slice(1), hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(def, tt) };
+          }),
+        });
+      } else {
+        push(item('assign_deed'));
+      }
+    }
     push(item('take_creature'));
     push(item('store_creature'));
     push(item('rename_creature'));

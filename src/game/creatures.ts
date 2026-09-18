@@ -1,4 +1,4 @@
-import { TileType, TILE_DEFS, TREE_DEFS, treeAge, treeSpecies, packTreeData } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, treeAge, treeSpecies, packTreeData, TREE_AGES } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { mapFromBeast } from './treasure';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
@@ -52,7 +52,10 @@ export type GatherKind =
   | 'mend'
   | 'compost'
   | 'seek'
-  | 'fish';
+  | 'fish'
+  // The forester's two other trades: a bevere is set to one of the three.
+  | 'prune'
+  | 'stump';
 /**
  * How far a wild thing will drift from where it stands, and how long it stands.
  *
@@ -73,11 +76,11 @@ export const WILD_REACH = 1.5;
 export const WILD_REST = 8;
 export const WILD_REST_SPREAD = 22;
 
-export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing' };
-export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing' };
+export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing', prune: 'forestry', stump: 'digging' };
+export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing', prune: 'pruning the wood', stump: 'digging out stumps' };
 /** The plain form, for "it will forage" rather than "it will foraging". */
-export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig', fish: 'fish the water round the deed and carry the catch home' };
-const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [], fish: [] };
+export const GATHER_DO: Record<GatherKind, string> = { forage: 'forage', botanize: 'botanize', woodcut: 'fell trees', farm: 'sow, tend and harvest the fields', mine: 'mine the ore', sand: 'dig sand and carry it home', clay: 'dig clay and carry it home', quarry: 'cut stone and carry it home', stoke: 'keep the fires and furnaces fed', fetch: 'pick up what is lying about', guard: 'keep watch over the deed', hunt: 'hunt the country round the deed and bring the carcasses home', peat: 'cut peat and tar and carry them home', reed: 'cut reeds and carry them home', water: 'carry water from the shore or the well to your barrels', prospect: 'read the ground for metal and mark what it finds', plant: 'plant sprouts where the trees have been cut', hod: 'carry brick and timber to your planned walls and fit it', mend: 'mend the damaged gear in your stores', compost: 'clear away what is rotting and turn it into compost', seek: 'smell out buried relics and mark where to dig', fish: 'fish the water round the deed and carry the catch home', prune: 'prune what would otherwise die', stump: 'dig out stumps' };
+const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORAGE_TABLE, botanize: BOTANIZE_TABLE, woodcut: [], farm: [], mine: [], sand: [], clay: [], quarry: [], stoke: [], fetch: [], guard: [], hunt: [], peat: [], reed: [], water: [], prospect: [], plant: [], hod: [], mend: [], compost: [], seek: [], fish: [], prune: [], stump: [] };
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather' | 'tusk' | 'sinew' | 'scale' | 'hoard';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
@@ -109,6 +112,12 @@ export interface SpeciesDef {
   timid: boolean;
   /** How it feeds itself in the wild and what it does as a job on the deed. */
   gathers: GatherKind | null;
+  /**
+   * The trades it may be set to instead, `gathers` among them, for a species
+   * with more than one. A bevere fells, prunes or digs out stumps; you say
+   * which when you set it to work, and `Creature.trade` remembers.
+   */
+  trades?: GatherKind[];
   /** How far from the token a deed worker roams before it earns any skill. */
   workRange: number;
   /** Body and belly colours per variant. */
@@ -250,6 +259,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     baitHint: 'a vegetable or something starchy',
     timid: true,
     gathers: 'woodcut',
+    trades: ['woodcut', 'prune', 'stump'],
     workRange: 8,
     /** It will not settle more than this far from water. */
     variants: [
@@ -1329,7 +1339,7 @@ export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => speci
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
 /** The jobs that are errands rather than a walk out for a load of something. */
 const ERRAND_JOBS = new Set<GatherKind>(['water', 'hod', 'mend', 'plant', 'prospect', 'compost']);
-const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard', 'hunt', 'water', 'prospect', 'plant', 'hod', 'mend', 'compost', 'seek']);
+const INDOOR_JOBS = new Set<GatherKind>(['woodcut', 'farm', 'mine', 'sand', 'clay', 'quarry', 'stoke', 'fetch', 'guard', 'hunt', 'water', 'prospect', 'plant', 'hod', 'mend', 'compost', 'seek', 'prune', 'stump']);
 export const wildGather = (species: SpeciesDef): GatherKind | null => (species.gathers && INDOOR_JOBS.has(species.gathers) ? 'forage' : species.gathers);
 /** The task skill a species trains, if it has a job. */
 export const workSkill = (species: SpeciesDef): string | null => (species.gathers ? GATHER_SKILL[species.gathers] : null);
@@ -1497,6 +1507,8 @@ export interface IslandCreature {
   traits?: string[];
   hunting?: boolean;
   mine?: boolean;
+  /** The trade a worker was set to, which is its species' own unless it was told otherwise. */
+  job?: string | null;
   /*
    * And, for your own only, the working life the card used to invent.
    *
@@ -1606,6 +1618,12 @@ export interface Creature {
   /** What the worker walked out to do: a farm job, or the hearth a stoker is feeding. */
   job: FarmJob | Hearth | null;
   /**
+   * The trade it was set to, when that is not its species' own. Null means
+   * `gathers`. The island keeps the same thing in the creature's `job`
+   * column, which there has only ever held a trade.
+   */
+  trade: GatherKind | null;
+  /**
    * The vehicle whose traces it is in, if any. Worked out from the vehicles
    * themselves when a world is read back, so it is never saved twice.
    */
@@ -1659,6 +1677,7 @@ export interface CreatureJSON {
   bredAt?: number;
   due?: number;
   unborn?: { traits: string[]; sex: Sex } | null;
+  trade?: GatherKind | null;
 }
 
 /**
@@ -1879,6 +1898,7 @@ export class Creatures {
       workY: -1,
       pouch: null,
       job: null,
+      trade: null,
       hitchedTo: null,
       tacked: false,
       ridden: false,
@@ -1941,6 +1961,8 @@ export class Creatures {
       c.enemy = r.hunting ? 0 : null;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
+      // And what it was set to, if that is not what its kind does anyway.
+      if (r.job !== undefined) c.trade = r.job && r.job !== SPECIES[c.species]?.gathers && r.job in GATHER_SKILL ? (r.job as GatherKind) : null;
       // The working life, which comes for yours and for nobody else's.
       if (r.care !== undefined) c.care = r.care;
       if (r.xp !== undefined) c.xp = r.xp;
@@ -2576,6 +2598,15 @@ export class Creatures {
     }
     if (kind === 'farm') return !!c && this.farmJobAt(game, c, x, y) !== null;
     if (kind === 'woodcut') return game.world.getTile(x, y) === TileType.Tree && !!this.beside(game, x, y);
+    if (kind === 'prune') {
+      // What would otherwise die: a stage that prunes back and whose next
+      // stage has no life in it. Nothing else is touched — a mature tree
+      // pruned stops bearing, and a sapling pruned is a shrub for good.
+      if (game.world.getTile(x, y) !== TileType.Tree || !this.beside(game, x, y)) return false;
+      const age = treeAge(game.world.getData(x, y));
+      return age.pruned !== null && age.next !== null && !TREE_AGES[age.next].alive;
+    }
+    if (kind === 'stump') return game.world.getTile(x, y) === TileType.Stump && this.tileOk(game, x, y);
     const def = TILE_DEFS[game.world.getTile(x, y)];
     return !!(kind === 'forage' ? def.forage : def.botanize) && !game.isForaged(x, y, kind);
   }
@@ -2646,8 +2677,8 @@ export class Creatures {
     const x0 = Math.floor(cx);
     const y0 = Math.floor(cy);
     const visit = (x: number, y: number): void => {
-      // A tree is never walkable, so a feller judges the tile beside it instead.
-      if (kind !== 'woodcut' && !this.tileOk(game, x, y)) return;
+      // A tree is never walkable, so a feller or a pruner judges the tile beside it instead.
+      if (kind !== 'woodcut' && kind !== 'prune' && !this.tileOk(game, x, y)) return;
       if (!this.gatherable(game, x, y, kind, who)) return;
       const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) + game.rand() * 1.5;
       if (d < bestD) {
@@ -2688,6 +2719,8 @@ export class Creatures {
     const x = Math.floor(c.x);
     const y = Math.floor(c.y);
     if (kind === 'woodcut') return this.finishFelling(game, c);
+    if (kind === 'prune') return this.finishPruning(game, c);
+    if (kind === 'stump') return this.finishStumping(game, c);
     if (kind === 'farm') return this.finishFarming(game, c, x, y);
     if (kind === 'mine') return this.finishMining(game, c);
     if (kind === 'sand' || kind === 'clay') return this.finishDigging(game, c, kind === 'sand' ? 'sand' : 'clay');
@@ -2746,6 +2779,31 @@ export class Creatures {
       game.dropOnGround(tx, ty, { uid: game.inventory.nextUid++, id: 'log', ql, dmg: 0, count: logs - 1, extra: def.name });
     }
     return { uid: game.inventory.nextUid++, id: 'log', ql, dmg: 0, count: 1, extra: def.name };
+  }
+
+  /** Prune the tree a forester walked to back a stage. It carries nothing home. */
+  private finishPruning(game: Game, c: Creature): Item | null {
+    const tx = c.workX;
+    const ty = c.workY;
+    if (game.world.getTile(tx, ty) !== TileType.Tree) return null;
+    const data = game.world.getData(tx, ty);
+    const age = treeAge(data);
+    if (age.pruned === null) return null;
+    this.gainSkill(game, c, GATHER_SKILL.prune, 0.225);
+    // The age and nothing else, as under a sickle: the species stays, and so
+    // does any notch, since the tile is still a tree.
+    game.world.setTile(tx, ty, TileType.Tree, packTreeData(treeSpecies(data), age.pruned));
+    return null;
+  }
+
+  /** Dig out the stump a forester walked to. Bare dirt where it stood. */
+  private finishStumping(game: Game, c: Creature): Item | null {
+    const tx = c.workX;
+    const ty = c.workY;
+    if (game.world.getTile(tx, ty) !== TileType.Stump) return null;
+    this.gainSkill(game, c, GATHER_SKILL.stump, 0.225);
+    game.world.setTile(tx, ty, TileType.Dirt);
+    return null;
   }
 
   /** Work the seam a miner walked to, and hand it the ore it carries home. */
@@ -3648,7 +3706,7 @@ export class Creatures {
     }
     if (this.comeWhenCalled(c, dt, game)) return;
     const def = this.species(c);
-    const kind = def.gathers;
+    const kind = c.trade ?? def.gathers;
     // Standing orders come before any job: an intruder is everyone's business.
     if (this.defendDeed(game, c, dt, deed)) return;
     if (kind === 'guard') {
@@ -3754,7 +3812,7 @@ export class Creatures {
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
         // A tree cannot be stood on and neither can the water: both are worked from beside.
-        const spot = kind === 'woodcut' || kind === 'fish' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
+        const spot = kind === 'woodcut' || kind === 'prune' || kind === 'fish' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
         if (kind === 'mine') c.job = null;
         if (spot) {
           c.job = kind === 'farm' ? this.farmJobAt(game, c, t.x, t.y) : null;
@@ -3904,7 +3962,7 @@ export class Creatures {
   }
 
   describe(c: Creature): string {
-    const job = this.species(c).gathers;
+    const job = c.trade ?? this.species(c).gathers;
     const verb = job ? GATHER_VERB[job] : 'busy';
     if (c.ridden) return 'under the saddle';
     if (c.hitchedTo !== null) return 'in the traces';
@@ -3953,6 +4011,7 @@ export class Creatures {
         bredAt: c.bredAt,
         due: c.due,
         unborn: c.unborn,
+        trade: c.trade,
       })),
     };
   }
@@ -3964,7 +4023,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, trade: j.trade ?? null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

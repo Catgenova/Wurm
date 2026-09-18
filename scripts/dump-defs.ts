@@ -305,6 +305,8 @@ out.push(`alter table species_def add column if not exists mount real;`);
 out.push(`alter table species_def add column if not exists draught boolean not null default false;`);
 out.push(`alter table species_def add column if not exists pull real;`);
 out.push(`alter table species_def add column if not exists pitch real;`);
+/* And the trades a species may be set to, for one with more than one. */
+out.push(`alter table species_def add column if not exists trades text[];`);
 out.push(`alter table species_def add column if not exists swims boolean not null default false;`);
 out.push(`alter table species_def add column if not exists pannier real;`);
 /* A cart is pulled by hand; a vehicle is driven from a seat with a team in
@@ -736,6 +738,8 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.draught) out.push(`update species_def set draught = true where id = ${q(d.id)};`);
   if (d.swims) out.push(`update species_def set swims = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
+  const trades = (d as unknown as { trades?: string[] }).trades;
+  if (trades) out.push(`update species_def set trades = array[${trades.map(q).join(', ')}]::text[] where id = ${q(d.id)};`);
 }
 for (const id of [...unnamed].sort()) {
   out.push(`insert into item_def values (${q(id)}, ${q(id)}, 'misc', 1, false, null, null);`);
