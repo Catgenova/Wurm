@@ -600,6 +600,10 @@ async function main(): Promise<void> {
           const y = Math.floor(at.y) + dy;
           if (x - 5 < 0 || y - 5 < 0 || x + 5 >= back.w || y + 5 >= back.h) continue;
           if (back.getTile(x, y) === undefined || TILE_DEFS[back.getTile(x, y)]?.blocks) continue;
+          // And ground the walk below will agree to cross: a spawn under a tree
+          // passed the two checks above and then could not be walked to, on a
+          // live run, because the path rule is the stricter of the two.
+          if (!back.isPassable(x, y)) continue;
           const wet = Math.min(back.getHeight(x, y), back.getHeight(x + 1, y),
             back.getHeight(x + 1, y + 1), back.getHeight(x, y + 1)) < 0;
           if (wet) continue;
