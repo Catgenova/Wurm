@@ -283,6 +283,13 @@ export const MINE_COLLAPSE = 0.01;
  */
 export const MINE_DEPTH = 10;
 
+/**
+ * How deep a bottom may lie and still be worked from a boat, in height
+ * units: three times what a pick or a shovel works to from the shore. Past
+ * that a spadeful comes up empty. The island reads the same number.
+ */
+export const DREDGE_DEPTH = 30;
+
 /** Ground with anything living in it, and the damp ground that is full of them. */
 export const WORMY = new Set<TileType>([TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Marsh, TileType.Moss]);
 export const RICH_WORMS = new Set<TileType>([TileType.Marsh, TileType.Moss]);
@@ -482,6 +489,51 @@ export const ACTIONS: ActionDef[] = [
       g.logMsg(`You dig up some ${itemDef(yieldId).name.toLowerCase()} from the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
       // And one spadeful in a thousand that is not dirt at all.
       maybeMap(g, 'digging', 'shovel');
+    },
+  },
+  {
+    id: 'dredge',
+    label: 'Dredge',
+    verb: 'dredging',
+    skill: 'digging',
+    tool: 'shovel',
+    corner: true,
+    stamina: 0.06,
+    baseTime: 7,
+    difficulty: 10,
+    // Digging from a boat: the bottom comes up a spadeful at a time, to a
+    // depth the shore never reaches, and deepens the water as it goes.
+    applies: (t, g) => t.kind === 'tile' && !!g.afloat() && !!TILE_DEFS[tile(t, g)].digYield,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('shovel')) return 'You need a shovel to dredge with.';
+      if (!g.afloat()) return 'Dredging is done from a boat.';
+      const w = g.world;
+      if (w.getHeight(t.cx, t.cy) >= 0) return 'That corner is above the water. Dig it from the shore.';
+      if (w.getHeight(t.cx, t.cy) < -DREDGE_DEPTH) return 'The bottom is too deep to reach from a boat.';
+      if (w.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock down there. A shovel will not bite on it.';
+      const under = cornerUnderBuilding(g, t.cx, t.cy);
+      if (under) return under;
+      if (slopeAfter(g, t.cx, t.cy, -1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const w = g.world;
+      const def = TILE_DEFS[w.getTile(t.x, t.y)];
+      if (!g.skillCheck('digging', 10, g.toolQl('shovel'))) {
+        g.missed();
+        g.logMsg('The shovel comes up with nothing but water.', 'event');
+        return;
+      }
+      w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) - 1);
+      const left = w.getDirt(t.cx, t.cy) - 1;
+      w.setDirt(t.cx, t.cy, left);
+      if (def.turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
+      if (left <= 0) g.exposeRock(t.cx, t.cy);
+      const yieldId = def.digYield ?? 'dirt';
+      const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
+      g.logMsg(`You dredge up some ${itemDef(yieldId).name.toLowerCase()} off the bottom at the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {

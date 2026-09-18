@@ -799,6 +799,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('collect', 'Collect', 'filling a shovel', 'digging', 'shovel', false, 0, 0.05, 7, 6, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_worms', 'Turn it over for worms', 'turning the dirt over', 'digging', 'shovel', false, null, 0.04, 6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig', 'Dig', 'digging', 'digging', 'shovel', true, null, 0.05, 6, 8, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dredge', 'Dredge', 'dredging', 'digging', 'shovel', true, null, 0.06, 7, 10, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('flatten', 'Flatten', 'flattening', 'digging', 'shovel', false, null, 0.03, 3.5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt', 'Drop dirt', 'dropping dirt', 'digging', null, true, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('raise_rock', 'Raise the rock with concrete', 'laying concrete', 'masonry', 'trowel', true, null, 0.04, 5, 10, false, false);
@@ -2792,6 +2793,7 @@ create or replace function kept_best() returns double precision language sql imm
 create or replace function nutrient_decay() returns double precision language sql immutable as $fn$ select 0.00013333333333333334::double precision $fn$;
 create or replace function climb_per_level() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
 create or replace function mine_depth() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
+create or replace function dredge_depth() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function tree_stage() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
 create or replace function tree_seeds() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function tree_seed_reach() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;

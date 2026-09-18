@@ -8608,3 +8608,66 @@ select pg_temp.one_day(:'world2') \g /dev/null
 select '951. the tile beside it, cut once: ' || :'d_after_one' || ' day the morning after, and a day with no cut leaves '
      || land_data(:'world2', :lx + 1, :ly) || ' — the count starts over; and grass off any deed, Hoarding at 41,41: on a deed '
      || on_deed(:'world6', 41, 41) || ', so cutting it counts nothing';
+
+/*
+ * Dredging, which is digging from a boat.
+ *
+ * Asked from the island. A shovel works a corner from the shore to ten under
+ * the water line and no further; from a boat the same shovel reaches the
+ * bottom to thirty, and every spadeful deepens the water it floats on.
+ */
+\echo ''
+\echo '--- dredging, which is digging from a boat'
+select set_config('request.jwt.claims', json_build_object('sub', :'eater')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; gx int; gy int;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- A pond two tiles square in open country: eight under, sand on the bottom
+  -- and five of soil over the rock at every corner of it. Hunger stands on
+  -- the bank at 19,20, which is one of the four tiles the pond's corner 20,21
+  -- can be worked from.
+  for gx in 20..22 loop for gy in 20..22 loop
+    perform land_set_height(w, gx, gy, -8); perform land_set_dirt(w, gx, gy, 5);
+  end loop; end loop;
+  for gx in 20..21 loop for gy in 20..21 loop
+    perform land_set_tile(w, gx, gy, tile_id('Sand'));
+  end loop; end loop;
+  perform land_set_tile(w, 19, 20, tile_id('Grass'));
+  update player set x = 19.5, y = 20.5 where world_id = w and uid = me;
+  delete from item where world_id = w and holder_uid = me and def in ('shovel', 'sand', 'rowing_boat');
+  perform give(w, me, 'shovel', 1, 50);
+  perform give(w, me, 'rowing_boat', 1, 50, 'Pine');
+  delete from event where uid = me;
+end $$;
+select '952. off the table: dredge is corner work with a ' || (select tool from action_def where id = 'dredge')
+     || ' at ' || (select skill from action_def where id = 'dredge') || ' ' || (select difficulty from action_def where id = 'dredge')
+     || ', ported ' || act_ported('dredge') || ', to ' || dredge_depth() || ' under against the shore''s ' || mine_depth()
+     || ' — and from the bank, shovel in hand: "' || coalesce(act_refusal(:'world6', :'eater', 'dredge', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":21}'::jsonb), 'allowed') || '"';
+select act_perform(:'world6', :'eater', 'place_furniture',
+  ('{"kind":"item","uid":' || (select id from item where world_id = :'world6' and holder_uid = :'eater'
+     and def = 'rowing_boat' order by id desc limit 1) || ',"x":20,"y":20,"sx":0,"sy":0}')::jsonb) \g /dev/null
+select id as dredger from placed where world_id = :'world6' and sub = 'rowing_boat' order by id desc limit 1 \gset
+select act_perform(:'world6', :'eater', 'board_vehicle', ('{"kind":"furniture","id":' || :'dredger' || '}')::jsonb) \g /dev/null
+select '953. aboard a ' || coalesce((select sub from placed where id = :'dredger' and driver = :'eater'), 'nothing — not aboard')
+     || ' over eight of water, the bank''s corner at ' || land_height(:'world6', 19, 20) || ': "'
+     || coalesce(act_refusal(:'world6', :'eater', 'dredge', '{"kind":"tile","x":19,"y":20,"cx":19,"cy":20}'::jsonb), 'allowed')
+     || '" — and the bottom: ' || coalesce(act_refusal(:'world6', :'eater', 'dredge', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":21}'::jsonb), 'allowed');
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for i in 1..8 loop
+    exit when land_height(w, 20, 21) < -8;
+    perform act_perform(w, me, 'dredge', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":21}'::jsonb);
+  end loop;
+end $$;
+select '954. dredged: the corner is ' || land_height(:'world6', 20, 21) || ' under with ' || land_dirt(:'world6', 20, 21)
+     || ' of soil left, ' || coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = :'eater' and def = 'sand'), 0)
+     || ' sand in the pack — "' || (select text from event where uid = :'eater' and text like 'You dredge%' order by n desc limit 1) || '"';
+select land_set_height(:'world6', 20, 21, -31) \g /dev/null
+select coalesce(act_refusal(:'world6', :'eater', 'dredge', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":21}'::jsonb), 'allowed') as deep_door \gset
+select land_set_height(:'world6', 20, 21, -9), land_set_dirt(:'world6', 20, 21, 0) \g /dev/null
+select '955. and the other doors — the same corner thirty-one under: "' || :'deep_door'
+     || '"; back at nine with the soil gone off it: "'
+     || coalesce(act_refusal(:'world6', :'eater', 'dredge', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":21}'::jsonb), 'allowed') || '"';

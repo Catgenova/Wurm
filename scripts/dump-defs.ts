@@ -50,7 +50,7 @@ import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
-import { MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
+import { DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
@@ -905,6 +905,7 @@ for (const [fn, v] of [
   ['climb_per_level', CLIMB_PER_LEVEL],
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
+  ['dredge_depth', DREDGE_DEPTH],
   /* And how long a tree stands at one age, in real seconds, and what it leaves. */
   ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
   ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],
