@@ -535,8 +535,19 @@ export class UI {
   }
 
   showTileMenu(pick: Pick, sx: number, sy: number): void {
-    const { title, facts, entries } = this.menuFor(pick);
-    this.menu.show(sx, sy, title, entries, facts);
+    let built: { title: string; facts?: string[]; entries: MenuItem[] };
+    try {
+      built = this.menuFor(pick);
+    } catch (e) {
+      // Said in the log and on the console rather than swallowed: a menu
+      // that cannot be built is a bug, and one that took the click handler
+      // down with it was reported as the game locking up.
+      const why = e instanceof Error ? e.message : String(e);
+      console.error('The menu for this could not be built', e);
+      this.game.logMsg(`The menu for this could not be built: ${why}`, 'error');
+      built = { title: 'Something here', entries: [{ label: `Could not list what can be done here: ${why}`, disabled: true }] };
+    }
+    this.menu.show(sx, sy, built.title, built.entries, built.facts);
   }
 
   /**

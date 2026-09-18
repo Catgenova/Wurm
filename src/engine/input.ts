@@ -85,8 +85,15 @@ export class Input {
     });
     window.addEventListener('mouseup', (e) => {
       if (this.press && e.button === this.press.button) {
-        if (!this.press.moved) this.onClick?.(e.clientX, e.clientY, e.button);
-        this.press = null;
+        // Let go of the press whatever the click does. A click handler that
+        // threw used to leave it held, and every move after that read as a
+        // drag: reported from the island as a right-click that "partially
+        // locks up my game".
+        try {
+          if (!this.press.moved) this.onClick?.(e.clientX, e.clientY, e.button);
+        } finally {
+          this.press = null;
+        }
       }
     });
     /*
@@ -194,9 +201,13 @@ export class Input {
       if (this.touches.size === 0) {
         const g = this.gesture;
         this.cancelLongPress();
-        if (g && !g.moved && !g.fired && performance.now() - g.startTime < LONG_PRESS_MS) this.onClick?.(g.startX, g.startY, 0);
-        this.gesture = null;
-        this.pinch = null;
+        // As with the mouse: the tap is let go of whatever the click does.
+        try {
+          if (g && !g.moved && !g.fired && performance.now() - g.startTime < LONG_PRESS_MS) this.onClick?.(g.startX, g.startY, 0);
+        } finally {
+          this.gesture = null;
+          this.pinch = null;
+        }
       } else if (this.touches.size === 1) {
         // One finger left after a pinch: carry on as a pan, never a tap.
         const rest = this.touches.entries().next().value;

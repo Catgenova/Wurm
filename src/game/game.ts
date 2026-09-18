@@ -14,7 +14,7 @@ import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, t
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
-import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter } from './smelter';
+import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
@@ -4293,14 +4293,14 @@ export class Game {
       } else if (r.kind === 'smelter') {
         this.smelters.set(r.id, {
           ...at, ql: r.ql ?? 20, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
-          jobs: (r.state?.jobs ?? []) as PlacedSmelter['jobs'],
-          output: (r.state?.output ?? []) as Item[],
+          jobs: furnaceJobs(r.state?.jobs),
+          output: furnaceOutput(r.id, r.state?.output),
         });
       } else if (r.kind === 'kiln') {
         this.kilns.set(r.id, {
           ...at, ql: r.ql ?? 20, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
-          jobs: (r.state?.jobs ?? []) as PlacedKiln['jobs'],
-          output: (r.state?.output ?? []) as Item[],
+          jobs: furnaceJobs(r.state?.jobs),
+          output: furnaceOutput(r.id, r.state?.output),
         });
       } else if (r.kind === 'anvil') {
         this.anvils.set(r.id, { ...at, ql: r.ql ?? 20, metal: r.material ?? 'iron' });
@@ -5229,6 +5229,52 @@ export class Game {
  * The row itself, less the columns that are nobody's business — so a column
  * the island learns later arrives here without anybody having to widen a list.
  */
+/**
+ * What a furnace off the island is working on and has finished, as things the
+ * browser knows.
+ *
+ * The island writes a finished piece as `{def, ql, count, extra}` — its own
+ * shape for a thing — and a job as `{makes, left, total, ql}` with nothing
+ * about what went in. The browser's item has an `id`, and its job has an
+ * `item`. Reported from the island as a right-click on a smelter that locked
+ * the game up: the menu named what was finished in it, a piece with no `id`
+ * has no name, and a name with nothing in it cannot be lowercased. The list
+ * had been taken as it came, cast and not looked at.
+ *
+ * The uid is the furnace's and the piece's place in it, negative so it can
+ * never be a uid of anything in the pack, and the same on every read so a
+ * menu built off one read and used after the next still names the same
+ * piece.
+ */
+export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Item[] {
+  return (rows ?? []).map((raw, i) => {
+    const o = raw as { id?: string; def?: string; ql?: number; dmg?: number; count?: number; extra?: string | null; uid?: number };
+    return {
+      uid: typeof o.uid === 'number' ? o.uid : -(furnace * 1000 + i + 1),
+      id: o.id ?? o.def ?? 'lump',
+      ql: o.ql ?? 1,
+      dmg: o.dmg ?? 0,
+      count: o.count ?? 1,
+      extra: o.extra ?? undefined,
+    };
+  });
+}
+
+/** And the jobs, each with something in the `item` a local finish would read. */
+export function furnaceJobs(rows: unknown[] | undefined): SmeltJob[] {
+  return (rows ?? []).map((raw) => {
+    const j = raw as { makes?: string; left?: number; total?: number; ql?: number; extra?: string | null; item?: Item };
+    const ql = j.ql ?? 1;
+    return {
+      item: j.item ?? { uid: 0, id: j.extra ? `${j.extra.toLowerCase()}_lump` : (j.makes ?? ''), ql, dmg: 0, count: 1 },
+      makes: j.makes ?? '',
+      left: j.left ?? 0,
+      total: j.total ?? j.left ?? 0,
+      ql,
+    };
+  });
+}
+
 export interface IslandPlaced {
   id: number;
   kind: string;

@@ -296,6 +296,18 @@ jobs:
           npx esbuild supabase/test/outlook.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/outlook.mjs --log-level=error
           node node_modules/.cache/outlook.mjs
+      - name: A furnace off the island reads the way one you built yourself does
+        run: |
+          # The island writes a finished piece as {def, ql, count, extra} and a
+          # job as {makes, left, total, ql}; the browser's item has an id and
+          # its job an item. The list was taken as it came, cast and not looked
+          # at, and a right-click on a smelter with a finished lump in it threw
+          # out of the click handler and locked the input. So a smelter and a
+          # kiln are handed over exactly as the island hands them, and asked
+          # what the menu asks.
+          npx esbuild supabase/test/furnace.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/furnace.mjs --log-level=error
+          node node_modules/.cache/furnace.mjs
 
   migrate:
     name: Push the migrations to the project
