@@ -3459,6 +3459,7 @@ create or replace function fog_bytes() returns double precision language sql imm
 create or replace function wild_reach() returns double precision language sql immutable as $fn$ select 1.5::double precision $fn$;
 create or replace function wild_rest() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function wild_rest_spread() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
+create or replace function site_looks() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function hunger_rate() returns double precision language sql immutable as $fn$ select 0.00005::double precision $fn$;
 create or replace function thirst_rate() returns double precision language sql immutable as $fn$ select 0.000075::double precision $fn$;
 create or replace function say_max() returns double precision language sql immutable as $fn$ select 200::double precision $fn$;

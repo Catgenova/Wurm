@@ -78,6 +78,22 @@ export type GatherKind =
 export const WILD_REACH = 1.5;
 export const WILD_REST = 8;
 export const WILD_REST_SPREAD = 22;
+/**
+ * How many looks at standable ground a rolled species gets before the roll is
+ * given up on.
+ *
+ * What stands up is rolled against `WILD_SPECIES` and the ground says where.
+ * Throwing a roll away because *this* tile is wrong for it makes a species as
+ * common as its weight times the share of the island that suits it: a mola
+ * wants metal under it, metal is a seventh of the ground, and one mola in a
+ * hundred and forty is a mola nobody meets. Reported exactly so — "I have yet
+ * to see a single mola spawn". So a place is looked for instead, and eight
+ * looks put every species back within a fraction of its weight.
+ *
+ * Looks at ground a creature could stand on, not throws: on an island that is
+ * mostly sea, eight throws into the water are no goes at all.
+ */
+export const SITE_LOOKS = 8;
 
 export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing', prune: 'forestry', stump: 'digging', fruit: 'forestry' };
 export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing', prune: 'pruning the wood', stump: 'digging out stumps', fruit: 'picking fruit' };
@@ -2298,18 +2314,60 @@ export class Creatures {
     return this.spawnSpecies(game, null, count, minDistance);
   }
 
+  /**
+   * Whether anything at all may be put down here: a question about the ground
+   * rather than about the species standing on it.
+   */
+  private groundOk(game: Game, x: number, y: number, minDistance: number): boolean {
+    const w = game.world;
+    if (!this.tileOk(game, x, y)) return false;
+    if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) return false;
+    return Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) >= minDistance;
+  }
+
+  /**
+   * Ground that suits a species, or nothing: `SITE_LOOKS` looks at ground a
+   * creature could stand on, given three times that many throws to find them.
+   */
+  private siteFor(game: Game, id: string, minDistance: number): { x: number; y: number } | null {
+    const w = game.world;
+    let looks = 0;
+    for (let i = 0; i < SITE_LOOKS * 3 && looks < SITE_LOOKS; i++) {
+      const x = Math.floor(game.rand() * w.w);
+      const y = Math.floor(game.rand() * w.h);
+      if (!this.groundOk(game, x, y, minDistance)) continue;
+      looks++;
+      if (this.suits(game, SPECIES[id], x, y)) return { x, y };
+    }
+    return null;
+  }
+
   /** As spawnWild, but for one species; pass null to roll the wild mix. */
   spawnSpecies(game: Game, species: string | null, count: number, minDistance = 12): number {
     const w = game.world;
     let placed = 0;
     for (let tries = 0; tries < count * 40 && placed < count; tries++) {
-      const x = Math.floor(game.rand() * w.w);
-      const y = Math.floor(game.rand() * w.h);
-      if (!this.tileOk(game, x, y)) continue;
-      if (w.centerHeight(x, y) < 2 || game.onDeed(x, y)) continue;
-      if (Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) < minDistance) continue;
+      let x = Math.floor(game.rand() * w.w);
+      let y = Math.floor(game.rand() * w.h);
+      if (!this.groundOk(game, x, y, minDistance)) continue;
       const id = species ?? (game.rand() < MONSTER_SHARE ? this.pickMonster(game, x, y) : rollTable(WILD_SPECIES, game.rand()));
-      if (!id || !this.suits(game, SPECIES[id], x, y)) continue;
+      if (!id) continue;
+      if (!this.suits(game, SPECIES[id], x, y)) {
+        /*
+         * The roll says what stands up; the ground says where. Throwing the
+         * roll away because this tile is wrong for it made a species as common
+         * as its weight times the share of the island that suits it, which is
+         * how a mola — one in thirty by weight, metal under a seventh of the
+         * ground — came out at one in two hundred. A monster keeps the tile it
+         * was rolled on: how far it stands from a deed was settled there.
+         */
+        if (SPECIES[id]?.monster) continue;
+        const site = this.siteFor(game, id, minDistance);
+        if (!site) continue;
+        x = site.x;
+        y = site.y;
+        tries += SITE_LOOKS;
+      }
       // Born at some point in the past, so the country is not all yearlings.
       this.spawn(id, x + 0.5, y + 0.5, 'wild', game.rand, game.time - game.rand() * OLD_AT * 1.6);
       placed++;

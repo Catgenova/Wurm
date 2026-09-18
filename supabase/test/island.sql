@@ -10065,3 +10065,56 @@ select '1009. a swing at a wild orse, which comes straight back, by the tab each
      || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'public' and p.prokind = 'f' and p.proname in ('perform_fight', 'hurt_player', 'hunt_settle', 'companion_settle', 'wound_beast')
            and p.prosrc like '%''fight'')%') || ' of 5';
+
+/*
+ * A habitat is where a thing lives, not how rare it is.
+ *
+ * Reported: "with wildermon like mola, their spawn points can be over seams
+ * buried, not just exposed. I have yet to see a single mola spawn." The first
+ * half was already so — `suits` asks `bedrock_at`, which is the rock under a
+ * tile bare or buried — and the second half was the order of the two rolls:
+ * the stocker picked a tile, rolled what stood up on it, and threw the roll
+ * away when the ground was wrong for it. A species was then as common as its
+ * weight times the share of the island that suits it.
+ *
+ * And nothing ever replaced what was killed: a block was put out once and
+ * `world_stocked` remembered it for good.
+ */
+\echo ''
+\echo '--- a habitat is where a thing lives'
+select id as copper from rock_def where yields = 'copper_ore' \gset
+-- Three tiles in a row that a creature could be put down on: somewhere dry,
+-- standable and off anybody's deed, which is what the stocker asks of a tile
+-- before it asks anything about the thing standing on it.
+select g.x as seamx, g.y as seamy from generate_series(2, 40) x, generate_series(2, 40) y,
+  lateral (select x, y) g
+where (select bool_and(creature_tile_ok(:'world2', g.x + i, g.y) and centre_height(:'world2', g.x + i, g.y) >= 2
+                       and not on_deed(:'world2', g.x + i, g.y)) from generate_series(0, 2) i)
+order by g.y, g.x limit 1 \gset
+-- Bare rock over copper, ordinary ground over copper, bare rock over nothing.
+select land_set_rock(:'world2', :'seamx', :'seamy', :'copper'),
+       land_set_rock(:'world2', :'seamx' + 1, :'seamy', :'copper'),
+       land_set_rock(:'world2', :'seamx' + 2, :'seamy', 0) \g /dev/null
+select land_set_tile(:'world2', :'seamx', :'seamy', tile_id('Rock')),
+       land_set_tile(:'world2', :'seamx' + 2, :'seamy', tile_id('Rock')) \g /dev/null
+select '1010. a mola settles over metal, bare or buried, at ' || :'seamx' || ',' || :'seamy'
+     || ': on the bare face ' || suits(:'world2', 'mola', :'seamx', :'seamy')
+     || ', on the ground with a seam under it ' || suits(:'world2', 'mola', :'seamx' + 1, :'seamy')
+     || ', on plain stone ' || suits(:'world2', 'mola', :'seamx' + 2, :'seamy')
+     || '; and a quarra, which wants stone with nothing in it: ' || suits(:'world2', 'quarra', :'seamx' + 2, :'seamy')
+     || ' on the plain face, ' || suits(:'world2', 'quarra', :'seamx', :'seamy') || ' on the copper';
+select '1010b. eight looks for ground a mola will settle on, over the two tiles with metal: '
+     || coalesce((select x || ',' || y from site_for(:'world2', :'seamx', :'seamy', 2, 1, 'mola', 8)), 'nothing')
+     || '; over the one with none: '
+     || coalesce((select x || ',' || y from site_for(:'world2', :'seamx' + 2, :'seamy', 1, 1, 'mola', 8)), 'nothing');
+delete from creature where world_id = :'world2' and mode = 'wild' \g /dev/null
+delete from world_stocked where world_id = :'world2' \g /dev/null
+select creature_stock_block(:'world2', 0, 0) as first_fill \gset
+select creature_stock_block(:'world2', 0, 0) as straight_after \gset
+update world_stocked set at = now() - make_interval(secs => restock_every() + 60) where world_id = :'world2' \g /dev/null
+delete from creature where world_id = :'world2' and mode = 'wild'
+  and id in (select id from creature where world_id = :'world2' and mode = 'wild' order by id limit 5) \g /dev/null
+select creature_stock_block(:'world2', 0, 0) as topped \gset
+select '1010c. a block put out: ' || :'first_fill' || ' head; asked again straight away: ' || :'straight_after'
+     || '; five killed and the interval gone by: ' || :'topped' || ' went back out, and the block holds '
+     || (select count(*) from creature where world_id = :'world2' and mode = 'wild');

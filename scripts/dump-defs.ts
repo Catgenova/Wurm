@@ -21,7 +21,7 @@ import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
-import { COAX_LAPSE, COAX_STEP, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
+import { COAX_LAPSE, COAX_STEP, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
          COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
 import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
@@ -994,6 +994,7 @@ for (const [fn, v] of [
    */
   /* And how far a wild thing drifts, and how long it stands between. */
   ['wild_reach', WILD_REACH], ['wild_rest', WILD_REST], ['wild_rest_spread', WILD_REST_SPREAD],
+  ['site_looks', SITE_LOOKS],
   ['hunger_rate', HUNGER_RATE], ['thirst_rate', THIRST_RATE],
   ['say_max', SAY_MAX], ['say_a_minute', SAY_A_MINUTE],
   ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],

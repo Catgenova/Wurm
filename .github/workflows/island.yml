@@ -191,6 +191,17 @@ jobs:
           npx esbuild supabase/test/face.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/face.mjs --log-level=error
           node node_modules/.cache/face.mjs
+      - name: The wild mix is the mix the weights ask for
+        run: |
+          # Reported as never having seen a mola. The stocker picked a tile,
+          # rolled what stood up on it, and threw the roll away when the ground
+          # was wrong for it — so a species came out as common as its weight
+          # times the share of the island that suits it. A mola wants metal
+          # under it, metal is a seventh of the ground, and a mola was one in
+          # two hundred.
+          npx esbuild supabase/test/wild.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/wild.mjs --log-level=error
+          node node_modules/.cache/wild.mjs
       - name: The ground is the one on the chart
         run: |
           # And that the ground both generators agree on is the ground that was
