@@ -600,7 +600,21 @@ async function main(): Promise<void> {
      * right. Islands are rolled fresh every run, so anything that leans on
      * where a random one puts you cries wolf on a schedule of its own.
      */
-    const at = island.me!;
+    /*
+     * And from where the island says we are standing, not where we came
+     * ashore.
+     *
+     * The walk test above moved the body half a tile, and this searched out
+     * from the spawn — so it chose the tile the body had just left, and then
+     * had to walk *back* to it diagonally. A live run found that diagonal
+     * blocked, the walk failed, and a check about whether the island has
+     * anywhere worth a settlement read as false while the settlement it went
+     * on to found worked perfectly. The dig below learned this same lesson
+     * already; it is the same fix.
+     */
+    const { data: whereWeAre } = await supabase().from('player').select('x,y')
+      .eq('world_id', id).eq('uid', uid).single();
+    const at = (whereWeAre ?? island.me!) as { x: number; y: number };
     let sx = Math.floor(at.x);
     let sy = Math.floor(at.y);
     for (let r = 0; r <= 12; r++) {
