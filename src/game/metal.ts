@@ -4,7 +4,7 @@ import { world } from './pace';
  * lumps are mixed into alloys, sand is fired into moulds, and a mould filled
  * with metal is beaten out on an anvil.
  */
-export type SmithSkill = 'blacksmithing' | 'weaponsmithing' | 'armorsmithing' | 'chainsmithing' | 'platesmithing';
+export type SmithSkill = 'blacksmithing' | 'weaponsmithing' | 'armorsmithing' | 'chainsmithing' | 'platesmithing' | 'jewellery';
 
 export interface MetalDef {
   id: string;
@@ -147,6 +147,9 @@ export const MOULDS: MouldDef[] = [
   // Fittings for building: hinges for anything that swings, brackets to bind a gate.
   { id: 'hinge_mould', name: 'Hinge mould', makes: 'hinge', skill: 'blacksmithing', sand: 2, difficulty: 8, lumps: 1, per: 2 },
   { id: 'bracket_mould', name: 'Bracket mould', makes: 'bracket', skill: 'blacksmithing', sand: 2, difficulty: 8, lumps: 1, per: 4 },
+  // A jeweller's castings, two to a lump. The stone comes after, with a file.
+  { id: 'ring_mould', name: 'Ring mould', makes: 'ring', skill: 'jewellery', sand: 2, difficulty: 14, lumps: 1, per: 2 },
+  { id: 'pendant_mould', name: 'Pendant mould', makes: 'pendant', skill: 'jewellery', sand: 2, difficulty: 16, lumps: 1, per: 2 },
   // The two big castings: a bell and a figure, each hung or set up afterwards.
   { id: 'bell_mould', name: 'Bell mould', makes: 'bell_casting', skill: 'blacksmithing', sand: 6, difficulty: 26, lumps: 8 },
   { id: 'statue_mould', name: 'Statue mould', makes: 'statue_casting', skill: 'blacksmithing', sand: 8, difficulty: 30, lumps: 12 },

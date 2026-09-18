@@ -20,7 +20,7 @@ export const CRAFT_HEAD = 0.25;
  * an item action, so it shows on the material's menu as well as in the
  * crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Writing' | 'Cooking' | 'Smelting';
+export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Writing' | 'Cooking' | 'Smelting' | 'Jewellery';
 /** A place a recipe has to be worked at, beyond what is carried. */
 export type Station = 'campfire' | 'smelter' | 'spindle' | 'loom';
 const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter', spindle: 'spindle', loom: 'loom' };
@@ -216,6 +216,9 @@ export const RECIPES: Recipe[] = [
   { id: 'make_cherry_preserves', category: 'Cooking', result: 'preserves', count: 2, inputs: [{ item: 'cherry', count: 12 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Preserve cherries', verb: 'preserving cherries', baseTime: 14, stamina: 0.03, difficulty: 14, done: 'You boil the cherries down with their own sugar and jar two lots.', fail: 'It catches on the bottom and the whole batch tastes of burning.', consumeOnFail: true },
   { id: 'press_olives', category: 'Cooking', result: 'olive_oil', count: 2, inputs: [{ item: 'olive', count: 10 }], tool: 'quern', skill: 'milling', label: 'Press into oil', verb: 'pressing olives', baseTime: 16, stamina: 0.05, difficulty: 18, done: 'You crush the olives under the stone and draw off two measures of oil.', fail: 'You crush them to a paste that will not part with its oil.', consumeOnFail: true },
   { id: 'make_stew', category: 'Cooking', result: 'stew', inputs: [{ item: 'cooked_meat' }, { item: 'potato' }, { item: 'onion' }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Simmer a stew', verb: 'simmering a stew', baseTime: 16, stamina: 0.03, difficulty: 10, done: 'You simmer meat and vegetables into a thick stew.', fail: 'The pot catches and the stew is spoiled.', consumeOnFail: true },
+  // A stone goes into a plain casting with a file. The piece takes the stone's name, the way a chest takes its wood, and the rarer the stone the harder the seating.
+  { id: 'set_ring', category: 'Jewellery', result: 'jewelled_ring', inputs: [{ item: 'gem' }, { item: 'ring' }], tool: 'file', skill: 'jewellery', material: 'gem', label: 'Set in a ring', verb: 'setting a stone', baseTime: 10, stamina: 0.03, difficulty: 10, done: 'You seat the stone in the band and close the claws over it with the file.' },
+  { id: 'set_pendant', category: 'Jewellery', result: 'jewelled_pendant', inputs: [{ item: 'gem' }, { item: 'pendant' }], tool: 'file', skill: 'jewellery', material: 'gem', label: 'Set in a pendant', verb: 'setting a stone', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You seat the stone in the drop and close the claws over it with the file.' },
   ...[],
 ];
 

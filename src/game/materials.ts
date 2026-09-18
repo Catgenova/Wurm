@@ -1,3 +1,4 @@
+import { GEMS, tradeName, type GemDef } from './gems';
 import { METAL_BY_LUMP, METALS } from './metal';
 import { TREE_DEFS } from '../world/tiles';
 
@@ -12,7 +13,7 @@ import { TREE_DEFS } from '../world/tiles';
  * everything made of it reads whichever of them apply to the sort of thing
  * it is.
  */
-export type MaterialKind = 'wood' | 'metal';
+export type MaterialKind = 'wood' | 'metal' | 'gem';
 
 export interface MaterialDef {
   id: string;
@@ -91,10 +92,13 @@ const METAL_PROPS: Record<string, Props> = {
 
 const wood = (name: string): MaterialDef => ({ id: name.toLowerCase(), name, kind: 'wood', ...(WOOD_PROPS[name] ?? WOOD_PROPS.Pine) });
 const metal = (id: string, name: string): MaterialDef => ({ id, name, kind: 'metal', ...(METAL_PROPS[id] ?? METAL_PROPS.copper) });
+/** A stone: nothing is made *of* one but the setting, and the rarer it is the harder it is to seat. Its line says what it favours. */
+const gem = (g: GemDef): MaterialDef => ({ id: g.id, name: g.name, kind: 'gem', difficulty: 3 * (5 - g.weight), weight: 1, wear: 1, decay: 1, edge: 1, soak: 1, bite: 1, hold: 1, note: `${g.flavour} It favours ${tradeName(g.skill)}.` });
 
 export const WOODS: MaterialDef[] = TREE_DEFS.map((t) => wood(t.name));
 export const METAL_MATERIALS: MaterialDef[] = METALS.map((m) => metal(m.id, m.name));
-export const MATERIALS: MaterialDef[] = [...WOODS, ...METAL_MATERIALS];
+export const GEM_MATERIALS: MaterialDef[] = GEMS.map(gem);
+export const MATERIALS: MaterialDef[] = [...WOODS, ...METAL_MATERIALS, ...GEM_MATERIALS];
 
 /** Looked up by the name written on the item, which is how it is stored. */
 const BY_NAME = new Map(MATERIALS.map((m) => [m.name.toLowerCase(), m]));

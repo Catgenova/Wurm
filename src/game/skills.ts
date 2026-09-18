@@ -57,6 +57,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'leatherworking', name: 'Leatherworking', group: 'Skills', start: 1 },
   { id: 'chainsmithing', name: 'Chain armoursmithing', group: 'Skills', start: 1 },
   { id: 'platesmithing', name: 'Plate armoursmithing', group: 'Skills', start: 1 },
+  { id: 'jewellery', name: 'Jewellery', group: 'Skills', start: 1 },
   { id: 'bowyery', name: 'Bowyery', group: 'Skills', start: 1 },
   { id: 'fletching', name: 'Fletching', group: 'Skills', start: 1 },
   { id: 'fighting', name: 'Fighting', group: 'Fighting', start: 1 },

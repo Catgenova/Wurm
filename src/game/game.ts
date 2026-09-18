@@ -39,6 +39,7 @@ import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS } from './skills';
+import { gemOf, JEWEL_BONUS } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from './learn';
@@ -1790,6 +1791,8 @@ export class Game {
     let mult = this.player.rested > 0 ? REST_MULT : 1;
     // A knack earned on the way up never wears off, unlike a meal or a night's sleep.
     mult += knackBonus(this.player.knacks[id]);
+    // And the stone you wear, worth a knack on the one trade it favours.
+    if (gemOf(this.worn('jewel'))?.skill === id) mult += JEWEL_BONUS;
     // And the reader's path is a tenth on everything, for good.
     if (this.walks('knowledge', 1)) mult += 0.1;
     // A table with all four things on it is worth a fifth more on everything.

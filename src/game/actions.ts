@@ -16,6 +16,7 @@ import { IMPROVE_ACTIONS } from './improve';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
+import { maybeGem } from './gems';
 import { TREASURE_ACTIONS, maybeMap } from './treasure';
 import { FIRST_AID_ACTIONS } from './firstaid';
 import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
@@ -728,6 +729,8 @@ export const ACTIONS: ActionDef[] = [
       g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
       // And one swing in a thousand that brings out something nobody quarried.
       maybeMap(g, 'mining', 'pickaxe');
+      // And a stone, now and again, which is the other thing a miner is for.
+      maybeGem(g, 'mining', 'pickaxe');
       // Cutting the face back is its own job, with its own entry in the menu.
       // Now and again one comes down anyway.
       if (g.rand() < MINE_COLLAPSE) {

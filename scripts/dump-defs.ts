@@ -74,6 +74,7 @@ import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
 } from '../src/game/treasure';
+import { GEMS, GEM_ODDS, JEWEL_BONUS, JEWEL_PIECES } from '../src/game/gems';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
@@ -292,6 +293,9 @@ out.push(`create table if not exists treasure_def (
 out.push(`create table if not exists map_band (
   ord int primary key, within real not null, say text not null
 );`);
+/* The stones the rock gives up, in the order they are drawn, and the pieces they are set in. */
+out.push(`create table if not exists gem_def (id text primary key, name text not null, skill text not null, weight real not null, flavour text not null, ord int not null);`);
+out.push(`create table if not exists jewel_def (id text primary key);`);
 /* What you set and walk away from, and what it will hold. */
 out.push(`create table if not exists trap_def (
   id text primary key, name text not null, difficulty real not null, holds real not null,
@@ -600,7 +604,9 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band;');
+out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;');
+GEMS.forEach((g, i) => out.push(`insert into gem_def values (${q(g.id)}, ${q(g.name)}, ${q(g.skill)}, ${q(g.weight)}, ${q(g.flavour)}, ${q(i)});`));
+for (const id of JEWEL_PIECES) out.push(`insert into jewel_def values (${q(id)});`);
 out.push('');
 
 /*
@@ -1062,6 +1068,8 @@ for (const [fn, v] of [
 for (const [fn, v] of [
   ['map_odds', MAP_ODDS], ['map_kill_scale', MAP_KILL_SCALE], ['map_kill_cap', MAP_KILL_CAP],
   ['map_range', MAP_RANGE], ['unearth_reach', UNEARTH_REACH], ['map_snippet', MAP_SNIPPET],
+  /* A stone in the rock, and what a worn one is worth. */
+  ['gem_odds', GEM_ODDS], ['jewel_bonus', JEWEL_BONUS],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

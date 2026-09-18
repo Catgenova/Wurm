@@ -1,5 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
+import { JEWEL_PIECES } from './gems';
 import { itemDef, rarityOf, type Item } from './items';
 import { matOf } from './materials';
 
@@ -9,9 +10,9 @@ import { matOf } from './materials';
  * and every kind of both trains a subskill of its own, by being used or by
  * being hit.
  */
-export type Slot = 'head' | 'chest' | 'arms' | 'legs' | 'feet' | 'weapon' | 'offhand' | 'belt';
+export type Slot = 'head' | 'chest' | 'arms' | 'legs' | 'feet' | 'weapon' | 'offhand' | 'belt' | 'jewel';
 
-export const SLOTS: Slot[] = ['head', 'chest', 'arms', 'legs', 'feet', 'weapon', 'offhand', 'belt'];
+export const SLOTS: Slot[] = ['head', 'chest', 'arms', 'legs', 'feet', 'weapon', 'offhand', 'belt', 'jewel'];
 export const SLOT_NAMES: Record<Slot, string> = {
   head: 'Head',
   chest: 'Chest',
@@ -21,6 +22,7 @@ export const SLOT_NAMES: Record<Slot, string> = {
   weapon: 'Hand',
   offhand: 'Off hand',
   belt: 'Belt',
+  jewel: 'Jewel',
 };
 
 /** Where a blow lands, and how likely each is. */
@@ -170,6 +172,7 @@ export function slotOf(id: string): Slot | null {
   if (isWeapon(id)) return 'weapon';
   if (isShield(id)) return 'offhand';
   if (id === 'toolbelt') return 'belt';
+  if (JEWEL_PIECES.includes(id)) return 'jewel';
   return null;
 }
 

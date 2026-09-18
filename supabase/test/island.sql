@@ -8962,3 +8962,69 @@ select '975. the iron-bound gate: ' || (select name from wall_type_def where id 
      || ' and proof against beasts ' || (select beast_proof from wall_type_def where id = 'iron_gate') || ', where a fence gate is ' || (select beast_proof from wall_type_def where id = 'fence_gate')
      || '; of log it wants ' || (select string_agg(key || ' ' || value, ', ' order by key) from jsonb_each_text(wall_bill('log', 'iron_gate')))
      || ' — ' || (select count(*) from wall_fitting) || ' fittings on ' || (select count(distinct type) from wall_fitting) || ' kinds of wall';
+
+/*
+ * Gems and jewellery.
+ *
+ * A stone out of the rock now and again, each favouring a trade; a ring or a
+ * pendant cast two to a lump; the stone set in it with a file, the piece
+ * taking the stone's name; and worn, a knack's worth on the trade.
+ */
+\echo ''
+\echo '--- gems and jewellery'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '976. off the table: ' || (select string_agg(name || ' for ' || skill || ' (' || weight || ')', ', ' order by ord) from gem_def)
+     || '; one swing in ' || round(1 / gem_odds()) || ' brings one out and a worn stone is worth ' || jewel_bonus() || ' on its trade'
+     || '; a ' || (select name from mould_def where id = 'ring_mould') || ' casts ' || (select per from mould_def where id = 'ring_mould') || ' and a '
+     || (select name from mould_def where id = 'pendant_mould') || ' ' || (select per from mould_def where id = 'pendant_mould') || ', at ' || (select skill from mould_def where id = 'ring_mould')
+     || '; setting takes ' || (select string_agg(item || ' ×' || count, ', ' order by ord) from recipe_input where recipe = 'set_ring') || ' with a ' || (select tool from recipe where id = 'set_ring')
+     || '; the pieces go in the ' || slot_of('jewelled_ring') || ' and ' || slot_of('jewelled_pendant') || ' slot and a plain ring in ' || coalesce(slot_of('ring'), 'none')
+     || '; ported ' || act_ported('set_ring') || ' and ' || act_ported('set_pendant');
+-- The draw, three thousand times: every stone turns up, and the diamond least.
+select string_agg(name || ' ' || n, ', ' order by n desc) as draws, coalesce(min(n) filter (where name = 'Diamond'), 0) as diamonds, count(*) as kinds
+  from (select name, count(*) as n from (select roll_gem() as name from generate_series(1, 3000)) d group by name) t \gset
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('gem', 'ring', 'pendant', 'jewelled_ring', 'jewelled_pendant', 'file') \g /dev/null
+select count(*) from (select maybe_gem(:'world2', :'ivar', 50, 50) from generate_series(1, 4000)) x \g /dev/null
+select '977. three thousand draws — ' || :'draws' || ' — every one of ' || (select count(*) from gem_def) || ' kinds seen: ' || (:kinds = (select count(*) from gem_def))
+     || ', the diamond the rarest and about one in sixteen: ' || (:diamonds between 90 and 300)
+     || '; and four thousand swings at fifty bring out ' || coalesce((select sum(count) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'gem'), 0)
+     || ' stones, between one and forty: ' || (coalesce((select sum(count) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'gem'), 0) between 1 and 40)
+     || ', every one at a quality in (0, 100]: ' || coalesce((select bool_and(ql > 0 and ql <= 100) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'gem'), false)
+     || ', the last of them told as "' || (select text from event where uid = :'ivar' and text like 'Something glints%' order by n desc limit 1) || '"';
+-- Setting a ruby in a silver band, and wearing it.
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('gem', 'ring', 'pendant', 'jewelled_ring', 'jewelled_pendant', 'file') \g /dev/null
+select give(:'world2', :'ivar', 'ring', 1, 60, 'Silver') as band \gset
+select give(:'world2', :'ivar', 'gem', 1, 70, 'Ruby') as stone \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'set_ring', ('{"kind":"item","uid":' || :'stone' || '}')::jsonb), 'ALLOWED') as nofile \gset
+select give(:'world2', :'ivar', 'file', 1, 50, 'Iron') \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'set_ring', ('{"kind":"item","uid":' || :'stone' || '}')::jsonb), 'ALLOWED') as withfile \gset
+select round(skill_mult(:'world2', :'ivar', 'fighting')::numeric, 2) as bare_fight, round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2) as bare_mine \gset
+-- The seating can fail, as any craft can; the stone and the band are kept on a failure, so it is tried until it takes.
+create or replace function pg_temp.set_until(p_world uuid, p_uid uuid, p_stone bigint) returns int language plpgsql as $$
+declare i int := 0;
+begin
+  loop
+    i := i + 1;
+    if exists (select 1 from item where world_id = p_world and holder_uid = p_uid and def = 'jewelled_ring') or i > 40 then return i; end if;
+    perform act_perform(p_world, p_uid, 'set_ring', jsonb_build_object('kind', 'item', 'uid', p_stone));
+  end loop;
+end $$;
+delete from event where uid = :'ivar' \g /dev/null
+select pg_temp.set_until(:'world2', :'ivar', :'stone') as tries \gset
+select id as jewel from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'jewelled_ring' \gset
+select coalesce(act_refusal(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'jewel' || '}')::jsonb), 'ALLOWED') as wearable \gset
+select act_perform(:'world2', :'ivar', 'equip', ('{"kind":"item","uid":' || :'jewel' || '}')::jsonb) \g /dev/null
+select '978. without a file: "' || :'nofile' || '"; with one: "' || :'withfile' || '"; seated at try ' || :'tries' || ': "' || (select text from event where uid = :'ivar' and text like 'You seat%' order by n desc limit 1) || '"'
+     || ' — a ' || (select lower(name) from item_def where id = (select def from item where id = :'jewel')) || ' of ' || (select extra from item where id = :'jewel')
+     || ' at QL ' || (select round(ql) from item where id = :'jewel') || ', the stone and the band gone: '
+     || (not exists (select 1 from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('gem', 'ring')))
+     || '; worn: "' || :'wearable' || '", in the ' || (select key from player p, jsonb_each(p.equipped) where p.world_id = :'world2' and p.uid = :'ivar' and value::bigint = :'jewel') || ' slot'
+     || ', and fighting goes in at ' || :'bare_fight' || ' then ' || round(skill_mult(:'world2', :'ivar', 'fighting')::numeric, 2)
+     || ' where mining stays at ' || :'bare_mine' || ' then ' || round(skill_mult(:'world2', :'ivar', 'mining')::numeric, 2);
+-- What a craft is made of decides how stubborn it is, on the island now as in the browser.
+select id as woodrec from recipe where material = 'wood' and difficulty is not null order by id limit 1 \gset
+select '979. what it is made of decides how stubborn the work is: setting a diamond is ' || craft_hardness('set_ring', 'Diamond') || ' and a garnet ' || craft_hardness('set_ring', 'Garnet')
+     || '; ' || :'woodrec' || ' of oak is ' || craft_hardness(:'woodrec', 'Oak') || ' and of pine ' || craft_hardness(:'woodrec', 'Pine')
+     || ', which is the recipe''s ' || (select difficulty from recipe where id = :'woodrec') || ' and the wood''s ' || (mat_of('Oak')).difficulty || ' or ' || (mat_of('Pine')).difficulty
+     || ', where the island used to read the recipe alone';
+update player set equipped = equipped - 'jewel' where world_id = :'world2' and uid = :'ivar' \g /dev/null
