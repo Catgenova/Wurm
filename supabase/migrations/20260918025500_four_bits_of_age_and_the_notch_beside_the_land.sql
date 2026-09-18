@@ -880,22 +880,43 @@ end $function$
 
 -- Every half-felled tree standing anywhere, once: the notch out of the byte and
 -- into its row, and the byte left holding species and age.
+--
+-- A line at a time, each read into a variable once. The first cut of this was
+-- one query with a lateral `generate_series` over every line, and it timed out
+-- on the project at two minutes: `get_byte(t.data, i)` on a four-kilobyte
+-- toasted column detoasts the whole value for every byte asked, so it was
+-- sixteen megabytes of copying per line to find nothing in most of them.
+-- Measured on a synthetic island the size of the live one, four thousand
+-- lines: the lateral way 29 s, this way 1.3 s. `tree_day` has read its lines
+-- the same way since the day it was made fast, for the same reason.
+set statement_timeout = '20min';
 do $$
-declare r record; v_line bytea; v_n int := 0;
+declare r record; v_hits int[]; v_x int; v_data bytea; v_n int := 0;
 begin
   for r in
-    select t.world_id, t.y, g.i as x, (get_byte(t.data, g.i) >> 6) & 3 as cuts
-      from land_tile t cross join lateral generate_series(0, length(t.tiles) - 1) g(i)
-     where get_byte(t.tiles, g.i) = 16 and get_byte(t.data, g.i) >= 64
+    select t.world_id, t.y, t.tiles, t.data from land_tile t
+     where position('\x10'::bytea in t.tiles) > 0
   loop
-    insert into tree_notch (world_id, x, y, cuts) values (r.world_id, r.x, r.y, r.cuts)
-      on conflict (world_id, x, y) do update set cuts = excluded.cuts;
-    select data into v_line from land_tile where world_id = r.world_id and y = r.y;
-    perform land_set_data(r.world_id, r.x, r.y, get_byte(v_line, r.x) & 63);
-    perform land_announce(r.world_id, r.x, r.y);
-    v_n := v_n + 1;
+    select array_agg(gi) into v_hits from generate_series(0, length(r.tiles) - 1) gi
+      where get_byte(r.tiles, gi) = 16 and get_byte(r.data, gi) >= 64;
+    if v_hits is null then continue; end if;
+    v_data := r.data;
+    foreach v_x in array v_hits loop
+      insert into tree_notch (world_id, x, y, cuts)
+        values (r.world_id, v_x, r.y, (get_byte(v_data, v_x) >> 6) & 3)
+        on conflict (world_id, x, y) do update set cuts = excluded.cuts;
+      v_data := set_byte(v_data, v_x, get_byte(v_data, v_x) & 63);
+      v_n := v_n + 1;
+    end loop;
+    -- The line written once, and each tree that changed told to whoever is near.
+    update land_tile t set data = v_data where t.world_id = r.world_id and t.y = r.y;
+    foreach v_x in array v_hits loop
+      perform land_chunk_forget(r.world_id, v_x, r.y);
+      perform land_announce(r.world_id, v_x, r.y);
+    end loop;
   end loop;
   raise notice 'tree_notch: % half-felled trees moved off the byte', v_n;
 end $$;
+reset statement_timeout;
 
 select private.lock_doors();
