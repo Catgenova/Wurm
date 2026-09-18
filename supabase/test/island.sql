@@ -9060,3 +9060,76 @@ select '980. Farce''s seed, put in the crate and taken out again, with Alice''s 
      || ', with ' || (select count from item where id = :'marked') || ' left marked in Ivar''s pack';
 update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
 delete from item where world_id = :'world2' and def = 'cabbage_seed' \g /dev/null
+
+/*
+ * The body learns from the heavy trades.
+ *
+ * Every go at digging or mining trains the back as well, in the one place
+ * both sides pay for a go; a go at anything lighter does not.
+ */
+\echo ''
+\echo '--- the body learns from the heavy trades'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', to_jsonb(1.0)) where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'body_strength')::numeric, 4) as back_before \gset
+select spend_wind(:'world2', :'ivar', 'dig') from generate_series(1, 3) \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'body_strength')::numeric, 4) as back_dug \gset
+select spend_wind(:'world2', :'ivar', 'mine') from generate_series(1, 3) \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'body_strength')::numeric, 4) as back_mined \gset
+select spend_wind(:'world2', :'ivar', 'forage') from generate_series(1, 3) \g /dev/null
+select '981. the heavy trades, ' || (select string_agg(id, ' and ' order by id) from skill_def where heavy) || ', train the back at ' || work_back() || ' a go, off the same list and number as the browser'
+     || ': body strength ' || :'back_before' || ', then ' || :'back_dug' || ' after three spadefuls (up: ' || (:back_dug > :back_before) || ')'
+     || ', ' || :'back_mined' || ' after three swings of the pick (up: ' || (:back_mined > :back_dug) || ')'
+     || ', and ' || round(skill_of(:'world2', :'ivar', 'body_strength')::numeric, 4) || ' after three goes at foraging, which is no heavier than it was (up: '
+     || (round(skill_of(:'world2', :'ivar', 'body_strength')::numeric, 4) > :back_mined) || ')';
+
+/*
+ * A container's contents are its own.
+ *
+ * A bag's contents carry the bag's holder and follow the bag: into a crate,
+ * out again, onto the ground and into somebody else's hands. And every
+ * container is a line of the container table.
+ */
+\echo ''
+\echo '--- what is in a container belongs to the container'
+select id as box, x as bx, y as by from crate where world_id = :'world2' order by id limit 1 \gset
+delete from item where world_id = :'world2' and def in ('satchel', 'cabbage_seed') \g /dev/null
+select x as was_x, y as was_y from player where world_id = :'world2' and uid = :'ivar' \gset
+update player set x = :bx + 0.5, y = :by + 0.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select give(:'world2', :'ivar', 'satchel', 1, 50) as satchel \gset
+select give(:'world2', :'ivar', 'cabbage_seed', 5, 50) as seeds \gset
+select act_perform(:'world2', :'ivar', 'stow_item', ('{"kind":"item","uid":' || :'seeds' || ',"count":5}')::jsonb) \g /dev/null
+-- The island stows into the first bag with room, which may be one Ivar already carries; that bag is the one measured.
+select id as stowed, inside as bag from item where world_id = :'world2' and holder = 'bag' and def = 'cabbage_seed' \gset
+select lower(d.name) as bagname from item b join item_def d on d.id = b.def where b.id = :'bag' \gset
+create or replace function pg_temp.whose(p_id bigint, p_ivar uuid, p_alice uuid) returns text language sql as $$
+  select holder || ' / ' || case when holder_uid = p_ivar then 'Ivar' when holder_uid = p_alice then 'Alice' when holder_uid is null then 'nobody' else 'somebody else' end
+    || case when inside is not null then ' / in the bag' else '' end from item where id = p_id
+$$;
+select pg_temp.whose(:'stowed', :'ivar', :'alice') as stowed_as \gset
+-- Into the crate, bag and all, and out again.
+select act_perform(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'bag' || ',"count":1}')::jsonb) \g /dev/null
+select pg_temp.whose(:'bag', :'ivar', :'alice') as bag_crated, pg_temp.whose(:'stowed', :'ivar', :'alice') as seeds_crated \gset
+select act_perform(:'world2', :'ivar', 'take_from_store', ('{"kind":"item","uid":' || :'bag' || ',"count":1}')::jsonb) \g /dev/null
+select pg_temp.whose(:'bag', :'ivar', :'alice') as bag_back, pg_temp.whose(:'stowed', :'ivar', :'alice') as seeds_back \gset
+-- Dropped, and picked up by Alice.
+select act_perform(:'world2', :'ivar', 'drop', ('{"kind":"item","uid":' || :'bag' || ',"count":1}')::jsonb) \g /dev/null
+select pg_temp.whose(:'bag', :'ivar', :'alice') as bag_dropped, pg_temp.whose(:'stowed', :'ivar', :'alice') as seeds_dropped \gset
+select gx as bag_gx, gy as bag_gy from item where id = :'bag' \gset
+update player set x = :bag_gx + 0.5, y = :bag_gy + 0.5 where world_id = :'world2' and uid = :'alice' \g /dev/null
+select act_perform(:'world2', :'alice', 'pick_up', ('{"kind":"ground","x":' || :bag_gx || ',"y":' || :bag_gy || ',"uid":' || :'bag' || '}')::jsonb) \g /dev/null
+select '982. five seeds stowed in Ivar''s ' || :'bagname' || ' are ' || :'stowed_as' || '; the ' || :'bagname' || ' put in the crate is ' || :'bag_crated' || ' and the seeds ' || :'seeds_crated'
+     || '; taken out again, ' || :'bag_back' || ' and ' || :'seeds_back'
+     || '; dropped, ' || :'bag_dropped' || ' and ' || :'seeds_dropped'
+     || '; picked up by Alice, ' || pg_temp.whose(:'bag', :'ivar', :'alice') || ' and ' || pg_temp.whose(:'stowed', :'ivar', :'alice')
+     || ', all ' || (select count from item where id = :'stowed') || ' of them'
+     || '; and the container table has a line for it: ' || (select kind || ' ' || lower(name) || ', ' || units || ' of ' || capacity || ', held by '
+          || case when holder_uid = :'alice' then 'Alice' when holder_uid is null then 'nobody' else 'somebody else' end from container where world_id = :'world2' and kind = 'bag' and id = :'bag');
+select '983. after everything above, things in a crate or a piece of furniture with a holder of their own: ' || (select count(*) from item where holder in ('crate', 'furniture') and holder_uid is not null)
+     || '; things in a bag not carrying the bag''s holder: ' || (select count(*) from item i join item b on b.id = i.inside where i.holder = 'bag' and i.holder_uid is distinct from b.holder_uid)
+     || '; and the island''s containers, one line each: ' || (select string_agg(kind || ' ' || n, ', ' order by kind) from (select kind, count(*) as n from container where world_id = :'world2' group by kind) t)
+     || ', ' || (select count(*) from container where world_id = :'world2' and units > 0) || ' of them with something in';
+-- The bag goes back to Ivar, contents following.
+update item set holder = 'player', holder_uid = :'ivar', gx = null, gy = null where id = :'bag' \g /dev/null
+update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item where world_id = :'world2' and def = 'cabbage_seed' \g /dev/null

@@ -51,6 +51,15 @@ export const WORK_WIND = 0.05;
 export const WORK_WIND_SPENT = 0.6;
 /** What the go itself teaches the hands, spent or not. */
 export const WORK_HAND = 0.05;
+/**
+ * And what the heavy trades teach the back. A shovel or a pick lifted a
+ * thousand times is strength at anything, whatever the swing found; the
+ * lighter trades teach the hands and the chest and nothing else. The island
+ * reads the same number and the same list.
+ */
+export const WORK_BACK = 0.05;
+/** The trades that are heavy work: every go at them trains body strength as well. */
+export const HEAVY_SKILLS: ReadonlySet<string> = new Set(['digging', 'mining']);
 
 /**
  * How dark it has to be before a fight teaches you anything about noticing.

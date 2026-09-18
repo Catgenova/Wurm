@@ -84,7 +84,7 @@ import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOG
 import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
-import { DARK_HIT, DARK_SHOT, DARK_SWING, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
+import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -112,6 +112,8 @@ out.push(`alter table tile_def add column if not exists paved boolean not null d
 out.push(`create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );`);
+/* The trades that are heavy work: every go at them trains body strength as well. */
+out.push(`alter table skill_def add column if not exists heavy boolean not null default false;`);
 out.push(`create table if not exists material_def (
   id text primary key, difficulty real not null, weight real not null, wear real not null,
   decay real not null, edge real not null, soak real not null, bite real not null, hold real not null
@@ -641,6 +643,7 @@ for (const [id, d] of Object.entries(TILE_DEFS)) {
 for (const d of SKILL_DEFS) {
   out.push(`insert into skill_def values (${q(d.id)}, ${q(d.name)}, ${q(d.start)}, ${q((d as { parent?: string }).parent)});`);
 }
+for (const id of HEAVY_SKILLS) out.push(`update skill_def set heavy = true where id = ${q(id)};`);
 /*
  * `Object.entries` of an *array* hands you indices.
  *
@@ -1021,6 +1024,8 @@ for (const [fn, v] of [
  */
 for (const [fn, v] of [
   ['work_wind', WORK_WIND], ['work_wind_spent', WORK_WIND_SPENT], ['work_hand', WORK_HAND],
+  /* And what the heavy trades teach the back, on every go at them. */
+  ['work_back', WORK_BACK],
   ['night_eyes_from', NIGHT_EYES_FROM],
   ['dark_swing', DARK_SWING], ['dark_shot', DARK_SHOT], ['dark_hit', DARK_HIT],
 ] as Array<[string, number]>) {

@@ -15,6 +15,7 @@ alter table tile_def add column if not exists paved boolean not null default fal
 create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );
+alter table skill_def add column if not exists heavy boolean not null default false;
 create table if not exists material_def (
   id text primary key, difficulty real not null, weight real not null, wear real not null,
   decay real not null, edge real not null, soak real not null, bite real not null, hold real not null
@@ -809,6 +810,8 @@ insert into skill_def values ('chain_armour', 'Chain armour', 1, null);
 insert into skill_def values ('plate_armour', 'Plate armour', 1, null);
 insert into skill_def values ('climbing', 'Climbing', 1, null);
 insert into skill_def values ('swimming', 'Swimming', 1, null);
+update skill_def set heavy = true where id = 'digging';
+update skill_def set heavy = true where id = 'mining';
 insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane, note) values ('birch', 'Birch', -1, 0.88, 1.02, 1.05, 1, 0.96, 1.04, 1, false, 'Light and even-grained. The bowyer''s wood for a medium bow.');
 insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane, note) values ('pine', 'Pine', -3, 0.8, 1.2, 1.25, 0.9, 0.88, 1.06, 0.95, false, 'Soft, quick to work and quick to rot. Good for what you mean to replace.');
 insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane, note) values ('oak', 'Oak', 5, 1.22, 0.68, 0.85, 1.12, 1.16, 0.94, 1.12, false, 'Hard going and worth it: an oak thing takes a third of the knocks and carries more.');
@@ -3052,6 +3055,7 @@ create or replace function breed_gain() returns double precision language sql im
 create or replace function work_wind() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
 create or replace function work_wind_spent() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
 create or replace function work_hand() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
+create or replace function work_back() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
 create or replace function night_eyes_from() returns double precision language sql immutable as $fn$ select 0.35::double precision $fn$;
 create or replace function dark_swing() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function dark_shot() returns double precision language sql immutable as $fn$ select 0.7::double precision $fn$;

@@ -42,7 +42,7 @@ import { Skills, SKILL_DEFS } from './skills';
 import { gemOf, JEWEL_BONUS } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
-import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from './learn';
+import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
@@ -2450,6 +2450,8 @@ export class Game {
     // The body learns from the work itself: wind from spending it, control from doing it.
     if (cost > 0) this.gainSkill('body_stamina', WORK_WIND + cost * WORK_WIND_SPENT);
     this.gainSkill('body_control', WORK_HAND);
+    // And the back, from the heavy trades: a shovel or a pick, whatever the go found.
+    if (a.def.skill && HEAVY_SKILLS.has(a.def.skill)) this.gainSkill('body_strength', WORK_BACK);
     if (this.action !== a) {
       // Whatever was performed put something else in hand; leave it alone.
       this.events.emit('action');
