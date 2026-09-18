@@ -51,6 +51,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   quern: { name: 'Quern', category: 'tool', weight: 9, description: 'Two dressed millstones, one turning on the other. Grinds grain into flour and nothing else.' },
   whetstone: { name: 'Whetstone', category: 'tool', weight: 1.2, description: 'A shaped block of stone. Takes the burr off metal and puts an edge back on it; needed to improve anything metal or stone.' },
   file: { name: 'File', category: 'tool', weight: 0.8, description: 'Cast at an anvil and cut with teeth. Needed to improve anything metal or wooden.' },
+  horseshoe: { name: 'Horseshoes', category: 'material', weight: 0.25, stackable: true, decay: 1, description: 'Four to a lump. Nailed onto a mount by a farrier with a mallet, they hold a week of riding: quicker on stone, and up what it would have baulked at.' },
+  horseshoe_mould: { name: 'Horseshoe mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, four shoes to a filling. It wears a little every time it is filled, and no mould can be mended.' },
   coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is twenty coins. It wears with every strike.' },
   coin_die_mould: { name: 'Coin die mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
   bell_casting: { name: 'Bell casting', category: 'misc', weight: 16, description: 'A bell cast whole, tongue and all, wanting a frame to hang in. Eight lumps went into it.' },

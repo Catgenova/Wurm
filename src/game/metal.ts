@@ -143,6 +143,7 @@ export const MOULDS: MouldDef[] = [
   { id: 'shield_boss_mould', name: 'Shield boss mould', makes: 'shield_boss', skill: 'armorsmithing', sand: 3, difficulty: 14, lumps: 2 },
   { id: 'file_mould', name: 'File mould', makes: 'file', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
   { id: 'coin_die_mould', name: 'Coin die mould', makes: 'coin_die', skill: 'blacksmithing', sand: 2, difficulty: 16, lumps: 2 },
+  { id: 'horseshoe_mould', name: 'Horseshoe mould', makes: 'horseshoe', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1, per: 4 },
   // The two big castings: a bell and a figure, each hung or set up afterwards.
   { id: 'bell_mould', name: 'Bell mould', makes: 'bell_casting', skill: 'blacksmithing', sand: 6, difficulty: 26, lumps: 8 },
   { id: 'statue_mould', name: 'Statue mould', makes: 'statue_casting', skill: 'blacksmithing', sand: 8, difficulty: 30, lumps: 12 },

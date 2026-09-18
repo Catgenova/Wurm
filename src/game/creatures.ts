@@ -3,6 +3,7 @@ import { isSeam } from '../world/tiles';
 import { mapFromBeast } from './treasure';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { DeedStore, Game } from './game';
+import { DAY_SECONDS } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { MINE_COLLAPSE } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -1558,6 +1559,8 @@ export interface IslandCreature {
   traits?: string[];
   hunting?: boolean;
   mine?: boolean;
+  /** Shod, by the island's clock. */
+  shod?: boolean;
   /** The trade a worker was set to, which is its species' own unless it was told otherwise. */
   job?: string | null;
   /*
@@ -1681,6 +1684,8 @@ export interface Creature {
   hitchedTo: number | null;
   /** Saddled and bridled, for the sorts that can be ridden. */
   tacked: boolean;
+  /** When it was last shod; shoes hold `SHOE_DAYS`. Long ago when it never was. */
+  shodAt: number;
   /** What is riding on its back, for the sorts that carry panniers. */
   pannier: Item[];
   /** Set while the player is up on its back. */
@@ -1718,6 +1723,7 @@ export interface CreatureJSON {
   fleece?: number;
   skills?: Record<string, number>;
   tacked?: boolean;
+  shodAt?: number;
   pannier?: Item[];
   post?: number | null;
   trapped?: number | null;
@@ -1753,6 +1759,17 @@ export const GRAZE_FILL = 0.5;
 
 /** How long a called creature keeps making its way over. */
 export const CALL_WINDOW = 12;
+/**
+ * Horseshoes. Four to a mount, nailed on with a mallet; they hold a week,
+ * quicker on stone and gravel by a share and up a steeper step by a fixed
+ * height. The island reads the same four.
+ */
+export const SHOES_PER_MOUNT = 4;
+export const SHOE_DAYS = 7;
+export const SHOE_PACE = 1.15;
+export const SHOE_STEP = 8;
+/** Whether the shoes are still on: a week from the fitting, in the clock that fitted them. */
+export const isShod = (now: number, c: { shodAt: number }): boolean => now - c.shodAt < SHOE_DAYS * DAY_SECONDS;
 /** How close it comes before standing still, well inside arm's reach. */
 const CALL_DISTANCE = 0.9;
 
@@ -1952,6 +1969,7 @@ export class Creatures {
       trade: null,
       hitchedTo: null,
       tacked: false,
+      shodAt: -1e9,
       ridden: false,
       pannier: [],
       post: null,
@@ -1975,7 +1993,7 @@ export class Creatures {
    * Replaces rather than merges: what is not in the list has wandered out of
    * the range we asked about, or is dead, and either way it is not here.
    */
-  sawAll(rows: IslandCreature[]): Hurt[] {
+  sawAll(rows: IslandCreature[], time = 0): Hurt[] {
     const now = Date.now();
     const seen = new Set<number>();
     const hurt: Hurt[] = [];
@@ -2014,6 +2032,8 @@ export class Creatures {
       c.mine = r.mine;
       // And what it was set to, if that is not what its kind does anyway.
       if (r.job !== undefined) c.trade = r.job && r.job !== SPECIES[c.species]?.gathers && (SPECIES[c.species]?.trades ?? []).includes(r.job as GatherKind) ? (r.job as GatherKind) : null;
+      // Shod or not is the island's word; the browser keeps its own clock of it.
+      if (r.shod !== undefined) c.shodAt = r.shod ? (isShod(time, c) ? c.shodAt : time) : -1e9;
       // The working life, which comes for yours and for nobody else's.
       if (r.care !== undefined) c.care = r.care;
       if (r.xp !== undefined) c.xp = r.xp;
@@ -4063,6 +4083,7 @@ export class Creatures {
         due: c.due,
         unborn: c.unborn,
         trade: c.trade,
+        shodAt: c.shodAt,
       })),
     };
   }
@@ -4074,7 +4095,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

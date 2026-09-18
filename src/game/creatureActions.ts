@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
@@ -576,6 +576,34 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       }
       c.tacked = true;
       g.logMsg(`You saddle ${c.name} and slip the bit into its mouth. It stands for it.`, 'event');
+    },
+  },
+  {
+    id: 'shoe_creature',
+    label: 'Shoe it',
+    verb: 'shoeing it',
+    stamina: 0.03,
+    baseTime: 6,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && !isShod(g.time, c);
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      if (!SPECIES[c.species].mount) return 'Only a mount takes shoes.';
+      if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
+      if (!ageDef(c, g.time).works) return `${c.name} is not grown. Nothing that young takes a shoe.`;
+      if (g.inventory.count('horseshoe') < SHOES_PER_MOUNT || !g.inventory.has('mallet')) return 'You need four horseshoes and a mallet.';
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      const shoes = g.inventory.find('horseshoe');
+      if (!shoes || !g.inventory.remove(shoes.uid, SHOES_PER_MOUNT)) return;
+      c.shodAt = g.time;
+      g.logMsg(`You nail four shoes onto ${c.name}'s hooves. They will hold a week: quicker on stone, and up what it would have baulked at.`, 'event');
     },
   },
   {

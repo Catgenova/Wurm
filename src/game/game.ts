@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
+import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -18,7 +18,7 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, isShod, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { knackable, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -3775,7 +3775,9 @@ export class Game {
   /** How fast a mount carries a rider: its own pace, steadied by practice. */
   mountSpeed(c: Creature): number {
     const def = this.creatures.species(c);
-    return Math.min(MAX_MOUNT_SPEED, def.speed * ageDef(c, this.time).speed * this.creatures.speedMul(c) * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger));
+    // Shod, it goes quicker on laid stone and gravel.
+    const shod = isShod(this.time, c) && !!TILE_DEFS[this.world.getTile(this.player.tileX, this.player.tileY)].paved ? SHOE_PACE : 1;
+    return Math.min(MAX_MOUNT_SPEED, def.speed * ageDef(c, this.time).speed * this.creatures.speedMul(c) * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger) * shod);
   }
 
   /**
@@ -3785,7 +3787,7 @@ export class Game {
    */
   mountStep(c: Creature): number {
     const sure = this.creatures.species(c).pitch ?? 1;
-    return MAX_STEP + (c.skills[HAUL_SKILL] ?? 0) * CLIMB_PITCH * 2 * sure;
+    return MAX_STEP + (c.skills[HAUL_SKILL] ?? 0) * CLIMB_PITCH * 2 * sure + (isShod(this.time, c) ? SHOE_STEP : 0);
   }
 
   /** The steepest tile a mount will carry a rider onto: the standing cap, raised by whatever raises its step. */

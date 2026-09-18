@@ -1,5 +1,6 @@
 import { clockLeft } from '../../game/boons';
-import { ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { DAY_SECONDS } from '../../game/game';
+import { isShod, SHOE_DAYS, ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
 import { CHANNELS, isGain, pct, TIER_COLOUR, traitOf, type TraitChannel } from '../../game/traits';
 import { TIER_LEVEL } from '../../game/husbandry';
 
@@ -307,6 +308,7 @@ export class WildermonPanel {
     if (c.ridden) parts.push('Under the saddle');
     else if (c.hitchedTo !== null) parts.push('In the traces');
     else if (c.tacked) parts.push('Saddled and bridled');
+    if (isShod(this.game.time, c)) parts.push(`Shod, for ${Math.max(1, Math.ceil((SHOE_DAYS * DAY_SECONDS - (this.game.time - c.shodAt)) / DAY_SECONDS))} more day${Math.ceil((SHOE_DAYS * DAY_SECONDS - (this.game.time - c.shodAt)) / DAY_SECONDS) === 1 ? '' : 's'}`);
     if (c.due > 0) parts.push(`In young, due in ${clockLeft(Math.max(0, c.due - this.game.time))}`);
     if (c.mode === 'active') parts.push(`Stance: ${STANCE_NAMES[c.stance]}`);
     if (c.mode === 'deed') {

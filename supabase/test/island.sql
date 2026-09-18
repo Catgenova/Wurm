@@ -8903,3 +8903,43 @@ select '970. "' || (select text from event where uid = :'ivar' order by n desc l
      || ' s and standing a while after — and the citizens of ' || (select name from deed where world_id = :'world2' and founded_by = :'ivar') || ' told: '
      || (select count(*) from event where kind = 'system' and text like 'The bell rings out%') || ' of '
      || (select count(*) from deed_member where world_id = :'world2' and founder = :'ivar');
+
+/*
+ * Horseshoes.
+ *
+ * Four to a lump off a gang mould, nailed onto a mount with a mallet. They
+ * hold a week: quicker on stone and gravel, and a step higher.
+ */
+\echo ''
+\echo '--- horseshoes'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '971. off the table: a ' || (select name from mould_def where id = 'horseshoe_mould') || ' casts ' || (select per from mould_def where id = 'horseshoe_mould')
+     || ' shoes from ' || (select lumps from mould_def where id = 'horseshoe_mould') || ' lump; a mount takes ' || shoes_per_mount() || ', they hold ' || shoe_days()
+     || ' days, at ' || shoe_pace() || ' the pace on paved ground — ' || (select string_agg(name, ', ' order by id) from tile_def where paved) || ' — and ' || shoe_step()
+     || ' more of step; ported ' || act_ported('shoe_creature');
+-- A horse of Ivar's for the shoes, since the suite's first horse was cleared with its island long ago: grown, standing beside him, and a grubba that is no mount.
+select creature_spawn(:'world2', 'orse', 14.6, 12.6, 'active', now() - interval '1 day') as shodhorse \gset
+update creature set from_x = 14.6, from_y = 12.6, to_x = 14.6, to_y = 12.6, leg_at = now(), leg_ends = now(), settled_at = now(),
+    rider = null, shod_at = null where world_id = :'world2' and id = :'shodhorse' \g /dev/null
+update player set x = 14.5, y = 12.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('horseshoe', 'mallet') \g /dev/null
+select '972. the grubba: "' || coalesce(act_refusal(:'world2', :'ivar', 'shoe_creature', ('{"kind":"creature","id":' || :'stumper' || '}')::jsonb), 'ALLOWED')
+     || '"; the horse, with nothing in the pack: "' || coalesce(act_refusal(:'world2', :'ivar', 'shoe_creature', ('{"kind":"creature","id":' || :'shodhorse' || '}')::jsonb), 'ALLOWED')
+     || '"' as doors \gset
+select give(:'world2', :'ivar', 'horseshoe', 4, 50, 'Iron') \g /dev/null
+select give(:'world2', :'ivar', 'mallet', 1, 50, 'Pine') \g /dev/null
+select round(mount_step((select c from creature c where c.world_id = :'world2' and c.id = :'shodhorse'))::numeric, 1) as step_before \gset
+select :'doors' || '; with four shoes and a mallet: "' || coalesce(act_refusal(:'world2', :'ivar', 'shoe_creature', ('{"kind":"creature","id":' || :'shodhorse' || '}')::jsonb), 'ALLOWED') || '"';
+delete from event where uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'shoe_creature', ('{"kind":"creature","id":' || :'shodhorse' || '}')::jsonb) \g /dev/null
+update creature set rider = :'ivar' where world_id = :'world2' and id = :'shodhorse' \g /dev/null
+select round(travel_speed(:'world2', :'ivar')::numeric, 2) as pace_grass \gset
+select land_tile(:'world2', 14, 12) as was_tile \gset
+select land_set_tile(:'world2', 14, 12, tile_id('Stone slabs')) \g /dev/null
+select '973. "' || (select text from event where uid = :'ivar' order by n desc limit 1) || '" — shoes left ' || coalesce((select count from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'horseshoe'), 0)
+     || ', shod ' || shod((select c from creature c where c.world_id = :'world2' and c.id = :'shodhorse')) || ' and handed to a browser as shod '
+     || coalesce((select x->>'shod' from jsonb_array_elements(rpc_creatures(:'world2', 40)) x where (x->>'id')::int = :'shodhorse'), 'NOTHING')
+     || '; its step ' || :'step_before' || ' then ' || round(mount_step((select c from creature c where c.world_id = :'world2' and c.id = :'shodhorse'))::numeric, 1)
+     || '; under saddle on grass ' || :'pace_grass' || ' and on slabs ' || round(travel_speed(:'world2', :'ivar')::numeric, 2);
+select land_set_tile(:'world2', 14, 12, :'was_tile') \g /dev/null
+update creature set rider = null where world_id = :'world2' and id = :'shodhorse' \g /dev/null

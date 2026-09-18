@@ -271,7 +271,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   island.hooks.mobs = (rows) => {
     // Everything that lost health since the last answer gets its number, which
     // is the half of the fight that happens away from your own body.
-    for (const h of game.creatures.sawAll(rows)) {
+    for (const h of game.creatures.sawAll(rows, game.time)) {
       game.events.emit('hit', h.x, h.y, h.taken, 'dealt');
     }
     game.events.emit('creature');

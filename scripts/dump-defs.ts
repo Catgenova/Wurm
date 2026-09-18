@@ -21,7 +21,7 @@ import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
-import { COAX_LAPSE, COAX_STEP, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD } from '../src/game/creatures';
+import { COAX_LAPSE, COAX_STEP, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT } from '../src/game/creatures';
 import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
@@ -106,6 +106,8 @@ out.push(`create table if not exists tile_def (
   botanize boolean not null default false, pavable boolean not null default false,
   turns_to_dirt boolean not null default false, collect boolean not null default false
 );`);
+/* Laid stone or gravel: a shod mount goes quicker on it. */
+out.push(`alter table tile_def add column if not exists paved boolean not null default false;`);
 out.push(`create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );`);
@@ -625,6 +627,7 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
 }
 for (const [id, d] of Object.entries(TILE_DEFS)) {
   out.push(`insert into tile_def values (${q(Number(id))}, ${q(d.name)}, ${q(d.speed)}, ${q(!!d.blocks)}, ${q(d.digYield)}, ${q(!!d.mineable)}, ${q(!!d.forage)}, ${q(!!d.botanize)}, ${q(!!d.pavable)}, ${q(!!d.turnsToDirt)}, ${q(!!d.collect)});`);
+  if (d.paved) out.push(`update tile_def set paved = true where id = ${q(Number(id))};`);
 }
 for (const d of SKILL_DEFS) {
   out.push(`insert into skill_def values (${q(d.id)}, ${q(d.name)}, ${q(d.start)}, ${q((d as { parent?: string }).parent)});`);
@@ -923,6 +926,8 @@ for (const [fn, v] of [
   ['melt_share', MELT_SHARE], ['melt_keep', MELT_KEEP], ['melt_heat', MELT_HEAT],
   /* Coins: how many a lump strikes, what a strike costs the die, and how hard a strike is. */
   ['coins_per_lump', COINS_PER_LUMP], ['die_wear', DIE_WEAR], ['coin_difficulty', COIN_DIFFICULTY],
+  /* Horseshoes: four to a mount, a week on, a share quicker on stone and a step higher. */
+  ['shoes_per_mount', SHOES_PER_MOUNT], ['shoe_days', SHOE_DAYS], ['shoe_pace', SHOE_PACE], ['shoe_step', SHOE_STEP],
   /* And how long a tree stands at one age, in real seconds, and what it leaves. */
   ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
   ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],

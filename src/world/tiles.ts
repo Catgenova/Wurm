@@ -141,6 +141,8 @@ export interface TileDef {
   botanize?: boolean;
   /** Can be paved over. */
   pavable?: boolean;
+  /** Laid stone or gravel: a shod mount goes quicker on it. */
+  paved?: boolean;
   /** Digging turns the tile into dirt. */
   turnsToDirt?: boolean;
   /**
@@ -165,8 +167,8 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
   [TileType.Moss]: { name: 'Moss', color: [82, 126, 66], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
-  [TileType.Gravel]: { name: 'Gravel', color: [156, 152, 144], speed: 1.15, pavable: true, roll: 1 },
-  [TileType.Cobblestone]: { name: 'Cobblestone', color: [126, 122, 116], speed: 1.25, roll: 1 },
+  [TileType.Gravel]: { name: 'Gravel', paved: true, color: [156, 152, 144], speed: 1.15, pavable: true, roll: 1 },
+  [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
   [TileType.Field]: { name: 'Field', color: [130, 102, 62], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
   [TileType.Tree]: { name: 'Tree', color: [76, 124, 56], speed: 1, blocks: true, roll: 0.6 },
   [TileType.Bush]: { name: 'Bush', color: [86, 138, 60], speed: 0.5, roll: 0.4 },
@@ -176,7 +178,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1, roll: 0.5 },
   [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8, roll: 0.4 },
   [TileType.Lawn]: { name: 'Lawn', color: [104, 164, 74], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
-  [TileType.Slabs]: { name: 'Stone slabs', color: [172, 170, 164], speed: 1.3, roll: 1 },
+  [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
 
 /**
