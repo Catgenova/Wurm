@@ -7912,23 +7912,26 @@ select '902. what each age prunes to: ' || string_agg(
 from tree_age_def a left join tree_age_def b on b.id = a.pruned;
 
 select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
--- One oak of each age in a row, a forester who knows the work, and a hatchet.
+-- The four ages the rule was asked about, an oak apiece in a row — sapling,
+-- young, old, mature — a forester who knows the work, and a sickle. Named
+-- rather than walked off the table, which has grown since: the later stages
+-- have their own measurements.
 do $$
-declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; a record; v_x int := 50;
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; a int; v_x int := 50;
 begin
   select id into w from world where name = 'Hoarding';
-  delete from item where world_id = w and holder_uid = me and def = 'hatchet';
+  delete from item where world_id = w and holder_uid = me and def = 'sickle';
   delete from event where uid = me;
-  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'hatchet', 90, 1);
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'sickle', 90, 1);
   update player set act = null, act_queue = '[]'::jsonb, seen_at = now(),
       stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
   insert into skill (world_id, uid, id, value) values (w, me, 'forestry', 90)
     on conflict (world_id, uid, id) do update set value = 90;
-  for a in select * from tree_age_def order by hits, logs loop
+  foreach a in array array[3, 0, 2, 1] loop
     perform land_set_tile(w, v_x, 52, tile_id('Tree'));
     perform land_set_height(w, v_x, 52, 4);
-    -- Species 2 is oak; the age goes in the two bits over it.
-    perform land_set_data(w, v_x, 52, 2 | (a.id << 4));
+    -- Species 2 is oak; the age goes in the bits over it.
+    perform land_set_data(w, v_x, 52, 2 | (a << 4));
     v_x := v_x + 1;
   end loop;
 end $$;
@@ -8021,7 +8024,7 @@ select '908. an old oak pruned and one beside it left alone, and a day later: th
      || case when land_tile(:'world6', 58, 52) = tile_id('Tree')
              then lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 58, 52))))
              else 'gone' end
-     || ' — which is what pruning is for';
+     || ' — a day further on than the one taken back, and two days from gone; 915 takes the last of those days back too';
 
 
 /*
@@ -8260,3 +8263,52 @@ select examine_tile_text(:'world6', 62, 58) as stump_look \gset
 select pg_temp.one_day(:'world6') \g /dev/null
 select '922. what the island says of a stump: "' || :'stump_look'
      || '" — and a stump left a day is ' || (select name from tile_def where id = land_tile(:'world6', 62, 58));
+
+
+/*
+ * The sickle: the forester's own blade.
+ *
+ * Asked from the island. Pruning was done with the hatchet because the island
+ * had no sickle; it has one now, cast at the anvil and fitted to a handle like
+ * the hatchet, and Prune is its. It cuts what a bush has on it as well — rose
+ * petals and lavender, both dyestuffs — and a thorn bush has nothing on it
+ * worth the blade.
+ */
+\echo ''
+\echo '--- the sickle'
+select '923. the sickle, off the tables: a mould that makes ' || (select makes from mould_def where id = 'sickle_blade_mould')
+     || ' for ' || (select lumps from mould_def where id = 'sickle_blade_mould') || ' lump, a recipe that fits it — "'
+     || (select label from recipe where id = 'fit_sickle_blade') || '" for ' || (select result from recipe where id = 'fit_sickle_blade')
+     || ' — and what Prune asks for now: ' || (select tool from action_def where id = 'prune');
+select '924. what a sickle cuts off a bush: ' || string_agg(lower(name) || ' → ' || coalesce(yields, 'nothing worth the blade'), '; ' order by id)
+from bush_def;
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def in ('rose_petals', 'lavender');
+  delete from event where uid = me;
+  -- A rose bush, a thorn bush and a lavender bush in a row.
+  perform land_set_tile(w, 50, 58, tile_id('Bush')); perform land_set_height(w, 50, 58, 4); perform land_set_data(w, 50, 58, 0);
+  perform land_set_tile(w, 51, 58, tile_id('Bush')); perform land_set_height(w, 51, 58, 4); perform land_set_data(w, 51, 58, 1);
+  perform land_set_tile(w, 52, 58, tile_id('Bush')); perform land_set_height(w, 52, 58, 4); perform land_set_data(w, 52, 58, 2);
+  update player set x = 50.5, y = 57.5 where world_id = w and uid = me;
+  perform act_perform(w, me, 'harvest_bush', '{"kind":"tile","x":50,"y":58}'::jsonb);
+end $$;
+select '925. a rose bush, with the sickle: "'
+     || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You cut%' order by n desc limit 1)
+     || '" — ' || coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'rose_petals'), 0)
+     || ' rose petals in the pack, and asked again: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'harvest_bush', '{"kind":"tile","x":50,"y":58}'::jsonb), 'ALLOWED') || '"';
+update player set x = 51.5, y = 57.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'harvest_bush', '{"kind":"tile","x":51,"y":58}'::jsonb), 'ALLOWED') as thorn_said \gset
+update player set x = 52.5, y = 57.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select '926. a thorn bush: "' || :'thorn_said' || '", and a lavender bush: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'harvest_bush', '{"kind":"tile","x":52,"y":58}'::jsonb), 'ALLOWED') || '"';
+-- And without the blade.
+update item set holder_uid = '00000000-0000-0000-0000-000000000000' where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sickle' \g /dev/null
+select '927. and with no sickle in hand, pruning: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'prune', '{"kind":"tile","x":52,"y":58}'::jsonb), 'ALLOWED')
+     || '" — the hatchet does not do any more';
+update item set holder_uid = '77777777-7777-7777-7777-777777777777' where world_id = :'world6' and holder_uid = '00000000-0000-0000-0000-000000000000' and def = 'sickle' \g /dev/null

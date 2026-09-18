@@ -791,7 +791,7 @@ export const ACTIONS: ActionDef[] = [
     label: 'Prune',
     verb: 'pruning',
     skill: 'forestry',
-    tool: 'hatchet',
+    tool: 'sickle',
     stamina: 0.03,
     baseTime: 6,
     difficulty: 20,
@@ -807,7 +807,7 @@ export const ACTIONS: ActionDef[] = [
       // A stage whose next stage is itself is a shrub already kept.
       if (age.pruned === null && age.next === age.id) return 'It is clipped as far as it goes.';
       if (age.pruned === null) return `The ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} is too young to prune. Let it grow.`;
-      return g.inventory.has('hatchet') ? null : 'You need a hatchet to prune.';
+      return g.inventory.has('sickle') ? null : 'You need a sickle to prune.';
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -816,7 +816,7 @@ export const ACTIONS: ActionDef[] = [
       const age = treeAge(data);
       const to = age.pruned === null ? undefined : TREE_AGES[age.pruned];
       if (!to) return;
-      if (!g.skillCheck('forestry', 20, g.toolQl('hatchet'))) {
+      if (!g.skillCheck('forestry', 20, g.toolQl('sickle'))) {
         g.missed();
         g.logMsg(`You cut at the ${def.name.toLowerCase()} and take off nothing that matters.`, 'event');
         return;
@@ -827,6 +827,40 @@ export const ACTIONS: ActionDef[] = [
       // tree pruned back is still half felled.
       g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), to.id));
       g.logMsg(`You prune the ${age.name.toLowerCase()} ${def.name.toLowerCase()} back. It stands as a ${to.name.toLowerCase()} ${def.name.toLowerCase()} now.`, 'event');
+    },
+  },
+  {
+    id: 'harvest_bush',
+    label: 'Harvest',
+    labelFor: (t, g) => {
+      const def = t.kind === 'tile' ? BUSH_DEFS[bushSpecies(g.world.getData(t.x, t.y))] : undefined;
+      return def?.yields ? `Cut ${itemDef(def.yields).name.toLowerCase()}` : 'Harvest';
+    },
+    verb: 'harvesting',
+    skill: 'forestry',
+    tool: 'sickle',
+    stamina: 0.02,
+    baseTime: 4,
+    applies: (t, g) => tile(t, g) === TileType.Bush,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Bush) return 'There is no bush here.';
+      const def = BUSH_DEFS[bushSpecies(g.world.getData(t.x, t.y))];
+      if (!def.yields) return `Nothing on a ${def.name.toLowerCase()} is worth a sickle.`;
+      if (g.isForaged(t.x, t.y, 'forage')) return `You have had what this ${def.name.toLowerCase()} has on it. Come back later.`;
+      return g.inventory.has('sickle') ? null : 'You need a sickle to harvest a bush.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const def = BUSH_DEFS[bushSpecies(g.world.getData(t.x, t.y))];
+      if (!def.yields) return;
+      // As fruit off a tree: more to a practised hand, and never nothing.
+      const skill = g.skills.get('forestry');
+      const count = Math.max(1, Math.round(3 * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
+      const made = g.inventory.add(def.yields, { count, ql: g.productQl('forestry', g.toolQl('sickle')) });
+      g.markForaged(t.x, t.y, 'forage');
+      g.gainSkill('forestry', 0.35);
+      g.logMsg(`You cut ${count} ${itemDef(def.yields).name.toLowerCase()} off the ${def.name.toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
     },
   },
   {

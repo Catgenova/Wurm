@@ -34,6 +34,9 @@ export const DYES: DyeDef[] = [
   dye('weld', 'Weld', 'yellow', '#c9a83c', '#96792a', 'sage', 8, 16, 'Sage boiled for the yellow in it. Bright, and the base of every green.'),
   dye('verdigris', 'Verdigris', 'green', '#4b7a4a', '#325232', 'mint', 8, 18, 'Mint over copper. A deep leaf green, and the hardest of them to get even.'),
   dye('umber', 'Umber', 'brown', '#6b4b2e', '#4a3320', 'nuts', 8, 10, 'Nut husks, boiled. The dye a beginner starts on, because it is very hard to get wrong.'),
+  // The two a sickle cuts off a bush.
+  dye('rose', 'Rose', 'pink', '#d6879f', '#9c5468', 'rose_petals', 8, 15, 'Rose petals, boiled gently. A pink that fades in the sun and is dyed again every spring.'),
+  dye('lavender', 'Lavender', 'violet', '#8a6fbf', '#5d4a88', 'lavender', 8, 16, 'Lavender heads, boiled. A violet that keeps its scent for a while after.'),
 ];
 
 export const DYE_BY_ID = new Map(DYES.map((d) => [d.id, d]));

@@ -222,12 +222,14 @@ export interface BushDef {
   name: string;
   foliage: [light: string, dark: string];
   flowers?: string;
+  /** What a sickle cuts off it, or nothing worth the blade. */
+  yields?: string;
 }
 
 export const BUSH_DEFS: BushDef[] = [
-  { name: 'Rose bush', foliage: ['#6ea24a', '#3e6a2c'], flowers: '#e0455f' },
+  { name: 'Rose bush', foliage: ['#6ea24a', '#3e6a2c'], flowers: '#e0455f', yields: 'rose_petals' },
   { name: 'Thorn bush', foliage: ['#7e9a4e', '#4c6430'] },
-  { name: 'Lavender bush', foliage: ['#8faa7a', '#5f7a52'], flowers: '#9a6fd0' },
+  { name: 'Lavender bush', foliage: ['#8faa7a', '#5f7a52'], flowers: '#9a6fd0', yields: 'lavender' },
 ];
 
 export interface RockVariantDef {

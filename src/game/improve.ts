@@ -42,6 +42,7 @@ const METAL_TOOLS = new Set([
   'shovel',
   'pickaxe',
   'hatchet',
+  'sickle',
   'carving_knife',
   'chisel',
   'trowel',

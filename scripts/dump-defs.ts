@@ -504,6 +504,8 @@ out.push(`alter table tree_age_def add column if not exists pruned int;`);
 /* And whether there is life in it, which a shrivelled tree has not. */
 out.push(`alter table tree_age_def add column if not exists alive boolean not null default true;`);
 out.push(`create table if not exists bush_def (id int primary key, name text not null);`);
+/* And what a sickle cuts off each, a change later than the table. */
+out.push(`alter table bush_def add column if not exists yields text;`);
 /* Weighted tables, shared by foraging people and foraging creatures. */
 out.push(`create table if not exists loot_table (
   id text not null, item text not null, weight real not null, primary key (id, item)
@@ -1092,7 +1094,10 @@ for (const t of Object.values(TRAPS)) {
   out.push(`insert into trap_def values (${q(t.id)}, ${q(t.name)}, ${q(t.difficulty)}, ${q(t.holds)}, `
     + `${q(t.reach)}, ${q(t.odds)}, ${q(t.lifeMin)}, ${q(t.lifeMax)}, ${q(!!t.water)}, ${q(t.hold ?? null)}, ${q(t.note)});`);
 }
-BUSH_DEFS.forEach((b, i) => out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`));
+BUSH_DEFS.forEach((b, i) => {
+  out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`);
+  if (b.yields) out.push(`update bush_def set yields = ${q(b.yields)} where id = ${q(i)};`);
+});
 for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE]] as Array<[string, Array<[string, number]>]>) {
   for (const [item, weight] of table) out.push(`insert into loot_table values (${q(id)}, ${q(item)}, ${q(weight)});`);
 }
