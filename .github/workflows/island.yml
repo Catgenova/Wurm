@@ -313,6 +313,15 @@ jobs:
           npx esbuild supabase/test/bins.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/bins.mjs --log-level=error
           node node_modules/.cache/bins.mjs
+
+      - name: An anvil off the island keeps its metal
+        run: |
+          # The island hands an anvil's metal in `sub`, as its own rules read
+          # it. A copper anvil set down on an island came to a browser as an
+          # iron one; now it is the anvil it was poured as.
+          npx esbuild supabase/test/anvil.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/anvil.mjs --log-level=error
+          node node_modules/.cache/anvil.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

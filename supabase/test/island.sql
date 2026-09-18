@@ -2595,7 +2595,7 @@ select '390. ' || (select text from event where uid = :'ivar' and kind = 'event'
 -- back on its own and everybody would be face down by the third section.
 update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- an anvil, and what is beaten out on it'
-select give(:'world2', :'ivar', 'anvil', 1, 70, 'Iron') \g /dev/null
+select give(:'world2', :'ivar', 'anvil', 1, 70, 'iron') \g /dev/null
 select id as anvil_item from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1 \gset
 update player set x = 8.5, y = 7.5 where world_id = :'world2' and uid = :'ivar';
 delete from event where uid = :'ivar';
@@ -2605,6 +2605,11 @@ select id as anvil from placed where world_id = :'world2' and kind = 'anvil' ord
 select '391. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
      || ' — it is worth ' || round(anvil_ql((select p from placed p where p.id = :'anvil'))::numeric, 1)
      || ' to beat on, from a quality of 70, because what a thing is made of decides how kindly it works';
+-- What the ground read hands a browser for it: the metal rides in `sub`, as
+-- the island's own naming reads it; `material` is never written for an anvil.
+select '391b. the ground read hands it over as sub "' || (p.value->>'sub') || '", material ' || coalesce(p.value->>'material', 'null')
+     || ', and the island calls it "' || anvil_name((select pl from placed pl where pl.id = :'anvil')) || '" — a browser reads the metal off sub'
+  from jsonb_array_elements(rpc_ground(:'world2', 40, true)->'placed') p where (p.value->>'id')::bigint = :'anvil';
 select '392. and another on the same four subtiles: ' || coalesce(anvil_place_reason(:'world2', 8, 8, 0, 0), 'allowed');
 
 select give(:'world2', :'ivar', 'shovel_head_mould', 1, 60) \g /dev/null
@@ -8947,7 +8952,7 @@ select '964. an hour of heat later, ' || :'melted' || ' finished: ' || (select s
 \echo '--- coins and a die'
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 -- An anvil of Ivar's own to strike on: the earlier one was taken up again.
-select give(:'world2', :'ivar', 'anvil', 1, 70, 'Iron') \g /dev/null
+select give(:'world2', :'ivar', 'anvil', 1, 70, 'iron') \g /dev/null
 update player set x = 8.5, y = 7.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select act_perform(:'world2', :'ivar', 'place_anvil',
   ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || (select id from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1) || '}')::jsonb) \g /dev/null

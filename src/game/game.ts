@@ -4391,7 +4391,12 @@ export class Game {
           output: furnaceOutput(r.id, r.state?.output),
         });
       } else if (r.kind === 'anvil') {
-        this.anvils.set(r.id, { ...at, ql: r.ql ?? 20, metal: r.material ?? 'iron' });
+        // An anvil's metal rides in `sub` — the island's `perform_forge` puts
+        // what the anvil was poured from there, and its `anvil_name` and
+        // `anvil_ql` read it back from there; `material` is never written for
+        // one. Reported as "made a copper anvil and placed down an iron anvil":
+        // this read `material`, found nothing, and called every anvil iron.
+        this.anvils.set(r.id, { ...at, ql: r.ql ?? 20, metal: r.sub ?? 'copper' });
       } else if (r.kind === 'post') {
         const p: PlacedPost = { ...at, ql: r.ql ?? 20, dmg: r.dmg ?? 0, worker: null, name: r.name ?? undefined, material: r.material ?? undefined };
         this.posts.set(r.id, p);
