@@ -29,6 +29,15 @@ export const MAX_STEP = 32;
  * places is the one thing this repository will not have.
  */
 export const CLIMB_PER_LEVEL = 0.4;
+/**
+ * The steepest tile a body can stand on: sixty between its highest corner and
+ * its lowest, before climbing, which raises it at the rate it raises the
+ * step. The step between tiles is asked about separately; this is the tile
+ * itself. The island reads the same number.
+ */
+export const MAX_STAND = 60;
+/** Above this a tile is slow going whichever way it is crossed, and the pace falls off with the slope. */
+export const SLOW_SLOPE = 40;
 
 /** Water deeper than this (in height units below the surface) means swimming. */
 export const SWIM_DEPTH = 4;
@@ -117,6 +126,8 @@ export class Player {
   burden = 0;
   /** Steepest step allowed, raised by the climbing skill. */
   maxStep = MAX_STEP;
+  /** Steepest tile that can be stood on, raised by the climbing skill. */
+  maxStand = MAX_STAND;
   /** Share of walking speed kept in deep water, raised by the swimming skill. */
   swimSpeed = SWIM_SPEED;
   /** Steepness of the last step taken between tiles, for the climbing skill. */
@@ -163,7 +174,7 @@ export class Player {
     this.visualLevel += (this.level - this.visualLevel) * Math.min(1, dt * 7);
     if (Math.abs(this.level - this.visualLevel) < 0.01) this.visualLevel = this.level;
     const step = (x0: number, y0: number, x1: number, y1: number): number | null =>
-      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1, this.maxStep) ? this.level : null;
+      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1, this.maxStep) && standsOn(world, x1, y1, this.maxStand) ? this.level : null;
     let vx = 0;
     let vy = 0;
     let distanceLimit = Infinity;
@@ -212,6 +223,11 @@ export class Player {
     const ahead = world.heightAt(this.x + vx * 0.15, this.y + vy * 0.15);
     const grade = (ahead - h) / (0.15 * UNITS_PER_TILE);
     if (grade > 0) speed /= 1 + grade * 1.6;
+    // And a steep tile is slow going whichever way it is crossed — on your
+    // own feet. A hull floats over whatever the bottom does, and a seat has
+    // legs or wheels under it that answer for their own pace.
+    const steep = this.carried ? 0 : world.slope(this.tileX, this.tileY);
+    if (steep > SLOW_SLOPE) speed *= SLOW_SLOPE / steep;
 
     const len = Math.min(speed * dt, distanceLimit);
     const nx = this.x + vx * len;
@@ -269,6 +285,17 @@ export function groundStep(world: World, x0: number, y0: number, x1: number, y1:
   return Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= maxStep;
 }
 
+/**
+ * Terrain-only rule for standing on a tile: nothing steeper than `maxStand`
+ * between its highest corner and its lowest, which for the player grows with
+ * climbing and for everything else is MAX_STAND. A body already inside a tile
+ * that has been dug too steep under it is never asked this; it is asked of
+ * the tile being stepped into.
+ */
+export function standsOn(world: World, x: number, y: number, maxStand = MAX_STAND): boolean {
+  return world.slope(x, y) <= maxStand;
+}
+
 /** Something (a wall) that forbids stepping from one tile to another. */
 export type StepBlock = (x0: number, y0: number, x1: number, y1: number) => boolean;
 
@@ -279,7 +306,7 @@ export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad
   return {
     passable: (x: number, y: number) => world.isPassable(x, y),
     step: (x0: number, y0: number, level: number, x1: number, y1: number): number | null =>
-      rule ? rule(x0, y0, level, x1, y1) : groundStep(world, x0, y0, x1, y1) ? level : null,
+      rule ? rule(x0, y0, level, x1, y1) : groundStep(world, x0, y0, x1, y1) && standsOn(world, x1, y1) ? level : null,
     levels,
     cost: (x: number, y: number) => {
       const def = TILE_DEFS[world.getTile(x, y)];

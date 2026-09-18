@@ -78,7 +78,7 @@ import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECOND
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
-import { CLIMB_PER_LEVEL, SWIM_DEPTH } from '../src/game/player';
+import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
@@ -903,6 +903,8 @@ for (const [fn, v] of [
    */
   /* What a level of climbing adds to the steepest step a body can take. */
   ['climb_per_level', CLIMB_PER_LEVEL],
+  /* The steepest tile a body can stand on, before climbing. */
+  ['max_stand', MAX_STAND],
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
   ['dredge_depth', DREDGE_DEPTH],

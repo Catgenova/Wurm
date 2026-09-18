@@ -8671,3 +8671,48 @@ select land_set_height(:'world6', 20, 21, -9), land_set_dirt(:'world6', 20, 21, 
 select '955. and the other doors — the same corner thirty-one under: "' || :'deep_door'
      || '"; back at nine with the soil gone off it: "'
      || coalesce(act_refusal(:'world6', :'eater', 'dredge', '{"kind":"tile","x":20,"y":20,"cx":20,"cy":21}'::jsonb), 'allowed') || '"';
+
+/*
+ * A slope you can stand on.
+ *
+ * Asked from the island. A walk was refused by the step between tile middles
+ * and nothing else, so a tile dug into a wall seventy high between its
+ * corners could still be walked. Now a tile has a slope you can stand on —
+ * sixty, raised by climbing — a rider has the mount's, wheels the bare sixty,
+ * and afloat there is none.
+ */
+\echo ''
+\echo '--- a slope you can stand on'
+do $$
+declare w uuid; gx int; gy int;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- Flat at four from 26 to 36, one corner raised seventy and one fifty.
+  for gx in 26..36 loop for gy in 26..36 loop
+    perform land_set_height(w, gx, gy, 4); perform land_set_dirt(w, gx, gy, 5);
+    if gx < 36 and gy < 36 then perform land_set_tile(w, gx, gy, tile_id('Grass')); end if;
+  end loop; end loop;
+  perform land_set_height(w, 32, 32, 74);
+  perform land_set_height(w, 28, 32, 54);
+  delete from skill where world_id = w and id = 'climbing'
+    and uid = (select uid from player where world_id = w and name = 'Dane');
+end $$;
+select uid as dane from player where world_id = :'world6' and name = 'Dane' \gset
+select walk_share(:'world6', :'dane', 0, 30.5, 32.5, 31.5, 32.5) as share70 \gset
+select walk_share(:'world6', :'dane', 0, 29.5, 32.5, 28.5, 32.5) as share50 \gset
+insert into skill (world_id, uid, id, value) values (:'world6', :'dane', 'climbing', 50)
+  on conflict (world_id, uid, id) do update set value = excluded.value;
+select '956. off the table a body stands on ' || max_stand() || ', climbing adding ' || climb_per_level() || ' a level. A tile dug '
+     || tile_slope(:'world6', 31, 32) || ' steep beside one dug ' || tile_slope(:'world6', 28, 32)
+     || ': a walker with no climbing gets ' || :'share70' || ' of a step off the flat into the first and ' || :'share50'
+     || ' into the second; at climbing 50 the first is ' || walk_share(:'world6', :'dane', 0, 30.5, 32.5, 31.5, 32.5);
+select '957. a wild thing, which has no climbing, would stand on the seventy: ' || creature_tile_ok(:'world6', 31, 32)
+     || ', on the fifty: ' || creature_tile_ok(:'world6', 28, 32) || ', on the flat: ' || creature_tile_ok(:'world6', 31, 30)
+     || ' — and the slope read off the square in hand is ' || chunk_slope(land_chunk_get(:'world6', 31 / chunk_size()::int, 32 / chunk_size()::int), 31 / chunk_size()::int, 32 / chunk_size()::int, 31, 32, chunk_size()::int)
+     || ' against ' || tile_slope(:'world6', 31, 32) || ' off the scanlines';
+-- The pond's corner ninety under makes the tile the boat sits on a ninety
+-- slope: Hunger, aboard, is not asked; Dane, on his feet, is.
+select land_set_height(:'world6', 20, 21, -98) \g /dev/null
+select '958. the boat''s tile dug ' || tile_slope(:'world6', 20, 20) || ' steep under it: aboard, Hunger gets '
+     || walk_share(:'world6', :'eater', 0, 19.5, 20.5, 20.5, 20.5) || ' of the way onto it; Dane on his feet, climbing 50, gets '
+     || walk_share(:'world6', :'dane', 0, 19.5, 20.5, 20.5, 20.5);

@@ -25,7 +25,7 @@ import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
-import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STEP, Player, readPlayer, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
@@ -766,7 +766,7 @@ export class Game {
     // Deck is ground: it is flat, and the drop under it is not your problem.
     if (level === 0 && this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) return 0;
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
-      if (level === 0 && !groundStep(this.world, x0, y0, x1, y1, this.climbStep())) return null;
+      if (level === 0 && (!groundStep(this.world, x0, y0, x1, y1, this.climbStep()) || !standsOn(this.world, x1, y1, this.standSlope()))) return null;
       return level;
     }
     if (level > 0 && this.connector(x0, y0, level) && this.standable(x1, y1, level - 1) && !b.blocksAt(level - 1, x0, y0, x1, y1)) {
@@ -791,7 +791,8 @@ export class Game {
     }
     if (!this.vehicleGround(x1, y1)) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
-    return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) ? 0 : null;
+    // Wheels get the bare cap: no team makes a cart stand on a wall.
+    return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) && standsOn(this.world, x1, y1) ? 0 : null;
   };
 
   /**
@@ -806,7 +807,7 @@ export class Game {
     // Only the web-footed sort will take a rider into deep water.
     if (!this.creatures.species(up).swims && this.world.heightAt(x1 + 0.5, y1 + 0.5) < -SWIM_DEPTH) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
-    return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) ? 0 : null;
+    return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) && standsOn(this.world, x1, y1, this.mountStand(up)) ? 0 : null;
   };
 
   /**
@@ -1774,6 +1775,11 @@ export class Game {
     return MAX_STEP + this.skills.get('climbing') * CLIMB_PER_LEVEL;
   }
 
+  /** Steepest tile the player can stand on, which climbing raises at the rate it raises the step. */
+  standSlope(): number {
+    return MAX_STAND + this.skills.get('climbing') * CLIMB_PER_LEVEL;
+  }
+
   /** Raise a skill and announce it. Returns the gain. */
   /**
    * How much faster a trade goes into you than it otherwise would: doubled
@@ -2166,6 +2172,7 @@ export class Game {
     // What climbing and swimming have earned, and what the armour costs, before the next step.
     p.burden = this.burden();
     p.maxStep = this.climbStep();
+    p.maxStand = this.standSlope();
     p.swimSpeed = Math.min(0.85, SWIM_SPEED + this.skills.get('swimming') * 0.0033);
     if (p.lastClimb > 0) {
       // Only ground that would have turned you back at the start teaches you anything.
@@ -3779,6 +3786,11 @@ export class Game {
   mountStep(c: Creature): number {
     const sure = this.creatures.species(c).pitch ?? 1;
     return MAX_STEP + (c.skills[HAUL_SKILL] ?? 0) * CLIMB_PITCH * 2 * sure;
+  }
+
+  /** The steepest tile a mount will carry a rider onto: the standing cap, raised by whatever raises its step. */
+  mountStand(c: Creature): number {
+    return MAX_STAND + this.mountStep(c) - MAX_STEP;
   }
 
   /** Get up on a saddled wildermon. */

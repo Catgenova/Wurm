@@ -308,6 +308,17 @@ jobs:
           npx esbuild supabase/test/furnace.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/furnace.mjs --log-level=error
           node node_modules/.cache/furnace.mjs
+      - name: A slope you can stand on is the same slope on both sides
+        run: |
+          # The standing cap is written twice — `standsOn` and `standSlope` in
+          # the browser, `walk_share` and `creature_tile_ok` on the island —
+          # so the same dug ground is put to both: a tile seventy steep and
+          # one fifty, a walker at climbing nought and then fifty asking to
+          # step off the flat into each, and a wild thing asked whether it
+          # would stand there.
+          npx esbuild supabase/test/stand.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/stand.mjs --log-level=error
+          node node_modules/.cache/stand.mjs
 
   migrate:
     name: Push the migrations to the project

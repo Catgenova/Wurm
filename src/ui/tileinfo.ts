@@ -4,6 +4,7 @@ import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
 import { bedrockAt } from '../world/ore';
 import { groundRoll, TILE_DEFS, TileType, dustiness } from '../world/tiles';
+import { SLOW_SLOPE } from '../game/player';
 
 /**
  * What the rock under a tile is, when anybody has looked.
@@ -83,6 +84,12 @@ export function tileUses(g: Game, x: number, y: number): string[] {
     const laden = Math.round(groundRoll(def.roll, 1) * 100);
     const word = pace > 100 ? ', better than open ground' : pace < 70 ? ', heavy going' : pace < 100 ? ', slow' : '';
     lines.push(`On foot: ${pace}% pace${word} · a full cart keeps ${laden}% of its own`);
+    // And whether it can be stood on at all, which is the one thing about a
+    // dug tile you otherwise find out by walking into it.
+    const slope = w.slope(x, y);
+    const cap = g.standSlope();
+    if (slope > cap) lines.push(`Slope ${slope}: too steep to stand on. You manage ${Math.floor(cap)}, and climbing raises it`);
+    else if (slope > SLOW_SLOPE) lines.push(`Slope ${slope}: slow going, ${Math.round((100 * SLOW_SLOPE) / slope)}% pace across it`);
   }
 
   // Working it with a tool.

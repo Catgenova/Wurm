@@ -9,7 +9,7 @@ import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { fishable, fishHere, waterDepth } from './fishing';
 import { itemDef, type Item } from './items';
-import { groundStep } from './player';
+import { groundStep, standsOn } from './player';
 import { skillGain } from './skills';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
@@ -2128,10 +2128,10 @@ export class Creatures {
     return n;
   }
 
-  /** Whether a tile is somewhere a creature can walk: passable, dry, in bounds. */
+  /** Whether a tile is somewhere a creature can walk: passable, dry, in bounds, and no steeper than anything stands on. */
   tileOk(game: Game, x: number, y: number): boolean {
     const w = game.world;
-    return w.inBounds(x, y) && w.isPassable(x, y) && w.centerHeight(x, y) >= -1;
+    return w.inBounds(x, y) && w.isPassable(x, y) && w.centerHeight(x, y) >= -1 && standsOn(w, x, y);
   }
 
   /**
