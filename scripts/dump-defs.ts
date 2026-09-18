@@ -81,6 +81,7 @@ import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOG
 import { CLIMB_PER_LEVEL, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
+import { DARK_HIT, DARK_SHOT, DARK_SWING, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -963,6 +964,21 @@ for (const [fn, v] of [
   ['swing_fight', SWING_FIGHT], ['swing_arm', SWING_ARM], ['swing_body', SWING_BODY],
   ['shot_fight', SHOT_FIGHT], ['shot_archery', SHOT_ARCHERY],
   ['rod_gain', ROD_GAIN], ['net_gain', NET_GAIN], ['breed_gain', BREED_GAIN],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/*
+ * What a go of work teaches the body, and how dark it has to be before a fight
+ * teaches you anything about noticing.
+ *
+ * Both lived in the browser and nowhere else, so on an island `body_control`
+ * rose from nothing at all, `body_stamina` only from sleeping, and `awareness`
+ * never — which is a body that digs for a week and is no stronger for it.
+ */
+for (const [fn, v] of [
+  ['work_wind', WORK_WIND], ['work_wind_spent', WORK_WIND_SPENT], ['work_hand', WORK_HAND],
+  ['night_eyes_from', NIGHT_EYES_FROM],
+  ['dark_swing', DARK_SWING], ['dark_shot', DARK_SHOT], ['dark_hit', DARK_HIT],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

@@ -40,6 +40,7 @@ import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bri
 import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
+import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from './learn';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { hasStep, MEDITATION, type PathId } from './meditation';
@@ -265,7 +266,6 @@ const FORAGE_COOLDOWN = world(180);
  * How dark it has to be before a fight teaches you anything about noticing.
  * Dusk is not night: a scuffle at seven in the evening is still fought by eye.
  */
-const NIGHT_EYES_FROM = 0.35;
 /**
  * The things a single tile can be worked over for, each with its own
  * cooldown: picking berries does not stop you cutting the grass.
@@ -1522,7 +1522,7 @@ export class Game {
    */
   hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
     // Being hit in the dark teaches more about watching than hitting does.
-    this.fought(0.8);
+    this.fought(DARK_HIT);
     const hit = this.absorb(raw);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
@@ -2430,8 +2430,8 @@ export class Game {
     if (a.def.skill) this.gainSkill(a.def.skill, this.swingMissed ? TRY_LEARN : 1);
     this.swingMissed = false;
     // The body learns from the work itself: wind from spending it, control from doing it.
-    if (cost > 0) this.gainSkill('body_stamina', 0.05 + cost * 0.6);
-    this.gainSkill('body_control', 0.05);
+    if (cost > 0) this.gainSkill('body_stamina', WORK_WIND + cost * WORK_WIND_SPENT);
+    this.gainSkill('body_control', WORK_HAND);
     if (this.action !== a) {
       // Whatever was performed put something else in hand; leave it alone.
       this.events.emit('action');

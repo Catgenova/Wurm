@@ -2821,6 +2821,13 @@ create or replace function shot_archery() returns double precision language sql 
 create or replace function rod_gain() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
 create or replace function net_gain() returns double precision language sql immutable as $fn$ select 0.55::double precision $fn$;
 create or replace function breed_gain() returns double precision language sql immutable as $fn$ select 0.9::double precision $fn$;
+create or replace function work_wind() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
+create or replace function work_wind_spent() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
+create or replace function work_hand() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
+create or replace function night_eyes_from() returns double precision language sql immutable as $fn$ select 0.35::double precision $fn$;
+create or replace function dark_swing() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
+create or replace function dark_shot() returns double precision language sql immutable as $fn$ select 0.7::double precision $fn$;
+create or replace function dark_hit() returns double precision language sql immutable as $fn$ select 0.8::double precision $fn$;
 create or replace function chip_chance() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function try_learn() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
 create or replace function graze_hungry() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;

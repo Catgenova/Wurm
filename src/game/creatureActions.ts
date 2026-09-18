@@ -1,4 +1,4 @@
-import { tryGain } from './learn';
+import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { ageDef, attackOf, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance } from './creatures';
 import { bestTier, traitList } from './traits';
@@ -396,7 +396,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.gainSkill(usable.kind, tryGain(landed, SWING_ARM));
       g.gainSkill('body_strength', tryGain(landed, SWING_BODY));
       // And, if it is dark enough to matter, what it teaches you about noticing.
-      g.fought(0.5);
+      g.fought(DARK_SWING);
       if (!landed) {
         g.logMsg(`You swing at the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''} and miss.`, 'event');
       } else {
@@ -457,7 +457,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const def = SPECIES[c.species];
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
       // Picking a target out of the dark at range is the hardest looking there is.
-      g.fought(0.7);
+      g.fought(DARK_SHOT);
       // The far end of a bow's range is a far harder shot than the near end.
       const reach = 1 - (d / (bow.range ?? 6)) * 0.35;
       const landed = g.rand() <= hitChance(g, bow) * reach;

@@ -7640,3 +7640,56 @@ select '884. and where peat sits in what burns: '
      || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
           where n.nspname = 'public' and p.prokind = 'f' and p.prosrc like '%shafts, thatch%')
      || ' rules still spell the list out by hand';
+
+/*
+ * And the body, which learns from the work.
+ *
+ * Reported from the island: "i haven't seemed to be able to increase any
+ * characteristics aside from mind logic so far in this iteration, in the solo
+ * world i was making body gains from my digging and mining."
+ *
+ * Exactly right. `body_stamina` rose here only from a night's sleep and
+ * `body_control` from nothing whatever, because "wind from spending it,
+ * control from doing it" lived in the browser's `finishGo` and nowhere else —
+ * and the island has been charging the wind and saying nothing about what
+ * spending it taught you. Awareness was worse: the one characteristic that is
+ * meant to be hard to get was impossible, because nothing on this island had
+ * ever paid anybody for being out in the dark.
+ */
+\echo ''
+\echo '--- the body learns from the work'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'body_control')::numeric, 4) as hand0,
+       round(skill_of(:'world2', :'ivar', 'body_stamina')::numeric, 4) as wind0 \gset
+select spend_wind(:'world2', :'ivar', 'dig') \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'body_control')::numeric, 4) as hand1,
+       round(skill_of(:'world2', :'ivar', 'body_stamina')::numeric, 4) as wind1 \gset
+select spend_wind(:'world2', :'ivar', 'examine') \g /dev/null
+select '885. one go of digging: hands ' || :'hand0' || ' to ' || :'hand1'
+     || ', wind ' || :'wind0' || ' to ' || :'wind1'
+     || ' — and then a go that costs no wind at all: hands '
+     || round(skill_of(:'world2', :'ivar', 'body_control')::numeric, 4) || ', wind '
+     || round(skill_of(:'world2', :'ivar', 'body_stamina')::numeric, 4)
+     || ', which is the browser''s rule: the hands learn from every go and the chest only from what it spent';
+-- And the dark, which nothing here has ever paid for.
+select epoch as was_epoch from world where id = :'world2' \gset
+update world set epoch = now() - make_interval(secs => 12 / 24.0 * day_seconds()) where id = :'world2' \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'awareness')::numeric, 4) as eyes0, round(darkness(:'world2')::numeric, 2) as noon \gset
+select fought_in_dark(:'world2', :'ivar', dark_hit()) \g /dev/null
+select round(skill_of(:'world2', :'ivar', 'awareness')::numeric, 4) as eyes1 \gset
+update world set epoch = now() - make_interval(secs => 1 / 24.0 * day_seconds()) where id = :'world2' \g /dev/null
+select fought_in_dark(:'world2', :'ivar', dark_hit()) \g /dev/null
+select '886. a blow taken at midday, darkness ' || :'noon' || ': awareness ' || :'eyes0' || ' to ' || :'eyes1'
+     || ' — and the same blow at one in the morning, darkness ' || round(darkness(:'world2')::numeric, 2)
+     || ': ' || round(skill_of(:'world2', :'ivar', 'awareness')::numeric, 4)
+     || ' — the one characteristic bought with the hours you can see least';
+update world set epoch = :'was_epoch' where id = :'world2' \g /dev/null
+select '887. and what this island pays a characteristic for, all six of them: '
+     || (select string_agg(d.name || ' (' || coalesce(g.who, 'NOTHING AT ALL') || ')', ', ' order by d.name)
+           from skill_def d
+           left join lateral (
+             select string_agg(distinct p.proname, ' + ') as who
+               from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.prokind = 'f'
+                and p.prosrc ~ ('(skill_raise|skill_told|char_told)\([^,]+,[^,]+,\s*''' || d.id || '''')) g on true
+          where d.id in ('body_strength','body_stamina','body_control','mind_logic','soul_strength','awareness'));
