@@ -1386,11 +1386,14 @@ select '230. a brick takes ' || round(fire_seconds('unfired_clay_brick', 55)) ||
  * is the one way nobody asks: the island refused every kiln anybody tried to
  * put down, and this measurement went on saying `allowed` throughout, because
  * it was asking itself a question it had made up.
+ *
+ * On the tile beside the campfire rather than on top of it: the island refuses
+ * a thing set down on something standing now, as the browser always did.
  */
 select '231. setting it down, asked the island''s way and the browser''s: '
-     || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb), 'allowed')
-     || ' | ' || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"itemUid":' || :'kit' || '}')::jsonb), 'allowed');
-select act_perform(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":8,"y":8,"sx":0,"sy":0,"itemUid":' || :'kit' || '}')::jsonb) \g /dev/null
+     || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":9,"y":8,"sx":0,"sy":0,"uid":' || :'kit' || '}')::jsonb), 'allowed')
+     || ' | ' || coalesce(act_refusal(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":9,"y":8,"sx":0,"sy":0,"itemUid":' || :'kit' || '}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'place_kiln', ('{"kind":"tile","x":9,"y":8,"sx":0,"sy":0,"itemUid":' || :'kit' || '}')::jsonb) \g /dev/null
 select coalesce(max(id), 0) as kiln from placed where world_id = :'world2' and kind = 'kiln' \gset
 select '232. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
      || ' — it holds ' || furnace_capacity('kiln') || ' pieces at once';
