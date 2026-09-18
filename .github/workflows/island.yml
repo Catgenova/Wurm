@@ -273,6 +273,18 @@ jobs:
           npx esbuild supabase/test/field.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/field.mjs --log-level=error
           node node_modules/.cache/field.mjs
+      - name: Everybody you may write to, each of them once
+        run: |
+          # Friends, the people off your own land, and anybody who has written
+          # to you are three questions with the same answers in them, and the
+          # Letters tab laid them end to end: a friend you had also invited
+          # home was two rows of the same person. The Friends tab, three lines
+          # away in the same file, had always folded them through a `Set`. So
+          # the rule is a function now rather than a line inside the drawing,
+          # and this asks it the question the screenshot asked.
+          npx esbuild supabase/test/letters.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/letters.mjs --log-level=error
+          node node_modules/.cache/letters.mjs
 
   migrate:
     name: Push the migrations to the project

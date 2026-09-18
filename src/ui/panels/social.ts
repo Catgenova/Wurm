@@ -20,6 +20,38 @@ const REFRESH = 6;
  * asking both announce themselves in the log the second they happen, which is
  * what actually needs to be prompt.
  */
+/**
+ * Everybody off the same land as you, each of them once.
+ *
+ * A person on two of your settlements is one person.
+ */
+export function neighbours(s: Social): Folk[] {
+  const by = new Map<string, Folk>();
+  for (const d of s.deeds) for (const f of d.folk) if (!by.has(f.uid)) by.set(f.uid, f);
+  return [...by.values()];
+}
+
+/**
+ * Everybody you may write to, each of them once.
+ *
+ * Friends first, then whoever you share land with, then anybody who has
+ * written to you and is neither. Filed by uid because those three lists
+ * overlap: a friend you also live with was appearing twice in the Letters tab,
+ * which is what was reported. The Friends tab has always folded the same two
+ * together through a `Set` and this one concatenated them — the same list said
+ * twice, three lines apart in one file.
+ *
+ * Out here rather than inside the drawing so that it can be read on its own
+ * and checked on its own. A rule buried in DOM building is a rule nothing can
+ * ask a question of.
+ */
+export function writeTo(s: Social): Folk[] {
+  const by = new Map<string, Folk>();
+  for (const f of [...s.friends, ...neighbours(s)]) if (!by.has(f.uid)) by.set(f.uid, f);
+  for (const u of s.unread) if (!by.has(u.uid)) by.set(u.uid, { uid: u.uid, name: u.name, online: false });
+  return [...by.values()];
+}
+
 export class SocialPanel {
   private readonly bar: HTMLDivElement;
   private readonly page: HTMLDivElement;
@@ -92,9 +124,7 @@ export class SocialPanel {
 
   /** Everybody off every roll of yours, each named once however many you share. */
   private neighbours(s: Social): Folk[] {
-    const by = new Map<string, Folk>();
-    for (const d of s.deeds) for (const f of d.folk) if (!by.has(f.uid)) by.set(f.uid, f);
-    return [...by.values()];
+    return neighbours(s);
   }
 
   private async refresh(force: boolean): Promise<void> {
@@ -381,10 +411,7 @@ export class SocialPanel {
       return;
     }
     const unread = new Map(s.unread.map((u) => [u.uid, u.n]));
-    const people = [...s.friends, ...this.neighbours(s)];
-    for (const u of s.unread) {
-      if (!people.some((p) => p.uid === u.uid)) people.push({ uid: u.uid, name: u.name, online: false });
-    }
+    const people = writeTo(s);
     this.page.append(this.head('Write to'));
     if (!people.length) {
       this.page.append(this.empty('Make a friend or move onto somebody’s land, and this is where you can write to them. Anybody ashore can be written to from the Friends tab.'));
