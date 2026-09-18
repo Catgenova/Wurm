@@ -1721,9 +1721,10 @@ export class Renderer {
         ctx.fill();
         ctx.stroke();
       }
-      if (wall.type === 'fence_gate') {
+      if (wall.type === 'fence_gate' || wall.type === 'iron_gate') {
         quad(0.08, 0.46, 0.06, 0.94);
-        ctx.fillStyle = rgb(mat.floor, lit, 0.85);
+        // An iron-bound gate reads as iron whatever its posts are of.
+        ctx.fillStyle = rgb(wall.type === 'iron_gate' ? [72, 74, 80] : mat.floor, lit, 0.85);
         ctx.fill();
         ctx.stroke();
         ctx.beginPath();

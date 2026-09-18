@@ -4,7 +4,7 @@
  * planned first, then built by feeding them materials one unit at a time.
  */
 
-export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'fence' | 'fence_gate' | 'half_wall';
+export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate';
 
 export interface WallTypeDef {
   id: WallType;
@@ -23,18 +23,24 @@ export interface WallTypeDef {
   railed?: boolean;
   /** Offered on any border, building or no building. */
   standalone?: boolean;
+  /** Passable for people and for nothing else: a wildermon or a monster finds it shut. */
+  beastProof?: boolean;
+  /** Cast metal the wall takes over its material's bill: hinges for anything that swings, brackets to bind a gate. */
+  fittings?: Array<[string, number]>;
 }
 
 export const WALL_TYPES: WallTypeDef[] = [
   { id: 'solid', name: 'Solid', factor: 1, passable: false },
   { id: 'window', name: 'Window', factor: 0.75, passable: false },
   { id: 'bay', name: 'Bay window', factor: 1.25, passable: false },
-  { id: 'door', name: 'Door', factor: 0.75, passable: true },
-  { id: 'double_door', name: 'Double door', factor: 1, passable: true },
+  { id: 'door', name: 'Door', factor: 0.75, passable: true, fittings: [['hinge', 2]] },
+  { id: 'double_door', name: 'Double door', factor: 1, passable: true, fittings: [['hinge', 4]] },
   // Waist-high, and cheap because there is so much less of them. A gate is
   // the one thing in the list you can walk through.
   { id: 'fence', name: 'Fence', factor: 0.3, passable: false, height: 0.42, low: true, railed: true, standalone: true },
-  { id: 'fence_gate', name: 'Fence gate', factor: 0.4, passable: true, height: 0.42, low: true, railed: true, standalone: true },
+  { id: 'fence_gate', name: 'Fence gate', factor: 0.4, passable: true, height: 0.42, low: true, railed: true, standalone: true, fittings: [['hinge', 2]] },
+  // Bound in iron: it swings for a person and holds against everything else.
+  { id: 'iron_gate', name: 'Iron-bound gate', factor: 0.5, passable: true, height: 0.6, low: true, railed: true, standalone: true, beastProof: true, fittings: [['hinge', 2], ['bracket', 4]] },
   { id: 'half_wall', name: 'Half wall', factor: 0.5, passable: false, height: 0.5, low: true, standalone: true },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
@@ -177,7 +183,16 @@ function scaledBill(material: string, factor: number): Bill {
   return { needed, total: { ...needed } };
 }
 
-export const wallBill = (material: string, type: WallType): Bill => scaledBill(material, WALL_TYPE_BY_ID.get(type)?.factor ?? 1);
+export const wallBill = (material: string, type: WallType): Bill => {
+  const def = WALL_TYPE_BY_ID.get(type);
+  const bill = scaledBill(material, def?.factor ?? 1);
+  // The fittings go on top of the material's bill, whatever the wall is of.
+  for (const [item, n] of def?.fittings ?? []) {
+    bill.needed[item] = (bill.needed[item] ?? 0) + n;
+    bill.total[item] = (bill.total[item] ?? 0) + n;
+  }
+  return bill;
+};
 
 /** Materials for a floor slot: floors and roofs take half a wall, stairs three quarters, ladders are two planks. */
 export function floorBill(material: string, kind: FloorKind = 'floor'): Bill {
@@ -361,7 +376,7 @@ export class Buildings {
   }
 
   /** Same, for the walls of a given storey. */
-  blocksAt(level: number, x0: number, y0: number, x1: number, y1: number): boolean {
+  blocksAt(level: number, x0: number, y0: number, x1: number, y1: number, beast = false): boolean {
     if (!this.walls.size) return false;
     const dx = x1 - x0;
     const dy = y1 - y0;
@@ -370,11 +385,14 @@ export class Buildings {
       const border: Border =
         dx === 1 ? { x: x1, y: y0, dir: 'v' } : dx === -1 ? { x: x0, y: y0, dir: 'v' } : dy === 1 ? { x: x0, y: y1, dir: 'h' } : { x: x0, y: y0, dir: 'h' };
       const w = this.wallOnBorder(level, border);
-      return !!w && isDone(w) && !(WALL_TYPE_BY_ID.get(w.type)?.passable ?? false);
+      if (!w || !isDone(w)) return false;
+      const def = WALL_TYPE_BY_ID.get(w.type);
+      // A gate bound in iron swings for a person and for nothing else.
+      return !(def?.passable ?? false) || (beast && !!def?.beastProof);
     }
     // Diagonal: allowed only when at least one of the two L-shaped routes is open.
-    const viaX = !this.blocksAt(level, x0, y0, x1, y0) && !this.blocksAt(level, x1, y0, x1, y1);
-    const viaY = !this.blocksAt(level, x0, y0, x0, y1) && !this.blocksAt(level, x0, y1, x1, y1);
+    const viaX = !this.blocksAt(level, x0, y0, x1, y0, beast) && !this.blocksAt(level, x1, y0, x1, y1, beast);
+    const viaY = !this.blocksAt(level, x0, y0, x0, y1, beast) && !this.blocksAt(level, x0, y1, x1, y1, beast);
     return !(viaX || viaY);
   }
 

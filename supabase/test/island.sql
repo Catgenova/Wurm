@@ -8943,3 +8943,22 @@ select '973. "' || (select text from event where uid = :'ivar' order by n desc l
      || '; under saddle on grass ' || :'pace_grass' || ' and on slabs ' || round(travel_speed(:'world2', :'ivar')::numeric, 2);
 select land_set_tile(:'world2', 14, 12, :'was_tile') \g /dev/null
 update creature set rider = null where world_id = :'world2' and id = :'shodhorse' \g /dev/null
+
+/*
+ * Iron fittings for building.
+ *
+ * A door takes two hinges, a double door four, a gate two, on top of the
+ * wall's bill; and an iron-bound gate, four brackets over its hinges, swings
+ * for a person and for nothing else.
+ */
+\echo ''
+\echo '--- iron fittings for building'
+select '974. off the table: hinges come ' || (select per from mould_def where id = 'hinge_mould') || ' to a lump and brackets ' || (select per from mould_def where id = 'bracket_mould')
+     || '; a plank door wants ' || (select string_agg(key || ' ' || value, ', ' order by key) from jsonb_each_text(wall_bill('plank', 'door')))
+     || ', a plank double door ' || (select string_agg(key || ' ' || value, ', ' order by key) from jsonb_each_text(wall_bill('plank', 'double_door')))
+     || ', a log fence gate ' || (select string_agg(key || ' ' || value, ', ' order by key) from jsonb_each_text(wall_bill('log', 'fence_gate')))
+     || ', and a plain log fence still ' || (select string_agg(key || ' ' || value, ', ' order by key) from jsonb_each_text(wall_bill('log', 'fence')));
+select '975. the iron-bound gate: ' || (select name from wall_type_def where id = 'iron_gate') || ', passable ' || (select passable from wall_type_def where id = 'iron_gate')
+     || ' and proof against beasts ' || (select beast_proof from wall_type_def where id = 'iron_gate') || ', where a fence gate is ' || (select beast_proof from wall_type_def where id = 'fence_gate')
+     || '; of log it wants ' || (select string_agg(key || ' ' || value, ', ' order by key) from jsonb_each_text(wall_bill('log', 'iron_gate')))
+     || ' — ' || (select count(*) from wall_fitting) || ' fittings on ' || (select count(distinct type) from wall_fitting) || ' kinds of wall';

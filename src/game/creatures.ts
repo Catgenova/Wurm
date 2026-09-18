@@ -2566,7 +2566,7 @@ export class Creatures {
     const fY = Math.floor(fy);
     if (fX !== tX || fY !== tY) {
       if (!groundStep(game.world, fX, fY, tX, tY)) return false;
-      if (game.buildings.blocksAt(0, fX, fY, tX, tY)) return false;
+      if (game.buildings.blocksAt(0, fX, fY, tX, tY, true)) return false;
     }
     return true;
   }

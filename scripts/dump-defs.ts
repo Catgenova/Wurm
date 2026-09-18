@@ -129,6 +129,9 @@ out.push(`create table if not exists wall_type_def (
   low boolean not null default false, railed boolean not null default false,
   standalone boolean not null default false
 );`);
+/* Passable for people and for nothing else; and the cast metal a wall takes over its material's bill. */
+out.push(`alter table wall_type_def add column if not exists beast_proof boolean not null default false;`);
+out.push(`create table if not exists wall_fitting (type text not null, item text not null, count int not null, primary key (type, item));`);
 out.push(`create table if not exists build_material_def (
   id text primary key, name text not null, kind text not null, tool text not null, skill text not null
 );`);
@@ -697,7 +700,7 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate melt_def, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+out.push(`truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
@@ -1072,6 +1075,8 @@ for (const [fn, v] of [
 }
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
+  if (w.beastProof) out.push(`update wall_type_def set beast_proof = true where id = ${q(w.id)};`);
+  for (const [item, n] of w.fittings ?? []) out.push(`insert into wall_fitting values (${q(w.id)}, ${q(item)}, ${q(n)});`);
 }
 for (const m of BUILD_MATERIALS) {
   out.push(`insert into build_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.kind)}, ${q(m.tool)}, ${q(m.skill)});`);
