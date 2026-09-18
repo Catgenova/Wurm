@@ -154,6 +154,23 @@ const PACKABLE = new Set<number>([TileType.Dirt, TileType.Grass, TileType.Lawn, 
 
 const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Moss, TileType.Lawn, TileType.Steppe, TileType.Tundra]);
 
+/**
+ * What a spadeful lays down: the ground each material makes of the tile it
+ * covers. Dirt was the only thing that could be dropped, and a clay bank or a
+ * beach could be dug up but never laid; now what comes out of a bed can go
+ * back down as itself.
+ */
+export const SPOIL_TILE: Record<string, TileType> = { dirt: TileType.Dirt, clay: TileType.Clay, sand: TileType.Sand };
+
+/** The spoil named off the menu, or the first of the three to hand. */
+export function spoilInHand(g: Game, uid?: number): { uid: number; id: string; count: number } | undefined {
+  if (uid !== undefined) {
+    const chosen = g.inventory.get(uid);
+    return chosen && chosen.id in SPOIL_TILE ? chosen : undefined;
+  }
+  return g.inventory.items.find((it) => it.id in SPOIL_TILE);
+}
+
 /** A word and its article: "an oak", "a pine". */
 export const an = (word: string): string => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
 
@@ -541,15 +558,20 @@ export const ACTIONS: ActionDef[] = [
   {
     id: 'drop_dirt',
     label: 'Drop dirt',
+    labelFor: (t, g) => {
+      const it = t.kind === 'tile' ? spoilInHand(g, t.itemUid) : undefined;
+      return it ? `Drop ${itemDef(it.id).name.toLowerCase()}` : 'Drop dirt';
+    },
     verb: 'dropping dirt',
     skill: 'digging',
     corner: true,
     stamina: 0.02,
     baseTime: 2,
-    applies: (t, g) => t.kind === 'tile' && g.inventory.has('dirt'),
+    applies: (t, g) => t.kind === 'tile' && g.inventory.items.some((it) => it.id in SPOIL_TILE),
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
-      if (!g.inventory.has('dirt')) return 'You have no dirt to drop.';
+      const it = spoilInHand(g, t.itemUid);
+      if (!it) return t.itemUid !== undefined ? 'That is not dirt, clay or sand.' : 'You have no dirt, clay or sand to drop.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
       if (slopeAfter(g, t.cx, t.cy, 1) > maxDigSlope(g)) return 'The slope would be too steep for your digging skill.';
@@ -557,13 +579,15 @@ export const ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
-      if (!g.inventory.consume('dirt')) return;
+      const it = spoilInHand(g, t.itemUid);
+      if (!it || !g.inventory.remove(it.uid, 1)) return;
       const w = g.world;
       w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) + 1);
       w.setDirt(t.cx, t.cy, w.getDirt(t.cx, t.cy) + 1);
       g.exposeRock(t.cx, t.cy);
-      if (BURYABLE.has(w.getTile(t.x, t.y))) w.setTile(t.x, t.y, TileType.Dirt);
-      g.logMsg(`You drop the dirt on the ${cornerName(t)} corner, raising the ground.`, 'event');
+      // What the spadeful covers becomes what was in it: dirt, clay or sand.
+      if (BURYABLE.has(w.getTile(t.x, t.y))) w.setTile(t.x, t.y, SPOIL_TILE[it.id]);
+      g.logMsg(`You drop the ${itemDef(it.id).name.toLowerCase()} on the ${cornerName(t)} corner, raising the ground.`, 'event');
     },
   },
   {

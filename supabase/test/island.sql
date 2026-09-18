@@ -8466,3 +8466,47 @@ select '940. a shrivelled pine: "' || examine_tile_text(:'world6', 53, 62) || '"
 select '941. and what the ground read hands a browser for it: notches ' || ((rpc_ground(:'world6', 40, true))->'notches')::text
      || ', the woods turned over ' || round(((rpc_ground(:'world6', 40, true))->>'treesAgo')::numeric / 3600) || ' hours ago'
      || ' — and the fast half says nothing about either: ' || coalesce(((rpc_ground(:'world6', 40, false))->'notches')::text, 'nothing');
+
+/*
+ * A spadeful of clay or sand lays down the ground it was.
+ *
+ * Asked from the island: clay and sand as ground you can lay. Dropped, a
+ * spadeful raised the corner and covered the ground with dirt whatever was in
+ * it; now dirt makes dirt, clay makes clay and sand makes sand.
+ */
+\echo ''
+\echo '--- a spadeful of clay or sand'
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def in ('dirt', 'clay', 'sand');
+  delete from event where uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'clay', 40, 3);
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'sand', 40, 3);
+  insert into skill (world_id, uid, id, value) values (w, me, 'digging', 60) on conflict (world_id, uid, id) do update set value = 60;
+  -- A flat patch of grass, level at four, well inside the island's sixty-four.
+  for j in 40..43 loop for i in 40..43 loop
+    perform land_set_tile(w, i, j, tile_id('Grass')); perform land_set_data(w, i, j, 0); perform land_set_height(w, i, j, 4);
+  end loop; end loop;
+  update player set x = 41.5, y = 40.5 where world_id = w and uid = me;
+end $$;
+select land_height(:'world6', 41, 41) as h0 \gset
+select act_perform(:'world6', '77777777-7777-7777-7777-777777777777', 'drop_dirt',
+  ('{"kind":"tile","x":41,"y":41,"cx":41,"cy":41,"itemUid":' || (select id from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'clay') || '}')::jsonb) \g /dev/null
+select '942. clay dropped on a grass corner: the ground is ' || (select name from tile_def where id = land_tile(:'world6', 41, 41))
+     || ', the corner rose from ' || :'h0' || ' to ' || land_height(:'world6', 41, 41)
+     || ' — "' || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You drop%' order by n desc limit 1) || '"';
+select act_perform(:'world6', '77777777-7777-7777-7777-777777777777', 'drop_dirt',
+  ('{"kind":"tile","x":41,"y":41,"cx":41,"cy":41,"itemUid":' || (select id from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sand') || '}')::jsonb) \g /dev/null
+select '943. and sand on the same corner: ' || (select name from tile_def where id = land_tile(:'world6', 41, 41))
+     || ' — and asked with nothing named, what goes down first: ' || spoil_in_hand(:'world6', '77777777-7777-7777-7777-777777777777', null);
+select '944. a log named: "' || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'drop_dirt',
+        ('{"kind":"tile","x":41,"y":41,"cx":41,"cy":41,"itemUid":' || (select id from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'log' order by id desc limit 1) || '}')::jsonb), 'ALLOWED')
+     || '"' as named_log \gset
+-- The three out of the pack, the door asked, and back again.
+update item set holder_uid = '00000000-0000-0000-0000-000000000000' where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def in ('dirt', 'clay', 'sand') \g /dev/null
+select :'named_log' || ' — and with none of the three in the pack: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'drop_dirt', '{"kind":"tile","x":41,"y":41,"cx":41,"cy":41}'::jsonb), 'ALLOWED') || '"';
+update item set holder_uid = '77777777-7777-7777-7777-777777777777' where world_id = :'world6' and holder_uid = '00000000-0000-0000-0000-000000000000' and def in ('dirt', 'clay', 'sand') \g /dev/null
