@@ -213,6 +213,7 @@ create table if not exists crate_def (
 create table if not exists gather_def (
   id text primary key, skill text not null, verb text not null, plain text not null
 );
+create table if not exists melt_def (item text primary key, content real not null);
 create table if not exists trait_def (
   id text primary key, name text not null, tier text not null,
   aura boolean not null default false, note text not null
@@ -1149,6 +1150,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('light_smelter', 'Light', 'lighting the smelter', null, null, false, null, 0.04, 6, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('damp_smelter', 'Damp it down', 'damping the smelter', null, null, false, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('smelt_ore', 'Smelt', 'charging the smelter', 'smelting', null, false, null, 0.01, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('melt_down', 'Melt down', 'charging the smelter', 'smelting', null, false, null, 0.01, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cast_anvil', 'Cast an anvil', 'filling the anvil mould', 'blacksmithing', null, false, null, 0.04, 6, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('smelter_take_all', 'Take what is done', 'emptying the smelter', null, null, false, null, 0.01, 1, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_ashes_smelter', 'Rake out the ashes', 'raking out ashes', null, null, false, null, 0.02, 2, null, false, false);
@@ -1185,7 +1187,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('clear_field', 'Clear the field', 'clearing the field', 'farming', null, false, null, 0.03, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt_here', 'Drop (raises the ground)', 'dropping dirt', 'digging', null, false, null, 0.02, 2, null, false, false);
 
-truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+truncate melt_def, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
@@ -2650,6 +2652,51 @@ insert into gather_def values ('seek', 'archaeology', 'nosing about', 'smell out
 insert into gather_def values ('fish', 'fishing', 'fishing', 'fish the water round the deed and carry the catch home');
 insert into gather_def values ('prune', 'forestry', 'pruning the wood', 'prune what would otherwise die');
 insert into gather_def values ('stump', 'digging', 'digging out stumps', 'dig out stumps');
+insert into melt_def values ('anvil', 20);
+insert into melt_def values ('arrow_head', 0.04);
+insert into melt_def values ('axe_head', 2);
+insert into melt_def values ('battle_axe', 2);
+insert into melt_def values ('big_axle', 3);
+insert into melt_def values ('butchering_knife', 1);
+insert into melt_def values ('chain_boots', 2);
+insert into melt_def values ('chain_coif', 2);
+insert into melt_def values ('chain_hauberk', 5);
+insert into melt_def values ('chain_leggings', 4);
+insert into melt_def values ('chain_sleeves', 3);
+insert into melt_def values ('file', 1);
+insert into melt_def values ('frying_pan', 1);
+insert into melt_def values ('hatchet', 1);
+insert into melt_def values ('hatchet_head', 1);
+insert into melt_def values ('helm', 2);
+insert into melt_def values ('hunting_knife', 1);
+insert into melt_def values ('knife_blade', 1);
+insert into melt_def values ('large_cart', 3);
+insert into melt_def values ('long_sword', 3);
+insert into melt_def values ('long_sword_blade', 3);
+insert into melt_def values ('maul', 3);
+insert into melt_def values ('maul_head', 3);
+insert into melt_def values ('metal_shield', 2);
+insert into melt_def values ('nail', 0.01);
+insert into melt_def values ('pickaxe', 1);
+insert into melt_def values ('pickaxe_head', 1);
+insert into melt_def values ('plate_arms', 3);
+insert into melt_def values ('plate_boots', 3);
+insert into melt_def values ('plate_breastplate', 6);
+insert into melt_def values ('plate_legs', 4);
+insert into melt_def values ('rake', 1);
+insert into melt_def values ('rake_head', 1);
+insert into melt_def values ('ribbon', 0.25);
+insert into melt_def values ('shield_boss', 2);
+insert into melt_def values ('short_sword', 1);
+insert into melt_def values ('short_sword_blade', 1);
+insert into melt_def values ('shovel', 1);
+insert into melt_def values ('shovel_head', 1);
+insert into melt_def values ('sickle', 1);
+insert into melt_def values ('sickle_blade', 1);
+insert into melt_def values ('spear', 1);
+insert into melt_def values ('spear_head', 1);
+insert into melt_def values ('sword', 2);
+insert into melt_def values ('sword_blade', 2);
 insert into wild_table values ('rabba', 27, false, null);
 insert into wild_table values ('vola', 23, false, null);
 insert into wild_table values ('bevere', 15, false, null);
@@ -2819,6 +2866,9 @@ create or replace function climb_per_level() returns double precision language s
 create or replace function max_stand() returns double precision language sql immutable as $fn$ select 60::double precision $fn$;
 create or replace function mine_depth() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function dredge_depth() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
+create or replace function melt_share() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
+create or replace function melt_keep() returns double precision language sql immutable as $fn$ select 0.7::double precision $fn$;
+create or replace function melt_heat() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function tree_stage() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
 create or replace function tree_seeds() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function tree_seed_reach() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;

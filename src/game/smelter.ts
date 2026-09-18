@@ -3,6 +3,7 @@ import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } fr
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
+import { MELT_HEAT, meltLumps, meltQl, meltRefusal, metalOfItem } from './melt';
 import { METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, ORE_PER_LUMP, castSeconds, isOreItem, mouldLumps, smeltSeconds } from './metal';
 
 /**
@@ -249,6 +250,51 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       g.logMsg(`You charge the smelter with ${n * ORE_PER_LUMP} × ${itemDef(taken.id).name.toLowerCase()}`
         + `${n > 1 ? `, ${n} charges of it` : ''}. Each charge is about ${Math.round(seconds)} seconds of heat`
         + ` and comes out as one lump.`, 'event');
+    },
+  },
+  {
+    id: 'melt_down',
+    label: 'Melt down',
+    verb: 'charging the smelter',
+    skill: 'smelting',
+    hidden: true,
+    quantity: true,
+    instant: true,
+    stamina: 0.01,
+    baseTime: 0,
+    applies: (t, g) => smelterOf(g, t) !== undefined,
+    check: (t, g) => {
+      const s = smelterOf(g, t);
+      if (!s) return 'It is gone.';
+      if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
+      const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      if (!item) return 'Choose something to melt down.';
+      const why = meltRefusal(item);
+      if (why) return why;
+      const n = Math.min(Math.max(1, (t.kind === 'smelter' ? t.count : undefined) ?? 1), item.count);
+      if (s.jobs.length + meltLumps(item, n) > SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
+      return null;
+    },
+    perform: (t, g) => {
+      const s = smelterOf(g, t);
+      if (!s || t.kind !== 'smelter' || t.itemUid === undefined) return;
+      const item = g.inventory.get(t.itemUid);
+      const metal = item && metalOfItem(item);
+      if (!item || !metal || meltRefusal(item)) return;
+      const n = Math.min(Math.max(1, t.count ?? 1), item.count);
+      const lumps = meltLumps(item, n);
+      if (s.jobs.length + lumps > SMELTER_CAPACITY) return;
+      const ql = meltQl(item);
+      const taken = g.inventory.take(item.uid, n);
+      if (!taken) return;
+      // Scrap is quicker than ore: it has been through the fire once already.
+      const seconds = smeltSeconds(metal.id, item.ql, s.ql) * MELT_HEAT;
+      for (let i = 0; i < lumps; i++) {
+        s.jobs.push({ item: { ...taken, count: n }, makes: metal.lump, left: seconds, total: seconds, ql });
+      }
+      g.events.emit('smelter');
+      g.logMsg(`You put ${n > 1 ? `${n} × ` : 'the '}${itemDef(item.id).name.toLowerCase()} into the smelter to melt down.`
+        + ` It will come back as ${lumps} ${metal.name.toLowerCase()} lump${lumps > 1 ? 's' : ''}, at about ${Math.round(ql)} quality.`, 'event');
     },
   },
   {

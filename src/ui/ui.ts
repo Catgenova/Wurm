@@ -36,6 +36,7 @@ import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
 import { METAL_BY_LUMP, MOULD_BY_ID, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
+import { meltable } from '../game/melt';
 import { smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, type PlacedFurniture } from '../game/furniture';
@@ -1027,6 +1028,17 @@ export class UI {
         disabled: !ores.length,
         hint: ores.length ? undefined : 'You carry no ore.',
         children: ores.length ? ores.map((it) => quantity(smeltDef, it)) : undefined,
+      });
+    }
+    // Scrap goes back into the fire: anything cast from metal, or hafted to a cast head.
+    const meltDef = ACTION_BY_ID.get('melt_down');
+    const scrap = g.inventory.items.filter((it) => meltable(it));
+    if (meltDef) {
+      entries.push({
+        label: 'Melt down',
+        disabled: !scrap.length,
+        hint: scrap.length ? undefined : 'You carry nothing made of metal.',
+        children: scrap.length ? scrap.map((it) => quantity(meltDef, it)) : undefined,
       });
     }
     const castDef = ACTION_BY_ID.get('cast_anvil');

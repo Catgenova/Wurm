@@ -51,6 +51,7 @@ import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/ite
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
+import { MELT_HEAT, MELT_KEEP, MELT_SHARE, METAL_CONTENT } from '../src/game/melt';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
@@ -416,6 +417,8 @@ out.push(`create table if not exists crate_def (
 out.push(`create table if not exists gather_def (
   id text primary key, skill text not null, verb text not null, plain text not null
 );`);
+/* What the fire gives back of a thing: the lumps it was cast from, a piece at a time. */
+out.push(`create table if not exists melt_def (item text primary key, content real not null);`);
 out.push(`create table if not exists trait_def (
   id text primary key, name text not null, tier text not null,
   aura boolean not null default false, note text not null
@@ -685,7 +688,7 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+out.push(`truncate melt_def, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
@@ -814,6 +817,7 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
 for (const [id, skill] of Object.entries(GATHER_SKILL)) {
   out.push(`insert into gather_def values (${q(id)}, ${q(skill)}, ${q(GATHER_VERB[id as 'forage'])}, ${q(GATHER_DO[id as 'forage'])});`);
 }
+for (const [item, content] of Object.entries(METAL_CONTENT).sort()) out.push(`insert into melt_def values (${q(item)}, ${q(content)});`);
 for (const [id, weight] of WILD_SPECIES) out.push(`insert into wild_table values (${q(id)}, ${q(weight)}, false, null);`);
 for (const [id, weight] of MONSTERS) out.push(`insert into wild_table values (${q(id)}, ${q(weight)}, true, ${q(MONSTER_CAP[id] ?? 1)});`);
 for (const t of TRAITS) {
@@ -908,6 +912,8 @@ for (const [fn, v] of [
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
   ['dredge_depth', DREDGE_DEPTH],
+  /* What the fire gives back of a thing melted down, and the heat it takes. */
+  ['melt_share', MELT_SHARE], ['melt_keep', MELT_KEEP], ['melt_heat', MELT_HEAT],
   /* And how long a tree stands at one age, in real seconds, and what it leaves. */
   ['tree_stage', TREE_STAGE], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
   ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],

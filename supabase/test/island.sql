@@ -8774,3 +8774,44 @@ select '961. rare work is signed: the mark for rare is ' || maker_mark(:'world2'
      || coalesce((select maker from item where id = :'marked'), 'none') || ' and the plain one '
      || coalesce((select maker from item where id = :'plain'), 'none') || ' — and Look: "'
      || examine_item_text(:'world2', :'ivar', (select i from item i where i.id = :'marked')) || '"';
+
+/*
+ * Melting down: what the fire gives back.
+ *
+ * A thing cast from metal goes back into the smelter and comes out as lumps
+ * of its own metal: half of what it was cast from, at seven tenths of the
+ * quality less the damage it carried, in half an ore charge's heat.
+ */
+\echo ''
+\echo '--- melting down'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select coalesce(max(id), 0) as scrapper from placed where world_id = :'world2' and kind = 'smelter' \gset
+update placed set state = '{}'::jsonb, lit = false, fuel = 0 where id = :'scrapper' \g /dev/null
+update player set x = (select x from placed where id = :'scrapper') + 0.5, y = (select y from placed where id = :'scrapper') - 0.5
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+-- Heads stack, and the pack has one from the mark on rare work: cleared, so
+-- what goes into the fire is the one head given here.
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('hatchet_head', 'nail') \g /dev/null
+select give(:'world2', :'ivar', 'hatchet_head', 1, 60, 'Iron') as scrap \gset
+update item set dmg = 20 where id = :'scrap' \g /dev/null
+select give(:'world2', :'ivar', 'plank', 1, 60, 'Pine') as board \gset
+select give(:'world2', :'ivar', 'nail', 100, 40, 'Copper') as tacks \gset
+delete from event where uid = :'ivar' \g /dev/null
+select '962. off the table: a hatchet head holds ' || (select content from melt_def where item = 'hatchet_head') || ' lump of its metal, a hatchet the same '
+     || (select content from melt_def where item = 'hatchet') || ', an anvil ' || (select content from melt_def where item = 'anvil') || ', a nail '
+     || (select content from melt_def where item = 'nail') || ' — half comes back (' || melt_share() || ') at ' || melt_keep()
+     || ' of the quality, in ' || melt_heat() || ' of an ore charge''s heat; ported ' || act_ported('melt_down')
+     || ' — a plank: "' || coalesce(act_refusal(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :'scrapper' || ',"itemUid":' || :'board' || '}')::jsonb), 'ALLOWED')
+     || '"; the iron head, damaged twenty: "' || coalesce(act_refusal(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :'scrapper' || ',"itemUid":' || :'scrap' || '}')::jsonb), 'ALLOWED') || '"';
+select act_perform(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :'scrapper' || ',"itemUid":' || :'scrap' || '}')::jsonb) \g /dev/null
+select act_perform(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :'scrapper' || ',"itemUid":' || :'tacks' || ',"count":100}')::jsonb) \g /dev/null
+select '963. "' || (select string_agg(text, '" | "' order by n) from event where uid = :'ivar' and text like 'You put%')
+     || '" — jobs in the furnace: ' || jsonb_array_length(furnace_jobs((select p from placed p where p.id = :'scrapper')))
+     || ', the head left in the pack: ' || (select count(*) from item where id = :'scrap')
+     || ', nails left: ' || coalesce((select count from item where id = :'tacks'), 0)
+     || ' — a hundred copper nails are ' || melt_lumps('nail', 100) || ' lump, and the head''s lump will be QL ' || round(melt_ql(60, 20)::numeric, 1);
+-- An hour of heat.
+update placed set lit = true, fuel = 100000, since = now() - interval '1 hour' where id = :'scrapper' \g /dev/null
+select furnace_settle(:'world2', :'scrapper') as melted \gset
+select '964. an hour of heat later, ' || :'melted' || ' finished: ' || (select string_agg(o->>'def' || ' QL ' || round((o->>'ql')::numeric, 1), ', ' order by o->>'def')
+       from jsonb_array_elements(furnace_output((select p from placed p where p.id = :'scrapper'))) o);
