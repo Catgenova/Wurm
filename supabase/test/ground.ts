@@ -14,7 +14,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { ACTION_BY_ID, foreignGround, slopeNeeds, slopeRefusal, tileCorners } from '../../src/game/actions';
+import { ACTION_BY_ID, flattenTarget, foreignGround, slopeNeeds, slopeRefusal, tileCorners } from '../../src/game/actions';
 import { TileType } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
@@ -115,6 +115,57 @@ check('what the island says is in a bin reaches the browser',
   binHere?.items.length === 1 && binHere.items[0].id === 'dirt' && binHere.items[0].count === 3,
   binHere ? JSON.stringify(binHere.items) : 'no bin');
 check('and an empty one is empty', game.furniture.get(92)?.items.length === 0, String(game.furniture.get(92)?.items.length));
+
+/*
+ * The level, and a spadeful out of a crate.
+ *
+ * Asked for as "flatten toward a chosen height", "a run of goes that knows
+ * when to stop" and "drop dirt straight from the cart or crate". The first two
+ * are one thing: sight a mark and every door that moves a corner refuses once
+ * the corner is on it, so a run of any length stops there.
+ */
+for (let y = 4; y <= 9; y++) for (let x = 4; x <= 9; x++) { w.setHeight(x, y, 100); w.setDirt(x, y, 20); w.setTile(x, y, TileType.Dirt); }
+for (let y = 6; y <= 7; y++) for (let x = 6; x <= 7; x++) w.setHeight(x, y, 103);
+game.player.x = 6.5; game.player.y = 6.5;
+game.level = null;
+game.inventory.items.length = 0;
+game.inventory.add('shovel', { ql: 50 });
+ACTION_BY_ID.get('take_level')!.perform({ kind: 'tile', x: 5, y: 5, cx: 5, cy: 5 } as never, game);
+check('the level is sighted where it was taken', game.level === 100, String(game.level));
+check('and flattening the bank aims at it', flattenTarget(game, 6, 6) === 100, String(flattenTarget(game, 6, 6)));
+let dug = 0;
+for (let i = 0; i < 10; i++) {
+  if (ACTION_BY_ID.get('dig')!.check?.({ kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 } as never, game)) break;
+  ACTION_BY_ID.get('dig')!.perform({ kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 } as never, game);
+  dug++;
+}
+// A go that misses is still a go, so the count is what it took rather than three.
+check('ten spadefuls asked for at a bank three proud of it stop on the mark',
+  dug < 10 && w.getHeight(6, 6) === 100, `${dug} goes, corner at ${w.getHeight(6, 6)}`);
+check('and the door says the corner is there',
+  asked('dig', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }) === 'That corner is down to the level of 100 already.',
+  asked('dig', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }));
+check('and will not have it back either',
+  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }) === 'That corner is up to the level of 100 already.',
+  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }));
+ACTION_BY_ID.get('clear_level')!.perform({ kind: 'tile', x: 5, y: 5 } as never, game);
+check('and putting the level away clears it', game.level === null, String(game.level));
+
+// Nothing in the pack, five spadefuls in the crate beside him.
+game.inventory.items.length = 0;
+game.inventory.add('shovel', { ql: 50 });
+game.crates.set(9100, { id: 9100, x: 6, y: 6, sx: 0, sy: 0, kind: 'plank',
+  items: [{ uid: 9101, id: 'dirt', ql: 20, dmg: 0, count: 5 }] } as never);
+check('a spadeful can come out of a crate you stand beside',
+  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 7, cy: 6 }) === 'nothing',
+  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 7, cy: 6 }));
+const wasHigh = w.getHeight(7, 6);
+ACTION_BY_ID.get('drop_dirt')!.perform({ kind: 'tile', x: 6, y: 6, cx: 7, cy: 6 } as never, game);
+check('and dropping it raises the corner and comes out of the crate',
+  w.getHeight(7, 6) === wasHigh + 1 && (game.crates.get(9100)?.items[0]?.count ?? 0) === 4
+  && game.inventory.count('dirt') === 0,
+  `corner ${w.getHeight(7, 6)}, crate ${game.crates.get(9100)?.items[0]?.count}, pack ${game.inventory.count('dirt')}`);
+game.crates.delete(9100);
 
 for (const line of [...ok, ...bad]) console.log(`  ${line}`);
 console.log(bad.length ? `\n${bad.length} of ${ok.length + bad.length} went wrong` : `\nall ${ok.length} right`);

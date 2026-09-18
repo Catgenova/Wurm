@@ -11,7 +11,8 @@ import { BREWING_ACTIONS } from './brewing';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
-import { FURNITURE_ACTIONS } from './furniture';
+import { FURNITURE_ACTIONS, furnitureCentre } from './furniture';
+import { crateCentre } from './crates';
 import { GEAR_ACTIONS } from './gear';
 import { IMPROVE_ACTIONS } from './improve';
 import { FARM_ACTIONS } from './farming';
@@ -165,15 +166,8 @@ const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, Til
  * back down as itself.
  */
 export const SPOIL_TILE: Record<string, TileType> = { dirt: TileType.Dirt, clay: TileType.Clay, sand: TileType.Sand };
-
-/** The spoil named off the menu, or the first of the three to hand. */
-export function spoilInHand(g: Game, uid?: number): { uid: number; id: string; count: number } | undefined {
-  if (uid !== undefined) {
-    const chosen = g.inventory.get(uid);
-    return chosen && chosen.id in SPOIL_TILE ? chosen : undefined;
-  }
-  return g.inventory.items.find((it) => it.id in SPOIL_TILE);
-}
+/** The order a spadeful is looked for in, which is the order it was written in. */
+export const SPOIL_ORDER = ['dirt', 'clay', 'sand'];
 
 /** A word and its article: "an oak", "a pine". */
 export const an = (word: string): string => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
@@ -245,10 +239,73 @@ export const tileCorners = (x: number, y: number): Array<[number, number]> => [
  * corner and the ground only ever comes down.
  */
 export function flattenTarget(g: Game, x: number, y: number): number {
+  // A level taken is the mark for everything, and the reason to take one.
+  if (g.level !== null) return g.level;
   const w = g.world;
   const heights = tileCorners(x, y).map(([cx, cy]) => w.getHeight(cx, cy));
   if (g.player.tileX === x && g.player.tileY === y) return Math.min(...heights);
   return Math.round(w.centerHeight(g.player.tileX, g.player.tileY));
+}
+
+/**
+ * Why this corner is finished, when a level has been taken.
+ *
+ * The one thing a run of goes never knew was when to stop. Ask for
+ * twenty-five spadefuls at a corner and you get twenty-five, whatever height
+ * that leaves it at, and the only way to land on a number was to count. With
+ * a level taken the door itself says when the corner is there, so a run of any
+ * length stops exactly on it: the refusal ends the run the way every other
+ * refusal does. `dir` is which way the job moves the ground.
+ */
+export function levelStop(g: Game, cx: number, cy: number, dir: -1 | 1): string | null {
+  if (g.level === null) return null;
+  const h = g.world.getHeight(cx, cy);
+  if (dir < 0 && h <= g.level) return `That corner is down to the level of ${g.level} already.`;
+  if (dir > 0 && h >= g.level) return `That corner is up to the level of ${g.level} already.`;
+  return null;
+}
+
+/**
+ * A spadeful, from the pack or out of a store you are standing beside.
+ *
+ * Twenty kilos a spadeful and a hundred and twenty on your back is six of
+ * them, so moving a bank of earth is a great many walks to the crate and back.
+ * A cart, a crate or a bin within reach is as good as a pocket for this one
+ * job: the ground is what the load was fetched for. The pack comes first, so
+ * nothing changes for anybody who is carrying their own.
+ */
+export function spoilFrom(g: Game, want: string[], uid?: number): { id: string; take: () => boolean } | undefined {
+  if (uid !== undefined) {
+    const chosen = g.inventory.get(uid);
+    if (!chosen || !(chosen.id in SPOIL_TILE)) return undefined;
+    return { id: chosen.id, take: () => !!g.inventory.remove(chosen.uid, 1) };
+  }
+  for (const id of want) {
+    const held = g.inventory.items.find((it) => it.id === id);
+    if (held) return { id, take: () => !!g.inventory.remove(held.uid, 1) };
+  }
+  const near = (at: [number, number]): boolean => Math.hypot(at[0] - g.player.x, at[1] - g.player.y) <= 2.5;
+  // One spadeful off the top of the pile, not the pile: a stack of five dirt
+  // is one row, and lifting the row out of the crate would take all five.
+  const one = (it: { count: number }, whole: () => boolean): boolean => {
+    if (it.count > 1) {
+      it.count -= 1;
+      g.events.emit('crate');
+      return true;
+    }
+    return whole();
+  };
+  for (const id of want) {
+    for (const c of g.crates.values()) {
+      const it = near(crateCentre(c)) ? c.items.find((o) => o.id === id) : undefined;
+      if (it) return { id, take: () => one(it, () => !!g.crateTake(c, it.uid)) };
+    }
+    for (const f of g.furniture.values()) {
+      const it = near(furnitureCentre(f)) ? f.items.find((o) => o.id === id) : undefined;
+      if (it) return { id, take: () => one(it, () => !!g.furnitureTake(f, it.uid)) };
+    }
+  }
+  return undefined;
 }
 
 /** True while any corner of the tile is off the height flattening aims at. */
@@ -534,7 +591,7 @@ export const ACTIONS: ActionDef[] = [
        */
       if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
       if (g.world.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock. Only a pickaxe will take it lower.';
-      return slopeRefusal(g, 'digging', t.cx, t.cy, -1);
+      return levelStop(g, t.cx, t.cy, -1) ?? slopeRefusal(g, 'digging', t.cx, t.cy, -1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -675,13 +732,13 @@ export const ACTIONS: ActionDef[] = [
         // would be a strange rule that let you take clay out of a bank and
         // not put it back.
         const want = TILE_DEFS[w.getTile(t.x, t.y)].digYield ?? 'dirt';
-        const used = g.inventory.consume(want) ? want : (g.inventory.consume('dirt') ? 'dirt' : null);
-        if (!used) {
-          g.logMsg(`You need ${itemDef(want).name.toLowerCase()} or dirt to bring this ground up to your level.`, 'error');
+        const got = spoilFrom(g, want === 'dirt' ? ['dirt'] : [want, 'dirt']);
+        if (!got || !got.take()) {
+          g.logMsg(`You need ${itemDef(want).name.toLowerCase()} or dirt to bring this ground up, in the pack or in something beside you.`, 'error');
           return false;
         }
         raise(lo, 1);
-        g.logMsg(`You pack ${itemDef(used).name.toLowerCase()} in to bring the ground up.`, 'event');
+        g.logMsg(`You pack ${itemDef(got.id).name.toLowerCase()} in to bring the ground up.`, 'event');
       }
       if (TILE_DEFS[w.getTile(t.x, t.y)].turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
       if (!needsFlattening(g, t.x, t.y)) {
@@ -695,7 +752,7 @@ export const ACTIONS: ActionDef[] = [
     id: 'drop_dirt',
     label: 'Drop dirt',
     labelFor: (t, g) => {
-      const it = t.kind === 'tile' ? spoilInHand(g, t.itemUid) : undefined;
+      const it = t.kind === 'tile' ? spoilFrom(g, SPOIL_ORDER, t.itemUid) : undefined;
       return it ? `Drop ${itemDef(it.id).name.toLowerCase()}` : 'Drop dirt';
     },
     verb: 'dropping dirt',
@@ -703,19 +760,22 @@ export const ACTIONS: ActionDef[] = [
     corner: true,
     stamina: 0.02,
     baseTime: 2,
-    applies: (t, g) => t.kind === 'tile' && g.inventory.items.some((it) => it.id in SPOIL_TILE),
+    applies: (t, g) => t.kind === 'tile' && !!spoilFrom(g, SPOIL_ORDER, t.itemUid),
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
-      const it = spoilInHand(g, t.itemUid);
-      if (!it) return t.itemUid !== undefined ? 'That is not dirt, clay or sand.' : 'You have no dirt, clay or sand to drop.';
+      const it = spoilFrom(g, SPOIL_ORDER, t.itemUid);
+      if (!it) {
+        return t.itemUid !== undefined ? 'That is not dirt, clay or sand.'
+          : 'You have no dirt, clay or sand to drop, and nothing beside you is holding any.';
+      }
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      return slopeRefusal(g, 'digging', t.cx, t.cy, 1);
+      return levelStop(g, t.cx, t.cy, 1) ?? slopeRefusal(g, 'digging', t.cx, t.cy, 1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
-      const it = spoilInHand(g, t.itemUid);
-      if (!it || !g.inventory.remove(it.uid, 1)) return;
+      const it = spoilFrom(g, SPOIL_ORDER, t.itemUid);
+      if (!it || !it.take()) return;
       const w = g.world;
       w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) + 1);
       w.setDirt(t.cx, t.cy, w.getDirt(t.cx, t.cy) + 1);
@@ -723,6 +783,46 @@ export const ACTIONS: ActionDef[] = [
       // What the spadeful covers becomes what was in it: dirt, clay or sand.
       if (BURYABLE.has(w.getTile(t.x, t.y))) w.setTile(t.x, t.y, SPOIL_TILE[it.id]);
       g.logMsg(`You drop the ${itemDef(it.id).name.toLowerCase()} on the ${cornerName(t)} corner, raising the ground.`, 'event');
+    },
+  },
+  {
+    /*
+     * A surveyor's level, and the mark everything else works to.
+     *
+     * Asked for as "flatten toward a chosen height" and "a run of goes that
+     * knows when to stop", which turn out to be one thing: a mark. Sight it at
+     * a corner and flattening aims at it instead of at the tile you are
+     * standing on, and every job that moves that corner refuses once it is
+     * there — so twenty-five spadefuls asked for at a bank stop the moment the
+     * bank is down to the mark, rather than twenty-five spadefuls later.
+     */
+    id: 'take_level',
+    label: 'Take the level here',
+    verb: 'taking the level',
+    instant: true,
+    corner: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => t.kind === 'tile' && g.level !== g.world.getHeight(t.cx, t.cy),
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      g.level = g.world.getHeight(t.cx, t.cy);
+      g.logMsg(`You sight the level at ${g.level}. Flattening works to it, and digging, dropping and concrete stop at it.`, 'event');
+      g.events.emit('action');
+    },
+  },
+  {
+    id: 'clear_level',
+    label: 'Clear the level',
+    verb: 'clearing the level',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (_t, g) => g.level !== null,
+    perform: (_t, g) => {
+      g.level = null;
+      g.logMsg('You put the level away. Flattening works to the ground you stand on again.', 'event');
+      g.events.emit('action');
     },
   },
   {
@@ -748,7 +848,7 @@ export const ACTIONS: ActionDef[] = [
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
       if (!g.inventory.has('trowel')) return 'You need a trowel to lay concrete.';
-      return slopeRefusal(g, 'masonry', t.cx, t.cy, 1);
+      return levelStop(g, t.cx, t.cy, 1) ?? slopeRefusal(g, 'masonry', t.cx, t.cy, 1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -836,7 +936,7 @@ export const ACTIONS: ActionDef[] = [
       if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
       const ore = oreAt(g.world, t.x, t.y);
       if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
-      return null;
+      return levelStop(g, t.cx, t.cy, -1);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;

@@ -1230,6 +1230,18 @@ function helpText(): string {
     your shovel grates on rock and will go no further. Strip all four corners of a tile bare and the
     rock beneath is exposed, and the tile becomes rock &mdash; whatever kind lies there, which may be a
     seam of silver or gold. Drop dirt on a corner to bury the rock again.</p>
+    <p><b>The level.</b> Right-click a corner and choose <b>Take the level here</b> and that corner's
+    height becomes the mark every job works to. <b>Flatten</b> aims at it instead of at the tile you
+    are standing on, so a whole yard can be brought to one height from wherever you happen to stand.
+    <b>Digging</b> and <b>Chip corner</b> refuse a corner once it is down to the mark, and <b>dropping
+    dirt</b> and <b>concrete</b> refuse one once it is up to it &mdash; so asking for twenty-five
+    spadefuls at a bank stops the moment the bank is level, rather than twenty-five spadefuls later.
+    The Tile window says how far the corner under the cursor stands from the mark. <b>Clear the
+    level</b> puts it away.</p>
+    <p><b>A spadeful out of the cart.</b> Dirt, clay and sand weigh <b>20kg</b> apiece, so a back
+    carries six or so and moving a bank is a great many walks. Dropping dirt and the packing-in half
+    of flattening will take a spadeful out of any <b>crate, cart or bin within reach</b> when you are
+    carrying none yourself: park the cart where the work is and it feeds itself.</p>
     <p><b>Beds of sand, clay, peat and tar</b> are not dug like that unless you want them dug. Stand on
     one and choose <b>Collect</b> &mdash; the entry names what is underfoot, <i>Collect clay</i>,
     <i>Collect tar</i> &mdash; and you fill a shovel off the top of it: the tile keeps its type, its

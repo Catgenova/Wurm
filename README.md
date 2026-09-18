@@ -429,6 +429,13 @@ in world time.
   most of what a post is for: a logging camp in a far wood, a digger on a clay
   bank, a Snout turned loose over an old ruin, for as long as a stake in wet
   ground lasts.
+- **The level, and a spadeful out of the cart.** Take the level at a corner and
+  that height is the mark: flattening aims at it from wherever you stand, and
+  digging, chipping, dropping dirt and laying concrete all refuse a corner once
+  it is on the mark — so a run of goes stops exactly there instead of counting
+  spadefuls and overshooting. Dirt, clay and sand weigh 20kg apiece, so
+  dropping dirt and the packing-in half of flattening will draw a spadeful out
+  of any crate, cart or bin within reach when you carry none yourself.
 - **Raw materials, rubbish and a cart.** A raw material bin holds 400 of what
   comes out of the ground, off a tree or off a beast unworked — ore, logs,
   dirt, shards, wool — and refuses everything a bench has touched. A trash crate rots what is put

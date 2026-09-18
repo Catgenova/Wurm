@@ -517,6 +517,20 @@ export class Game {
    * Wednesday whether or not this tab was open for any of it.
    */
   treesAt = Date.now() / 1000;
+  /**
+   * The height everything that shapes the ground is working towards, or null.
+   *
+   * A surveyor sights a level and every cut and every barrowful after it is
+   * measured against that one mark. Until now flattening aimed at whatever
+   * tile you happened to be standing on, so levelling a yard meant standing in
+   * exactly the right place for every tile of it, and digging had no mark at
+   * all: you counted spadefuls and overshot. Take the level at a corner and it
+   * is the mark until you clear it — flattening aims at it, digging and
+   * chipping stop when they reach it, and dirt and concrete stop when they
+   * come up to it. On an island it lives on the player row, so it is the same
+   * mark in every browser you open.
+   */
+  level: number | null = null;
 
   private swingMissed = false;
 
@@ -4509,6 +4523,9 @@ export class Game {
       for (const n of ground.notches) this.world.setNotch(n.x, n.y, n.cuts);
     }
     if (ground.treesAgo !== undefined && Number.isFinite(ground.treesAgo)) this.treesAt = Date.now() / 1000 - ground.treesAgo;
+    // The level is the island's when you are on one: taking it is an ask
+    // like any other, and this is the answer coming back.
+    if (ground.level !== undefined) this.level = ground.level;
     if (ground.crops !== undefined) {
       this.crops.clear();
       for (const c of ground.crops) {
@@ -5494,6 +5511,8 @@ const UNLIT: Aged = { since: () => 0 };
 export interface IslandGround {
   placed: IslandPlaced[];
   crates: IslandCrate[];
+  /** The height the ground is being worked to, or null for none. */
+  level?: number | null;
   /**
    * What is lying on the ground within range, whole rows, on the fast half.
    * Left out means nothing said; an empty list means nothing is there.

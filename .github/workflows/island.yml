@@ -326,8 +326,9 @@ jobs:
       - name: What the ground says about a cut it will not take
         run: |
           # A slope refusal carries its numbers on both sides, ground inside
-          # somebody else's stake is refused, and flattening steps round a
-          # corner of bare rock instead of stopping at it.
+          # somebody else's stake is refused, flattening steps round a corner
+          # of bare rock instead of stopping at it, a level taken stops a run
+          # of goes on the mark, and a spadeful comes out of the crate.
           npx esbuild supabase/test/ground.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/ground.mjs --log-level=error
           node node_modules/.cache/ground.mjs

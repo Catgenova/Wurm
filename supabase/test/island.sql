@@ -60,9 +60,22 @@ select '3. Hild knocks: bodies ' || (select count(*) from player)
 update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
 \echo '--- what the island refuses, and why'
 select '4. a corner across the island:  ' || coalesce(act_refusal(:'world', :'ivar', 'dig', '{"x":2,"y":2,"cx":2,"cy":2}'), 'ALLOWED');
-select land_set_height(:'world', 8, 8, 0) \g /dev/null
+-- The corner and the ring of them round it, so that the water line is the only
+-- thing being asked about: one corner dropped a hundred steps on its own is
+-- refused for the cliff it would leave, which is a different question and
+-- 329c's. Digging has a slope door on this side now; the browser always had one.
+do $$
+declare w uuid := (select id from world limit 1); i int; j int;
+begin
+  for i in 7..9 loop for j in 7..9 loop perform land_set_height(w, i, j, 0); end loop; end loop;
+end $$;
 select '5. a corner at the water line:  ' || coalesce(act_refusal(:'world', :'ivar', 'dig', '{"x":8,"y":8,"cx":8,"cy":8}'), 'ALLOWED');
-select land_set_height(:'world', 8, 8, 100), land_set_dirt(:'world', 8, 8, 0) \g /dev/null
+do $$
+declare w uuid := (select id from world limit 1); i int; j int;
+begin
+  for i in 7..9 loop for j in 7..9 loop perform land_set_height(w, i, j, 100); end loop; end loop;
+end $$;
+select land_set_dirt(:'world', 8, 8, 0) \g /dev/null
 select '6. a corner of bare rock:       ' || coalesce(act_refusal(:'world', :'ivar', 'dig', '{"x":8,"y":8,"cx":8,"cy":8}'), 'ALLOWED');
 select land_set_dirt(:'world', 8, 8, 20) \g /dev/null
 delete from item where holder_uid = :'ivar' and def = 'shovel';
@@ -2176,6 +2189,84 @@ update skill set value = :'dug' where world_id = :'world2' and uid = :'ivar' and
 update player set x = 9.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
 
 /*
+ * A surveyor's level, and a run of goes that stops on it.
+ *
+ * Asked for as "flatten toward a chosen height" and "a run of goes that knows
+ * when to stop", which are one thing. A bank three steps proud of flat ground,
+ * the level sighted on the flat, and ten spadefuls asked for: it comes down
+ * three and stops, because the door says the corner is there.
+ */
+update player set x = 6.5, y = 6.5, level_h = null where world_id = :'world2' and uid = :'ivar';
+-- The patch as it was found, because a seam at 5,5 and a good deal else is
+-- measured on this ground later and a bank dug here would be the end of it.
+create temp table ground_was as
+  select x, y, land_tile(:'world2', x, y) as tile, land_data(:'world2', x, y) as data,
+         land_height(:'world2', x, y) as h, land_dirt(:'world2', x, y) as dirt
+    from generate_series(4, 9) x, generate_series(4, 9) y;
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        i int; j int;
+begin
+  for i in 4..9 loop for j in 4..9 loop
+    perform land_set_height(w, i, j, 100); perform land_set_dirt(w, i, j, 20);
+    perform land_set_tile(w, i, j, 1);
+  end loop; end loop;
+  for i in 6..7 loop for j in 6..7 loop perform land_set_height(w, i, j, 103); end loop; end loop;
+end $$;
+select act_perform(:'world2', :'ivar', 'take_level', '{"kind":"tile","x":5,"y":5,"cx":5,"cy":5}'::jsonb) \g /dev/null
+select '329e. the level sighted on the flat: ' || (select coalesce(level_h::text, 'NONE') from player where world_id = :'world2' and uid = :'ivar')
+     || ', and flattening the bank now aims at ' || flatten_target(:'world2', :'ivar', 6, 6)
+     || ' rather than at the ground underfoot';
+delete from event where uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int; n int := 0;
+begin
+  for i in 1..10 loop
+    exit when act_refusal(w, me, 'dig', '{"kind":"tile","x":6,"y":6,"cx":6,"cy":6}'::jsonb) is not null;
+    perform act_perform(w, me, 'dig', '{"kind":"tile","x":6,"y":6,"cx":6,"cy":6}'::jsonb);
+    n := n + 1;
+  end loop;
+  perform tell(w, me, 'dug ' || n || ' times', 'info');
+end $$;
+select '329f. ten spadefuls asked for at a bank three proud of it: '
+     || (select text from event where uid = :'ivar' and kind = 'info' order by n desc limit 1)
+     || ', leaving the corner at ' || land_height(:'world2', 6, 6)
+     || ' — and asked once more: ' || coalesce(act_refusal(:'world2', :'ivar', 'dig', '{"kind":"tile","x":6,"y":6,"cx":6,"cy":6}'::jsonb), 'ALLOWED')
+     || ' | dropping a spadeful back on it: ' || coalesce(act_refusal(:'world2', :'ivar', 'drop_dirt', '{"kind":"tile","x":6,"y":6,"cx":6,"cy":6}'::jsonb), 'allowed');
+
+/*
+ * And a spadeful out of a crate you are standing beside, which is the other
+ * half of moving a bank: twenty kilos a spadeful and six of them on your back.
+ */
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('dirt', 'clay', 'sand');
+insert into crate (world_id, id, kind, x, y, sx, sy, made_by) values (:'world2', 9100, 'plank', 6, 6, 0, 0, :'ivar');
+insert into item (world_id, holder, crate, def, ql, count) values (:'world2', 'crate', 9100, 'dirt', 20, 5);
+update player set level_h = null where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select '329g. with nothing in the pack and five spadefuls in the crate beside him: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'drop_dirt', '{"kind":"tile","x":6,"y":6,"cx":7,"cy":6}'::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'drop_dirt', '{"kind":"tile","x":6,"y":6,"cx":7,"cy":6}'::jsonb) \g /dev/null
+select '329h. ' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID')
+     || ' — ' || (select coalesce(sum(count), 0) from item where world_id = :'world2' and holder = 'crate' and crate = 9100)
+     || ' left in the crate, and none of it ever in his hands: '
+     || (select coalesce(sum(count), 0) from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'dirt');
+delete from item where world_id = :'world2' and holder = 'crate' and crate = 9100;
+delete from crate where world_id = :'world2' and id = 9100;
+update player set x = 9.5, y = 9.5, level_h = null where world_id = :'world2' and uid = :'ivar';
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1); r record;
+begin
+  for r in select * from ground_was loop
+    perform land_set_tile(w, r.x, r.y, r.tile);
+    perform land_set_data(w, r.x, r.y, r.data);
+    perform land_set_height(w, r.x, r.y, r.h);
+    perform land_set_dirt(w, r.x, r.y, r.dirt);
+  end loop;
+end $$;
+drop table ground_was;
+
+/*
  * And whose ground it is. Nothing asked before: a visitor could cut a trench
  * through somebody's token. A stake of Hild's is planted on ground no other
  * deed covers, and the same shovel is put to it from both sides.
@@ -2307,7 +2398,7 @@ select '344. and what is now lit for him: ' ||
         where is_prospected(:'world2', :'ivar', x, y)) || ' tiles — for Hild, who has not looked: '
      || (select count(*) from generate_series(0, 15) x cross join generate_series(0, 15) y
          where is_prospected(:'world2', :'hild', x, y));
-select '345. the eleven the ground brought: '
+select '345. what the ground brought, ' || (select count(*) from action_def where ground_action(id)) || ' of them: '
      || (select string_agg(id, ', ' order by id) from action_def where ground_action(id))
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 

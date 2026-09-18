@@ -53,7 +53,12 @@ export function cornerReading(g: Game, cx: number, cy: number): string {
   const h = w.getHeight(cx, cy);
   const soil = w.getDirt(cx, cy);
   const stands = h === 0 ? 'at the water line' : h > 0 ? `${h} above the water` : `${-h} under water`;
-  return `Corner ${cx}, ${cy} · ${stands} · ${soil > 0 ? `${soil} soil over rock` : 'bare rock'}`;
+  // And where it stands against the level, when one has been taken, which is
+  // the number every job on this corner is working towards.
+  const mark = g.level === null ? ''
+    : h === g.level ? ' · at the level'
+    : ` · ${Math.abs(h - g.level)} ${h > g.level ? 'above' : 'below'} the level of ${g.level}`;
+  return `Corner ${cx}, ${cy} · ${stands} · ${soil > 0 ? `${soil} soil over rock` : 'bare rock'}${mark}`;
 }
 
 /**
