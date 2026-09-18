@@ -715,6 +715,14 @@ async function main(): Promise<void> {
            * the deed crate started being placed again failed here.
            */
           if (taken.has(`${x},${y}`)) continue;
+          /*
+           * And somewhere a body can walk to from where it stands. The ring
+           * found soil two tiles off with trees and water between, once, and
+           * the walk below found no path and left the body where it was: the
+           * dig was refused for being too far away, which was true and was
+           * again about the wrong thing.
+           */
+          if ((dx || dy) && !findPath(back, Math.floor(me.x), Math.floor(me.y), 0, x, y, pathOptions(back))) continue;
           cx = x; cy = y; found = true;
         }
       }
