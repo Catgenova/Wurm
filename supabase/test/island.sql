@@ -9643,3 +9643,20 @@ select '1006. a rabba of 20 that is plated, big-boned and fanged, all fantastic:
      || ' of that where a plain rabba closes 2.5; slippery (fantastic) would be hit '
      || (select round((trait_mul('{slippery_fantastic}', 'evade') * 100)::numeric) ) || ' times where a plain one is hit 100, and quick-jawed (fantastic) at heel would strike every '
      || round((companion_blow() / trait_mul('{quick_jawed_fantastic}', 'haste'))::numeric, 2) || ' seconds against ' || companion_blow();
+
+/*
+ * What is lying on the ground reaches a browser, which it never did: the
+ * ground answer carried the fires, the crates, the crops and the walls, and
+ * never a thing lying on the grass.
+ */
+\echo ''
+\echo '--- what is lying on the ground reaches a browser'
+select drop_on_ground(:'world2', 7, 6, 'corpse', 30, 'Rabba') as carcass \gset
+select drop_on_ground(:'world2', 60, 60, 'log', 20, 'Pine') \g /dev/null
+delete from caller where uid = :'ivar' \g /dev/null
+select (rpc_ground(:'world2', 40, false))->'lying' as lying \gset
+select '1007. asked for the ground, the fast half: ' || jsonb_array_length(:'lying'::jsonb) || ' things lying within reach of Ivar, the corpse dropped at 7,6 among them: '
+     || (select coalesce(string_agg(l->>'def' || ' (' || (l->>'extra') || ') at ' || (l->>'gx') || ',' || (l->>'gy') || ', holder ' || (l->>'holder') || ', id ' || (l->>'id'), '; '), 'NOTHING')
+         from jsonb_array_elements(:'lying'::jsonb) l where (l->>'id')::bigint = :'carcass')
+     || ' — the row a browser now draws as a pile and asks to butcher; and one across the island at 60,60: '
+     || case when exists (select 1 from jsonb_array_elements(:'lying'::jsonb) l where (l->>'gx')::int = 60) then 'CARRIED' else 'left out, being out of range' end;

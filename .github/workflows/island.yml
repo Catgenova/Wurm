@@ -273,6 +273,17 @@ jobs:
           npx esbuild supabase/test/field.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/field.mjs --log-level=error
           node node_modules/.cache/field.mjs
+
+      - name: What is lying on the ground reaches a browser
+        run: |
+          # The ground answer never carried a thing lying on the grass, and the
+          # browser's map of the ground was only its own rules' to write, which
+          # do not run on an island: a corpse was in Postgres and drawn by
+          # nobody. The answer carries `lying` now, and this hands `sawGround`
+          # one as the island sends it.
+          npx esbuild supabase/test/lying.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/lying.mjs --log-level=error
+          node node_modules/.cache/lying.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

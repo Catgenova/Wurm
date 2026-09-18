@@ -211,6 +211,9 @@ export interface ItemRow {
   lit_at: string | null;
   /** The bag this is in, when `holder` says 'bag'. */
   inside: number | null;
+  /** The tile it lies on, when `holder` says 'ground'. */
+  gx: number | null;
+  gy: number | null;
   [key: string]: unknown;
 }
 

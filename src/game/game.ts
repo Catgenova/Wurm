@@ -8,6 +8,8 @@ import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
+import type { ItemRow } from '../net/island';
+import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
@@ -2283,7 +2285,10 @@ export class Game {
     this.creatures.update(dt, this);
 
     this.decayClock += dt;
-    if (this.decayClock >= DECAY_STEP && this.ground.size) {
+    // On an island what is lying about rots on the island's clock, and every
+    // ground answer replaces it; rotting it here as well would take a pile off
+    // the screen a second before the next answer put it back, and say so.
+    if (this.decayClock >= DECAY_STEP && this.ground.size && !this.bodyFromIsland) {
       this.applyDecay(this.decayClock);
       this.decayClock = 0;
     } else if (this.decayClock >= DECAY_STEP) {
@@ -4285,7 +4290,32 @@ export class Game {
    * Ids are the island's, which is what makes replacing safe — the same fire
    * comes back as the same fire.
    */
-  sawGround(ground: IslandGround): void {
+  sawGround(ground: IslandGround, aged: Aged = UNLIT): void {
+    /*
+     * What is lying on the ground, which until now the island never said.
+     *
+     * Reported as "killed a roxxa, no corpse dropped to butcher, or at least
+     * isn't displaying". The corpse was there: the island drops one where
+     * the thing fell, and the suite has measured it since kills were ported.
+     * Nothing carried it: `rpc_ground` sent the fires, the crates, the crops
+     * and the walls and never a thing lying on the grass, and this map was
+     * only ever written by the browser's own rules, which do not run on an
+     * island. So a corpse, a log a worker put down, a hatchet somebody else
+     * dropped — all in Postgres and drawn by nobody.
+     *
+     * Replaced outright, like the rest of the fast half: what is not in the
+     * answer has been picked up, has rotted, or is out of range. Ids are the
+     * island's, so a pile clicked is the row the island will be asked about.
+     */
+    if (ground.lying) {
+      this.ground.clear();
+      for (const row of ground.lying) {
+        const key = `${row.gx},${row.gy}`;
+        const pile = this.ground.get(key) ?? [];
+        pile.push(packed(row, aged));
+        this.ground.set(key, pile);
+      }
+    }
     this.crates.clear();
     this.campfires.clear();
     this.smelters.clear();
@@ -5389,9 +5419,17 @@ export interface IslandCrate {
 }
 
 /** Everything on the ground within sight, as one answer. */
+/** An island clock for a ground read that comes without one: nothing lying about has been burning. */
+const UNLIT: Aged = { since: () => 0 };
+
 export interface IslandGround {
   placed: IslandPlaced[];
   crates: IslandCrate[];
+  /**
+   * What is lying on the ground within range, whole rows, on the fast half.
+   * Left out means nothing said; an empty list means nothing is there.
+   */
+  lying?: ItemRow[];
   /**
    * What is growing, and how far along.
    *

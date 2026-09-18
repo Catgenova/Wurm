@@ -32,7 +32,7 @@ function row(over: Partial<ItemRow> = {}): ItemRow {
   return {
     id: 1, def: 'water_skin', ql: 50, dmg: 0, count: 1, extra: null, holder: 'player',
     charges: null, locked: false, issued: false, rare: null, dye: null, bless: null, maker: null, piece: null,
-    lit: false, lit_at: null, inside: null, ...over,
+    lit: false, lit_at: null, inside: null, gx: null, gy: null, ...over,
   };
 }
 
