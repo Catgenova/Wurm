@@ -4927,7 +4927,7 @@ export class Game {
         job.makes === 'anvil'
           ? { uid: this.inventory.nextUid++, id: 'anvil', ql: job.ql, dmg: 0, count: 1, extra: job.item.id.replace('_lump', '') }
           : { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1, extra: job.extra, piece: job.piece };
-      s.output.push(made);
+      furnaceOut(s.output, made);
       this.logMsg(`The smelter finishes a ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
       this.events.emit('smelter');
     }
@@ -4955,7 +4955,7 @@ export class Game {
       if (this.islandClock) { job.left = 0; continue; }
       k.jobs.shift();
       const made: Item = { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
-      k.output.push(made);
+      furnaceOut(k.output, made);
       this.logMsg(`The kiln fires a ${ITEM_DEFS[made.id]?.name.toLowerCase() ?? made.id}. (QL ${made.ql.toFixed(1)})`, 'event');
       this.events.emit('smelter');
     }
@@ -5302,6 +5302,21 @@ export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Ite
       piece: o.piece ?? undefined,
     };
   });
+}
+
+/**
+ * A finished piece put with what is waiting, folded into a stack of its kind
+ * the way a pack folds it: twenty lumps wait as one entry of twenty rather
+ * than twenty of one, and the quality is the average by the unit. The
+ * island folds its furnace output the same way (`furnace_fold`).
+ */
+export function furnaceOut(output: Item[], made: Item): void {
+  const def = ITEM_DEFS[made.id];
+  const stack = def?.stackable ? output.find((it) => it.id === made.id && it.extra === made.extra && it.piece === made.piece) : undefined;
+  if (stack) {
+    stack.ql = (stack.ql * stack.count + made.ql * made.count) / (stack.count + made.count);
+    stack.count += made.count;
+  } else output.push(made);
 }
 
 /** And the jobs, each with something in the `item` a local finish would read. */

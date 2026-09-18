@@ -54,7 +54,6 @@ export const METAL_BY_LUMP = new Map(METALS.map((m) => [m.lump, m]));
 export const isLump = (id: string): boolean => METAL_BY_LUMP.has(id);
 export const isOreItem = (id: string): boolean => METAL_BY_ORE.has(id);
 
-/** Metal a single nail takes, in kilograms, and so how many come off one lump. */
 /**
  * Coins: a lump of silver or gold struck into twenty under a die, at the
  * anvil. A compact store of metal that goes in a pocket, and comes back out
@@ -66,8 +65,14 @@ export const DIE_WEAR = 2;
 export const COIN_DIFFICULTY = 12;
 /** The metals a coin is struck from. */
 export const COIN_METALS = ['silver', 'gold'];
+/**
+ * Nails: five to a filling of the nail mould, asked for, down from a hundred.
+ * A nail still weighs ten grams on the item table; how far a lump goes is a
+ * choice about the game rather than a sum, and the island reads the same
+ * number through the mould table's `per`.
+ */
 export const NAIL_WEIGHT = 0.01;
-export const NAILS_PER_LUMP = 100;
+export const NAILS_PER_LUMP = 5;
 
 /**
  * Ore a lump takes.

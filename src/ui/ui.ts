@@ -1187,7 +1187,7 @@ export class UI {
       const job = s.jobs[0];
       entries.push({ label: `In the furnace: ${jobName(job)}`, note: `${Math.ceil(job.left)}s left, ${s.jobs.length} in all`, disabled: true });
     }
-    if (s.output.length) entries.push({ label: `Finished: ${s.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
+    if (s.output.length) entries.push({ label: `Finished: ${s.output.map((o) => `${o.count > 1 ? `${o.count} × ` : ''}${itemName(o).toLowerCase()}`).join(', ')}`, disabled: true });
     return entries;
   }
 
@@ -1329,7 +1329,7 @@ export class UI {
       const job = k.jobs[0];
       entries.push({ label: `In the kiln: ${itemDef(job.makes).name.toLowerCase()}`, note: `${Math.ceil(job.left)}s left, ${k.jobs.length} in all`, disabled: true });
     }
-    if (k.output.length) entries.push({ label: `Fired: ${k.output.map((o) => itemName(o).toLowerCase()).join(', ')}`, disabled: true });
+    if (k.output.length) entries.push({ label: `Fired: ${k.output.map((o) => `${o.count > 1 ? `${o.count} × ` : ''}${itemName(o).toLowerCase()}`).join(', ')}`, disabled: true });
     return entries;
   }
 

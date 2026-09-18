@@ -612,8 +612,9 @@ for (const id of JEWEL_PIECES) out.push(`insert into jewel_def values (${q(id)})
 out.push('');
 
 /*
- * Eighteen things this game can make and has no definition for: seventeen
- * moulds and the altar. The browser does not notice, because `itemDef()` hands
+ * Things this game can make and has no definition for: once seventeen moulds
+ * and the altar, and the moulds are named off their own table now, so the
+ * altar alone. The browser does not notice, because `itemDef()` hands
  * back `{ name: id, category: 'misc', weight: 1 }` for anything it has never
  * heard of — so a mould is called `arrow_head_mould` on screen and weighs a
  * kilo, which is wrong and harmless.

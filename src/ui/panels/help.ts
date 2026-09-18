@@ -456,8 +456,8 @@ function helpText(): string {
     into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Nails, furniture and storage</h3>
     <p>Anything that is nailed together needs <b>nails</b>, and nails need metal. Fire a <b>nail mould</b>
-    from sand at a smelter: it is a gang mould with a hundred little channels in it, so one lump of metal
-    poured into it there and beaten out on an anvil gives a hundred nails at ten grams apiece. Crates, tool heads fitted to their
+    from sand at a smelter: it is a gang mould with five channels in it, so one lump of metal
+    poured into it there and beaten out on an anvil gives five nails at ten grams apiece. Crates, tool heads fitted to their
     shafts and every piece of furniture take them; sawing planks, carving shafts and bundling thatch do
     not, so the early game needs no smith.</p>
     <p><b>Fine carpentry</b> is the furniture hand, separate from the carpentry that cuts the wood. With

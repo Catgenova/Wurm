@@ -9218,7 +9218,7 @@ select furnace_sweep(:'world2') as swept_2 \gset
 select '984. two iron ore in a lit smelter: ' || :jobs_in || ' jobs of ' || :secs_each || ' s each; half a charge''s heat later the clock''s sweep alone brings the first to ' || :left_half || ' s left'
      || '; a log fed mid-job (' || :'fuel_door' || ') leaves it at ' || :left_fuelled || ' s, nothing lost'
      || '; two charges'' heat later the sweep finishes ' || :swept_2 || ' with nobody asking: ' || jsonb_array_length(state->'jobs') || ' jobs left and '
-     || jsonb_array_length(state->'output') || ' lumps waiting, told "' || coalesce((select text from event where uid = :'ivar' and text like 'The smelter finishes%' order by n desc limit 1), 'nothing') || '"'
+     || (select coalesce(sum((o->>'count')::int), 0) from jsonb_array_elements(state->'output') o) || ' lumps waiting, told "' || coalesce((select text from event where uid = :'ivar' and text like 'The smelter finishes%' order by n desc limit 1), 'nothing') || '"'
   from placed where id = :oven2;
 
 /*
@@ -9349,7 +9349,7 @@ select give(:'world2', :'ivar', 'casting', 1, 50, 'Iron', null, null, 'plate_bre
 select id as oven3, x as ox3, y as oy3 from placed where world_id = :'world2' and kind = 'smelter' order by id limit 1 \gset
 select x as was_x, y as was_y from player where world_id = :'world2' and uid = :'ivar' \gset
 update player set x = :ox3 + 0.5, y = :oy3 + 0.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
-update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb) where id = :oven3 \g /dev/null
+update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb), fuel = 3600, lit = true, since = now() where id = :oven3 \g /dev/null
 select item_metal(i) as plate_metal from item i where i.id = :'plate' \gset
 delete from event where uid = :'ivar' \g /dev/null
 select coalesce(act_refusal(:'world2', :'ivar', 'melt_down', ('{"kind":"smelter","id":' || :oven3 || ',"itemUid":' || :'plate' || '}')::jsonb), 'allowed') as melt_door \gset
@@ -9359,5 +9359,17 @@ select '991. a breastplate casting holds ' || :plate_metal || ' lumps, the whole
      || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'nothing') || '", '
      || (select jsonb_array_length(state->'jobs') from placed where id = :oven3) || ' lumps in the furnace and '
      || pack_count(:'world2', :'ivar', 'casting') || ' castings left in the pack';
+-- The three lumps out of the heat: one entry of three, not three of one, and drawn as such.
+update placed set since = since - make_interval(secs => (select sum((j->>'total')::double precision) + 1 from jsonb_array_elements(state->'jobs') j)) where id = :oven3 \g /dev/null
+select furnace_settle(:'world2', :oven3) as cooled3 \gset
+select jsonb_array_length(state->'output') as waiting, state->'output'->0->>'count' as waiting_n, round((state->'output'->0->>'ql')::numeric, 1) as waiting_ql from placed where id = :oven3 \gset
+delete from event where uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'smelter_take_all', ('{"kind":"smelter","id":' || :oven3 || '}')::jsonb) \g /dev/null
+select '992. three lumps of one kind out of the heat: ' || :cooled3 || ' finished, waiting as ' || :waiting || ' entry of ' || :waiting_n || ' at QL ' || :waiting_ql
+     || ', and drawn: "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'nothing') || '"';
+select '993. off the table: a nail mould runs one lump out as ' || (select per from mould_def where id = 'nail_mould') || ' nails, a nail melts back as '
+     || (select content from melt_def where item = 'nail') || ' of a lump; and every mould has a name of its own: '
+     || (select count(*) from mould_def m join item_def d on d.id = m.id where d.name = m.id) || ' named as their id, the arrow head mould being "'
+     || (select name from item_def where id = 'arrow_head_mould') || '" and weighing ' || (select weight from item_def where id = 'arrow_head_mould');
 update placed set state = jsonb_build_object('jobs', '[]'::jsonb, 'output', '[]'::jsonb) where id = :oven3 \g /dev/null
 update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null

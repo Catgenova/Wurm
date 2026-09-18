@@ -1,4 +1,5 @@
 import { matOfItem, workingQl } from './materials';
+import { MOULDS } from './metal';
 import { dyeWord } from './dyestuffs';
 
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
@@ -189,7 +190,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   electrum_lump: { name: 'Electrum lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   // Moulds, fired from sand, and the pieces beaten out of them.
   anvil_mould: { name: 'Anvil mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  nail_mould: { name: 'Nail mould', category: 'tool', weight: 1.2, decay: 1, description: 'A gang mould with a hundred little channels in it. One lump of metal runs out as a hundred nails. It wears like any mould and cannot be mended.' },
+  nail_mould: { name: 'Nail mould', category: 'tool', weight: 1.2, decay: 1, description: 'A gang mould with five channels in it. One lump of metal runs out as five nails. It wears like any mould and cannot be mended.' },
   pan_mould: { name: 'Pan mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
   rake_head_mould: { name: 'Rake head mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
   shovel_head_mould: { name: 'Shovel head mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
@@ -394,6 +395,23 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   small_barrel: { name: 'Small barrel', category: 'misc', weight: 7, decay: 4, description: 'Holds 30 litres of one liquid, and nothing solid at all.' },
   large_barrel: { name: 'Large barrel', category: 'misc', weight: 34, decay: 4, description: 'Holds 250 litres of one liquid. It takes a while to fill and longer to empty.' },
 };
+
+/*
+ * Every mould the metal table knows is an item, named off that table.
+ *
+ * Seventeen of them had no entry above and showed on screen as their ids:
+ * `arrow_head_mould` in the crafting window, weighing a kilo, because
+ * `itemDef` hands back a fallback for anything it has never heard of. The
+ * ones written out above keep their own words; the rest are filled in here
+ * from the mould table, so a mould added there is named here, and on the
+ * island, which reads this list, without a second entry to forget.
+ */
+for (const m of MOULDS) {
+  ITEM_DEFS[m.id] ??= {
+    name: m.name, category: 'tool', weight: 1.2, decay: 1,
+    description: `A sand mould${m.per && m.per > 1 ? `, ${m.per} to a filling` : ''}. It wears a little every time it is filled, and no mould can be mended.`,
+  };
+}
 
 /**
  * What a hoard is made of: the deep metals, best first.
