@@ -4404,6 +4404,11 @@ export class Game {
      * `undefined` is "nothing said about this"; an empty array is "nothing is
      * growing here", and they are not the same answer.
      */
+    if (ground.notches !== undefined) {
+      this.world.notches.clear();
+      for (const n of ground.notches) this.world.setNotch(n.x, n.y, n.cuts);
+    }
+    if (ground.treesAgo !== undefined && Number.isFinite(ground.treesAgo)) this.treesAt = Date.now() / 1000 - ground.treesAgo;
     if (ground.crops !== undefined) {
       this.crops.clear();
       for (const c of ground.crops) {
@@ -5287,6 +5292,14 @@ export interface IslandGround {
    * without any arrangement is how long a second is.
    */
   crops?: Array<{ x: number; y: number; id: string; stage: number; ago: number; tended: number; tendedNow: boolean; ql: number }>;
+  /**
+   * The felling notches near you and how long ago the woods last turned
+   * over, both on the slow half. Look reads them: "2 of 3 strokes in it", and
+   * "the woods turn over in 9 hours". A browser on an island keeps no clock
+   * of its own for the woods, so this is the only place it hears the hour.
+   */
+  notches?: Array<{ x: number; y: number; cuts: number }>;
+  treesAgo?: number;
   /**
    * Your own settlement, on the slow half.
    *

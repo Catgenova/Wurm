@@ -285,6 +285,17 @@ jobs:
           npx esbuild supabase/test/letters.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/letters.mjs --log-level=error
           node node_modules/.cache/letters.mjs
+      - name: What Look says is coming for a tree, the same on both sides
+        run: |
+          # "The woods turn over in 9 hours, and it will be shrivelled. Prune
+          # it to keep it." is one sentence written twice, once a side. A solo
+          # world hears the browser's and an island the island's, and a player
+          # who plays both should never be able to tell which — so every stage
+          # of the age table is put to both, and the hour-words at their
+          # thresholds, where a sentence turns.
+          npx esbuild supabase/test/outlook.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/outlook.mjs --log-level=error
+          node node_modules/.cache/outlook.mjs
 
   migrate:
     name: Push the migrations to the project

@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, TREE_STAGE, type TreeAge } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
@@ -154,6 +154,33 @@ const PACKABLE = new Set<number>([TileType.Dirt, TileType.Grass, TileType.Lawn, 
 
 const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Moss, TileType.Lawn, TileType.Steppe, TileType.Tundra]);
 
+/** A word and its article: "an oak", "a pine". */
+export const an = (word: string): string => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+
+/** "in 9 hours", "in 40 minutes", "within the hour". */
+export function hoursHence(seconds: number): string {
+  const s = Math.max(0, seconds);
+  if (s >= 5400) return `in ${Math.round(s / 3600)} hours`;
+  if (s >= 3000) return 'in about an hour';
+  if (s >= 120) return `in ${Math.round(s / 60)} minutes`;
+  return 'any moment';
+}
+
+/**
+ * What is coming for a tree, and what to do about it: the woods turn over
+ * once a day, so the next stage is a matter of hours and the sentence says
+ * which. A stage whose next stage is itself has nothing coming.
+ */
+export function treeOutlook(age: TreeAge, treesAt: number): string {
+  if (age.next === age.id) return ' It is clipped, and will stay as it is.';
+  const when = hoursHence(TREE_STAGE - (Date.now() / 1000 - treesAt));
+  const then = age.next === null ? 'it will be gone' : `it will be ${TREE_AGES[age.next].name.toLowerCase()}`;
+  let out = ` The woods turn over ${when}, and ${then}.`;
+  if (!age.alive) out += ' Fell it for what timber is in it before then.';
+  else if (age.pruned !== null && age.next !== null && !TREE_AGES[age.next].alive) out += ' Prune it to keep it.';
+  return out;
+}
+
 /** Forestry it takes to graft: a beginner's graft is a sprout thrown away. */
 export const GRAFT_SKILL = 50;
 /** A sprout of one of the three that bear, which is what a graft is made from. */
@@ -282,8 +309,17 @@ export const ACTIONS: ActionDef[] = [
       const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
       let text = `You see ${w.tileName(t.x, t.y).toLowerCase()} at (${t.x}, ${t.y}).`;
       if (type === TileType.Tree) {
-        const age = treeAge(w.getData(t.x, t.y)).name.toLowerCase();
-        text = `You see a ${age} ${TREE_DEFS[treeSpecies(w.getData(t.x, t.y))].name.toLowerCase()} tree at (${t.x}, ${t.y}).`;
+        const data = w.getData(t.x, t.y);
+        const age = treeAge(data);
+        const kind = TREE_DEFS[treeSpecies(data)].name.toLowerCase();
+        text = `You see ${an(`${age.name.toLowerCase()} ${kind} tree`)} at (${t.x}, ${t.y}).`;
+        // What is in it, what is coming for it, and what to do about that —
+        // the same words the island uses, so a tree reads the same on both.
+        const cuts = w.notchAt(t.x, t.y);
+        if (cuts) text += ` It has ${cuts} of ${age.hits} strokes in it.`;
+        text += treeOutlook(age, g.treesAt);
+      } else if (type === TileType.Stump) {
+        text = `You see the stump of ${an(TREE_DEFS[treeSpecies(w.getData(t.x, t.y))].name.toLowerCase())} at (${t.x}, ${t.y}). Dig it out, or leave it a day.`;
       } else if (type === TileType.Bush) {
         text = `You see a ${BUSH_DEFS[bushSpecies(w.getData(t.x, t.y))].name.toLowerCase()} at (${t.x}, ${t.y}).`;
       }

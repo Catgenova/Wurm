@@ -8436,3 +8436,33 @@ select '935. grafted: the tree at 50,60 is a ' || lower((select name from tree_a
      || '" — and the sprouts spent on it: ' || (6 - coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sprout' and extra = 'Apple'), 0))
      || ' of 6, the birch sprout untouched: ' || coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sprout' and extra = 'Birch'), 0);
 select '936. and the journal counts it as an orchard planted: ' || (select coalesce(tally->>'orchard', '0') from player where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777');
+
+/*
+ * Look says what a tree is, what is in it, what is coming, and what to do.
+ *
+ * Asked from the island: Look shows the age and what is next — an old oak,
+ * gone in nine hours, prune it to keep it. The hour was always on the island
+ * and the notch beside the land; nothing had been told to say them.
+ */
+\echo ''
+\echo '--- what Look says of a tree'
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- The woods turned over nine hours ago, so they turn again in fifteen.
+  update world set trees_at = now() - interval '9 hours' where id = w;
+  perform land_set_tile(w, 50, 62, tile_id('Tree')); perform land_set_height(w, 50, 62, 4); perform land_set_data(w, 50, 62, 2 | (4 << 4));   -- a very old oak
+  perform land_set_tile(w, 51, 62, tile_id('Tree')); perform land_set_height(w, 51, 62, 4); perform land_set_data(w, 51, 62, 2 | (1 << 4)); perform tree_notch(w, 51, 62, 2);   -- a mature oak, two strokes in
+  perform land_set_tile(w, 52, 62, tile_id('Tree')); perform land_set_height(w, 52, 62, 4); perform land_set_data(w, 52, 62, 2 | (6 << 4));   -- clipped
+  perform land_set_tile(w, 53, 62, tile_id('Tree')); perform land_set_height(w, 53, 62, 4); perform land_set_data(w, 53, 62, 1 | (5 << 4));   -- a shrivelled pine
+  update player set x = 51.5, y = 61.5 where world_id = w and uid = '77777777-7777-7777-7777-777777777777';
+end $$;
+select '937. a very old oak: "' || examine_tile_text(:'world6', 50, 62) || '"';
+select '938. a mature oak with two strokes in it: "' || examine_tile_text(:'world6', 51, 62) || '"';
+select '939. a clipped oak: "' || examine_tile_text(:'world6', 52, 62) || '"';
+select '940. a shrivelled pine: "' || examine_tile_text(:'world6', 53, 62) || '"';
+select '941. and what the ground read hands a browser for it: notches ' || ((rpc_ground(:'world6', 40, true))->'notches')::text
+     || ', the woods turned over ' || round(((rpc_ground(:'world6', 40, true))->>'treesAgo')::numeric / 3600) || ' hours ago'
+     || ' — and the fast half says nothing about either: ' || coalesce(((rpc_ground(:'world6', 40, false))->'notches')::text, 'nothing');
