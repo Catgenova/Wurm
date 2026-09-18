@@ -1838,8 +1838,15 @@ export class Game {
   wearTitle(id: string | null): void {
     if (id !== null && !this.player.titles.includes(id)) return;
     this.player.title = id;
+    // And tell the island, which keeps it. Without this the chip lights up
+    // and the next heartbeat puts it back: the island reports `title` on
+    // every beat and had never been told this one changed.
+    this.woreTitle?.(id);
     this.events.emit('skill', '', 0);
   }
+
+  /** Set by the island, when there is one, to carry a title across. */
+  woreTitle?: (id: string | null) => void;
 
   /** The title being worn, written out. */
   titleName(): string | null {

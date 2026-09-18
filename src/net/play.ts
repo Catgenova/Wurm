@@ -475,6 +475,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     game.write(def.said.replace('{name}', name || 'Somebody'), 'event');
   };
   game.emoted = (id: string) => island.emote(id);
+  game.woreTitle = (id: string | null) => void island.wearTitle(id);
   island.hooks.people = (people: PlayerRow[]) => {
     game.roster.sawAll(people
       .filter((p) => p.uid !== island.uid)

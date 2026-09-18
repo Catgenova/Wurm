@@ -7693,3 +7693,59 @@ select '887. and what this island pays a characteristic for, all six of them: '
               where n.nspname = 'public' and p.prokind = 'f'
                 and p.prosrc ~ ('(skill_raise|skill_told|char_told)\([^,]+,[^,]+,\s*''' || d.id || '''')) g on true
           where d.id in ('body_strength','body_stamina','body_control','mind_logic','soul_strength','awareness'));
+
+/*
+ * And two things a person chose that nobody was keeping.
+ *
+ * Reported from the island: "my title seems to revert automatically to the
+ * first on the list" and "might want an option to plant a specific sprout."
+ *
+ * One cause under both. The browser held the choice and the island held the
+ * thing, and there was no step between them: `wearTitle` set its own copy and
+ * told nobody, while `rpc_settle` reported the island's `title` on every beat
+ * and the browser took it — so a title lasted until the next heartbeat. The
+ * sprout is the same shape without the reverting: both sides planted the first
+ * one they found, so a forester carrying oak, cedar and maple had no way to
+ * say which, and the island's "first" was the oldest in the pack.
+ */
+\echo ''
+\echo '--- what you chose is what you get'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set titles = '["digger_1","miner_1"]'::jsonb, title = 'digger_1'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+-- Each on its own statement, or the select beside it reads the island from
+-- before it ran: the suite has been bitten by that before and says so at the top.
+select (rpc_wear_title(:'world2', 'miner_1'))::text as wore \gset
+select '888. the first title earned is worn by default, and then the second is chosen: '
+     || :'wore' || ' — the island holds "'
+     || coalesce((select title from player where world_id = :'world2' and uid = :'ivar'), 'none')
+     || '" now, which is what the next heartbeat hands back rather than the first one ever earned';
+select ((rpc_wear_title(:'world2', 'no_such_title'))->>'why') as refused \gset
+select '889. and one nobody earned: "' || :'refused' || '", still wearing '
+     || coalesce((select title from player where world_id = :'world2' and uid = :'ivar'), 'none');
+select (rpc_wear_title(:'world2', null))::text as bare \gset
+select '890. and taking it off: ' || :'bare' || ', wearing '
+     || coalesce((select title from player where world_id = :'world2' and uid = :'ivar'), 'nothing at all');
+/*
+ * And the sprout, which is the same question asked of a pack rather than a
+ * list: both sides planted the first one they found, so a forester carrying
+ * oak, cedar and maple had no way to say which.
+ */
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'sprout' \g /dev/null
+update land_tile set tiles = set_byte(tiles, 9, 1) where world_id = :'world2' and y = 9 \g /dev/null
+update player set x = 8.5, y = 8.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select name as old_tree from tree_def order by id limit 1 \gset
+select name as new_tree from tree_def order by id desc limit 1 \gset
+select give(:'world2', :'ivar', 'sprout', 1, 30, :'old_tree') \g /dev/null
+select give(:'world2', :'ivar', 'sprout', 1, 30, :'new_tree') \g /dev/null
+select id as chosen_sprout from item where world_id = :'world2' and holder_uid = :'ivar'
+  and def = 'sprout' and extra = :'new_tree' order by id desc limit 1 \gset
+select act_perform(:'world2', :'ivar', 'plant',
+  ('{"kind":"tile","x":9,"y":9,"itemUid":' || :'chosen_sprout' || '}')::jsonb) \g /dev/null
+select '891. a pack holding a ' || lower(:'old_tree') || ' sprout and a ' || lower(:'new_tree')
+     || ', with the ' || lower(:'new_tree') || ' asked for by name: what goes in the ground is '
+     || coalesce((select lower(name) from tree_def where id = (land_data(:'world2', 9, 9) & 15)), 'nothing')
+     || ', and what is left in the pack is '
+     || coalesce((select lower(extra) from item where world_id = :'world2' and holder_uid = :'ivar'
+                    and def = 'sprout' limit 1), 'none')
+     || ' — asked for nothing in particular it still plants the oldest to hand, which is what it always did';

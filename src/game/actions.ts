@@ -799,7 +799,13 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 5,
     applies: (t, g) => DIGGABLE_PLANT_TILES.has(tile(t, g)) && g.inventory.has('sprout'),
     check: (t, g) => {
-      if (!g.inventory.has('sprout')) return 'You have no sprout to plant.';
+      // The one chosen off the menu, or the first that comes to hand. Sprouts
+      // come in nine species and do not look alike once they are twenty years
+      // old, so a pack holding oak and cedar had no way to say which.
+      const asked = t.kind === 'tile' ? t.itemUid : undefined;
+      const chosen = asked !== undefined ? g.inventory.get(asked) : undefined;
+      if (asked !== undefined && chosen?.id !== 'sprout') return 'That is not a sprout.';
+      if (!chosen && !g.inventory.has('sprout')) return 'You have no sprout to plant.';
       // A grown tile of tree is something you walk round, not through, and the
       // sprout becomes that tile the moment it goes in. Planted underfoot it
       // closes over the person who planted it.
@@ -810,7 +816,8 @@ export const ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
-      const sprout = g.inventory.find('sprout');
+      const picked = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const sprout = picked?.id === 'sprout' ? picked : g.inventory.find('sprout');
       if (!sprout) return;
       const species = Math.max(
         0,

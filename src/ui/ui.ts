@@ -840,6 +840,22 @@ export class UI {
           continue;
         }
       }
+      // And sprouts, for the same reason: nine species, and a planted one is
+      // what stands there for the next twenty years.
+      if (def.id === 'plant') {
+        const sprouts = this.game.inventory.items.filter((it) => it.id === 'sprout');
+        if (sprouts.length > 1) {
+          entries.push({
+            label: def.label,
+            children: sprouts.map((it) => {
+              const st: Target = { ...target, itemUid: it.uid };
+              const why = def.check?.(st, this.game) ?? null;
+              return { label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it), hint: why ?? undefined, disabled: !!why, onSelect: () => this.game.requestAction(def, st) };
+            }),
+          });
+          continue;
+        }
+      }
       entries.push(this.jobEntry(def, target, reason, def.labelFor?.(target, this.game) ?? def.label));
     }
     if (!building) entries.push(...this.buildingEntries(pick));

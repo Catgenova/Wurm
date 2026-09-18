@@ -1774,6 +1774,33 @@ export class Island {
     });
   }
 
+  /**
+   * Wear one of the titles you have earned, or take the one you have off.
+   *
+   * The step that was missing. `wearTitle` in the browser set its own copy and
+   * told nobody; `rpc_settle` reports the island's `title` on every beat and
+   * the browser takes it. So a title chosen here lasted until the next
+   * heartbeat and then went back to the first one ever earned — which is what
+   * the island had, honestly, because nothing had ever said otherwise.
+   *
+   * The answer is applied rather than assumed, so a window that has got ahead
+   * of the island — a title not earned, an island that said no — is put right
+   * by the island rather than left showing what it hoped for.
+   */
+  async wearTitle(id: string | null): Promise<void> {
+    if (!this.info) return;
+    const { data, error } = await supabase().rpc('rpc_wear_title', {
+      p_world: this.info.id, p_title: id,
+    });
+    if (error) {
+      this.hooks.say(`The island did not hear that (${error.message}).`, 'error');
+      return;
+    }
+    const said = data as { title?: string | null; why?: string } | null;
+    if (said?.why) this.hooks.say(said.why, 'error');
+    this.hooks.mine?.({ title: said?.title ?? null });
+  }
+
   /** Ask somebody to come and live on your land. */
   async invite(uid: string): Promise<string | null> {
     return this.socialDoor('rpc_invite', { p_uid: uid });
