@@ -22,6 +22,12 @@ export const TileType = {
   Reed: 19,
   Lawn: 20,
   Slabs: 21,
+  /**
+   * What a felled tree leaves: its species in the data byte, a day in the
+   * way of planting, building and paving, and then grass. Dug out with a
+   * shovel by anybody who cannot wait.
+   */
+  Stump: 22,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
@@ -83,6 +89,7 @@ export const DUSTINESS: Readonly<Record<number, number>> = {
   [TileType.Grass]: 0.16,
   [TileType.Tree]: 0.16,
   [TileType.Bush]: 0.16,
+  [TileType.Stump]: 0.2,
   [TileType.Lawn]: 0.13,
   [TileType.Tar]: 0.12,
   [TileType.Moss]: 0.1,
@@ -163,6 +170,9 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Field]: { name: 'Field', color: [130, 102, 62], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
   [TileType.Tree]: { name: 'Tree', color: [76, 124, 56], speed: 1, blocks: true, roll: 0.6 },
   [TileType.Bush]: { name: 'Bush', color: [86, 138, 60], speed: 0.5, roll: 0.4 },
+  // Walked over, and in the way of everything else until it is dug out or
+  // rots: no digging its corners, no planting, no paving, no building.
+  [TileType.Stump]: { name: 'Stump', color: [98, 130, 58], speed: 0.7, roll: 0.35 },
   [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1, roll: 0.5 },
   [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8, roll: 0.4 },
   [TileType.Lawn]: { name: 'Lawn', color: [104, 164, 74], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },

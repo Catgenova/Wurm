@@ -5057,11 +5057,18 @@ export class Game {
     const stumps: Array<[number, number, number]> = [];
     for (let y = 0; y < w.h; y++) {
       for (let x = 0; x < w.w; x++) {
-        if (w.getTile(x, y) !== TileType.Tree) continue;
+        const here = w.getTile(x, y);
+        // A stump left a day is gone.
+        if (here === TileType.Stump) {
+          w.setTile(x, y, TileType.Grass, 0);
+          continue;
+        }
+        if (here !== TileType.Tree) continue;
         const data = w.getData(x, y);
         const age = treeAge(data);
         if (age.next === null) {
-          w.setTile(x, y, TileType.Grass, 0);
+          // What a dead tree leaves: a stump of its kind, for a day.
+          w.setTile(x, y, TileType.Stump, packTreeData(treeSpecies(data), 0));
           stumps.push([x, y, treeSpecies(data)]);
         } else {
           w.setTile(x, y, TileType.Tree, packTreeData(treeSpecies(data), age.next));

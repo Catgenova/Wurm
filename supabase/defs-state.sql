@@ -699,6 +699,7 @@ insert into tile_def values (18, 'Kelp', 1, false, null, false, false, false, fa
 insert into tile_def values (19, 'Reed', 0.8, false, null, false, false, false, false, false, false);
 insert into tile_def values (20, 'Lawn', 1, false, null, false, true, true, true, true, false);
 insert into tile_def values (21, 'Stone slabs', 1.3, false, null, false, false, false, false, false, false);
+insert into tile_def values (22, 'Stump', 0.7, false, null, false, false, false, false, false, false);
 insert into skill_def values ('body_strength', 'Body strength', 20, null);
 insert into skill_def values ('body_stamina', 'Body stamina', 20, null);
 insert into skill_def values ('body_control', 'Body control', 20, null);
@@ -796,6 +797,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('chip_corner', 'Chip corner', 'chipping at the face', 'mining', 'pickaxe', true, null, 0.07, 9, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('prospect', 'Prospect', 'prospecting', 'prospecting', 'pickaxe', false, null, 0.03, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cut_down', 'Cut down', 'cutting down', 'woodcutting', 'hatchet', false, null, 0.07, 8, 10, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_stump', 'Dig out the stump', 'digging out the stump', 'digging', 'shovel', false, null, 0.06, 8, 5, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_sprout', 'Pick sprout', 'picking a sprout', 'forestry', null, false, null, 0.02, 4, 15, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('prune', 'Prune', 'pruning', 'forestry', 'hatchet', false, null, 0.03, 6, 20, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_fruit', 'Pick fruit', 'picking fruit', 'forestry', null, false, null, 0.02, 4, null, false, true);

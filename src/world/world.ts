@@ -693,6 +693,7 @@ export class World {
     const t = this.getTile(x, y);
     if (t === TileType.Tree) return `${TREE_DEFS[treeSpecies(this.getData(x, y))].name} tree`;
     if (t === TileType.Bush) return BUSH_DEFS[bushSpecies(this.getData(x, y))].name;
+    if (t === TileType.Stump) return `${TREE_DEFS[treeSpecies(this.getData(x, y))].name} stump`;
     if (t === TileType.Rock) return ROCK_VARIANTS[rockVariant(this.getData(x, y))].name;
     if (t === TileType.Slabs) return SLAB_VARIANTS[slabVariant(this.getData(x, y))].name;
     return TILE_DEFS[t].name;

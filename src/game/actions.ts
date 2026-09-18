@@ -718,14 +718,46 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg(`You cut into the ${what}. ${age.hits - cuts} more like that and it comes down.`, 'event');
         return;
       }
-      w.setTile(t.x, t.y, TileType.Grass);
       g.note('tree');
       if (!age.logs) {
+        // Nothing that size leaves a stump worth the name.
+        w.setTile(t.x, t.y, TileType.Grass);
         g.logMsg(`You clear the ${what} away. There is no timber in one that size.`, 'event');
         return;
       }
+      // A tree with timber in it leaves a stump, of its own kind, in the way
+      // of the ground for a day or until somebody digs it out.
+      w.setTile(t.x, t.y, TileType.Stump, packTreeData(treeSpecies(data), 0));
       const item = g.inventory.add('log', { count: age.logs, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
-      g.logMsg(`The ${what} comes down. You get ${age.logs} ${age.logs === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)})`, 'event');
+      g.logMsg(`The ${what} comes down. You get ${age.logs} ${age.logs === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)}) The stump is left.`, 'event');
+    },
+  },
+  {
+    id: 'dig_stump',
+    label: 'Dig out the stump',
+    verb: 'digging out the stump',
+    skill: 'digging',
+    tool: 'shovel',
+    stamina: 0.06,
+    baseTime: 8,
+    difficulty: 5,
+    applies: (t, g) => tile(t, g) === TileType.Stump,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Stump) return 'There is no stump here.';
+      return g.inventory.has('shovel') ? null : 'You need a shovel to dig out a stump.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const def = TREE_DEFS[treeSpecies(g.world.getData(t.x, t.y))];
+      if (!g.skillCheck('digging', 5, g.toolQl('shovel'))) {
+        g.missed();
+        g.logMsg(`The roots hold. You dig round the ${def.name.toLowerCase()} stump and it does not shift.`, 'event');
+        return;
+      }
+      // Bare dirt where it stood: the roots came out with it.
+      g.world.setTile(t.x, t.y, TileType.Dirt);
+      g.logMsg(`You dig the ${def.name.toLowerCase()} stump out. The ground is bare dirt where it stood.`, 'event');
     },
   },
   {

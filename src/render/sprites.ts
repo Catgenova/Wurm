@@ -113,11 +113,17 @@ const AY = SPRITE_H - 8;
 /** What hangs in each of the bearing trees. */
 const FRUIT_COLOUR: Record<string, string> = { apple: '#d8443c', cherry: '#b41f3e', olive: '#4a5a2c' };
 
-/** A leaf colour gone some of the way to dead leaf: `t` of the way, 0 to 1. */
+/**
+ * A colour gone some of the way to dead leaf: `t` of the way, 0 to 1. Below
+ * nought it goes the other way, towards pale cut wood, which is what the face
+ * of a stump is.
+ */
 function dulled(hex: string, t: number): string {
   const n = parseInt(hex.slice(1), 16);
-  const mix = (c: number, to: number): number => Math.round(c + (to - c) * t);
-  return `rgb(${mix((n >> 16) & 255, 142)},${mix((n >> 8) & 255, 124)},${mix(n & 255, 92)})`;
+  const to: [number, number, number] = t < 0 ? [226, 206, 168] : [142, 124, 92];
+  const k = Math.abs(t);
+  const mix = (c: number, target: number): number => Math.round(c + (target - c) * k);
+  return `rgb(${mix((n >> 16) & 255, to[0])},${mix((n >> 8) & 255, to[1])},${mix(n & 255, to[2])})`;
 }
 
 /** Bare wood: a few branches off the top of the trunk, in the trunk's colour. */
@@ -259,6 +265,45 @@ export function treeSprite(species: number, variant: number): Sprite {
         ctx.stroke();
       }
       if (age.look !== 'worn') blob(ctx, bx - r * 0.35, cy - r * 0.4, r * 0.4, canopy[0]);
+    }
+  });
+  cache.set(key, spr);
+  return spr;
+}
+
+/** What a felled tree leaves: a short wide stub of its trunk, cut flat. */
+export function stumpSprite(species: number): Sprite {
+  const key = `stump:${species}`;
+  let spr = cache.get(key);
+  if (spr) return spr;
+  const def = TREE_DEFS[species];
+  spr = makeSprite(48, 40, 24, 36, (ctx) => {
+    const bx = 24;
+    const by = 36;
+    shadow(ctx, bx, by, 10, 3.6);
+    const w = 11;
+    const h = 7;
+    // The stub, with its shaded side, and a root or two showing at the foot.
+    ctx.fillStyle = def.trunk;
+    ctx.fillRect(bx - w / 2, by - h, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(bx, by - h, w / 2, h);
+    ctx.fillStyle = def.trunk;
+    ctx.beginPath();
+    ctx.ellipse(bx - w * 0.55, by - 1, 3.2, 1.6, 0, 0, TAU);
+    ctx.ellipse(bx + w * 0.5, by - 0.5, 2.8, 1.4, 0, 0, TAU);
+    ctx.fill();
+    // The cut face, pale, with the rings in it.
+    ctx.fillStyle = dulled(def.trunk, -0.55);
+    ctx.beginPath();
+    ctx.ellipse(bx, by - h, w / 2, w / 4, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = dulled(def.trunk, -0.15);
+    ctx.lineWidth = 0.7;
+    for (const r of [0.28, 0.55, 0.8]) {
+      ctx.beginPath();
+      ctx.ellipse(bx + 0.4, by - h, (w / 2) * r, (w / 4) * r, 0, 0, TAU);
+      ctx.stroke();
     }
   });
   cache.set(key, spr);

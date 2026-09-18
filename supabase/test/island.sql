@@ -6992,29 +6992,30 @@ do $$
 declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; v_x int; i int;
 begin
   select id into w from world where name = 'Hoarding';
-  for v_x in 50..53 loop
+  for v_x in 50..56 loop
     update player set x = v_x + 0.5, y = 49.5 where world_id = w and uid = me;
-    -- Four swings at each, which is one more than the worst of them needs, and
-    -- stopping the moment there is nothing standing there — which is what
-    -- `act_refusal` does for a real swing and this loop has to do for itself.
-    for i in 1..4 loop
+    -- Six swings at each, which is two more than the worst of them needs and
+    -- room for a stroke to glance, and stopping the moment there is nothing
+    -- standing there — which is what `act_refusal` does for a real swing and
+    -- this loop has to do for itself.
+    for i in 1..6 loop
       exit when land_tile(w, v_x, 50) <> tile_id('Tree');
       perform act_perform(w, me, 'cut_down', ('{"kind":"tile","x":' || v_x || ',"y":50}')::jsonb);
     end loop;
   end loop;
 end $$;
-select '845. four swings at one tree of each age, oldest first: '
+select '845. six swings at one tree of each age, the smallest first: '
      || (select string_agg(text, ' | ' order by n) from event
           where uid = '77777777-7777-7777-7777-777777777777'
             and (text like '%cut into%' or text like '%comes down%' or text like '%no timber%'));
-select '846. and the timber off the four of them: '
+select '846. and the timber off the seven of them: '
      || coalesce((select sum(count)::text from item where world_id = :'world6'
                    and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'log'), '0')
-     || ' logs — the sapling gave none of it, and every one of the four stands where it stood'
+     || ' logs — the sapling and the clipped shrub gave none of it, and every one of the seven stands where it stood'
      || ' until the last stroke lands';
-select '847. and the ground they stood on: ' || string_agg(
+select '847. and the ground they stood on, a stump wherever there was timber: ' || string_agg(
          (select name from tile_def t where t.id = land_tile(:'world6', q.x, 50)), ', ' order by q.x)
-from (values (50),(51),(52),(53)) q(x);
+from (values (50),(51),(52),(53),(54),(55),(56)) q(x);
 
 -- A notch is the tile's, not the woodcutter's.
 do $$
@@ -7088,7 +7089,8 @@ select '852. and two days after that: ' || :'day3' || '; a fourth: ' || :'day4'
 -- The sixth day is the last one.
 select pg_temp.one_day(:'world7') \g /dev/null
 select '853. and on the sixth day: ' || (select name from tile_def where id = land_tile(:'world7',60,60))
-     || ' where it stood, and ' || (select count(*) from (
+     || ' where it stood — of its own kind, ' || lower((select name from tree_def where id = tree_species(land_data(:'world7',60,60))))
+     || ', for a day — and ' || (select count(*) from (
           select q.gx, q.gy from (select 60 + dx as gx, 60 + dy as gy
             from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
           where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree')) t)
@@ -8184,3 +8186,77 @@ select '918. felling it: "' || (select string_agg(text, '" "' order by n) from e
           where uid = '77777777-7777-7777-7777-777777777777' and (text like '%cut into%' or text like '%comes down%'))
      || '" — ' || coalesce((select sum(count) from item where world_id = :'world6'
           and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'log'), 0) || ' logs of dead wood';
+
+
+/*
+ * What a felled tree leaves.
+ *
+ * Asked from the island: a felled tree leaves a stump tile you must dig out,
+ * or that rots after a day. A tree with timber in it leaves one; a sapling
+ * cleared away does not. A stump is walked over and in the way of everything
+ * else — no planting, no paving, no building, no digging its corners — until
+ * a shovel takes it out or the day does.
+ */
+\echo ''
+\echo '--- what a felled tree leaves'
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def in ('shovel', 'log');
+  delete from event where uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'shovel', 80, 1);
+  insert into skill (world_id, uid, id, value) values (w, me, 'digging', 60)
+    on conflict (world_id, uid, id) do update set value = 60;
+  -- A mature oak and a sapling pine, felled.
+  perform land_set_tile(w, 50, 56, tile_id('Tree')); perform land_set_height(w, 50, 56, 4); perform land_set_data(w, 50, 56, 2 | (1 << 4));
+  perform land_set_tile(w, 51, 56, tile_id('Tree')); perform land_set_height(w, 51, 56, 4); perform land_set_data(w, 51, 56, 1 | (3 << 4));
+  update player set x = 50.5, y = 55.5 where world_id = w and uid = me;
+  for i in 1..8 loop
+    exit when land_tile(w, 50, 56) <> tile_id('Tree');
+    perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":50,"y":56}'::jsonb);
+  end loop;
+  update player set x = 51.5, y = 55.5 where world_id = w and uid = me;
+  for i in 1..8 loop
+    exit when land_tile(w, 51, 56) <> tile_id('Tree');
+    perform act_perform(w, me, 'cut_down', '{"kind":"tile","x":51,"y":56}'::jsonb);
+  end loop;
+end $$;
+select '919. a mature oak felled leaves ' || (select name from tile_def where id = land_tile(:'world6', 50, 56))
+     || ' — "' || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like '%comes down%' order by n desc limit 1)
+     || '" — an ' || lower((select name from tree_def where id = tree_species(land_data(:'world6', 50, 56))))
+     || ' stump; and a sapling pine cleared leaves ' || (select name from tile_def where id = land_tile(:'world6', 51, 56));
+update player set x = 50.5, y = 55.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select '920. what the stump is in the way of: planting "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'plant', '{"kind":"tile","x":50,"y":56}'::jsonb), 'ALLOWED')
+     || '", digging a corner "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'dig', '{"kind":"tile","x":50,"y":56,"cx":50,"cy":56}'::jsonb), 'ALLOWED')
+     || '", and digging it out "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'dig_stump', '{"kind":"tile","x":50,"y":56}'::jsonb), 'ALLOWED')
+     || '" — and asked of the grass beside it: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'dig_stump', '{"kind":"tile","x":51,"y":56}'::jsonb), 'ALLOWED') || '"';
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  for i in 1..8 loop
+    exit when land_tile(w, 50, 56) <> tile_id('Stump');
+    perform act_perform(w, me, 'dig_stump', '{"kind":"tile","x":50,"y":56}'::jsonb);
+  end loop;
+end $$;
+select '921. and dug out: ' || (select name from tile_def where id = land_tile(:'world6', 50, 56))
+     || ' — "' || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like '%stump%' order by n desc limit 1) || '"';
+-- A stump left alone, and the day.
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  -- Well away from anything that could die and seed a sapling onto it the same day.
+  perform land_set_tile(w, 62, 58, tile_id('Stump')); perform land_set_height(w, 62, 58, 4); perform land_set_data(w, 62, 58, 2);
+end $$;
+select examine_tile_text(:'world6', 62, 58) as stump_look \gset
+select pg_temp.one_day(:'world6') \g /dev/null
+select '922. what the island says of a stump: "' || :'stump_look'
+     || '" — and a stump left a day is ' || (select name from tile_def where id = land_tile(:'world6', 62, 58));

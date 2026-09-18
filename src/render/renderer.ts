@@ -50,7 +50,7 @@ import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { SWAY_MAX, swayAt } from './sway';
-import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck } from './sprites';
+import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 export interface Pick {
@@ -92,7 +92,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap' | 'deck';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap' | 'deck';
   x: number;
   y: number;
   sx: number;
@@ -815,11 +815,11 @@ export class Renderer {
         if (!lit) {
           // Remembered ground keeps its shape and its trees and nothing else:
           // no creatures, no piles, no detail, and a cold wash over the lot.
-          if (t === TileType.Tree || t === TileType.Bush) {
+          if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
             const data = world.viewData(x, y, false);
-            const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : bushSprite(bushSpecies(data));
+            const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : t === TileType.Bush ? bushSprite(bushSpecies(data)) : stumpSprite(treeSpecies(data));
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-            this.ents.push({ kind: t === TileType.Tree ? 'tree' : 'bush', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
+            this.ents.push({ kind: t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
           }
           if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
           fogPath.moveTo(pts[0], pts[1]);
@@ -829,11 +829,11 @@ export class Renderer {
           fogPath.closePath();
           continue;
         }
-        if (t === TileType.Tree || t === TileType.Bush) {
+        if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
           const data = world.getData(x, y);
-          const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : bushSprite(bushSpecies(data));
+          const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : t === TileType.Bush ? bushSprite(bushSpecies(data)) : stumpSprite(treeSpecies(data));
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          this.ents.push({ kind: t === TileType.Tree ? 'tree' : 'bush', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
+          this.ents.push({ kind: t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
         }
         if (this.game.ground.size && this.game.groundAt(x, y).length) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;

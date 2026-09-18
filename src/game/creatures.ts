@@ -1,4 +1,4 @@
-import { TileType, TILE_DEFS, TREE_DEFS, treeAge, treeSpecies } from '../world/tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, treeAge, treeSpecies, packTreeData } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { mapFromBeast } from './treasure';
 import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
@@ -2736,8 +2736,9 @@ export class Creatures {
       game.world.setNotch(tx, ty, cuts);
       return null;
     }
-    game.world.setTile(tx, ty, TileType.Grass);
     const logs = age.logs;
+    // A tree with timber in it leaves a stump, as it does under a hatchet.
+    game.world.setTile(tx, ty, logs ? TileType.Stump : TileType.Grass, logs ? packTreeData(treeSpecies(data), 0) : 0);
     if (!logs) return null;
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
     // The rest of the tree is left at the stump; it can only carry one at a time.
