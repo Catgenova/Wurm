@@ -358,6 +358,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   firewood_rack: { name: 'Firewood rack', category: 'misc', weight: 14, decay: 4, description: 'Keeps the wood off the wet ground. Holds 40 things.' },
   ale_bucket: { name: 'Bucket of ale', category: 'food', weight: 6, decay: 2, drink: 0.4, charges: 5, description: 'Thin, sour and honest. Drink it and the work goes easier for a good while.', feeds: { starch: 0.12 } },
   cider_bucket: { name: 'Bucket of cider', category: 'food', weight: 6, decay: 2, drink: 0.45, charges: 5, description: 'Pressed apples gone dangerous. A trade comes easier after it.', feeds: { greens: 0.1 } },
+  juice_bucket: { name: 'Bucket of juice', category: 'food', weight: 6, decay: 6, drink: 0.5, charges: 5, description: 'Fruit pressed under a quern, sweet and cloudy, with nothing dangerous in it. Drink it while it is fresh.', feeds: { greens: 0.1 } },
   mead_bucket: { name: 'Bucket of mead', category: 'food', weight: 6, decay: 1.5, drink: 0.5, charges: 5, description: 'Honey and time. The best thing to come out of a hive after the honey itself.', feeds: { starch: 0.12, greens: 0.04 } },
   wine_bucket: { name: 'Bucket of wine', category: 'food', weight: 6, decay: 1, drink: 0.5, charges: 5, description: 'Cherries, water and three quarters of an hour of patience.', feeds: { greens: 0.1 } },
   fishing_rod: { name: 'Fishing rod', category: 'tool', weight: 1.4, decay: 3, description: 'Two shafts spliced, a waxed line and a strip of metal bent into a hook. Stand at water and fish.' },

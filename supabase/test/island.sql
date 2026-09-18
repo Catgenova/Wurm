@@ -9424,3 +9424,62 @@ select '996. ' || :'stand' || ' beside the token: setting the plucka to fruit ('
      || ', the pear tree picked for the day: ' || is_foraged(:'world2', :tok_x + 3, :tok_y, 'forage') || ' and still a ' || lower((select name from tree_def where id = tree_species(land_data(:'world2', :tok_x + 3, :tok_y))))
      || ', and the plucka told of nothing but its work: ' || coalesce((select string_agg(distinct left(text, 40), ' | ') from event where uid = :'ivar' and text ilike '%plucka%'), 'nothing');
 update creature set mode = 'stored', job = null where world_id = :'world2' and id = :'picker' \g /dev/null
+
+/*
+ * A quern presses fruit into juice and cider.
+ *
+ * Ten of any fruit into a bucket of juice, and twenty apples or pears
+ * straight into a bucket of cider, no barrel and no waiting; the bucket goes
+ * in with the fruit and comes out full.
+ */
+\echo ''
+\echo '--- a quern presses fruit into juice and cider'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select '997. off the tables: ' || (select count(*) from recipe where id like 'press\_%\_juice') || ' juice presses, one a fruit, and '
+     || (select count(*) from recipe where id like 'press\_%\_cider') || ' cider presses ('
+     || (select string_agg(replace(replace(id, 'press_', ''), '_cider', ''), ', ' order by id) from recipe where id like 'press\_%\_cider') || ')'
+     || '; a ' || (select name from item_def where id = 'juice_bucket') || ' holds ' || (select liquid from vessel_def where item = 'juice_bucket')
+     || ', drinkable ' || (select drinkable from liquid_def where id = 'juice') || ' and a brew ' || (select brew from liquid_def where id = 'juice')
+     || '; pressing apples takes ' || (select string_agg(item || ' × ' || count, ' + ' order by ord) from recipe_input where recipe = 'press_apple_juice')
+     || ' with a ' || (select tool from recipe where id = 'press_apple_juice') || ' at ' || (select skill from recipe where id = 'press_apple_juice')
+     || ', and a spoiled press hands back ' || (select string_agg(item || ' × ' || count, ', ') from recipe_gives where recipe = 'press_apple_juice' and kind = 'salvage');
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('apple', 'pear', 'bucket', 'juice_bucket', 'cider_bucket', 'quern') \g /dev/null
+select give(:'world2', :'ivar', 'quern', 1, 50) \g /dev/null
+select give(:'world2', :'ivar', 'bucket', 2, 40, 'Oak') \g /dev/null
+select give(:'world2', :'ivar', 'apple', 50, 60) as apples \gset
+select give(:'world2', :'ivar', 'pear', 100, 60) as pears \gset
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'milling', 70)
+  on conflict (world_id, uid, id) do update set value = 70;
+update player set act = null, act_queue = '[]'::jsonb, stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'press_apple_juice', ('{"kind":"item","uid":' || :'apples' || '}')::jsonb), 'ALLOWED') as juice_door \gset
+delete from event where uid = :'ivar' \g /dev/null
+-- A press can spoil, as any craft can; pressed until a bucket comes out, and the spoiled goes counted.
+do $$
+declare w uuid := (select id from world where name <> 'Rockhaven' order by made_at limit 1);
+        me uuid := '11111111-1111-1111-1111-111111111111'; i int;
+begin
+  for i in 1..5 loop
+    exit when exists (select 1 from item where world_id = w and holder_uid = me and def = 'juice_bucket');
+    perform act_perform(w, me, 'press_apple_juice', jsonb_build_object('kind', 'item', 'uid',
+      (select id from item where world_id = w and holder_uid = me and def = 'apple' order by id limit 1)));
+  end loop;
+  for i in 1..5 loop
+    exit when exists (select 1 from item where world_id = w and holder_uid = me and def = 'cider_bucket');
+    perform act_perform(w, me, 'press_pear_cider', jsonb_build_object('kind', 'item', 'uid',
+      (select id from item where world_id = w and holder_uid = me and def = 'pear' order by id limit 1)));
+  end loop;
+end $$;
+select text as juice_said from event where uid = :'ivar' and kind = 'event' and text like 'You crush the apples%' order by n desc limit 1 \gset
+select text as cider_said from event where uid = :'ivar' and kind = 'event' and text like 'You crush the pears%' order by n desc limit 1 \gset
+select count(*) as spoiled from event where uid = :'ivar' and kind = 'event' and (text like 'The pulp clogs%' or text like 'The must sours%') \gset
+select id as juice, coalesce(charges, 0) as sips from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'juice_bucket' order by id desc limit 1 \gset
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{thirst}', '0.4') where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'drink_skin', ('{"kind":"item","uid":' || :'juice' || '}')::jsonb), 'ALLOWED') as sip_door \gset
+delete from event where uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'drink_skin', ('{"kind":"item","uid":' || :'juice' || '}')::jsonb) \g /dev/null
+select '998. ten apples and a bucket under the quern (' || :'juice_door' || '): "' || :'juice_said' || '" — and twenty pears: "' || :'cider_said' || '"'
+     || ' — in the pack: ' || pack_count(:'world2', :'ivar', 'juice_bucket') || ' bucket of juice, ' || pack_count(:'world2', :'ivar', 'cider_bucket') || ' of cider, '
+     || pack_count(:'world2', :'ivar', 'bucket') || ' empty, ' || pack_count(:'world2', :'ivar', 'apple') || ' apples and ' || pack_count(:'world2', :'ivar', 'pear') || ' pears, ' || :spoiled || ' presses spoiled on the way'
+     || '; the juice holds ' || coalesce(:'sips', 'no') || ' drinks, and drinking one (' || :'sip_door' || '): "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'nothing')
+     || '", thirst from 0.40 to ' || (select round((stats->>'thirst')::numeric, 2) from player where world_id = :'world2' and uid = :'ivar')
+     || ' with ' || coalesce((select charges::text from item where id = :'juice'), 'no') || ' left';

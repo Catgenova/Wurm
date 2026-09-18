@@ -44,7 +44,7 @@ export const isBrew = (liquid: LiquidKind | undefined): boolean => !!liquid && B
 export const isWorking = (f: PlacedFurniture): boolean => (f.ferment ?? 0) > 0;
 
 /** Anything you would actually put in your mouth. */
-export const drinkable = (liquid: LiquidKind | undefined): boolean => liquid === 'water' || liquid === 'milk' || isBrew(liquid);
+export const drinkable = (liquid: LiquidKind | undefined): boolean => liquid === 'water' || liquid === 'milk' || liquid === 'juice' || isBrew(liquid);
 
 type FurnitureTarget = Extract<Target, { kind: 'furniture' }>;
 const pieceOf = (g: Game, t: Target): PlacedFurniture | undefined => (t.kind === 'furniture' ? g.furniture.get((t as FurnitureTarget).id) : undefined);

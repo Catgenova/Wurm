@@ -297,6 +297,10 @@ function helpText(): string {
     <b>ale</b> from 12 wheat in a quarter of an hour, <b>cider</b> from 20 apples in half an hour,
     <b>mead</b> from 12 honey in forty minutes, and <b>wine</b> from 30 cherries in three quarters of an
     hour. Each takes 15 litres of water and gives back 15 litres of drink.</p>
+    <p>A <b>quern</b> presses fruit too: ten of any fruit into a <b>bucket of juice</b>, sweet and with
+    nothing dangerous in it, and twenty apples or pears straight into a <b>bucket of cider</b> with no
+    barrel and no waiting &mdash; one bucket, where the barrel would have made three from the same fruit
+    and fifteen litres of water.</p>
     <p>While it is working the barrel says so and nothing can be drawn off it &mdash; and nothing hurries
     it. When it stops, draw it into a bucket like any other liquid and drink from that. The quality of
     what comes out is half what went in and half your <b>brewing</b>, and a brew that will not take

@@ -10,6 +10,7 @@ import { WOUND_KINDS } from './wounds';
 import { TRAPS } from './traps';
 import { BREWS } from './brewing';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
+import { TREE_DEFS } from '../world/tiles';
 
 /** What working a thing out with your hands teaches the head. */
 export const CRAFT_HEAD = 0.25;
@@ -248,7 +249,57 @@ const SMELTER_RECIPES: Recipe[] = [
   { id: 'make_electrum', category: 'Smelting', result: 'electrum_lump', count: 4, inputs: [{ item: 'silver_lump', count: 2 }, { item: 'gold_lump', count: 2 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix electrum', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 18, done: 'You mix a crucible of electrum.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
 ];
 
-RECIPES.push(...MOULD_RECIPES, ...SMELTER_RECIPES);
+/**
+ * The quern presses fruit as well as olives. Asked for: ten of any fruit
+ * into a bucket of juice, and twenty apples or pears straight into a bucket
+ * of cider with no barrel and no waiting. One bucket, where the barrel
+ * would have made three from the same fruit and fifteen litres of water: a
+ * quicker cider and a dearer one. The bucket goes in with the fruit and
+ * comes out full; a spoiled press hands it back empty.
+ */
+const FRUITS: string[] = TREE_DEFS.map((t) => t.fruit).filter((f): f is string => !!f);
+const fruits = (id: string): string => {
+  const name = itemDef(id).name.toLowerCase();
+  return name.endsWith('y') ? `${name.slice(0, -1)}ies` : /(ch|sh|s|x)$/.test(name) ? `${name}es` : `${name}s`;
+};
+const PRESS_RECIPES: Recipe[] = [
+  ...FRUITS.map((fruit): Recipe => ({
+    id: `press_${fruit}_juice`,
+    category: 'Cooking' as RecipeCategory,
+    result: 'juice_bucket',
+    inputs: [{ item: fruit, count: 10 }, { item: 'bucket' }],
+    tool: 'quern',
+    skill: 'milling',
+    label: 'Press into juice',
+    verb: 'pressing juice',
+    baseTime: 12,
+    stamina: 0.04,
+    difficulty: 10,
+    done: `You crush the ${fruits(fruit)} under the stone and run the juice off into the bucket.`,
+    fail: 'The pulp clogs the stone and the juice runs away into the ground.',
+    consumeOnFail: true,
+    salvage: [['bucket', 1]],
+  })),
+  ...['apple', 'pear'].map((fruit): Recipe => ({
+    id: `press_${fruit}_cider`,
+    category: 'Cooking' as RecipeCategory,
+    result: 'cider_bucket',
+    inputs: [{ item: fruit, count: 20 }, { item: 'bucket' }],
+    tool: 'quern',
+    skill: 'milling',
+    label: 'Press into cider',
+    verb: 'pressing cider',
+    baseTime: 20,
+    stamina: 0.05,
+    difficulty: 18,
+    done: `You crush the ${fruits(fruit)} under the stone, run the must off into the bucket and let it stand. It is cider by the time the quern is washed.`,
+    fail: 'The must sours on the stone and you tip it away.',
+    consumeOnFail: true,
+    salvage: [['bucket', 1]],
+  })),
+];
+
+RECIPES.push(...MOULD_RECIPES, ...SMELTER_RECIPES, ...PRESS_RECIPES);
 
 /** The twenty pieces of furniture, each nailed together by a fine carpenter. */
 const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
