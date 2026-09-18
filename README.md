@@ -283,8 +283,9 @@ in world time.
   finished, shaping themselves into hips and ridges from their neighbours.
 - **A journal of goals.** Eighty-five goals in seven chapters — Ashore, The
   trades, The land, The water, The wildermon, Standing, A lifetime — from
-  felling your first tree to landing one of every fish, brewing all four,
-  making something fantastic and taking a trade to 99. Nothing is required and
+  felling a tree to catching every kind of fish, brewing ale, cider, mead and
+  wine, making a fantastic item and reaching 99 in a skill. Each says plainly
+  what to do, and a hint says how when that is not obvious. Nothing is required and
   nothing is rewarded; each ticks itself off the moment it is done, says so in
   the events with a running count, and stays ticked for good. It exists
   because there is a great deal to do here and nothing else that says so.
