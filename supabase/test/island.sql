@@ -9238,3 +9238,38 @@ select '987. turning it: ' || :'door1' || ', and the bed faces ' || :'f1' || ' a
      || '; a turn is a ' || (select base_time from action_def where id = 'turn_furniture') || ' second job, and ' || (select count(*) from event where uid = :'ivar' and text like 'You turn%') || ' were told';
 delete from placed where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
 update player set x = :was_x, y = :was_y where world_id = :'world2' and uid = :'ivar' \g /dev/null
+
+/*
+ * A reed bed takes a spadeful too.
+ *
+ * Reeds stand in wet ground; dirt dropped on them is dry ground, and the bed
+ * is dirt from then on, aimed at a corner or dropped at your feet.
+ */
+\echo ''
+\echo '--- a spadeful of dirt drains a reed bed'
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int; j int;
+begin
+  select id into w from world where name = 'Hoarding';
+  for j in 24..26 loop for i in 24..26 loop
+    perform land_set_height(w, i, j, 4);
+    perform land_set_dirt(w, i, j, 10);
+  end loop; end loop;
+  perform land_set_tile(w, 24, 24, tile_id('Reed'));
+  perform land_set_tile(w, 25, 24, tile_id('Reed'));
+  update player set x = 24.4, y = 24.4, act = null, act_queue = '[]'::jsonb, seen_at = now(), away = false,
+      stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1') where world_id = w and uid = me;
+  -- Dirt alone in the pack: a spadeful of clay would make a clay bed, which is its own rule.
+  delete from item where world_id = w and holder_uid = me and def in ('dirt', 'clay', 'sand');
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'dirt', 20, 4);
+end $$;
+select land_height(:'world7', 24, 24) as reed_h0 \gset
+select coalesce(act_refusal(:'world7', :'eater', 'drop_dirt', '{"kind":"tile","x":24,"y":24,"cx":24,"cy":24}'::jsonb), 'allowed') as reed_door \gset
+select act_perform(:'world7', :'eater', 'drop_dirt', '{"kind":"tile","x":24,"y":24,"cx":24,"cy":24}'::jsonb) \g /dev/null
+select '988. a reed bed at 24,24, dirt dropped on its corner (' || :'reed_door' || '): the bed is ' || (select name from tile_def where id = land_tile(:'world7', 24, 24))
+     || ' and the corner is up from ' || :reed_h0 || ' to ' || land_height(:'world7', 24, 24)
+     || '; the reed bed beside it, still ' || (select name from tile_def where id = land_tile(:'world7', 25, 24)) || ', takes the spadeful dropped at your feet too: '
+     || (select case when exists (select 1 from buryable b where b.tile = tile_id('Reed')) then 'reed is on the list both sides read' else 'reed is NOT on the list' end);
+update player set x = 25.4, y = 24.4 where world_id = :'world7' and uid = :'eater' \g /dev/null
+select act_perform(:'world7', :'eater', 'drop_dirt_here', ('{"kind":"item","uid":' || (select id from item where world_id = :'world7' and holder_uid = :'eater' and def = 'dirt' limit 1) || '}')::jsonb) \g /dev/null
+select '989. and dropped at the feet on the bed beside: it is ' || (select name from tile_def where id = land_tile(:'world7', 25, 24)) || ', with ' || coalesce((select sum(count) from item where world_id = :'world7' and holder_uid = :'eater' and def = 'dirt'), 0) || ' dirt left of four';

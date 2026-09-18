@@ -61,10 +61,13 @@ export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, T
  * above it: `reconcile` leaves a bed alone, so the ground will never turn your
  * clay to dirt behind your back, and this will, because you asked it to with a
  * shovel. A bed buried is a bed gone — nothing remembers what was under it.
+ *
+ * And a reed bed: a spadeful of dirt on it is dry ground, the way a marsh is
+ * drained, and the reeds are gone with the wet they stood in.
  */
 export const BURYABLE: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss,
-  TileType.Marsh, TileType.Sand, TileType.Clay, TileType.Peat, TileType.Tar,
+  TileType.Marsh, TileType.Sand, TileType.Clay, TileType.Peat, TileType.Tar, TileType.Reed,
 ]);
 
 /**
