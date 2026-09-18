@@ -46,6 +46,7 @@ import { Dust } from './dust';
 import type { Peer } from '../game/roster';
 import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 import { FLOAT_COLOURS, Floaters } from './floaters';
+import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { SWAY_MAX, swayAt } from './sway';
@@ -252,6 +253,7 @@ const clamp255 = (v: number): number => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
  * Draws the world onto the full-page canvas: terrain quads back to front, one
  * diagonal at a time, with trees and the player slotted in at their depth.
  */
+
 export class Renderer {
   readonly camera = new Camera();
   time = 0;
@@ -1159,6 +1161,10 @@ export class Renderer {
             emoteT: emoteAt(player.emote, player.emoteAt, performance.now() / 1000) ?? undefined,
           }),
         );
+        // What this body last said, over its own head. No name drawn under it,
+        // so the bubble sits where a peer's name would be.
+        const mine = this.game.saidAloud;
+        if (mine) this.speechBubble(ctx, zoom, ent.sx, ent.sy - 32 * zoom, mine.text, mine.at);
         continue;
       }
       if (ent.kind === 'peer' && ent.peer) {
@@ -1219,6 +1225,10 @@ export class Renderer {
           ctx.lineWidth = 1;
           ctx.textAlign = 'left';
         }
+        // Over the name and over whatever they are at, so a person talking
+        // while they dig reads top to bottom: what they said, what they are
+        // doing, who they are.
+        if (peer.said) this.speechBubble(ctx, zoom, ent.sx, ent.sy - 46 * zoom, peer.said, peer.saidAt ?? 0);
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {
@@ -2528,6 +2538,18 @@ export class Renderer {
       return mask;
     }
     return this.sailTrim(f);
+  }
+
+  /**
+   * What somebody just said, over their head.
+   *
+   * The drawing itself is `drawSpeech`, which takes an age rather than a stamp
+   * so that it can be handed any moment of a bubble's life and drawn on its
+   * own — which is how it was checked, nine of them side by side, rather than
+   * by squinting at a game and hoping somebody typed something.
+   */
+  private speechBubble(ctx: CanvasRenderingContext2D, zoom: number, sx: number, sy: number, text: string, at: number): void {
+    drawSpeech(ctx, zoom, sx, sy, text, performance.now() / 1000 - at);
   }
 
   private sailTrim(f: PlacedFurniture): number | undefined {

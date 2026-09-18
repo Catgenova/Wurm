@@ -6,6 +6,7 @@ import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
+import { saidWords } from '../game/roster';
 import { skillRises, tookOff } from './felt';
 import { packAll } from './packed';
 
@@ -473,6 +474,17 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     if (!def) return;
     game.roster.emoted(hashId(uid), id);
     game.write(def.said.replace('{name}', name || 'Somebody'), 'event');
+  };
+  /*
+   * A bubble over whoever said it. The roster holds everybody but this body,
+   * so this body's goes on the game — and it is stamped by the clock the
+   * frames are drawn on either way.
+   */
+  island.hooks.spoke = (uid: string, text: string) => {
+    const words = saidWords(text);
+    if (!words) return;
+    if (uid === island.uid) game.saidAloud = { text: words, at: performance.now() / 1000 };
+    else game.roster.spoke(hashId(uid), words);
   };
   game.emoted = (id: string) => island.emote(id);
   game.woreTitle = (id: string | null) => void island.wearTitle(id);

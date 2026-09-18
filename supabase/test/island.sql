@@ -7807,3 +7807,31 @@ select '895. and lifting the rack out from under them: "'
 delete from crate where world_id = :'world2' and x = 11 and y = 11 and sx = 1 and sy = 3 \g /dev/null
 select :'lifting' || '"' || coalesce(act_refusal(:'world2', :'ivar', 'pick_up_furniture',
           ('{"kind":"furniture","id":' || :'rack' || '}')::jsonb), 'ALLOWED') || '"';
+
+/*
+ * And who said it, which the line has always carried and nothing has read.
+ *
+ * Asked from the island: a speech bubble over somebody's head when they talk.
+ * The whole of what that needs from this side was already here — `rpc_say`
+ * writes `said_by` on every chat line and has since chat went in — and the
+ * browser was reading four columns off the row and dropping that one.
+ *
+ * So there is no island change for the bubbles at all. What is worth pinning
+ * is the two things they quietly depend on: that a chat line names its
+ * speaker, and that the column is in what Realtime publishes. Drop it from the
+ * publication and the lines still arrive, the log still reads right, and the
+ * bubbles simply stop — with nothing anywhere to say why.
+ */
+\echo ''
+\echo '--- a line that says who said it'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select rpc_say(:'world2', 'eight crates of iron ore on the rack if anybody wants some') \g /dev/null
+select '896. the newest thing said on this island: "' || e.text || '", said by '
+     || coalesce(folk_name(:'world2', e.said_by), 'NOBODY')
+     || ', heard by ' || coalesce(e.uid::text, 'everyone')
+     || ' — the name is in the line for the log, and `said_by` is who to draw it over'
+  from event e where e.world_id = :'world2' and e.kind = 'chat' order by e.n desc limit 1;
+select '897. and what Realtime hands a browser off that row: '
+     || (select array_to_string(attnames, ', ') from pg_publication_tables
+          where pubname = 'supabase_realtime' and tablename = 'event')
+     || ' — `said_by` among them, or the bubbles stop with nothing to say why';

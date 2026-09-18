@@ -48,7 +48,29 @@ export interface Peer extends PeerState {
    */
   emote?: string;
   emoteAt?: number;
+  /**
+   * The last thing they said out loud, and when it reached us.
+   *
+   * On the local clock like `emoteAt` and for the same reason: a bubble is
+   * drawn frame by frame for a few seconds, so it has to be timed by the clock
+   * the frames are timed by rather than by the hour the island stamped on the
+   * line. A line caught up on after a quiet spell is not somebody talking now
+   * and never reaches this.
+   */
+  said?: string;
+  saidAt?: number;
 }
+
+/**
+ * The words out of a chat line, without the name in front of them.
+ *
+ * Every line said on this island is written `<Name> the words`, by `rpc_say`
+ * over there and by `say` here, so that the log reads as a conversation. A
+ * bubble over somebody's head does not need their name in it — their name is
+ * already drawn under the bubble — and a bubble that carries it is a bubble
+ * half full of something you can read anyway.
+ */
+export const saidWords = (line: string): string => line.replace(/^<[^>]*>\s*/, '');
 
 /** How far out of step a peer must be before they are snapped rather than walked. */
 const TELEPORT = 6;
@@ -171,5 +193,13 @@ export class Roster {
     if (!p) return;
     p.emote = emote;
     p.emoteAt = clock();
+  }
+
+  /** Somebody said something out loud, for the bubble over their head. */
+  spoke(id: number, text: string): void {
+    const p = this.peers.get(id);
+    if (!p) return;
+    p.said = text;
+    p.saidAt = clock();
   }
 }

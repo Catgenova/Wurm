@@ -1838,6 +1838,17 @@ export class Game {
   /** Set by the island, when there is one, to carry a title across. */
   woreTitle?: (id: string | null) => void;
 
+  /**
+   * What this body last said out loud, for the bubble over its own head.
+   *
+   * Everybody else's lives on their `Peer`, which is where everything drawn
+   * about somebody else lives. The one body the roster does not hold is this
+   * one, so it keeps its own — and it is here rather than on `player` because
+   * `player` is swapped between actors on a shared machine and what was said
+   * belongs to the screen, not to whichever body it is pointing at.
+   */
+  saidAloud: { text: string; at: number } | null = null;
+
   /** The title being worn, written out. */
   titleName(): string | null {
     return this.player.title ? TITLE_BY_ID.get(this.player.title)?.name ?? null : null;

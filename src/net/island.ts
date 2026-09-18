@@ -313,6 +313,17 @@ export interface IslandHooks {
    */
   doing?: (what: { act: string | null; total: number; secs: number; left?: number; goes?: number; queued: number }) => void;
   /**
+   * Somebody said something out loud, just now, and who.
+   *
+   * Apart from `say`, which is the log's and carries every line this island
+   * has for us including the ones caught up on after a quiet spell. This is
+   * only ever the live subscription, and only chat — a bubble over a head is a
+   * drawing of somebody talking, and somebody who spoke ten minutes ago is not
+   * talking. `said_by` has been on the row since chat went in and nothing has
+   * ever read it: the line carries who said it and the browser threw that away.
+   */
+  spoke?: (uid: string, text: string) => void;
+  /**
    * The rest of you, as the island has it.
    *
    * The island owns the player — queue, skills, stats, and the ore a
@@ -1335,7 +1346,7 @@ export class Island {
     this.channel = listening
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event', filter: on },
         (m) => {
-          const e = m.new as { n?: number; text: string; kind: string; uid: string | null };
+          const e = m.new as { n?: number; text: string; kind: string; uid: string | null; said_by?: string | null };
           if (e.uid && e.uid !== this.uid) return;
           /*
            * The cursor, and this path obeys it too.
@@ -1359,6 +1370,8 @@ export class Island {
             this.said = e.n;
           }
           this.hooks.say(e.text, e.kind, whenSaid((e as { at?: unknown }).at));
+          // And over the speaker's head, which only a line arriving live gets.
+          if (e.kind === 'chat' && e.said_by) this.hooks.spoke?.(e.said_by, e.text);
           /*
            * A line of trouble means the island has done something to the body.
            *
