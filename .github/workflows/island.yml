@@ -259,6 +259,20 @@ jobs:
           npx esbuild supabase/test/window.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/window.mjs --log-level=error
           node node_modules/.cache/window.mjs
+      - name: What a ground read is allowed to forget
+        run: |
+          # `rpc_ground` answers in two halves and `sawGround` has two kinds of
+          # key: ones the answer always carries, which may be cleared and
+          # replaced, and ones it carries only on the reconcile, which may not.
+          # Getting that wrong does not look like a bug in the reading — it
+          # looks like the thing itself flickering, once a second, for ever.
+          # It has been got wrong twice in that one function now, for the
+          # settlements and then for the crops, so it is a test rather than a
+          # comment: `undefined` is "nothing said about this" and an empty list
+          # is "nothing is there", and they are not the same answer.
+          npx esbuild supabase/test/field.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/field.mjs --log-level=error
+          node node_modules/.cache/field.mjs
 
   migrate:
     name: Push the migrations to the project

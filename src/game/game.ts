@@ -4267,7 +4267,6 @@ export class Game {
    * comes back as the same fire.
    */
   sawGround(ground: IslandGround): void {
-    this.crops.clear();
     this.crates.clear();
     this.campfires.clear();
     this.smelters.clear();
@@ -4394,13 +4393,26 @@ export class Game {
      * reads so a field looks alive rather than stepping every twenty seconds,
      * and this puts it right each time — the same arrangement the wildlife's
      * legs are drawn under.
+     *
+     * Applied only when it was *sent*, which is the whole of why the clear is
+     * in here rather than at the top with the crates. Crops ride the slow half
+     * and `placed` and `crates` ride the fast one, so a bare `clear()` up there
+     * emptied the map about once a second and the reconcile put it back twenty
+     * seconds later: crops that showed up and flickered away. The note under
+     * the settlements a few lines down says this in so many words about
+     * `deeds` and `folk`, and it was written after the same mistake.
+     * `undefined` is "nothing said about this"; an empty array is "nothing is
+     * growing here", and they are not the same answer.
      */
-    for (const c of ground.crops ?? []) {
-      this.crops.set(`${c.x},${c.y}`, {
-        x: c.x, y: c.y, id: c.id, stage: c.stage,
-        stageAt: this.time - (Number.isFinite(c.ago) ? c.ago : 0),
-        tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
-      });
+    if (ground.crops !== undefined) {
+      this.crops.clear();
+      for (const c of ground.crops) {
+        this.crops.set(`${c.x},${c.y}`, {
+          x: c.x, y: c.y, id: c.id, stage: c.stage,
+          stageAt: this.time - (Number.isFinite(c.ago) ? c.ago : 0),
+          tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
+        });
+      }
     }
     this.placed.crates.reset(this.crates.values());
     this.placed.campfires.reset(this.campfires.values());
@@ -5267,7 +5279,16 @@ export interface IslandGround {
    * without any arrangement is how long a second is.
    */
   crops?: Array<{ x: number; y: number; id: string; stage: number; ago: number; tended: number; tendedNow: boolean; ql: number }>;
-  deed: { name: string; x: number; y: number; radius: number; level: number; mine: boolean } | null;
+  /**
+   * Your own settlement, on the slow half.
+   *
+   * Optional, and the three states are three different answers: absent is
+   * "this read said nothing about it", null is "you have no settlement" —
+   * which is what a disband sends — and an object is the one you have. The
+   * fast read carries none of the three, which is why `sawGround` applies it
+   * only when it was sent, and why this was wrong to type as always present.
+   */
+  deed?: { name: string; x: number; y: number; radius: number; level: number; mine: boolean } | null;
   /**
    * Other people's settlements, and only those near enough to be standing in.
    *
