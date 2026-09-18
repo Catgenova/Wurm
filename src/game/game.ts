@@ -20,7 +20,7 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, HAUL_SKILL, isBaitFor, isShod, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { knackable, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -1529,6 +1529,7 @@ export class Game {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
       this.logMsg(`You take ${what} on your ${itemName(hit.worn as Item).toLowerCase()}.`, 'fight');
+      this.fightBack();
       return;
     }
     this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
@@ -1537,6 +1538,37 @@ export class Game {
     const wound = this.wound(kind, hit.part, hit.taken);
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
     this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'fight');
+    this.fightBack();
+  }
+
+  /**
+   * Turn on whatever just bit you.
+   *
+   * Asked for: "players automatically attack back when attacked". Whoever
+   * hurt you was marked before the blow (`attackedBy`); if it is something
+   * wild and you are not already swinging at it, whatever was in hand goes to
+   * the front of the line to be picked up again after, and you swing at it
+   * `FIGHT_BACK_GOES` times or until the first refusal — dead, gone, out of
+   * reach — ends the run. A companion that nipped you, a body with no wind
+   * left, a thing already dead, are no fight. Reach is not asked here: the
+   * bite is the proof of it, and every go of the swing asks again. The island
+   * does the same in `fight_back`, off the same number and the same guards,
+   * so a bite on an island turns you the same way.
+   */
+  private fightBack(): void {
+    const id = this.player.attackedBy;
+    if (id === null || id === PLAYER_ATTACKER || this.player.stats.health <= 0) return;
+    if (this.player.stats.stamina < EXHAUSTED) return;
+    const c = this.creatures.get(id);
+    if (!c || c.mode !== 'wild' || c.health <= 0) return;
+    if (this.action?.def.id === 'attack_creature' && this.action.target.kind === 'creature' && this.action.target.id === id) return;
+    const def = ACTION_BY_ID.get('attack_creature');
+    if (!def) return;
+    const target: Target = { kind: 'creature', id };
+    if (this.action) this.queue.unshift({ def: this.action.def, target: this.action.target, goes: this.action.left });
+    this.action = null;
+    this.logMsg(`You turn on the ${this.creatures.species(c).name.toLowerCase()}.`, 'fight');
+    this.startAction(def, target, FIGHT_BACK_GOES);
   }
 
   /** Open a wound, or deepen one of the same kind already in that place. */

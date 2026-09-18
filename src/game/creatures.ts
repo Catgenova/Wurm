@@ -112,6 +112,12 @@ export const COMPANION_REACH = 0.9;
 export const COMPANION_BLOW = 1.2;
 export const COMPANION_PACE = 1.3;
 export const BLOW_MEMORY = 8;
+/**
+ * How many swings you turn on something with when it bites you: enough to
+ * see a fight out, and the first refusal — dead, gone, out of reach — ends
+ * the run, as it ends any run of goes. The next bite starts it again.
+ */
+export const FIGHT_BACK_GOES = 100;
 export const STANCE_HINTS: Record<Stance, string> = {
   passive: 'Never attacks.',
   defensive: 'Fights back when it or you are attacked.',

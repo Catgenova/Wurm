@@ -910,6 +910,9 @@ function helpText(): string {
     one outright, and the shields skill and its quality decide how often. Two-handed weapons leave no
     hand for one.</p>
     <h3>Weapons and the bow</h3>
+    <p>When something bites you, you <b>turn on it</b>: whatever you were doing goes to the front of the
+    line and is picked up again after, and you keep swinging until it is dead, gone or out of reach.
+    A swing you were already aiming at it is left alone, and nothing tame counts.</p>
     <p>Every weapon belongs to a kind, and each kind is its own subskill: <b>knives</b>, <b>swords</b>,
     <b>axes</b>, <b>mauls</b>, <b>polearms</b> and <b>archery</b>. Swinging trains the weapon's own
     subskill and the <b>fighting</b> skill behind it, and both decide whether a blow lands and how hard.

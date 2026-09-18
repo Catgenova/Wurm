@@ -1799,8 +1799,16 @@ update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '
  * Everything else wild swept off the island first. Twenty sections have been
  * spawning things to hit, butcher and tame, and a guard that goes for the
  * nearest of them is unreadable if there are thirty of them.
+ *
+ * And the beach moved off the map. The whole of a sixteen-tile island lies
+ * inside the peace of its beach (`peace_reach`, twenty-four tiles), and
+ * nothing comes for you there — which is why, from the day the beach went
+ * quiet, every line below read "nothing said" and "0 blows" and measured
+ * nothing. The spawn is put back after 299: a hunter is measured in open
+ * country.
  */
 delete from creature where world_id = :'world2' and mode = 'wild';
+update world set spawn_x = 200, spawn_y = 200 where id = :'world2';
 update player set x = 2.5, y = 0.5 where world_id = :'world2' and uid = :'hild';
 update player set x = 2.5, y = 9.5, wounds = '[]'::jsonb,
     stats = jsonb_set(jsonb_set(stats, '{health}', '1'), '{hurtSettled}', to_jsonb(now()))
@@ -1836,8 +1844,12 @@ select '296. and it comes: a leg from ' || (select round(from_x::numeric, 1) || 
      || ' taking ' || (select round(extract(epoch from (leg_ends - leg_at))::numeric, 1) from creature where id = :'stalker')
      || ' seconds — it stops a pace short of him rather than on him';
 
--- Beside him, and ten seconds of standing there.
+-- Beside him, and ten seconds of standing there — with a hole half dug, and his wind about him.
 delete from event where uid = :'ivar';
+update player set act = 'dig', act_target = '{"kind":"tile","x":2,"y":9,"cx":2,"cy":9}'::jsonb, act_started = now(),
+    act_ends = now() + interval '5 seconds', act_left = 3, act_goes = 3, act_queue = '[]'::jsonb,
+    stats = jsonb_set(stats, '{stamina}', '1')
+  where world_id = :'world2' and uid = :'ivar';
 update creature set from_x = 3.5, from_y = 9.5, to_x = 3.5, to_y = 9.5, leg_at = now(), leg_ends = now(),
     until = now() - interval '10 seconds', settled_at = now() - interval '10 seconds'
   where world_id = :'world2' and id = :'stalker';
@@ -1845,6 +1857,12 @@ select creature_settle(:'world2', :'stalker') \g /dev/null
 select '297. ten seconds of it: ' || (select count(*) from event where uid = :'ivar' and text like '%is on you%')
      || ' blows, health down to ' || (select round(((stats->>'health')::numeric), 3) from player where uid = :'ivar')
      || ', and he is carrying ' || coalesce((select string_agg(wound_text(x.value), ' | ') from player p, jsonb_array_elements(p.wounds) x where p.uid = :'ivar'), 'nothing');
+select '297b. and he turns on it: "' || coalesce((select text from event where uid = :'ivar' and text like 'You turn on%' order by n limit 1), 'NOTHING SAID')
+     || '" said ' || (select count(*) from event where uid = :'ivar' and text like 'You turn on%') || ' time for ' || (select count(*) from event where uid = :'ivar' and text like '%is on you%') || ' bites — in hand: '
+     || (select coalesce(act, 'nothing') || case when (act_target->>'id')::int = :'stalker' then ' on the ulva' else ' on ' || coalesce(act_target::text, 'nothing') end
+         || ', ' || coalesce(act_goes::text, '0') || ' goes' from player where world_id = :'world2' and uid = :'ivar')
+     || ', and the hole he was digging is first in line behind it: ' || (select coalesce(act_queue->0->>'action', 'NOTHING') || ' with ' || coalesce(act_queue->0->>'goes', '0') || ' to go' from player where world_id = :'world2' and uid = :'ivar')
+     || ' — and the same number on both sides: ' || fight_back_goes();
 
 -- And an hour of it, which is the whole point: see the head of the migration.
 delete from event where uid = :'ivar';
@@ -1857,6 +1875,9 @@ update creature set from_x = 3.5, from_y = 9.5, to_x = 3.5, to_y = 9.5, leg_at =
 select creature_settle(:'world2', :'stalker') \g /dev/null
 select '298. an hour with the tab shut: ' || (select count(*) from event where uid = :'ivar' and text like '%is on you%')
      || ' blows, not two and a half thousand — an hour of absence is not an hour of being chased';
+-- The swing he turned with is put down before the next subject.
+update player set act = null, act_target = null, act_started = null, act_ends = null, act_left = null, act_goes = null, act_queue = '[]'::jsonb
+  where world_id = :'world2' and uid = :'ivar';
 
 -- Far enough away and it thinks better of it — and a monster does not.
 update player set x = 1.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
@@ -1869,6 +1890,7 @@ select '299. fourteen tiles of open ground later the ulva '
      || case when (select hunting from creature where id = :'stalker') is null then 'has given him up' else 'is still coming' end
      || ', and the goblin '
      || case when (select hunting from creature where id = :'gob2') is null then 'has given him up too' else 'has not: a monster follows better than twice as far' end;
+update world set spawn_x = 8, spawn_y = 8 where id = :'world2';
 
 \echo ''
 -- A body rests between one subject and the next. This suite runs hundreds of

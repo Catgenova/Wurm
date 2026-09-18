@@ -293,6 +293,16 @@ jobs:
           npx esbuild supabase/test/seam.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/seam.mjs --log-level=error
           node node_modules/.cache/seam.mjs
+
+      - name: You turn on whatever bites you
+        run: |
+          # A bite used to mark you and hurt you and that was all. Bitten in a
+          # game of its own, a body swings at the thing with what it had been
+          # doing first in line behind it; a second bite changes nothing; a nip
+          # from a tame one is no fight.
+          npx esbuild supabase/test/turn.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/turn.mjs --log-level=error
+          node node_modules/.cache/turn.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

@@ -22,7 +22,7 @@ import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
 import { COAX_LAPSE, COAX_STEP, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
-         COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY } from '../src/game/creatures';
+         COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
 import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
@@ -921,6 +921,8 @@ for (const [fn, v] of [
      pace on the way, and how long a blow at it or at you is remembered. */
   ['companion_sight', COMPANION_SIGHT], ['companion_leash', COMPANION_LEASH], ['companion_reach', COMPANION_REACH],
   ['companion_blow', COMPANION_BLOW], ['companion_pace', COMPANION_PACE], ['blow_memory', BLOW_MEMORY],
+  /* And how many swings you turn on something with when it bites you. */
+  ['fight_back_goes', FIGHT_BACK_GOES],
   /* A knack: what one is worth, how many a trade holds, how often a go leaves
      one behind, and how often it lands on the trade you were working rather
      than a neighbour. */
