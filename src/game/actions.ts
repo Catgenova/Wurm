@@ -166,6 +166,29 @@ const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, Til
  * back down as itself.
  */
 export const SPOIL_TILE: Record<string, TileType> = { dirt: TileType.Dirt, clay: TileType.Clay, sand: TileType.Sand };
+/**
+ * The jobs that teach the body nothing at all.
+ *
+ * Every go trains the hands a little, and spending wind trains the chest —
+ * which is right for work, and wrong for the three things that are not work.
+ * Asked for: "no stats should be gained by eating, drinking, or moving items".
+ * Putting something in your mouth, tipping a bucket, and carrying a thing from
+ * a crate to your pack are not exercise, and a body that does them over and
+ * over should be no steadier for it. The wind they cost is still spent: a cost
+ * is not a lesson. The island keeps the same list in `teaches_nothing`, and a
+ * test of its own holds the two of them together.
+ */
+export const TEACHES_NOTHING = new Set<string>([
+  // Eating and drinking, and handing food to something else.
+  'eat', 'drink', 'drink_from_vessel', 'drink_skin', 'feed',
+  // Carrying things about, in and out of whatever holds them.
+  'pick_up', 'pick_up_all', 'drop', 'crate_take_all', 'furniture_take_all',
+  'kiln_take_all', 'smelter_take_all', 'store_in_crate', 'store_in_furniture',
+  'take_from_store', 'stow_item', 'empty_bag', 'throw_away', 'equip', 'unequip',
+  // And pouring, which is carrying by another name.
+  'fill_bucket', 'fill_skin', 'empty_bucket', 'empty_vessel', 'pour_into_barrel',
+]);
+
 /** The order a spadeful is looked for in, which is the order it was written in. */
 export const SPOIL_ORDER = ['dirt', 'clay', 'sand'];
 

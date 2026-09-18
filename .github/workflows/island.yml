@@ -329,9 +329,18 @@ jobs:
           # somebody else's stake is refused, flattening steps round a corner
           # of bare rock instead of stopping at it, a level taken stops a run
           # of goes on the mark, and a spadeful comes out of the crate.
-          npx esbuild supabase/test/ground.ts --bundle --platform=node --format=esm \
-            --outfile=node_modules/.cache/ground.mjs --log-level=error
-          node node_modules/.cache/ground.mjs
+          npx esbuild supabase/test/cut.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/cut.mjs --log-level=error
+          node node_modules/.cache/cut.mjs
+
+      - name: What a go teaches the body, and what it does not
+        run: |
+          # Eating, drinking and carrying things about are not work: both sides
+          # name the same twenty-five jobs that teach the body nothing, and a
+          # loaf eaten in a game of its own leaves every stat where it was.
+          npx esbuild supabase/test/body.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/body.mjs --log-level=error
+          node node_modules/.cache/body.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

@@ -1,172 +1,98 @@
 /**
- * What the ground says about a cut it will not take, and about whose it is.
+ * The ground a seed makes, pinned.
  *
- * Three rules written twice, and measured to agree word for word. A slope
- * refusal now carries its numbers: the slope the cut would leave, the slope
- * the skill allows, and the skill it would take. Ground inside a settlement
- * you are not of is refused outright, which nothing asked before. And
- * flattening steps round a corner of bare rock rather than stopping at it,
- * which only this side can be asked about here, since the island's own copy
- * is measured in the suite at 329b.
+ * The island's land travelled exactly once, at founding: `found-island.ts`
+ * worked it out with the generator of that day and handed it to Postgres,
+ * which has kept it ever since. Every browser since works the same ground out
+ * for itself from the seed — with the generator of *today*.
  *
- * The island is asked directly, the way the outlook test asks it, so the two
- * sentences are compared rather than described.
+ * So the generator is not code. It is a wire format with one message in it,
+ * sent years ago, and every change to it moves the ground under every island
+ * already founded. Nothing says so: `tile_change` carries what people have
+ * dug and nothing else, the island keeps quietly winning every disagreement,
+ * and the browser goes on drawing ground the rules do not believe in.
+ *
+ * Measured, against builds this repo actually shipped, on one 256 window:
+ *
+ *     b886a42 and later        0 of 65536 faces differ
+ *     c04881e               1367 of 65536 differ,   239 of them soft ground
+ *                                the island would refuse to let you pack
+ *     0aed1fc               2933 of 65536 differ,   634 of them
+ *     8562112              23044 of 65536 differ,  6328 of them
+ *
+ * A tile the browser draws as dirt and the island holds as sand is a tile
+ * where *"That ground will not pack down"* is the island being right and the
+ * screen being wrong — about ground nobody has ever touched.
+ *
+ * This does not stop the generator changing. It stops it changing by
+ * accident: the number below is what the ground comes out as, and moving it
+ * is a thing done deliberately, with every founded island reconciled to the
+ * new ground in the same breath. `tools/reconcile-land.ts` is what does that.
  */
-import { execFileSync } from 'node:child_process';
-import { Game } from '../../src/game/game';
-import { ACTION_BY_ID, flattenTarget, foreignGround, slopeNeeds, slopeRefusal, tileCorners } from '../../src/game/actions';
-import { TileType } from '../../src/world/tiles';
+import { generateAtlasWindow } from '../../src/world/atlas-world';
+import { readAtlas } from '../../tools/atlas-node';
 
-const psql = (sql: string): string =>
-  execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
-    input: sql,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      PGHOST: process.env.PGHOST ?? '/var/run/postgresql',
-      PGPORT: process.env.PGPORT ?? '5433',
-      PGUSER: process.env.PGUSER ?? 'wurm',
-      PGDATABASE: process.env.PGDATABASE ?? 'postgres',
-    },
-  }).replace(/\n$/, '');
+const SIZE = 256;
+const SEED = 4242;
 
-const ok: string[] = [];
-const bad: string[] = [];
-const check = (what: string, passed: boolean, detail = ''): void => {
-  (passed ? ok : bad).push(`${passed ? 'ok  ' : 'FAIL'} ${what}${detail ? ` — ${detail}` : ''}`);
+/** A plain rolling hash. Nothing cryptographic is wanted; a change is a change. */
+function digest(bytes: Uint8Array): string {
+  let a = 0x811c9dc5 >>> 0;
+  let b = 0x01000193 >>> 0;
+  for (let i = 0; i < bytes.length; i++) {
+    a = Math.imul(a ^ bytes[i], 0x01000193) >>> 0;
+    b = (Math.imul(b + bytes[i] + i, 0x85ebca6b) ^ (b >>> 13)) >>> 0;
+  }
+  return (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0'));
+}
+
+const atlas = readAtlas();
+const win = generateAtlasWindow(SEED, atlas, 0, 0, SIZE, SIZE, SIZE);
+const heights = new Uint8Array(win.heights.buffer, win.heights.byteOffset, win.heights.byteLength);
+
+const marks = {
+  tiles: digest(win.tiles),
+  data: digest(win.data),
+  rock: digest(win.rock),
+  heights: digest(heights),
+  dirt: digest(win.dirt),
 };
 
-const game = Game.create(4242);
-const w = game.world;
-for (let y = 0; y < 40; y++) for (let x = 0; x < 40; x++) { w.setTile(x, y, TileType.Dirt); w.setHeight(x, y, 100); w.setDirt(x, y, 20); }
-game.skills.values.set('digging', 20);
-game.skills.values.set('masonry', 20);
-game.player.x = 10.5;
-game.player.y = 10.5;
-
-// A corner with a cliff beside it: one step down leaves a slope of 62.
-w.setHeight(20, 20, 100);
-w.setHeight(21, 20, 39);
-const said = slopeRefusal(game, 'digging', 20, 20, -1) ?? '';
-const slope = Number(/slope of (\d+)/.exec(said)?.[1] ?? 0);
-check('the slope refusal carries its numbers',
-  /^That would leave a slope of \d+\. Your digging allows 60; it would take digging \d+\.\d\.$/.test(said), said || 'nothing said');
-const islandSaid = psql(
-  `select 'That would leave a slope of ' || ${slope} || '. Your digging allows 60; it would take digging '`
-  + ` || to_char(slope_needs(${slope}), 'FM990.0') || '.'`);
-check('and the island builds the same sentence', said === islandSaid, `island "${islandSaid}"`);
-const islandNeeds = psql('select slope_needs(62) || \' \' || slope_needs(40) || \' \' || slope_needs(41)');
-check('and the skill a slope takes is the same sum on both sides',
-  islandNeeds === `${slopeNeeds(62)} ${slopeNeeds(40)} ${slopeNeeds(41)}`, `island ${islandNeeds} browser ${slopeNeeds(62)} ${slopeNeeds(40)} ${slopeNeeds(41)}`);
-check('a slope inside the cap says nothing', slopeRefusal(game, 'digging', 10, 10, -1) === null, String(slopeRefusal(game, 'digging', 10, 10, -1)));
-
-// Ground inside somebody else's stake.
-game.neighbourDeeds = [{ name: 'Hildsmoor', x: 30, y: 30, radius: 1, level: 1, holder: 'Hild' } as never];
-const dig = ACTION_BY_ID.get('dig')!;
-const pack = ACTION_BY_ID.get('pack')!;
-const cut = ACTION_BY_ID.get('cut_grass');
-const THEIRS = 'That ground is part of Hildsmoor. Only its citizens may shape it.';
-// Asked at the door, which is where the rule was hung, rather than of the rule.
-const asked = (id: string, t: unknown): string => String(ACTION_BY_ID.get(id)?.check?.(t as never, game) ?? 'nothing');
-check('a corner inside a stake of somebody else\'s is refused', asked('dig', { kind: 'tile', x: 30, y: 30, cx: 30, cy: 30 }) === THEIRS, asked('dig', { kind: 'tile', x: 30, y: 30, cx: 30, cy: 30 }));
-check('and so is packing the tile', asked('pack', { kind: 'tile', x: 30, y: 30 }) === THEIRS, asked('pack', { kind: 'tile', x: 30, y: 30 }));
-check('and so is mining it', asked('mine', { kind: 'tile', x: 30, y: 30, cx: 30, cy: 30 }) === THEIRS, asked('mine', { kind: 'tile', x: 30, y: 30, cx: 30, cy: 30 }));
-check('a corner a step outside it is not', asked('dig', { kind: 'tile', x: 34, y: 34, cx: 34, cy: 34 }) !== THEIRS, asked('dig', { kind: 'tile', x: 34, y: 34, cx: 34, cy: 34 }));
-check('a corner whose far tile is inside is refused all the same', asked('dig', { kind: 'tile', x: 32, y: 32, cx: 32, cy: 32 }) === THEIRS, asked('dig', { kind: 'tile', x: 32, y: 32, cx: 32, cy: 32 }));
-check('and cutting its grass, which shapes nothing, is not on the list', asked('cut_grass', { kind: 'tile', x: 30, y: 30 }) !== THEIRS, asked('cut_grass', { kind: 'tile', x: 30, y: 30 }));
-void pack; void dig; void cut; void foreignGround;
-game.neighbourDeeds = [];
-
-// A tile with one shoulder of bare rock, worked towards the ground underfoot.
-for (const [cx, cy] of tileCorners(12, 12)) { w.setHeight(cx, cy, 100); w.setDirt(cx, cy, 20); }
-w.setHeight(13, 12, 103); w.setDirt(13, 12, 0);
-w.setHeight(14, 12, 102);
-w.setHeight(13, 13, 98);
-w.setHeight(14, 13, 100);
-// Standing well clear of it: the tile you stand on is what flattening aims
-// at, and a corner shared with the tile being worked would move the aim.
-game.player.x = 10.5; game.player.y = 10.5;
-const flatten = ACTION_BY_ID.get('flatten')!;
-const before = game.log.length;
-for (let i = 0; i < 8; i++) if (flatten.perform({ kind: 'tile', x: 13, y: 12 } as never, game) === false) break;
-const heights = tileCorners(13, 12).map(([cx, cy]) => w.getHeight(cx, cy)).join(', ');
-check('flattening steps round the rock and levels the rest', heights === '103, 100, 100, 100', heights);
-const last = game.log.slice(before).filter((l) => l.kind === 'error').pop();
-check('and names the rock when nothing else will move',
-  last?.text === 'What is still standing high here is bare rock. Mine it down.', last?.text ?? 'nothing said');
-
-/*
- * And what a piece of furniture holds, as the island hands it over.
+/**
+ * What the ground has come out as since the relief landed on 15 September.
+ * Change these only alongside a reconcile of every island already founded.
  *
- * Reported as "i opened it and dragged my dirt into it and the dirt
- * vanished". This read filled `items` with a bare `[]` and nothing ever
- * filled it again, so every chest, bin and larder on an island was drawn
- * empty. The row is shaped exactly as `rpc_ground` builds it.
+ * `data` moved on 18 September, when eight fruit trees were held to their
+ * islands: every face stayed and the species byte of one tree in fifty
+ * changed, which the reconcile compares now as well as the face.
  */
-game.sawGround({
-  placed: [{ id: 91, kind: 'furniture', sub: 'bulk_bin', x: 20, y: 20, sx: 0, sy: 0, ql: 40, mine: true,
-    things: [{ id: 771, def: 'dirt', ql: 30, dmg: 0, count: 3, extra: null }] },
-    { id: 92, kind: 'furniture', sub: 'chest', x: 22, y: 20, sx: 0, sy: 0, ql: 40, mine: true, things: [] },
-  ] as never,
-  crates: [],
-});
-const binHere = game.furniture.get(91);
-check('what the island says is in a bin reaches the browser',
-  binHere?.items.length === 1 && binHere.items[0].id === 'dirt' && binHere.items[0].count === 3,
-  binHere ? JSON.stringify(binHere.items) : 'no bin');
-check('and an empty one is empty', game.furniture.get(92)?.items.length === 0, String(game.furniture.get(92)?.items.length));
+const PINNED: Record<keyof typeof marks, string> = {
+  tiles: '07fcda3bbd161f34',
+  data: '61700fae33936ef8',
+  rock: 'bafd32f32da1ef6a',
+  heights: '561c219755d4479c',
+  dirt: '2c0887dc7256457a',
+};
 
-/*
- * The level, and a spadeful out of a crate.
- *
- * Asked for as "flatten toward a chosen height", "a run of goes that knows
- * when to stop" and "drop dirt straight from the cart or crate". The first two
- * are one thing: sight a mark and every door that moves a corner refuses once
- * the corner is on it, so a run of any length stops there.
- */
-for (let y = 4; y <= 9; y++) for (let x = 4; x <= 9; x++) { w.setHeight(x, y, 100); w.setDirt(x, y, 20); w.setTile(x, y, TileType.Dirt); }
-for (let y = 6; y <= 7; y++) for (let x = 6; x <= 7; x++) w.setHeight(x, y, 103);
-game.player.x = 6.5; game.player.y = 6.5;
-game.level = null;
-game.inventory.items.length = 0;
-game.inventory.add('shovel', { ql: 50 });
-ACTION_BY_ID.get('take_level')!.perform({ kind: 'tile', x: 5, y: 5, cx: 5, cy: 5 } as never, game);
-check('the level is sighted where it was taken', game.level === 100, String(game.level));
-check('and flattening the bank aims at it', flattenTarget(game, 6, 6) === 100, String(flattenTarget(game, 6, 6)));
-let dug = 0;
-for (let i = 0; i < 10; i++) {
-  if (ACTION_BY_ID.get('dig')!.check?.({ kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 } as never, game)) break;
-  ACTION_BY_ID.get('dig')!.perform({ kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 } as never, game);
-  dug++;
+let moved = 0;
+for (const k of Object.keys(marks) as Array<keyof typeof marks>) {
+  const same = PINNED[k] === marks[k];
+  if (!same) moved++;
+  console.log(`  ${k.padEnd(8)} ${marks[k]}${same ? '' : `   MOVED (was ${PINNED[k] || 'unpinned'})`}`);
 }
-// A go that misses is still a go, so the count is what it took rather than three.
-check('ten spadefuls asked for at a bank three proud of it stop on the mark',
-  dug < 10 && w.getHeight(6, 6) === 100, `${dug} goes, corner at ${w.getHeight(6, 6)}`);
-check('and the door says the corner is there',
-  asked('dig', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }) === 'That corner is down to the level of 100 already.',
-  asked('dig', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }));
-check('and will not have it back either',
-  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }) === 'That corner is up to the level of 100 already.',
-  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 6, cy: 6 }));
-ACTION_BY_ID.get('clear_level')!.perform({ kind: 'tile', x: 5, y: 5 } as never, game);
-check('and putting the level away clears it', game.level === null, String(game.level));
-
-// Nothing in the pack, five spadefuls in the crate beside him.
-game.inventory.items.length = 0;
-game.inventory.add('shovel', { ql: 50 });
-game.crates.set(9100, { id: 9100, x: 6, y: 6, sx: 0, sy: 0, kind: 'plank',
-  items: [{ uid: 9101, id: 'dirt', ql: 20, dmg: 0, count: 5 }] } as never);
-check('a spadeful can come out of a crate you stand beside',
-  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 7, cy: 6 }) === 'nothing',
-  asked('drop_dirt', { kind: 'tile', x: 6, y: 6, cx: 7, cy: 6 }));
-const wasHigh = w.getHeight(7, 6);
-ACTION_BY_ID.get('drop_dirt')!.perform({ kind: 'tile', x: 6, y: 6, cx: 7, cy: 6 } as never, game);
-check('and dropping it raises the corner and comes out of the crate',
-  w.getHeight(7, 6) === wasHigh + 1 && (game.crates.get(9100)?.items[0]?.count ?? 0) === 4
-  && game.inventory.count('dirt') === 0,
-  `corner ${w.getHeight(7, 6)}, crate ${game.crates.get(9100)?.items[0]?.count}, pack ${game.inventory.count('dirt')}`);
-game.crates.delete(9100);
-
-for (const line of [...ok, ...bad]) console.log(`  ${line}`);
-console.log(bad.length ? `\n${bad.length} of ${ok.length + bad.length} went wrong` : `\nall ${ok.length} right`);
-process.exit(bad.length ? 1 : 0);
+console.log(moved === 0
+  ? `the ground a seed makes is the ground it made before`
+  : `THE GROUND HAS MOVED in ${moved} of ${Object.keys(marks).length} layers`);
+if (moved) {
+  console.log('');
+  console.log('Every island already founded holds the ground the OLD generator made.');
+  console.log('A browser will now draw the new ground over it and the two will');
+  console.log('disagree about tiles nobody has ever touched — which is the island');
+  console.log('refusing to pack dirt, refusing to fell trees that are not there,');
+  console.log('and walls of nothing you cannot walk through.');
+  console.log('');
+  console.log('If the change is wanted: run tools/reconcile-land.ts against every');
+  console.log('live island to write the difference into tile_change, then pin the');
+  console.log('new marks here in the same commit.');
+}
+process.exit(moved === 0 ? 0 : 1);

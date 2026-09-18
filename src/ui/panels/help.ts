@@ -137,12 +137,15 @@ function helpText(): string {
     with, and one more for every ten points of <b>mind logic</b>, which is earned by crafting. Walking
     off, stopping with <kbd>Esc</kbd> or clicking somewhere else forgets the lot.</p>
     <h3>What the characteristics are for</h3>
+    <p><b>Work, and only work.</b> Eating, drinking, and carrying things in and out of crates, bags and
+    barrels teach the body nothing: they cost what wind they cost and leave every characteristic where
+    it was. Swinging, building, digging and hauling are what the body learns from.</p>
     <p>The five characteristics start at 20 and rise slowly from the work that uses them, and each one
     does something plain:</p>
     <table>
       <tr><td><b>Body strength</b></td><td>How hard you hit. Earned by fighting.</td></tr>
       <tr><td><b>Body stamina</b></td><td>Less wind spent per action and quicker to get it back. Earned by spending it.</td></tr>
-      <tr><td><b>Body control</b></td><td>Everything takes less time. Earned by doing anything at all.</td></tr>
+      <tr><td><b>Body control</b></td><td>Everything takes less time. Earned by doing any <i>work</i> at all.</td></tr>
       <tr><td><b>Mind logic</b></td><td>Jobs you can line up, and difficult crafts come out right more often. Earned by crafting.</td></tr>
       <tr><td><b>Soul strength</b></td><td>A wild animal is readier to trust you. Earned by taming, success or not.</td></tr>
     </table>

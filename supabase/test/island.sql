@@ -9486,6 +9486,34 @@ select '981. the heavy trades, ' || (select string_agg(id, ' and ' order by id) 
      || (round(skill_of(:'world2', :'ivar', 'body_strength')::numeric, 4) > :back_mined) || ')';
 
 /*
+ * And the jobs that teach it nothing at all.
+ *
+ * Asked for: "no stats should be gained by eating, drinking, or moving items".
+ * Every go trained the hands and every go that cost wind trained the chest,
+ * which is right for work and wrong for putting something in your mouth,
+ * tipping a bucket, or carrying a thing from a crate to your pack. The wind is
+ * still spent: a cost is not a lesson.
+ */
+create temp table body_was as
+  select id, value from skill where world_id = :'world2' and uid = :'ivar'
+   and id in ('body_control', 'body_stamina', 'body_strength');
+select spend_wind(:'world2', :'ivar', j) from unnest(array['eat', 'drink', 'pick_up', 'take_from_store',
+  'store_in_crate', 'fill_bucket', 'stow_item', 'throw_away']) j \g /dev/null
+select '981b. eight goes at eating, drinking and carrying things about moved: '
+     || coalesce((select string_agg(s.id, ', ' order by s.id) from skill s join body_was b on b.id = s.id
+                   where s.world_id = :'world2' and s.uid = :'ivar' and s.value <> b.value), 'nothing at all')
+     || ' — and of the island''s ' || (select count(*) from action_def) || ' jobs, '
+     || (select count(*) from action_def where teaches_nothing(id)) || ' teach the body nothing';
+select spend_wind(:'world2', :'ivar', 'dig') \g /dev/null
+select '981c. and one spadeful after them moved: '
+     || coalesce((select string_agg(s.id, ', ' order by s.id) from skill s join body_was b on b.id = s.id
+                   where s.world_id = :'world2' and s.uid = :'ivar' and s.value <> b.value), 'NOTHING')
+     || ' — the wind the idle eight cost was spent all the same: '
+     || case when (select (stats->>'stamina')::double precision from player where world_id = :'world2' and uid = :'ivar') < 1
+             then 'it is down off full' else 'FULL, SO NOTHING WAS SPENT' end;
+drop table body_was;
+
+/*
  * A container's contents are its own.
  *
  * A bag's contents carry the bag's holder and follow the bag: into a crate,

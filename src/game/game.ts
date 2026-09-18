@@ -5,7 +5,7 @@ import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
-import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
+import { ACTIONS, ACTION_BY_ID, TEACHES_NOTHING, TRY_LEARN, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
 import type { ItemRow } from '../net/island';
@@ -2503,13 +2503,23 @@ export class Game {
      * about it by the whole amount. Both say `TRY_LEARN` now: a swing teaches
      * you something, landing it teaches you more.
      */
-    if (a.def.skill) this.gainSkill(a.def.skill, this.swingMissed ? TRY_LEARN : 1);
+    /*
+     * And nothing at all for the jobs that are not work.
+     *
+     * Asked for: "no stats should be gained by eating, drinking, or moving
+     * items". The wind is still spent below — a cost is not a lesson — but a
+     * body that empties a crate into its pack a hundred times is no steadier
+     * for it. `TEACHES_NOTHING` is the list, and the island keeps its own.
+     */
+    if (!TEACHES_NOTHING.has(a.def.id)) {
+      if (a.def.skill) this.gainSkill(a.def.skill, this.swingMissed ? TRY_LEARN : 1);
+      // The body learns from the work itself: wind from spending it, control from doing it.
+      if (cost > 0) this.gainSkill('body_stamina', WORK_WIND + cost * WORK_WIND_SPENT);
+      this.gainSkill('body_control', WORK_HAND);
+      // And the back, from the heavy trades: a shovel or a pick, whatever the go found.
+      if (a.def.skill && HEAVY_SKILLS.has(a.def.skill)) this.gainSkill('body_strength', WORK_BACK);
+    }
     this.swingMissed = false;
-    // The body learns from the work itself: wind from spending it, control from doing it.
-    if (cost > 0) this.gainSkill('body_stamina', WORK_WIND + cost * WORK_WIND_SPENT);
-    this.gainSkill('body_control', WORK_HAND);
-    // And the back, from the heavy trades: a shovel or a pick, whatever the go found.
-    if (a.def.skill && HEAVY_SKILLS.has(a.def.skill)) this.gainSkill('body_strength', WORK_BACK);
     if (this.action !== a) {
       // Whatever was performed put something else in hand; leave it alone.
       this.events.emit('action');
