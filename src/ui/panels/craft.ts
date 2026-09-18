@@ -1,7 +1,7 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { RECIPE_CATEGORIES, RECIPES, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { RECIPE_CATEGORIES, RECIPES, materialChoices, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 import { Repaint } from '../repaint';
@@ -21,6 +21,8 @@ export class CraftPanel {
   private search: HTMLInputElement;
   private query = '';
   private readyOnly = false;
+  /** What each recipe is to be made of, where the row was set to a wood or a metal: recipe id to material. */
+  private readonly wants = new Map<string, string>();
 
   constructor(private readonly win: UIWindow, private readonly game: Game) {
     win.body.classList.add('inv-body');
@@ -83,7 +85,7 @@ export class CraftPanel {
   }
 
   render(now = performance.now()): void {
-    const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game)]));
+    const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id))]));
     // What the book would say. Standing at an anvil hammering, this is the
     // same from one second to the next, so nothing is touched.
     const sig = `${this.query}\u0000${this.readyOnly ? 1 : 0}\u0000${RECIPES.map((r) => `${r.id}${statuses.get(r)?.ready ? 1 : 0}${statuses.get(r)?.max ?? 0}`).join('')}`;
@@ -132,7 +134,7 @@ export class CraftPanel {
     name.append(meta);
     const needs = document.createElement('div');
     needs.className = 'craft-needs';
-    const parts: HTMLSpanElement[] = [];
+    const parts: HTMLElement[] = [];
     if (r.station) {
       const station = document.createElement('span');
       station.className = st.station ? 'have' : 'lack';
@@ -158,12 +160,30 @@ export class CraftPanel {
       parts.push(span);
     }
     // What it would come out made of, since the same bill in two woods makes
-    // two different things.
-    if (st.material) {
+    // two different things; and a choice of them, when more than one kind is
+    // carried. Asked for: an oak chest from a pack that holds pine too.
+    const choices = materialChoices(this.game, r);
+    if (st.material && choices.length > 1) {
+      const pick = document.createElement('select');
+      pick.className = 'craft-of';
+      pick.title = 'What to make it of';
+      for (const m of choices) {
+        const o = document.createElement('option');
+        o.value = m;
+        o.textContent = `of ${m.toLowerCase()}`;
+        o.selected = m === st.material;
+        pick.append(o);
+      }
+      pick.addEventListener('change', () => {
+        this.wants.set(r.id, pick.value);
+        this.render();
+      });
+      parts.push(pick);
+    } else if (st.material) {
       const made = document.createElement('span');
       made.className = 'have';
       made.textContent = `of ${st.material.toLowerCase()}`;
-      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : 'Pick a different stack from your pack to use another';
+      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : 'Carry another kind and you can choose between them here';
       parts.push(made);
     }
     parts.forEach((p, k) => {
@@ -196,7 +216,7 @@ export class CraftPanel {
     const def = ACTION_BY_ID.get(r.id);
     // Start on a stack of whatever the window said it would be made of, so
     // clicking Craft makes the thing the row described.
-    const want = recipeStatus(r, this.game).material;
+    const want = recipeStatus(r, this.game, this.wants.get(r.id)).material;
     const stock = this.game.inventory.items;
     const material = (want ? stock.find((it) => it.id === r.inputs[0].item && it.extra === want) : undefined) ?? this.game.inventory.find(r.inputs[0].item);
     if (!def || !material) return;

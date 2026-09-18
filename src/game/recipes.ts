@@ -396,10 +396,10 @@ export interface RecipeStatus {
   material?: string;
 }
 
-export function recipeStatus(r: Recipe, g: Game): RecipeStatus {
+export function recipeStatus(r: Recipe, g: Game, want?: string): RecipeStatus {
   const tool = !r.tool || g.inventory.has(r.tool);
   const station = !r.station || g.atStation(r.station);
-  const material = chooseMaterial(g, r);
+  const material = chooseMaterial(g, r, undefined, want);
   const inputs = r.inputs.map((i) => ({ item: i.item, need: i.count ?? 1, have: countFor(g, r, i.item, material) }));
   const max = tool && station ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
   return { tool, station, inputs, ready: max >= 1, max, material };
@@ -435,11 +435,27 @@ const strictInput = (g: Game, r: Recipe, id: string): boolean =>
   !!r.material && g.inventory.items.some((it) => it.id === id && isMaterialKind(it.extra, r.material as MaterialKind));
 
 /**
- * Which material this craft will be made of: whatever was clicked if it will
- * serve, and otherwise whichever the player has most of. A recipe that names
- * its wood takes that and nothing else.
+ * The materials of its kind a craft could be made of, off what is carried:
+ * the woods among the planks for a chest. The first input that has stock of
+ * the kind decides, the way `chooseMaterial` reads it; a recipe that names
+ * its wood offers nothing to choose.
  */
-export function chooseMaterial(g: Game, r: Recipe, preferUid?: number): string | undefined {
+export function materialChoices(g: Game, r: Recipe): string[] {
+  if (!r.material || r.wood) return [];
+  for (const i of r.inputs) {
+    const stacks = g.inventory.items.filter((it) => it.id === i.item && isMaterialKind(it.extra, r.material as MaterialKind));
+    if (stacks.length) return [...new Set(stacks.map((it) => it.extra as string))].sort();
+  }
+  return [];
+}
+
+/**
+ * Which material this craft will be made of: whatever was clicked if it will
+ * serve, then whatever the crafting window was set to if any of it is
+ * carried, and otherwise whichever the player has most of. A recipe that
+ * names its wood takes that and nothing else.
+ */
+export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: string): string | undefined {
   if (!r.material) return undefined;
   if (r.wood) return r.wood;
   for (const i of r.inputs) {
@@ -447,6 +463,7 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number): string |
     if (!stacks.length) continue;
     const clicked = stacks.find((it) => it.uid === preferUid);
     if (clicked) return clicked.extra;
+    if (want && stacks.some((it) => it.extra === want)) return want;
     const need = i.count ?? 1;
     const held = new Map<string, number>();
     for (const st of stacks) held.set(st.extra as string, (held.get(st.extra as string) ?? 0) + st.count);

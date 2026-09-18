@@ -267,7 +267,8 @@ function helpText(): string {
     of and what that lends it.</p>
     <p><b>One craft, one material.</b> You cannot nail an oak plank to a pine one and call it a chest.
     The crafting window shows what the piece would come out <i>of</i>, and picks whichever you have most
-    of; click a different stack in your pack to use that one instead. Nails and the like are exempt
+    of; carry more than one kind and the row offers a choice of them, and clicking a stack in your pack
+    uses that one instead. Nails and the like are exempt
     &mdash; they are whatever metal they are. <b>Improving</b> is the same rule: an oak chest wants more
     oak, and a bronze blade will not take copper.</p>
     <p><b>The six woods.</b> <b>Pine</b> is soft, light and quick to work, and rots as fast as it grew.

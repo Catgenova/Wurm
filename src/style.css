@@ -1305,6 +1305,17 @@ kbd {
   opacity: 0.7;
 }
 
+/* The wood or metal a piece is to be made of, where there is a choice. */
+.craft-needs .craft-of {
+  font: inherit;
+  color: #9fcf7c;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(159, 207, 124, 0.45);
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
 .craft-btns {
   display: flex;
   grid-row: 1 / span 2;

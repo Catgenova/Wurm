@@ -320,6 +320,17 @@ jobs:
             --outfile=node_modules/.cache/stand.mjs --log-level=error
           node node_modules/.cache/stand.mjs
 
+      - name: The crafting window offers a choice of wood
+        run: |
+          # Asked for: a pack with oak and pine in it, and a row that lets you
+          # say which the piece is to be made of. `materialChoices` lists the
+          # woods carried for the recipe, `recipeStatus` takes the one the row
+          # is set to, the clicked stack still wins over it, and the thing
+          # made comes out of the wood the row said.
+          npx esbuild supabase/test/wood.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/wood.mjs --log-level=error
+          node node_modules/.cache/wood.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live
