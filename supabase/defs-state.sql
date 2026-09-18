@@ -3064,6 +3064,12 @@ create or replace function coax_lapse() returns double precision language sql im
 create or replace function coax_step() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
 create or replace function hunt_leash() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function hunt_rest() returns double precision language sql immutable as $fn$ select 150::double precision $fn$;
+create or replace function companion_sight() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
+create or replace function companion_leash() returns double precision language sql immutable as $fn$ select 9::double precision $fn$;
+create or replace function companion_reach() returns double precision language sql immutable as $fn$ select 0.9::double precision $fn$;
+create or replace function companion_blow() returns double precision language sql immutable as $fn$ select 1.2::double precision $fn$;
+create or replace function companion_pace() returns double precision language sql immutable as $fn$ select 1.3::double precision $fn$;
+create or replace function blow_memory() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function knack_each() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function knack_cap() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function knack_odds() returns double precision language sql immutable as $fn$ select 5000::double precision $fn$;

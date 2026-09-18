@@ -89,10 +89,33 @@ export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feath
 export const PLAYER_ATTACKER = -1;
 export const STANCES: Stance[] = ['passive', 'defensive', 'aggressive'];
 export const STANCE_NAMES: Record<Stance, string> = { passive: 'Passive', defensive: 'Defensive', aggressive: 'Aggressive' };
+/**
+ * A companion at heel, and what it does about company.
+ *
+ * An aggressive one goes for anything wild within `COMPANION_SIGHT` of you;
+ * either sort drops a fight that has got `COMPANION_LEASH` from you; it
+ * strikes from `COMPANION_REACH` every `COMPANION_BLOW` seconds and runs at
+ * `COMPANION_PACE` times its walk on the way; and a blow at it or at you is
+ * remembered for `BLOW_MEMORY` seconds, which is also how long a defensive
+ * worker on a deed remembers one.
+ *
+ * These were literals in `updateActive`, which was fine while the browser
+ * owned the wildlife. It does not any more: the island parked a companion
+ * at its keeper's feet and had no rule for what it does about company, so
+ * reported as "aggressive and defensive wildermon companions don't
+ * attack". They are crossed now, and the island's `companion_settle` walks
+ * and strikes off the same six numbers.
+ */
+export const COMPANION_SIGHT = 5;
+export const COMPANION_LEASH = 9;
+export const COMPANION_REACH = 0.9;
+export const COMPANION_BLOW = 1.2;
+export const COMPANION_PACE = 1.3;
+export const BLOW_MEMORY = 8;
 export const STANCE_HINTS: Record<Stance, string> = {
   passive: 'Never attacks.',
   defensive: 'Fights back when it or you are attacked.',
-  aggressive: 'Hunts other wildermon within 5 tiles of you.',
+  aggressive: `Hunts other wildermon within ${COMPANION_SIGHT} tiles of you.`,
 };
 
 export interface SpeciesDef {
@@ -3417,7 +3440,7 @@ export class Creatures {
     }
     if (game.time < c.searchAt) return false;
     c.searchAt = game.time + 1.5;
-    const recent = (at: number): boolean => game.time - at < 8;
+    const recent = (at: number): boolean => game.time - at < BLOW_MEMORY;
     let best: Creature | null = null;
     let bestD = Infinity;
     for (const o of this.list.values()) {
@@ -3739,36 +3762,41 @@ export class Creatures {
     if (this.comeWhenCalled(c, dt, game)) return;
     if (c.stance === 'passive') c.enemy = null;
     else if (c.enemy === null) {
+      let found: Creature | null = null;
       if (c.stance === 'aggressive') {
-        let best: Creature | null = null;
         let bestD = Infinity;
         for (const o of this.list.values()) {
           if (o.id === c.id || o.mode !== 'wild') continue;
           const d = Math.hypot(o.x - p.x, o.y - p.y);
-          if (d <= 5 && d < bestD) {
+          if (d <= COMPANION_SIGHT && d < bestD) {
             bestD = d;
-            best = o;
+            found = o;
           }
         }
-        if (best) c.enemy = best.id;
       } else {
-        const recent = (at: number): boolean => game.time - at < 8;
+        const recent = (at: number): boolean => game.time - at < BLOW_MEMORY;
         const threat = recent(c.attackedAt) ? c.attackedBy : recent(p.attackedAt) ? p.attackedBy : null;
-        if (threat !== null && threat !== c.id && this.list.has(threat)) c.enemy = threat;
+        const t = threat === null ? undefined : this.list.get(threat);
+        // Only something wild: a worker of your own that nipped you is not a fight for it.
+        if (t && t.id !== c.id && t.mode === 'wild') found = t;
+      }
+      if (found) {
+        c.enemy = found.id;
+        game.logMsg(`${c.name} goes for the ${this.species(found).name.toLowerCase()}.`, 'event');
       }
     }
     if (c.enemy !== null) {
       const e = c.enemy === PLAYER_ATTACKER ? undefined : this.list.get(c.enemy);
-      if (!e || e.mode === 'stored' || Math.hypot(e.x - p.x, e.y - p.y) > 9) {
+      if (!e || e.mode === 'stored' || Math.hypot(e.x - p.x, e.y - p.y) > COMPANION_LEASH) {
         c.enemy = null;
       } else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);
-        if (d <= 0.9) {
+        if (d <= COMPANION_REACH) {
           if (c.cooldown <= 0) {
             this.attack(game, c, e);
-            c.cooldown = 1.2;
+            c.cooldown = COMPANION_BLOW;
           }
-        } else if (this.stepToward(game, c, e.x, e.y, dt, 1.3) === 'blocked') {
+        } else if (this.stepToward(game, c, e.x, e.y, dt, COMPANION_PACE) === 'blocked') {
           c.enemy = null;
         }
         return;

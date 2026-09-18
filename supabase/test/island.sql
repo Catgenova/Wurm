@@ -3457,7 +3457,9 @@ select '493. calling for something beyond us: ' || coalesce(act_refusal(:'world2
 insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'prayer', 40)
   on conflict (world_id, uid, id) do update set value = 40;
 update player set favour = 100, favour_at = now() where world_id = :'world2' and uid = :'ivar';
-select id as issued from item where world_id = :'world2' and holder_uid = :'ivar' and issued limit 1 \gset
+-- The first by id, which is the hatchet: without the order this picked whatever the index
+-- handed over first, and read one way in three runs of thirty-five and the other in the rest.
+select id as issued from item where world_id = :'world2' and holder_uid = :'ivar' and issued order by id limit 1 \gset
 select '494. the circle on something we washed ashore with: ' || coalesce(act_refusal(:'world2', :'ivar',
        'cast', ('{"kind":"item","spell":"cunning","uid":' || :'issued' || '}')::jsonb), 'allowed');
 select give(:'world2', :'ivar', 'hatchet', 1, 50, 'Steel') as made \gset
@@ -9483,3 +9485,96 @@ select '998. ten apples and a bucket under the quern (' || :'juice_door' || '): 
      || '; the juice holds ' || coalesce(:'sips', 'no') || ' drinks, and drinking one (' || :'sip_door' || '): "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'nothing')
      || '", thirst from 0.40 to ' || (select round((stats->>'thirst')::numeric, 2) from player where world_id = :'world2' and uid = :'ivar')
      || ' with ' || coalesce((select charges::text from item where id = :'juice'), 'no') || ' left';
+
+/*
+ * A companion at heel fights.
+ *
+ * Reported: "Aggressive and defensive wildermon companions don't attack". The
+ * island parked a companion at its keeper's feet and had no rule for what it
+ * does about company; the browser's rule never runs while the island owns the
+ * wildlife. `companion_settle` is that rule now, off the browser's numbers.
+ */
+\echo ''
+\echo '--- a companion at heel fights'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from creature where world_id = :'world2' and mode in ('wild', 'active') \g /dev/null
+delete from item where world_id = :'world2' and holder = 'ground' and def = 'corpse' \g /dev/null
+update player set x = 6.5, y = 6.5, act = null, act_queue = '[]'::jsonb, equipped = '{}'::jsonb,
+    stats = jsonb_set(jsonb_set(stats - 'hurtBy' - 'hurtAt', '{health}', '1'), '{stamina}', '1')
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select creature_spawn(:'world2', 'ulva', 6.5, 6.5, 'active', now() - interval '1 day', :'ivar') as heel \gset
+update creature set name = 'Fang', stance = 'defensive' where world_id = :'world2' and id = :'heel' \g /dev/null
+-- A rabba three tiles off, stood still, so the fight is measured against a thing that stays put.
+select creature_spawn(:'world2', 'rabba', 9.5, 6.5, 'wild', now() - interval '2 hours') as prey \gset
+update creature set until = now() + interval '1 hour' where world_id = :'world2' and id = :'prey' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select case when enemy is null then 'stands at heel' else 'GOES FOR IT' end as calm_says from creature where world_id = :'world2' and id = :'heel' \gset
+-- The rabba bites Ivar.
+select mark_attacker(:'world2', :'ivar', :'prey') \g /dev/null
+update creature set stance = 'passive' where world_id = :'world2' and id = :'heel' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select case when enemy is null then 'stands at heel' else 'GOES FOR IT' end as passive_says from creature where world_id = :'world2' and id = :'heel' \gset
+update creature set stance = 'defensive' where world_id = :'world2' and id = :'heel' \g /dev/null
+delete from event where uid = :'ivar' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select coalesce(enemy, 0) as foe, round(to_x::numeric, 1) as leg_x, round(to_y::numeric, 1) as leg_y,
+       round(extract(epoch from (leg_ends - now()))::numeric, 1) as leg_left
+  from creature where world_id = :'world2' and id = :'heel' \gset
+select '999. Fang the ulva at heel and a rabba three tiles off — defensive, with nothing struck at anybody, it ' || :'calm_says'
+     || '; the rabba bites Ivar, and passive it ' || :'passive_says' || '; defensive it '
+     || case when :'foe' = :'prey' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID')
+             || '", a leg to ' || :'leg_x' || ',' || :'leg_y' || ' with ' || :'leg_left' || ' s of it left'
+        else 'STANDS' end;
+select round(health::numeric) as prey_health from creature where world_id = :'world2' and id = :'prey' \gset
+-- Twenty seconds go by.
+update creature set until = until - interval '20 seconds', leg_at = leg_at - interval '20 seconds',
+    leg_ends = leg_ends - interval '20 seconds', settled_at = settled_at - interval '20 seconds'
+  where world_id = :'world2' and id = :'heel' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select '1000. twenty seconds on: ' || coalesce((select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event'), 'nothing said')
+     || ' — the rabba is ' || case when exists (select 1 from creature where world_id = :'world2' and id = :'prey')
+                                   then 'still alive at ' || (select round(health::numeric) from creature where world_id = :'world2' and id = :'prey') || ' of ' || :'prey_health'
+                                   else 'dead' end
+     || ', ' || (select count(*) from item where world_id = :'world2' and holder = 'ground' and def = 'corpse' and gx = 9 and gy = 6) || ' corpse on its tile'
+     || ', and Fang is ' || (select case when enemy is null then 'back at heel at ' else 'STILL AT IT at ' end
+                                || round(creature_x(c)::numeric, 1) || ',' || round(creature_y(c)::numeric, 1)
+                             from creature c where world_id = :'world2' and id = :'heel');
+-- Aggressive needs no reason, and the leash is its keeper's, not the token's.
+update player set stats = stats - 'hurtBy' - 'hurtAt' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select creature_spawn(:'world2', 'rabba', 9.5, 6.5, 'wild', now() - interval '2 hours') as prey2 \gset
+update creature set until = now() + interval '1 hour' where world_id = :'world2' and id = :'prey2' \g /dev/null
+update creature set stance = 'aggressive' where world_id = :'world2' and id = :'heel' \g /dev/null
+delete from event where uid = :'ivar' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select coalesce(enemy, 0) as foe2 from creature where world_id = :'world2' and id = :'heel' \gset
+select coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID') as unasked \gset
+-- Ivar walks off ten tiles, which is past the leash, and the leg Fang was on ends.
+update player set x = 19.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+update creature set until = until - interval '2 seconds', leg_at = leg_at - interval '2 seconds',
+    leg_ends = leg_ends - interval '2 seconds', settled_at = settled_at - interval '2 seconds'
+  where world_id = :'world2' and id = :'heel' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select '1001. aggressive, with nothing struck at anybody: it ' || case when :'foe2' = :'prey2' then 'goes for the rabba unasked ("' || :'unasked' || '")' else 'STANDS' end
+     || '; Ivar walks off ten tiles, past the leash of ' || companion_leash() || ', and Fang '
+     || (select case when enemy is null then 'drops it and is at heel at ' else 'KEEPS AFTER IT at ' end
+                || round(creature_x(c)::numeric, 1) || ',' || round(creature_y(c)::numeric, 1)
+         from creature c where world_id = :'world2' and id = :'heel')
+     || ', the rabba untouched at ' || (select round(health::numeric) || ' of ' || max_health(c) from creature c where world_id = :'world2' and id = :'prey2');
+-- And the swipe a cornered animal gets in, which marks you as struck, which a defensive one answers.
+update player set x = 6.5, stats = jsonb_set(stats - 'hurtBy' - 'hurtAt', '{health}', '1') where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from creature where world_id = :'world2' and id = :'prey2' \g /dev/null
+update creature set stance = 'defensive' where world_id = :'world2' and id = :'heel' \g /dev/null
+select creature_settle(:'world2', :'heel') \g /dev/null
+select creature_spawn(:'world2', 'orse', 7.5, 6.5, 'wild', now() - interval '1 day') as kicker \gset
+update creature set until = now() + interval '1 hour' where world_id = :'world2' and id = :'kicker' \g /dev/null
+delete from event where uid = :'ivar' \g /dev/null
+select coalesce(act_refusal(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'kicker' || '}')::jsonb), 'ALLOWED') as swing_door \gset
+select act_perform(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'kicker' || '}')::jsonb) \g /dev/null
+select coalesce(stats->>'hurtBy', 'nobody') as hurt_by from player where world_id = :'world2' and uid = :'ivar' \gset
+select creature_settle(:'world2', :'heel') \g /dev/null
+select '1002. Ivar swings at a wild orse (' || :'swing_door' || '), which comes straight back at him: "'
+     || coalesce((select split_part(text, '. You have', 1) from event where uid = :'ivar' and kind = 'error' order by n desc limit 1), 'NOTHING SAID')
+     || '" — he is marked as struck by ' || case when :'hurt_by' = :'kicker' then 'the orse' else :'hurt_by' end
+     || ', and Fang, defensive and standing by, '
+     || (select case when enemy = :'kicker' then 'goes for it: "' || coalesce((select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1), 'NOTHING SAID') || '"'
+                     else 'STANDS' end from creature where world_id = :'world2' and id = :'heel');
