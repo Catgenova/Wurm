@@ -446,6 +446,21 @@ export const TREE_SEED_REACH = 2;
  */
 export const SAPLING_SHARE = 0.12;
 
+/**
+ * A grass tile kept cut on a deed becomes lawn.
+ *
+ * The data byte of a grass tile, which nothing else used, keeps the count:
+ * the low two bits are days cut running, and the bit above them says it was
+ * cut today. The day's pass moves the flag into the count and the third day
+ * makes lawn; a day with no cut sets the count back to nought. The island
+ * reads the same bits, in `tree_day`.
+ */
+export const MOWN_TODAY = 4;
+export const MOWN_DAYS = 3;
+export const LAWN_AFTER = 3;
+export const mownDays = (data: number): number => data & MOWN_DAYS;
+export const mownToday = (data: number): boolean => (data & MOWN_TODAY) !== 0;
+
 export const treeSpecies = (data: number): number => Math.min(TREE_DEFS.length - 1, data & 15);
 /**
  * The age, in the four bits over the species.

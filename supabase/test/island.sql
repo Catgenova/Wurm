@@ -8568,3 +8568,43 @@ end $$;
 select '947. laid: the corner is ' || land_height(:'world6', 46, 41) || ' from ' || :'r0' || ', with ' || land_dirt(:'world6', 46, 41)
      || ' soil over it — "' || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You lay concrete%' order by n desc limit 1)
      || '" — concrete spent: ' || (6 - coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'concrete'), 0)) || ' of 6';
+
+/*
+ * Grass kept cut on a deed becomes lawn.
+ *
+ * Asked from the island: lawn you can grow. Cut grass on a deed tile three
+ * days running and it is lawn; a day with no cut starts the count over; off a
+ * deed, cutting counts nothing.
+ */
+\echo ''
+\echo '--- grass kept cut on a deed becomes lawn'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select x - 2 as lx, y - 2 as ly from deed where world_id = :'world2' and founded_by = :'ivar' \gset
+-- Two grass tiles on the deed, and Ivar beside them.
+select land_set_tile(:'world2', :lx, :ly, tile_id('Grass')), land_set_data(:'world2', :lx, :ly, 0) \g /dev/null
+select land_set_tile(:'world2', :lx + 1, :ly, tile_id('Grass')), land_set_data(:'world2', :lx + 1, :ly, 0) \g /dev/null
+update player set x = :lx + 0.5, y = :ly - 0.5 where world_id = :'world2' and uid = :'ivar';
+delete from event where uid = :'ivar';
+select act_perform(:'world2', :'ivar', 'cut_grass', ('{"kind":"tile","x":' || :lx || ',"y":' || :ly || '}')::jsonb) \g /dev/null
+select '948. grass cut on the deed: the tile holds ' || land_data(:'world2', :lx, :ly) || ' (cut today, 0 days) — "'
+     || (select text from event where uid = :'ivar' and text like 'You cut%' order by n desc limit 1)
+     || '" — and Look: "' || examine_tile_text(:'world2', :lx, :ly) || '"';
+select pg_temp.one_day(:'world2') \g /dev/null
+select act_perform(:'world2', :'ivar', 'cut_grass', ('{"kind":"tile","x":' || :lx || ',"y":' || :ly || '}')::jsonb) \g /dev/null
+select land_data(:'world2', :lx, :ly) as d2 \gset
+select pg_temp.one_day(:'world2') \g /dev/null
+select act_perform(:'world2', :'ivar', 'cut_grass', ('{"kind":"tile","x":' || :lx || ',"y":' || :ly || '}')::jsonb) \g /dev/null
+select '949. a day and a cut, twice more: the tile held ' || :'d2' || ' after the second cut, and says "'
+     || (select text from event where uid = :'ivar' and text like 'You cut%' order by n desc limit 1) || '" after the third';
+-- The third day.
+select pg_temp.one_day(:'world2') \g /dev/null
+select '950. and on the third day it is ' || (select name from tile_def where id = land_tile(:'world2', :lx, :ly))
+     || ' holding ' || land_data(:'world2', :lx, :ly);
+-- The tile beside it: cut once, then a day with no cut.
+select act_perform(:'world2', :'ivar', 'cut_grass', ('{"kind":"tile","x":' || (:lx + 1) || ',"y":' || :ly || '}')::jsonb) \g /dev/null
+select pg_temp.one_day(:'world2') \g /dev/null
+select land_data(:'world2', :lx + 1, :ly) as d_after_one \gset
+select pg_temp.one_day(:'world2') \g /dev/null
+select '951. the tile beside it, cut once: ' || :'d_after_one' || ' day the morning after, and a day with no cut leaves '
+     || land_data(:'world2', :lx + 1, :ly) || ' — the count starts over; and grass off any deed, Hoarding at 41,41: on a deed '
+     || on_deed(:'world6', 41, 41) || ', so cutting it counts nothing';

@@ -1,5 +1,5 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, TREE_STAGE, type TreeAge } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, TREE_STAGE, type TreeAge, LAWN_AFTER, MOWN_TODAY, mownDays, mownToday } from '../world/tiles';
 import { isSeam } from '../world/tiles';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
@@ -342,6 +342,9 @@ export const ACTIONS: ActionDef[] = [
         text += treeOutlook(age, g.treesAt);
       } else if (type === TileType.Stump) {
         text = `You see the stump of ${an(TREE_DEFS[treeSpecies(w.getData(t.x, t.y))].name.toLowerCase())} at (${t.x}, ${t.y}). Dig it out, or leave it a day.`;
+      } else if (type === TileType.Grass && w.getData(t.x, t.y)) {
+        const d = w.getData(t.x, t.y);
+        text += ` Kept cut: ${mownDays(d) + (mownToday(d) ? 1 : 0)} of ${LAWN_AFTER} days towards lawn.`;
       } else if (type === TileType.Bush) {
         text = `You see a ${BUSH_DEFS[bushSpecies(w.getData(t.x, t.y))].name.toLowerCase()} at (${t.x}, ${t.y}).`;
       }
@@ -1834,6 +1837,15 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'grass');
       g.inventory.add('mixed_grass', { count: 2, ql: g.productQl('foraging') });
+      // Grass kept cut on a deed becomes lawn: the tile counts the days.
+      const w = g.world;
+      if (w.getTile(t.x, t.y) === TileType.Grass && g.onDeed(t.x, t.y)) {
+        const days = mownDays(w.getData(t.x, t.y));
+        w.setTile(t.x, t.y, TileType.Grass, days | MOWN_TODAY);
+        const left = LAWN_AFTER - days - 1;
+        g.logMsg(`You cut two bundles of mixed grass.${left > 0 ? ` Kept cut, this will be lawn in ${left} more day${left === 1 ? '' : 's'}.` : ' Kept cut, this will be lawn tomorrow.'}`, 'event');
+        return;
+      }
       g.logMsg('You cut two bundles of mixed grass.', 'event');
     },
   },

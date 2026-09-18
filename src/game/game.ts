@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies } from '../world/tiles';
+import { packTreeData, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, TREE_STAGE, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -5066,6 +5066,17 @@ export class Game {
         // A stump left a day is gone.
         if (here === TileType.Stump) {
           w.setTile(x, y, TileType.Grass, 0);
+          continue;
+        }
+        // Grass kept cut on a deed becomes lawn; a day without a cut starts
+        // the count over.
+        if (here === TileType.Grass) {
+          const data = w.getData(x, y);
+          if (data) {
+            if (!mownToday(data)) w.setTile(x, y, TileType.Grass, 0);
+            else if (mownDays(data) + 1 >= LAWN_AFTER) w.setTile(x, y, TileType.Lawn, 0);
+            else w.setTile(x, y, TileType.Grass, mownDays(data) + 1);
+          }
           continue;
         }
         if (here !== TileType.Tree) continue;
