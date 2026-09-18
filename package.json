@@ -6,10 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build && node scripts/copy-site.mjs && node scripts/bundle-sql.mjs",
+    "build": "npm run typecheck && vite build && node scripts/copy-site.mjs && node scripts/bundle-sql.mjs && node scripts/emit-wildermon.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "defs": "node scripts/emit-defs.mjs",
+    "wildermon": "node scripts/emit-wildermon.mjs",
     "db:test": "supabase/test/run.sh",
     "db:bundle": "node scripts/bundle-sql.mjs",
     "views": "node tools/views.mjs > src/render/view.ts",

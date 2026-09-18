@@ -253,19 +253,26 @@ export const familyOf = (id: string): string => TRAIT_BY_ID.get(id)?.family ?? i
 const holds = (taken: string[], id: string): boolean => taken.some((t) => familyOf(t) === familyOf(id));
 
 /**
+ * What a hundred husbandry does to each row of the wild table: a third off the
+ * common one, and the three worth having lifted steeply.
+ */
+export const HUSBANDRY_LIFT: Record<TraitTier, number> = { common: -0.35, rare: 1.5, supreme: 3, fantastic: 5 };
+/** The table a keeper of this much husbandry rolls against. Skill of nought is `WILD_ODDS` itself. */
+export function husbandryOdds(husbandry = 0): Record<TraitTier, number> {
+  const lift = Math.max(0, Math.min(100, husbandry)) / 100;
+  const odds = {} as Record<TraitTier, number>;
+  for (const t of TIERS) odds[t] = WILD_ODDS[t] * (1 + lift * HUSBANDRY_LIFT[t]);
+  return odds;
+}
+
+/**
  * One fresh trait out of the wild, avoiding what is already there. Husbandry
  * tilts the table: a keeper who knows what they are looking at finds better
  * blood in the wild as well as breeding it. A share of what comes up is
  * fighting blood, and that is two rolls: the name, and then its own grade.
  */
 export function rollTrait(rand: () => number, taken: string[] = [], husbandry = 0): string | null {
-  const lift = Math.max(0, Math.min(100, husbandry)) / 100;
-  const odds: Record<TraitTier, number> = {
-    common: WILD_ODDS.common * (1 - lift * 0.35),
-    rare: WILD_ODDS.rare * (1 + lift * 1.5),
-    supreme: WILD_ODDS.supreme * (1 + lift * 3),
-    fantastic: WILD_ODDS.fantastic * (1 + lift * 5),
-  };
+  const odds = husbandryOdds(husbandry);
   for (let i = 0; i < 12; i++) {
     const id = rand() < FIGHT_SHARE
       ? gradeId(pick(FIGHTING, rand).id, rollTier(odds, rand))

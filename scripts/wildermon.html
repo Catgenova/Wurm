@@ -1,0 +1,523 @@
+<title>Wildermon Stud Book</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Every wildermon on the island — roles, base stats, and the whole pool of blood each one can be born with.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap">
+
+<style>
+:root {
+  --ground: #e7eae3;
+  --panel: #f8faf6;
+  --sunk: #eef1ea;
+  --ink: #1a1f1b;
+  --soft: #58615a;
+  --faint: #838c84;
+  --line: #d1d8cd;
+  --hair: #e1e6dc;
+  --accent: #3d6a45;
+  --accent-ink: #2f5436;
+  --beast: #7b4a2c;
+  --common: #7f9486;
+  --rare: #3f8cc4;
+  --supreme: #8f5ec4;
+  --fantastic: #a8761a;
+  --tint: 16%;
+  --shadow: 0 1px 2px rgba(26, 31, 27, .05);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #131714;
+    --panel: #1b201c;
+    --sunk: #232823;
+    --ink: #e5eae3;
+    --soft: #9ba59c;
+    --faint: #7a847b;
+    --line: #2c332d;
+    --hair: #242b25;
+    --accent: #85b98e;
+    --accent-ink: #9fcda7;
+    --beast: #c08a5e;
+    --common: #9fb0a4;
+    --rare: #8fc8f0;
+    --supreme: #c79bf0;
+    --fantastic: #f0c060;
+    --tint: 22%;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #131714;
+  --panel: #1b201c;
+  --sunk: #232823;
+  --ink: #e5eae3;
+  --soft: #9ba59c;
+  --faint: #7a847b;
+  --line: #2c332d;
+  --hair: #242b25;
+  --accent: #85b98e;
+  --accent-ink: #9fcda7;
+  --beast: #c08a5e;
+  --common: #9fb0a4;
+  --rare: #8fc8f0;
+  --supreme: #c79bf0;
+  --fantastic: #f0c060;
+  --tint: 22%;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding-block: 0 64px;
+  padding-inline: 20px;
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 15px/1.55 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.sheet { max-width: 1180px; margin: 0 auto; }
+h1, h2, h3 { font-family: Newsreader, Georgia, "Times New Roman", serif; font-weight: 500; margin: 0; text-wrap: balance; }
+a { color: var(--accent-ink); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ---- masthead ---- */
+.masthead { display: flex; flex-direction: column; gap: 14px; padding: 34px 0 20px; }
+.masthead h1 { font-size: clamp(30px, 6vw, 46px); line-height: 1.05; letter-spacing: -.01em; }
+.masthead h1 em { font-style: italic; color: var(--beast); }
+.standfirst { max-width: 62ch; color: var(--soft); margin: 0; }
+.tally { display: flex; flex-wrap: wrap; gap: 10px 26px; padding-top: 4px; }
+.tally div { display: flex; align-items: baseline; gap: 7px; }
+.tally b { font: 500 21px/1 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.tally span { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+
+/* ---- section furniture ---- */
+section { padding-top: 40px; }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; border-top: 1px solid var(--line); padding-top: 14px; margin-bottom: 16px; }
+.head h2 { font-size: 26px; }
+.head p { margin: 0; color: var(--soft); font-size: 14px; max-width: 58ch; }
+
+/* ---- controls ---- */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+input[type="search"], select {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px;
+}
+input[type="search"] { flex: 1 1 210px; min-width: 0; }
+select { cursor: pointer; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: inherit; font-size: 12.5px; line-height: 1; cursor: pointer;
+  background: var(--panel); color: var(--soft); border: 1px solid var(--line);
+  border-radius: 20px; padding: 6px 11px;
+}
+.chip:hover { color: var(--ink); }
+.chip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); color: var(--ink); }
+.count { color: var(--faint); font-size: 13px; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* ---- roster ---- */
+.roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+.beast {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 15px 16px 14px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 11px;
+}
+.beast.mon { border-color: color-mix(in srgb, var(--beast) 45%, var(--line)); background: color-mix(in srgb, var(--beast) 5%, var(--panel)); }
+.beast > header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.beast h3 { font-size: 23px; line-height: 1.1; }
+.beast .share { font: 400 12px/1 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--faint); }
+.beast .swatches { display: flex; gap: 4px; margin-left: auto; }
+.sw { width: 15px; height: 15px; border-radius: 50%; border: 1px solid rgba(128, 128, 128, .35); }
+.blurb { margin: 0; font-size: 13.5px; color: var(--soft); }
+
+.roles { display: flex; flex-wrap: wrap; gap: 5px; }
+.role {
+  font-size: 12px; line-height: 1; padding: 5px 9px; border-radius: 5px;
+  background: var(--sunk); border: 1px solid var(--hair); color: var(--ink);
+}
+.role.work { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 38%, var(--hair)); }
+.role.monster { background: color-mix(in srgb, var(--beast) 16%, var(--panel)); border-color: color-mix(in srgb, var(--beast) 45%, var(--hair)); }
+
+.stats { display: flex; flex-wrap: wrap; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 7px; overflow: hidden; }
+.stats > div { flex: 1 1 88px; background: var(--panel); padding: 6px 9px 7px; }
+.beast.mon .stats > div { background: color-mix(in srgb, var(--beast) 5%, var(--panel)); }
+.stats dt { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); margin: 0; }
+.stats dd { margin: 1px 0 0; font: 500 15px/1.2 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.stats dd small { font-family: "IBM Plex Sans", sans-serif; font-weight: 400; font-size: 11.5px; color: var(--faint); }
+
+.lines { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.lines p { margin: 0; color: var(--soft); }
+.lines b { color: var(--ink); font-weight: 500; }
+.lines .key { color: var(--faint); font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; margin-right: 6px; }
+
+/* ---- blood ---- */
+.odds { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.odd { border: 1px solid var(--line); border-left: 3px solid var(--tier); border-radius: 8px; background: var(--panel); padding: 11px 13px; }
+.odd h4 { margin: 0; font: 600 13px/1 "IBM Plex Sans", sans-serif; letter-spacing: .07em; text-transform: uppercase; color: var(--tier-ink); }
+.odd .big { font: 500 24px/1.2 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; margin-top: 5px; }
+.odd p { margin: 2px 0 0; font-size: 12.5px; color: var(--faint); }
+
+.traitlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+.trait { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 10px 12px; }
+.trait > b { font-weight: 600; font-size: 14.5px; }
+.trait .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tier); margin-right: 7px; vertical-align: middle; }
+.aura { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-ink); margin-left: 7px; }
+.trait p { margin: 3px 0 0; font-size: 12.5px; color: var(--faint); }
+.pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.pill { font: 500 12px/1 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; padding: 4px 7px; border-radius: 4px; background: var(--sunk); border: 1px solid var(--hair); }
+.pill span { font-family: "IBM Plex Sans", sans-serif; font-weight: 400; color: var(--soft); margin-left: 4px; }
+.pill.up { color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 35%, var(--hair)); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.pill.down { color: var(--beast); border-color: color-mix(in srgb, var(--beast) 35%, var(--hair)); background: color-mix(in srgb, var(--beast) 10%, var(--panel)); }
+
+.scroller { overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+thead th { position: sticky; top: env(safe-area-inset-top, 0px); background: var(--sunk); font: 600 11.5px/1.3 "IBM Plex Sans", sans-serif; letter-spacing: .07em; text-transform: uppercase; color: var(--tier-ink, var(--faint)); border-bottom: 1px solid var(--line); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--sunk); }
+td.name b { font-weight: 600; }
+td.name p { margin: 2px 0 0; font-size: 12px; color: var(--faint); max-width: 34ch; }
+td.grade { font: 500 13px/1.35 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.grade span { display: block; font-family: "IBM Plex Sans", sans-serif; font-weight: 400; font-size: 11.5px; color: var(--faint); }
+
+.glossary { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 20px; }
+.glossary div { padding: 7px 0; border-bottom: 1px solid var(--hair); font-size: 13px; color: var(--soft); }
+.glossary b { color: var(--ink); font-weight: 600; }
+.glossary em { font-style: normal; color: var(--faint); font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; margin-left: 6px; }
+
+.note { max-width: 66ch; color: var(--soft); font-size: 14px; }
+.note code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.empty { padding: 26px 0; color: var(--faint); }
+@media (max-width: 520px) {
+  body { padding-inline: 16px; }
+  .roster, .traitlist { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="sheet">
+  <header class="masthead">
+    <h1>The <em>Wildermon</em> Stud Book</h1>
+    <p class="standfirst">Everything that walks, swims, burrows or comes at you on this island: what it is for, what it is worth in numbers, and the whole pool of blood any one of them can be born with. Read straight off the rules the island runs on.</p>
+    <div class="tally" id="tally"></div>
+  </header>
+
+  <section id="roster-section">
+    <div class="head">
+      <h2>The roster</h2>
+      <p>Base figures for a grown animal with no traits counted. Blood moves every one of them.</p>
+    </div>
+    <div class="controls">
+      <input type="search" id="q" placeholder="Search a name, a trade, a diet…" aria-label="Search the roster">
+      <select id="sort" aria-label="Sort the roster">
+        <option value="name">A to Z</option>
+        <option value="common">Commonest first</option>
+        <option value="health">Toughest first</option>
+        <option value="attack">Hardest hitting</option>
+        <option value="speed">Fastest</option>
+        <option value="tameLevel">Easiest to tame</option>
+      </select>
+      <span class="count" id="count"></span>
+      <div class="chips" id="rolefilter"></div>
+    </div>
+    <div class="roster" id="roster"></div>
+    <p class="empty" id="empty" hidden>Nothing on the island answers to that.</p>
+  </section>
+
+  <section id="blood">
+    <div class="head">
+      <h2>Blood</h2>
+      <p>Every wildermon of every species is born with <b id="slots">three</b> traits, drawn from the one pool. Nothing here is species-bound; a rabba may be born ironsides.</p>
+    </div>
+    <div class="odds" id="odds"></div>
+    <p class="note" id="wildnote"></p>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>Plain blood</h2>
+      <p>A plain trait is its tier: scrappy is common, ironsides is fantastic. One roll picks both.</p>
+    </div>
+    <div class="controls">
+      <div class="chips" id="tierfilter"></div>
+      <span class="count" id="traitcount"></span>
+    </div>
+    <div class="traitlist" id="plain"></div>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>Fighting blood</h2>
+      <p>Thirty names, each in all four grades. The roll picks the name, then rolls the grade for it off the same odds; no animal carries two grades of one name.</p>
+    </div>
+    <div class="scroller">
+      <table id="fighting">
+        <thead><tr><th>Name</th><th>Common</th><th>Rare</th><th>Supreme</th><th>Fantastic</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>What a trait lifts</h2>
+      <p>Fifteen channels. Every figure on this page is a multiplier on one of them, with one as neutral.</p>
+    </div>
+    <div class="glossary" id="glossary"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script type="application/json" id="data">__WILDERMON_DATA__</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const TIER_VAR = { common: 'var(--common)', rare: 'var(--rare)', supreme: 'var(--supreme)', fantastic: 'var(--fantastic)' };
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const oneIn = (p) => p >= 0.5 ? (1 / p).toFixed(1) : String(Math.round(1 / p));
+  /* A share as a percentage, keeping the half a percent that matters at the thin end. */
+  const share = (p) => { const v = p * 100; return (Math.abs(v - Math.round(v)) < 0.05 ? v.toFixed(0) : v.toFixed(1)) + '%'; };
+
+  /* ---- the tally ---- */
+  const wild = D.species.filter((s) => !s.monster);
+  const monsters = D.species.filter((s) => s.monster);
+  const trades = new Set();
+  for (const s of D.species) { if (s.trade) trades.add(s.trade.id); for (const t of s.trades) trades.add(t.id); }
+  const names = D.plain.length + D.families.length;
+  [[wild.length, 'wildermon'], [monsters.length, 'monsters'], [trades.size, 'trades to set them to'],
+   [names, 'names of blood'], [D.traits.length, 'rows to roll'], [D.slots, 'traits apiece']]
+    .forEach(([n, word]) => { const d = el('div'); d.append(el('b', null, String(n)), el('span', null, word)); $('tally').append(d); });
+  $('slots').textContent = ['no', 'one', 'two', 'three', 'four'][D.slots] || String(D.slots);
+
+  /* ---- the roster ---- */
+  const ROLE_ORDER = [{ name: 'Works a trade', match: (s) => !!s.trade }];
+  for (const s of D.species) for (const r of s.roles) {
+    if (r.id === 'work' || ROLE_ORDER.some((x) => x.name === r.name)) continue;
+    ROLE_ORDER.push({ name: r.name, match: (sp) => sp.roles.some((x) => x.name === r.name) });
+  }
+  let role = null, query = '', sort = 'name';
+
+  const statRow = (label, value, unit) => {
+    const d = document.createElement('div');
+    d.append(el('dt', null, label));
+    const dd = el('dd', null, value);
+    if (unit) dd.append(' ', el('small', null, unit));
+    d.append(dd);
+    return d;
+  };
+
+  function card(s) {
+    const c = el('article', 'beast' + (s.monster ? ' mon' : ''));
+    const head = el('header');
+    head.append(el('h3', null, s.name));
+    if (s.share !== null) {
+      const share = el('span', 'share', '1 in ' + oneIn(s.share));
+      share.title = 'One in ' + oneIn(s.share) + ' of everything that stands up out there is a ' + s.name.toLowerCase() + '.';
+      head.append(share);
+    }
+    const sw = el('div', 'swatches');
+    for (const v of s.variants.slice(0, 4)) {
+      const dot = el('span', 'sw');
+      dot.style.background = 'linear-gradient(135deg, ' + v.body + ' 55%, ' + v.belly + ' 55%)';
+      dot.title = v.body + ' over ' + v.belly;
+      sw.append(dot);
+    }
+    head.append(sw);
+    c.append(head, el('p', 'blurb', s.description));
+
+    if (s.roles.length) {
+      const roles = el('div', 'roles');
+      for (const r of s.roles) { const b = el('span', 'role ' + r.id, cap(r.name)); b.title = r.note; roles.append(b); }
+      c.append(roles);
+    }
+
+    const st = el('dl', 'stats');
+    st.append(statRow('Health', String(s.stats.health)));
+    st.append(statRow('Attack', String(s.stats.attack)));
+    st.append(statRow('Speed', s.stats.speed.toFixed(1), 'tiles/s'));
+    if (s.monster) {
+      st.append(statRow('Notices you', String(s.stats.notice ?? 7), 'tiles'));
+      if (s.cap !== null) st.append(statRow('At once', String(s.cap), 'island-wide'));
+    } else {
+      st.append(statRow('Taming', String(s.stats.tameLevel), Math.round(s.stats.tameChance * 100) + '% a try'));
+      if (s.trade) st.append(statRow('Range', String(s.stats.workRange), 'tiles, +' + s.stats.rangePerStep + '/10 skill'));
+    }
+    if (s.stats.pannier) st.append(statRow('Panniers', String(s.stats.pannier), 'kg'));
+    if (s.stats.pull !== null) st.append(statRow('Pull', s.stats.pull.toFixed(2), 'of a team'));
+    if (s.stats.pitch !== null) st.append(statRow('Footing', '×' + s.stats.pitch, 'on a slope'));
+    if (s.stats.sight > 5) st.append(statRow('Sight', String(s.stats.sight), 'tiles'));
+    if (s.stats.glow !== null) st.append(statRow('Glow', String(s.stats.glow), 'tiles'));
+    if (s.stats.fleeceSeconds !== null) st.append(statRow('Regrows', String(Math.round(s.stats.fleeceSeconds / 60)), 'minutes'));
+    if (s.stats.unruly !== null) st.append(statRow('Unruly', Math.round(s.stats.unruly * 100) + '%', 'turns on you'));
+    c.append(st);
+
+    const lines = el('div', 'lines');
+    const line = (key, node) => { const p = el('p'); p.append(el('span', 'key', key), node); lines.append(p); };
+    if (s.trade) line('Trade', document.createTextNode('It will ' + s.trade.does + ', and trains ' + s.trade.skillName.toLowerCase() + ' doing it.'));
+    for (const t of s.trades) line('Or', document.createTextNode('It may ' + t.does + ' instead.'));
+    const where = [];
+    if (s.habitat.length) where.push('Settles ' + s.habitat.join(' and '));
+    if (s.flags.nocturnal) where.push('only out after dark');
+    if (where.length) line('Ground', document.createTextNode(where.join(', ') + '.'));
+    if (!s.monster) line('Bait', document.createTextNode(s.baitHint.charAt(0).toUpperCase() + s.baitHint.slice(1) + ' — ' + s.diet.join(', ').toLowerCase() + '.'));
+    const temper = [];
+    temper.push(s.flags.timid ? 'Runs when hurt' : s.flags.hunter ? 'Comes for you on sight' : s.flags.defensive ? 'Fights back every time it is struck' : 'Stands its ground');
+    if (!s.monster) temper.push('tamed it stands ' + s.stance);
+    temper.push('its blows leave a ' + s.wound);
+    line('Temper', document.createTextNode(temper.join(', ') + '.'));
+    line('Butcher', document.createTextNode(s.butcher.map((b) => b.n + ' ' + b.name.toLowerCase()).join(', ') + '.'));
+    c.append(lines);
+    return c;
+  }
+
+  function draw() {
+    const q = query.trim().toLowerCase();
+    let list = D.species.filter((s) => {
+      if (role && !role.match(s)) return false;
+      if (!q) return true;
+      return (s.name + ' ' + s.description + ' ' + s.baitHint + ' ' + s.diet.join(' ') + ' ' +
+        s.roles.map((r) => r.name).join(' ') + ' ' + s.habitat.join(' ')).toLowerCase().includes(q);
+    });
+    const by = {
+      name: (a, b) => a.name.localeCompare(b.name),
+      common: (a, b) => (b.share ?? 0) - (a.share ?? 0),
+      health: (a, b) => b.stats.health - a.stats.health,
+      attack: (a, b) => b.stats.attack - a.stats.attack,
+      speed: (a, b) => b.stats.speed - a.stats.speed,
+      tameLevel: (a, b) => a.stats.tameLevel - b.stats.tameLevel || a.name.localeCompare(b.name),
+    };
+    list = list.slice().sort(by[sort]);
+    const grid = $('roster');
+    grid.textContent = '';
+    for (const s of list) grid.append(card(s));
+    $('count').textContent = list.length + ' of ' + D.species.length;
+    $('empty').hidden = list.length > 0;
+  }
+
+  const filters = $('rolefilter');
+  const chips = [];
+  for (const r of [{ name: 'All' }].concat(ROLE_ORDER)) {
+    const b = el('button', 'chip', cap(r.name));
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(r.name === 'All'));
+    b.addEventListener('click', () => {
+      role = r.name === 'All' ? null : r;
+      for (const c of chips) c.setAttribute('aria-pressed', String(c === b));
+      draw();
+    });
+    chips.push(b);
+    filters.append(b);
+  }
+  $('q').addEventListener('input', (e) => { query = e.target.value; draw(); });
+  $('sort').addEventListener('change', (e) => { sort = e.target.value; draw(); });
+  draw();
+
+  /* ---- blood ---- */
+  for (const t of D.tiers) {
+    const p = D.wildOdds[t.id];
+    const box = el('div', 'odd');
+    box.style.setProperty('--tier', TIER_VAR[t.id]);
+    box.style.setProperty('--tier-ink', TIER_VAR[t.id]);
+    box.append(el('h4', null, t.id));
+    box.append(el('div', 'big', share(p)));
+    box.append(el('p', null, '1 in ' + oneIn(p) + ' slots out of the wild'));
+    $('odds').append(box);
+  }
+  const fan = D.wildOdds.fantastic;
+  const anyFan = 1 - Math.pow(1 - fan, D.slots);
+  const lift = (D.bredOdds.fantastic / D.wildOdds.fantastic).toFixed(1).replace(/\.0$/, '');
+  $('wildnote').append(document.createTextNode(
+    'Those are the odds on one slot of something you caught. Across ' + D.slots + ' slots, about one wild-caught animal in ' +
+    Math.round(1 / anyFan) + ' carries a fantastic trait at all — which is why good blood is bred rather than found. ' +
+    'Animal husbandry tilts the whole table: at 100 skill the fantastic row is ' + lift + ' times as likely (' +
+    share(D.bredOdds.fantastic) + ' a slot, one animal in ' + Math.round(1 / (1 - Math.pow(1 - D.bredOdds.fantastic, D.slots))) +
+    ') and the common row is ' + Math.round(-D.husbandryLift.common * 100) + '% thinner. ' +
+    Math.round(D.fightShare * 100) + '% of every slot rolls fighting blood rather than plain.'));
+
+  /* ---- plain traits ---- */
+  let tier = null;
+  function drawTraits() {
+    const box = $('plain');
+    box.textContent = '';
+    const list = D.plain.filter((t) => !tier || t.tier === tier);
+    for (const t of list) {
+      const c = el('div', 'trait');
+      c.style.setProperty('--tier', TIER_VAR[t.tier]);
+      const head = el('div');
+      head.append(el('span', 'dot'), el('b', null, t.name));
+      if (t.aura) head.append(el('span', 'aura', 'herd-wide'));
+      c.append(head, pills(t));
+      c.append(el('p', null, t.note));
+      box.append(c);
+    }
+    $('traitcount').textContent = list.length + ' of ' + D.plain.length;
+  }
+  function pills(t) {
+    const box = el('div', 'pills');
+    for (const e of t.effects) {
+      const p = el('span', 'pill ' + (e.gain ? 'up' : 'down'), e.pct);
+      p.append(el('span', null, e.label));
+      box.append(p);
+    }
+    return box;
+  }
+  const tchips = [];
+  for (const t of [{ id: null, name: 'Every tier' }].concat(D.tiers.map((x) => ({ id: x.id, name: cap(x.id) })))) {
+    const b = el('button', 'chip', t.name);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(t.id === null));
+    if (t.id) b.style.borderLeft = '3px solid ' + TIER_VAR[t.id];
+    b.addEventListener('click', () => {
+      tier = t.id;
+      for (const c of tchips) c.setAttribute('aria-pressed', String(c === b));
+      drawTraits();
+    });
+    tchips.push(b);
+    $('tierfilter').append(b);
+  }
+  drawTraits();
+
+  /* ---- fighting blood ---- */
+  const body = $('fighting').querySelector('tbody');
+  D.tiers.forEach((t, i) => { $('fighting').querySelectorAll('thead th')[i + 1].style.setProperty('--tier-ink', TIER_VAR[t.id]); });
+  for (const f of D.families) {
+    const tr = el('tr');
+    const name = el('td', 'name');
+    const b = el('b', null, f.name);
+    name.append(b);
+    if (f.aura) name.append(el('span', 'aura', ' herd-wide'));
+    name.append(el('p', null, f.note));
+    tr.append(name);
+    for (const g of f.grades) {
+      const td = el('td', 'grade');
+      td.style.color = TIER_VAR[g.tier];
+      for (const e of g.effects) {
+        const wrap = el('div', null, e.pct);
+        wrap.append(el('span', null, e.label));
+        td.append(wrap);
+      }
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+
+  /* ---- glossary ---- */
+  for (const ch of D.channels) {
+    const d = el('div');
+    d.append(el('b', null, ch.label));
+    d.append(el('em', null, ch.up ? 'more is better' : 'less is better'));
+    d.append(document.createElement('br'));
+    d.append(document.createTextNode(cap(ch.note)));
+    $('glossary').append(d);
+  }
+
+  /* ---- footer ---- */
+  const foot = $('foot');
+  foot.append(el('span', null, 'Generated from src/game/creatures.ts and src/game/traits.ts — ' + D.species.length + ' species, ' + D.traits.length + ' trait rows.'));
+  foot.append(el('span', null, 'Fingerprint __WILDERMON_STAMP__'));
+})();
+</script>
