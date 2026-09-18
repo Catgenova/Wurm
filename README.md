@@ -428,8 +428,9 @@ in world time.
   most of what a post is for: a logging camp in a far wood, a digger on a clay
   bank, a Snout turned loose over an old ruin, for as long as a stake in wet
   ground lasts.
-- **Bulk, rubbish and a cart.** A bulk storage bin holds 400 of anything that
-  stacks and refuses everything that does not. A trash crate rots what is put
+- **Raw materials, rubbish and a cart.** A raw material bin holds 400 of what
+  comes out of the ground, off a tree or off a beast unworked — ore, logs,
+  dirt, shards, wool — and refuses everything a bench has touched. A trash crate rots what is put
   in it thirty times faster than open ground, and Put away never chooses it —
   throwing something out has to be asked for. A small cart holds 100 things
   and follows you about once you take hold of the shafts, until you let go.
@@ -599,8 +600,8 @@ in world time.
   well-built kiln. Fired, the bowl cooks, the pot makes pottage, the jar puts
   up preserves, and the brick builds.
 - **Where deed workers put things.** A worker fills the deed crate first, then
-  the nearest other store on the deed that will take its load — crate, bulk
-  bin, chest, larder, cart — never a trash crate. When everything is full it
+  the nearest other store on the deed that will take its load — crate, raw
+  material bin, chest, larder, cart — never a trash crate. When everything is full it
   holds on to what it is carrying and waits near the token instead of tipping
   it on the ground, saying so once. Seed for sowing and wood for stoking are
   drawn from any store on the deed, not only the deed crate.
@@ -991,7 +992,7 @@ in world time.
 - **Dragging between windows.** Anything in the inventory or an open container
   can be dragged from one window to the other, under the same rules the menus
   use: you must be within reach of the container, and it must accept what you
-  are giving it — a bulk bin refuses tools, a barrel refuses solids, a full
+  are giving it — a raw material bin refuses anything worked, a barrel refuses solids, a full
   crate is full — and it says which when it will not go.
 - **Fog of war, in three states.** Land nobody has looked at is not drawn at
   all and cannot be clicked; land somebody is looking at is drawn in full;

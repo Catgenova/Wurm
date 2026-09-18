@@ -2732,7 +2732,7 @@ select '402. ' || (select text from event where uid = :'ivar' and kind = 'event'
 -- goes with no wall-clock time between them, so nothing ever gets its wind
 -- back on its own and everybody would be face down by the third section.
 update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
-\echo '--- a chest, a bulk bin, and a crate with a rotten bottom'
+\echo '--- a chest, a raw material bin, and a crate with a rotten bottom'
 delete from placed where world_id = :'world2' and kind = 'furniture'
   and sub in ('chest', 'bulk_bin', 'trash_crate');
 select give(:'world2', :'ivar', 'chest', 1, 50), give(:'world2', :'ivar', 'bulk_bin', 1, 50),
@@ -2754,14 +2754,27 @@ select id as chest from placed where world_id = :'world2' and sub = 'chest' orde
 select id as bin from placed where world_id = :'world2' and sub = 'bulk_bin' order by id desc limit 1 \gset
 select id as bin_trash from placed where world_id = :'world2' and sub = 'trash_crate' order by id desc limit 1 \gset
 select '403. standing at a chest of ' || furniture_capacity((select p from placed p where p.id = :'chest'))
-     || ', a bulk bin of ' || furniture_capacity((select p from placed p where p.id = :'bin'))
+     || ', a raw material bin of ' || furniture_capacity((select p from placed p where p.id = :'bin'))
      || ' and a trash crate of ' || furniture_capacity((select p from placed p where p.id = :'bin_trash'));
 select '404. what each of them says to a hatchet: chest — '
      || coalesce(furniture_refuses((select p from placed p where p.id = :'chest'), 'hatchet'), 'it will take it')
-     || ' | bulk bin — '
+     || ' | raw material bin — '
      || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'hatchet'), 'it will take it')
      || ' | a barrel — '
      || coalesce(furniture_refuses((select p from placed p where p.id = :'barrel'), 'hatchet'), 'it will take it');
+-- What comes out of the ground against what comes off a bench.
+select '404b. the raw material bin, to iron ore: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'iron_ore'), 'taken')
+     || ' | a log: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'log'), 'taken')
+     || ' | dirt: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'dirt'), 'taken')
+     || ' | rock shards: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'rock_shards'), 'taken')
+     || ' | wool: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'wool'), 'taken')
+     || ' | a plank: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'plank'), 'TAKEN')
+     || ' | a stone brick: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'stone_brick'), 'TAKEN')
+     || ' | an iron lump: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'iron_lump'), 'TAKEN')
+     || ' | wheat: ' || coalesce(furniture_refuses((select p from placed p where p.id = :'bin'), 'wheat'), 'TAKEN')
+     || ' — ' || (select count(*) from item_def where raw) || ' raw materials on the island''s list, every one a stackable material: '
+     || (select bool_and(stackable and category = 'material') from item_def where raw)
+     || ', the bin named ' || (select name from furniture_def where id = 'bulk_bin');
 select id as hatchet2 from item where world_id = :'world2' and holder_uid = :'ivar' and holder = 'player'
   and def = 'hatchet' order by id desc limit 1 \gset
 delete from event where uid = :'ivar';

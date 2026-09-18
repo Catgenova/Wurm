@@ -261,6 +261,9 @@ out.push(`alter table item_def add column if not exists drink real;`);
  * things it will hold. Both were only ever read by the browser until a pair
  * of hands down here wanted to examine a shovel and put it in a satchel. */
 out.push(`alter table item_def add column if not exists description text;`);
+/* Raw: out of the ground, off a tree, out of a vein, off a beast or a field,
+ * and no bench has touched it. What a raw material bin takes. */
+out.push(`alter table item_def add column if not exists raw boolean not null default false;`);
 /* Ground with anything living in it, and the damp ground that is full of them. */
 out.push(`alter table tile_def add column if not exists wormy boolean not null default false;`);
 out.push(`alter table tile_def add column if not exists rich_worms boolean not null default false;`);
@@ -274,7 +277,7 @@ out.push(`alter table furniture_def add column if not exists liquid real;`);
 out.push(`alter table furniture_def add column if not exists well real;`);
 /* A bin that takes bulk and nothing else, a hive that is the swarm's, and a
  * crate whose bottom is rotten through. */
-out.push(`alter table furniture_def add column if not exists bulk boolean not null default false;`);
+out.push(`alter table furniture_def add column if not exists raw boolean not null default false;`);
 out.push(`alter table furniture_def add column if not exists hive real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
 /* Ground worth turning over with a trowel: soil and sand, not bare rock or
@@ -639,6 +642,7 @@ for (const r of RECIPES) {
 }
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
   out.push(`insert into item_def values (${q(id)}, ${q(d.name)}, ${q(d.category)}, ${q(d.weight)}, ${q(!!d.stackable)}, ${q(d.decay)}, ${q(d.charges)});`);
+  if (d.raw) out.push(`update item_def set raw = true where id = ${q(id)};`);
 }
 for (const [id, d] of Object.entries(TILE_DEFS)) {
   out.push(`insert into tile_def values (${q(Number(id))}, ${q(d.name)}, ${q(d.speed)}, ${q(!!d.blocks)}, ${q(d.digYield)}, ${q(!!d.mineable)}, ${q(!!d.forage)}, ${q(!!d.botanize)}, ${q(!!d.pavable)}, ${q(!!d.turnsToDirt)}, ${q(!!d.collect)});`);
@@ -1168,7 +1172,7 @@ for (const f of FURNITURE as unknown as A[]) {
   out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);
   if (f.liquid !== undefined) out.push(`update furniture_def set liquid = ${q(f.liquid)} where id = ${q(f.id)};`);
   if (f.well !== undefined) out.push(`update furniture_def set well = ${q(f.well)} where id = ${q(f.id)};`);
-  if (f.bulk) out.push(`update furniture_def set bulk = true where id = ${q(f.id)};`);
+  if (f.raw) out.push(`update furniture_def set raw = true where id = ${q(f.id)};`);
   if (f.bell) out.push(`update furniture_def set bell = true where id = ${q(f.id)};`);
   if (f.landmark) out.push(`update furniture_def set landmark = true where id = ${q(f.id)};`);
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);

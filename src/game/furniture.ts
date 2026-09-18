@@ -31,8 +31,8 @@ export interface FurnitureDef {
   /** Trade that builds it; fine carpentry with a mallet unless it says otherwise. */
   skill?: string;
   tool?: string;
-  /** Takes nothing but bulk: stackable stuff, and a great deal of it. */
-  bulk?: boolean;
+  /** Takes raw materials and nothing else: ore, logs, dirt, by the pile. */
+  raw?: boolean;
   /** What is put in rots this many times faster than it would in the open. */
   trash?: number;
   /** Can be taken hold of and pulled along behind you. */
@@ -187,8 +187,8 @@ export const FURNITURE: FurnitureDef[] = [
   piece('altar', 'Altar', 2, 2, [['stone_brick', 16], ['mortar', 8], ['stone_slab', 4], ['gold_lump', 1]], 40, 40, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true }),
   piece('banner', 'Banner', 1, 1, [['cloth', 4], ['shaft', 2], ['rope', 1], ['nail', 6]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
   piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
-  // Storage of a different sort: bulk, rubbish, and something to pull it in.
-  piece('bulk_bin', 'Bulk storage bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a hundred bricks go into.', 400, { bulk: true }),
+  // Storage of a different sort: raw materials, rubbish, and something to pull it in.
+  piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { raw: true }),
   piece('trash_crate', 'Trash crate', 1, 1, [['plank', 3], ['nail', 6]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
   piece('cart', 'Small cart', 2, 1, [['plank', 8], ['shaft', 4], ['nail', 16]], 18, 14, 'You build a small cart on two wheels, light enough for one person to pull.', 100, { cart: true }),
   // The two that are driven rather than carried. A wheelwright's bill: wheels
@@ -362,8 +362,15 @@ export const hiveRoom = (f: PlacedFurniture): number => furnitureCapacity(f) - f
 export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hive ?? 0) > 0;
 
 /**
- * Why a piece will not take something, or null if it will. A bulk bin takes
- * bulk and nothing else; a barrel takes no solids at all.
+ * What a raw material bin says to anything a bench has touched. The island
+ * says it in the same words (`furniture_refuses`).
+ */
+export const RAW_BIN_REFUSAL = 'A raw material bin takes raw materials — ore, logs, dirt, shards, wool — and nothing a bench has touched.';
+
+/**
+ * Why a piece will not take something, or null if it will. A raw material bin
+ * takes raw materials (`ItemDef.raw`) and nothing else; a barrel takes no
+ * solids at all.
  */
 export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null {
   const def = furnitureDef(f.kind);
@@ -371,7 +378,7 @@ export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null 
   if (holdsLiquid(f)) return `${it} holds liquid and nothing else.`;
   if (def.hive) return `${it} is the swarm's, not yours. Take what is in it; do not put anything back.`;
   if (!def.capacity) return `${it} does not hold things.`;
-  if (def.bulk && !itemDef(item.id).stackable) return 'A bulk bin takes bulk: things that stack, by the pile.';
+  if (def.raw && !itemDef(item.id).raw) return RAW_BIN_REFUSAL;
   return null;
 }
 

@@ -303,6 +303,16 @@ jobs:
           npx esbuild supabase/test/turn.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/turn.mjs --log-level=error
           node node_modules/.cache/turn.mjs
+
+      - name: A raw material bin takes raw materials and nothing else
+        run: |
+          # Ore, logs, dirt, shards and wool go in; a plank, a brick, a lump,
+          # a hatchet and wheat are refused in the island's words. And the list
+          # holds to its own rule: forty stackable materials, every ore and
+          # every shard among them, none of them what a recipe makes.
+          npx esbuild supabase/test/bins.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/bins.mjs --log-level=error
+          node node_modules/.cache/bins.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

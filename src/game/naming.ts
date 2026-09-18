@@ -9,7 +9,7 @@ import { trapName } from './traps';
  * Calling things by name.
  *
  * A settlement of any age has six bins, four crates and a row of chests, and
- * every one of them is called "Bulk bin (oak)". Naming them is the difference
+ * every one of them is called "Raw material bin (oak)". Naming them is the difference
  * between hunting through the lot and walking to the one marked Planks. Any
  * crate, bin, chest, cart, piece of furniture, work post or trap takes a name,
  * and that name is what it is called everywhere afterwards: the Stores window,

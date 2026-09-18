@@ -488,7 +488,7 @@ function helpText(): string {
     again until it has been emptied.</p>
     <h3>Calling things by name</h3>
     <p>A settlement of any age has six bins, four crates and a row of chests, and every one of them is
-    called <i>Bulk bin (oak)</i>. Any crate, bin, chest, cart, piece of furniture, work post or trap
+    called <i>Raw material bin (oak)</i>. Any crate, bin, chest, cart, piece of furniture, work post or trap
     will take a name of its own: its menu offers <b>Give it a name</b>, and after that the name is what
     it is called <b>everywhere</b> &mdash; in the Stores window, in the settlement window, in its own
     menu, and when you point at it. Answering with nothing takes the name off again. It is the
@@ -529,10 +529,12 @@ function helpText(): string {
     slots your deed level allows. That, and the fact you can put one down anywhere, is what a post is
     for: a logging camp in a far wood, a digger on a clay bank, a Snout turned loose over an old ruin
     &mdash; for as long as a stake in wet ground lasts.</p>
-    <h3>Bulk, rubbish, and something to pull it in</h3>
+    <h3>Raw materials, rubbish, and something to pull it in</h3>
     <p>Three more things to put things in, each for a job a chest does badly.</p>
-    <p>A <b>bulk storage bin</b> holds <b>400</b> of anything that stacks &mdash; bricks, ore, planks,
-    grain, shards &mdash; and refuses everything that does not. It is where a quarry's output goes.</p>
+    <p>A <b>raw material bin</b> holds <b>400</b> of what comes out of the ground, off a tree, out of a
+    vein or off a beast unworked &mdash; ore, logs, dirt, sand, clay, shards, wool, hides &mdash; and
+    refuses everything a bench, a kiln or a smelter has touched: no bricks, planks or lumps, and no
+    food. It is where a mine's output goes.</p>
     <p>A <b>trash crate</b> is built with a rotten bottom on purpose: anything put in it rots <b>thirty
     times faster</b> than it would out in the rain, and is gone in minutes. <b>Put away</b> never picks
     it, whatever you are standing beside; you have to choose <b>Throw it in the trash</b> on the thing
@@ -1086,7 +1088,7 @@ function helpText(): string {
     picked up again when empty. The deed crate beside the token is one of them.</p>
     <p><b>Where a worker puts things.</b> A deed worker fills the deed crate first, and when that is
     full it walks to the nearest other thing on the deed that will take what it is carrying &mdash;
-    another crate, a bulk bin, a chest, a larder, a cart. A <b>trash crate</b> is never chosen, so
+    another crate, a raw material bin, a chest, a larder, a cart. A <b>trash crate</b> is never chosen, so
     nothing anybody worked for ends up in it. When <b>everything on the deed is full</b> the worker
     keeps hold of its load and stands about near the token rather than tipping it on the ground, and
     says so once: empty something or build more storage and it picks up where it left off. Seed for
@@ -1094,7 +1096,7 @@ function helpText(): string {
     <p><b>Moving things by hand.</b> Anything in the inventory or in an open container can be
     <b>dragged</b> from one window to the other. The rules are the same as the menu's: you have to be
     standing next to the container, and it has to be willing to hold what you are giving it &mdash; a
-    bulk bin will not take a tool, a barrel takes no solids, a full crate is full. It says which when
+    raw material bin takes nothing worked, a barrel takes no solids, a full crate is full. It says which when
     it will not go.</p>
     <p>Ground does not advertise what it is holding. Grass is grass to look at, wherever it stands in
     its cycle &mdash; click a tile, or press <b>T</b>, and the Tile window says whether there is

@@ -4751,7 +4751,7 @@ export class Game {
     let bestD = Infinity;
     for (const f of this.furnitureWithin(range)) {
       if (!furnitureCapacity(f)) continue;
-      // A bulk bin that will not take a tool is not the nearest store for a tool.
+      // A raw material bin that will not take a tool is not the nearest store for a tool.
       if (item && furnitureRefuses(f, item)) continue;
       // Nothing goes in the trash by accident: that one has to be asked for.
       if (furnitureDef(f.kind).trash) continue;
