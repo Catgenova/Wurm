@@ -8374,3 +8374,65 @@ select worker_settle(:'world2', :'forester') as stump_rounds \gset
 select '932. set to dig out stumps instead, job = ' || (select job from creature where world_id = :'world2' and id = :'forester') || ', twenty minutes of it: the stump is '
      || (select name from tile_def where id = land_tile(:'world2', :tok_x + 3, :tok_y + 2))
      || ' — and what a browser is handed for it: job ' || coalesce((select x->>'job' from jsonb_array_elements(rpc_creatures(:'world2', 40)) x where (x->>'id')::int = :'forester'), 'NOTHING');
+
+/*
+ * Grafting: a fruit sprout onto a wild tree.
+ *
+ * Asked from the island. A forester at fifty grafts an apple, cherry or olive
+ * sprout onto a living tree that does not bear, with a carving knife, and the
+ * tree is that kind from then on — at the age it was, notch and all. A graft
+ * that does not take is a sprout spent. An orchard without felling a thing.
+ */
+\echo ''
+\echo '--- grafting'
+select set_config('request.jwt.claims', json_build_object('sub', '77777777-7777-7777-7777-777777777777')::text, false) \g /dev/null
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777';
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from item where world_id = w and holder_uid = me and def in ('sprout', 'carving_knife');
+  delete from event where uid = me;
+  insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', me, 'carving_knife', 80, 1);
+  insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (w, 'player', me, 'sprout', 50, 6, 'Apple');
+  insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (w, 'player', me, 'sprout', 50, 1, 'Birch');
+  insert into skill (world_id, uid, id, value) values (w, me, 'forestry', 40)
+    on conflict (world_id, uid, id) do update set value = 40;
+  -- A mature oak with a stroke in it, a mature apple, and a shrivelled pine.
+  perform land_set_tile(w, 50, 60, tile_id('Tree')); perform land_set_height(w, 50, 60, 4); perform land_set_data(w, 50, 60, 2 | (1 << 4)); perform tree_notch(w, 50, 60, 1);
+  perform land_set_tile(w, 51, 60, tile_id('Tree')); perform land_set_height(w, 51, 60, 4); perform land_set_data(w, 51, 60, 6 | (1 << 4));
+  perform land_set_tile(w, 52, 60, tile_id('Tree')); perform land_set_height(w, 52, 60, 4); perform land_set_data(w, 52, 60, 1 | (5 << 4));
+  update player set x = 50.5, y = 59.5 where world_id = w and uid = me;
+end $$;
+select '933. at forestry 40, grafting: "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'graft', '{"kind":"tile","x":50,"y":60}'::jsonb), 'ALLOWED') || '"';
+update skill set value = 50 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' and id = 'forestry' \g /dev/null
+select '934. at fifty: the oak "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'graft', '{"kind":"tile","x":50,"y":60}'::jsonb), 'ALLOWED')
+     || '", with the birch sprout named "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'graft',
+          ('{"kind":"tile","x":50,"y":60,"itemUid":' || (select id from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sprout' and extra = 'Birch') || '}')::jsonb), 'ALLOWED')
+     || '"' as oak_doors \gset
+update player set x = 51.5, y = 59.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'graft', '{"kind":"tile","x":51,"y":60}'::jsonb), 'ALLOWED') as apple_door \gset
+update player set x = 52.5, y = 59.5 where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777' \g /dev/null
+select :'oak_doors' || ', the apple "' || :'apple_door' || '", the shrivelled pine "'
+     || coalesce(act_refusal(:'world6', '77777777-7777-7777-7777-777777777777', 'graft', '{"kind":"tile","x":52,"y":60}'::jsonb), 'ALLOWED') || '"';
+-- The graft, tried until it takes: a stroke of the knife glances like any other.
+do $$
+declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;
+begin
+  select id into w from world where name = 'Hoarding';
+  delete from event where uid = me;
+  update player set x = 50.5, y = 59.5 where world_id = w and uid = me;
+  for i in 1..6 loop
+    exit when tree_species(land_data(w, 50, 60)) = 6;
+    perform act_perform(w, me, 'graft', '{"kind":"tile","x":50,"y":60}'::jsonb);
+  end loop;
+end $$;
+select '935. grafted: the tree at 50,60 is a ' || lower((select name from tree_age_def where id = tree_age(land_data(:'world6', 50, 60))))
+     || ' ' || lower((select name from tree_def where id = tree_species(land_data(:'world6', 50, 60))))
+     || ' with ' || tree_cuts(:'world6', 50, 60) || ' stroke still in it — "'
+     || (select text from event where uid = '77777777-7777-7777-7777-777777777777' and text like 'You graft%' order by n desc limit 1)
+     || '" — and the sprouts spent on it: ' || (6 - coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sprout' and extra = 'Apple'), 0))
+     || ' of 6, the birch sprout untouched: ' || coalesce((select sum(count) from item where world_id = :'world6' and holder_uid = '77777777-7777-7777-7777-777777777777' and def = 'sprout' and extra = 'Birch'), 0);
+select '936. and the journal counts it as an orchard planted: ' || (select coalesce(tally->>'orchard', '0') from player where world_id = :'world6' and uid = '77777777-7777-7777-7777-777777777777');

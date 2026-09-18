@@ -2,7 +2,7 @@ import type { Game } from '../game/game';
 import { EMOTES } from '../game/emotes';
 import type { Pick, Renderer } from '../render/renderer';
 import { TileType, TREE_DEFS, treeAge, treeSpecies, SLAB_BY_ITEM } from '../world/tiles';
-import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
+import { ACTION_BY_ID, type ActionDef, type Target, fruitSprout } from '../game/actions';
 import { BUILD_ACTION_BY_ID, materialName } from '../game/buildActions';
 import {
   describeNeeds,
@@ -841,9 +841,10 @@ export class UI {
         }
       }
       // And sprouts, for the same reason: nine species, and a planted one is
-      // what stands there for the next twenty years.
-      if (def.id === 'plant') {
-        const sprouts = this.game.inventory.items.filter((it) => it.id === 'sprout');
+      // what stands there for the next twenty years. A graft chooses among
+      // the three that bear.
+      if (def.id === 'plant' || def.id === 'graft') {
+        const sprouts = this.game.inventory.items.filter((it) => it.id === 'sprout' && (def.id === 'plant' || fruitSprout(it)));
         if (sprouts.length > 1) {
           entries.push({
             label: def.label,

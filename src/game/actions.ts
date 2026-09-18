@@ -154,6 +154,12 @@ const PACKABLE = new Set<number>([TileType.Dirt, TileType.Grass, TileType.Lawn, 
 
 const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Moss, TileType.Lawn, TileType.Steppe, TileType.Tundra]);
 
+/** Forestry it takes to graft: a beginner's graft is a sprout thrown away. */
+export const GRAFT_SKILL = 50;
+/** A sprout of one of the three that bear, which is what a graft is made from. */
+export const fruitSprout = (it: { id: string; extra?: string }): boolean =>
+  it.id === 'sprout' && !!TREE_DEFS.find((d) => d.name === it.extra)?.fruit;
+
 const cornerName = (t: Target & { kind: 'tile' }): string => {
   const ns = t.cy === t.y ? 'north' : 'south';
   const ew = t.cx === t.x ? 'west' : 'east';
@@ -944,6 +950,57 @@ export const ACTIONS: ActionDef[] = [
       g.note('planted');
       if (TREE_DEFS[species].fruit) g.note('orchard');
       g.logMsg(`You plant the ${TREE_DEFS[species].name.toLowerCase()} sprout.`, 'event');
+    },
+  },
+  {
+    id: 'graft',
+    label: 'Graft',
+    labelFor: (t, g) => {
+      const it = t.kind === 'tile' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      return it?.extra ? `Graft ${it.extra.toLowerCase()} sprout` : 'Graft';
+    },
+    verb: 'grafting',
+    skill: 'forestry',
+    tool: 'carving_knife',
+    stamina: 0.03,
+    baseTime: 8,
+    difficulty: 40,
+    applies: (t, g) => tile(t, g) === TileType.Tree && g.inventory.items.some((it) => it.id === 'sprout' && fruitSprout(it)),
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Tree) return 'There is no tree here to graft to.';
+      const data = g.world.getData(t.x, t.y);
+      const age = treeAge(data);
+      if (!age.alive) return 'There is no life in it to graft to.';
+      if (TREE_DEFS[treeSpecies(data)].fruit) return 'It bears already.';
+      // Grafting is the forester's finest work, and a beginner's graft is a
+      // sprout thrown away.
+      if (g.skills.get('forestry') < GRAFT_SKILL) return `You do not know enough of trees to graft one yet. It takes forestry ${GRAFT_SKILL}.`;
+      const asked = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      if (asked !== undefined && !(asked?.id === 'sprout' && fruitSprout(asked))) return 'That is not a fruit sprout.';
+      if (!asked && !g.inventory.items.some((it) => it.id === 'sprout' && fruitSprout(it))) return 'You have no fruit sprout to graft.';
+      return g.inventory.has('carving_knife') ? null : 'You need a carving knife to graft.';
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const picked = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const sprout = picked?.id === 'sprout' && fruitSprout(picked) ? picked : g.inventory.items.find((it) => it.id === 'sprout' && fruitSprout(it));
+      if (!sprout) return;
+      const data = g.world.getData(t.x, t.y);
+      const was = TREE_DEFS[treeSpecies(data)];
+      const species = TREE_DEFS.findIndex((d) => d.name === sprout.extra);
+      if (species < 0) return;
+      // The sprout is spent either way: a graft that does not take is a sprout gone.
+      g.inventory.remove(sprout.uid, 1);
+      if (!g.skillCheck('forestry', 40, g.toolQl('carving_knife'))) {
+        g.missed();
+        g.logMsg(`The ${TREE_DEFS[species].name.toLowerCase()} graft does not take, and the sprout is spent.`, 'event');
+        return;
+      }
+      // The species and nothing else: the age stays, and so does any notch.
+      g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(species, treeVariant(data)));
+      g.note('orchard');
+      g.logMsg(`You graft the ${TREE_DEFS[species].name.toLowerCase()} sprout onto the ${was.name.toLowerCase()}. It is a ${treeAge(data).name.toLowerCase()} ${TREE_DEFS[species].name.toLowerCase()} tree now.`, 'event');
     },
   },
   {
