@@ -1,6 +1,7 @@
 import { needsIron, oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
 import type { LandBlob } from '../net/protocol';
 import { World } from '../world/world';
+import { settingsStored } from './settings';
 import type { BuildingsJSON } from './building';
 import type { PlacedAnvil } from './anvil';
 import type { PlacedCampfire } from './campfire';
@@ -562,14 +563,31 @@ function finish(world: World, m: SaveMeta): Game {
   for (const pile of game.ground.values()) restake(pile);
   for (const crate of game.crates.values()) restake(crate.items);
   if (game.deed && !game.deedCrate()) game.placeDeedCrate();
-  game.settings.grid = m.settings?.grid ?? true;
-  game.settings.rotation = (m.settings?.eighths ?? (m.settings?.rotation ?? 0) * 2) & 7;
-  game.settings.deedBorder = m.settings?.deedBorder ?? true;
-  game.settings.cutaway = m.settings?.cutaway ?? false;
-  game.settings.tileWindow = m.settings?.tileWindow ?? true;
-  game.settings.fog = m.settings?.fog ?? true;
-  game.settings.follow = m.settings?.follow ?? true;
-  game.settings.edgePan = m.settings?.edgePan ?? true;
+  /*
+   * And the settings, only if this browser has never put any away.
+   *
+   * They live in `localStorage` now, beside the keys and the window layout,
+   * because they are a fact about the person rather than about the island —
+   * and because an island session never saves at all, so riding the save meant
+   * resetting on every refresh for everybody playing on one.
+   *
+   * A save that predates that move still carries them, and a solo player who
+   * has been playing for a week should not have their view reset by the
+   * upgrade. So the save seeds them once, through the proxy, which puts them
+   * away; after that the store is the authority and this is skipped. Without
+   * the guard a change made in the twenty seconds before a save would be
+   * reverted by the save on the next refresh.
+   */
+  if (!settingsStored()) {
+    game.settings.grid = m.settings?.grid ?? true;
+    game.settings.rotation = (m.settings?.eighths ?? (m.settings?.rotation ?? 0) * 2) & 7;
+    game.settings.deedBorder = m.settings?.deedBorder ?? true;
+    game.settings.cutaway = m.settings?.cutaway ?? false;
+    game.settings.tileWindow = m.settings?.tileWindow ?? true;
+    game.settings.fog = m.settings?.fog ?? true;
+    game.settings.follow = m.settings?.follow ?? true;
+    game.settings.edgePan = m.settings?.edgePan ?? true;
+  }
   game.logMsg('Your journey continues where you left off.', 'system');
   // Older saves predate building: hand out the tools they never got.
   const granted: string[] = [];

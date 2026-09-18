@@ -37,6 +37,7 @@ import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedP
 import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
 import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
+import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS } from './skills';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
@@ -319,23 +320,12 @@ export class Game {
   private acting: Actor;
   readonly events = new GameEmitter();
   readonly log: LogEntry[] = [];
-  readonly settings = {
-    grid: true,
-    rotation: 0,
-    deedBorder: true,
-    /** Hide walls standing between the viewer and the inside of a building. */
-    cutaway: false,
-    /** Storey being looked at, 0 for the ground floor; null follows the player. */
-    viewLevel: null as number | null,
-    /** Open the tile window when a tile is clicked. */
-    tileWindow: true,
-    /** Hide the land nobody has looked at, and cool what is out of sight. */
-    fog: true,
-    /** Keep the camera on the player rather than leaving it where it was dragged. */
-    follow: true,
-    /** Push the view along when the cursor rests against the edge of the screen. */
-    edgePan: true,
-  };
+  /**
+   * What the person sitting here likes, which is theirs rather than the
+   * island's — see `settings.ts`. They put themselves away as they are
+   * changed, so a refresh comes back to the view you left.
+   */
+  readonly settings: Settings = liveSettings();
   /**
    * Everything placed, filed by the tile it stands on. The renderer asks what
    * is on a tile for every tile it draws, so these are what keep that from
