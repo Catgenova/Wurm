@@ -586,6 +586,8 @@ export function recipeAction(r: Recipe): ActionDef {
       const rare = rollRarity(g.rand);
       if (rare) {
         item.rare = rare;
+        // Rare work carries its maker's mark.
+        item.maker = g.player.name;
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }

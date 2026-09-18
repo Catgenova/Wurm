@@ -404,6 +404,8 @@ export interface Item {
   issued?: boolean;
   /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
   rare?: number;
+  /** Who made it, for rare work and better: a maker's mark. The island keeps the same. */
+  maker?: string;
   /** What is in it, for the things that hold things. */
   inside?: Item[];
   /** The colour it has been dyed, for the things that take a dye. */

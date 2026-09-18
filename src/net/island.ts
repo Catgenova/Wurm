@@ -202,6 +202,8 @@ export interface ItemRow {
   dye: string | null;
   /** Circles of cunning worked into it. */
   bless: number | null;
+  /** Who made it, for rare work and better. */
+  maker: string | null;
   /** Alight, for the things that burn, and when it was set going. */
   lit: boolean;
   lit_at: string | null;

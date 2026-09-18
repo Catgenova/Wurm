@@ -8757,3 +8757,20 @@ select '959. Fleeting given up: ' || :'gone' || ' — and until the delete is do
 commit;
 select '960. and afterwards the island is gone: ' || (select count(*) from world where name = 'Fleeting')
      || ' left, and the keys let go: ' || (select count(*) from pg_locks l where l.locktype = 'advisory' and l.pid = pg_backend_pid());
+
+/*
+ * A maker's mark on rare work.
+ *
+ * Rare work and better carries who made it, and Look says so; the ordinary
+ * run of things stays unsigned.
+ */
+\echo ''
+\echo '--- a maker''s mark on rare work'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+select give(:'world2', :'ivar', 'hatchet_head', 1, 70, 'Iron', 'rare', maker_mark(:'world2', :'ivar', 'rare')) as marked \gset
+select give(:'world2', :'ivar', 'hatchet_head', 1, 70, 'Iron', null, maker_mark(:'world2', :'ivar', null)) as plain \gset
+select '961. rare work is signed: the mark for rare is ' || maker_mark(:'world2', :'ivar', 'rare') || ', for the ordinary run '
+     || coalesce(maker_mark(:'world2', :'ivar', null), 'nobody') || '; the rare head holds maker '
+     || coalesce((select maker from item where id = :'marked'), 'none') || ' and the plain one '
+     || coalesce((select maker from item where id = :'plain'), 'none') || ' — and Look: "'
+     || examine_item_text(:'world2', :'ivar', (select i from item i where i.id = :'marked')) || '"';

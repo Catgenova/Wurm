@@ -1390,6 +1390,8 @@ export const ACTIONS: ActionDef[] = [
       const stuff = made ? ` ${made.name}: ${made.note}` : '';
       const r = rarityOf(item);
       const rare = r.name ? ` It is ${r.name}: better at what it is for by a ${r.boost > 1.3 ? 'half' : r.boost > 1.15 ? 'quarter' : 'tenth'}, slower to wear and to rot, and can be bettered ${r.ceiling} past your own skill.` : '';
+      // Rare work is signed.
+      const by = item.maker ? ` Made by ${item.maker}.` : '';
       // A knack comes off something somebody made, so the examine line says so
       // for the same things the eating does.
       const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;
@@ -1397,7 +1399,7 @@ export const ACTIONS: ActionDef[] = [
       // What it is worth at the work now, which is rarely the number stamped on it.
       const worth = g.toolWorth(item);
       const at = itemDef(item.id).category === 'tool' && Math.abs(worth - item.ql) >= 0.05 ? ` It works as a ${worth.toFixed(1)} today.` : '';
-      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${at}${desc}${rare}${favours}${stuff}`, 'event');
+      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${at}${desc}${rare}${by}${favours}${stuff}`, 'event');
     },
   },
   {

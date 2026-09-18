@@ -164,6 +164,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const rare = rollRarity(g.rand);
       if (rare) {
         made.rare = rare;
+        made.maker = g.player.name;
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
