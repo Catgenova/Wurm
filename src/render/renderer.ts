@@ -165,6 +165,26 @@ const GRID_COLOR = 'rgba(0,0,0,0.16)';
 const DEED_COLOR = 'rgba(96, 230, 110, 0.9)';
 const DEED_SHADOW = 'rgba(0, 40, 0, 0.6)';
 const PLAN_COLOR = 'rgba(120, 220, 140, 0.95)';
+/*
+ * Scaffolding: what a plan looks like before anything is built on it.
+ *
+ * Reported as "there's currently nothing at all to show it's a plan", with a
+ * picture of a tile whose tooltip said `Part of Oceanport · House · one
+ * storey` over ground that looked exactly like the ground beside it. A plan
+ * with no walls on it yet drew nothing whatever, because everything drawn for
+ * a building hangs off a wall or a floor, and a fresh plan has neither.
+ *
+ * So the plan itself is drawn: stakes and string round the edge of the
+ * footprint, the way a builder marks a site out before a stone is laid. Pale
+ * timber for the stakes so they read as something standing there, and the
+ * plan's own green for the string, so a run of it says the same word the
+ * dashed outline of a planned wall says.
+ */
+const SCAFFOLD_POST = 'rgba(186, 158, 112, 0.95)';
+const SCAFFOLD_TRIM = 'rgba(112, 88, 56, 0.95)';
+const SCAFFOLD_LINE = 'rgba(120, 220, 140, 0.75)';
+/** How tall a stake stands, as a share of a wall. Waist high on a body. */
+const SCAFFOLD_HEIGHT = 0.42;
 const SIDES: Side[] = ['n', 'e', 's', 'w'];
 
 /** Which side of a tile a picked point is closest to. */
@@ -1458,7 +1478,25 @@ export class Renderer {
       if (viewLevel !== null && level > viewLevel) continue;
       for (const border of [backA, backB]) {
         const wall = bld.wallOnBorder(level, border);
-        if (!wall) continue;
+        if (!wall) {
+          /*
+           * No wall here, planned or built. If the border is the edge of a
+           * plan it is marked out instead, so a building that is nothing but
+           * a footprint still looks like one.
+           */
+          const plan = bld.edgeOf(border);
+          if (plan && !(cutaway && building?.id !== plan.id)) {
+            const [tx, ty] = border.dir === 'h'
+              ? [border.x, bld.buildingAt(border.x, border.y) === plan ? border.y : border.y - 1]
+              : [bld.buildingAt(border.x, border.y) === plan ? border.x : border.x - 1, border.y];
+            // Nothing stands in the air: an upper storey is only marked out
+            // where there is a floor under it to mark out.
+            if (level === 0 || bld.floor(level, tx, ty)) {
+              this.drawScaffold(border, base, level, inside?.id === plan.id && inFront ? 0.35 : 1);
+            }
+          }
+          continue;
+        }
         /*
          * Every wall is drawn once, by whichever tile has it as a back edge.
          * When that tile is not part of the wall's own building the wall
@@ -1703,6 +1741,58 @@ export class Renderer {
     if (!done) ctx.setLineDash([4, 3]);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * A stake at each end of a border, a string between them and a brace across:
+   * the site marked out, which is all a plan is until somebody builds on it.
+   */
+  private drawScaffold(border: Border, base: number, level: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const [ax, ay, bx, by] = borderPoints(border);
+    const h0 = base + level * WALL_HEIGHT;
+    const h1 = h0 + WALL_HEIGHT * SCAFFOLD_HEIGHT;
+    const px = (t: number): number => cam.worldToScreenX(ax + (bx - ax) * t, ay + (by - ay) * t);
+    const py = (t: number, k: number): number => cam.worldToScreenY(ax + (bx - ax) * t, ay + (by - ay) * t, h0 + (h1 - h0) * k);
+    const line = (t0: number, k0: number, t1: number, k1: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t0), py(t0, k0));
+      ctx.lineTo(px(t1), py(t1, k1));
+      ctx.stroke();
+    };
+    ctx.globalAlpha = alpha;
+    // The chalk line on the ground, which is the line the wall will stand on.
+    ctx.strokeStyle = PLAN_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    line(0, 0, 1, 0);
+    ctx.setLineDash([]);
+    /*
+     * And the string between the stakes, which is the whole of what a marked
+     * out site is. It had a diagonal brace across it for a moment, and eight
+     * of those round a two by two footprint read as a cat's cradle rather than
+     * a building: the line a wall will stand on is the thing worth drawing.
+     */
+    ctx.strokeStyle = SCAFFOLD_LINE;
+    ctx.lineWidth = 1.4;
+    line(0.05, 1, 0.95, 1);
+    // And the stakes themselves, which are the only solid thing about a plan.
+    ctx.fillStyle = SCAFFOLD_POST;
+    ctx.strokeStyle = SCAFFOLD_TRIM;
+    ctx.lineWidth = 1;
+    for (const t of [0.05, 0.95]) {
+      const w = 0.045;
+      ctx.beginPath();
+      ctx.moveTo(px(t - w), py(t - w, 0));
+      ctx.lineTo(px(t + w), py(t + w, 0));
+      ctx.lineTo(px(t + w), py(t + w, 1));
+      ctx.lineTo(px(t - w), py(t - w, 1));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
 

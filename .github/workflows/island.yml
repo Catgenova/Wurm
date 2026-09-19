@@ -212,6 +212,16 @@ jobs:
           npx esbuild supabase/test/rack.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/rack.mjs --log-level=error
           node node_modules/.cache/rack.mjs
+      - name: A plan is marked out round its outline
+        run: |
+          # Reported as "there's currently nothing at all to show it's a plan".
+          # Everything drawn for a building hangs off a wall or a floor, and a
+          # fresh plan has neither, so a footprint was ground like any other
+          # ground. It is marked out with stakes and string now, and this is
+          # the rule that says where: the outline, once per border.
+          npx esbuild supabase/test/plan.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/plan.mjs --log-level=error
+          node node_modules/.cache/plan.mjs
       - name: The ground is the one on the chart
         run: |
           # And that the ground both generators agree on is the ground that was

@@ -505,6 +505,7 @@ export class UI {
     if (fu) {
       lines.push(furnitureName(fu));
       lines.push(furnitureState(fu));
+      if (rackSpots(fu)) lines.push(this.rackLine(fu));
       if (furnitureCapacity(fu)) lines.push('Stand next to it to put things away.');
       this.tooltip.show(sx, sy, lines);
       return;
@@ -674,7 +675,10 @@ export class UI {
     const smelter = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
     if (smelter) return { title: `Smelter (${smelterState(smelter)})`, entries: this.smelterEntries(smelter) };
     const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
-    if (piece) return { title: `${furnitureName(piece)} (${furnitureState(piece)})`, entries: [...this.furnitureEntries(piece), ...this.nameEntry({ kind: 'furniture', id: piece.id })] };
+    if (piece) {
+      const state = rackSpots(piece) ? `${furnitureState(piece)} · ${this.rackLine(piece)}` : furnitureState(piece);
+      return { title: `${furnitureName(piece)} (${state})`, entries: [...this.furnitureEntries(piece), ...this.nameEntry({ kind: 'furniture', id: piece.id })] };
+    }
     const kilnHere = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
     if (kilnHere) return { title: `Kiln (${kilnState(kilnHere)})`, entries: this.kilnEntries(kilnHere) };
     const anvilHere = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
@@ -1191,6 +1195,18 @@ export class UI {
     return entries;
   }
 
+  /**
+   * How loaded a rack is, in one line: spots taken, and the gross of what is
+   * in the crates standing on it. A rack holds nothing itself, so without
+   * this it reads as a piece of furniture with nothing in it however full it
+   * is. Asked for as "show inventory gross (x/x)".
+   */
+  private rackLine(f: PlacedFurniture): string {
+    const load = this.game.rackLoad(f);
+    if (!load.crates) return `no crates on it · room for ${load.spots}`;
+    return `${load.crates} of ${load.spots} spots · ${load.units} / ${load.capacity} things`;
+  }
+
   /** Opening, emptying and lifting a piece of furniture. */
   private furnitureEntries(f: PlacedFurniture): MenuItem[] {
     const g = this.game;
@@ -1261,7 +1277,7 @@ export class UI {
       const deck = rackDeck(f);
       const on = g.cratesOn(f);
       const free = deck.find(([sx, sy]) => !g.crateAt(f.x, f.y, sx, sy));
-      entries.push({ label: `${on.length} of ${rackSpots(f)} spots full`, disabled: true });
+      entries.push({ label: this.rackLine(f), disabled: true });
       const placeDef = ACTION_BY_ID.get('place_crate');
       const carried = g.inventory.items.filter((it) => crateKindOfItem(it.id));
       if (placeDef) {

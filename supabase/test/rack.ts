@@ -20,7 +20,7 @@
  */
 import { Game } from '../../src/game/game';
 import { ACTION_BY_ID } from '../../src/game/actions';
-import { rackDeck, rackSpots } from '../../src/game/furniture';
+import { furnitureCapacity, furnitureUnits, rackDeck, rackSpots } from '../../src/game/furniture';
 import { crateKindOfItem } from '../../src/game/crates';
 import type { Target } from '../../src/game/actions';
 
@@ -88,6 +88,34 @@ const maskOf = (): number => {
   return m;
 };
 say(maskOf() === 0xff, `the model is told all eight: 0b${maskOf().toString(2).padStart(8, '0')}`);
+
+/*
+ * And the gross, which is what a rack has to say about itself: it holds
+ * nothing of its own, so every reader of a piece of furniture said it was
+ * empty however loaded it was. Asked for as "show inventory gross (x/x)".
+ */
+const empty = game.rackLoad(shelf);
+say(empty.crates === 8 && empty.units === 0 && empty.capacity > 0,
+  `eight empty crates on it: ${empty.crates} of ${empty.spots} spots, ${empty.units} / ${empty.capacity} things`);
+say(furnitureCapacity(shelf) === 0 && furnitureUnits(shelf) === 0,
+  'the rack itself holds nothing, which is why the gross had to be added up from the crates');
+
+let put = 0;
+let uid = 90001;
+for (const c of game.cratesOn(shelf).slice(0, 3)) {
+  for (let i = 0; i < 4; i++) {
+    // Straight into the crate rather than through the pack: `inventory.add`
+    // stacks, and a stack that grows is not four things going in.
+    if (game.crateAdd(c, { uid: uid++, id: 'iron_ore', ql: 20, dmg: 0, count: 1 })) put += 1;
+  }
+}
+const loaded = game.rackLoad(shelf);
+say(loaded.units === put, `${put} ore into three of them: ${loaded.units} / ${loaded.capacity} things on the rack`);
+say(loaded.capacity === empty.capacity, 'and the room on it has not changed, only what is in it');
+
+// Emptied again, so what follows is about lifting rather than about loading.
+for (const c of game.cratesOn(shelf)) c.items.length = 0;
+say(game.rackLoad(shelf).units === 0, 'taken out again: 0 of the gross left');
 
 /* Lifting the rack out from under them is refused, and lifting them is not. */
 const lift = ACTION_BY_ID.get('pick_up_furniture');

@@ -5007,6 +5007,28 @@ export class Game {
     return out;
   }
 
+  /**
+   * What a rack is carrying, added up.
+   *
+   * A rack holds nothing of its own — its `items` are always empty and
+   * `furnitureCapacity` is nought — so everything that reads a piece of
+   * furniture to say how full it is said nothing at all about one, however
+   * many crates were standing on it. Asked for: "for crate shelf show
+   * inventory gross (x/x)". The gross is the crates' own figures added up,
+   * which is the only honest answer: each one is its own crate, and a rack of
+   * eight plank crates in oak holds more than one of eight in pine.
+   */
+  rackLoad(f: PlacedFurniture): { crates: number; spots: number; units: number; capacity: number } {
+    const on = this.cratesOn(f);
+    let units = 0;
+    let capacity = 0;
+    for (const c of on) {
+      units += crateUnits(c);
+      capacity += crateCapacity(c);
+    }
+    return { crates: on.length, spots: rackSpots(f), units, capacity };
+  }
+
   /** Whether a spot is taken, leaving out one piece of furniture when it is that piece asking about its own turn. */
   occupiedSubtile(x: number, y: number, sx: number, sy: number, exceptFurniture?: number): boolean {
     if (this.crateAt(x, y, sx, sy)) return true;

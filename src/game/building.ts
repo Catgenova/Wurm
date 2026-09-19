@@ -267,6 +267,21 @@ export class Buildings {
     return this.walls.get(wallKey(level, b));
   }
 
+  /**
+   * The building a border is the edge of, when it is the edge of exactly one.
+   *
+   * A border between two tiles of the same building is inside it; what this
+   * finds is the outline, which is what a site marked out with stakes and
+   * string looks like and where the scaffolding goes. A border between two
+   * *different* buildings is an edge of both, and the near one owns it.
+   */
+  edgeOf(border: Border): Building | undefined {
+    const near = this.buildingAt(border.x, border.y);
+    const far = border.dir === 'h' ? this.buildingAt(border.x, border.y - 1) : this.buildingAt(border.x - 1, border.y);
+    if (near && far && near.id === far.id) return undefined;
+    return near ?? far;
+  }
+
   setWall(b: Building, level: number, x: number, y: number, side: Side, type: WallType, material: string): Wall {
     return this.planWall(b.id, level, x, y, side, type, material);
   }
