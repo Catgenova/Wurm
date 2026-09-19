@@ -12,7 +12,7 @@
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
 import { BURYABLE, BUSH_DEFS, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
-import { SKILL_DEFS } from '../src/game/skills';
+import { SKILL_DEFS, isQuiet } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
 import { RECIPES } from '../src/game/recipes';
@@ -115,6 +115,8 @@ out.push(`create table if not exists skill_def (
 );`);
 /* The trades that are heavy work: every go at them trains body strength as well. */
 out.push(`alter table skill_def add column if not exists heavy boolean not null default false;`);
+/* And the ones a gain says nothing about: the characteristics, and what you pick up on the way. */
+out.push(`alter table skill_def add column if not exists quiet boolean not null default false;`);
 out.push(`create table if not exists material_def (
   id text primary key, difficulty real not null, weight real not null, wear real not null,
   decay real not null, edge real not null, soak real not null, bite real not null, hold real not null
@@ -652,6 +654,7 @@ for (const d of SKILL_DEFS) {
   out.push(`insert into skill_def values (${q(d.id)}, ${q(d.name)}, ${q(d.start)}, ${q((d as { parent?: string }).parent)});`);
 }
 for (const id of HEAVY_SKILLS) out.push(`update skill_def set heavy = true where id = ${q(id)};`);
+for (const d of SKILL_DEFS) if (isQuiet(d.id)) out.push(`update skill_def set quiet = true where id = ${q(d.id)};`);
 /*
  * `Object.entries` of an *array* hands you indices.
  *

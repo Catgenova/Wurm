@@ -88,6 +88,29 @@ export const SKILL_DEFS: SkillDef[] = [
 /** Every skill by its id, for anything that has an id and wants the name. */
 export const SKILL_BY_ID = new Map(SKILL_DEFS.map((d) => [d.id, d]));
 
+/**
+ * Skills picked up by doing something else, which do not narrate themselves.
+ *
+ * You do not set out to climb: you set out to get up the hill, and the
+ * climbing is what that cost you. A line about it after every step would bury
+ * the thing you were actually doing.
+ */
+export const QUIET_SKILLS: ReadonlySet<string> = new Set(['climbing', 'swimming']);
+
+/**
+ * Whether a gain says anything about itself, which is a question about the
+ * skill rather than about the go.
+ *
+ * A characteristic moves in thousandths and is read as a whole number, so it
+ * speaks only when the whole number changes; a trade is what you sat down to
+ * do, so it says what it was worth every time. The island reads this off
+ * `skill_def.quiet`, emitted from this one list, because the alternative —
+ * which is what it had — is a line written by hand at every place a skill can
+ * go up, and eight of them forgotten.
+ */
+export const isQuiet = (id: string): boolean =>
+  SKILL_BY_ID.get(id)?.group === 'Characteristics' || QUIET_SKILLS.has(id);
+
 export const SKILL_CURVE = 1.8;
 
 /** What is left of a gain at a given level, 1 at nothing and 0 at mastery. */

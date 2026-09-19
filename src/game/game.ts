@@ -40,7 +40,7 @@ import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapNam
 import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { liveSettings, type Settings } from './settings';
-import { Skills, SKILL_DEFS } from './skills';
+import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { gemOf, JEWEL_BONUS } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex } from './tileindex';
@@ -207,8 +207,6 @@ export interface GameInit {
   guests?: GuestSave[];
 }
 
-/** Skills picked up by doing something else, which do not narrate themselves. */
-const QUIET_SKILLS = new Set(['climbing', 'swimming']);
 /** Actions you can hold in your head before any mind logic is earned. */
 const BASE_QUEUE = 3;
 /** Where every characteristic starts, and so what counts as a point gained. */
@@ -2010,7 +2008,7 @@ export class Game {
     if (gain <= 0.000005 || !def) return gain;
     const now = this.skills.get(id);
     // What you pick up in the background says less about itself than what you set out to do.
-    if (def.group === 'Characteristics' || QUIET_SKILLS.has(id)) {
+    if (isQuiet(id)) {
       if (Math.floor(now) > Math.floor(before)) {
         const room = id === 'mind_logic' && this.queueCapacity() > BASE_QUEUE + Math.floor(Math.max(0, before - CHAR_START) / 10);
         this.logMsg(`${def.name} is now ${Math.floor(now)}.${room ? ` You can keep ${this.queueCapacity()} jobs in your head.` : ''}`, 'skill');

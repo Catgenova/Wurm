@@ -448,6 +448,17 @@ jobs:
           npx esbuild supabase/test/arch.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/arch.mjs --log-level=error
           node node_modules/.cache/arch.mjs
+      - name: A go that missed still teaches you, and says so
+        run: |
+          # Reported: "i'm not getting any smelting experience for failed
+          # smelting." The experience was there; nobody was saying so. The line
+          # was written by hand at the end of a performer and a failed craft
+          # returned before reaching it, so this asks both halves — what a miss
+          # is worth against a landing, and that the same sentence comes out of
+          # both sides for the same ruined crucible.
+          npx esbuild supabase/test/taught.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/taught.mjs --log-level=error
+          node node_modules/.cache/taught.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written
