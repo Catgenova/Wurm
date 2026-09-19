@@ -230,6 +230,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle. Boiled, it gives a violet.' },
   pickaxe_head: { name: 'Pickaxe head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   knife_blade: { name: 'Knife blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },
+  saw_blade: { name: 'Saw blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },
+  trowel_blade: { name: 'Trowel blade', category: 'material', weight: 1, stackable: true, decay: 1 },
   sword_blade: { name: 'Sword blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   log: { name: 'Log', category: 'material', weight: 24, stackable: true, raw: true, decay: 18 },
   plank: { name: 'Plank', category: 'material', weight: 2, stackable: true, decay: 20 },

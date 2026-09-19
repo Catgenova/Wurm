@@ -152,6 +152,24 @@ export const MOULDS: MouldDef[] = [
   { id: 'spear_head_mould', name: 'Spear head mould', makes: 'spear_head', skill: 'weaponsmithing', sand: 2, difficulty: 16, lumps: 1 },
   { id: 'shield_boss_mould', name: 'Shield boss mould', makes: 'shield_boss', skill: 'armorsmithing', sand: 3, difficulty: 14, lumps: 2 },
   { id: 'file_mould', name: 'File mould', makes: 'file', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
+  /*
+   * The four tools you come ashore with that nobody could ever make a second
+   * of. Reported: "there does not seem to be a way to make a chisel / mould
+   * for chisel" — and the chisel was only the one that got noticed first,
+   * because every single thing in Stonework wants one. The saw, the trowel and
+   * the carving knife were in exactly the same position: issued at fifteen or
+   * twenty quality, worn down by use like anything else, and gone for good.
+   *
+   * A chisel is a bar of steel with an edge on it and is cast whole, the way a
+   * file is. A saw and a trowel are a blade with a handle riveted to it, so
+   * they are cast as blades and fitted with a shaft, the way every other
+   * handled tool on the island already is. The carving knife wanted no mould
+   * at all: a knife blade has been castable since the first anvil and nobody
+   * had written down that you may put a carving grip on one.
+   */
+  { id: 'chisel_mould', name: 'Chisel mould', makes: 'chisel', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },
+  { id: 'saw_blade_mould', name: 'Saw blade mould', makes: 'saw_blade', skill: 'blacksmithing', sand: 2, difficulty: 16, lumps: 1 },
+  { id: 'trowel_blade_mould', name: 'Trowel blade mould', makes: 'trowel_blade', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },
   { id: 'coin_die_mould', name: 'Coin die mould', makes: 'coin_die', skill: 'blacksmithing', sand: 2, difficulty: 16, lumps: 2 },
   { id: 'horseshoe_mould', name: 'Horseshoe mould', makes: 'horseshoe', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1, per: 4 },
   // Fittings for building: hinges for anything that swings, brackets to bind a gate.

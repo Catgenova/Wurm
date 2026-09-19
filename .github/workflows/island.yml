@@ -470,6 +470,19 @@ jobs:
           npx esbuild supabase/test/slab.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/slab.mjs --log-level=error
           node node_modules/.cache/slab.mjs
+      - name: Every tool can be made a second time
+        run: |
+          # Reported: "there does not seem to be a way to make a chisel / mould
+          # for chisel." Four of the ten tools you come ashore with could never
+          # be made again by anybody, and every tool wears — so each was a
+          # countdown, and the chisel's ran out first because the whole of
+          # Stonework wants one. Nothing was wrong in any one file; a tool
+          # simply had no row anywhere, which is hard to notice by reading. So
+          # it is counted: everything that can put a tool in your hands is
+          # walked, and anything left over is a tool nobody can replace.
+          npx esbuild supabase/test/tools.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/tools.mjs --log-level=error
+          node node_modules/.cache/tools.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written
