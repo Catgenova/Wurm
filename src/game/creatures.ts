@@ -78,6 +78,40 @@ export type GatherKind =
 export const WILD_REACH = 1.5;
 export const WILD_REST = 8;
 export const WILD_REST_SPREAD = 22;
+
+/**
+ * How far from its home ground a wild thing will get.
+ *
+ * Nothing kept a wild animal anywhere. A wander target was drawn a tile and a
+ * half from wherever it was standing, from wherever it had got to last time,
+ * for ever — a random walk with nothing pulling on it. So an island's
+ * wildlife had no geography at all: a thing that spawned in the tundra was as
+ * likely to be found on the south beach an hour later, and the places you
+ * learned to go for a particular animal were places only until you next
+ * looked.
+ *
+ * Everything wild has a home now, and a step that would take it past this far
+ * from home is drawn towards home instead. Twenty-eight tiles is a few
+ * screens: big enough that an animal is not pacing a cage, small enough that
+ * a valley keeps what lives in it.
+ */
+export const WILD_RANGE = 28;
+
+/**
+ * And how near another of its own kind a grazer has to be to throw in with
+ * it.
+ *
+ * Herds are made at the moment a thing arrives rather than kept as a list: a
+ * grazer spawning within this of another of its species takes *that one's*
+ * home for its own, so the two of them wander the same patch of country and
+ * are found together ever after. Chains of that are what makes a herd, and it
+ * costs one look round at birth and nothing at all thereafter.
+ *
+ * Hunters do not do this. Two hunters sharing a range is a pair of animals
+ * competing for the same dinner, and what makes a hunter frightening is
+ * meeting it where it lives rather than meeting six of them.
+ */
+export const HERD_REACH = 14;
 /**
  * How many looks at standable ground a rolled species gets before the roll is
  * given up on.
@@ -1403,6 +1437,24 @@ const HUNT_GIVE_UP = 13;
 export const HUNT_LEASH = 30;
 
 /**
+ * And how far from its own home ground it will go while hunting.
+ *
+ * The leash above is tied where a chase began, which is the right measure for
+ * a hunter you walked in on and the wrong one for a hunter that had already
+ * wandered halfway to the next valley — that one would take you thirty tiles
+ * further still, which is sixty tiles of country between it and anywhere it
+ * has any business being.
+ *
+ * Both are asked, and the first to run out ends it. So a hunter met at its
+ * den chases you the full thirty as it always did, and one met at the edge of
+ * its range gives up in a dozen, because it is already nearly as far from
+ * home as it is willing to be. A dozen over the range is deliberate: a bound
+ * exactly at the range would have a hunter at the edge turn back before it
+ * had gone anywhere, which is not a hunter at all.
+ */
+export const HUNT_HOME = WILD_RANGE + 12;
+
+/**
  * And how long it wants nothing to do with hunting after it gives one up.
  *
  * Without this it drops the chase at the end of the leash, notices you again
@@ -1724,6 +1776,16 @@ export interface Creature {
   /** Where it first had your scent, which is what the leash is tied to. */
   huntX: number;
   huntY: number;
+  /**
+   * The middle of its own ground: where it wanders about, and what a hunter's
+   * leash is measured from.
+   *
+   * Set where it is first put down, and shared with the herd it joined if it
+   * joined one. Nought for anything that is not wild — a tame thing's home is
+   * wherever its keeper is, and a worker's is the settlement.
+   */
+  homeX: number;
+  homeY: number;
   /** When it will take an interest again, after giving a chase up. */
   huntRest: number;
   /** When it last said it had nowhere to put a load down. */
@@ -1808,6 +1870,14 @@ export interface CreatureJSON {
   due?: number;
   unborn?: { traits: string[]; sex: Sex } | null;
   trade?: GatherKind | null;
+  /**
+   * The middle of its own ground. Saved, because a herd that scattered every
+   * time somebody reloaded would not be a herd; a save from before this has
+   * none, and everything in it takes where it is standing as home, which is
+   * the same answer it would have got had it only just arrived.
+   */
+  homeX?: number;
+  homeY?: number;
 }
 
 /**
@@ -2008,8 +2078,39 @@ export class Creatures {
   spawn(species: string, x: number, y: number, mode: CreatureMode = 'wild', rand: () => number = Math.random, born = 0): Creature {
     const c = Creatures.make(this.nextId++, species, x, y, mode, rand);
     c.born = born;
+    if (mode === 'wild') this.joinHerd(c);
     this.list.set(c.id, c);
     return c;
+  }
+
+  /**
+   * Throw in with the nearest of its own kind, if there is one about.
+   *
+   * A herd is not a list anywhere: it is a shared home. A grazer arriving
+   * within `HERD_REACH` of another of its species takes that one's home
+   * ground for its own, so the pair of them wander the same patch and are
+   * found together ever after — and the next one along joins whichever of
+   * them it lands nearest, which is how a herd grows out of one look round at
+   * birth and no bookkeeping at all.
+   *
+   * Hunters keep their own ground. Six goblins sharing a range would be a
+   * pack, and what makes a hunter frightening is meeting it where it lives.
+   */
+  private joinHerd(c: Creature): void {
+    if (SPECIES[c.species]?.hunter) return;
+    let bestD = HERD_REACH;
+    let best: Creature | null = null;
+    for (const o of this.list.values()) {
+      if (o.species !== c.species || o.mode !== 'wild') continue;
+      const d = Math.hypot(o.homeX - c.x, o.homeY - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+    if (!best) return;
+    c.homeX = best.homeX;
+    c.homeY = best.homeY;
   }
 
   private static make(id: number, species: string, x: number, y: number, mode: CreatureMode, rand: () => number): Creature {
@@ -2057,6 +2158,8 @@ export class Creatures {
       searchAt: 0,
       huntX: 0,
       huntY: 0,
+      homeX: x,
+      homeY: y,
       huntRest: -1e9,
       noRoomAt: 0,
       owed: 0,
@@ -3802,7 +3905,15 @@ export class Creatures {
       }
       return;
     }
-    if (game.time >= c.until) this.wanderTarget(game, c, WILD_REACH);
+    /*
+     * A step about its own country, rather than a step from wherever it last
+     * got to. Past the edge of its range it turns for home instead, which is
+     * what keeps an island's wildlife somewhere in particular.
+     */
+    if (game.time >= c.until) {
+      if (Math.hypot(c.x - c.homeX, c.y - c.homeY) > WILD_RANGE) this.wanderTarget(game, c, WILD_REACH, c.homeX, c.homeY);
+      else this.wanderTarget(game, c, WILD_REACH);
+    }
   }
 
   /**
@@ -3814,13 +3925,29 @@ export class Creatures {
     const d = Math.hypot(p.x - c.x, p.y - c.y);
     const hunting = c.enemy === PLAYER_ATTACKER;
     const giveUp = def.monster ? HUNT_GIVE_UP * 2.2 : HUNT_GIVE_UP;
-    // How far it has come from where it started, which is the one measure that
-    // grows while it chases. The gap to you does not: it is closing that.
+    /*
+     * Two measures, and the first to run out ends it. How far it has come
+     * from where the chase began is the one that grows while it chases — the
+     * gap to you does not, because it is closing that — and how far it is
+     * from its own home ground is what stops a hunter that had already
+     * strayed from taking you another thirty tiles beyond where it strayed
+     * to.
+     */
     const came = Math.hypot(c.x - c.huntX, c.y - c.huntY);
-    if (hunting && (d > giveUp || came > HUNT_LEASH
+    const out = Math.hypot(c.x - c.homeX, c.y - c.homeY);
+    const spent = came > HUNT_LEASH || out > HUNT_HOME;
+    if (hunting && (d > giveUp || spent
                     || c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3))) {
       c.enemy = null;
-      if (came > HUNT_LEASH) c.huntRest = game.time + HUNT_REST;
+      if (spent) {
+        c.huntRest = game.time + HUNT_REST;
+        // And back to its own country, rather than standing wherever it
+        // happened to stop. A hunter that gave up ten valleys from home and
+        // stayed there is how a range stops meaning anything.
+        c.tx = c.homeX;
+        c.ty = c.homeY;
+        c.state = 'wander';
+      }
       return false;
     }
     if (!hunting) {
@@ -4264,6 +4391,8 @@ export class Creatures {
         bredAt: c.bredAt,
         due: c.due,
         unborn: c.unborn,
+        homeX: c.homeX,
+        homeY: c.homeY,
         trade: c.trade,
         shodAt: c.shodAt,
       })),
@@ -4277,7 +4406,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

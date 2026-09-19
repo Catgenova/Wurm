@@ -3446,6 +3446,7 @@ create or replace function coax_lapse() returns double precision language sql im
 create or replace function coax_step() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
 create or replace function hunt_leash() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function hunt_rest() returns double precision language sql immutable as $fn$ select 150::double precision $fn$;
+create or replace function hunt_home() returns double precision language sql immutable as $fn$ select 40::double precision $fn$;
 create or replace function companion_sight() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function companion_leash() returns double precision language sql immutable as $fn$ select 9::double precision $fn$;
 create or replace function companion_reach() returns double precision language sql immutable as $fn$ select 0.9::double precision $fn$;
@@ -3507,6 +3508,8 @@ create or replace function fog_bytes() returns double precision language sql imm
 create or replace function wild_reach() returns double precision language sql immutable as $fn$ select 1.5::double precision $fn$;
 create or replace function wild_rest() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function wild_rest_spread() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
+create or replace function wild_range() returns double precision language sql immutable as $fn$ select 28::double precision $fn$;
+create or replace function herd_reach() returns double precision language sql immutable as $fn$ select 14::double precision $fn$;
 create or replace function site_looks() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function carry_base() returns double precision language sql immutable as $fn$ select 120::double precision $fn$;
 create or replace function carry_per_strength() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;

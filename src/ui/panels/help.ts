@@ -679,6 +679,19 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>Where the animals live</h3>
+    <p>Everything wild has <b>a home</b>: a patch of country it keeps to, set where it was first
+    put down. It wanders about that ground and turns back when it strays too far, so the places you
+    learn to go for a particular animal stay the places you go for it.</p>
+    <p>Grazers keep company. One that arrives near others of its kind takes <b>their</b> ground for
+    its own, so you find them together and they move together — a herd, made without anybody
+    writing a list. Hunters do not: each keeps its own range, because what makes a hunter
+    frightening is meeting it where it lives rather than meeting six of them.</p>
+    <p>That changes what running from one is like. A hunter gives up when it has run the length of
+    its leash <i>or</i> when it has come as far from its own ground as it is willing to — whichever
+    happens first. So one you walk in on at its den will chase you a long way, and one you meet at
+    the edge of its range gives up quickly, because it is already nearly as far out as it goes.
+    Either way it turns for home afterwards rather than staying where it stopped.</p>
     <h3>What the island will not tell you</h3>
     <p>A handful of rules here are real, load-bearing, and findable only by being refused or by
     making forty of something and noticing. They are worth knowing up front.</p>

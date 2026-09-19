@@ -651,6 +651,25 @@ jobs:
           npx esbuild supabase/test/ashore.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/ashore.mjs --log-level=error
           node node_modules/.cache/ashore.mjs
+      - name: A herd keeps together, and a hunter keeps to its country
+        run: |
+          # Nothing kept a wild animal anywhere: a wander target was drawn a
+          # tile and a half from wherever it last got to, for ever, so an
+          # island's wildlife had no geography at all. Everything wild has a
+          # home now, and a herd is not a list anywhere — it is a shared home,
+          # taken from the nearest of its own kind at the moment it arrives.
+          #
+          # And the leash was tied where a chase began, which is right for a
+          # hunter you walked in on and wrong for one that had already
+          # strayed: that one would take you thirty tiles further still. Both
+          # measures are asked now and the first to run out ends it.
+          #
+          # Put to both sides, because the wild is thought about on whichever
+          # of them is doing the thinking, and a herd that holds together in a
+          # browser and scatters on an island is worse than no herd at all.
+          npx esbuild supabase/test/range.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/range.mjs --log-level=error
+          node node_modules/.cache/range.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written
