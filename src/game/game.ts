@@ -211,6 +211,15 @@ export interface GameInit {
 const BASE_QUEUE = 3;
 /** Where every characteristic starts, and so what counts as a point gained. */
 const CHAR_START = 20;
+/**
+ * How many jobs a given mind logic will hold, which is the whole of what mind
+ * logic is for and the only reason to tell anybody it went up.
+ *
+ * A function of the number rather than of the player, because the sentence
+ * about it is asked twice — what it holds now against what it held before the
+ * go — and the second of those is a value nobody has any more.
+ */
+export const queueCapAt = (mind: number): number => BASE_QUEUE + Math.floor(Math.max(0, mind - CHAR_START) / 10);
 /** Ashes left per second of burning: a log's worth of fire leaves about five. */
 const ASH_RATE = 1 / 120;
 /** Damage at which a tool starts warning you, and every five points after. */
@@ -1114,7 +1123,7 @@ export class Game {
    */
   queueCapacity(): number {
     if (this.remoteCap !== null) return this.remoteCap;
-    return BASE_QUEUE + Math.floor(Math.max(0, this.skills.get('mind_logic') - CHAR_START) / 10);
+    return queueCapAt(this.skills.get('mind_logic'));
   }
 
   /** Body control quickens every action; the effect is small but it is always there. */
@@ -2010,8 +2019,8 @@ export class Game {
     // What you pick up in the background says less about itself than what you set out to do.
     if (isQuiet(id)) {
       if (Math.floor(now) > Math.floor(before)) {
-        const room = id === 'mind_logic' && this.queueCapacity() > BASE_QUEUE + Math.floor(Math.max(0, before - CHAR_START) / 10);
-        this.logMsg(`${def.name} is now ${Math.floor(now)}.${room ? ` You can keep ${this.queueCapacity()} jobs in your head.` : ''}`, 'skill');
+        const room = id === 'mind_logic' && queueCapAt(now) > queueCapAt(before);
+        this.logMsg(`${def.name} is now ${Math.floor(now)}.${room ? ` You can keep ${queueCapAt(now)} jobs in your head.` : ''}`, 'skill');
       }
     } else {
       const places = gain < 0.0001 ? 6 : 4;
