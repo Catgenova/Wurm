@@ -1,7 +1,7 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { RECIPE_CATEGORIES, RECIPES, materialChoices, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 import { Repaint } from '../repaint';
@@ -132,6 +132,27 @@ export class CraftPanel {
     const meta = document.createElement('small');
     meta.textContent = `${skillName(r.skill)} · ${this.game.duration(ACTION_BY_ID.get(r.id)!).toFixed(0)} s`;
     name.append(meta);
+    /*
+     * What it would come out at, which nothing anywhere has ever said.
+     *
+     * Your skill is the ceiling and your tool decides how often you reach it,
+     * and both halves of that were findable only by making forty of something
+     * and noticing. It was reported as the game being broken — "i've made a
+     * lot of whetstones and haven't managed anything other than QL 1" — which
+     * is what the rule looks like from outside when nobody has said it.
+     */
+    const pr = prospect(r, this.game);
+    const worth = document.createElement('small');
+    worth.className = 'craft-ql' + (pr.toolBound ? ' craft-ql-held' : '');
+    worth.textContent = !pr.tooled
+      ? `up to QL ${pr.ceiling.toFixed(0)}`
+      : pr.reach >= 0.9
+        ? `QL ${pr.ceiling.toFixed(0)}, near enough every time`
+        : `up to QL ${pr.ceiling.toFixed(0)}, about ${Math.round(pr.reach * 100)}% of goes; the rest near QL ${pr.short.toFixed(0)}`;
+    worth.title = pr.toolBound
+      ? `Your ${lower(r.tool as string)} is what is holding this back, not your hands. A better one reaches your skill more often.`
+      : 'Your skill is the ceiling; the tool decides how often a go reaches it.';
+    name.append(worth);
     const needs = document.createElement('div');
     needs.className = 'craft-needs';
     const parts: HTMLElement[] = [];

@@ -13,6 +13,7 @@ import { itemName } from '../game/items';
 import { ACTION_BY_ID } from '../game/actions';
 import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
+import { ashore, JOURNAL, nextGoals } from '../game/journal';
 import { uiPoint } from './screen';
 
 export interface HudCallbacks {
@@ -105,6 +106,13 @@ export class Hud {
   private actionFill: HTMLDivElement;
   private queueEl: HTMLDivElement;
   private goBtn: HTMLButtonElement;
+  private guideEl: HTMLDivElement;
+  private guideTitle: HTMLDivElement;
+  private guideBody: HTMLDivElement;
+  /** Which goal the guide is showing, so it is only rewritten when it changes. */
+  private guideOn = '';
+  /** Opens the journal window; filled in by the UI that owns the windows. */
+  openJournal: (() => void) | null = null;
   private hintEl: HTMLDivElement;
   private gridBtn: HTMLButtonElement | null = null;
   private compass: HTMLSpanElement;
@@ -327,6 +335,53 @@ export class Hud {
     root.append(this.actionEl);
 
     /*
+     * What to do next, for somebody who came ashore ninety seconds ago.
+     *
+     * There is no tutorial on this island and never has been. The journal is
+     * eighty-five goals in eleven chapters, all on screen at once, which is a
+     * fine list and a poor answer to the only question a new arrival has,
+     * which is "what now": a list says everything at the same volume and
+     * leaves the reading to you.
+     *
+     * So the first chapter is read out, one goal at a time, in as many words
+     * as it takes — and then it stands down for good, because by the time the
+     * stake is in the ground the question has changed to "what else" and the
+     * journal is the right answer to that one. It can be put away sooner, and
+     * once put away it stays away.
+     */
+    this.guideEl = document.createElement('div');
+    this.guideEl.className = 'guide';
+    this.guideEl.hidden = true;
+    this.guideTitle = document.createElement('div');
+    this.guideTitle.className = 'guide-title';
+    this.guideBody = document.createElement('div');
+    this.guideBody.className = 'guide-body';
+    const guideBar = document.createElement('div');
+    guideBar.className = 'guide-bar';
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'tb-btn tb-small';
+    more.textContent = 'The rest of it';
+    more.title = 'Open the journal: everything anybody thought worth doing here';
+    more.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openJournal?.();
+    });
+    const hush = document.createElement('button');
+    hush.type = 'button';
+    hush.className = 'tb-btn tb-small';
+    hush.textContent = 'Put it away';
+    hush.title = 'Stop showing this. The journal (J) has all of it whenever you want it.';
+    hush.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.game.settings.guide = false;
+      this.guideEl.hidden = true;
+    });
+    guideBar.append(more, hush);
+    this.guideEl.append(this.guideTitle, this.guideBody, guideBar);
+    root.append(this.guideEl);
+
+    /*
      * The belt: the jobs you do most, hung on a worn toolbelt's loops and
      * pressed with the number keys. No belt, no loops.
      */
@@ -491,6 +546,7 @@ export class Hud {
 
   update(renderer: Renderer, fps: number): void {
     this.refreshStorey();
+    this.refreshGuide();
     const p = this.game.player;
     this.nameEl.textContent = p.name;
     for (const [id, bar] of Object.entries(this.bars)) {
@@ -677,6 +733,30 @@ export class Hud {
       this.queueEl.hidden = false;
       this.queueEl.textContent = `Then: ${this.queueWords(waiting)} · ${waiting.length + 1}/${this.game.queueCapacity()}`;
     } else this.queueEl.hidden = true;
+  }
+
+  /**
+   * The next thing to do, while there is still a first thing.
+   *
+   * Only rewritten when the goal changes, since this runs every frame and the
+   * answer is the same from one to the next for minutes at a time.
+   */
+  private refreshGuide(): void {
+    if (!this.game.settings.guide || ashore(this.game.ticked)) {
+      if (!this.guideEl.hidden) this.guideEl.hidden = true;
+      return;
+    }
+    const next = nextGoals(this.game.ticked, 1)[0];
+    if (!next) {
+      this.guideEl.hidden = true;
+      return;
+    }
+    if (next.id === this.guideOn) return;
+    this.guideOn = next.id;
+    this.guideEl.hidden = false;
+    const done = JOURNAL[0].goals.filter((g) => this.game.ticked.has(g.id)).length;
+    this.guideTitle.textContent = `${next.text} \u00b7 ${done + 1} of ${JOURNAL[0].goals.length}`;
+    this.guideBody.textContent = next.how ?? next.hint ?? '';
   }
 
   /**

@@ -17,6 +17,17 @@ export interface Goal {
   text: string;
   /** How it is done, for the ones that are not obvious. */
   hint?: string;
+  /**
+   * The same thing said to somebody who has never played, in as many words as
+   * it takes.
+   *
+   * `hint` is a note in a list, read by somebody who already knows what they
+   * are looking at. This is an instruction, read by somebody who came ashore
+   * ninety seconds ago and does not yet know that right-click is how anything
+   * happens. Only the goals a new arrival meets first have one, because after
+   * the first chapter the question has stopped being "what now".
+   */
+  how?: string;
   met: (g: Game) => boolean;
 }
 
@@ -36,12 +47,12 @@ export const JOURNAL: Chapter[] = [
   {
     name: 'Ashore',
     goals: [
-      { id: 'tree', text: 'Fell a tree', met: did('tree') },
-      { id: 'plank', text: 'Saw a log into planks', met: skill('carpentry', 1.2) },
-      { id: 'fire', text: 'Light a campfire', hint: 'Two shafts, placed and lit', met: did('fire') },
-      { id: 'cook', text: 'Cook food on a campfire', met: (g) => Object.keys(g.tally).some((k) => k.startsWith('made:cooked') || k === 'made:baked_potato' || k === 'made:roast_onion' || k === 'made:roast_nuts') },
-      { id: 'crate', text: 'Build a crate and place it', met: did('crate') },
-      { id: 'deed', text: 'Plant a stake to found a settlement', met: (g) => !!g.deed },
+      { id: 'tree', text: 'Fell a tree', how: 'Right-click any tree and choose Cut down. The hatchet you came ashore with is already in your pack — every job here takes the right tool and refuses without it, and it says which.', met: did('tree') },
+      { id: 'plank', text: 'Saw a log into planks', how: 'A felled tree leaves logs on the ground. Right-click one and Pick up, then open Crafting (R) and look for Saw into planks. Crafting lists everything there is to make, with what each needs in green if you have it and red if you do not.', met: skill('carpentry', 1.2) },
+      { id: 'fire', text: 'Light a campfire', hint: 'Two shafts, placed and lit', how: 'Crafting (R) makes shafts from a log. With two in your pack, right-click the ground and choose Build campfire, then right-click the fire and Light. Feed it wood to keep it in.', met: did('fire') },
+      { id: 'cook', text: 'Cook food on a campfire', how: 'Stand next to a lit fire with meat, a fish or a potato in your pack, and it will be among the things Crafting offers. A fire is a place as much as a thing: some recipes only appear when you are standing at one.', met: (g) => Object.keys(g.tally).some((k) => k.startsWith('made:cooked') || k === 'made:baked_potato' || k === 'made:roast_onion' || k === 'made:roast_nuts') },
+      { id: 'crate', text: 'Build a crate and place it', how: 'Three logs and a mallet make a log crate; six planks and twelve nails make a better one. Right-click the ground to place it. Everything on this island rots where it lies, and a crate slows that down a great deal.', met: did('crate') },
+      { id: 'deed', text: 'Plant a stake to found a settlement', how: 'You came ashore with a settlement stake. Stand where you want the middle of your land and right-click the ground: Found settlement. Inside its border, things rot ten times slower and nobody else may dig.', met: (g) => !!g.deed },
     ],
   },
   {
@@ -180,4 +191,38 @@ const ours = <T extends { mine?: boolean }>(xs: Iterable<T>): T[] =>
   [...xs].filter((x) => x.mine !== false);
 
 export const ALL_GOALS: Goal[] = JOURNAL.flatMap((c) => c.goals);
+
+/**
+ * What to do next, in the order somebody arriving would come to it.
+ *
+ * The journal is eighty-five goals in eleven chapters, all on screen at once,
+ * which is a very good list and a very poor answer to the question anybody
+ * actually has in their first hour, which is "what now". A list is not a
+ * path: it says everything at the same volume and leaves the reading to you.
+ *
+ * So the chapters are taken as an order — they were written as one — and this
+ * hands back the few undone goals nearest the front, which is the next thing
+ * to do and the two behind it. It stops naming things once the first chapter
+ * is behind you, because by then the question has changed from "what now" to
+ * "what else", and the full list is the right answer to that one.
+ */
+export function nextGoals(ticked: ReadonlySet<string>, n = 3): Goal[] {
+  const out: Goal[] = [];
+  for (const chapter of JOURNAL) {
+    for (const goal of chapter.goals) {
+      if (ticked.has(goal.id)) continue;
+      out.push(goal);
+      if (out.length >= n) return out;
+    }
+  }
+  return out;
+}
+
+/** Which chapter a goal is in, for saying where somebody has got to. */
+export const chapterOf = (id: string): string =>
+  JOURNAL.find((c) => c.goals.some((g) => g.id === id))?.name ?? '';
+
+/** Whether the first chapter is behind you, which is when the guide stands down. */
+export const ashore = (ticked: ReadonlySet<string>): boolean =>
+  JOURNAL[0].goals.every((g) => ticked.has(g.id));
 export const goalCount = ALL_GOALS.length;

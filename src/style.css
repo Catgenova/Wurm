@@ -695,6 +695,75 @@ kbd {
   font-size: 11px;
 }
 
+/*
+ * The first-steps card. It sits above the action bar, in the same column, and
+ * takes itself away once the first chapter of the journal is done.
+ */
+.guide {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  width: min(430px, calc(100vw - 32px));
+  padding: 9px 11px 8px;
+  border: 1px solid #5e4a2c;
+  border-radius: 4px;
+  background: rgba(26, 22, 18, 0.94);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.guide-title {
+  color: var(--ui-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.guide-body {
+  margin-top: 4px;
+  color: var(--ui-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.guide-bar {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+/* And the same list, in the journal, above the whole of it. */
+.goal-next {
+  margin: 2px 0 8px;
+  padding: 7px 8px;
+  border: 1px solid #4a3c26;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.goal-next-head {
+  color: var(--ui-accent);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.goal-next-row {
+  margin-top: 5px;
+  color: var(--ui-dim);
+  font-size: 12px;
+}
+
+.goal-next-first {
+  color: var(--ui-text);
+}
+
+.goal-next-how {
+  margin-top: 2px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* The one control on the action bar that can be clicked. */
 .action-stop {
   margin-top: 5px;
@@ -1284,6 +1353,20 @@ kbd {
   margin-left: 6px;
   color: var(--ui-dim);
   font-weight: 400;
+}
+
+/* What a go would come out at, and a warning when the tool is the limit. */
+.craft-ql {
+  display: block;
+  margin: 1px 0 0;
+  color: var(--ui-dim);
+  font-size: 11px;
+  font-weight: 400;
+  white-space: normal;
+}
+
+.craft-ql-held {
+  color: #d8a54b;
 }
 
 .craft-needs {

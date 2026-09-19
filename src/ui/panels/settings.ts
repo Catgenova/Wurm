@@ -103,6 +103,12 @@ export class SettingsPanel {
     }
     add('Show tile grid', 'Outline every tile. Also toggled with G.', () => game.settings.grid, (v) => (game.settings.grid = v));
     add(
+      'Show the first-steps card',
+      'A card over the action bar saying what to do next, while the first chapter of the journal is unfinished. It stands down on its own once the stake is in the ground; untick to put it away now.',
+      () => game.settings.guide,
+      (v) => (game.settings.guide = v),
+    );
+    add(
       'Cut away walls facing you',
       'Take away the walls standing between you and the inside of a building. Also toggled with X, or the ◪ button beside the storey arrows.',
       () => game.settings.cutaway,

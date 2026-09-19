@@ -634,6 +634,23 @@ jobs:
           npx esbuild supabase/test/paced.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/paced.mjs --log-level=error
           node node_modules/.cache/paced.mjs
+      - name: Somebody coming ashore is told what to do and what decides it
+        run: |
+          # There is no tutorial on this island and never has been. The
+          # journal is eighty-five goals all on screen at once, which is a
+          # good list and a poor answer to "what now": a list says everything
+          # at the same volume. The first chapter is read out one goal at a
+          # time now, in as many words as it takes, and stands down for good
+          # once the stake is in the ground.
+          #
+          # And one rule is said out loud that never was: your skill is the
+          # ceiling and your tool decides how often you reach it. That was
+          # reported as the game being broken — "i've made a lot of whetstones
+          # and haven't managed anything other than QL 1" — which is what a
+          # rule looks like from outside when nobody has said it.
+          npx esbuild supabase/test/ashore.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/ashore.mjs --log-level=error
+          node node_modules/.cache/ashore.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

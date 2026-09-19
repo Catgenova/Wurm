@@ -180,6 +180,8 @@ export class UI {
       (x, y, title, items) => this.menu.show(x, y, title, items));
     const journal = this.windows.create({ id: 'journal', title: 'Journal', x: 12, y: 56, width: 330, height: 420, anchor: 'tr', open: false });
     new JournalPanel(journal, game);
+    // "The rest of it" on the first-steps card opens the whole list.
+    this.hud.openJournal = () => journal.open();
     const pals = this.windows.create({ id: 'wildermon', title: 'Wildermon', x: 364, y: 330, width: 330, height: 320, anchor: 'tr', open: false });
     this.wildermon = new WildermonPanel(
       pals,

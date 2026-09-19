@@ -679,6 +679,28 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>What the island will not tell you</h3>
+    <p>A handful of rules here are real, load-bearing, and findable only by being refused or by
+    making forty of something and noticing. They are worth knowing up front.</p>
+    <p><b>Your skill is the ceiling; your tool decides how often you reach it.</b> Nothing you make
+    is ever better than your hands. A go rolls against the quality of the tool: land it and the
+    piece comes out at your skill, miss it and the piece comes out at roughly what the tool is
+    worth. The copper chisel you washed ashore with is quality fifteen, so it reaches your ceiling
+    about one go in seven. That is the whole reason to better a tool, and every recipe row in
+    <b>Crafting</b> (<kbd>R</kbd>) now says what it would come out at and marks the ones where the
+    tool rather than your hands is the thing in the way.</p>
+    <p><b>A job that costs no wind and takes no time teaches your body nothing.</b> Examining a
+    tile, locking a chest, naming a thing, choosing a stance — all free, all instant, and none of
+    them exercise. Only work that costs something teaches anything.</p>
+    <p><b>A cart needs an opening it fits through.</b> A person turns sideways through a single
+    door; wheels do not. A double door, an archway or a gate is what a cart, a wagon or a team
+    needs, and a fence with no way through it is a cart trap.</p>
+    <p><b>Everything rots where it lies.</b> A deed slows that to a tenth, a roof over a closed
+    room slows it to a tenth again, and a crate or a sack slows it further still. A pile of planks
+    left in a field is a pile of planks you are going to lose.</p>
+    <p><b>A refusal is information.</b> Nothing here fails silently: when a job will not go, the
+    line in <b>Trouble</b> says which tool, which material, which skill or which distance is
+    wrong. It is nearly always quicker to try the thing and read the refusal than to guess.</p>
     <h3>Walking, running, and looking into a room</h3>
     <p>A <b>run is not a walk gone faster</b>. Anything covering ground quickly — you on a good
     road, a mount at full stretch, a hunter closing on you — reaches further with each step,

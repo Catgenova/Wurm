@@ -465,6 +465,55 @@ export interface RecipeStatus {
   material?: string;
 }
 
+/**
+ * What a go at this would come out at, and what is holding it back.
+ *
+ * The rule that decides the quality of everything anybody makes here is
+ * written in one function, `productQl`, and said out loud nowhere at all. You
+ * find it out by making forty whetstones and noticing. It is two facts:
+ *
+ *   **Your skill is the ceiling.** Nothing you make is better than your hands,
+ *   ever. Not with a perfect tool, not on a lucky day.
+ *
+ *   **Your tool decides how often you reach it.** A go rolls against the
+ *   tool's quality: land it and the piece comes out at your skill, miss and it
+ *   comes out at roughly what the tool is worth. So a copper chisel at fifteen
+ *   gets you your ceiling about one go in seven and something rough the rest
+ *   of the time, and that is the whole reason to better a tool.
+ *
+ * Which is worth saying in the one window where it bites — a recipe row can
+ * say it in six words — rather than leaving it to be discovered by a player
+ * who has concluded the game is broken. It was reported as exactly that:
+ * "i've made a lot of whetstones and haven't managed anything other than QL 1".
+ */
+export interface Prospect {
+  /** The best it can be: your own hands. */
+  ceiling: number;
+  /** The share of goes that reach it, which is what the tool is worth. */
+  reach: number;
+  /** Roughly what a go that falls short comes out at. */
+  short: number;
+  /** Whether the tool rather than the hands is the thing in the way. */
+  toolBound: boolean;
+  /** Whether a tool is involved at all. */
+  tooled: boolean;
+}
+
+export function prospect(r: Recipe, g: Game): Prospect {
+  const ceiling = Math.min(100, Math.max(1, g.skills.get(r.skill)));
+  const toolQl = r.tool ? g.toolQl(r.tool) : 0;
+  if (!r.tool || toolQl <= 0) return { ceiling, reach: 1, short: ceiling, toolBound: false, tooled: false };
+  return {
+    ceiling,
+    reach: Math.max(0, Math.min(1, toolQl / 100)),
+    short: Math.min(ceiling, Math.max(1, toolQl)),
+    // A tool is in the way when missing with it costs you something worth
+    // having. A tool already better than your hands costs a miss nothing.
+    toolBound: toolQl < ceiling * 0.9,
+    tooled: true,
+  };
+}
+
 export function recipeStatus(r: Recipe, g: Game, want?: string): RecipeStatus {
   const tool = !r.tool || g.inventory.has(r.tool);
   const station = !r.station || g.atStation(r.station);
