@@ -1750,13 +1750,106 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   // Age is drawn rather than written: a yearling is two thirds the size of
   // its parents and an old one has put weight on.
   zoom *= pose.scale ?? 1;
+  const kept = standingSprite(pose);
+  if (kept) ctx.drawImage(kept.canvas, sx - kept.ax * zoom, sy - kept.ay * zoom, kept.w * zoom, kept.h * zoom);
+  else drawBody(ctx, sx, sy, zoom, pose);
+  drawCreatureOverlay(ctx, sx, sy, zoom, pose);
+}
+
+/** One body, drawn out of paths, with its feet at (sx, sy). */
+function drawBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   const own = pose.species ? OWN_BODY[pose.species] : undefined;
   if (own) own(ctx, sx, sy, zoom, pose);
   else if (pose.species && MONSTER_SHAPES[pose.species]) drawMonsterBody(ctx, sx, sy, zoom, pose, MONSTER_SHAPES[pose.species]);
   else if (pose.species && BEASTS[pose.species]) drawBeastBody(ctx, sx, sy, zoom, pose, BEASTS[pose.species]);
   else if (pose.species && BIRDS[pose.species]) drawBirdBody(ctx, sx, sy, zoom, pose, BIRDS[pose.species]);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
-  drawCreatureOverlay(ctx, sx, sy, zoom, pose);
+}
+
+/**
+ * How much room a body is given on its own canvas, and where its feet sit on
+ * it. Generous on purpose: the box is measured back to the ink that was
+ * actually laid down, so being too big costs one pass over some empty pixels
+ * when a species is first drawn and nothing thereafter, while being too small
+ * would clip an animal and there would be no way to tell from the code.
+ */
+const BODY_PAD = 256;
+const BODY_FOOT = 384;
+/** And how tall the pad is: everything above the feet, and a little below. */
+const BODY_SKY = 448;
+/** A fleece grows; five steps of it is finer than anybody can see. */
+const FLEECE_STEPS = 5;
+
+/**
+ * A standing body, kept as a picture rather than drawn again every frame.
+ *
+ * Every animal on the island was fifty-odd path operations per frame —
+ * ellipses, strokes, fills — where a tree is one `drawImage`. Thirty of them
+ * on screen is fifteen hundred canvas calls a frame for bodies alone.
+ *
+ * Only while it is standing still and settled: a walk is a continuous thing
+ * and cutting it into frames would either read as steppy or want more pictures
+ * than the memory is worth. What that leaves is the common case and the one
+ * that hurts — a settled deed with a dozen animals standing about it, and
+ * every idle beast on a live island. `gait` is eased rather than switched, so
+ * the wait for it to reach nought is what keeps a body that has just stopped
+ * from being frozen halfway out of its run.
+ *
+ * Nothing that changes without the body changing is in here: the health bar,
+ * the name and the hit flash are all drawn over the top, live, as before.
+ */
+function standingSprite(pose: CreaturePose): Sprite | null {
+  if (pose.moving || (pose.gait ?? 0) > 0.02 || !pose.species) return null;
+  const fleece = Math.round((pose.fleece ?? 1) * (FLEECE_STEPS - 1));
+  const key = `${SPRITE_SCALE}|body:${pose.species}:${pose.colors.join(',')}:${pose.facing ?? 0}:${fleece}`;
+  const had = cache.get(key);
+  if (had) return had;
+  const still: CreaturePose = { ...pose, moving: false, gait: 0, scale: 1, health: 1, label: undefined };
+  const box = inkBox((ctx) => drawBody(ctx, BODY_PAD, BODY_FOOT, 1, still), BODY_PAD * 2, BODY_SKY);
+  // A body that laid down no ink at all is not worth a canvas; draw it live.
+  if (!box) return null;
+  const spr = makeSprite(box.w, box.h, BODY_PAD - box.x, BODY_FOOT - box.y,
+    (ctx) => drawBody(ctx, BODY_PAD - box.x, BODY_FOOT - box.y, 1, still), 1);
+  cache.set(key, spr);
+  return spr;
+}
+
+/**
+ * Where a drawing actually put ink, so a picture of it can be cut to size.
+ *
+ * Done once per body the first time it is wanted and never again: the
+ * alternative is a box guessed by hand, which is either wasteful or clips
+ * something, and a clipped animal is the sort of fault that sits there for
+ * weeks because nothing in the code says it is happening.
+ */
+function inkBox(draw: (ctx: CanvasRenderingContext2D) => void, w: number, h: number): { x: number; y: number; w: number; h: number } | null {
+  const pad = document.createElement('canvas');
+  pad.width = w;
+  pad.height = h;
+  const ctx = pad.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  draw(ctx);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] === 0) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return null;
+  // A pixel of slack all round, so nothing is shaved by rounding on the blit.
+  x0 = Math.max(0, x0 - 1);
+  y0 = Math.max(0, y0 - 1);
+  x1 = Math.min(w - 1, x1 + 1);
+  y1 = Math.min(h - 1, y1 + 1);
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
 /**

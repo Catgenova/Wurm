@@ -44,7 +44,7 @@ import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { gemOf, JEWEL_BONUS } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
-import { TileIndex, keyX, keyY, tileKey } from './tileindex';
+import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
@@ -427,16 +427,26 @@ export class Game {
    * is on a tile for every tile it draws, so these are what keep that from
    * being a walk of every crate and every stick of furniture in the world.
    */
+  private readonly standing = new Tally();
   readonly placed = {
-    crates: new TileIndex<PlacedCrate>(),
-    campfires: new TileIndex<PlacedCampfire>(),
-    smelters: new TileIndex<PlacedSmelter>(),
-    kilns: new TileIndex<PlacedKiln>(),
-    furniture: new TileIndex<PlacedFurniture>(),
-    anvils: new TileIndex<PlacedAnvil>(),
-    posts: new TileIndex<PlacedPost>(),
-    traps: new TileIndex<PlacedTrap>(),
+    crates: new TileIndex<PlacedCrate>(this.standing),
+    campfires: new TileIndex<PlacedCampfire>(this.standing),
+    smelters: new TileIndex<PlacedSmelter>(this.standing),
+    kilns: new TileIndex<PlacedKiln>(this.standing),
+    furniture: new TileIndex<PlacedFurniture>(this.standing),
+    anvils: new TileIndex<PlacedAnvil>(this.standing),
+    posts: new TileIndex<PlacedPost>(this.standing),
+    traps: new TileIndex<PlacedTrap>(this.standing),
   };
+
+  /**
+   * Whether anything at all has been put down on a tile: a crate, a fire, a
+   * smelter, a kiln, a stick of furniture, an anvil, a post, a trap. One
+   * lookup in place of eight, for the renderer, which asks per tile.
+   */
+  anythingPlaced(x: number, y: number): boolean {
+    return this.standing.any(x, y);
+  }
   /**
    * The other people on the island, when there are any. Empty on a world
    * nobody else is in, which is every world until somebody opens one up, so

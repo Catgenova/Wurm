@@ -37,8 +37,42 @@ export const tileKey = (x: number, y: number): number => y * STRIDE + x;
 export const keyX = (key: number): number => key % STRIDE;
 export const keyY = (key: number): number => (key - (key % STRIDE)) / STRIDE;
 
+/**
+ * How many placed things stand on each tile, across every index at once.
+ *
+ * The renderer asked eight separate indexes what was on a tile, for every tile
+ * it drew: eight map lookups apiece, and on all but a handful of tiles all
+ * eight answers are nothing. One shared count answers "is there anything here
+ * at all" in a single lookup, and the eight are only asked on the few tiles
+ * where the answer can be yes.
+ */
+export class Tally {
+  private n = new Map<number, number>();
+
+  up(key: number, by = 1): void {
+    if (by <= 0) return;
+    this.n.set(key, (this.n.get(key) ?? 0) + by);
+  }
+
+  down(key: number, by = 1): void {
+    if (by <= 0) return;
+    const was = this.n.get(key);
+    if (was === undefined) return;
+    if (was > by) this.n.set(key, was - by);
+    else this.n.delete(key);
+  }
+
+  /** Whether anything at all stands on a tile. */
+  any(x: number, y: number): boolean {
+    return this.n.has(tileKey(x, y));
+  }
+}
+
 export class TileIndex<T extends Placed> {
   private byTile = new Map<number, T[]>();
+
+  /** The shared count of what stands where, when this index is part of one. */
+  constructor(private readonly tally?: Tally) {}
 
   private key(x: number, y: number): number {
     return tileKey(x, y);
@@ -49,6 +83,7 @@ export class TileIndex<T extends Placed> {
     const at = this.byTile.get(k);
     if (at) at.push(item);
     else this.byTile.set(k, [item]);
+    this.tally?.up(k);
   }
 
   remove(item: T, x = item.x, y = item.y): void {
@@ -56,7 +91,9 @@ export class TileIndex<T extends Placed> {
     const at = this.byTile.get(k);
     if (!at) return;
     const i = at.indexOf(item);
-    if (i >= 0) at.splice(i, 1);
+    if (i < 0) return;
+    at.splice(i, 1);
+    this.tally?.down(k);
     if (!at.length) this.byTile.delete(k);
   }
 
@@ -92,6 +129,9 @@ export class TileIndex<T extends Placed> {
 
   /** Rebuild from scratch, for a world that has just been loaded. */
   reset(items: Iterable<T>): void {
+    // What this index was contributing to the shared count comes off first,
+    // or a reload would leave every tile it ever held counted twice.
+    if (this.tally) for (const [k, at] of this.byTile) this.tally.down(k, at.length);
     this.byTile.clear();
     for (const item of items) this.add(item);
   }

@@ -63,7 +63,6 @@ import { MARK_COLOURS } from '../game/marks';
 import { SettingsPanel } from './panels/settings';
 import { keyName, type Keybinds } from '../game/keybinds';
 import { Hud, WINDOWS } from './hud';
-import { buildHelp } from './panels/help';
 import { EventLogPanel } from './panels/eventlog';
 import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
@@ -236,7 +235,22 @@ export class UI {
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (uiBox().w - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (uiBox().h - 460) / 2)}px`;
-    buildHelp(help);
+    /*
+     * The handbook, fetched the first time it is opened and not before.
+     *
+     * It is a hundred and thirty kilobytes of prose — the single largest thing
+     * in the bundle after the drawings, and every one of them was being
+     * parsed and built into the page before the first frame, for a window that
+     * starts closed and that most sessions never open at all. It is its own
+     * file now: the island starts sooner, and the handbook costs a moment the
+     * first time somebody asks for it, by which point they are reading.
+     */
+    let built = false;
+    help.onOpen = () => {
+      if (built) return;
+      built = true;
+      void import('./panels/help').then((m) => m.buildHelp(help));
+    };
   }
 
   /**

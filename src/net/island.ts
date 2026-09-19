@@ -5,7 +5,7 @@ import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
 import type { IslandCrate, IslandGround } from '../game/game';
-import { BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_RANGE, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
 
 /**
@@ -601,6 +601,22 @@ export class Island {
    * is thrown away on the way in if it has moved.
    */
   private acted = 0;
+  /**
+   * When the body last moved or did anything, for pacing the ground reads.
+   * Infinity until the first of either, so a body that has only just arrived
+   * is read at the quick pace rather than the slow one.
+   */
+  private restless = Infinity;
+  /** Set when something was done; the next ground read turns it into a moment. */
+  private stirred = false;
+
+  /**
+   * How much to stretch every beat by, which is one while somebody is looking
+   * at the island and a good deal more when the tab is in the background.
+   */
+  private slower(): number {
+    return typeof document !== 'undefined' && document.visibilityState === 'hidden' ? AWAY_SLOWER : 1;
+  }
   /** The island's shared topic we are holding a share of, if any. */
   private bodiesTopic = '';
   /** Bodies go on a topic everybody on the island agrees on. */
@@ -1563,7 +1579,7 @@ export class Island {
    * is `creature_sweep`'s only door.
    */
   async refreshMobs(now: number): Promise<void> {
-    if (!this.info || !this.hooks.mobs || now - this.lastMobs < MOBS_EVERY) return;
+    if (!this.info || !this.hooks.mobs || now - this.lastMobs < MOBS_EVERY * this.slower()) return;
     this.lastMobs = now;
     const { data, error } = await supabase().rpc('rpc_creatures', { p_world: this.info.id, p_range: MOBS_RANGE });
     /*
@@ -1590,7 +1606,19 @@ export class Island {
    * correct for.
    */
   async refreshGround(now: number): Promise<void> {
-    if (!this.info || !this.hooks.built || now - this.lastGround < GROUND_EVERY) return;
+    /*
+     * Nothing set down moves unless somebody moves it, so while we are
+     * standing still and not working, this is asked for at a walking pace
+     * rather than a running one — and the moment either changes, `restless`
+     * is the current moment and the wait is back to `GROUND_EVERY`.
+     */
+    if (this.stirred) {
+      this.stirred = false;
+      this.restless = now;
+    }
+    const idle = now - this.restless > GROUND_IDLE;
+    const wait = (idle ? GROUND_IDLE : GROUND_EVERY) * this.slower();
+    if (!this.info || !this.hooks.built || now - this.lastGround < wait) return;
     this.lastGround = now;
     // The slow half when it is owed, and the burning half every other time.
     const slow = this.groundSlow;
@@ -1700,6 +1728,8 @@ export class Island {
     }
 
     if (said === this.lastSaid) return;
+    // Feet have moved, so the ground round them is worth asking about again.
+    this.restless = now;
     if (now - this.lastMove < MOVE_EVERY) return;
     this.lastMove = now;
     this.lastSaid = said;
@@ -1994,6 +2024,11 @@ export class Island {
     }
     if (result.crates) this.hooks.stored?.(result.crates);
     if (result.pack || result.crates) this.acted++;
+    // Anything done with your hands can have changed what is standing here,
+    // so the ground goes back to being read at the quick pace. A flag rather
+    // than a stamp because nothing down here is holding the clock; the next
+    // read turns it into one.
+    this.stirred = true;
     // We know when this ends before the island tells anybody, so ask to be
     // settled then rather than at the next heartbeat — and put the clock on
     // the screen now rather than a heartbeat from now.

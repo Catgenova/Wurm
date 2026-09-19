@@ -228,6 +228,32 @@ export const CHANGE_PAGE = 20000;
  */
 export const MOBS_EVERY = 1;
 
+/**
+ * And how much slower everything is asked for when nobody is looking.
+ *
+ * A tab in the background is still a browser with a clock in it: it kept
+ * asking the island for the wildlife and the ground once a second apiece, for
+ * a screen nobody could see, and paid for both. A browser throttles its own
+ * timers when a tab is hidden, but not reliably and not by this much, and the
+ * frames that do run should not spend the island's budget. Eight to one is
+ * enough that a tab left open all afternoon costs a tenth of what it did, and
+ * little enough that coming back to it is still a second or so behind.
+ */
+export const AWAY_SLOWER = 8;
+
+/**
+ * And how far apart the ground is asked for when nothing here is happening.
+ *
+ * The wildlife is deliberately not slowed this way — a beast crossing a field
+ * is the one thing on this island that reads as broken when it is stale. What
+ * is *set down* is different: a crate, a fire, a wall does not move unless
+ * somebody moves it, and while you are standing still and not working, the
+ * only thing that can change it is another person. Four seconds is a fair
+ * wait to hear about somebody else's fence, and the moment you move or do
+ * anything at all it goes back to one.
+ */
+export const GROUND_IDLE = 4;
+
 /** How far out to ask. Beyond this a thing is somebody else's weather. */
 export const MOBS_RANGE = 40;
 

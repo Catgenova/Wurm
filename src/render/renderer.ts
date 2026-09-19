@@ -358,6 +358,50 @@ export class Renderer {
    */
   private colorBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
+  /**
+   * Entities are handed out of a pool rather than made fresh.
+   *
+   * Every tree, pile, crate, fire and animal on screen was an object literal,
+   * built and thrown away on every frame — a few thousand of them a second,
+   * all of them dead before the next frame starts. They are lent out of here
+   * instead and given back when the row is done.
+   *
+   * `take` blanks every optional field, which is the whole safety of it: a
+   * crate handed a creature's slot must not still be carrying that creature.
+   * There is exactly one place that can go wrong and it clears the lot.
+   */
+  private entPool: Entity[] = [];
+  private entN = 0;
+
+  private take(kind: Entity['kind'], x: number, y: number, sx: number, sy: number, spr: Sprite | null): Entity {
+    let e = this.entPool[this.entN];
+    if (!e) {
+      e = { kind, x, y, sx, sy, spr };
+      this.entPool[this.entN] = e;
+    } else {
+      e.kind = kind;
+      e.x = x;
+      e.y = y;
+      e.sx = sx;
+      e.sy = sy;
+      e.spr = spr;
+    }
+    this.entN++;
+    e.creature = undefined;
+    e.peer = undefined;
+    e.crateId = undefined;
+    e.fire = undefined;
+    e.smelter = undefined;
+    e.kiln = undefined;
+    e.piece = undefined;
+    e.anvil = undefined;
+    e.post = undefined;
+    e.trap = undefined;
+    e.deck = undefined;
+    e.lift = undefined;
+    this.ents.push(e);
+    return e;
+  }
   private waterPoly = new Float64Array(16);
   /** Every water polygon drawn this frame, so a wake can be kept on the water. */
   private waterEdge = new Float64Array(4);
@@ -966,6 +1010,7 @@ export class Renderer {
 
     for (let d = dLo; d <= dHi; d++) {
       this.ents.length = 0;
+      this.entN = 0;
       if (grain) {
         this.grainN = 0;
         this.grainM = 0;
@@ -1053,7 +1098,7 @@ export class Renderer {
             const data = world.viewData(x, y, false);
             const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : t === TileType.Bush ? bushSprite(bushSpecies(data)) : stumpSprite(treeSpecies(data));
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-            this.ents.push({ kind: t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
+            this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
           }
           if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
           fogPath.moveTo(pts[0], pts[1]);
@@ -1067,128 +1112,102 @@ export class Renderer {
           const data = world.getData(x, y);
           const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : t === TileType.Bush ? bushSprite(bushSpecies(data)) : stumpSprite(treeSpecies(data));
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          this.ents.push({ kind: t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr });
+          this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
         }
         if (this.game.ground.size && this.game.groundAt(x, y).length) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          this.ents.push({ kind: 'pile', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: pileSprite() });
+          this.take('pile', x, y, baseX, baseY + hh - avg * hs, pileSprite());
         }
         if (this.game.isToken(x, y)) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          this.ents.push({ kind: 'token', x, y, sx: baseX, sy: baseY + hh - avg * hs, spr: tokenSprite() });
+          this.take('token', x, y, baseX, baseY + hh - avg * hs, tokenSprite());
         }
         if (this.game.crops.size) {
           const crop = this.game.cropAt(x, y);
           if (crop) {
             const def = cropDef(crop.id);
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-            this.ents.push({
-              kind: 'crop',
-              x,
-              y,
-              sx: baseX,
-              sy: baseY + hh - avg * hs,
-              spr: cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1]),
-            });
+            this.take('crop', x, y, baseX, baseY + hh - avg * hs,
+              cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1]));
           }
         }
-        if (this.game.smelters.size) {
-          for (const sm of this.game.smeltersOnTile(x, y)) {
-            const [wx, wy] = smelterCentre(sm);
-            this.ents.push({ kind: 'smelter', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, smelter: sm });
-          }
-        }
-        if (this.game.kilns.size) {
-          for (const kl of this.game.kilnsOnTile(x, y)) {
-            const [wx, wy] = kilnCentre(kl);
-            this.ents.push({ kind: 'kiln', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, kiln: kl });
-          }
-        }
-        if (this.game.furniture.size) {
-          for (const fu of this.game.furnitureOnTile(x, y)) {
-            const [wx, wy] = furnitureCentre(fu);
-            this.ents.push({ kind: 'furniture', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, piece: fu });
-          }
-        }
-        if (this.game.anvils.size) {
-          for (const an of this.game.anvilsOnTile(x, y)) {
-            const [wx, wy] = anvilCentre(an);
-            this.ents.push({ kind: 'anvil', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, anvil: an });
-          }
-        }
-        if (this.game.posts.size) {
-          for (const po of this.game.postsOnTile(x, y)) {
-            const [wx, wy] = postCentre(po);
-            this.ents.push({ kind: 'post', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, post: po });
-          }
-        }
+        /*
+         * A bridge is not put down on a tile, it spans one, so it is asked
+         * for on its own rather than through the count below.
+         */
         if (this.game.bridges.size) {
           const bridge = this.game.bridgeAt(x, y);
           if (bridge) {
             const span = bridge.spans.find((sp) => sp.x === x && sp.y === y);
             const wx = x + 0.5;
             const wy = y + 0.5;
-            this.ents.push({
-              kind: 'deck',
-              x,
-              y,
-              sx: cam.worldToScreenX(wx, wy),
-              sy: cam.worldToScreenY(wx, wy, bridge.height),
-              spr: null,
-              deck: { kind: bridge.kind, done: !!span && Object.values(span.needed).every((n) => n <= 0), drop: bridge.height - world.centerHeight(x, y), id: bridge.id },
-            });
+            this.take('deck', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, bridge.height), null).deck =
+              { kind: bridge.kind, done: !!span && Object.values(span.needed).every((n) => n <= 0), drop: bridge.height - world.centerHeight(x, y), id: bridge.id };
           }
         }
-        if (this.game.traps.size) {
+        /*
+         * Everything put down, asked about only where something was put down.
+         *
+         * These are eight separate indexes and this used to ask all eight
+         * about every tile on screen: eight map lookups per tile, and on all
+         * but a handful of tiles all eight answers are nothing. One shared
+         * count of what stands where — kept by the indexes themselves, so it
+         * cannot fall out of step with them — turns that into a single
+         * lookup, and the eight are opened only where there is anything in
+         * them.
+         */
+        if (this.game.anythingPlaced(x, y)) {
+          for (const sm of this.game.smeltersOnTile(x, y)) {
+            const [wx, wy] = smelterCentre(sm);
+            this.take('smelter', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).smelter = sm;
+          }
+          for (const kl of this.game.kilnsOnTile(x, y)) {
+            const [wx, wy] = kilnCentre(kl);
+            this.take('kiln', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).kiln = kl;
+          }
+          for (const fu of this.game.furnitureOnTile(x, y)) {
+            const [wx, wy] = furnitureCentre(fu);
+            this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).piece = fu;
+          }
+          for (const an of this.game.anvilsOnTile(x, y)) {
+            const [wx, wy] = anvilCentre(an);
+            this.take('anvil', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).anvil = an;
+          }
+          for (const po of this.game.postsOnTile(x, y)) {
+            const [wx, wy] = postCentre(po);
+            this.take('post', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).post = po;
+          }
           for (const tr of this.game.trapsOnTile(x, y)) {
             const [wx, wy] = trapCentre(tr);
-            this.ents.push({ kind: 'trap', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, trap: tr });
+            this.take('trap', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).trap = tr;
           }
-        }
-        if (this.game.campfires.size) {
           for (const fire of this.game.campfiresOnTile(x, y)) {
             const [wx, wy] = fireCentre(fire);
-            this.ents.push({ kind: 'campfire', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: null, fire });
+            this.take('campfire', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).fire = fire;
           }
-        }
-        if (this.game.crates.size) {
           for (const crate of this.game.cratesOnTile(x, y)) {
             // A crate standing on a rack is drawn by the rack, up on its deck
             // where it actually is. Drawn here as well it would be a second
             // crate on the floor underneath the first.
             if (this.game.rackAt(crate.x, crate.y, crate.sx, crate.sy)) continue;
             const [wx, wy] = crateCentre(crate);
-            this.ents.push({ kind: 'crate', x, y, sx: cam.worldToScreenX(wx, wy), sy: cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), spr: crateSprite(crate.kind), crateId: crate.id });
+            this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), crateSprite(crate.kind)).crateId = crate.id;
           }
         }
         // Other people on the island stand on tiles like anything else does.
         if (this.game.roster.size) {
           for (const peer of this.game.roster.atTile(x, y)) {
             const [px, py] = this.game.roster.drawnAt(peer);
-            this.ents.push({
-              kind: 'peer',
-              x,
-              y,
-              sx: cam.worldToScreenX(px, py),
-              sy: cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), -4) + peer.level * WALL_HEIGHT),
-              spr: null,
-              peer,
-            });
+            this.take('peer', x, y, cam.worldToScreenX(px, py),
+              cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), -4) + peer.level * WALL_HEIGHT), null).peer = peer;
           }
         }
         if (this.game.creatures.list.size) {
           // Anything standing on a tile with a deck or a slab over it stands on that.
           const deckHere = this.game.laidOver(x, y);
           for (const cr of this.game.creatures.atTile(x, y)) {
-            this.ents.push({
-              kind: 'creature',
-              x,
-              y,
-              sx: cam.worldToScreenX(cr.x, cr.y),
-              sy: cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), -4)),
-              spr: null,
-              creature: cr,
-            });
+            this.take('creature', x, y, cam.worldToScreenX(cr.x, cr.y),
+              cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), -4)), null).creature = cr;
           }
         }
         if (this.game.foundations.size) this.drawFoundation(x, y, lit);
@@ -1212,15 +1231,7 @@ export class Renderer {
         const [vx, vy] = drivenBy ? furnitureCentre(drivenBy) : [player.x, player.y];
         // A rider sits where their mount stands, which is where they stand.
         const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
-        this.ents.push({
-          kind: 'player',
-          x: player.tileX,
-          y: player.tileY,
-          sx: cam.worldToScreenX(vx, vy),
-          sy,
-          spr: null,
-          lift: this.driverSeat() * zoom,
-        });
+        this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null).lift = this.driverSeat() * zoom;
       }
       if (grain) {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
