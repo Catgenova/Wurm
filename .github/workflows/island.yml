@@ -597,6 +597,48 @@ jobs:
           # tree, so anything the CLI would slot in early has been checked.
           supabase db push --include-all
           supabase migration list --linked
+      - name: What is alive on each island
+        # Asked for: "what is the crescent island mob count currently?" — a
+        # question nothing in the run could answer, because this is the only
+        # job with a line to the project. Reported rather than checked: a count
+        # is news and not a rule, so it never fails the run, and the island is
+        # only read from.
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'glebtboagnafcgwjjvfy' }}
+        run: |
+          # Say what this CLI can actually do before asking it anything: the
+          # name of the subcommand that runs SQL has moved between versions,
+          # and the log of a failed guess is worth more than the guess.
+          supabase --version
+          supabase db --help || true
+          # Wild is the only kind the target counts; anything tamed, penned or
+          # stored is on top of it. And the island is stocked a block at a time
+          # as people walk into it, so `blocks` is how much of it has ever been
+          # visited, which is the other half of why a count is what it is.
+          SQL=$(cat <<'EOSQL'
+          select w.name as island,
+                 w.size,
+                 count(*) filter (where c.mode = 'wild') as wild,
+                 count(*) filter (where c.mode is not null and c.mode <> 'wild') as kept,
+                 (select count(*) from world_stocked s where s.world_id = w.id) as blocks,
+                 greatest(32, (ceil(w.size / 32.0) * ceil(w.size / 32.0))::int) as whole_island_target
+            from world w
+            left join creature c on c.world_id = w.id
+           group by w.id, w.name, w.size
+           order by w.name;
+          EOSQL
+          )
+          # Whichever of these this version answers to. None of them is allowed
+          # to take the run down with it.
+          supabase db query --linked "$SQL" \
+            || printf '%s\n' "$SQL" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$SQL" \
+            || echo "::warning::Could not read the island; see the CLI's own help above."
 
   found:
     name: Found an island on the project
