@@ -3547,6 +3547,7 @@ insert into wall_type_def values ('door', 'Door', 0.75, true, null, false, false
 insert into wall_fitting values ('door', 'hinge', 2);
 insert into wall_type_def values ('double_door', 'Double door', 1, true, null, false, false, false);
 insert into wall_fitting values ('double_door', 'hinge', 4);
+insert into wall_type_def values ('arch', 'Arch', 0.85, true, null, false, false, false);
 insert into wall_type_def values ('fence', 'Fence', 0.3, false, 0.42, true, true, true);
 insert into wall_type_def values ('fence_gate', 'Fence gate', 0.4, true, 0.42, true, true, true);
 insert into wall_fitting values ('fence_gate', 'hinge', 2);

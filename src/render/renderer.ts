@@ -2042,6 +2042,9 @@ export class Renderer {
       case 'double_door':
         this.wallOpening(mat, lit, { px, py, quad }, 0.2, 0.8, 0, 0.76, 'double', zoom);
         break;
+      case 'arch':
+        this.wallArch(mat, lit, { px, py, quad }, zoom);
+        break;
       default:
         break;
     }
@@ -2280,6 +2283,128 @@ export class Renderer {
       }
       default:
         break;
+    }
+  }
+
+  /**
+   * An archway: a doorway with nothing hung in it.
+   *
+   * Asked for as a new doorway type in every material, and it is the one
+   * opening whose shape is the point of it. A door is a rectangle with a leaf
+   * in it and the leaf is what you look at; an arch is a hole, so the hole has
+   * to be worth looking at — which means a true round head, the wall's own
+   * thickness carried round the curve as a soffit, and the stones or the
+   * timbers that hold the head up drawn as the things that actually hold it up.
+   *
+   * The head is a real semicircle rather than a squashed one: a tile is forty
+   * terrain units across and a storey is thirty up, so a rise of four thirds
+   * of the half-width in `k` is a rise equal to it on the ground.
+   */
+  private wallArch(mat: MaterialDef, lit: number, g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py } = g;
+    const t0 = 0.26;
+    const t1 = 0.74;
+    const mid = (t0 + t1) / 2;
+    const halfW = (t1 - t0) / 2;
+    const rise = (halfW * UNITS_PER_TILE) / WALL_HEIGHT;
+    const spring = 0.5;
+    const steps = zoom >= 0.9 ? 12 : 6;
+    /** A point on the head, `u` from the left springing round to the right. */
+    const headT = (u: number): number => mid - halfW * Math.cos(Math.PI * u);
+    const headK = (u: number): number => spring + rise * Math.sin(Math.PI * u);
+    /** The whole opening, jambs and head, on one face of the wall. */
+    const outline = (s: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t0, 0, s), py(t0, 0, s));
+      ctx.lineTo(px(t0, spring, s), py(t0, spring, s));
+      for (let i = 1; i <= steps; i++) ctx.lineTo(px(headT(i / steps), headK(i / steps), s), py(headT(i / steps), headK(i / steps), s));
+      ctx.lineTo(px(t1, 0, s), py(t1, 0, s));
+      ctx.closePath();
+    };
+    /*
+     * What you see through it: the far side of the opening, dark at the head
+     * where the soffit shades it and lighter at the floor. An arch is not a
+     * window with a leaf behind it — it is a way through, and it should read
+     * as one from across the deed.
+     */
+    outline(-1);
+    const deep = ctx.createLinearGradient(px(mid, spring + rise, -1), py(mid, spring + rise, -1), px(mid, 0, -1), py(mid, 0, -1));
+    deep.addColorStop(0, rgb(mat.trim, lit * 0.16));
+    deep.addColorStop(1, rgb(mat.trim, lit * 0.42));
+    ctx.fillStyle = deep;
+    ctx.fill();
+    /*
+     * The soffit and the jambs: the wall's own thickness, seen edge on all the
+     * way round the opening. Drawn as one strip from the near outline to the
+     * far one, which is what makes an arch look cut through something rather
+     * than painted on it.
+     */
+    ctx.fillStyle = rgb(mat.color, lit * 0.58);
+    const strip = (ta: number, ka: number, tb: number, kb: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(ta, ka, 1), py(ta, ka, 1));
+      ctx.lineTo(px(tb, kb, 1), py(tb, kb, 1));
+      ctx.lineTo(px(tb, kb, -1), py(tb, kb, -1));
+      ctx.lineTo(px(ta, ka, -1), py(ta, ka, -1));
+      ctx.closePath();
+      ctx.fill();
+    };
+    strip(t0, 0, t0, spring);
+    strip(t1, 0, t1, spring);
+    for (let i = 0; i < steps; i++) {
+      strip(headT(i / steps), headK(i / steps), headT((i + 1) / steps), headK((i + 1) / steps));
+    }
+    // And the edge of the hole, so the face reads as cut rather than shaded.
+    outline(1);
+    ctx.strokeStyle = rgb(mat.trim, lit * 0.85);
+    ctx.stroke();
+    if (zoom < 0.7) return;
+    /*
+     * And what holds the head up, which is the whole of how an arch is built
+     * and differs by what it is built of. Stone is cut into wedges that lean
+     * on each other, with a keystone at the crown; timber is bent or built up
+     * in a ring and pegged, so it reads as a band rather than as courses.
+     */
+    if (mat.kind === 'stone') {
+      ctx.strokeStyle = rgb(mat.trim, lit * 0.9);
+      ctx.lineWidth = Math.max(1, 1.4 * zoom);
+      const ring = 0.3;
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const t = headT(u);
+        const k = headK(u);
+        // Out along the radius: the joint between one wedge and the next.
+        ctx.beginPath();
+        ctx.moveTo(px(t, k), py(t, k));
+        ctx.lineTo(px(mid + (t - mid) * (1 + ring), spring + (k - spring) * (1 + ring)),
+                   py(mid + (t - mid) * (1 + ring), spring + (k - spring) * (1 + ring)));
+        ctx.stroke();
+      }
+      // The keystone, a shade lighter because it is the one that was cut last.
+      ctx.beginPath();
+      const key = 0.5 / steps;
+      for (const [u, r] of [[0.5 - key, 0], [0.5 + key, 0], [0.5 + key, ring], [0.5 - key, ring]] as Array<[number, number]>) {
+        const t = mid + (headT(u) - mid) * (1 + r);
+        const k = spring + (headK(u) - spring) * (1 + r);
+        if (u === 0.5 - key && r === 0) ctx.moveTo(px(t, k), py(t, k));
+        else ctx.lineTo(px(t, k), py(t, k));
+      }
+      ctx.closePath();
+      ctx.fillStyle = rgb(mat.color, lit * 1.1);
+      ctx.fill();
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    } else {
+      // A timber ring, pegged where it meets the jambs.
+      ctx.strokeStyle = rgb(mat.trim, lit);
+      ctx.lineWidth = Math.max(2, 4.5 * zoom);
+      ctx.beginPath();
+      ctx.moveTo(px(t0, spring - 0.06), py(t0, spring - 0.06));
+      for (let i = 0; i <= steps; i++) ctx.lineTo(px(headT(i / steps), headK(i / steps), 1), py(headT(i / steps), headK(i / steps), 1));
+      ctx.lineTo(px(t1, spring - 0.06), py(t1, spring - 0.06));
+      ctx.stroke();
+      ctx.lineWidth = 1;
     }
   }
 

@@ -7,8 +7,10 @@
  * They do count, and always have: what a border wants is something standing on
  * it with its bill paid, and neither side has ever asked what kind of wall it
  * is. That half is measured here so the claim is a measurement rather than an
- * assurance — a room closed in by a solid wall, a door, a window and a bay
- * takes a roof.
+ * assurance — a room closed in by a solid wall, a door, a window, a bay and an
+ * archway takes a roof. The arch is the sharpest case of it: a doorway with
+ * nothing hung in it, that anything at all can walk through, and it closes a
+ * storey exactly as a foot of stone does.
  *
  * What was wrong was the answer to a storey that is genuinely short. "All
  * walls of the top storey must be built before roofing" names no storey and no
@@ -55,7 +57,7 @@ const SIX: Array<[number, number, Side, WallType]> = [
   [30, 30, 'w', 'door'],
   [30, 30, 's', 'window'],
   [31, 30, 'n', 'bay'],
-  [31, 30, 'e', 'solid'],
+  [31, 30, 'e', 'arch'],
   [31, 30, 's', 'solid'],
 ];
 
@@ -97,7 +99,7 @@ end $$;`);
 /* ---- closed in by a door, a window and a bay ---- */
 const mine = gapText(b.levels, bld.levelGaps(b, 0, game.player.x, game.player.y));
 const theirs = psql(`select coalesce(level_gap(${W}, 1, 0, 30.5, 30.5), 'CLOSED IN')`);
-check('a room closed in by a solid wall, a door, a window and a bay is closed in',
+check('a room closed in by a solid wall, a door, a window, a bay and an arch is closed in',
   mine === null && theirs === 'CLOSED IN', `browser ${mine ?? 'CLOSED IN'}, island ${theirs}`);
 
 const roof = ACTION_BY_ID.get('plan_floor');

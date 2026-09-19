@@ -4,7 +4,7 @@
  * planned first, then built by feeding them materials one unit at a time.
  */
 
-export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate';
+export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate';
 
 export interface WallTypeDef {
   id: WallType;
@@ -41,6 +41,17 @@ export const WALL_TYPES: WallTypeDef[] = [
   { id: 'bay', name: 'Bay window', factor: 1.25, passable: false, thick: 1.7 },
   { id: 'door', name: 'Door', factor: 0.75, passable: true, fittings: [['hinge', 2]] },
   { id: 'double_door', name: 'Double door', factor: 1, passable: true, fittings: [['hinge', 4]] },
+  /*
+   * A doorway with nothing hung in it.
+   *
+   * It is the only opening in the list that takes no ironwork — there is
+   * nothing to swing, so there are no hinges to cast — and the only one you
+   * can walk through that a wildermon can walk through as well. That is the
+   * trade: an archway is cheaper than a door and quicker to raise, and it
+   * shuts nothing out. Build it between two rooms of your own and put a door
+   * on the way in from the field.
+   */
+  { id: 'arch', name: 'Arch', factor: 0.85, passable: true },
   // Waist-high, and cheap because there is so much less of them. A gate is
   // the one thing in the list you can walk through.
   { id: 'fence', name: 'Fence', factor: 0.3, passable: false, height: 0.42, low: true, railed: true, standalone: true },

@@ -439,6 +439,15 @@ jobs:
           npx esbuild supabase/test/thick.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/thick.mjs --log-level=error
           node node_modules/.cache/thick.mjs
+      - name: An archway, in each material
+        run: |
+          # Asked for: "add a new doorway type, Arch, in each material." A type
+          # is offered in every material by construction, so what is worth
+          # checking is that both sides charge the same for it in all twelve —
+          # and that it hangs nothing, which is the whole of what it is.
+          npx esbuild supabase/test/arch.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/arch.mjs --log-level=error
+          node node_modules/.cache/arch.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written
