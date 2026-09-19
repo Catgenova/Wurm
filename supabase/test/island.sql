@@ -649,6 +649,12 @@ select settle(:'world2', :'ivar') \g /dev/null
 select '94. with a stack of oak: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
      || ' — logs left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log');
 
+-- Hands first, walls second: a storey over a log one wants carpentry ten, and
+-- being told that before you build the other five walls is the point of asking
+-- in that order.
+select '94b. raising a storey with the hands he has: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'add_floor', '{"kind":"tile","x":6,"y":7}'), 'allowed');
+update skill set value = 12 where uid = :'ivar' and id = 'carpentry';
 select '95. raising a storey with one wall up: ' || coalesce(act_refusal(:'world2', :'ivar', 'add_floor', '{"kind":"tile","x":6,"y":7}'), 'allowed');
 -- The other five borders, each checked before it is built rather than forced.
 do $$

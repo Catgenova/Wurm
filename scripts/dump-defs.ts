@@ -20,7 +20,7 @@ import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { WALL_TYPES, MATERIALS as BUILD_MATERIALS } from '../src/game/building';
+import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT } from '../src/game/building';
 import { COAX_LAPSE, COAX_STEP, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
          COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
 import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
@@ -137,9 +137,28 @@ out.push(`create table if not exists wall_type_def (
 );`);
 /* Passable for people and for nothing else; and the cast metal a wall takes over its material's bill. */
 out.push(`alter table wall_type_def add column if not exists beast_proof boolean not null default false;`);
+/* Wide enough to drive a cart through: a double door, an archway, a gate. */
+out.push(`alter table wall_type_def add column if not exists wide boolean not null default false;`);
 out.push(`create table if not exists wall_fitting (type text not null, item text not null, count int not null, primary key (type, item));`);
 out.push(`create table if not exists build_material_def (
   id text primary key, name text not null, kind text not null, tool text not null, skill text not null
+);`);
+/*
+ * How tall a material stands, and how heavy a storey of it is.
+ *
+ * Three grades of weight — timber, brick and rubble, cut stone — and nothing
+ * heavier goes over something lighter. Added as columns rather than written
+ * into the create, because the table is already out on every island.
+ */
+out.push(`alter table build_material_def add column if not exists storeys int not null default 10;`);
+out.push(`alter table build_material_def add column if not exists heft int not null default 1;`);
+/*
+ * The three shapes a roof comes in: what each costs, how far it rises and
+ * whether you may walk out onto it.
+ */
+out.push(`create table if not exists roof_shape_def (
+  id text primary key, name text not null, rise real not null,
+  factor real not null, walkable boolean not null default false, note text not null
 );`);
 out.push(`create table if not exists build_material_bill (
   material text not null, ord int not null, item text not null, n int not null,
@@ -720,7 +739,7 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+out.push(`truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
@@ -1019,6 +1038,12 @@ for (const [fn, v] of [
    */
   ['swim_wind', SWIM_WIND], ['drown_rate', DROWN_RATE], ['exhausted', EXHAUSTED],
   ['swim_depth', SWIM_DEPTH], ['swim_learn', SWIM_LEARN], ['drown_warn', DROWN_WARN],
+  /* And what a storey over a storey asks of the hands: ten a storey. */
+  ['storey_skill', STOREY_SKILL],
+  /* And what a roof over your head is worth to what is under it, and to you. */
+  ['indoors_decay', INDOORS_DECAY], ['indoors_rest', INDOORS_REST],
+  /* And how high one storey stands, which a bridge landing on one has to know. */
+  ['wall_height', WALL_HEIGHT],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
@@ -1127,10 +1152,14 @@ for (const [fn, v] of [
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
   if (w.beastProof) out.push(`update wall_type_def set beast_proof = true where id = ${q(w.id)};`);
+  if (w.wide) out.push(`update wall_type_def set wide = true where id = ${q(w.id)};`);
   for (const [item, n] of w.fittings ?? []) out.push(`insert into wall_fitting values (${q(w.id)}, ${q(item)}, ${q(n)});`);
 }
+for (const r of ROOF_SHAPES) {
+  out.push(`insert into roof_shape_def values (${q(r.id)}, ${q(r.name)}, ${q(r.rise)}, ${q(r.factor)}, ${q(r.walkable)}, ${q(r.note)});`);
+}
 for (const m of BUILD_MATERIALS) {
-  out.push(`insert into build_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.kind)}, ${q(m.tool)}, ${q(m.skill)});`);
+  out.push(`insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values (${q(m.id)}, ${q(m.name)}, ${q(m.kind)}, ${q(m.tool)}, ${q(m.skill)}, ${q(m.storeys)}, ${q(m.heft)});`);
   m.bill.forEach(([item, n], ord) => out.push(`insert into build_material_bill values (${q(m.id)}, ${q(ord)}, ${q(item)}, ${q(n)});`));
 }
 for (const f of FISH) out.push(`insert into fish_def values (${q(f.id)}, ${q(f.name)}, ${q(f.depth)}, ${q(f.level)}, ${q(f.weight)});`);

@@ -36,7 +36,7 @@ import { FAITH_ACTIONS } from './faith';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
-import type { FloorKind, Side, WallType } from './building';
+import type { FloorKind, RoofShape, Side, WallType } from './building';
 import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf } from './boons';
@@ -61,6 +61,8 @@ export type Target =
       wallType?: WallType;
       material?: string;
       floorKind?: FloorKind;
+      /** Which shape of roof, when a roof is what is being planned. */
+      roofShape?: RoofShape;
       buildingId?: number;
       /** Subtile for placing objects. */
       sx?: number;

@@ -501,6 +501,56 @@ jobs:
           npx esbuild supabase/test/bench.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/bench.mjs --log-level=error
           node node_modules/.cache/bench.mjs
+      - name: A storey stands on what is under it
+        run: |
+          # A building could be ten storeys of logs: nothing anywhere asked
+          # what the stuff would stand, so twelve materials differed only in
+          # what they cost and what colour they came out. Each says now how
+          # many storeys of it hold up, the shortest material in a building
+          # caps the whole of it, nothing heavier goes over something lighter,
+          # and raising a storey takes ten of the trade below for every one
+          # above the first. The cart half is the browser's alone, since the
+          # island has never had an opinion about where wheels may go.
+          npx esbuild supabase/test/storey.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/storey.mjs --log-level=error
+          node node_modules/.cache/storey.mjs
+      - name: A room with walls round it and a roof over it
+        run: |
+          # A roof cost half a wall, took the same work, and did nothing at
+          # all: what you left on the floor of a finished house rotted at the
+          # rate it rotted at in a field, and the only thing on the island
+          # that ever sheltered anything was a sack. There are rooms now —
+          # everywhere you reach without crossing a wall — and a room walled
+          # all round with something over it is indoors, worth a tenth of the
+          # rot and a third again of a night's sleep. The sweep never charged
+          # for a deed either, which the browser always had; both tenths are
+          # one function now. And a roof has a shape: gable, hip or a flat
+          # deck you can walk out onto.
+          npx esbuild supabase/test/indoors.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/indoors.mjs --log-level=error
+          node node_modules/.cache/indoors.mjs
+      - name: Glass in the window, and a colour on the wall
+        run: |
+          # Every window on the island has had glass in it since the first day
+          # and the glass was never made, never paid for and never once lit: a
+          # window wall cost three quarters of a solid one and nothing besides,
+          # so glazing was free and a window was cheaper than the wall it was
+          # cut into. And everything here comes out the colour of what it was
+          # made of, so a street of twelve materials is a street of twelve
+          # colours; paint is the first thing a builder gets to choose.
+          npx esbuild supabase/test/glazed.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/glazed.mjs --log-level=error
+          node node_modules/.cache/glazed.mjs
+      - name: The pile on the site, and a bridge to a storey
+        run: |
+          # A builder carried everything — twenty-four logs for six walls, at
+          # what a log weighs — while the crate they were tipped into stood on
+          # the very tile being worked. And a bridge's ends wanted a bank or a
+          # poured slab, both of them ground, so two towers a tile apart were
+          # a staircase down, a walk across the yard and a staircase up.
+          npx esbuild supabase/test/site.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/site.mjs --log-level=error
+          node node_modules/.cache/site.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

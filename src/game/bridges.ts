@@ -87,6 +87,16 @@ export interface Bridge {
   by: number;
   /** Height the deck is carried at. */
   height: number;
+  /**
+   * The storey its two ends meet, and the storey you walk it on.
+   *
+   * Nought for a bridge between two banks, which is every bridge there was.
+   * A bridge may land on a finished floor instead, and then both ends are that
+   * storey of their buildings and the deck is walked at that storey — which is
+   * how two towers get a walkway between them rather than a staircase down,
+   * a path across the yard and a staircase up.
+   */
+  level?: number;
   material?: string;
   /** One entry per tile of deck between the ends, in order. */
   spans: BridgeSpan[];
@@ -172,14 +182,20 @@ export const BRIDGE_ACTIONS: ActionDef[] = [
       const kind = (t.material ?? 'rope') as BridgeKind;
       const [ax, ay] = [g.player.tileX, g.player.tileY];
       if (g.bridgeReason(kind, ax, ay, t.x, t.y)) return;
-      const w = g.world;
-      const height = Math.round((w.centerHeight(ax, ay) + w.centerHeight(t.x, t.y)) / 2);
-      const b = g.addBridge(kind, ax, ay, t.x, t.y, height, kind === 'stone' ? undefined : 'Oak');
+      /*
+       * The height the deck is carried at, off whatever each end lands on:
+       * bank, poured slab, or the floor of a storey. `centerHeight` was the
+       * ground under the tile, which is the one thing a bridge to a second
+       * storey is not carried at.
+       */
+      const ends = [g.topDeck(ax, ay), g.topDeck(t.x, t.y)];
+      const height = Math.round((ends[0].height + ends[1].height) / 2);
+      const b = g.addBridge(kind, ax, ay, t.x, t.y, height, kind === 'stone' ? undefined : 'Oak', ends[0].level);
       const def = BRIDGES[kind];
       g.gainSkill(def.skill, 0.4);
       g.note('planned_bridge');
       g.logMsg(
-        `You set out a ${def.name.toLowerCase()} of ${b.spans.length} span${b.spans.length > 1 ? 's' : ''} across. Each one wants ${def.bill.map(([id, n]) => `${n} ${itemDef(id).name.toLowerCase()}`).join(', ')}. ${def.note}`,
+        `You set out a ${def.name.toLowerCase()} of ${b.spans.length} span${b.spans.length > 1 ? 's' : ''} across${b.level ? `, storey ${b.level + 1} to storey ${b.level + 1}` : ''}. Each one wants ${def.bill.map(([id, n]) => `${n} ${itemDef(id).name.toLowerCase()}`).join(', ')}. ${def.note}`,
         'system',
       );
       for (const sp of b.spans) g.events.emit('world', sp.x, sp.y);

@@ -9,6 +9,9 @@ import {
   MAX_LEVELS,
   SIDE_NAMES,
   gapText,
+  heftWord,
+  roofShapeDef,
+  storeySkill,
   WALL_TYPE_BY_ID,
   type Bill,
   type Building,
@@ -16,6 +19,8 @@ import {
   type MaterialDef,
   workLevel,
 } from './building';
+import type { PlacedCrate } from './crates';
+import { pickDye } from './dyes';
 import type { Game } from './game';
 import { itemDef } from './items';
 
@@ -34,15 +39,52 @@ export function materialName(id: string, n: number): string {
 
 const needsText = (bill: Bill): string => describeNeeds(bill, materialName);
 
-/** The next item on a bill that the player is carrying. */
-function nextAvailable(g: Game, bill: Bill): string | null {
-  for (const [id, n] of Object.entries(bill.needed)) if (n > 0 && g.inventory.has(id)) return id;
+/**
+ * The work site: a crate standing on the tile you are building on.
+ *
+ * A builder carried everything. Twenty-four logs for six walls, at what a log
+ * weighs, is four trips from the woodpile to the corner of a house, and the
+ * crate you tipped them all into is standing on the very tile you are working
+ * — which is where a builder's materials have stood since anybody built
+ * anything. So the bill draws from a crate on the tile first and from the pack
+ * after: the pile on the site is the pile you are building out of.
+ *
+ * On the tile, not within reach: a crate two tiles off is a store, and walking
+ * to it is the point of it being over there.
+ */
+const siteCrates = (g: Game, x: number, y: number): PlacedCrate[] =>
+  [...g.crates.values()].filter((c) => c.x === x && c.y === y);
+
+/** The next item on a bill that is to hand: in the pack, or in a crate on the tile. */
+function nextAvailable(g: Game, bill: Bill, at?: { x: number; y: number }): string | null {
+  for (const [id, n] of Object.entries(bill.needed)) {
+    if (n <= 0) continue;
+    if (g.inventory.has(id)) return id;
+    if (at && siteCrates(g, at.x, at.y).some((c) => c.items.some((it) => it.id === id && it.count > 0))) return id;
+  }
   return null;
 }
 
-function consumeUnit(g: Game, bill: Bill): string | null {
-  const id = nextAvailable(g, bill);
-  if (!id || !g.inventory.consume(id)) return null;
+function consumeUnit(g: Game, bill: Bill, at?: { x: number; y: number }): string | null {
+  const id = nextAvailable(g, bill, at);
+  if (!id) return null;
+  if (g.inventory.has(id)) {
+    if (!g.inventory.consume(id)) return null;
+  } else {
+    // Out of the crate on the site, a unit at a time, and the row goes when
+    // the last of it does.
+    let took = false;
+    for (const c of siteCrates(g, at?.x ?? 0, at?.y ?? 0)) {
+      const i = c.items.findIndex((it) => it.id === id && it.count > 0);
+      if (i < 0) continue;
+      const it = c.items[i];
+      it.count -= 1;
+      if (it.count <= 0) c.items.splice(i, 1);
+      took = true;
+      break;
+    }
+    if (!took) return null;
+  }
   bill.needed[id] -= 1;
   return id;
 }
@@ -57,6 +99,8 @@ const wallLevel = (g: Game, t: TileTarget): number => {
 /** The wall or fence on the side of a tile that is being worked on. */
 const wallAt = (g: Game, t: TileTarget) => (t.side ? g.buildings.wall(wallLevel(g, t), t.x, t.y, t.side) : undefined);
 const material = (id: string | undefined): MaterialDef | undefined => (id ? MATERIAL_BY_ID.get(id) : undefined);
+/** "second", "third": the ordinal ending, for the sentence that names a storey. */
+const nth = (n: number): string => (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
 
 /** Building work. These are hidden from the generic menu; the UI composes them with sides and materials. */
 export const BUILD_ACTIONS: ActionDef[] = [
@@ -153,6 +197,17 @@ export const BUILD_ACTIONS: ActionDef[] = [
         if (!floor || !isDone(floor)) return 'Build the floor of this storey first.';
       }
       if (g.buildings.wall(level, t.x, t.y, t.side)) return 'There is already a wall on that side.';
+      /*
+       * And what is underneath has to carry it. A storey of cut stone raised
+       * over a log one is a roof looking for somewhere to fall; the courses
+       * below are what hold a wall up, and a beginner finds that out by
+       * being told rather than by watching it come down.
+       */
+      const mat = material(t.material);
+      const bears = g.buildings.bearing(b, level);
+      if (mat && mat.heft > bears) {
+        return `${mat.name} is too heavy to raise over what is under it. This storey carries ${heftWord(bears)}, no more.`;
+      }
       return null;
     },
     perform: (t, g) => {
@@ -216,7 +271,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const mat = material(wall.material);
       const tool = mat ? needTool(g, mat.tool) : null;
       if (tool) return tool;
-      if (!nextAvailable(g, wall)) return `You need ${needsText(wall)}.`;
+      if (!nextAvailable(g, wall, t)) return `You need ${needsText(wall)}.`;
       return null;
     },
     perform: (t, g) => {
@@ -224,7 +279,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const wall = wallAt(g, t);
       if (!wall || isDone(wall)) return false;
       const mat = material(wall.material);
-      const used = consumeUnit(g, wall);
+      const used = consumeUnit(g, wall, t);
       if (!used || !mat) return false;
       g.gainSkill(mat.skill, 0.4);
       g.events.emit('world', t.x, t.y);
@@ -234,7 +289,120 @@ export const BUILD_ACTIONS: ActionDef[] = [
         return false;
       }
       g.logMsg(`You fit ${materialName(used, 1)} into the wall. Still needed: ${needsText(wall)}.`, 'event');
-      return nextAvailable(g, wall) !== null;
+      return nextAvailable(g, wall, t) !== null;
+    },
+  },
+  /*
+   * Paint.
+   *
+   * Everything on this island comes out the colour of what it was made of, so
+   * a street of twelve materials is a street of twelve colours and no more:
+   * the builder chooses what a wall is *of* and never what it looks like. A
+   * pot of the same dye the tailoring uses, worked into a limewash and
+   * brushed over finished work, is the first thing a builder gets to choose —
+   * and it is cheap, which is the point of offering it at all.
+   */
+  {
+    id: 'paint_wall',
+    label: 'Paint the wall',
+    verb: 'painting',
+    hidden: true,
+    skill: 'alchemy',
+    stamina: 0.02,
+    baseTime: 6,
+    applies: (t, g) => isTile(t) && !!wallAt(g, t),
+    labelFor: (t, g) => {
+      const d = pickDye(g);
+      return d ? `Paint it ${d.def.word}` : 'Paint the wall';
+    },
+    check: (t, g) => {
+      if (!isTile(t) || !t.side) return 'Choose a side.';
+      const wall = wallAt(g, t);
+      if (!wall) return 'There is no wall there.';
+      if (!isDone(wall)) return 'Finish it before you paint it.';
+      const d = pickDye(g);
+      if (!d) return 'You have no dye. Boil one out of berries, acorns or herbs with a bucket of lye.';
+      if (wall.dye === d.def.id) return `It is ${d.def.word} already.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (!isTile(t) || !t.side) return;
+      const wall = wallAt(g, t);
+      const d = pickDye(g);
+      if (!wall || !d || !g.inventory.remove(d.item.uid, 1)) return;
+      wall.dye = d.def.id;
+      g.gainSkill('alchemy', 0.3);
+      g.logMsg(`You brush the ${d.def.name.toLowerCase()} over the wall on the ${SIDE_NAMES[t.side]} side. It comes up ${d.def.word}.`, 'event');
+      g.events.emit('world', t.x, t.y);
+    },
+  },
+  {
+    id: 'strip_wall_paint',
+    label: 'Scrub the paint off',
+    verb: 'scrubbing',
+    hidden: true,
+    skill: 'alchemy',
+    stamina: 0.03,
+    baseTime: 5,
+    applies: (t, g) => isTile(t) && !!wallAt(g, t)?.dye,
+    check: (t, g) => {
+      if (!isTile(t) || !t.side) return 'Choose a side.';
+      const wall = wallAt(g, t);
+      if (!wall?.dye) return 'It has taken no colour.';
+      if (!g.inventory.has('lye_bucket')) return 'You need a bucket of lye to scrub it back.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (!isTile(t) || !t.side) return;
+      const wall = wallAt(g, t);
+      const lye = g.inventory.find('lye_bucket');
+      if (!wall || !lye) return;
+      g.inventory.remove(lye.uid, 1);
+      g.inventory.add('bucket', { ql: lye.ql });
+      delete wall.dye;
+      g.gainSkill('alchemy', 0.2);
+      g.logMsg(`You scrub the wall back to bare ${material(wall.material)?.name.toLowerCase() ?? 'stone'}.`, 'event');
+      g.events.emit('world', t.x, t.y);
+    },
+  },
+  {
+    id: 'paint_floor',
+    label: 'Paint the floor',
+    verb: 'painting',
+    hidden: true,
+    skill: 'alchemy',
+    stamina: 0.02,
+    baseTime: 6,
+    applies: (t, g) => {
+      if (!isTile(t)) return false;
+      const b = buildingOf(g, t);
+      return !!b && !!g.buildings.floor(topLevel(b), t.x, t.y);
+    },
+    labelFor: (t, g) => {
+      const d = pickDye(g);
+      return d ? `Paint the floor ${d.def.word}` : 'Paint the floor';
+    },
+    check: (t, g) => {
+      if (!isTile(t)) return null;
+      const b = buildingOf(g, t);
+      const floor = b && g.buildings.floor(topLevel(b), t.x, t.y);
+      if (!floor) return 'There is no floor here.';
+      if (!isDone(floor)) return 'Finish it before you paint it.';
+      const d = pickDye(g);
+      if (!d) return 'You have no dye. Boil one out of berries, acorns or herbs with a bucket of lye.';
+      if (floor.dye === d.def.id) return `It is ${d.def.word} already.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (!isTile(t)) return;
+      const b = buildingOf(g, t);
+      const floor = b && g.buildings.floor(topLevel(b), t.x, t.y);
+      const d = pickDye(g);
+      if (!floor || !d || !g.inventory.remove(d.item.uid, 1)) return;
+      floor.dye = d.def.id;
+      g.gainSkill('alchemy', 0.3);
+      g.logMsg(`You work the ${d.def.name.toLowerCase()} into the boards. The floor comes up ${d.def.word}.`, 'event');
+      g.events.emit('world', t.x, t.y);
     },
   },
   {
@@ -274,6 +442,24 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = buildingOf(g, t);
       if (!b) return 'No building here.';
       if (b.levels >= MAX_LEVELS) return `Buildings cannot be taller than ${MAX_LEVELS} storeys.`;
+      /*
+       * And no taller than what it is made of will stand.
+       *
+       * The shortest material in the whole building answers, not the one you
+       * are standing on: a plank wing joined to a stone tower caps the tower,
+       * because a building is one thing and comes down as one thing.
+       */
+      const cap = g.buildings.storeyCap(b);
+      if (b.levels >= cap) {
+        const worst = g.buildings.materialsIn(b).reduce((a, m) => (a && a.storeys <= m.storeys ? a : m), undefined as MaterialDef | undefined);
+        return `${worst?.name ?? 'What this is built of'} will not stand ${cap + 1} storeys. ${cap} is as high as it goes.`;
+      }
+      // And the hands to raise it: ten a storey in the trade of the one below.
+      const under = g.buildings.storeyMaterial(b, b.levels - 1);
+      const want = storeySkill(b.levels);
+      if (under && g.skills.get(under.skill) < want) {
+        return `Raising a ${b.levels + 1}${nth(b.levels + 1)} storey over ${under.name.toLowerCase()} takes ${under.skill} ${want}. You have ${g.skills.get(under.skill).toFixed(1)}.`;
+      }
       if (g.buildings.hasRoof(b)) return 'Take the roof off first.';
       if (g.buildings.hasLowWall(b, b.levels - 1)) return 'Nothing rests on a fence or a half wall. The storey below needs walls all round.';
       const below = gapText(b.levels, g.buildings.levelGaps(b, b.levels - 1, g.player.x, g.player.y));
@@ -326,8 +512,15 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!b) return;
       const kind: FloorKind = t.floorKind ?? 'floor';
       const level = kind === 'roof' ? b.levels : topLevel(b);
+      /*
+       * A building has one roof, so the first tile of it decides the shape and
+       * the rest follow. Changing your mind means taking the roof off, which
+       * is what changing your mind about a roof means anywhere.
+       */
+      if (kind === 'roof' && !b.roof) b.roof = t.roofShape ?? 'hip';
       const floor = g.buildings.setFloor(b, level, t.x, t.y, t.material, kind, kind === 'stairs' || kind === 'ladder' ? t.side : undefined);
-      const what = kind === 'ladder' ? 'ladder' : `${material(t.material)?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
+      const shape = kind === 'roof' ? `${roofShapeDef(b).name.toLowerCase()} ` : '';
+      const what = kind === 'ladder' ? 'ladder' : `${shape}${material(t.material)?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
       g.logMsg(`You plan a ${what}. It needs ${needsText(floor)}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -350,7 +543,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const mat = material(floor.material);
       const tool = floorKind(floor) === 'ladder' ? needTool(g, 'mallet') : mat ? needTool(g, mat.tool) : null;
       if (tool) return tool;
-      if (!nextAvailable(g, floor)) return `You need ${needsText(floor)}.`;
+      if (!nextAvailable(g, floor, t)) return `You need ${needsText(floor)}.`;
       return null;
     },
     perform: (t, g) => {
@@ -358,7 +551,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = buildingOf(g, t);
       const floor = b && g.buildings.floor(t.floorKind === 'roof' ? b.levels : topLevel(b), t.x, t.y);
       if (!floor || isDone(floor)) return false;
-      const used = consumeUnit(g, floor);
+      const used = consumeUnit(g, floor, t);
       if (!used) return false;
       const kind = floorKind(floor);
       const mat = material(floor.material);
@@ -371,7 +564,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
         return false;
       }
       g.logMsg(`You work ${materialName(used, 1)} into the ${FLOOR_KIND_NAMES[kind]}. Still needed: ${needsText(floor)}.`, 'event');
-      return nextAvailable(g, floor) !== null;
+      return nextAvailable(g, floor, t) !== null;
     },
   },
   {

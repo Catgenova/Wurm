@@ -1,3 +1,4 @@
+import { INDOORS_REST } from './building';
 import { drinkable, isBrew, isWorking } from './brewing';
 import type { ActionDef, Target } from './actions';
 import { FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
@@ -558,8 +559,11 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f) return;
       const def = furnitureDef(f.kind);
-      // A well-made bed is a better night than a cot with a thin mattress.
-      const rest = (def.bed ?? 1) * (0.6 + f.ql / 250);
+      // A well-made bed is a better night than a cot with a thin mattress —
+      // and a bed under a roof, in a room with walls all round it, is a better
+      // night again than the same bed standing in a field in the weather.
+      const inside = g.buildings.indoors(0, Math.floor(f.x), Math.floor(f.y));
+      const rest = (def.bed ?? 1) * (0.6 + f.ql / 250) * (inside ? INDOORS_REST : 1);
       g.note('slept');
       g.sleepUntilMorning(rest, furnitureName(f).toLowerCase());
     },

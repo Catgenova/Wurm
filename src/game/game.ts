@@ -12,7 +12,7 @@ import type { ItemRow } from '../net/island';
 import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
-import { Buildings, connectsDown, floorKind, isDone, MAX_LEVELS, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
+import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, MAX_LEVELS, roofShapeDef, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
@@ -799,7 +799,10 @@ export class Game {
     if (!this.world.isPassable(x, y)) return false;
     if (level <= 0) return true;
     const f = this.buildings.floor(level, x, y);
-    return !!f && isDone(f) && walkableKind(floorKind(f));
+    if (!f || !isDone(f)) return false;
+    // A flat roof is a deck: you walk out onto it. A pitched one you do not.
+    if (!walkableKind(floorKind(f))) return roofShapeDef(this.buildings.list.get(f.building)).walkable;
+    return true;
   }
 
   /** A finished staircase or ladder occupying a tile's floor slot at a storey. */
@@ -818,7 +821,10 @@ export class Game {
     const b = this.buildings;
     if (this.connector(x1, y1, level + 1) && !b.blocksAt(level, x0, y0, x1, y1)) return level + 1;
     // Deck is ground: it is flat, and the drop under it is not your problem.
-    if (level === 0 && this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) return 0;
+    if (this.bridges.size) {
+      const deck = this.bridgeStepLevel(x0, y0, x1, y1);
+      if (deck !== null && deck === level) return deck;
+    }
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
       if (level === 0) {
         const slab = this.slabStep(x0, y0, x1, y1);
@@ -843,12 +849,15 @@ export class Game {
     if (this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) {
       const b = this.bridgeAt(x1, y1) ?? this.bridgeAt(x0, y0);
       if (!b || !BRIDGES[b.kind].carts) return null;
+      // A walkway between two upper storeys is a walkway. Nobody drives it.
+      if (b.level) return null;
       // Coming off the deck onto the bank: the bank still has to take wheels.
       if (!this.bridgeAt(x1, y1) && !this.vehicleGround(x1, y1)) return null;
       return 0;
     }
     if (!this.vehicleGround(x1, y1)) return null;
-    if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
+    // A door is for a person. Wheels want a double door, an archway or a gate.
+    if (this.buildings.blocksVehicle(x0, y0, x1, y1)) return null;
     // Wheels get the bare cap: no team makes a cart stand on a wall.
     return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) && standsOn(this.world, x1, y1) ? 0 : null;
   };
@@ -2464,9 +2473,19 @@ export class Game {
     return lost;
   }
 
-  /** How fast things rot at a spot: full speed in the wild, a tenth of that on deed land. */
+  /**
+   * How fast things rot at a spot: full speed in the wild, a tenth of that on
+   * deed land, and a tenth of whatever that comes to under a roof.
+   *
+   * The indoor tenth is the whole of what a roof was worth and never gave.
+   * A building was a shape with a door in it: the roof tile cost as much as
+   * half a wall, took the same work, and did nothing at all for anything left
+   * under it. A crate of planks in a closed room now keeps a hundred times as
+   * long as one in a field, which is the reason anybody puts a roof on.
+   */
   decayMultiplier(x: number, y: number): number {
-    return this.onDeed(x, y) ? 0.1 : 1;
+    const out = this.onDeed(x, y) ? 0.1 : 1;
+    return this.buildings.indoors(0, x, y) ? out * INDOORS_DECAY : out;
   }
 
   private updateAction(dt: number): void {
@@ -3216,9 +3235,9 @@ export class Game {
 
   // ---- Bridges: ground where there was none. ----
 
-  addBridge(kind: BridgeKind, ax: number, ay: number, bx: number, by: number, height: number, material?: string): Bridge {
+  addBridge(kind: BridgeKind, ax: number, ay: number, bx: number, by: number, height: number, material?: string, level = 0): Bridge {
     const spans = spanTiles(ax, ay, bx, by).map(([x, y]) => ({ x, y, ...spanBill(kind) }));
-    const b: Bridge = { id: this.nextBridgeId++, kind, ax, ay, bx, by, height, material, spans };
+    const b: Bridge = { id: this.nextBridgeId++, kind, ax, ay, bx, by, height, material, level, spans };
     this.bridges.set(b.id, b);
     this.reindexDecks();
     return b;
@@ -3274,13 +3293,40 @@ export class Game {
    * and walk it; you do not climb onto one out of the water underneath.
    */
   bridgeStep(x0: number, y0: number, x1: number, y1: number): boolean {
+    return this.bridgeStepLevel(x0, y0, x1, y1) !== null;
+  }
+
+  /**
+   * The same step, and which storey it is walked on.
+   *
+   * Nought for a bridge between two banks. A bridge that lands on a finished
+   * floor is walked at that storey, so stepping onto it from the room it meets
+   * keeps you upstairs instead of dropping you into the yard.
+   */
+  bridgeStepLevel(x0: number, y0: number, x1: number, y1: number): number | null {
     // Onto the deck, from an end or from the deck itself.
     const to = this.bridgeAt(x1, y1);
-    if (to && bridgeDone(to) && this.onBridge(to, x0, y0)) return true;
+    if (to && bridgeDone(to) && this.onBridge(to, x0, y0)) return to.level ?? 0;
     // And off the far end of it again, which is a step down onto solid ground
     // from a deck the terrain underneath knows nothing about.
     const from = this.bridgeAt(x0, y0);
-    return !!from && bridgeDone(from) && this.onBridge(from, x1, y1);
+    return from && bridgeDone(from) && this.onBridge(from, x1, y1) ? from.level ?? 0 : null;
+  }
+
+  /**
+   * The highest thing at a tile that somebody may stand on and a bridge may
+   * land on: a finished floor of a building, or the ground and whatever is
+   * poured over it.
+   */
+  topDeck(x: number, y: number): { level: number; height: number } {
+    const base = this.surfaceHeight(x, y);
+    const b = this.buildings.buildingAt(x, y);
+    if (b) {
+      for (let l = b.levels - 1; l >= 1; l--) {
+        if (this.standable(x, y, l)) return { level: l, height: base + l * WALL_HEIGHT };
+      }
+    }
+    return { level: 0, height: base };
   }
 
   /** Why a bridge of this sort cannot be thrown between these two tiles, or null. */
@@ -3292,17 +3338,32 @@ export class Game {
     const span = spanTiles(ax, ay, bx, by);
     if (!span.length) return 'There is nothing between those two. Bridge a gap.';
     if (span.length > def.span) return `A ${def.name.toLowerCase()} spans ${def.span} tiles; that is ${span.length}.`;
-    for (const [x, y] of [[ax, ay], [bx, by]]) {
+    /*
+     * And what each end lands on.
+     *
+     * A bank, a poured slab, or a finished floor of a building — which is the
+     * new one, and the reason anybody builds a tower and then wishes they had
+     * not. A storey is as flat and as solid as a slab, and it is already at a
+     * height somebody chose; a walkway from one at second-storey height to
+     * another at the same is the thing two towers have always wanted and had
+     * to do with a staircase down, a walk across the yard and a staircase up.
+     */
+    const ends = [this.topDeck(ax, ay), this.topDeck(bx, by)];
+    for (const [i, [x, y]] of ([[ax, ay], [bx, by]] as Array<[number, number]>).entries()) {
       // The bank of a ravine always shares a corner with the ravine, so what
       // matters is whether you can stand in the middle of the tile, not
       // whether every corner of it is dry.
-      // A poured slab is an end: flat, solid and at a height somebody chose,
-      // which is the one thing two natural banks never are.
-      if (!this.slabAt(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < 0)) return 'Both ends want dry, solid ground to stand on.';
+      if (!ends[i].level && !this.slabAt(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < 0)) {
+        return 'Both ends want dry, solid ground to stand on.';
+      }
       if (this.bridgeAt(x, y)) return 'One end is already under a bridge.';
     }
-    const ha = this.surfaceHeight(ax, ay);
-    const hb = this.surfaceHeight(bx, by);
+    if (ends[0].level !== ends[1].level) {
+      const named = (n: number): string => (n ? `storey ${n + 1}` : 'the ground');
+      return `One end is on ${named(ends[0].level)} and the other on ${named(ends[1].level)}. A deck meets one storey or the other.`;
+    }
+    const ha = ends[0].height;
+    const hb = ends[1].height;
     if (Math.abs(ha - hb) > END_SLOP) return `The two ends are ${Math.abs(ha - hb).toFixed(0)} apart in height. One deck will not meet both; level one of them.`;
     const height = Math.round((ha + hb) / 2);
     for (const [x, y] of span) {

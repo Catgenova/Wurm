@@ -11,6 +11,7 @@ import {
   MATERIAL_BY_ID,
   progressOf,
   ROOF_RISE,
+  roofShapeDef,
   WALL_HEIGHT,
   WALL_THICK,
   FENCE_THICK,
@@ -26,6 +27,7 @@ import {
   floorBill,
 } from '../game/building';
 import { foundationDone } from '../game/foundations';
+import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
@@ -214,6 +216,12 @@ export function nearestSide(x: number, y: number, wx: number, wy: number): Side 
   return m === dn ? 'n' : m === ds ? 's' : m === dw ? 'w' : 'e';
 }
 
+/** A dye's hex, as the three numbers everything else here is drawn from. */
+const hexRgb = (hex: string): [number, number, number] => {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
 /**
@@ -384,6 +392,8 @@ export class Renderer {
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
   private deckHits: HitRect[] = [];
+  /** Painted materials, worked out once each and kept: there are not many. */
+  private readonly paints = new Map<string, MaterialDef>();
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -1634,6 +1644,26 @@ export class Renderer {
     }
   }
 
+  /**
+   * What a painted thing is the colour of.
+   *
+   * A limewash goes over the face and leaves the grain and the courses where
+   * they are, so only the colours change and every line the material draws on
+   * itself is drawn in the new one. Nothing is painted until somebody paints
+   * it, so the common case costs one undefined check.
+   */
+  private painted(mat: MaterialDef, dye: string | undefined): MaterialDef {
+    if (!dye) return mat;
+    const d = DYE_BY_ID.get(dye);
+    if (!d) return mat;
+    const key = `${mat.id}:${dye}`;
+    const had = this.paints.get(key);
+    if (had) return had;
+    const made: MaterialDef = { ...mat, color: hexRgb(d.colour), trim: hexRgb(d.shade), floor: hexRgb(d.colour) };
+    this.paints.set(key, made);
+    return made;
+  }
+
   /** A staircase climbing from the storey below to this floor's storey, starting at its facing side. */
   private drawStairs(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
@@ -1748,15 +1778,50 @@ export class Renderer {
     const eave = base + level * WALL_HEIGHT;
     const done = isDone(floor);
     const roof = (tx: number, ty: number): boolean => !!bld.roofAt(level, tx, ty) || (bld.floor(level, tx, ty) !== undefined && floorKind(bld.floor(level, tx, ty) as FloorTile) === 'roof');
+    /*
+     * How high a point of the roof stands, which is the whole of the shape.
+     *
+     * A **hip** rises wherever it is interior — all four tiles round a corner
+     * roofed — so every outside edge falls away and the middle of a big roof
+     * is a plateau. That is what every roof on the island was.
+     *
+     * A **gable** runs one ridge the length of the building and knows nothing
+     * about corners: the height depends only on how far across the short way
+     * you are, full at the middle line and nothing at either eave. The ends
+     * are wall carried up, which is why they are flat against the sky.
+     *
+     * A **flat** roof does not rise at all. It is a deck.
+     */
+    const b = bld.list.get(floor.building);
+    const shape = roofShapeDef(b);
+    const box = b ? bld.footprintBox(b) : { x0: x, y0: y, x1: x + 1, y1: y + 1 };
+    const along: 'x' | 'y' = box.x1 - box.x0 >= box.y1 - box.y0 ? 'x' : 'y';
+    const rise = ROOF_RISE * shape.rise;
+    /** How far up the gable a point is: nothing at the eaves, all of it on the ridge. */
+    const ramp = (px: number, py: number): number => {
+      const lo = along === 'x' ? box.y0 : box.x0;
+      const hi = along === 'x' ? box.y1 : box.x1;
+      if (hi - lo <= 0) return 1;
+      const t = ((along === 'x' ? py : px) - lo) / (hi - lo);
+      return Math.max(0, 1 - Math.abs(2 * t - 1));
+    };
+    const heightAt = (px: number, py: number, interior: boolean): number =>
+      shape.id === 'flat' ? eave : shape.id === 'gable' ? eave + rise * ramp(px, py) : eave + (interior ? rise : 0);
     // A corner is interior when all four tiles around it carry roof.
-    const cornerH = (cx: number, cy: number): number => (roof(cx - 1, cy - 1) && roof(cx, cy - 1) && roof(cx - 1, cy) && roof(cx, cy) ? eave + ROOF_RISE : eave);
+    const cornerH = (cx: number, cy: number): number =>
+      heightAt(cx, cy, roof(cx - 1, cy - 1) && roof(cx, cy - 1) && roof(cx - 1, cy) && roof(cx, cy));
     const corners: Array<[number, number, number]> = [
       [x, y, cornerH(x, y)],
       [x + 1, y, cornerH(x + 1, y)],
       [x + 1, y + 1, cornerH(x + 1, y + 1)],
       [x, y + 1, cornerH(x, y + 1)],
     ];
-    const ridge = eave + ROOF_RISE * 0.7;
+    // A hipped ridge sits a little under the corners it springs from, which is
+    // the number this roof has always been drawn with.
+    const ridge = shape.id === 'flat' ? eave : eave + rise * (shape.id === 'gable' ? ramp(x + 0.5, y + 0.5) : 0.7);
+    /** How high the middle of one edge stands: on a gable the ramp decides, and nothing else. */
+    const midH = (mx: number, my: number, next: boolean): number =>
+      shape.id === 'gable' ? heightAt(mx, my, true) : next ? ridge : eave;
     const avg = corners.reduce((s, c) => s + c[2], 0) / 4;
     const centreH = Math.max(avg, ridge);
     // Edge midpoints rise to the ridge where a neighbouring tile is roofed too, so rows form ridges.
@@ -1860,7 +1925,7 @@ export class Renderer {
       const a = corners[i];
       const b = corners[(i + 1) % 4];
       const [nx, ny] = neighbours[i];
-      const mid: [number, number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, roof(nx, ny) ? ridge : eave];
+      const mid: [number, number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, midH((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, roof(nx, ny))];
       // Both halves of a slope face the same way, so both take the shade of
       // the slope itself: the way out from the middle of the roof to the
       // middle of this side.
@@ -1906,7 +1971,7 @@ export class Renderer {
         const my = (a[1] + b[1]) / 2;
         ctx.beginPath();
         ctx.moveTo(csx, csy);
-        ctx.lineTo(cam.worldToScreenX(mx, my), cam.worldToScreenY(mx, my, ridge));
+        ctx.lineTo(cam.worldToScreenX(mx, my), cam.worldToScreenY(mx, my, midH(mx, my, true)));
         ctx.stroke();
       }
       ctx.lineWidth = 1;
@@ -2041,8 +2106,9 @@ export class Renderer {
   private drawFloor(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
-    const mat = MATERIAL_BY_ID.get(floor.material);
-    if (!mat) return;
+    const bare = MATERIAL_BY_ID.get(floor.material);
+    if (!bare) return;
+    const mat = this.painted(bare, floor.dye);
     const h = base + floor.level * WALL_HEIGHT + 0.5;
     const done = isDone(floor);
     const zoom = cam.zoom;
@@ -2226,8 +2292,9 @@ export class Renderer {
   private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
-    const mat = MATERIAL_BY_ID.get(wall.material);
-    if (!mat) return;
+    const bare = MATERIAL_BY_ID.get(wall.material);
+    if (!bare) return;
+    const mat = this.painted(bare, wall.dye);
     const [ax, ay, bx, by] = borderPoints(border);
     const kind = WALL_TYPE_BY_ID.get(wall.type);
     const h0 = base + wall.level * WALL_HEIGHT;
@@ -2424,10 +2491,10 @@ export class Renderer {
     }
     switch (wall.type) {
       case 'window':
-        this.wallOpening(mat, lit, { px, py, quad }, 0.3, 0.7, 0.38, 0.78, 'glass', zoom);
+        this.wallOpening(mat, lit, { px, py, quad }, 0.3, 0.7, 0.38, 0.78, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'bay':
-        this.wallOpening(mat, lit, { px, py, quad }, 0.18, 0.82, 0.33, 0.82, 'glass', zoom);
+        this.wallOpening(mat, lit, { px, py, quad }, 0.18, 0.82, 0.33, 0.82, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'door':
         this.wallOpening(mat, lit, { px, py, quad }, 0.34, 0.66, 0, 0.74, 'door', zoom);
@@ -2809,9 +2876,34 @@ export class Renderer {
    * comes out of the projection rather than out of a drawn line. A window that
    * was painted on the front of a sheet is a window on a sheet.
    */
+  /**
+   * How much of a light is burning in the room this wall shuts in.
+   *
+   * Only asked after dark, and only of a window, so the flood fill behind it
+   * runs on a handful of walls in the few frames that want it. Something on
+   * one of the room's own tiles is inside; a fire in the yard is not, however
+   * near the glass it stands.
+   */
+  private lampBehind(wall: Wall, border: Border): number {
+    const dark = this.game.darkness();
+    if (dark < 0.2) return 0;
+    const near = this.game.buildings.buildingAt(border.x, border.y)
+      ? { x: border.x, y: border.y }
+      : border.dir === 'h' ? { x: border.x, y: border.y - 1 } : { x: border.x - 1, y: border.y };
+    const room = this.game.buildings.room(wall.level, near.x, near.y);
+    if (!room) return 0;
+    const inside = new Set(room.tiles);
+    let most = 0;
+    for (const l of this.game.lights()) {
+      if (!inside.has(`${Math.floor(l.x)},${Math.floor(l.y)}`)) continue;
+      most = Math.max(most, l.strength);
+    }
+    return most * dark;
+  }
+
   private wallOpening(mat: MaterialDef, lit: number, g: WallGeom,
                       t0: number, t1: number, k0: number, k1: number,
-                      what: 'glass' | 'door' | 'double', zoom: number): void {
+                      what: 'glass' | 'door' | 'double', zoom: number, alight = 0): void {
     const ctx = this.canvas.ctx;
     const { px, py, quad } = g;
     // The reveal: the sides and head of the hole, which are in shadow because
@@ -2838,9 +2930,25 @@ export class Renderer {
     quad(t0, t1, k0, k1, -1);
     if (what === 'glass') {
       const gr = ctx.createLinearGradient(px(t0, k1, -1), py(t0, k1, -1), px(t1, k0, -1), py(t1, k0, -1));
-      gr.addColorStop(0, 'rgba(198, 226, 244, 0.85)');
-      gr.addColorStop(0.55, 'rgba(126, 170, 205, 0.8)');
-      gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
+      /*
+       * And a window with something burning behind it.
+       *
+       * Glass was drawn in every window on the island from the first day and
+       * never made, never paid for and never once lit: a window at midnight
+       * was the same cold blue pane as a window at noon, in a room with a
+       * fire in it. `alight` is how much of a light is in the room behind
+       * this wall, and it warms the pane and takes the sky out of it.
+       */
+      if (alight > 0) {
+        const k = Math.min(1, alight);
+        gr.addColorStop(0, `rgba(${(198 + 52 * k) | 0}, ${(226 - 26 * k) | 0}, ${(244 - 110 * k) | 0}, 0.9)`);
+        gr.addColorStop(0.55, `rgba(${(126 + 124 * k) | 0}, ${(170 + 20 * k) | 0}, ${(205 - 110 * k) | 0}, ${0.8 + 0.15 * k})`);
+        gr.addColorStop(1, `rgba(${(158 + 82 * k) | 0}, ${(198 - 10 * k) | 0}, ${(226 - 120 * k) | 0}, 0.9)`);
+      } else {
+        gr.addColorStop(0, 'rgba(198, 226, 244, 0.85)');
+        gr.addColorStop(0.55, 'rgba(126, 170, 205, 0.8)');
+        gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
+      }
       ctx.fillStyle = gr;
     } else {
       ctx.fillStyle = rgb(mat.floor, lit * 0.5, 0.95);

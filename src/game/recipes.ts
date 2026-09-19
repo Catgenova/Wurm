@@ -251,6 +251,15 @@ const MOULD_RECIPES: Recipe[] = MOULDS.map((m) => ({
 }));
 
 const SMELTER_RECIPES: Recipe[] = [
+  /*
+   * Glass, which the island had drawn in every window and never made.
+   *
+   * A window wall cost three quarters of a solid one and not a thing besides,
+   * so glazing was free and a window was cheaper than the wall it was cut into
+   * — which is exactly backwards. Sand run flat on a smelter hearth and cut
+   * square is what a pane is, and a window takes two of them.
+   */
+  { id: 'make_glass', category: 'Smelting', result: 'glass', count: 2, inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'smelting', label: 'Run a sheet of glass', verb: 'running glass', baseTime: 12, stamina: 0.03, difficulty: 16, done: 'You run the sand flat on the hearth and cut two panes out of the sheet.', fail: 'The sheet cords and cracks as it cools, and there is nothing square in it.', consumeOnFail: true },
   { id: 'make_bronze', category: 'Smelting', result: 'bronze_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'tin_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix bronze', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of bronze.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
   { id: 'make_steel', category: 'Smelting', result: 'steel_lump', count: 3, inputs: [{ item: 'iron_lump', count: 3 }, { item: 'coal', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Make steel', verb: 'making steel', baseTime: 14, stamina: 0.04, difficulty: 20, done: 'You draw off a crucible of steel.', fail: 'The heat is wrong and the crucible comes off grey and crumbling.', consumeOnFail: true },
   { id: 'make_brass', category: 'Smelting', result: 'brass_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'zinc_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix brass', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of brass.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },

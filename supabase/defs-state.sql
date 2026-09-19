@@ -28,9 +28,16 @@ create table if not exists wall_type_def (
   standalone boolean not null default false
 );
 alter table wall_type_def add column if not exists beast_proof boolean not null default false;
+alter table wall_type_def add column if not exists wide boolean not null default false;
 create table if not exists wall_fitting (type text not null, item text not null, count int not null, primary key (type, item));
 create table if not exists build_material_def (
   id text primary key, name text not null, kind text not null, tool text not null, skill text not null
+);
+alter table build_material_def add column if not exists storeys int not null default 10;
+alter table build_material_def add column if not exists heft int not null default 1;
+create table if not exists roof_shape_def (
+  id text primary key, name text not null, rise real not null,
+  factor real not null, walkable boolean not null default false, note text not null
 );
 create table if not exists build_material_bill (
   material text not null, ord int not null, item text not null, n int not null,
@@ -477,6 +484,7 @@ insert into item_def values ('dirt', 'Dirt', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'dirt';
 insert into item_def values ('sand', 'Sand', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'sand';
+insert into item_def values ('glass', 'Glass pane', 'material', 2, true, 0, null);
 insert into item_def values ('clay', 'Clay', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'clay';
 insert into item_def values ('peat', 'Peat', 'material', 2, true, null, null);
@@ -991,6 +999,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_wall', 'Plan wall', 'planning a wall', null, null, false, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_fence', 'Plan fence', 'planning a fence', null, null, false, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('build_wall', 'Build wall', 'building', null, null, false, null, 0.03, 5, null, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('paint_wall', 'Paint the wall', 'painting', 'alchemy', null, false, null, 0.02, 6, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('strip_wall_paint', 'Scrub the paint off', 'scrubbing', 'alchemy', null, false, null, 0.03, 5, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('paint_floor', 'Paint the floor', 'painting', 'alchemy', null, false, null, 0.02, 6, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('remove_wall', 'Remove wall', 'taking down the wall', null, null, false, null, 0.04, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('add_floor', 'Plan another storey', 'planning a storey', null, null, false, null, 0.02, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_floor', 'Plan floor', 'planning a floor', null, null, false, null, 0.02, 2, null, false, false);
@@ -1233,6 +1244,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_plate_arms_mould', 'Fire a plate arms mould', 'firing a mould', 'platesmithing', null, false, null, 0.03, 12, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_plate_legs_mould', 'Fire a plate legs mould', 'firing a mould', 'platesmithing', null, false, null, 0.03, 13, 17, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_plate_boots_mould', 'Fire a plate boots mould', 'firing a mould', 'platesmithing', null, false, null, 0.03, 12, 14, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_glass', 'Run a sheet of glass', 'running glass', 'smelting', null, false, null, 0.03, 12, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_bronze', 'Mix bronze', 'mixing an alloy', 'smelting', null, false, null, 0.03, 10, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_steel', 'Make steel', 'making steel', 'smelting', null, false, null, 0.04, 14, 20, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_brass', 'Mix brass', 'mixing an alloy', 'smelting', null, false, null, 0.03, 10, 12, false, true);
@@ -1368,7 +1380,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('clear_field', 'Clear the field', 'clearing the field', 'farming', null, false, null, 0.03, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt_here', 'Drop (raises the ground)', 'dropping dirt', 'digging', null, false, null, 0.02, 2, null, false, false);
 
-truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
@@ -1927,6 +1939,7 @@ update item_def set description = 'A wooden bucket. Fill it at any shore; ashes 
 update item_def set description = 'Water enough to leach ashes into lye.' where id = 'water_bucket';
 update item_def set description = 'Ash water, and it will take the hair off a hide. One bucket tans one skin.' where id = 'lye_bucket';
 update item_def set description = 'A pile of dirt. Drop it to raise the ground.' where id = 'dirt';
+update item_def set description = 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' where id = 'glass';
 update item_def set description = 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' where id = 'ash';
 update item_def set description = 'Chunks of rock. Paves gravel, builds cobblestone walls or becomes bricks.' where id = 'rock_shards';
 update item_def set description = 'A flat slab cut from rock. Laid as paving, a tile at a time.' where id = 'stone_slab';
@@ -3514,6 +3527,10 @@ create or replace function exhausted() returns double precision language sql imm
 create or replace function swim_depth() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
 create or replace function swim_learn() returns double precision language sql immutable as $fn$ select 0.09::double precision $fn$;
 create or replace function drown_warn() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
+create or replace function storey_skill() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
+create or replace function indoors_decay() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
+create or replace function indoors_rest() returns double precision language sql immutable as $fn$ select 1.35::double precision $fn$;
+create or replace function wall_height() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function craft_head() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function smith_gain() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function brew_gain() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
@@ -3579,52 +3596,61 @@ create or replace function choose_at() returns double precision language sql imm
 create or replace function sit_rest() returns double precision language sql immutable as $fn$ select 1800::double precision $fn$;
 insert into wall_type_def values ('solid', 'Solid', 1, false, null, false, false, false);
 insert into wall_type_def values ('window', 'Window', 0.75, false, null, false, false, false);
+insert into wall_fitting values ('window', 'glass', 2);
 insert into wall_type_def values ('bay', 'Bay window', 1.25, false, null, false, false, false);
+insert into wall_fitting values ('bay', 'glass', 4);
 insert into wall_type_def values ('door', 'Door', 0.75, true, null, false, false, false);
 insert into wall_fitting values ('door', 'hinge', 2);
 insert into wall_type_def values ('double_door', 'Double door', 1, true, null, false, false, false);
+update wall_type_def set wide = true where id = 'double_door';
 insert into wall_fitting values ('double_door', 'hinge', 4);
 insert into wall_type_def values ('arch', 'Arch', 0.85, true, null, false, false, false);
+update wall_type_def set wide = true where id = 'arch';
 insert into wall_type_def values ('fence', 'Fence', 0.3, false, 0.42, true, true, true);
 insert into wall_type_def values ('fence_gate', 'Fence gate', 0.4, true, 0.42, true, true, true);
+update wall_type_def set wide = true where id = 'fence_gate';
 insert into wall_fitting values ('fence_gate', 'hinge', 2);
 insert into wall_type_def values ('iron_gate', 'Iron-bound gate', 0.5, true, 0.6, true, true, true);
 update wall_type_def set beast_proof = true where id = 'iron_gate';
+update wall_type_def set wide = true where id = 'iron_gate';
 insert into wall_fitting values ('iron_gate', 'hinge', 2);
 insert into wall_fitting values ('iron_gate', 'bracket', 4);
 insert into wall_type_def values ('half_wall', 'Half wall', 0.5, false, 0.5, true, false, true);
-insert into build_material_def values ('log', 'Log', 'wood', 'mallet', 'carpentry');
+insert into roof_shape_def values ('gable', 'Gabled', 1, 0.3, false, 'One ridge down the length of it, falling to the eaves on two sides. The ends are wall carried up in a triangle rather than roof, so there are two slopes to cover instead of four and it is much the cheapest of the three.');
+insert into roof_shape_def values ('hip', 'Hipped', 1, 0.5, false, 'Falling away on all four sides. More covering than a gable and no gable ends to raise, and it sheds weather off every wall.');
+insert into roof_shape_def values ('flat', 'Flat', 0, 0.85, true, 'A deck rather than a roof: laid heavy enough to walk out onto. It costs most and what you get for it is a terrace.');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('log', 'Log', 'wood', 'mallet', 'carpentry', 3, 1);
 insert into build_material_bill values ('log', 0, 'log', 4);
-insert into build_material_def values ('plank', 'Plank', 'wood', 'mallet', 'carpentry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('plank', 'Plank', 'wood', 'mallet', 'carpentry', 4, 1);
 insert into build_material_bill values ('plank', 0, 'plank', 6);
-insert into build_material_def values ('timbercraft', 'Timbercraft', 'wood', 'mallet', 'carpentry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('timbercraft', 'Timbercraft', 'wood', 'mallet', 'carpentry', 4, 1);
 insert into build_material_bill values ('timbercraft', 0, 'plank', 2);
 insert into build_material_bill values ('timbercraft', 1, 'thatch', 2);
 insert into build_material_bill values ('timbercraft', 2, 'timber', 2);
-insert into build_material_def values ('cobblestone', 'Cobblestone', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('cobblestone', 'Cobblestone', 'stone', 'trowel', 'masonry', 6, 2);
 insert into build_material_bill values ('cobblestone', 0, 'rock_shards', 5);
-insert into build_material_def values ('slate', 'Slate', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('slate', 'Slate', 'stone', 'trowel', 'masonry', 8, 3);
 insert into build_material_bill values ('slate', 0, 'slate_brick', 4);
 insert into build_material_bill values ('slate', 1, 'mortar', 4);
-insert into build_material_def values ('marble', 'Marble', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('marble', 'Marble', 'stone', 'trowel', 'masonry', 10, 3);
 insert into build_material_bill values ('marble', 0, 'marble_brick', 4);
 insert into build_material_bill values ('marble', 1, 'mortar', 4);
-insert into build_material_def values ('sandstone', 'Sandstone', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('sandstone', 'Sandstone', 'stone', 'trowel', 'masonry', 7, 3);
 insert into build_material_bill values ('sandstone', 0, 'sandstone_brick', 4);
 insert into build_material_bill values ('sandstone', 1, 'mortar', 4);
-insert into build_material_def values ('stone_brick', 'Stone brick', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('stone_brick', 'Stone brick', 'stone', 'trowel', 'masonry', 10, 3);
 insert into build_material_bill values ('stone_brick', 0, 'stone_brick', 4);
 insert into build_material_bill values ('stone_brick', 1, 'mortar', 4);
-insert into build_material_def values ('clay_adobe', 'Clay adobe', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('clay_adobe', 'Clay adobe', 'stone', 'trowel', 'masonry', 5, 2);
 insert into build_material_bill values ('clay_adobe', 0, 'adobe', 5);
-insert into build_material_def values ('clay_bricks', 'Clay bricks', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('clay_bricks', 'Clay bricks', 'stone', 'trowel', 'masonry', 7, 2);
 insert into build_material_bill values ('clay_bricks', 0, 'clay_brick', 4);
 insert into build_material_bill values ('clay_bricks', 1, 'mortar', 4);
-insert into build_material_def values ('ornate_silver', 'Ornate silver', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('ornate_silver', 'Ornate silver', 'stone', 'trowel', 'masonry', 10, 3);
 insert into build_material_bill values ('ornate_silver', 0, 'stone_brick', 3);
 insert into build_material_bill values ('ornate_silver', 1, 'mortar', 3);
 insert into build_material_bill values ('ornate_silver', 2, 'silver_lump', 2);
-insert into build_material_def values ('ornate_gold', 'Ornate gold', 'stone', 'trowel', 'masonry');
+insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('ornate_gold', 'Ornate gold', 'stone', 'trowel', 'masonry', 10, 3);
 insert into build_material_bill values ('ornate_gold', 0, 'stone_brick', 3);
 insert into build_material_bill values ('ornate_gold', 1, 'mortar', 3);
 insert into build_material_bill values ('ornate_gold', 2, 'gold_lump', 2);
@@ -4351,6 +4377,8 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_plate_legs_mould', 0, 'sand', 5);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_plate_boots_mould', 'plate_boots_mould', 1, null, 'smelter', 'platesmithing', 'Fire a plate boots mould', 'firing a mould', 12, 0.03, 14, true, false, null, null, null, 'You fire a plate boots mould from the sand.', 'The sand slumps as it heats and the mould is spoiled.');
 insert into recipe_input values ('make_plate_boots_mould', 0, 'sand', 4);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_glass', 'glass', 2, null, 'smelter', 'smelting', 'Run a sheet of glass', 'running glass', 12, 0.03, 16, true, false, null, null, null, 'You run the sand flat on the hearth and cut two panes out of the sheet.', 'The sheet cords and cracks as it cools, and there is nothing square in it.');
+insert into recipe_input values ('make_glass', 0, 'sand', 3);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_bronze', 'bronze_lump', 4, null, 'smelter', 'smelting', 'Mix bronze', 'mixing an alloy', 10, 0.03, 12, true, true, null, null, null, 'You mix a crucible of bronze.', 'The mix will not take and you pour off a ruined crucible.');
 insert into recipe_input values ('make_bronze', 0, 'copper_lump', 3);
 insert into recipe_input values ('make_bronze', 1, 'tin_lump', 1);

@@ -106,7 +106,7 @@ export const DYE_ACTIONS: ActionDef[] = [
 ];
 
 /** The dye in the pack that will be used: the best pot of the first colour found. */
-function pickDye(g: Game): { item: Item; def: DyeDef } | null {
+export function pickDye(g: Game): { item: Item; def: DyeDef } | null {
   let best: { item: Item; def: DyeDef } | null = null;
   for (const it of g.inventory.items) {
     if (it.id !== 'dye') continue;
