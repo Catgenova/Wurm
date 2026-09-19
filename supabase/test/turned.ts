@@ -29,6 +29,8 @@ import { Camera } from '../../src/engine/camera';
 import { TURNS } from '../../src/render/view';
 import { HALF_H, HALF_W } from '../../src/render/iso';
 import { beastTurn, facingOf, FACINGS } from '../../src/render/sprites';
+import { pieceTurn } from '../../src/render/furniture';
+import type { Side } from '../../src/game/building';
 
 const ok: string[] = [];
 const bad: string[] = [];
@@ -137,9 +139,81 @@ for (const [dx, dy] of [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 
 check('and eight beasts heading eight different ways are eight different pictures',
   ways.size === FACINGS, `${ways.size} of ${FACINGS}`);
 
+/* ---- and the same again for a thing that does not walk -------------------- */
+/*
+ * Furniture had the identical fault in a different shape. A piece is an iso
+ * box — a top and the two faces nearest you — and every drawing puts its front
+ * on those two near faces: the doors of a wardrobe, the books on a shelf, the
+ * mouth of an oven. So a piece showed you its front from all eight viewpoints
+ * and there was no back to walk round to. The view could mirror the drawing,
+ * which kept an asymmetric piece standing the way it was set and did nothing
+ * else: turned a half, a piece showed you its face again.
+ *
+ * What is checked is the shape of the answer as you walk round one: the front
+ * comes into view, crosses, and goes out again, once, and the other side of
+ * the walk is its back.
+ */
+const SIDES: Side[] = ['n', 'e', 's', 'w'];
+const faces = (facing: Side): string[] =>
+  Array.from({ length: TURNS }, (_, r) => pieceTurn(facing, r).face);
+
+const shown = faces('s').filter((f) => f !== 'none').length;
+check('a piece shows its front from three viewpoints in eight', shown === 3,
+  `${faces('s').join(' ')} — two faces of four are in view at a time, and the front is one of them three times`);
+
+/* Square on once, and on one face either side of that: it comes and goes once. */
+const run = faces('s');
+const square = run.filter((f) => f === 'both').length;
+const half = run.filter((f) => f === 'half').length;
+check('square on to it once, and on one face either side of that', square === 1 && half === 2,
+  `${square} square on, ${half} on a single face`);
+
+const facing = run.indexOf('both');
+check('and the three are next to each other, so the front does not flicker in and out',
+  run[(facing + TURNS - 1) % TURNS] === 'half' && run[(facing + 1) % TURNS] === 'half',
+  `either side of the square-on viewpoint: ${run[(facing + TURNS - 1) % TURNS]} and ${run[(facing + 1) % TURNS]}`);
+
+/* The other side of the walk is its back, and the two never overlap. */
+const both = Array.from({ length: TURNS }, (_, r) => pieceTurn('s', r))
+  .filter((t) => t.face !== 'none' && t.behind).length;
+const backs = Array.from({ length: TURNS }, (_, r) => pieceTurn('s', r)).filter((t) => t.behind).length;
+check('you are behind it from three of the eight, and never behind its front at once',
+  backs === 3 && both === 0, `${backs} viewpoints behind it, ${both} of them somehow also showing the front`);
+
+/* The bug itself: four pieces set four ways are four different pictures. */
+const apart = new Set(SIDES.map((f) => {
+  const t = pieceTurn(f, 0);
+  return `${t.mirror}|${t.face}|${t.behind}`;
+}));
+check('four pieces set four ways are drawn four different ways from one spot', apart.size === 4,
+  `${apart.size} of 4: ${[...apart].join('  ')}`);
+
+/* And one piece is drawn differently as the camera goes round it. */
+const round = new Set(Array.from({ length: TURNS }, (_, r) => {
+  const t = pieceTurn('s', r);
+  return `${t.mirror}|${t.face}|${t.behind}`;
+}));
+check('and one piece is six different pictures as the camera goes round it', round.size === 6,
+  `${round.size} of eight viewpoints, since a plain back and a plain side look alike whichever face they are on`);
+
+/*
+ * And the one thing that must not have moved. Mirroring is what kept a bed's
+ * pillow at the end it was set at while the view went round; it is older than
+ * any of this and it is still the same answer.
+ */
+const OLD_TURN: Record<string, number> = { s: 0, w: 2, n: 4, e: 6 };
+const wasMirrored = (facing: Side, rotation: number): boolean =>
+  (((((OLD_TURN[facing] - rotation) % 8) + 8) % 8) >> 1) % 2 === 1;
+const moved: string[] = [];
+for (const f of SIDES) {
+  for (let r = 0; r < TURNS; r++) if (pieceTurn(f, r).mirror !== wasMirrored(f, r)) moved.push(`${f}@${r}`);
+}
+check('while the mirror that keeps a piece standing the way it was set has not moved',
+  moved.length === 0, moved.length ? moved.join(', ') : 'all thirty-two the same answer as before');
+
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {
   console.error(`${bad.length} of ${ok.length + bad.length} are not what they should be`);
   process.exit(1);
 }
-console.log(`a body is drawn eight ways round out of the one profile, and the camera turns the animal — ${ok.length} of ${ok.length}`);
+console.log(`a body and a piece are both drawn the way round they are actually turned — ${ok.length} of ${ok.length}`);

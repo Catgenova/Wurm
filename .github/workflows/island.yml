@@ -559,9 +559,16 @@ jobs:
           # and one heading east were the same picture and walking the camera
           # round one showed you the same flank. What the angle decides now is
           # how much of the length you are looking along, with the far end
-          # riding up the screen because it is further away. The failure is
-          # silent — a sign backwards and every beast walks backwards — so the
-          # eight are counted rather than eyeballed.
+          # riding up the screen because it is further away.
+          #
+          # Furniture had the same fault in a different shape: a piece is an
+          # iso box and every drawing put its front on the two faces nearest
+          # you, so a wardrobe showed its doors from everywhere and had no
+          # back. Which faces you have is taken from the relative turn now.
+          #
+          # Both failures are silent — a sign backwards and every beast on the
+          # island walks backwards — so the eight are counted rather than
+          # eyeballed.
           npx esbuild supabase/test/turned.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/turned.mjs --log-level=error
           node node_modules/.cache/turned.mjs

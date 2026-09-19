@@ -42,7 +42,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT, mirroredAt } from './furniture';
+import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT, pieceTurn } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -1417,7 +1417,7 @@ export class Renderer {
       }
       if (ent.kind === 'furniture' && ent.piece) {
         const piece = ent.piece;
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), mirroredAt(pieceFacing(piece), cam.rotation)));
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), pieceTurn(pieceFacing(piece), cam.rotation)));
         const [W, D] = furnitureSpan(piece.kind);
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
         // A sign is a board made to be read, so what is written on it stands
@@ -1543,7 +1543,7 @@ export class Renderer {
       const wy = ghost.y + (ghost.sy + h / 2) / SUBTILES;
       const px = cam.worldToScreenX(wx, wy);
       const py = cam.worldToScreenY(wx, wy, world.heightAt(wx, wy));
-      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, mirroredAt(ghost.facing, cam.rotation));
+      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, pieceTurn(ghost.facing, cam.rotation));
       if (!ghost.ok) {
         const [W, D] = furnitureSpan(ghost.piece);
         ctx.fillStyle = 'rgba(214, 58, 42, 0.5)';

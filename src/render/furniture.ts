@@ -182,7 +182,7 @@ export interface Tint {
   colour: string;
   shade: string;
 }
-type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean, tint?: Tint, trim?: number) => void;
+type Draw = (ctx: CanvasRenderingContext2D, W: number, D: number, h: number, lit?: boolean, tint?: Tint, trim?: number, turn?: PieceTurn) => void;
 
 const DRAW: Record<string, Draw> = {
   // A board across two posts. Whatever is written on it is drawn by the
@@ -206,20 +206,29 @@ const DRAW: Record<string, Draw> = {
     for (const [lx, ly] of [[-W * 0.62, 0], [W * 0.62, 0], [0, -D * 0.7]] as Array<[number, number]>) post(ctx, lx, ly, h - 2, w, 1.5);
     box(ctx, 0, 0, W * 0.82, D * 0.82, 2, w, h - 2);
   },
-  chair: (ctx, W, D, h) => {
+  chair: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     const w = WOODS.oak;
     const seat = h * 0.46;
+    /*
+     * The back panel stands off the edge the chair does not face, so which
+     * edge that is on screen depends on where you are standing. Sit in front
+     * of a chair and the back is behind the seat; walk round it and the back
+     * is the nearer of the two, with the seat behind it.
+     */
+    const away = turn?.behind ? 1 : -1;
     legs(ctx, W, D, seat, w);
+    if (turn?.behind) box(ctx, 0, D * 0.64 * -away, W * 0.74, D * 0.16, h - seat - 2, w, seat + 2);
     box(ctx, 0, 0, W * 0.8, D * 0.8, 2, w, seat);
-    // Back: a panel standing up off the far edge.
-    box(ctx, 0, -D * 0.64, W * 0.74, D * 0.16, h - seat - 2, w, seat + 2);
+    if (!turn?.behind) box(ctx, 0, D * 0.64 * away, W * 0.74, D * 0.16, h - seat - 2, w, seat + 2);
   },
-  bench: (ctx, W, D, h) => {
+  bench: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     const w = WOODS.dark;
     const seat = h * 0.52;
+    const away = turn?.behind ? 1 : -1;
     legs(ctx, W, D, seat, w, 0.88);
+    if (turn?.behind) box(ctx, 0, D * 0.6 * -away, W * 0.88, D * 0.14, h - seat - 2.2, w, seat + 2.2);
     box(ctx, 0, 0, W * 0.94, D * 0.82, 2.2, w, seat);
-    box(ctx, 0, -D * 0.6, W * 0.88, D * 0.14, h - seat - 2.2, w, seat + 2.2);
+    if (!turn?.behind) box(ctx, 0, D * 0.6 * away, W * 0.88, D * 0.14, h - seat - 2.2, w, seat + 2.2);
   },
   table: (ctx, W, D, h) => {
     const w = WOODS.oak;
@@ -234,18 +243,20 @@ const DRAW: Record<string, Draw> = {
     }
     box(ctx, 0, 0, W * 0.97, D * 0.97, 2.5, w, h - 2.5);
   },
-  desk: (ctx, W, D, h) => {
+  desk: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     const w = WOODS.dark;
     legs(ctx, W, D, h - 2.5, w, 0.88);
-    // A block of drawers hung under one end.
+    // A block of drawers hung under one end, on the side you sit at.
     box(ctx, -W * 0.42, -D * 0.08, W * 0.4, D * 0.4, h * 0.55, WOODS.oak, h * 0.3);
     box(ctx, 0, 0, W * 0.97, D * 0.97, 2.5, w, h - 2.5);
-    ctx.fillStyle = '#e0cf95';
-    for (const dy of [0, 4]) {
-      ctx.beginPath();
-      ctx.arc(-W * 0.42, -h * 0.5 + dy + D * 0.4, 0.85, 0, TAU);
-      ctx.fill();
-    }
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      ctx.fillStyle = '#e0cf95';
+      for (const dy of [0, 4]) {
+        ctx.beginPath();
+        ctx.arc(-W * 0.42, -h * 0.5 + dy + D * 0.4, 0.85, 0, TAU);
+        ctx.fill();
+      }
+    });
   },
   bed: (ctx, W, D, h) => {
     const w = WOODS.dark;
@@ -262,9 +273,10 @@ const DRAW: Record<string, Draw> = {
     box(ctx, 0, 0, W * 0.9, D * 0.9, h * 0.28, w, h * 0.5);
     box(ctx, 0, 0, W * 0.84, D * 0.84, h * 0.3, LINEN, h * 0.78);
   },
-  chest: (ctx, W, D, h) => {
+  chest: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     box(ctx, 0, 0, W * 0.9, D * 0.9, h * 0.68, WOODS.dark);
     box(ctx, 0, 0, W * 0.95, D * 0.95, h * 0.32, WOODS.oak, h * 0.68);
+    // The bands run over the lid either way; the lock is on the front alone.
     ctx.strokeStyle = '#46433e';
     ctx.lineWidth = 1.5;
     for (const k of [-0.5, 0.5]) {
@@ -274,80 +286,97 @@ const DRAW: Record<string, Draw> = {
       ctx.lineTo(bx, -h * 0.1 + D * 0.75 - Math.abs(k) * D * 0.2);
       ctx.stroke();
     }
-    ctx.fillStyle = '#e0cf95';
-    ctx.beginPath();
-    ctx.arc(0, -h * 0.62 + D * 0.9, 1.2, 0, TAU);
-    ctx.fill();
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      ctx.fillStyle = '#e0cf95';
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.62 + D * 0.9, 1.2, 0, TAU);
+      ctx.fill();
+    });
   },
-  coffer: (ctx, W, D, h) => {
+  coffer: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     box(ctx, 0, 0, W * 0.8, D * 0.8, h * 0.65, WOODS.grey);
     box(ctx, 0, 0, W * 0.86, D * 0.86, h * 0.35, WOODS.dark, h * 0.65);
-    ctx.fillStyle = '#e0cf95';
-    ctx.beginPath();
-    ctx.arc(0, -h * 0.58 + D * 0.8, 1, 0, TAU);
-    ctx.fill();
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      ctx.fillStyle = '#e0cf95';
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.58 + D * 0.8, 1, 0, TAU);
+      ctx.fill();
+    });
   },
-  cupboard: (ctx, W, D, h) => {
+  cupboard: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     box(ctx, 0, 0, W * 0.9, D * 0.9, h, WOODS.oak);
-    doors(ctx, W * 0.9, D * 0.9, h - 3, 3);
+    onFront(ctx, W, h, turn?.face ?? 'both', () => doors(ctx, W * 0.9, D * 0.9, h - 3, 3));
   },
-  wardrobe: (ctx, W, D, h) => {
+  wardrobe: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     box(ctx, 0, 0, W * 0.88, D * 0.88, h - 3, WOODS.dark);
     box(ctx, 0, 0, W * 0.96, D * 0.96, 3, WOODS.oak, h - 3);
-    doors(ctx, W * 0.88, D * 0.88, h - 6, 3);
+    onFront(ctx, W, h, turn?.face ?? 'both', () => doors(ctx, W * 0.88, D * 0.88, h - 6, 3));
   },
-  shelves: (ctx, W, D, h) => {
+  shelves: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     const w = WOODS.pale;
+    // Open at the front and boarded at the back, so walking round it turns a
+    // rack of oddments into a plain panel of boards.
+    if (turn?.face === 'none') box(ctx, 0, 0, W * 0.9, D * 0.2, h, WOODS.dark);
     post(ctx, -W * 0.9, 0, h, w, 2);
     post(ctx, W * 0.9, 0, h, w, 2);
     for (const k of [0.06, 0.36, 0.66, 0.94]) box(ctx, 0, 0, W * 0.88, D * 0.88, 1.6, w, h * k);
     // Odds and ends left on two of the boards.
-    ctx.fillStyle = '#8a6a44';
-    ctx.fillRect(-W * 0.45, -h * 0.36 - 4, 4.5, 4);
-    ctx.fillStyle = '#9a8a5e';
-    ctx.fillRect(W * 0.12, -h * 0.66 - 5, 5, 5);
-    ctx.fillStyle = '#6f7a3a';
-    ctx.fillRect(-W * 0.1, -h * 0.96 - 4, 3.5, 4);
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      ctx.fillStyle = '#8a6a44';
+      ctx.fillRect(-W * 0.45, -h * 0.36 - 4, 4.5, 4);
+      ctx.fillStyle = '#9a8a5e';
+      ctx.fillRect(W * 0.12, -h * 0.66 - 5, 5, 5);
+      ctx.fillStyle = '#6f7a3a';
+      ctx.fillRect(-W * 0.1, -h * 0.96 - 4, 3.5, 4);
+    });
   },
-  bookshelf: (ctx, W, D, h) => {
+  bookshelf: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     const w = WOODS.dark;
     box(ctx, 0, 0, W * 0.9, D * 0.9, h - 3, w);
     box(ctx, 0, 0, W * 0.97, D * 0.97, 3, WOODS.oak, h - 3);
-    // Rows of books standing on the open face, following its slant.
-    const colors = ['#8c3f34', '#3f5c8c', '#6f7a3a', '#8c6a2f', '#5a3b6b'];
-    for (let row = 0; row < 3; row++) {
-      const y = -(h - 6) * (0.24 + row * 0.3);
-      for (let i = 0; i < 6; i++) {
-        const t = i / 5;
-        const bx = -W * 0.78 + t * W * 0.68;
-        ctx.fillStyle = colors[(row * 2 + i) % colors.length];
-        ctx.fillRect(bx, y + t * D * 0.8, 2.1, 5.2);
+    // Rows of books standing on the open face, following its slant. Round the
+    // back of it there are no books, because the back of a bookshelf is a
+    // board — which is the whole of what turning one shows you.
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      const colors = ['#8c3f34', '#3f5c8c', '#6f7a3a', '#8c6a2f', '#5a3b6b'];
+      for (let row = 0; row < 3; row++) {
+        const y = -(h - 6) * (0.24 + row * 0.3);
+        for (let i = 0; i < 6; i++) {
+          const t = i / 5;
+          const bx = -W * 0.78 + t * W * 0.68;
+          ctx.fillStyle = colors[(row * 2 + i) % colors.length];
+          ctx.fillRect(bx, y + t * D * 0.8, 2.1, 5.2);
+        }
       }
-    }
+    });
   },
-  larder: (ctx, W, D, h) => {
+  larder: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     box(ctx, 0, 0, W * 0.92, D * 0.92, h, WOODS.oak);
-    doors(ctx, W * 0.92, D * 0.92, h - 9, 3);
-    // Slatted vents along the top, so what is inside keeps.
-    ctx.strokeStyle = 'rgba(40,26,14,0.5)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 4; i++) {
-      const y = -h + 3 + i * 2.1;
-      ctx.beginPath();
-      ctx.moveTo(-W * 0.74, y + D * 0.18);
-      ctx.lineTo(0, y + D * 0.92);
-      ctx.lineTo(W * 0.74, y + D * 0.18);
-      ctx.stroke();
-    }
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      doors(ctx, W * 0.92, D * 0.92, h - 9, 3);
+      // Slatted vents along the top, so what is inside keeps.
+      ctx.strokeStyle = 'rgba(40,26,14,0.5)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 4; i++) {
+        const y = -h + 3 + i * 2.1;
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.74, y + D * 0.18);
+        ctx.lineTo(0, y + D * 0.92);
+        ctx.lineTo(W * 0.74, y + D * 0.18);
+        ctx.stroke();
+      }
+    });
   },
   barrel: (ctx, W, D, h) => barrelShape(ctx, W, D, h),
   small_barrel: (ctx, W, D, h) => barrelShape(ctx, W, D, h),
   large_barrel: (ctx, W, D, h) => barrelShape(ctx, W, D, h),
-  oven: (ctx, W, D, h, lit) => {
-    // A brick box with an arched mouth, and a short chimney off the back.
+  oven: (ctx, W, D, h, lit, _tint, _trim, turn) => {
+    // A brick box with an arched mouth, and a short chimney off the back —
+    // which comes round to the near side when you are behind it.
+    const back = turn?.behind ? -1 : 1;
     box(ctx, 0, 0, W * 0.94, D * 0.94, h * 0.78, STONE);
-    box(ctx, 0, -D * 0.3, W * 0.5, D * 0.4, h * 0.22, STONE, h * 0.78);
-    post(ctx, W * 0.34, -D * 0.52, h * 0.4, STONE, 2.4, h);
+    box(ctx, 0, -D * 0.3 * back, W * 0.5, D * 0.4, h * 0.22, STONE, h * 0.78);
+    post(ctx, W * 0.34, -D * 0.52 * back, h * 0.4, STONE, 2.4, h);
     // Courses, so it reads as brick rather than one lump.
     ctx.strokeStyle = 'rgba(40,34,28,0.22)';
     ctx.lineWidth = 0.8;
@@ -359,15 +388,19 @@ const DRAW: Record<string, Draw> = {
       ctx.lineTo(W * 0.94, y);
       ctx.stroke();
     }
-    // The mouth, facing the viewer, alight or cold.
-    ctx.fillStyle = lit ? '#ffb347' : '#2a1d12';
-    ctx.beginPath();
-    ctx.moveTo(-W * 0.36, -h * 0.12 + D * 0.62);
-    ctx.lineTo(-W * 0.36, -h * 0.42 + D * 0.62);
-    ctx.quadraticCurveTo(0, -h * 0.62 + D * 0.62, W * 0.36, -h * 0.42 + D * 0.62);
-    ctx.lineTo(W * 0.36, -h * 0.12 + D * 0.62);
-    ctx.closePath();
-    ctx.fill();
+    // The mouth, on the side it was built facing, alight or cold. Stand
+    // behind an oven and there is no mouth: there is a wall of brick and a
+    // chimney over it, which is the point of asking which way it is turned.
+    onFront(ctx, W, h, turn?.face ?? 'both', () => {
+      ctx.fillStyle = lit ? '#ffb347' : '#2a1d12';
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.36, -h * 0.12 + D * 0.62);
+      ctx.lineTo(-W * 0.36, -h * 0.42 + D * 0.62);
+      ctx.quadraticCurveTo(0, -h * 0.62 + D * 0.62, W * 0.36, -h * 0.42 + D * 0.62);
+      ctx.lineTo(W * 0.36, -h * 0.12 + D * 0.62);
+      ctx.closePath();
+      ctx.fill();
+    });
   },
   brazier: (ctx, W, D, h, lit) => {
     /*
@@ -538,18 +571,25 @@ const DRAW: Record<string, Draw> = {
       ctx.stroke();
     }
   },
-  lectern: (ctx, W, D, h) => {
+  lectern: (ctx, W, D, h, _lit, _tint, _trim, turn) => {
     const w = WOODS.dark;
     box(ctx, 0, 0, W * 0.62, D * 0.62, 2, w);
     post(ctx, 0, 0, h - 7, w, 2.2, 2);
+    /*
+     * The top slopes down towards whoever is reading off it, so from behind
+     * it slopes away and the book on it is out of sight over the lip. Which
+     * is the difference between a lectern and a table with a book on it.
+     */
+    const tip = turn?.behind ? -1 : 1;
     ctx.fillStyle = WOODS.pale.top;
     ctx.beginPath();
-    ctx.moveTo(-W * 0.8, -h + 4);
-    ctx.lineTo(0, -h + 4 + D * 0.8);
-    ctx.lineTo(W * 0.8, -h - 2);
-    ctx.lineTo(0, -h - 2 - D * 0.8);
+    ctx.moveTo(-W * 0.8, -h + 4 * tip);
+    ctx.lineTo(0, -h + 4 * tip + D * 0.8 * tip);
+    ctx.lineTo(W * 0.8, -h - 2 * tip);
+    ctx.lineTo(0, -h - 2 * tip - D * 0.8 * tip);
     ctx.closePath();
     ctx.fill();
+    if (turn?.behind) return;
     ctx.fillStyle = 'rgba(248,244,232,0.92)';
     ctx.beginPath();
     ctx.ellipse(0, -h + 1, W * 0.38, D * 0.38, 0, 0, TAU);
@@ -848,33 +888,97 @@ function wheel(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, 
   ctx.fill();
 }
 
-/** Draw one piece with its floor contact at (sx, sy). */
 /**
- * Which way round a piece is drawn.
+ * Which way round a piece is drawn, and which of its faces you are looking at.
  *
- * The drawings have one face, and it is the south face at the first
- * viewpoint. A piece turned a quarter across the tile shows that face in the
- * mirror, since the two diagonals of the tile are each other's reflection on
- * screen; turned a half it shows the face again. Eight viewpoints and four
- * facings meet here, so a quarter turn of the view or of the piece flips it,
- * which is what keeps a piece standing the way it was set while the view goes
- * round it. The eighth turns fall on the nearer of the two.
+ * A piece is an iso box: a top rhombus and the two faces nearest you. Every
+ * drawing in this file puts its front on those two near faces — the doors of a
+ * wardrobe, the books on a shelf, the mouth of an oven — so a piece showed you
+ * its front from every viewpoint there was and there was no back to walk round
+ * to. The view could mirror a drawing and that was all, which kept an
+ * asymmetric piece standing the way it was set and did nothing else: turned a
+ * half, a piece showed you its face again.
+ *
+ * So the relative turn is taken properly. `rel` is the piece's front in view
+ * space, an eighth of a turn at a time, and which faces you can see falls out
+ * of it. A face is visible when a step along its outward normal carries down
+ * the screen, since down the screen is nearer; of the four, two are visible at
+ * a time, and at the eighth turns one of them is square to you while the other
+ * two are edge on.
+ *
+ *   rel 7  the front is square to you, spanning both near faces — which is
+ *          how every one of these drawings was authored.
+ *   rel 0  the front is the left of the two faces you can see.
+ *   rel 6  the front is the right of them.
+ *   rel 2, 3, 4  you are looking at its back.
+ *   rel 1, 5  you are square on to one of its sides, and neither the front
+ *          nor the back shows at all.
+ *
+ * Three viewpoints in eight show a piece's front, which is what walking round
+ * a wardrobe is actually like.
  */
 const FACING_TURN: Record<Side, number> = { s: 0, w: 2, n: 4, e: 6 };
-export const mirroredAt = (facing: Side, rotation: number): boolean =>
-  (((((FACING_TURN[facing] - rotation) % 8) + 8) % 8) >> 1) % 2 === 1;
 
-export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, mirror = false): void {
+/** Which of a piece's faces the viewer has: both near ones, one of them, or none. */
+export type FrontFace = 'both' | 'half' | 'none';
+
+export interface PieceTurn {
+  /** The drawing is flipped across the screen, as it always was. */
+  mirror: boolean;
+  /** How much of its front you can see. */
+  face: FrontFace;
+  /** And whether what you have instead is its back, rather than a side. */
+  behind: boolean;
+}
+
+export function pieceTurn(facing: Side, rotation: number): PieceTurn {
+  const rel = (((((FACING_TURN[facing] ?? 0) - rotation) % 8) + 8) % 8);
+  return {
+    mirror: ((rel >> 1) % 2) === 1,
+    face: rel === 7 ? 'both' : rel === 0 || rel === 6 ? 'half' : 'none',
+    behind: rel === 2 || rel === 3 || rel === 4,
+  };
+}
+
+/**
+ * Draw a piece's front, on whichever of its faces the front is.
+ *
+ * The drawings put their front detail across both near faces, so the one-face
+ * case is that same drawing with the other half clipped away — which needs no
+ * re-authoring and is exactly right, because the half that is clipped is the
+ * half that is now a plain side. `rel 0` and `rel 6` both land on the left
+ * half here: one of them is mirrored on the way out, so the two come out on
+ * opposite sides of the screen, which is the point.
+ */
+export function onFront(ctx: CanvasRenderingContext2D, W: number, h: number, face: FrontFace, draw: () => void): void {
+  if (face === 'none') return;
+  if (face === 'both') {
+    draw();
+    return;
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-W * 4, -h * 4, W * 4, h * 8);
+  ctx.clip();
+  draw();
+  ctx.restore();
+}
+
+/** Draw one piece with its floor contact at (sx, sy). */
+export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, turn: PieceTurn = SQUARE_ON): void {
   const [W, D] = furnitureSpan(kind);
   const h = FURNITURE_HEIGHT[kind] ?? 14;
   ctx.save();
   ctx.translate(sx, sy);
   ctx.scale(zoom, zoom);
-  if (mirror) ctx.scale(-1, 1);
+  if (turn.mirror) ctx.scale(-1, 1);
   ctx.fillStyle = 'rgba(0,0,0,0.26)';
   ctx.beginPath();
   ctx.ellipse(0, 0, W * 0.95, D * 0.95, 0, 0, TAU);
   ctx.fill();
-  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit, tint, trim);
+  (DRAW[kind] ?? DRAW.chest)(ctx, W, D, h, lit, tint, trim, turn);
   ctx.restore();
 }
+
+/** What a piece looks like with its front square to you: the drawing as drawn. */
+export const SQUARE_ON: PieceTurn = { mirror: false, face: 'both', behind: false };
