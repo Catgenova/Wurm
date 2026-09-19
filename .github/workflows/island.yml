@@ -835,6 +835,23 @@ jobs:
             --outfile=node_modules/.cache/shore.mjs --log-level=error
           node node_modules/.cache/shore.mjs
 
+      - name: What it costs to put the wildlife out
+        run: |
+          # "Something is severely delaying server responses." It was this.
+          # The wildlife went from one head to a thirty-two tile square to
+          # three, because the country read as empty between settlements,
+          # which was fair — and trebling the density trebles the work of
+          # placing them, which happens inside `rpc_move`, the call a walking
+          # browser makes constantly. An eighth of the island is standable, so
+          # seven throws in eight miss. One block of Bigness, in the walk call:
+          # seven seconds at three a region against one and a half at one.
+          #
+          # Back to one, and the price pinned here so the next change to that
+          # constant has to look at what it costs.
+          npx esbuild supabase/test/stock.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/stock.mjs --log-level=error
+          node node_modules/.cache/stock.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

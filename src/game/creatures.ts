@@ -1965,17 +1965,40 @@ const STREAM_BATCH = 6;
 /**
  * Wildlife a stretch of country holds, which is what the island adds up to.
  *
- * Reported: "wildermon are too rare." One head to a thirty-two tile square is
- * a creature every thousand tiles, and a thousand tiles is a long walk — so
- * the island read as empty between settlements, which is exactly the half of
- * it a player spends their time in. Three now, which is the same country with
- * something alive in sight of most of it.
+ * Back to one, and the reason is worth writing down because the number itself
+ * is not the fault.
+ *
+ * It was one, and "wildermon are too rare" was a fair report: a head to a
+ * thirty-two tile square is a creature every thousand tiles and the country
+ * between settlements read as empty. So it went to three. What that also did
+ * — and nobody looked, which is the actual mistake — was treble the work the
+ * island does to *put them out*, and that work happens inside `rpc_move`,
+ * which is the call a walking browser makes constantly.
+ *
+ * `creature_stock_block` throws darts at a two-hundred-and-fifty-six tile
+ * square until it has placed what the square is owed, giving up after twelve
+ * throws per head. Only an eighth of this island is ground anything can stand
+ * on, so most throws miss. Measured on Bigness, one block, inside the walk
+ * call:
+ *
+ *     three a region: 6,963 ms for a land block, 1,797 ms for open sea
+ *     one a region:   1,430 ms for a land block,   651 ms for open sea
+ *
+ * Seven seconds of server, on the move call, every time somebody walks into
+ * country nobody has been through in the last fifty minutes. Reported as the
+ * island severely delaying its answers, and that is what it was.
+ *
+ * One again, then, which is a fifth of the stall — and the density question is
+ * still open and still fair. The answer to it is not this number, it is that
+ * putting the wildlife out has no business happening on the walk call at all;
+ * it belongs on the heartbeat, where nobody is waiting for it. Until it moves
+ * there, the price of a fuller island is paid by whoever is walking across it.
  *
  * The island reads this number rather than keeping one of its own, so the two
  * of them cannot drift: `wild_per_region()` and `wild_floor()` are emitted
  * from here with the rest of the rulebook.
  */
-export const PER_REGION = 3;
+export const PER_REGION = 1;
 
 /**
  * How much wildlife a piece of country that size should hold.

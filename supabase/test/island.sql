@@ -4330,8 +4330,10 @@ select '557b. opening it put out ' || (select count(*) from creature where world
      || ' wild things in the one block of country people come ashore in; the other '
      || ((select ceil(size / 256.0) * ceil(size / 256.0) from world where id = :'big')::int
         - (select count(*) from world_stocked where world_id = :'big'))
-     || ' fill in as somebody walks into them — nine of them at once is five to thirteen seconds, '
-     || 'and PostgREST allows eight';
+     || ' fill in as somebody walks into them, on the walk call, while whoever '
+     || 'is walking waits — a block of land is a second and a half to two and a '
+     || 'half of it and a block of open sea two thirds of one, measured here, '
+     || 'and PostgREST allows eight requests at once';
 
 select rpc_join(:'big', 'Alice') \g /dev/null
 select '571. coming ashore on it hands over ' || length(rpc_join(:'big', 'Alice')::text)
