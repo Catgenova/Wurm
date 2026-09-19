@@ -301,19 +301,33 @@ export const ISLAND_SIZE = 4096;
  * A day and a night, in seconds.
  *
  * At the world's pace, which is the most visible thing about slowing that
- * clock: an hour of real time to the day now, and twenty-five minutes of dark
- * in it rather than ten. It has to move with everything else or the whole
- * point is lost — a crop that took a third of a day to ripen would take most
- * of one, and every "twice a day" thing in the game would quietly become once.
+ * clock: an hour of real time to the day now, and fifteen and a half minutes
+ * of dark in it rather than six. It has to move with everything else or the
+ * whole point is lost — a crop that took a third of a day to ripen would take
+ * most of one, and every "twice a day" thing in the game would quietly become
+ * once.
  *
- * It also keeps the lights honest. A torch was five minutes against a
- * ten-minute night; it is twelve and a half against a twenty-five minute one,
- * which is the same half a night it always was.
+ * It also keeps the lights honest. A torch is twelve and a half minutes
+ * against that fifteen-and-a-half-minute night, which is most of one: the
+ * night was cut back to a quarter of the cycle and the torch was not.
  */
 export const DAY_SECONDS = world(1440);
-/** When the sun comes up and goes down, in game hours. */
-export const DAWN = 6;
-export const DUSK = 20;
+/**
+ * When the sun comes up and goes down, in game hours.
+ *
+ * Three quarters of the cycle is day and the remaining quarter is night:
+ * eighteen hours between dawn and dusk, six the other way round, and noon
+ * sitting exactly between the two. Six to eight was fourteen hours of sun on
+ * paper and — once the two-hour ramps at either end are counted as the dark
+ * they are — very nearly half a night in practice, which is a long time to
+ * stand about holding a lantern.
+ *
+ * `darkness` below is written off these two and nothing else, so moving them
+ * moves the ramps, the sun's arc, the wash over the sky, what a nocturnal
+ * thing comes out for and how long a sleeper skips, all at once.
+ */
+export const DAWN = 3;
+export const DUSK = 21;
 const FORAGE_COOLDOWN = world(180);
 /**
  * How dark it has to be before a fight teaches you anything about noticing.

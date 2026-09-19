@@ -785,6 +785,38 @@ jobs:
             --outfile=node_modules/.cache/blood.mjs --log-level=error
           node node_modules/.cache/blood.mjs
 
+      - name: A quarter of the cycle dark, on both sides
+        run: |
+          # "On the full day cycle, it shouldn't be half night half day, it
+          # should be 3/4 day and 1/4 night." It was forty-two per cent dark,
+          # which reads as half. Dawn moves to three and dusk to nine, so
+          # eighteen hours sit between them with noon exactly in the middle.
+          #
+          # The second half of this is why it was possible to get wrong: the
+          # island's `darkness` held 7, 19, 21 and 5 written out by hand, the
+          # same bug `hour_of_day` had when it held 1440. It reads the
+          # generated `dawn_hour()` and `dusk_hour()` now, and the whole day is
+          # asked of both sides in three-minute steps.
+          npx esbuild supabase/test/dark.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/dark.mjs --log-level=error
+          node node_modules/.cache/dark.mjs
+
+      - name: Seed in the crate, and one you keep put down in one action
+        run: |
+          # "Seavics also move seeds to storage if not using them when working
+          # deed": the seed from a harvest went into the browser's `pouch`,
+          # which is not a thing a person can open, and into the furrow on the
+          # island, where it lay under the next crop for ever. It is a load
+          # like any other now on both sides, and this follows it to the crate.
+          #
+          # And "add a cull option on tamed wildermon to kill them with one
+          # action", which until now meant swinging at your own livestock until
+          # it stopped. Same carcass, one action, and a refusal for anything
+          # wild or anything across the island.
+          npx esbuild supabase/test/cull.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/cull.mjs --log-level=error
+          node node_modules/.cache/cull.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

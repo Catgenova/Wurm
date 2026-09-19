@@ -1744,6 +1744,7 @@ export class UI {
     push(item('store_creature'));
     push(item('rename_creature'));
     push(item('release_creature'));
+    push(item('cull_creature'));
     push(item('attack_creature'));
     return entries;
   }

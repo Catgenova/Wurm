@@ -1032,6 +1032,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dismount_creature', 'Get down', 'dismounting', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('hitch_creature', 'Hitch to the traces', 'hitching it up', null, null, false, null, 0.02, 2.5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('unhitch_creature', 'Take out of the traces', 'unhitching it', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cull_creature', 'Cull', 'culling it', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('release_creature', 'Release', 'releasing', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('groom', 'Brush it down', 'brushing it down', 'animal_husbandry', null, false, null, 0.03, 7, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pair_creature', 'Put it to a mate', 'putting them together', 'animal_husbandry', null, false, null, 0.04, 9, null, false, false);
@@ -3443,7 +3444,8 @@ create or replace function gestation() returns double precision language sql imm
 create or replace function rest_cap() returns double precision language sql immutable as $fn$ select 3600::double precision $fn$;
 create or replace function rest_mult() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function rest_per_second() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
-create or replace function dawn_hour() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
+create or replace function dawn_hour() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
+create or replace function dusk_hour() returns double precision language sql immutable as $fn$ select 21::double precision $fn$;
 create or replace function day_seconds() returns double precision language sql immutable as $fn$ select 3600::double precision $fn$;
 create or replace function action_pace() returns double precision language sql immutable as $fn$ select 3.75::double precision $fn$;
 create or replace function action_floor() returns double precision language sql immutable as $fn$ select 4.5::double precision $fn$;

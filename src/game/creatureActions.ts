@@ -724,6 +724,59 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'cull_creature',
+    /*
+     * Asked first, for the same reason releasing is: on an island `perform` is
+     * the island's half, and nothing over there can put a question to this
+     * browser. Good blood gets the same second look it gets before it is let
+     * go, because this is the more final of the two.
+     */
+    confirms: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return null;
+      const tier = bestTier(c.traits);
+      return tier === 'supreme' || tier === 'fantastic'
+        ? `${c.name} carries ${tier} blood: ${traitList(c.traits)}. Cull it anyway? There is no getting that back.`
+        : `Cull ${c.name}? It dies where it stands and leaves a carcass.`;
+    },
+    label: 'Cull',
+    verb: 'culling it',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      const c = creatureOf(g, t);
+      return !!c && c.mode !== 'wild' && c.hitchedTo === null && !c.ridden;
+    },
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is dead or gone.';
+      if (c.mode === 'wild') return 'That one is nobody\'s. Fight it if you mean it.';
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      // A kept one stands at the token, like everything else done to one: a
+      // carcass nobody can walk to is a carcass nobody can butcher.
+      if (c.mode === 'stored' && g.deed) {
+        c.x = g.deed.x + 0.5;
+        c.y = g.deed.y + 1.5;
+      }
+      const x = Math.floor(c.x);
+      const y = Math.floor(c.y);
+      // Whatever it was holding is not buried with it.
+      if (c.carrying) g.dropOnGround(x, y, c.carrying);
+      if (c.pouch) g.dropOnGround(x, y, c.pouch);
+      c.carrying = null;
+      c.pouch = null;
+      const name = c.name;
+      const what = SPECIES[c.species].name.toLowerCase();
+      g.creatures.kill(g, c, 'player', true);
+      g.logMsg(`You put ${name} down. The ${what}'s carcass lies where it stood, ready for the knife.`, 'fight');
+    },
+  },
+  {
     id: 'release_creature',
     /*
      * Asked before it happens rather than inside `perform`, which on an island

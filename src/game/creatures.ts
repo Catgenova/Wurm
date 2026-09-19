@@ -3313,7 +3313,13 @@ export class Creatures {
       game.events.emit('world', x, y);
       return null;
     }
-    // Harvest: the crop is carried to the crate, the seed goes in its cheeks.
+    /*
+     * Harvest: the crop is carried to the crate and the seed rides home in its
+     * cheeks to go in after it. Seed of some other crop still in there — which
+     * takes two harvests without a trip home in between, and so almost never
+     * happens now the cheeks are emptied at every store — is left on the field
+     * for the next sowing, or for whoever is clearing up, to find.
+     */
     const def = cropDef(crop.id);
     const y2 = cropYield(crop.tended);
     const grade = Math.max(1, Math.min(100, (crop.ql + ql) / 2));
@@ -4143,6 +4149,27 @@ export class Creatures {
       }
       return;
     }
+    /*
+     * Seed does not live in a worker's cheeks.
+     *
+     * The pouch is how a harvest's seed rides home, not a place to keep it: a
+     * field is sown out of the settlement's stores just as readily as out of a
+     * Seavic's mouth, so seed left in one is seed nobody can see, count, cook
+     * or plant by hand. Reported from the island as a farm hand that harvested
+     * all season and put nothing but the crop in the crate.
+     *
+     * It goes in at the next store it stands at, which in the ordinary run of
+     * things is the one it has just put the harvest into — so the round trip
+     * this costs is usually no trip at all. Only when there is somewhere for
+     * it to go: a worker with its hands full and nowhere to empty them stops
+     * working, and a mouthful of seed is not worth stopping a farm for.
+     */
+    if (c.pouch && c.pouch.count > 0 && this.storeFor(game, c, c.pouch)) {
+      c.carrying = c.pouch;
+      c.pouch = null;
+      return;
+    }
+    if (c.pouch && c.pouch.count <= 0) c.pouch = null;
     if (c.hunger < HUNGRY) {
       const larder = this.foodCrate(game, c, def);
       if (larder) {
@@ -4304,8 +4331,13 @@ export class Creatures {
     if (t.health <= 0) this.kill(game, t, by);
   }
 
-  /** Remove a creature and leave its corpse lying on the tile, ready for butchering. */
-  kill(game: Game, t: Creature, killer: Creature | 'player' | null): void {
+  /**
+   * Remove a creature and leave its corpse lying on the tile, ready for
+   * butchering. `quiet` holds back the lines this writes, for the one caller
+   * that has better words of its own: culling a beast you kept is not the
+   * same event as killing a wild one, and "has died" is not what happened.
+   */
+  kill(game: Game, t: Creature, killer: Creature | 'player' | null, quiet = false): void {
     // A beast that dies in the traces leaves an empty yoke behind it, and one
     // that dies under a rider puts them on the ground.
     if (t.hitchedTo !== null) game.unhitch(t);
@@ -4322,7 +4354,7 @@ export class Creatures {
     // Killing one of the bad things is worth writing down.
     if (def.monster && killer === 'player') {
       game.note(`slew:${def.id}`);
-      game.logMsg(`The ${def.name.toLowerCase()} goes down. Butcher it before it rots: there is a great deal on it.`, 'fight');
+      if (!quiet) game.logMsg(`The ${def.name.toLowerCase()} goes down. Butcher it before it rots: there is a great deal on it.`, 'fight');
     }
     const x = Math.floor(t.x);
     const y = Math.floor(t.y);
@@ -4336,6 +4368,7 @@ export class Creatures {
      * dragon carries a dragon's.
      */
     if (killer === 'player' && def.monster) mapFromBeast(game, def.health, x, y);
+    if (quiet) return;
     if (killer === 'player') game.logMsg(`You kill the wild ${def.name.toLowerCase()}. Its corpse lies where it fell.`, 'fight');
     else if (t.mode === 'active' || t.mode === 'deed') game.logMsg(`${t.name} has died.`, 'fight');
     else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'fight');

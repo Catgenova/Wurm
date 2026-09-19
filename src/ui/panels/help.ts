@@ -832,11 +832,13 @@ function helpText(): string {
     None of this is worked out at all while the sun is up.</p>
     <h3>Night, and a bed to wake in</h3>
     <p>The island keeps a clock now, shown beside your position: a full day and night passes in
-    <b>twenty-four minutes</b>, an hour to the minute. The sun goes down at eight and comes up at six,
-    and the world darkens between the two.</p>
+    <b>an hour</b> of real time, two and a half minutes to the game hour. The sun goes down at
+    <b>nine</b> and comes up at <b>three</b>, and the world darkens between the two. That is
+    <b>three quarters day and a quarter night</b> &mdash; about fifteen minutes of the hour dark,
+    with an hour of half-light at either end of it.</p>
     <p>A <b>bed</b> or a <b>cot</b> is worth more than the corner it stands in. Choose <b>Make this your
     home</b> and it becomes the place you wake up &mdash; whatever happens to you, wherever it happens.
-    Choose <b>Sleep until morning</b> after dark and you wake at half past six with your wind back and
+    Choose <b>Sleep until morning</b> after dark and you wake at half past three with your wind back and
     some of your hurt mended; a well-made bed is a better night than a thin cot. The world does not wait
     for you: fires burn down, crops come on, kilns finish and everything left outside ages by however
     long you were under. You wake up hungry and thirsty, too.</p>
@@ -1103,7 +1105,9 @@ function helpText(): string {
     starchy things, is placid by nature, and fells trees for its deed, carrying the logs to the crate;
     the <b>Seavic</b> is a squirrel that lives among the trees, eats acorns and nuts, is placid too, and
     runs a farm for its deed &mdash; sowing seed from the crate, tending every stage and carrying the
-    harvest back. It cannot rake a field of its own, so it only works ground you have tilled. The
+    harvest back. Seed it has no field to put in goes back to the stores with everything else, so what
+    it reaps is on a shelf where you can count it rather than in its cheeks. It cannot rake a field of
+    its own, so it only works ground you have tilled. The
     <b>Mola</b> is a heavier mole built around its claws, found sitting on metal, living on spices, and
     working the seams for its deed: it takes the nearest ore no other Mola has claimed, and the quality
     of what it brings back is its own mining skill, up to whatever the seam holds, and it leaves alone
@@ -1160,6 +1164,11 @@ function helpText(): string {
     heavier, and an old carcass is worth a third more than a grown one. The Wildermon window says which
     it is and how long a yearling has left to grow. What was already walking about when the island was
     raised counts as grown.</p>
+    <p><b>Putting one down.</b> An animal you keep can be <b>culled</b> from its own menu &mdash; one
+    action, wherever it stands, and it leaves the same carcass anything else would. You are asked
+    first, and asked harder if its blood is worth keeping, because there is no getting that back.
+    <b>Release</b> is the other door out: it walks off into the country with everything it was bred
+    for still in it. Neither is open to something in the traces or with you on its back.</p>
     <p><b>The working sorts.</b> Eighteen more wildermon came out of the same country, and most of them
     are kept for a job. The <b>Bogga</b> wallows in the marshes and cuts <b>peat and tar</b> for the
     deed. The <b>Sedra</b> is a long-necked wader that shears <b>reeds</b> at the water's edge, which is

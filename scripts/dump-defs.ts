@@ -65,7 +65,7 @@ import { DYEABLE_ITEMS } from '../src/game/dyes';
 import { PAIR_RANGE, GROOM_CAP, TIER_LEVEL } from '../src/game/husbandry';
 import { BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
-import { DAWN, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../src/game/game';
+import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
@@ -897,7 +897,7 @@ for (const [fn, v] of [
   ['clearance', CLEARANCE], ['end_slop', END_SLOP], ['pair_range', PAIR_RANGE],
   ['groom_cap', GROOM_CAP], ['breed_rest', BREED_REST], ['gestation', GESTATION],
   ['rest_cap', REST_CAP], ['rest_mult', REST_MULT], ['rest_per_second', REST_PER_SECOND],
-  ['dawn_hour', DAWN], ['day_seconds', DAY_SECONDS],
+  ['dawn_hour', DAWN], ['dusk_hour', DUSK], ['day_seconds', DAY_SECONDS],
   /*
    * What one unit of `base_time` is worth in seconds, and the shortest a go at
    * anything can be. `base_time` in `action_def` and `recipe` is a weight, not
