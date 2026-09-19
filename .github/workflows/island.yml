@@ -459,6 +459,17 @@ jobs:
           npx esbuild supabase/test/taught.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/taught.mjs --log-level=error
           node node_modules/.cache/taught.mjs
+      - name: A foundation is the same slab on both sides
+        run: |
+          # Concrete foundations: level ground poured into a slope, leaving the
+          # slope alone. Two numbers decide everything about one — what it
+          # costs, which is the hole it fills priced by the step, and how deep
+          # the deepest part of that pour is, which is what it asks of your
+          # masonry — and both are worked out twice, once a side. So the same
+          # tiles are put to both and the answers held against each other.
+          npx esbuild supabase/test/slab.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/slab.mjs --log-level=error
+          node node_modules/.cache/slab.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

@@ -25,6 +25,7 @@ import {
   type Wall,
   floorBill,
 } from '../game/building';
+import { foundationDone } from '../game/foundations';
 import { hash2 } from '../world/noise';
 import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
@@ -170,6 +171,17 @@ const GRID_COLOR = 'rgba(0,0,0,0.16)';
 const DEED_COLOR = 'rgba(96, 230, 110, 0.9)';
 const DEED_SHADOW = 'rgba(0, 40, 0, 0.6)';
 const PLAN_COLOR = 'rgba(120, 220, 140, 0.95)';
+/**
+ * Concrete, and the shadow line down a shutter board.
+ *
+ * A foundation is the one thing in the world whose whole point is that its
+ * sides are vertical, so it is drawn as the box it is: a flat top at the level
+ * it was poured to, and a face straight down from each edge the camera is on
+ * to the corner heights the ground still has. Nothing else in the game has an
+ * edge like that, which is exactly why it was asked for.
+ */
+const CONCRETE: readonly [number, number, number] = [172, 169, 160];
+const CONCRETE_TRIM: readonly [number, number, number] = [112, 109, 102];
 /*
  * Scaffolding: what a plan looks like before anything is built on it.
  *
@@ -1072,8 +1084,8 @@ export class Renderer {
           }
         }
         if (this.game.creatures.list.size) {
-          // Anything standing on a tile with finished deck over it stands on the deck.
-          const deckHere = this.game.bridges.size ? this.game.deckAt(x, y) : null;
+          // Anything standing on a tile with a deck or a slab over it stands on that.
+          const deckHere = this.game.laidOver(x, y);
           for (const cr of this.game.creatures.atTile(x, y)) {
             this.ents.push({
               kind: 'creature',
@@ -1086,13 +1098,14 @@ export class Renderer {
             });
           }
         }
+        if (this.game.foundations.size) this.drawFoundation(x, y, lit);
         if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
       }
 
       if (d === playerDepth) {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
-        const deck = this.game.bridges.size && !this.game.afloat() ? this.game.deckAt(player.tileX, player.tileY) : null;
+        const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
         const ph = deck !== null ? deck : Math.max(world.heightAt(player.x, player.y), -4) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
@@ -1931,6 +1944,100 @@ export class Renderer {
    * the way the building runs, which is what makes a room of them read as one
    * floor rather than as a grid of tiles each doing its own thing.
    */
+  /**
+   * A slab poured over a tile, or the shuttering waiting for it.
+   *
+   * The top is one flat quad at the level chosen, drawn in whatever the tile
+   * has been surfaced with — concrete until somebody paves it, and then the
+   * paving, joints and all, because a foundation is ground you may pave. The
+   * sides are the two the camera is on, each running from the ground's own
+   * corner heights straight up to that level: that vertical face is the whole
+   * of what a foundation is, and it is the thing you can put a wall against.
+   */
+  private drawFoundation(x: number, y: number, lit: boolean): void {
+    const f = this.game.foundationAt(x, y);
+    if (!f) return;
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const world = this.game.world;
+    const c = world.tileCorners(x, y);
+    /** The tile's four corners in world space, north, east, south, west. */
+    const at: Array<[number, number]> = [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]];
+    /** Which way is out through the edge that leaves corner `i`. */
+    const out: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    const px = (i: number): number => cam.worldToScreenX(at[i][0], at[i][1]);
+    const py = (i: number, h: number): number => cam.worldToScreenY(at[i][0], at[i][1], h);
+    const done = foundationDone(f);
+    ctx.globalAlpha = lit ? 1 : 0.55;
+    if (!done) {
+      /*
+       * Boards and string. A plan has no concrete in it yet, so drawing it as
+       * a slab would be a lie you could walk into: what is there is the line
+       * it will be poured to and the shutters holding it.
+       */
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const p = i === 0 ? ctx.moveTo.bind(ctx) : ctx.lineTo.bind(ctx);
+        p(px(i), py(i, f.top));
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(px(i), py(i, c[i]));
+        ctx.lineTo(px(i), py(i, f.top));
+        ctx.stroke();
+      }
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+      return;
+    }
+    // The faces, nearest last so the one across the view lies over the one
+    // running into it, as a wall's two faces do.
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      const [nx, ny] = out[i];
+      if (cam.nearSide(nx, ny) <= 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(px(i), py(i, f.top));
+      ctx.lineTo(px(j), py(j, f.top));
+      ctx.lineTo(px(j), py(j, c[j]));
+      ctx.lineTo(px(i), py(i, c[i]));
+      ctx.closePath();
+      // The face that runs across the view catches more light than the one
+      // running into it: the same two tones every wall in the world uses.
+      ctx.fillStyle = rgb(CONCRETE, Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny)) ? 0.82 : 0.66);
+      ctx.fill();
+      ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.85);
+      ctx.stroke();
+    }
+    const quad = new Float64Array(8);
+    for (let i = 0; i < 4; i++) {
+      quad[i * 2] = px(i);
+      quad[i * 2 + 1] = py(i, f.top);
+    }
+    ctx.beginPath();
+    ctx.moveTo(quad[0], quad[1]);
+    ctx.lineTo(quad[2], quad[3]);
+    ctx.lineTo(quad[4], quad[5]);
+    ctx.lineTo(quad[6], quad[7]);
+    ctx.closePath();
+    const t = world.viewTile(x, y, lit) as TileType;
+    const data = world.viewData(x, y, lit);
+    const paved = PAVED.has(t);
+    const base = !paved ? CONCRETE : t === TileType.Slabs ? SLAB_VARIANTS[slabVariant(data)].color : (TILE_DEFS[t]?.color ?? CONCRETE);
+    ctx.fillStyle = rgb(base, 0.97);
+    ctx.fill();
+    ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.9);
+    ctx.stroke();
+    if (paved && cam.zoom >= 0.75) this.paving(t, x, y, data, quad);
+    ctx.globalAlpha = 1;
+  }
+
   private drawFloor(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;

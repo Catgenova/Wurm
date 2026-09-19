@@ -29,6 +29,7 @@ import { HUSBANDRY_ACTIONS } from './husbandry';
 import { DYE_ACTIONS } from './dyes';
 import { TRAP_ACTIONS } from './traps';
 import { BRIDGE_ACTIONS } from './bridges';
+import { FOUNDATION_ACTIONS } from './foundations';
 import { NAMING_ACTIONS } from './naming';
 import { LANTERN_ACTIONS } from './lantern';
 import { FAITH_ACTIONS } from './faith';
@@ -2009,8 +2010,13 @@ export const ACTIONS: ActionDef[] = [
       if (g.deed) return 'You already hold a settlement. Disband it first.';
       const w = g.world;
       if (x - DEED_RADIUS < 0 || y - DEED_RADIUS < 0 || x + DEED_RADIUS >= w.w || y + DEED_RADIUS >= w.h) return 'Too close to the edge of the world.';
-      if (w.hasWater(x, y)) return 'The token must stand on dry land.';
-      if (!w.isPassable(x, y)) return 'The token needs a clear tile.';
+      // A poured slab is dry, level ground standing above whatever is under
+      // it, which is exactly what a token wants and is sometimes the only
+      // such tile on a hillside.
+      if (!g.slabAt(x, y)) {
+        if (w.hasWater(x, y)) return 'The token must stand on dry land.';
+        if (!w.isPassable(x, y)) return 'The token needs a clear tile.';
+      }
       return null;
     },
     perform: (t, g) => {
@@ -2155,6 +2161,7 @@ export const ACTIONS: ActionDef[] = [
   ...NAMING_ACTIONS,
   ...LANTERN_ACTIONS,
   ...BRIDGE_ACTIONS,
+  ...FOUNDATION_ACTIONS,
   ...FAITH_ACTIONS,
   ...MEDITATION_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,

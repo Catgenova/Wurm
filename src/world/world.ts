@@ -668,6 +668,11 @@ export class World {
     return out;
   }
 
+  /** The same four, in a list of their own, for the places that want one. */
+  tileCorners(x: number, y: number): number[] {
+    return this.corners(x, y, [0, 0, 0, 0]);
+  }
+
   centerHeight(x: number, y: number): number {
     return (this.getHeight(x, y) + this.getHeight(x + 1, y) + this.getHeight(x + 1, y + 1) + this.getHeight(x, y + 1)) / 4;
   }

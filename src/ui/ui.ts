@@ -31,6 +31,7 @@ import { postCandidates, postLife, postName, postRadius, postState, type PlacedP
 import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
+import { foundationState } from '../game/foundations';
 import { CASTS, FAITH, favourCap } from '../game/faith';
 import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sittingWorth } from '../game/meditation';
 import { canImprove } from '../game/improve';
@@ -1042,7 +1043,14 @@ export class UI {
      * finger.
      */
     const reading = groundReading(this.game, pick.x, pick.y);
-    const facts = [cornerReading(this.game, pick.cx, pick.cy), ...(reading ? [reading] : [])];
+    // And the slab, if there is one: a tile whose top is somewhere other than
+    // the ground has to say where, or nothing else on this list makes sense.
+    const slab = this.game.foundations.size ? this.game.foundationAt(pick.x, pick.y) : undefined;
+    const facts = [
+      cornerReading(this.game, pick.cx, pick.cy),
+      ...(slab ? [`Concrete foundation · ${foundationState(slab)}`] : []),
+      ...(reading ? [reading] : []),
+    ];
     return { title, facts, entries };
   }
 

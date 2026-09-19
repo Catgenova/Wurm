@@ -12,6 +12,7 @@ import type { PlacedFurniture } from './furniture';
 import type { PlacedPost } from './posts';
 import type { PlacedTrap } from './traps';
 import type { Bridge } from './bridges';
+import type { Foundation } from './foundations';
 import type { Boon } from './boons';
 import type { Wound } from './wounds';
 import type { Look } from './look';
@@ -237,6 +238,8 @@ interface SaveData {
   nextTrapId?: number;
   bridges?: Bridge[];
   nextBridgeId?: number;
+  foundations?: Foundation[];
+  nextFoundationId?: number;
   tally?: Record<string, number>;
   ledger?: Ledger;
   ticked?: string[];
@@ -312,6 +315,8 @@ function meta(game: Game): SaveMeta {
     nextTrapId: game.nextTrapId,
     bridges: [...game.bridges.values()],
     nextBridgeId: game.nextBridgeId,
+    foundations: [...game.foundations.values()],
+    nextFoundationId: game.nextFoundationId,
     tally: { ...game.tally },
     ledger: { ...game.ledger },
     ticked: [...game.ticked],
@@ -561,6 +566,8 @@ function finish(world: World, m: SaveMeta): Game {
     nextTrapId: m.nextTrapId,
     bridges: m.bridges,
     nextBridgeId: m.nextBridgeId,
+    foundations: m.foundations,
+    nextFoundationId: m.nextFoundationId,
     tally: m.tally,
     ledger: m.ledger,
     ticked: m.ticked,

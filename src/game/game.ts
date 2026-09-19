@@ -39,6 +39,7 @@ import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedP
 import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
 import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
+import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { gemOf, JEWEL_BONUS } from './gems';
@@ -188,6 +189,8 @@ export interface GameInit {
   nextTrapId?: number;
   bridges?: Bridge[];
   nextBridgeId?: number;
+  foundations?: Foundation[];
+  nextFoundationId?: number;
   tally?: Record<string, number>;
   ledger?: Ledger;
   ticked?: string[];
@@ -399,6 +402,10 @@ export class Game {
   nextBridgeId = 1;
   /** Tile key to the bridge whose deck covers it, rebuilt whenever one changes. */
   private deckIndex = new Map<string, number>();
+  /** Concrete slabs poured over sloping tiles, one to a tile. */
+  readonly foundations = new Map<number, Foundation>();
+  nextFoundationId = 1;
+  private slabIndex = new Map<string, number>();
   private nextPostId = 1;
   /**
    * A running count of things done: felled trees, landed fish, brews set
@@ -721,6 +728,12 @@ export class Game {
     }
     if (init.nextBridgeId) this.nextBridgeId = Math.max(this.nextBridgeId, init.nextBridgeId);
     if (this.bridges.size) this.reindexDecks();
+    for (const f of init.foundations ?? []) {
+      this.foundations.set(f.id, f);
+      this.slabIndex.set(`${f.x},${f.y}`, f.id);
+      if (f.id >= this.nextFoundationId) this.nextFoundationId = f.id + 1;
+    }
+    if (init.nextFoundationId) this.nextFoundationId = Math.max(this.nextFoundationId, init.nextFoundationId);
     for (const s of init.smelters ?? []) {
       this.smelters.set(s.id, s);
       if (s.id >= this.nextSmelterId) this.nextSmelterId = s.id + 1;
@@ -780,6 +793,9 @@ export class Game {
 
   /** Whether the player can stand on a tile at a storey: the ground, or a finished floor, staircase or ladder. */
   standable(x: number, y: number, level: number): boolean {
+    // A poured slab is the ground here: flat, dry and solid, over water or
+    // bare rock or a hole, which is the whole of what it was poured for.
+    if (level <= 0 && this.foundations.size && this.slabAt(x, y)) return true;
     if (!this.world.isPassable(x, y)) return false;
     if (level <= 0) return true;
     const f = this.buildings.floor(level, x, y);
@@ -804,7 +820,11 @@ export class Game {
     // Deck is ground: it is flat, and the drop under it is not your problem.
     if (level === 0 && this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) return 0;
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
-      if (level === 0 && (!groundStep(this.world, x0, y0, x1, y1, this.climbStep()) || !standsOn(this.world, x1, y1, this.standSlope()))) return null;
+      if (level === 0) {
+        const slab = this.slabStep(x0, y0, x1, y1);
+        if (slab !== null) return slab ? 0 : null;
+        if (!groundStep(this.world, x0, y0, x1, y1, this.climbStep()) || !standsOn(this.world, x1, y1, this.standSlope())) return null;
+      }
       return level;
     }
     if (level > 0 && this.connector(x0, y0, level) && this.standable(x1, y1, level - 1) && !b.blocksAt(level - 1, x0, y0, x1, y1)) {
@@ -1110,8 +1130,22 @@ export class Game {
     if (this.isToken(x, y)) return 'The settlement token stands here.';
     if (this.buildings.buildingAt(x, y)) return 'That tile is already part of a building.';
     if (this.world.getTile(x, y) !== TileType.PackedDirt) return 'Buildings need flat packed dirt. Pack the tile first.';
-    if (this.world.slope(x, y) !== 0) return 'The tile must be perfectly flat. Flatten it first.';
-    if (this.world.hasWater(x, y)) return 'You cannot build in water.';
+    /*
+     * Unless it is a slab, and then the ground under it is the slab's business.
+     *
+     * A foundation exists to make a tile a hillside would never give you: one
+     * flat top at one height, with nothing under it that anybody has to care
+     * about. So the three questions asked of open ground — is it level, is it
+     * dry, is it out of the water — are all answered by the pour, and asking
+     * the terrain again would refuse the one tile that was built to be built
+     * on. Shuttering is not a slab: a plan is a line of boards round a hole.
+     */
+    const slab = this.foundationAt(x, y);
+    if (slab && !foundationDone(slab)) return 'The foundation here is only shuttered. Pour it first.';
+    if (!slab) {
+      if (this.world.slope(x, y) !== 0) return 'The tile must be perfectly flat. Flatten it first.';
+      if (this.world.hasWater(x, y)) return 'You cannot build in water.';
+    }
     if (this.groundAt(x, y).length) return 'Clear away the items lying there first.';
     return null;
   }
@@ -3187,6 +3221,17 @@ export class Game {
     return b && bridgeDone(b) ? b.height : null;
   }
 
+  /**
+   * The height of anything laid over a tile that you stand on instead of the
+   * ground under it: a poured slab, or a finished bridge deck. Null when the
+   * ground is the ground.
+   */
+  laidOver(x: number, y: number): number | null {
+    const slab = this.foundations.size ? this.slabAt(x, y) : undefined;
+    if (slab) return slab.top;
+    return this.bridges.size ? this.deckAt(x, y) : null;
+  }
+
   /** Whether a bridge's ends or deck cover this tile, which is where you may step on. */
   onBridge(b: Bridge, x: number, y: number): boolean {
     if ((x === b.ax && y === b.ay) || (x === b.bx && y === b.by)) return true;
@@ -3220,17 +3265,135 @@ export class Game {
       // The bank of a ravine always shares a corner with the ravine, so what
       // matters is whether you can stand in the middle of the tile, not
       // whether every corner of it is dry.
-      if (!w.isPassable(x, y) || w.centerHeight(x, y) < 0) return 'Both ends want dry, solid ground to stand on.';
+      // A poured slab is an end: flat, solid and at a height somebody chose,
+      // which is the one thing two natural banks never are.
+      if (!this.slabAt(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < 0)) return 'Both ends want dry, solid ground to stand on.';
       if (this.bridgeAt(x, y)) return 'One end is already under a bridge.';
     }
-    const ha = w.centerHeight(ax, ay);
-    const hb = w.centerHeight(bx, by);
+    const ha = this.surfaceHeight(ax, ay);
+    const hb = this.surfaceHeight(bx, by);
     if (Math.abs(ha - hb) > END_SLOP) return `The two ends are ${Math.abs(ha - hb).toFixed(0)} apart in height. One deck will not meet both; level one of them.`;
     const height = Math.round((ha + hb) / 2);
     for (const [x, y] of span) {
       if (this.bridgeAt(x, y)) return 'Something is already bridged across there.';
       if (this.buildings.buildingAt(x, y)) return 'Not over a building.';
-      if (height - w.centerHeight(x, y) < CLEARANCE) return 'That is not a gap, it is ground. Walk it.';
+      if (height - this.surfaceHeight(x, y) < CLEARANCE) return 'That is not a gap, it is ground. Walk it.';
+    }
+    return null;
+  }
+
+  // ---- Foundations: level ground poured into a slope, leaving the slope alone. ----
+
+  addFoundation(x: number, y: number, top: number, needed?: number): Foundation {
+    const want = needed ?? concreteFor(this.world.tileCorners(x, y), top);
+    const f: Foundation = { id: this.nextFoundationId++, x, y, top, ...foundationBill(want) };
+    this.foundations.set(f.id, f);
+    this.slabIndex.set(`${x},${y}`, f.id);
+    return f;
+  }
+
+  removeFoundation(id: number): void {
+    const f = this.foundations.get(id);
+    if (!f) return;
+    this.slabIndex.delete(`${f.x},${f.y}`);
+    this.foundations.delete(id);
+  }
+
+  /** The foundation on a tile, shuttered or poured. */
+  foundationAt(x: number, y: number): Foundation | undefined {
+    const id = this.slabIndex.get(`${x},${y}`);
+    return id === undefined ? undefined : this.foundations.get(id);
+  }
+
+  /**
+   * The *poured* one, which is the only one you can stand on.
+   *
+   * Shuttering is a line of boards round a hole: everything that asks whether
+   * there is ground here has to be asking about the slab, not the plan.
+   */
+  slabAt(x: number, y: number): Foundation | undefined {
+    const f = this.foundationAt(x, y);
+    return f && foundationDone(f) ? f : undefined;
+  }
+
+  /** How high the top of a tile is: a poured slab's, or the ground's own. */
+  surfaceHeight(x: number, y: number): number {
+    return this.slabAt(x, y)?.top ?? this.world.centerHeight(x, y);
+  }
+
+  /**
+   * The level a foundation here would be poured to.
+   *
+   * What you have sighted, if you have sighted anything above the tile, and
+   * the top of the tile otherwise — which is the cheapest slab that squares
+   * the tile off and is what anybody wants nine times in ten. Sighting a
+   * level is already how this game is told "work to *here*", so a plinth
+   * needs no new question asked at the menu.
+   */
+  foundationTop(x: number, y: number): number {
+    const high = Math.max(...this.world.tileCorners(x, y));
+    return this.level !== null && this.level > high ? this.level : high;
+  }
+
+  /**
+   * A step on, off or along a poured slab, or null when no slab is involved
+   * and the ordinary rule should answer.
+   *
+   * The question is the same one as ever — how far up or down is the next
+   * tile — but asked of the two *surfaces*. Under a slab the terrain may be a
+   * cliff, a seabed or a hole, and none of that is under your feet any more.
+   * Landing on a slab needs no slope check either: level is what it is.
+   */
+  private slabStep(x0: number, y0: number, x1: number, y1: number): boolean | null {
+    if (!this.foundations.size) return null;
+    const onto = this.slabAt(x1, y1);
+    if (!onto && !this.slabAt(x0, y0)) return null;
+    if (Math.abs(this.surfaceHeight(x1, y1) - this.surfaceHeight(x0, y0)) > this.climbStep()) return false;
+    return !!onto || standsOn(this.world, x1, y1, this.standSlope());
+  }
+
+  /** Why a slab cannot be poured over this tile to that level, or null. */
+  foundationReason(x: number, y: number, top: number): string | null {
+    const w = this.world;
+    if (!w.inBounds(x, y)) return 'Not there.';
+    if (this.foundationAt(x, y)) return 'There is already a foundation on that tile.';
+    const corners = w.tileCorners(x, y);
+    const high = Math.max(...corners);
+    // It fills a hole; it does not cut one. Pouring below the ground you are
+    // pouring over is not a foundation, it is a trench.
+    if (top < high) return `A foundation fills a tile up, never down. Its high corner is at ${high}; sight a level at or above that.`;
+    /*
+     * And it is an answer to a slope. On ground that is already flat there is
+     * nothing to fill, and the tile next to it is the flat tile you were
+     * after — so a slab there is concrete spent on nothing.
+     */
+    if (top === high && high === Math.min(...corners)) return 'That tile is already level. A foundation is for ground that is not.';
+    /*
+     * Not up against a building. A wall is planned against the ground as the
+     * ground was, and a slab poured at its foot is a shelf under somebody
+     * else's footings; keep a tile between them.
+     */
+    for (let dy = -CLEAR_OF_BUILDINGS; dy <= CLEAR_OF_BUILDINGS; dy++) {
+      for (let dx = -CLEAR_OF_BUILDINGS; dx <= CLEAR_OF_BUILDINGS; dx++) {
+        const b = this.buildings.buildingAt(x + dx, y + dy);
+        if (b) return `${b.name} is too close. A foundation wants a tile clear of any building or plan.`;
+      }
+    }
+    if (this.isToken(x, y)) return 'The settlement token stands there.';
+    if (this.bridgeAt(x, y)) return 'A bridge is carried over that tile.';
+    if (this.groundAt(x, y).length) return 'Clear away the things lying there first: the pour would bury them.';
+    const other = this.deedAt(x, y);
+    if (other && !this.onDeed(x, y)) return `That is inside ${other.name}. Pour your concrete on your own ground.`;
+    /*
+     * And the deepest part of the pour is what asks for the skill: shuttering
+     * a step is a morning's work and shuttering a cliff is not.
+     */
+    const lift = liftFor(corners, top);
+    const want = masonryFor(lift);
+    const have = this.skills.get('masonry');
+    if (have < want) {
+      return `A pour ${lift} deep wants ${want.toFixed(1)} masonry and you have ${have.toFixed(1)}.`
+        + ` At your skill the deepest you can shutter is ${(have * LIFT_PER_MASONRY).toFixed(0)}.`;
     }
     return null;
   }
@@ -4236,7 +4399,11 @@ export class Game {
   /** Whether a vehicle could stand on a tile: solid, dry, level enough ground. */
   vehicleGround(x: number, y: number): boolean {
     const w = this.world;
-    if (!w.inBounds(x, y) || !w.isPassable(x, y) || w.hasWater(x, y)) return false;
+    if (!w.inBounds(x, y)) return false;
+    // A slab is hard level ground with a road's worth of room on it; a cart
+    // crosses one the way it crosses a bridge deck.
+    if (this.foundations.size && this.slabAt(x, y)) return !this.buildings.buildingAt(x, y);
+    if (!w.isPassable(x, y) || w.hasWater(x, y)) return false;
     return !this.buildings.buildingAt(x, y);
   }
 
@@ -4516,6 +4683,20 @@ export class Game {
      * down has to be able to come down here too.
      */
     if (ground.buildings) this.buildings.sawIsland(ground.buildings);
+    /*
+     * And the slabs, replaced outright for the same reason the walls are: one
+     * somebody struck has to be able to come away here too. Shuttering that
+     * has been poured while we were looking elsewhere arrives poured.
+     */
+    if (ground.foundations) {
+      this.foundations.clear();
+      this.slabIndex.clear();
+      for (const f of ground.foundations) {
+        this.foundations.set(f.id, f);
+        this.slabIndex.set(`${f.x},${f.y}`, f.id);
+      }
+      if (ground.nextFoundationId) this.nextFoundationId = ground.nextFoundationId;
+    }
     for (const c of ground.crates ?? []) {
       this.crates.set(c.id, {
         id: c.id, x: c.x, y: c.y, sx: c.sx, sy: c.sy,
@@ -5667,4 +5848,10 @@ export interface IslandGround {
    * a wall of it.
    */
   buildings?: BuildingsJSON;
+  /**
+   * And the slabs, which are not buildings: a foundation is ground somebody
+   * poured, and it is laid beside the terrain rather than inside a house.
+   */
+  foundations?: Foundation[];
+  nextFoundationId?: number;
 }
