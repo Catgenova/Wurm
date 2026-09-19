@@ -71,6 +71,19 @@ export class Camera {
     return y * this.cos - x * this.sin;
   }
 
+  /**
+   * Which side of a line the camera is on, as +1 or -1 along the vector given.
+   *
+   * Everything further down the screen is nearer in this projection, and a
+   * step by a world vector moves down the screen by `u + v` — so the sign of
+   * that is the side facing us. A wall is a box with a face on each side of
+   * its border and this is what picks the one that can be seen; get it wrong
+   * and every wall on the island is drawn on the far side of its own line.
+   */
+  nearSide(dx: number, dy: number): 1 | -1 {
+    return this.rotateX(dx, dy) + this.rotateY(dx, dy) >= 0 ? 1 : -1;
+  }
+
   /** View-space u/v back to world x. */
   unrotateX(u: number, v: number): number {
     return u * this.cos - v * this.sin;

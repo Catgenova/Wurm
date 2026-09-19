@@ -12,10 +12,13 @@ import {
   progressOf,
   ROOF_RISE,
   WALL_HEIGHT,
+  WALL_THICK,
+  FENCE_THICK,
   WALL_TYPE_BY_ID,
   workLevel,
   type Border,
   type FloorTile,
+  type MaterialDef,
   type Side,
   type Wall,
   floorBill,
@@ -199,6 +202,18 @@ export function nearestSide(x: number, y: number, wx: number, wy: number): Side 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
+/**
+ * A wall's face in the two coordinates that mean anything on it: `t` along the
+ * border and `k` up the height, with `s` choosing the face the camera is on or
+ * the one behind. Handed to whatever draws on a wall so that it never has to
+ * know where the wall is or which way the view is turned.
+ */
+interface WallGeom {
+  px: (t: number, k: number, s?: number) => number;
+  py: (t: number, k: number, s?: number) => number;
+  quad: (t0: number, t1: number, k0: number, k1: number, s?: number) => void;
+}
+
 /** How much of a neighbour's colour washes over the edge of a tile. */
 const BLEND_ALPHA = 0.46;
 /** How far in from the edge the neighbour's colour reaches, as a share of the way to the middle. */
@@ -1796,6 +1811,25 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * A wall, with a thickness to it.
+   *
+   * Reported: "walls are paper thin and have no character." They were exactly
+   * paper: one quad standing on the border line, one flat colour, and a few
+   * lines ruled across it. Nothing in that says how thick a thing is or what
+   * it is made of, and a village of it reads as folded card.
+   *
+   * So a wall is a box now rather than a curtain. It is centred on its border
+   * and carries three faces: the one the camera is on, the cap along its top —
+   * which catches the sky and is the whole of what says "thick" in a view from
+   * above — and, at an end with nothing carrying on from it, the end grain.
+   * The three are lit apart: the top brightest, the face by its angle to the
+   * light as before, the end in shadow.
+   *
+   * What it is made of is drawn on the face by `wallGrain`, and only when you
+   * are near enough to see it; from far off a wall is its three faces and
+   * that is the right amount of a wall.
+   */
   private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
@@ -1805,158 +1839,524 @@ export class Renderer {
     const kind = WALL_TYPE_BY_ID.get(wall.type);
     const h0 = base + wall.level * WALL_HEIGHT;
     const h1 = h0 + WALL_HEIGHT * (kind?.height ?? 1);
-    // A point on the wall face: t along the border, k up the height.
-    const px = (t: number, k: number): number => cam.worldToScreenX(ax + (bx - ax) * t, ay + (by - ay) * t);
-    const py = (t: number, k: number): number => cam.worldToScreenY(ax + (bx - ax) * t, ay + (by - ay) * t, h0 + (h1 - h0) * k);
-    const quad = (t0: number, t1: number, k0: number, k1: number): void => {
+    const dx = bx - ax;
+    const dy = by - ay;
+    /*
+     * Across the border, and which way of the two is the camera's.
+     *
+     * Everything further down the screen is nearer in this projection, and a
+     * step across the wall moves down the screen by `u + v`, so the sign of
+     * that is the side we can see. It is worked out per wall rather than per
+     * building: turn the view and the other face comes round.
+     */
+    const half = (kind?.railed ? FENCE_THICK : WALL_THICK) * (kind?.thick ?? 1);
+    const nx = -dy * half;
+    const ny = dx * half;
+    const toward = cam.nearSide(nx, ny);
+    /** A point on the wall: `t` along it, `k` up it, `s` the near face or the far one. */
+    const px = (t: number, k: number, s = 1): number =>
+      cam.worldToScreenX(ax + dx * t + nx * s * toward, ay + dy * t + ny * s * toward);
+    const py = (t: number, k: number, s = 1): number =>
+      cam.worldToScreenY(ax + dx * t + nx * s * toward, ay + dy * t + ny * s * toward, h0 + (h1 - h0) * k);
+    const quad = (t0: number, t1: number, k0: number, k1: number, s = 1): void => {
       ctx.beginPath();
-      ctx.moveTo(px(t0, k0), py(t0, k0));
-      ctx.lineTo(px(t1, k0), py(t1, k0));
-      ctx.lineTo(px(t1, k1), py(t1, k1));
-      ctx.lineTo(px(t0, k1), py(t0, k1));
+      ctx.moveTo(px(t0, k0, s), py(t0, k0, s));
+      ctx.lineTo(px(t1, k0, s), py(t1, k0, s));
+      ctx.lineTo(px(t1, k1, s), py(t1, k1, s));
+      ctx.lineTo(px(t0, k1, s), py(t0, k1, s));
+      ctx.closePath();
+    };
+    /** The cap across the top of a run, front edge to back edge. */
+    const cap = (t0: number, t1: number, k: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t0, k, 1), py(t0, k, 1));
+      ctx.lineTo(px(t1, k, 1), py(t1, k, 1));
+      ctx.lineTo(px(t1, k, -1), py(t1, k, -1));
+      ctx.lineTo(px(t0, k, -1), py(t0, k, -1));
+      ctx.closePath();
+    };
+    /** And the end of a run, where the thickness shows as end grain. */
+    const endOf = (t: number, k0: number, k1: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t, k0, 1), py(t, k0, 1));
+      ctx.lineTo(px(t, k0, -1), py(t, k0, -1));
+      ctx.lineTo(px(t, k1, -1), py(t, k1, -1));
+      ctx.lineTo(px(t, k1, 1), py(t, k1, 1));
       ctx.closePath();
     };
     // The face running along the view's x axis catches the light. How much of
     // it does is a matter of degree rather than a choice between two: turning
     // the view an eighth would otherwise jump a wall between the two tones,
     // and at a diagonal it is neither.
-    const vx = cam.rotateX(bx - ax, by - ay);
-    const vy = cam.rotateY(bx - ax, by - ay);
+    const vx = cam.rotateX(dx, dy);
+    const vy = cam.rotateY(dx, dy);
     const along = Math.abs(vx);
     const into = Math.abs(vy);
     const face = along / (along + into || 1);
     const lit = 0.72 * (1 - face) + (vx > 0 ? 1 : 0.8) * face;
+    // A cap looks at the sky and an end looks away from it.
+    const topLit = Math.min(1.3, lit * 1.24);
+    const endLit = lit * 0.74;
     const done = isDone(wall);
+    const zoom = cam.zoom;
     ctx.globalAlpha = alpha;
     if (!done) {
+      /*
+       * A plan, and then a plan filling. It keeps the thickness — a wall that
+       * grew a body the moment its last plank went in would jump — but the
+       * body is only drawn as far up as the materials have reached.
+       */
       const progress = progressOf(wall);
-      quad(0, 1, 0, 1);
-      ctx.fillStyle = rgb(mat.color, lit, 0.22);
+      if (progress > 0) {
+        quad(0, 1, 0, progress);
+        ctx.fillStyle = rgb(mat.color, lit, 0.9);
+        ctx.fill();
+        cap(0, 1, progress);
+        ctx.fillStyle = rgb(mat.color, topLit, 0.9);
+        ctx.fill();
+      }
+      quad(0, 1, progress, 1);
+      ctx.fillStyle = rgb(mat.color, lit, 0.18);
       ctx.fill();
+      quad(0, 1, 0, 1);
       ctx.strokeStyle = PLAN_COLOR;
       ctx.setLineDash([5, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (progress > 0) {
-        quad(0, 1, 0, progress);
-        ctx.fillStyle = rgb(mat.color, lit, 0.85);
-        ctx.fill();
-      }
       ctx.globalAlpha = 1;
       return;
     }
     if (kind?.railed) {
-      // Posts at the ends and the middle, two rails between them, and a gate
-      // leaf hung in the gap when there is one.
-      ctx.fillStyle = rgb(mat.color, lit);
-      ctx.strokeStyle = rgb(mat.trim, lit);
-      for (const t of [0.03, 0.5, 0.97]) {
-        quad(Math.max(0, t - 0.05), Math.min(1, t + 0.05), 0, 1);
+      /*
+       * Posts and rails, each of them a piece of timber with a top to it: a
+       * fence drawn flat is a comb, and a comb is what this was.
+       */
+      const post = (t: number, w: number): void => {
+        const t0 = Math.max(0, t - w);
+        const t1 = Math.min(1, t + w);
+        quad(t0, t1, 0, 1);
+        ctx.fillStyle = rgb(mat.color, lit);
+        ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit * 0.9);
+        ctx.stroke();
+        cap(t0, t1, 1);
+        ctx.fillStyle = rgb(mat.color, topLit);
         ctx.fill();
         ctx.stroke();
-      }
-      for (const [k0, k1] of [[0.32, 0.46], [0.72, 0.86]] as Array<[number, number]>) {
+      };
+      for (const [k0, k1] of [[0.3, 0.45], [0.7, 0.85]] as Array<[number, number]>) {
         quad(0, 1, k0, k1);
-        ctx.fillStyle = rgb(mat.color, lit * 0.94);
+        ctx.fillStyle = rgb(mat.color, lit * 0.92);
         ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit * 0.85);
         ctx.stroke();
-      }
-      if (wall.type === 'fence_gate' || wall.type === 'iron_gate') {
-        quad(0.08, 0.46, 0.06, 0.94);
-        // An iron-bound gate reads as iron whatever its posts are of.
-        ctx.fillStyle = rgb(wall.type === 'iron_gate' ? [72, 74, 80] : mat.floor, lit, 0.85);
+        cap(0, 1, k1);
+        ctx.fillStyle = rgb(mat.color, topLit * 0.94);
         ctx.fill();
+      }
+      for (const t of [0.04, 0.5, 0.96]) post(t, 0.05);
+      if (wall.type === 'fence_gate' || wall.type === 'iron_gate') {
+        // The leaf hangs behind the posts, which is what the recess says.
+        const iron = wall.type === 'iron_gate';
+        quad(0.09, 0.45, 0.06, 0.94, -0.4);
+        ctx.fillStyle = rgb(iron ? [72, 74, 80] : mat.floor, lit, 0.9);
+        ctx.fill();
+        ctx.strokeStyle = rgb(iron ? [40, 42, 48] : mat.trim, lit);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(px(0.1, 0.1), py(0.1, 0.1));
-        ctx.lineTo(px(0.44, 0.9), py(0.44, 0.9));
+        ctx.moveTo(px(0.11, 0.1, -0.4), py(0.11, 0.1, -0.4));
+        ctx.lineTo(px(0.43, 0.9, -0.4), py(0.43, 0.9, -0.4));
         ctx.stroke();
+        if (iron) {
+          // Two straps across it, which is where the iron actually is.
+          ctx.lineWidth = Math.max(1.5, 2.4 * zoom);
+          ctx.strokeStyle = rgb([54, 56, 62], lit);
+          for (const k of [0.24, 0.76]) {
+            ctx.beginPath();
+            ctx.moveTo(px(0.09, k, -0.4), py(0.09, k, -0.4));
+            ctx.lineTo(px(0.45, k, -0.4), py(0.45, k, -0.4));
+            ctx.stroke();
+          }
+          ctx.lineWidth = 1;
+        }
       }
       ctx.globalAlpha = 1;
       return;
     }
+    /* The face, then what it is made of, then the top and the end. */
     quad(0, 1, 0, 1);
     ctx.fillStyle = rgb(mat.color, lit);
     ctx.fill();
-    ctx.strokeStyle = rgb(mat.trim, lit);
+    if (zoom >= 0.5) this.wallGrain(mat, lit, border.x * 31 + border.y * 17 + wall.level, { px, py, quad }, zoom);
+    /*
+     * And the light down the face of it. Nothing out of doors is one flat
+     * tone from top to bottom: the ground throws shade back up the first foot
+     * of a wall and the sky picks out the last of it, and without that a wall
+     * of however good a masonry sits on the grass like a decal.
+     */
+    quad(0, 1, 0, 1);
+    const wash = ctx.createLinearGradient(px(0.5, 0), py(0.5, 0), px(0.5, 1), py(0.5, 1));
+    wash.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
+    wash.addColorStop(0.3, 'rgba(0, 0, 0, 0.05)');
+    wash.addColorStop(0.82, 'rgba(255, 255, 255, 0.03)');
+    wash.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+    ctx.fillStyle = wash;
+    ctx.fill();
+    ctx.strokeStyle = rgb(mat.trim, lit * 0.9);
     ctx.stroke();
-    if (mat.id === 'log') {
-      ctx.strokeStyle = rgb(mat.trim, lit, 0.5);
-      for (let k = 0.2; k < 1; k += 0.2) {
-        ctx.beginPath();
-        ctx.moveTo(px(0, k), py(0, k));
-        ctx.lineTo(px(1, k), py(1, k));
-        ctx.stroke();
-      }
-    } else if (mat.id === 'timbercraft') {
-      ctx.strokeStyle = rgb(mat.trim, lit);
-      ctx.lineWidth = 2;
-      for (const t of [0.33, 0.66]) {
-        ctx.beginPath();
-        ctx.moveTo(px(t, 0), py(t, 0));
-        ctx.lineTo(px(t, 1), py(t, 1));
-        ctx.stroke();
-      }
-      ctx.beginPath();
-      ctx.moveTo(px(0, 0.5), py(0, 0.5));
-      ctx.lineTo(px(1, 0.5), py(1, 0.5));
+    cap(0, 1, 1);
+    ctx.fillStyle = rgb(mat.color, topLit);
+    ctx.fill();
+    ctx.stroke();
+    /*
+     * And the end grain, at an end that nothing carries on from. A run of
+     * wall down a street is one wall to look at; it is only where a run stops
+     * that the thickness of it should be on show.
+     */
+    const bld = this.game.buildings;
+    const on = (i: number): boolean => {
+      const b: Border = border.dir === 'h'
+        ? { dir: 'h', x: border.x + i, y: border.y }
+        : { dir: 'v', x: border.x, y: border.y + i };
+      const w = bld.wallOnBorder(wall.level, b);
+      return !!w && isDone(w);
+    };
+    for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
+      if (on(i)) continue;
+      endOf(t, 0, 1);
+      ctx.fillStyle = rgb(mat.color, endLit);
+      ctx.fill();
+      ctx.strokeStyle = rgb(mat.trim, endLit);
       ctx.stroke();
-      ctx.lineWidth = 1;
-    } else if (mat.kind === 'stone' && mat.id !== 'marble') {
-      ctx.strokeStyle = rgb(mat.trim, lit, 0.35);
-      for (let k = 0.25; k < 1; k += 0.25) {
-        ctx.beginPath();
-        ctx.moveTo(px(0, k), py(0, k));
-        ctx.lineTo(px(1, k), py(1, k));
-        ctx.stroke();
-      }
-    }
-    if (mat.id.startsWith('ornate')) {
-      ctx.strokeStyle = rgb(mat.trim, 1);
-      ctx.lineWidth = 2;
-      quad(0.06, 0.94, 0.08, 0.92);
-      ctx.stroke();
-      ctx.lineWidth = 1;
     }
     switch (wall.type) {
       case 'window':
-        quad(0.32, 0.68, 0.4, 0.78);
-        ctx.fillStyle = 'rgba(150, 200, 235, 0.75)';
-        ctx.fill();
-        ctx.strokeStyle = rgb(mat.trim, lit);
-        ctx.stroke();
+        this.wallOpening(mat, lit, { px, py, quad }, 0.3, 0.7, 0.38, 0.78, 'glass', zoom);
         break;
       case 'bay':
-        quad(0.2, 0.8, 0.35, 0.82);
-        ctx.fillStyle = 'rgba(150, 200, 235, 0.75)';
-        ctx.fill();
-        ctx.strokeStyle = rgb(mat.trim, lit);
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.lineWidth = 1;
+        this.wallOpening(mat, lit, { px, py, quad }, 0.18, 0.82, 0.33, 0.82, 'glass', zoom);
         break;
       case 'door':
-        quad(0.36, 0.64, 0, 0.72);
-        ctx.fillStyle = 'rgba(40, 28, 18, 0.9)';
-        ctx.fill();
-        ctx.strokeStyle = rgb(mat.trim, lit);
-        ctx.stroke();
+        this.wallOpening(mat, lit, { px, py, quad }, 0.34, 0.66, 0, 0.74, 'door', zoom);
         break;
       case 'double_door':
-        quad(0.22, 0.78, 0, 0.74);
-        ctx.fillStyle = 'rgba(40, 28, 18, 0.9)';
-        ctx.fill();
-        ctx.strokeStyle = rgb(mat.trim, lit);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(px(0.5, 0), py(0.5, 0));
-        ctx.lineTo(px(0.5, 0.74), py(0.5, 0.74));
-        ctx.stroke();
+        this.wallOpening(mat, lit, { px, py, quad }, 0.2, 0.8, 0, 0.76, 'double', zoom);
         break;
       default:
         break;
     }
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * What a wall is made of, drawn on its face.
+   *
+   * Reported as "no character", and the word is fair: every wall on the
+   * island was one flat colour with at most a few ruled lines on it, so a log
+   * wall and a slate one differed by hue alone. A wall should say what it is
+   * from across the deed — logs by the round of them, boarding by the run of
+   * the boards, half-timber by its frame, and stone by the size and lie of its
+   * blocks. All of it is drawn off the wall's own coordinates, so nothing
+   * crawls when the view turns, and none of it is drawn at all from far off.
+   */
+  private wallGrain(mat: MaterialDef, lit: number, seed: number, g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    /** A band across the face, filled flat. */
+    const band = (t0: number, t1: number, k0: number, k1: number, k: number): void => {
+      quad(t0, t1, k0, k1);
+      ctx.fillStyle = rgb(mat.color, lit * k);
+      ctx.fill();
+    };
+    /** A rule across or up the face, for a joint or a seam. */
+    const rule = (t0: number, k0: number, t1: number, k1: number, k: number, a: number): void => {
+      ctx.strokeStyle = rgb(mat.trim, lit * k, a);
+      ctx.beginPath();
+      ctx.moveTo(px(t0, k0), py(t0, k0));
+      ctx.lineTo(px(t1, k1), py(t1, k1));
+      ctx.stroke();
+    };
+    /**
+     * Courses of blocks, which is most of what masonry is to look at: the
+     * mortar showing between them, every other course set half a block over,
+     * and no two blocks quite the same colour.
+     */
+    /** A stone with the corners knocked off it, for anything not cut square. */
+    const blob = (t0: number, t1: number, k0: number, k1: number): void => {
+      const mt = (t0 + t1) / 2;
+      const mk = (k0 + k1) / 2;
+      ctx.beginPath();
+      ctx.moveTo(px(t0, mk), py(t0, mk));
+      ctx.quadraticCurveTo(px(t0, k1), py(t0, k1), px(mt, k1), py(mt, k1));
+      ctx.quadraticCurveTo(px(t1, k1), py(t1, k1), px(t1, mk), py(t1, mk));
+      ctx.quadraticCurveTo(px(t1, k0), py(t1, k0), px(mt, k0), py(mt, k0));
+      ctx.quadraticCurveTo(px(t0, k0), py(t0, k0), px(t0, mk), py(t0, mk));
+      ctx.closePath();
+    };
+    const courses = (rows0: number, cols0: number, jitter: number, gap: number, rough = false): void => {
+      /*
+       * Half as many blocks from twice as far off. A brick wall is fifty-four
+       * little quads at the zoom where you can count them, and a village of
+       * that is a lot of paths for a difference nobody can see from there.
+       */
+      const rows = zoom >= 0.9 ? rows0 : Math.max(2, Math.round(rows0 / 2));
+      const cols = zoom >= 0.9 ? cols0 : Math.max(2, Math.round(cols0 / 2));
+      quad(0, 1, 0, 1);
+      // The mortar showing between. A cut joint is a dark line; rubble is
+      // bedded in a pale lime that shows as much as the stone does.
+      ctx.fillStyle = rgb(mat.trim, lit * (rough ? 0.92 : 0.82));
+      ctx.fill();
+      const kh = 1 / rows;
+      for (let r = 0; r < rows; r++) {
+        const k0 = r * kh + gap * kh;
+        const k1 = (r + 1) * kh - gap * kh;
+        const off = (r % 2) * 0.5;
+        for (let c = -1; c <= cols; c++) {
+          // Rubble comes off the field in whatever size it comes off in, so a
+          // course of it is not a course of equal stones.
+          const w = rough ? 0.62 + hash2(seed + c, r, 29) * 0.38 : 1;
+          const t0 = Math.max(0, (c + off) / cols + gap / cols);
+          const t1 = Math.min(1, t0 + ((c + 1 + off) / cols - gap / cols - t0) * w);
+          if (t1 <= t0) continue;
+          const j = hash2(seed + c, r, 19);
+          quad(t0, t1, k0, k1);
+          // Rubble is picked out against its bedding; ashlar is nearly one tone.
+          ctx.fillStyle = rgb(mat.color, lit * ((rough ? 1.05 : 1) + (j - 0.5) * jitter));
+          ctx.fill();
+        }
+      }
+    };
+    switch (mat.id) {
+      case 'log': {
+        /*
+         * Logs laid one on another. Each is a cylinder, so the light on it
+         * runs from a shadow at the bottom through a crown just above the
+         * middle to a softer top where it turns away — which is the whole
+         * difference between a log wall and a brown rectangle.
+         */
+        const n = 5;
+        for (let i = 0; i < n; i++) {
+          const k0 = i / n;
+          const k1 = (i + 1) / n;
+          quad(0, 1, k0, k1);
+          const gr = ctx.createLinearGradient(px(0.5, k0), py(0.5, k0), px(0.5, k1), py(0.5, k1));
+          gr.addColorStop(0, rgb(mat.color, lit * 0.7));
+          gr.addColorStop(0.55, rgb(mat.color, lit * 1.12));
+          gr.addColorStop(1, rgb(mat.color, lit * 0.88));
+          ctx.fillStyle = gr;
+          ctx.fill();
+          if (i) rule(0, k0, 1, k0, 0.8, 0.75);
+        }
+        break;
+      }
+      case 'plank': {
+        // Boarding: upright boards of slightly different woods, a sill under
+        // them and a head over, which is how boarding is actually held on.
+        const n = 7;
+        for (let i = 0; i < n; i++) {
+          const j = hash2(seed, i, 23);
+          band(i / n, (i + 1) / n, 0.06, 0.94, 0.9 + j * 0.2);
+          if (i) rule(i / n, 0.06, i / n, 0.94, 0.85, 0.5);
+        }
+        band(0, 1, 0, 0.06, 0.78);
+        band(0, 1, 0.94, 1, 0.86);
+        break;
+      }
+      case 'timbercraft': {
+        /*
+         * Half-timbering: pale daub between dark timbers. The braces are what
+         * make it read at a glance — a frame with no braces in it is a window
+         * frame, and a frame with them is a house.
+         */
+        const frame = (t0: number, t1: number, k0: number, k1: number, k: number): void => {
+          quad(t0, t1, k0, k1);
+          ctx.fillStyle = rgb(mat.trim, lit * k);
+          ctx.fill();
+        };
+        frame(0, 1, 0, 0.08, 0.95);
+        frame(0, 1, 0.92, 1, 1.05);
+        frame(0, 0.08, 0, 1, 1);
+        frame(0.92, 1, 0, 1, 1);
+        frame(0.46, 0.54, 0, 1, 1);
+        frame(0, 1, 0.47, 0.55, 0.98);
+        if (zoom >= 0.7) {
+          ctx.strokeStyle = rgb(mat.trim, lit);
+          ctx.lineWidth = Math.max(1.5, 3.2 * zoom);
+          for (const [a, b] of [[0.08, 0.46], [0.92, 0.54]] as Array<[number, number]>) {
+            ctx.beginPath();
+            ctx.moveTo(px(a, 0.08), py(a, 0.08));
+            ctx.lineTo(px(b, 0.47), py(b, 0.47));
+            ctx.stroke();
+          }
+          ctx.lineWidth = 1;
+        }
+        break;
+      }
+      case 'cobblestone':
+        // Field stone: round, uneven, and laid in courses only roughly.
+        courses(5, 6, 0.3, 0.045, true);
+        break;
+      case 'stone_brick':
+        courses(6, 4, 0.14, 0.055);
+        break;
+      case 'slate':
+        // Thin beds, because that is how slate comes off the hill.
+        courses(9, 3, 0.16, 0.05);
+        break;
+      case 'sandstone':
+        courses(5, 3, 0.2, 0.05);
+        break;
+      case 'clay_bricks':
+        courses(9, 6, 0.16, 0.07);
+        break;
+      case 'marble': {
+        // Great ashlar blocks and hardly any joint, and a vein or two.
+        courses(3, 2, 0.05, 0.02);
+        if (zoom >= 0.9) {
+          ctx.strokeStyle = rgb(mat.trim, lit, 0.35);
+          for (let i = 0; i < 3; i++) {
+            const t = 0.15 + hash2(seed, i, 41) * 0.7;
+            const k = 0.15 + hash2(seed, i, 43) * 0.6;
+            ctx.beginPath();
+            ctx.moveTo(px(t - 0.12, k - 0.06), py(t - 0.12, k - 0.06));
+            ctx.quadraticCurveTo(px(t, k + 0.05), py(t, k + 0.05), px(t + 0.13, k - 0.02), py(t + 0.13, k - 0.02));
+            ctx.stroke();
+          }
+        }
+        break;
+      }
+      case 'clay_adobe': {
+        /*
+         * No joints at all: mud rendered on by hand and left. What says adobe
+         * is that nothing about it is straight — patches where one day's
+         * render met the next, a heavy dark foot where the rain splashes up
+         * it, and a crack or two from the drying.
+         */
+        if (zoom >= 0.6) {
+          for (let i = 0; i < 9; i++) {
+            const t = hash2(seed, i, 53);
+            const k = hash2(seed, i, 59);
+            blob(Math.max(0, t - 0.17), Math.min(1, t + 0.17), Math.max(0, k - 0.13), Math.min(1, k + 0.13));
+            ctx.fillStyle = rgb(mat.color, lit * (0.9 + hash2(seed, i, 61) * 0.22));
+            ctx.fill();
+          }
+        }
+        // The foot of it, dark where the ground throws the wet back up.
+        quad(0, 1, 0, 0.14);
+        const foot = ctx.createLinearGradient(px(0.5, 0), py(0.5, 0), px(0.5, 0.14), py(0.5, 0.14));
+        foot.addColorStop(0, rgb(mat.trim, lit * 0.82));
+        foot.addColorStop(1, rgb(mat.color, lit, 0));
+        ctx.fillStyle = foot;
+        ctx.fill();
+        if (zoom >= 0.9) {
+          ctx.strokeStyle = rgb(mat.trim, lit * 0.8, 0.5);
+          for (let i = 0; i < 2; i++) {
+            const t = 0.22 + hash2(seed, i, 67) * 0.55;
+            ctx.beginPath();
+            ctx.moveTo(px(t, 0.95), py(t, 0.95));
+            ctx.lineTo(px(t + 0.04, 0.68), py(t + 0.04, 0.68));
+            ctx.lineTo(px(t - 0.02, 0.42), py(t - 0.02, 0.42));
+            ctx.stroke();
+          }
+        }
+        break;
+      }
+      case 'ornate_silver':
+      case 'ornate_gold': {
+        // Ashlar with a band of worked metal across it, which is the whole
+        // reason anybody spends the silver.
+        courses(5, 3, 0.08, 0.04);
+        quad(0.04, 0.96, 0.42, 0.6);
+        const gr = ctx.createLinearGradient(px(0.04, 0.6), py(0.04, 0.6), px(0.04, 0.42), py(0.04, 0.42));
+        gr.addColorStop(0, rgb(mat.trim, lit * 0.9));
+        gr.addColorStop(0.45, rgb(mat.color, lit * 1.3));
+        gr.addColorStop(1, rgb(mat.trim, lit));
+        ctx.fillStyle = gr;
+        ctx.fill();
+        ctx.strokeStyle = rgb(mat.trim, lit * 0.8);
+        ctx.stroke();
+        if (zoom >= 0.8) for (let i = 1; i < 6; i++) rule(i / 6, 0.42, i / 6, 0.6, 0.75, 0.6);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  /**
+   * A hole in a wall, with the wall's own thickness showing round it.
+   *
+   * The leaf or the glass sits on the back plane rather than on the face, so
+   * the reveal — the jamb and the head — is the wall itself seen edge on, and
+   * comes out of the projection rather than out of a drawn line. A window that
+   * was painted on the front of a sheet is a window on a sheet.
+   */
+  private wallOpening(mat: MaterialDef, lit: number, g: WallGeom,
+                      t0: number, t1: number, k0: number, k1: number,
+                      what: 'glass' | 'door' | 'double', zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    // The reveal: the sides and head of the hole, which are in shadow because
+    // they face across the wall rather than along it.
+    ctx.fillStyle = rgb(mat.color, lit * 0.6);
+    for (const [a, b] of [[t0, t0], [t1, t1]] as Array<[number, number]>) {
+      ctx.beginPath();
+      ctx.moveTo(px(a, k0, 1), py(a, k0, 1));
+      ctx.lineTo(px(b, k0, -1), py(b, k0, -1));
+      ctx.lineTo(px(b, k1, -1), py(b, k1, -1));
+      ctx.lineTo(px(a, k1, 1), py(a, k1, 1));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.moveTo(px(t0, k1, 1), py(t0, k1, 1));
+    ctx.lineTo(px(t1, k1, 1), py(t1, k1, 1));
+    ctx.lineTo(px(t1, k1, -1), py(t1, k1, -1));
+    ctx.lineTo(px(t0, k1, -1), py(t0, k1, -1));
+    ctx.closePath();
+    ctx.fillStyle = rgb(mat.color, lit * 0.48);
+    ctx.fill();
+    // And what is hung in it, on the back plane.
+    quad(t0, t1, k0, k1, -1);
+    if (what === 'glass') {
+      const gr = ctx.createLinearGradient(px(t0, k1, -1), py(t0, k1, -1), px(t1, k0, -1), py(t1, k0, -1));
+      gr.addColorStop(0, 'rgba(198, 226, 244, 0.85)');
+      gr.addColorStop(0.55, 'rgba(126, 170, 205, 0.8)');
+      gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
+      ctx.fillStyle = gr;
+    } else {
+      ctx.fillStyle = rgb(mat.floor, lit * 0.5, 0.95);
+    }
+    ctx.fill();
+    ctx.strokeStyle = rgb(mat.trim, lit * 0.8);
+    ctx.stroke();
+    const line = (t: number, a: number, b: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t, a, -1), py(t, a, -1));
+      ctx.lineTo(px(t, b, -1), py(t, b, -1));
+      ctx.stroke();
+    };
+    if (zoom < 0.7) return;
+    ctx.lineWidth = Math.max(1, 1.6 * zoom);
+    if (what === 'glass') {
+      // Bars: one up and one across, which is what a small pane looks like.
+      ctx.strokeStyle = rgb(mat.trim, lit);
+      line((t0 + t1) / 2, k0, k1);
+      ctx.beginPath();
+      ctx.moveTo(px(t0, (k0 + k1) / 2, -1), py(t0, (k0 + k1) / 2, -1));
+      ctx.lineTo(px(t1, (k0 + k1) / 2, -1), py(t1, (k0 + k1) / 2, -1));
+      ctx.stroke();
+    } else {
+      // Boards down the leaf, and the gap where a double door meets.
+      ctx.strokeStyle = rgb(mat.trim, lit * 0.7);
+      const leaves = what === 'double' ? 2 : 1;
+      for (let i = 1; i < leaves * 3; i++) line(t0 + ((t1 - t0) * i) / (leaves * 3), k0 + 0.03, k1 - 0.03);
+      if (what === 'double') {
+        ctx.strokeStyle = rgb(mat.trim, lit);
+        line((t0 + t1) / 2, k0, k1);
+      }
+    }
+    ctx.lineWidth = 1;
   }
 
   /** The deed's boundary as a line that follows the ground. */

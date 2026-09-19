@@ -27,12 +27,18 @@ export interface WallTypeDef {
   beastProof?: boolean;
   /** Cast metal the wall takes over its material's bill: hinges for anything that swings, brackets to bind a gate. */
   fittings?: Array<[string, number]>;
+  /**
+   * How thick it is against an ordinary wall, for the drawing. A bay stands
+   * proud of the wall it is let into; a half wall is a parapet and is built
+   * heavier than the storey it caps.
+   */
+  thick?: number;
 }
 
 export const WALL_TYPES: WallTypeDef[] = [
   { id: 'solid', name: 'Solid', factor: 1, passable: false },
   { id: 'window', name: 'Window', factor: 0.75, passable: false },
-  { id: 'bay', name: 'Bay window', factor: 1.25, passable: false },
+  { id: 'bay', name: 'Bay window', factor: 1.25, passable: false, thick: 1.7 },
   { id: 'door', name: 'Door', factor: 0.75, passable: true, fittings: [['hinge', 2]] },
   { id: 'double_door', name: 'Double door', factor: 1, passable: true, fittings: [['hinge', 4]] },
   // Waist-high, and cheap because there is so much less of them. A gate is
@@ -41,7 +47,7 @@ export const WALL_TYPES: WallTypeDef[] = [
   { id: 'fence_gate', name: 'Fence gate', factor: 0.4, passable: true, height: 0.42, low: true, railed: true, standalone: true, fittings: [['hinge', 2]] },
   // Bound in iron: it swings for a person and holds against everything else.
   { id: 'iron_gate', name: 'Iron-bound gate', factor: 0.5, passable: true, height: 0.6, low: true, railed: true, standalone: true, beastProof: true, fittings: [['hinge', 2], ['bracket', 4]] },
-  { id: 'half_wall', name: 'Half wall', factor: 0.5, passable: false, height: 0.5, low: true, standalone: true },
+  { id: 'half_wall', name: 'Half wall', factor: 0.5, passable: false, height: 0.5, low: true, standalone: true, thick: 1.25 },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
 /** Whether a wall type is waist-high work that nothing can be built over. */
@@ -83,6 +89,17 @@ export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 
 /** Height of one storey in terrain units (3 m). */
 export const WALL_HEIGHT = 30;
+/**
+ * Half the thickness of a wall and of a fence, in tiles.
+ *
+ * A wall is centred on its border and stands out this far either side of it,
+ * which is what gives it a top to catch the light and an end to show its
+ * grain. Reported as "walls are paper thin", and they were: a wall was a line
+ * with a picture on it. Forty-odd centimetres of stone at four metres to the
+ * tile is enough to read as built and not so much that a room loses its floor.
+ */
+export const WALL_THICK = 0.055;
+export const FENCE_THICK = 0.028;
 export const MAX_LEVELS = 10;
 
 export type Side = 'n' | 'e' | 's' | 'w';

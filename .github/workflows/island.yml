@@ -430,6 +430,15 @@ jobs:
           npx esbuild supabase/test/roof.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/roof.mjs --log-level=error
           node node_modules/.cache/roof.mjs
+      - name: A wall is a box, and the face you see is the one you are standing on
+        run: |
+          # Reported: "walls are paper thin and have no character." A wall is a
+          # box now rather than a curtain, and which of its two faces is drawn
+          # is worked out per wall from the camera — one line that, with the
+          # sign backwards, would put every wall on the island half a tile out.
+          npx esbuild supabase/test/thick.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/thick.mjs --log-level=error
+          node node_modules/.cache/thick.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written
