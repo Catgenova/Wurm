@@ -2,11 +2,15 @@
  * What a back takes, and where carrying stops being a drag and becomes a wall.
  *
  * Asked for: "time to implement the inventory movement cap. when inventory is
- * above 150% cap, movement speed becomes 0."
+ * above 150% cap, movement speed becomes 0." And then, later: "change
+ * overburdened movement speed from 0% to 5%."
  *
  * Past the limit a body was already slower and tired faster, and that was the
  * whole of it — the drag is capped, so a body under ten times its limit still
- * walked, at a crawl. Half again over it is the end of walking now.
+ * walked, at a crawl. Half again over it is a wall now: not one you cannot
+ * pass, one you creep along at a twentieth of your pace, which is slow enough
+ * to be no way to travel and quick enough to get you out of wherever you
+ * overloaded.
  *
  * The rule has to be the same rule on both sides. The browser draws the body
  * and must not draw it walking; the island decides where a body actually is
@@ -18,6 +22,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { Game, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../../src/game/game';
+import { BASE_SPEED, CARRY_CRAWL } from '../../src/game/player';
 import { itemWeight } from '../../src/game/items';
 
 const psql = (sql: string): string =>
@@ -40,10 +45,10 @@ const say = (ok: boolean, line: string): void => {
 };
 
 /* The three numbers, on both sides. */
-const theirs = psql("select carry_base() || ',' || carry_per_strength() || ',' || carry_stop()").split(',').map(Number);
-const mine = [CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP];
+const theirs = psql("select carry_base() || ',' || carry_per_strength() || ',' || carry_stop() || ',' || carry_crawl()").split(',').map(Number);
+const mine = [CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP, CARRY_CRAWL];
 say(mine.every((n, i) => n === theirs[i]),
-  `the same three numbers on both sides: base ${mine[0]} kg, ${mine[1]} kg a point of body strength, stop at ${mine[2]}× — the island says ${theirs.join(', ')}`);
+  `the same four numbers on both sides: base ${mine[0]} kg, ${mine[1]} kg a point of body strength, wall at ${mine[2]}×, ${(mine[3] * 100).toFixed(0)}% of pace past it — the island says ${theirs.join(', ')}`);
 
 /* A body in a game of its own, loaded until it cannot walk. */
 const game = Game.create(4242, 96);
@@ -66,7 +71,7 @@ const burdened = game.burden();
 say(burdened > 0, `and it is paying for it: burden ${burdened.toFixed(2)}, which is ${(100 / (1 + burdened)).toFixed(0)}% of its pace`);
 
 const over = loadTo(1.8);
-say(game.stalled(), `at ${(over * 100).toFixed(0)}% it is stopped where it stands`);
+say(game.stalled(), `at ${(over * 100).toFixed(0)}% it is down to a crawl`);
 
 /* And the body itself: a walk asked for, and nothing moved. */
 const w = game.world;
@@ -77,20 +82,32 @@ game.player.stalled = game.stalled();
 const from = { x: game.player.x, y: game.player.y };
 game.player.walkTo(w, game.player.tileX + 2, game.player.tileY);
 for (let i = 0; i < 40; i++) game.player.update(0.1, w);
-const stoodStill = Math.hypot(game.player.x - from.x, game.player.y - from.y) < 0.001;
-say(stoodStill, `four seconds of walking with ${(over * 100).toFixed(0)}% on its back moved it ${Math.hypot(game.player.x - from.x, game.player.y - from.y).toFixed(3)} tiles`);
-say(game.player.path === null, 'and the walk was dropped rather than left waiting');
+/*
+ * Four seconds at a twentieth of a base pace is about half a tile, before the
+ * ground and the burden take their own cuts — so this asks for movement that
+ * is plainly happening and plainly not walking, rather than for a number the
+ * tile under its feet would have to agree to.
+ */
+const crept = Math.hypot(game.player.x - from.x, game.player.y - from.y);
+const ceiling = BASE_SPEED * CARRY_CRAWL * 4;
+say(crept > 0 && crept <= ceiling + 0.001,
+  `four seconds of walking with ${(over * 100).toFixed(0)}% on its back crept ${crept.toFixed(3)} tiles, and could not have passed ${ceiling.toFixed(2)}`);
+say(crept < 0.25 * BASE_SPEED * 4,
+  `which is a crawl rather than a walk: ${(crept / (BASE_SPEED * 4) * 100).toFixed(1)}% of what it would have covered unladen`);
+say(game.player.path !== null || crept > 0,
+  'and the walk was kept rather than dropped, because a body at a twentieth is still going somewhere');
 
 /* Put it down and the road opens again. */
 const light = loadTo(0.5);
 game.player.stalled = game.stalled();
+const before = { x: game.player.x, y: game.player.y };
 game.player.walkTo(w, game.player.tileX + 2, game.player.tileY);
 for (let i = 0; i < 40; i++) game.player.update(0.1, w);
-const moved = Math.hypot(game.player.x - from.x, game.player.y - from.y);
+const moved = Math.hypot(game.player.x - before.x, game.player.y - before.y);
 say(!game.stalled() && moved > 0.5, `put down to ${(light * 100).toFixed(0)}% it walks again: ${moved.toFixed(2)} tiles in four seconds`);
 
 if (bad) {
   console.error(`${bad} of them are not what they should be`);
   process.exit(1);
 }
-console.log('a body walks under its limit, labours over it, and stands still half again past it — the same sum on both sides');
+console.log('a body walks under its limit, labours over it, and creeps half again past it — the same sums on both sides');

@@ -44,6 +44,19 @@ export const SWIM_DEPTH = 4;
 /** Share of walking speed kept in deep water before any swimming skill. */
 export const SWIM_SPEED = 0.42;
 export const BASE_SPEED = 2.4; // tiles per second
+/**
+ * What is left of your pace half again over the limit.
+ *
+ * It was nought — "when inventory is above 150% cap, movement speed becomes
+ * 0" — and nought has a sharp edge on it: a body that cannot move at all is a
+ * body that cannot get itself out of the trouble it walked into, and the only
+ * way out was to put things on the ground where they stood. Asked for now:
+ * five per cent. That is a hundredth of a tile a second short of nothing, so
+ * it is still a wall in every way that matters — you will not carry a hill of
+ * ore home on it — but a wall you can creep along rather than one you are
+ * pinned to. The island reads the same number.
+ */
+export const CARRY_CRAWL = 0.05;
 const ARRIVE = 0.06;
 
 export class Player {
@@ -126,7 +139,9 @@ export class Player {
   burden = 0;
   /**
    * Carrying more than a body can walk under. Set from `Game.stalled`, which
-   * is the same sum the island refuses a move on.
+   * is the same sum the island holds a body to. Not a stop any more — a
+   * twentieth of your pace, `CARRY_CRAWL` — so the name is a shade strong
+   * for what it now does, and kept because it is what both sides call it.
    */
   stalled = false;
   /** Steepest step allowed, raised by the climbing skill. */
@@ -217,18 +232,6 @@ export class Player {
       return 0;
     }
 
-    /*
-     * And nothing moves under a load half again over the limit. The walk is
-     * dropped rather than paused, so a click across the deed does not set off
-     * the moment a stone comes out of the pack — and the island refuses the
-     * same body on the same sum, so a step taken here would be taken back.
-     */
-    if (this.stalled) {
-      this.path = null;
-      this.moving = false;
-      return 0;
-    }
-
     const tileDef = TILE_DEFS[world.getTile(this.tileX, this.tileY)];
     // Feet hardly care what is under them. A laden wheel cares about little
     // else, and that is what makes a paved road worth the stone in it.
@@ -236,6 +239,14 @@ export class Player {
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;
+    /*
+     * And a load half again over the limit leaves you a twentieth of your
+     * pace. The walk is no longer dropped: at five per cent you are still
+     * going somewhere, slowly, so a path is a thing worth keeping — and the
+     * island allows the same fraction on the same sum, so the few inches
+     * taken here are inches it will let you keep.
+     */
+    if (this.stalled) speed *= CARRY_CRAWL;
     // Uphill slows you down.
     const ahead = world.heightAt(this.x + vx * 0.15, this.y + vy * 0.15);
     const grade = (ahead - h) / (0.15 * UNITS_PER_TILE);

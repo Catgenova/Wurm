@@ -375,8 +375,14 @@ export const CARRY_PER_STRENGTH = 5;
  * Past the limit everything is already slower and dearer in wind, and the
  * curve was the whole of it: load a body with ten times what it can take and
  * it still walked, at a crawl. Asked for: "when inventory is above 150% cap,
- * movement speed becomes 0". So half again over the limit is the end of it —
- * you may stand, work, and put things down, and you may not take a step.
+ * movement speed becomes 0". So half again over the limit became the end of
+ * walking.
+ *
+ * And then, asked for after that: five per cent rather than nought. Nought
+ * had a sharp edge on it — a body that cannot move at all cannot get itself
+ * out of wherever it overloaded, and the only way out was to put things down
+ * where they stood. `CARRY_CRAWL` is what is left of your pace past this
+ * line: enough to get somewhere, not enough to make carrying it worth doing.
  */
 export const CARRY_STOP = 1.5;
 
@@ -1647,9 +1653,10 @@ export class Game {
   }
 
   /**
-   * Whether you are carrying so much that you cannot take a step. The island
-   * reads the same sum in `over_carry` and will not move a body that is over
-   * it, so a browser that drew you walking would only be drawing.
+   * Whether you are carrying so much that you are down to a crawl. The island
+   * reads the same sum in `over_carry` and holds a body over it to the same
+   * fraction of its pace, so a browser that drew you striding would only be
+   * drawing.
    */
   stalled(): boolean {
     return this.carryShare() > CARRY_STOP;
@@ -2424,8 +2431,8 @@ export class Game {
     const stuck = this.stalled();
     if (stuck !== p.stalled) {
       p.stalled = stuck;
-      if (stuck) this.logMsg(`You cannot walk under ${this.inventory.totalWeight().toFixed(0)} kg. Your back takes ${this.carryLimit().toFixed(0)}; anything over ${(this.carryLimit() * CARRY_STOP).toFixed(0)} stops you where you stand.`, 'error');
-      else this.logMsg('You can walk again.', 'event');
+      if (stuck) this.logMsg(`You can barely move under ${this.inventory.totalWeight().toFixed(0)} kg. Your back takes ${this.carryLimit().toFixed(0)}; anything over ${(this.carryLimit() * CARRY_STOP).toFixed(0)} leaves you a twentieth of your pace.`, 'error');
+      else this.logMsg('You can walk properly again.', 'event');
     }
     p.maxStep = this.climbStep();
     p.maxStand = this.standSlope();
