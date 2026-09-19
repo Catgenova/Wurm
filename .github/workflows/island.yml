@@ -597,6 +597,24 @@ jobs:
           npx esbuild supabase/test/heard.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/heard.mjs --log-level=error
           node node_modules/.cache/heard.mjs
+      - name: A walk puts the work down, and a piece can be asked for a quality
+        run: |
+          # Walking anywhere used to throw the whole queue away — moveTo
+          # cancelled, rpc_cancel emptied act_queue — so a builder with four
+          # walls lined up who stepped to the woodpile came back to an empty
+          # head. It holds now: the job in hand goes back to the front and
+          # nothing restarts itself, because being dragged back across a yard
+          # you crossed on purpose is worse than losing the list.
+          #
+          # And a piece can be asked for a quality instead of a count of
+          # passes, which is the wrong unit: what a pass is worth falls away
+          # as the piece gets better. That is one refusal on each side, and
+          # the two are compared here word for word, because a ceiling the
+          # browser honours and the island does not is a button that works
+          # until it doesn't.
+          npx esbuild supabase/test/hands.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/hands.mjs --log-level=error
+          node node_modules/.cache/hands.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

@@ -2692,6 +2692,59 @@ export class Game {
     this.events.emit('action');
   }
 
+  /**
+   * Put down what is in hand without forgetting what was lined up behind it.
+   *
+   * Walking somewhere used to throw the whole list away. `moveTo` called
+   * `cancelAction`, which calls `clearQueue`, so a builder with four walls
+   * lined up who stepped three tiles to the woodpile came back to an empty
+   * head and four right-clicks to do again. Nothing warned them and nothing
+   * could get it back.
+   *
+   * A walk is a pause now. Whatever was in hand goes back to the *front* of
+   * the queue with however many goes it had left, and the whole lot waits.
+   * Nothing starts itself again — being dragged back across the yard the
+   * moment your feet stopped would be worse than losing the list — so the
+   * jobs sit there, the bar says how many and offers to carry on, and
+   * `Esc` still forgets the lot, which is what `Esc` has always been for.
+   */
+  pauseAction(): void {
+    const a = this.action;
+    if (!a && !this.queue.length) return;
+    if (a) {
+      this.action = null;
+      this.queue.unshift({ def: a.def, target: a.target, goes: a.left ?? a.goes });
+    }
+    this.held = true;
+    // The island keeps the queue on the player row, so the hold is its
+    // business too: `rpc_hold` puts the job in hand back at the front of
+    // `act_queue` where `rpc_cancel` would have emptied it.
+    this.hold?.();
+    this.events.emit('action');
+  }
+
+  /**
+   * Take the waiting jobs up again. Nothing else does this: it is a button
+   * and a key, and that is the point of holding rather than resuming.
+   */
+  resumeQueue(): boolean {
+    if (this.action || !this.queue.length) return false;
+    this.held = false;
+    const went = this.nextInQueue();
+    if (!went) this.events.emit('action');
+    return went;
+  }
+
+  /** Whether the jobs in the queue are waiting on you rather than on the job in hand. */
+  held = false;
+
+  /**
+   * Said to the island when a walk puts the work down, as `stop` is said when
+   * something gives it up. Filled in by `play.ts`; null in the game you play
+   * by yourself, where there is nobody to tell.
+   */
+  hold: (() => void) | null = null;
+
   cancelAction(silent = false): void {
     const a = this.action;
     const lined = this.queue.length;
@@ -2939,6 +2992,9 @@ export class Game {
 
   /** Put an action in hand and either begin it or start walking to it. */
   private startAction(def: ActionDef, target: Target, goes?: number): void {
+    // Anything starting takes the hold off: what is behind it in the queue
+    // follows on the way it always has, once this one is done.
+    this.held = false;
     this.action = { def, target, state: 'walking', elapsed: 0, duration: this.duration(def), left: goes, goes };
     if (this.inRange(def, target)) {
       this.beginPerform();
@@ -3005,6 +3061,7 @@ export class Game {
 
   /** Forget everything lined up; moving off or stopping does this. */
   clearQueue(silent = false): void {
+    this.held = false;
     if (!this.queue.length) return;
     const n = this.queue.length;
     this.queue.length = 0;
@@ -3023,7 +3080,10 @@ export class Game {
    */
   moveTo(x: number, y: number, keepFollowing = false): boolean {
     if (!keepFollowing) this.unfollow();
-    this.cancelAction();
+    // Following somebody about is not you deciding to go anywhere, so it
+    // gives the work up as it always did. A click is, and a click holds.
+    if (keepFollowing) this.cancelAction();
+    else this.pauseAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return false;
     const { rule, levels } = this.movement();

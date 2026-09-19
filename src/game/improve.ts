@@ -158,6 +158,23 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       const ceiling = improveCeiling(g, what.skill, item);
       if (item.ql >= ceiling) return `Your ${what.skill.replace(/_/g, ' ')} is not good enough to better it further.`;
       if (item.ql >= 99.9) return 'It cannot be bettered.';
+      /*
+       * A quality to stop at, when one was asked for.
+       *
+       * Improving is the deepest time sink on this island and the only way to
+       * ask for it in bulk was a count of passes — five, ten, fifty — which
+       * is a number nobody can work out in advance, because what a pass is
+       * worth falls away as the piece gets better. Forty to forty-one is one
+       * pass; ninety to ninety-one is a dozen.
+       *
+       * So a piece can be asked for a quality instead, and the repeat does
+       * the counting. It costs nothing but this refusal: a job that repeats
+       * asks its own check before every go and stops the moment it is
+       * refused, so "take it to sixty" is "keep going until sixty refuses
+       * you", on both sides, with no change to what a pass does.
+       */
+      const upto = 'upto' in t && typeof t.upto === 'number' ? t.upto : null;
+      if (upto !== null && item.ql >= upto) return `The ${itemName(item).toLowerCase()} is at QL ${item.ql.toFixed(1)}, which is what you asked for.`;
       return null;
     },
     perform: (t, g) => {

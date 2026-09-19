@@ -679,6 +679,23 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>Walking away from a job</h3>
+    <p>Walking somewhere <b>puts the work down</b> rather than forgetting it. Whatever was in hand
+    goes to the front of the list with however many goes it had left, everything queued behind it
+    stays queued, and the bar says how many are waiting. Nothing starts itself again — being
+    dragged back across a yard you crossed on purpose would be worse than losing the list — so
+    press <b>Carry on</b> on the bar, or <kbd>B</kbd>, when you want them back. <kbd>Esc</kbd>
+    still forgets the lot, which is what <kbd>Esc</kbd> has always been for.</p>
+    <h3>Improving up to a quality</h3>
+    <p>Asking for a number of passes is asking for a number nobody can work out: what a pass is
+    worth falls away as the piece gets better, so forty to forty-one is one pass and ninety to
+    ninety-one is a dozen. An item's <b>Improve</b> menu offers <b>Up to…</b> instead — name a
+    quality and it works until it gets there and then stops. It stops early, and says so, if your
+    hands top out first.</p>
+    <h3>Finding things in a store</h3>
+    <p>A crate, a cupboard, a cart and a bag all have a <b>search box</b> and the same
+    <b>ordering</b> the pack has: by name, quality, weight, damage or how many. A deed crate holds
+    three hundred things and your pack holds a dozen, so it is the store that needed it most.</p>
     <h3>What you can hear</h3>
     <p>The island makes a noise now, and what the noise is depends on what is being hit.
     <b>Footfalls</b> take their sound from the ground: grass is a brush with no edge on it, sand

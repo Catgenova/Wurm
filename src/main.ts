@@ -293,6 +293,9 @@ const PRESSES: Record<string, () => void> = {
   win_settings: () => ui.toggleWindow('settings'),
   win_help: () => ui.toggleWindow('help'),
   walk_home: () => game.walkHome(),
+  carry_on: () => {
+    if (!game.resumeQueue()) game.logMsg('There is nothing waiting to be taken up.', 'info');
+  },
   emotes: () => ui.showEmotes(),
   stop: () => {
     if (ui.menu.isOpen) ui.menu.hide();

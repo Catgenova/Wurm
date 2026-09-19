@@ -1966,6 +1966,24 @@ export class Island {
   }
 
   /**
+   * Put the work down without forgetting what was lined up behind it.
+   *
+   * The same beat and pulse as `stop`, and the difference is entirely the
+   * island's: `rpc_hold` puts whatever was in hand back at the front of
+   * `act_queue` and leaves the rest of the queue where it is, where
+   * `rpc_cancel` empties the lot. Walking somewhere is the one thing that
+   * wants this — a builder stepping to the woodpile is not giving up on four
+   * walls.
+   */
+  async hold(): Promise<void> {
+    if (!this.info) return;
+    if (this.beat) clearTimeout(this.beat);
+    this.beat = null;
+    await supabase().rpc('rpc_hold', { p_world: this.info.id });
+    await this.pulse();
+  }
+
+  /**
    * Say something to everybody on the island.
    *
    * Nothing is drawn here. The line goes over, the island writes it into

@@ -100,6 +100,16 @@ export type Target =
        * what an item's own menu means by "Put in crate".
        */
       into?: number;
+      /**
+       * A quality to stop improving at.
+       *
+       * Improving repeats until its own check refuses it, so a ceiling is all
+       * a target quality needs to be: `improve.ts` refuses a piece already at
+       * or above this, and the repeat stops there of its own accord. The
+       * island reads the same field off the same target and refuses in the
+       * same words, so "take it to sixty" means the same thing on both sides.
+       */
+      upto?: number;
     }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string };

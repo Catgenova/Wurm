@@ -4,6 +4,9 @@ import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 import { COUNTS, pinEntry, pinnable } from '../beltmenu';
+import { orderBy, sortSelect, type SortKey } from '../sorting';
+import type { ActionDef } from '../../game/actions';
+import { improvable, improveCeiling } from '../../game/improve';
 
 const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
   ['tool', 'Tools'],
@@ -11,16 +14,6 @@ const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
   ['food', 'Food'],
   ['plant', 'Plants & seeds'],
   ['misc', 'Other'],
-];
-
-/** How a pack may be put in order. */
-type SortKey = 'name' | 'ql' | 'weight' | 'dmg' | 'count';
-const SORTS: Array<[SortKey, string]> = [
-  ['name', 'Name'],
-  ['ql', 'Quality'],
-  ['weight', 'Weight'],
-  ['dmg', 'Damage'],
-  ['count', 'How many'],
 ];
 
 export class InventoryPanel {
@@ -61,17 +54,8 @@ export class InventoryPanel {
     // How the list is put in order, and whether it is grouped by kind.
     const bar = document.createElement('div');
     bar.className = 'panel-bar';
-    const sortSel = document.createElement('select');
-    sortSel.className = 'panel-select';
-    sortSel.title = 'How to order the list';
-    for (const [key, label] of SORTS) {
-      const opt = document.createElement('option');
-      opt.value = key;
-      opt.textContent = label;
-      sortSel.append(opt);
-    }
-    sortSel.addEventListener('change', () => {
-      this.sort = sortSel.value as SortKey;
+    const sortSel = sortSelect('How to order the list', (key) => {
+      this.sort = key;
       this.render();
     });
     const groupBtn = document.createElement('button');
@@ -112,16 +96,9 @@ export class InventoryPanel {
     return `${itemName(item)} ${def.category} ${def.description ?? ''}`.toLowerCase().includes(this.query);
   }
 
-  /** The order the list is asked for: name climbs, everything else falls. */
+  /** The order the list is asked for, which a store window now asks the same way. */
   private ordered(items: Item[]): Item[] {
-    const by: Record<SortKey, (a: Item, b: Item) => number> = {
-      name: (a, b) => itemName(a).localeCompare(itemName(b)),
-      ql: (a, b) => b.ql - a.ql,
-      weight: (a, b) => itemWeight(b) - itemWeight(a),
-      dmg: (a, b) => b.dmg - a.dmg,
-      count: (a, b) => b.count - a.count,
-    };
-    return [...items].sort(by[this.sort]);
+    return orderBy(items, this.sort);
   }
 
   render(): void {
@@ -221,6 +198,40 @@ export class InventoryPanel {
     return row;
   }
 
+  /**
+   * "Take it to sixty."
+   *
+   * A count of passes is the wrong unit for improving and always was. What a
+   * pass is worth falls away as the piece gets better — forty to forty-one is
+   * one pass and ninety to ninety-one is a dozen — so asking for fifty is
+   * asking for a number nobody can work out in advance, and the answer is
+   * always either short or wasted.
+   *
+   * A quality is the unit people actually think in, and it costs nothing to
+   * offer: improving repeats until its own check refuses it, so a ceiling in
+   * the target is the whole feature. The island reads the same field off the
+   * same target and refuses in the same words.
+   *
+   * Only the rungs above where the piece already is are worth showing, and
+   * only up to what the hands could manage, because a ceiling your skill
+   * cannot reach is a job that stops early and says something else.
+   */
+  private upToEntry(item: Item, def: ActionDef): MenuItem {
+    const rungs = [20, 40, 60, 70, 80, 90, 95];
+    const reach = improveCeiling(this.game, improvable(item.id)?.skill ?? '', item);
+    const worth = rungs.filter((q) => q > item.ql + 0.05);
+    if (!worth.length) return { label: 'Up to…', hint: 'It is past every mark worth aiming at.', disabled: true };
+    return {
+      label: 'Up to…',
+      note: `it is at QL ${item.ql.toFixed(1)}`,
+      children: worth.map((q) => ({
+        label: `Quality ${q}`,
+        note: q > reach ? `your hands top out at ${reach.toFixed(0)}, so it will stop there` : undefined,
+        onSelect: () => this.game.requestAction(def, { kind: 'item', uid: item.uid, upto: q }),
+      })),
+    };
+  }
+
   /** Action menu for an item; stack actions get a one / all submenu. */
   private openMenu(item: Item, x: number, y: number): void {
     const target = { kind: 'item' as const, uid: item.uid };
@@ -251,6 +262,7 @@ export class InventoryPanel {
             { label: 'Once', onSelect: () => this.game.requestAction(def, target, 1) },
             ...COUNTS.map((n) => ({ label: `${n} times`, onSelect: () => this.game.requestAction(def, target, n) })),
             { label: 'Until you stop', note: 'or until your wind gives out', onSelect: () => this.game.requestAction(def, target) },
+            ...(def.id === 'improve_item' ? [this.upToEntry(item, def)] : []),
           ],
         };
       }

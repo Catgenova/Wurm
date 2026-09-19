@@ -104,6 +104,8 @@ export class Hud {
   private actionLabel: HTMLDivElement;
   private actionFill: HTMLDivElement;
   private queueEl: HTMLDivElement;
+  private goBtn: HTMLButtonElement;
+  private hintEl: HTMLDivElement;
   private gridBtn: HTMLButtonElement | null = null;
   private compass: HTMLSpanElement;
   private companionEl: HTMLDivElement;
@@ -291,19 +293,37 @@ export class Hud {
     this.queueEl = document.createElement('div');
     this.queueEl.className = 'action-queue';
     this.queueEl.hidden = true;
-    const hint = document.createElement('div');
-    hint.className = 'action-hint';
-    hint.textContent = 'Esc or move to stop';
+    this.hintEl = document.createElement('div');
+    this.hintEl.className = 'action-hint';
+    this.hintEl.textContent = 'Esc to stop · moving puts it down';
     this.stopBtn = document.createElement('button');
     this.stopBtn.type = 'button';
     this.stopBtn.className = 'tb-btn tb-small action-stop';
     this.stopBtn.textContent = 'Stop';
-    this.stopBtn.title = 'Put the job down (Esc)';
+    this.stopBtn.title = 'Put the job down and forget what is lined up (Esc)';
     this.stopBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.game.cancelAction();
     });
-    this.actionEl.append(this.actionLabel, track, this.queueEl, this.stopBtn, hint);
+    /*
+     * Taking the work back up after a walk.
+     *
+     * Walking used to throw the whole list away; it holds it now, and this is
+     * how it is taken up again. Deliberately a button rather than something
+     * that happens by itself: jobs that started themselves the moment your
+     * feet stopped would walk you straight back across the yard you had just
+     * crossed on purpose.
+     */
+    this.goBtn = document.createElement('button');
+    this.goBtn.type = 'button';
+    this.goBtn.className = 'tb-btn tb-small action-stop';
+    this.goBtn.textContent = 'Carry on';
+    this.goBtn.hidden = true;
+    this.goBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.game.resumeQueue();
+    });
+    this.actionEl.append(this.actionLabel, track, this.queueEl, this.goBtn, this.stopBtn, this.hintEl);
     root.append(this.actionEl);
 
     /*
@@ -603,11 +623,36 @@ export class Hud {
     }
 
     const a = this.game.action;
+    const waiting = this.game.queue;
+    /*
+     * Nothing in hand, but something waiting.
+     *
+     * The bar used to go away entirely here and leave `queueEl` showing
+     * whatever it last said, which was a stale "Then: …" line under nothing
+     * at all. It has a second job now: when a walk has put the work down, the
+     * bar stays up to say what is waiting and offer to take it up again,
+     * because a list of jobs that is kept and never mentioned is a list that
+     * has been lost as far as anybody can tell.
+     */
     if (!a) {
-      this.actionEl.hidden = true;
+      if (!waiting.length) {
+        this.actionEl.hidden = true;
+        this.queueEl.hidden = true;
+        this.goBtn.hidden = true;
+        return;
+      }
+      this.actionEl.hidden = false;
+      this.goBtn.hidden = false;
+      this.actionLabel.textContent = waiting.length === 1 ? 'One job put down' : `${waiting.length} jobs put down`;
+      this.actionFill.style.width = '0%';
+      this.queueEl.hidden = false;
+      this.queueEl.textContent = `Waiting: ${this.queueWords(waiting)}`;
+      this.hintEl.textContent = 'Carry on to take them up · Esc to forget them';
       return;
     }
     this.actionEl.hidden = false;
+    this.goBtn.hidden = true;
+    this.hintEl.textContent = 'Esc to stop · moving puts it down';
     // A counted job says how far through the count it is: "3 of 10". Coming
     // back to an island mid-job, the island knows what is left and nobody
     // knows what was asked for, so it says that instead.
@@ -628,13 +673,18 @@ export class Hud {
       this.actionFill.style.width = `${pct}%`;
     }
     // What is lined up behind it, and how much room is left in your head.
-    const queue = this.game.queue;
-    if (queue.length) {
+    if (waiting.length) {
       this.queueEl.hidden = false;
-      // What each one is for, not just what it is: three flattens and one
-      // flatten ten times are a very different afternoon.
-      const then = queue.map((q) => `${q.def.label.toLowerCase()}${(q.goes ?? 1) > 1 ? ` ×${q.goes}` : ''}`);
-      this.queueEl.textContent = `Then: ${then.join(' → ')} · ${queue.length + 1}/${this.game.queueCapacity()}`;
+      this.queueEl.textContent = `Then: ${this.queueWords(waiting)} · ${waiting.length + 1}/${this.game.queueCapacity()}`;
     } else this.queueEl.hidden = true;
+  }
+
+  /**
+   * What is lined up, in words. Each one says what it is *for* and not only
+   * what it is: three flattens and one flatten ten times are a very different
+   * afternoon.
+   */
+  private queueWords(queue: Game['queue']): string {
+    return queue.map((q) => `${q.def.label.toLowerCase()}${(q.goes ?? 1) > 1 ? ` \u00d7${q.goes}` : ''}`).join(' \u2192 ');
   }
 }

@@ -228,6 +228,10 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     lastTarget = null;
     void island.stop();
   };
+  game.hold = () => {
+    lastTarget = null;
+    void island.hold();
+  };
 
   /*
    * The clock on what the island is doing.

@@ -7,6 +7,7 @@ import { bagAdd, bagRefuses, bagRoom, bagSpare, bagTake, itemDef, type Item, ite
 import type { MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
+import { orderBy, sortSelect, type SortKey } from '../sorting';
 
 /** A crate or a piece of storage furniture, seen through the same window. */
 export interface Store {
@@ -58,6 +59,9 @@ export class CratePanel {
   private furnitureId: number | null = null;
   private creatureId: number | null = null;
   private bagUid: number | null = null;
+  private search: HTMLInputElement;
+  private query = '';
+  private sort: SortKey = 'name';
 
   constructor(
     private readonly win: UIWindow,
@@ -100,8 +104,34 @@ export class CratePanel {
     putKind.textContent = 'Put in what it holds';
     putKind.title = 'Put in only the kinds already in it — top the store up without emptying your pack';
     putKind.addEventListener('click', () => this.putAll(true));
-    this.bar.append(takeAll, putAll, putKind);
-    win.body.append(head, this.list, this.bar, this.footer);
+    this.bar.append(takeAll, putAll, putKind, sortSelect('How to order what is inside', (key) => {
+      this.sort = key;
+      this.render();
+    }));
+    /*
+     * And a box to search it.
+     *
+     * The pack has had one of these since the storage work and a store has
+     * had none, which is the wrong way round: a pack holds a dozen things and
+     * a deed crate holds three hundred. Finding the one damaged hatchet in a
+     * cupboard meant reading the cupboard.
+     */
+    this.search = document.createElement('input');
+    this.search.type = 'search';
+    this.search.className = 'panel-search';
+    this.search.placeholder = 'Search what is inside\u2026';
+    this.search.addEventListener('input', () => {
+      this.query = this.search.value.trim().toLowerCase();
+      this.render();
+    });
+    this.search.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key !== 'Escape') return;
+      this.search.value = '';
+      this.query = '';
+      this.render();
+    });
+    win.body.append(this.search, head, this.list, this.bar, this.footer);
     makeDropZone(
       this.list,
       (p) => p.from === 'inventory' && this.store() !== undefined,
@@ -316,6 +346,13 @@ export class CratePanel {
     this.render();
   }
 
+  /** Whether a thing answers to what has been typed in the box. */
+  private matches(item: Item): boolean {
+    if (!this.query) return true;
+    const def = itemDef(item.id);
+    return `${itemName(item)} ${def.category} ${def.description ?? ''}`.toLowerCase().includes(this.query);
+  }
+
   render(): void {
     const store = this.store();
     this.list.replaceChildren();
@@ -331,13 +368,17 @@ export class CratePanel {
     }
     this.win.titleText.textContent = store.title;
     this.bar.hidden = false;
-    if (!store.items.length) {
+    if (!store.items.length || !store.items.some((it) => this.matches(it))) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = `The ${store.what} is empty.`;
+      // Two different emptinesses, and saying the wrong one is how somebody
+      // comes to believe a full crate has been robbed.
+      empty.textContent = store.items.length
+        ? `Nothing in the ${store.what} answers to that.`
+        : `The ${store.what} is empty.`;
       this.list.append(empty);
     }
-    for (const item of [...store.items].sort((a, b) => itemName(a).localeCompare(itemName(b)))) {
+    for (const item of orderBy(store.items.filter((it) => this.matches(it)), this.sort)) {
       const row = document.createElement('div');
       row.className = 'inv-row';
       const name = document.createElement('span');

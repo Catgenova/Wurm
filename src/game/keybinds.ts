@@ -76,6 +76,7 @@ export const BINDS: BindDef[] = [
    */
   { id: 'emotes', label: 'Emotes', hint: 'Wave, hop, and whatever else there is to do with your hands.', group: 'Doing things', keys: ['KeyZ'] },
   { id: 'stop', label: 'Stop', hint: 'Drop the current job and forget what is queued behind it. Closes an open menu first.', group: 'Doing things', keys: ['Escape'] },
+  { id: 'carry_on', label: 'Carry on', hint: 'Take up the jobs a walk put down. Walking no longer forgets them; this is how you get them back.', group: 'Doing things', keys: ['KeyB'] },
   { id: 'chat', label: 'Talk', hint: 'Put the cursor in the box at the bottom of the event log.', group: 'Doing things', keys: ['Enter'] },
 ];
 
