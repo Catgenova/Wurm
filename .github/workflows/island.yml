@@ -631,17 +631,29 @@ jobs:
           # stored is on top of it. And the island is stocked a block at a time
           # as people walk into it, so `blocks` is how much of it has ever been
           # visited, which is the other half of why a count is what it is.
+          #
+          # `ceiling` asks `creature_target()` rather than working the same sum
+          # out again here. The first cut of this step carried its own copy of
+          # the formula and was wrong within the hour, the moment the density
+          # was tripled: it went on reporting the old ceiling while the island
+          # stocked to the new one. A number worth printing is worth asking for.
+          #
+          # And the ref and the date, because four of the islands on the
+          # project are called Wildermon and a row nobody can tell from another
+          # row answers nothing.
           SQL=$(cat <<'EOSQL'
           select w.name as island,
+                 left(w.id::text, 8) as ref,
+                 to_char(w.made_at, 'MM-DD HH24:MI') as made,
                  w.size,
                  count(*) filter (where c.mode = 'wild') as wild,
                  count(*) filter (where c.mode is not null and c.mode <> 'wild') as kept,
                  (select count(*) from world_stocked s where s.world_id = w.id) as blocks,
-                 greatest(32, (ceil(w.size / 32.0) * ceil(w.size / 32.0))::int) as whole_island_target
+                 creature_target(w.id) as ceiling
             from world w
             left join creature c on c.world_id = w.id
-           group by w.id, w.name, w.size
-           order by w.name;
+           group by w.id, w.name, w.size, w.made_at
+           order by w.made_at, w.name;
           EOSQL
           )
           # Whichever of these this version answers to. None of them is allowed
