@@ -20,6 +20,7 @@ import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
 import { maybeGem } from './gems';
 import { TREASURE_ACTIONS, maybeMap } from './treasure';
+import { LOCK_ACTIONS } from './locks';
 import { FIRST_AID_ACTIONS } from './firstaid';
 import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
 import { DEED_ACTIONS } from './deed';
@@ -2181,6 +2182,7 @@ export const ACTIONS: ActionDef[] = [
   ...FIRST_AID_ACTIONS,
   ...PLACEABLE_ACTIONS,
   ...CRATE_ACTIONS,
+  ...LOCK_ACTIONS,
   ...RECIPE_ACTIONS,
   ...BUTCHER_ACTIONS,
   ...CAMPFIRE_ACTIONS,

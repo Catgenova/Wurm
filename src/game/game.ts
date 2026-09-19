@@ -53,6 +53,7 @@ import { ledgerTotals, record, type Ledger } from './ledger';
 import { FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { strokeOf } from '../audio/sound';
+import { lockRefusal, type Lockable } from './locks';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
@@ -94,7 +95,44 @@ export interface Deed {
    * yours because there is only you.
    */
   mine?: boolean;
+  /**
+   * What you are here: the person who planted the stake, somebody they have
+   * made a mayor, an ordinary builder, or a guest who may walk about and
+   * touch nothing.
+   *
+   * Absent in the game you play by yourself, where there is one person and
+   * they founded everything, so absent reads as `founder` everywhere it is
+   * asked. On an island it comes down with the settlement.
+   */
+  role?: DeedRole;
 }
+
+/**
+ * What somebody is on a settlement.
+ *
+ * `deed_member` was a flat list: in or out, and everybody in it could dig up
+ * the gardens, empty the stores and pull the walls down. Inviting anybody to
+ * anything was therefore a decision nobody could take back short of throwing
+ * them out, which is not a thing you want to have to do to somebody you are
+ * merely unsure about.
+ *
+ *   founder   planted the stake. Cannot be demoted, may do everything, and
+ *             holds the master key to every lock on their own land.
+ *   mayor     everything but founding: invites, expels, ranks, upgrades,
+ *             and may disband.
+ *   builder   the ordinary citizen, and what an invitation makes you: shapes
+ *             the ground, builds, takes from the stores.
+ *   guest     walks the land and opens nothing. What you offer somebody you
+ *             want to show round rather than hand the keys to.
+ */
+export type DeedRole = 'founder' | 'mayor' | 'builder' | 'guest';
+
+/** The ranks in order, so "at least a builder" is one comparison. */
+export const DEED_RANKS: DeedRole[] = ['guest', 'builder', 'mayor', 'founder'];
+
+/** Whether a rank is at least another. Absent means the solo game: founder. */
+export const rankAtLeast = (have: DeedRole | undefined, want: DeedRole): boolean =>
+  DEED_RANKS.indexOf(have ?? 'founder') >= DEED_RANKS.indexOf(want);
 
 export const DEED_RADIUS = 5;
 /** Every upgrade pushes the border out this far and takes on one more worker. */
@@ -1048,7 +1086,7 @@ export class Game {
    * Drawn, and used to say why the ground will not take a building — never to
    * light anything, which is the whole distinction this pair exists for.
    */
-  neighbourDeeds: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean }> = [];
+  neighbourDeeds: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean; role?: DeedRole }> = [];
 
   /**
    * Everybody else ashore, as of the last slow read.
@@ -1060,8 +1098,15 @@ export class Game {
    */
   folkAshore: Array<{ uid: string; name: string; online: boolean; x?: number; y?: number }> = [];
 
-  /** The neighbour whose settlement covers this tile, if one does. */
-  deedAt(x: number, y: number): { name: string; holder: string | null } | null {
+  /**
+   * The neighbour whose settlement covers this tile, if one does.
+   *
+   * It carries everything the island sent about it — the founder's name, the
+   * level, what you are on it — rather than the two fields it used to narrow
+   * to, so a stranger's land can be read from outside instead of being a
+   * green border you find the edges of by being refused.
+   */
+  deedAt(x: number, y: number): Game['neighbourDeeds'][number] | null {
     for (const d of this.neighbourDeeds) {
       if (Math.abs(x - d.x) <= d.radius && Math.abs(y - d.y) <= d.radius) return d;
     }
@@ -1100,6 +1145,25 @@ export class Game {
 
   onDeed(x: number, y: number): boolean {
     return !!this.deedOfMineAt(x, y);
+  }
+
+  /**
+   * Why a locked store will not open for you, or null.
+   *
+   * The key in your pack is the ordinary answer. The other is the ground:
+   * the **founder** of the settlement a store stands on may open anything on
+   * their own land, because a game where losing a small item costs you a
+   * building is a game nobody enjoys, and because that is what makes a lock
+   * worth fitting on somebody else's deed and only worth so much on your own.
+   *
+   * In the game you play by yourself the second answer is always yes on your
+   * own deed and always no off it, which is exactly right: a lock out in the
+   * country is worth something even when the only person who could open it is
+   * you, because the wildermon that came with you cannot.
+   */
+  lockRefusal(store: Lockable & { x: number; y: number }): string | null {
+    const mine = this.deedOfMineAt(Math.floor(store.x), Math.floor(store.y));
+    return lockRefusal(this.inventory.items, store, !!mine && rankAtLeast(mine.role, 'founder'));
   }
 
   /**
@@ -4915,12 +4979,14 @@ export class Game {
      * between reconciles. `undefined` is "nothing said about this"; `null` is
      * still "you have no settlement", which is what a disband sends.
      */
-    if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds;
+    // `null` from the island means you are nothing on it, which here is the
+    // same as saying nothing: a deed you do not belong to is not in `myDeeds`.
+    if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds.map((d) => ({ ...d, role: d.role ?? undefined }));
     if (ground.folk !== undefined) this.folkAshore = ground.folk;
     if (ground.deed !== undefined) {
       const d = ground.deed;
       const was = this.deed;
-      this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine } : null;
+      this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine, role: d.role ?? undefined } : null;
       // Only when it is actually different: this runs every few seconds, and a
       // settlement that has not moved is not news to anybody.
       if ((was?.name ?? null) !== (d?.name ?? null) || was?.x !== d?.x || was?.y !== d?.y
@@ -5942,6 +6008,8 @@ export interface IslandPlaced {
 export interface IslandCrate {
   id: number;
   kind: string;
+  /** The padlock fitted to it, by the number it shares with its key. */
+  lock?: number | null;
   x: number;
   y: number;
   sx: number;
@@ -6003,7 +6071,7 @@ export interface IslandGround {
    * fast read carries none of the three, which is why `sawGround` applies it
    * only when it was sent, and why this was wrong to type as always present.
    */
-  deed?: { name: string; x: number; y: number; radius: number; level: number; mine: boolean } | null;
+  deed?: { name: string; x: number; y: number; radius: number; level: number; mine: boolean; role?: DeedRole | null } | null;
   /**
    * Other people's settlements, and only those near enough to be standing in.
    *
@@ -6015,7 +6083,7 @@ export interface IslandGround {
    * settlement in it did — lit their homestead in your fog and ticked their
    * work off in your journal.
    */
-  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean }>;
+  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean; role?: DeedRole | null }>;
   /**
    * Everybody else ashore, with whereabouts while the island is quiet.
    *

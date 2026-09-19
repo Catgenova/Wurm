@@ -25,6 +25,12 @@ export interface Store {
   items: Item[];
   capacity: number;
   centre: [number, number];
+  /**
+   * The padlock on it, when it is one of the things that can carry one, with
+   * the tile it stands on so the ground can be asked about the master key.
+   * Absent on a pannier and a bag, which are carried rather than standing.
+   */
+  lock?: { lock?: number; x: number; y: number };
   what: string;
   /**
    * Which of the island's doors this one is behind, when it is behind one.
@@ -165,6 +171,7 @@ export class CratePanel {
         centre: crateCentre(crate),
         what: 'crate',
         kind: 'crate',
+        lock: crate,
         take: (uid) => this.game.crateTake(crate, uid),
         refuses: (item) => (crateSpare(crate) <= 0 ? `The ${crateName(crate).toLowerCase()} is full.` : null),
         fits: (item) => Math.min(item.count, crateSpare(crate)),
@@ -225,6 +232,7 @@ export class CratePanel {
         centre: furnitureCentre(piece),
         what: furnitureName(piece).toLowerCase(),
         kind: 'furniture',
+        lock: piece,
         take: (uid) => this.game.furnitureTake(piece, uid),
         refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureSpare(piece) <= 0 ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
         fits: (item) => (furnitureRefuses(piece, item) ? 0 : Math.min(item.count, furnitureSpare(piece))),
@@ -366,7 +374,14 @@ export class CratePanel {
       this.win.titleText.textContent = 'Storage';
       return;
     }
-    this.win.titleText.textContent = store.title;
+    /*
+     * A padlock, said in the title rather than only when you try something.
+     * A window that looks exactly like an open one and refuses every button
+     * is a window somebody presses four times before reading the log.
+     */
+    const shut = store.lock ? this.game.lockRefusal(store.lock) : null;
+    this.win.titleText.textContent = store.title + (!store.lock?.lock ? ''
+      : shut ? ' \u2014 locked' : ' \u2014 unlocked');
     this.bar.hidden = false;
     if (!store.items.length || !store.items.some((it) => this.matches(it))) {
       const empty = document.createElement('div');

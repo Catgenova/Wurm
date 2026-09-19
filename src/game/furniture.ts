@@ -265,6 +265,11 @@ export interface PlacedFurniture {
   material?: string;
   /** The colour it was dyed, for a banner and for a sail. */
   dye?: string;
+  /**
+   * The padlock fitted to it, by the number it shares with its key. See
+   * `locks.ts`. Only means anything on a piece that holds things.
+   */
+  lock?: number;
 }
 
 /** The two liquids worth keeping a barrel for. */
@@ -533,6 +538,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
       if (!nearPiece(g, f)) return 'Stand next to it.';
+      const shut = g.lockRefusal(f);
+      if (shut) return shut;
       return f.items.length ? null : 'It is empty.';
     },
     perform: (t, g) => {
@@ -573,6 +580,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
         }
         return 'Stand next to something that will take it.';
       }
+      const shut = g.lockRefusal(f);
+      if (shut) return shut;
       const refused = furnitureRefuses(f, item);
       if (refused) return refused;
       // Room for some of it is enough; what will not fit stays in the pack.

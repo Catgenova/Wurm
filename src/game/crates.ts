@@ -31,6 +31,14 @@ export interface PlacedCrate {
   deed?: boolean;
   /** The wood it was built of. */
   material?: string;
+  /**
+   * The padlock fitted to it, by the number it shares with its key.
+   *
+   * See `locks.ts`. Absent on everything that has never been locked, which
+   * is nearly everything: a crate on your own deed is safe because the ground
+   * is, and a lock is for a crate standing anywhere else.
+   */
+  lock?: number;
 }
 
 export interface CrateDef {
@@ -161,6 +169,10 @@ export const CRATE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const c = crateOf(g, t);
       if (!c) return 'It is gone.';
+      // A crate with a lock on it is not carried off with the lock: a locked
+      // thing that could simply be picked up is not locked at all.
+      const shut = g.lockRefusal(c);
+      if (shut) return shut;
       if (c.items.length) return 'Empty it first.';
       return null;
     },
@@ -182,7 +194,10 @@ export const CRATE_ACTIONS: ActionDef[] = [
     applies: (t) => t.kind === 'crate',
     check: (t, g) => {
       const c = crateOf(g, t);
-      return c && c.items.length ? null : 'The crate is empty.';
+      if (!c) return 'The crate is empty.';
+      const shut = g.lockRefusal(c);
+      if (shut) return shut;
+      return c.items.length ? null : 'The crate is empty.';
     },
     perform: (t, g) => {
       const c = crateOf(g, t);
@@ -206,6 +221,8 @@ export const CRATE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const c = crateInto(g, t);
       if (!c || !nearCrate(g, c)) return 'Stand next to a crate.';
+      const shut = g.lockRefusal(c);
+      if (shut) return shut;
       // Room for some of it is enough: what fits goes in and the rest stays in
       // the pack. Only a crate with no room at all has anything to refuse, and
       // the refusal names the crate you were aiming at.

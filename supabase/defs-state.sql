@@ -570,6 +570,8 @@ insert into item_def values ('helm_mould', 'Helm mould', 'tool', 1.2, false, 1, 
 insert into item_def values ('axle_mould', 'Axle mould', 'tool', 1.4, false, 1, null);
 insert into item_def values ('ribbon_mould', 'Ribbon mould', 'tool', 1.2, false, 1, null);
 insert into item_def values ('nail', 'Nails', 'material', 0.01, true, 1, null);
+insert into item_def values ('padlock', 'Padlock', 'tool', 0.6, false, null, null);
+insert into item_def values ('key', 'Key', 'tool', 0.02, false, null, null);
 insert into item_def values ('arrow', 'Arrows', 'material', 0.05, true, 3, null);
 insert into item_def values ('arrow_head', 'Arrow heads', 'material', 0.02, true, 1, null);
 insert into item_def values ('feather', 'Feathers', 'material', 0.01, true, 20, null);
@@ -1083,6 +1085,8 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('crate_take_all', 'Take everything', 'emptying the crate', null, null, false, null, 0.01, 1, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('store_in_crate', 'Put in crate', 'stowing', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_from_store', 'Take out', 'taking it out', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('fit_lock', 'Fit a padlock', 'fitting a padlock', 'blacksmithing', null, false, null, 0.02, 6, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_off_lock', 'Take the padlock off', 'taking the padlock off', null, null, false, null, 0.02, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_planks', 'Saw into planks', 'sawing', 'carpentry', 'saw', false, null, 0.04, 5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_timbers', 'Saw into timbers', 'sawing', 'carpentry', 'saw', false, null, 0.04, 5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_shafts', 'Carve shafts', 'carving shafts', 'carpentry', 'carving_knife', false, null, 0.03, 5, null, false, true);
@@ -1155,6 +1159,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_bridle', 'Stitch a bridle', 'stitching a bridle', 'leatherworking', 'awl', false, null, 0.03, 10, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_yoke', 'Stitch a yoke', 'stitching a yoke', 'leatherworking', 'awl', false, null, 0.04, 12, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_cheese', 'Press into cheese', 'pressing cheese', 'cooking', 'clay_bowl', false, null, 0.03, 14, 14, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_padlock', 'Forge a padlock', 'forging a padlock', 'blacksmithing', 'hammer', false, null, 0.05, 16, 28, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_lantern', 'Build a lantern', 'building a lantern', 'blacksmithing', 'hammer', false, null, 0.04, 18, 24, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_torch', 'Wind a torch', 'winding a torch', 'ropemaking', null, false, null, 0.02, 5, 6, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_candle', 'Draw candles', 'drawing candles', 'alchemy', null, false, null, 0.02, 9, 10, false, true);
@@ -1967,6 +1972,8 @@ update item_def set description = 'A sand mould. It wears a little every time it
 update item_def set description = 'A long sand mould for a wagon axle. It wears a little every time it is filled, and no mould can be mended.' where id = 'axle_mould';
 update item_def set description = 'A mould that runs one lump out as a single metal ribbon. It wears like any mould and cannot be mended.' where id = 'ribbon_mould';
 update item_def set description = 'Ten grams of metal apiece. Nothing is nailed together without them.' where id = 'nail';
+update item_def set description = 'A shackle, a body and a mechanism, and no key until it is fitted to something. Fit it to a crate, a cupboard, a cart or a chest and it cuts a key to itself as it closes.' where id = 'padlock';
+update item_def set description = 'Cut to one lock and no other. Hand it over and you have handed over what it opens; lose it and the settlement’s founder is the only way back in.' where id = 'key';
 update item_def set description = 'Shaft, head and feather. A bow spends one with every shot.' where id = 'arrow';
 update item_def set description = 'Three to an arrow, and only a bird carries them.' where id = 'feather';
 update item_def set description = 'Spun on a spindle. Woven on a loom it becomes cloth.' where id = 'yarn';
@@ -4143,6 +4150,9 @@ insert into recipe_input values ('make_yoke', 2, 'nail', 4);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_cheese', 'cheese', 3, 'clay_bowl', null, 'cooking', 'Press into cheese', 'pressing cheese', 14, 0.03, 14, true, false, null, null, null, 'You curdle the milk, press it and turn out three cheeses.', 'The milk will not take and you pour off a bucket of whey.');
 insert into recipe_input values ('make_cheese', 0, 'milk_bucket', 1);
 insert into recipe_gives values ('make_cheese', 'bucket', 1, 'return');
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_padlock', 'padlock', 1, 'hammer', 'smelter', 'blacksmithing', 'Forge a padlock', 'forging a padlock', 16, 0.05, 28, true, false, 'metal', null, null, 'You case the mechanism and hang the shackle. It has no key yet: the key is cut when it is fitted to something.', 'The wards will not line up and the whole thing goes back in the fire.');
+insert into recipe_input values ('make_padlock', 0, 'ribbon', 2);
+insert into recipe_input values ('make_padlock', 1, 'nail', 4);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_lantern', 'lantern', 1, 'hammer', null, 'blacksmithing', 'Build a lantern', 'building a lantern', 18, 0.04, 24, true, false, null, null, null, 'You bend the ribbons into a frame, stretch the oiled cloth over its sides and hang a handle off the top.', 'The frame will not sit square and the whole thing has to come apart again.');
 insert into recipe_input values ('make_lantern', 0, 'ribbon', 4);
 insert into recipe_input values ('make_lantern', 1, 'cloth', 2);

@@ -212,6 +212,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   axle_mould: { name: 'Axle mould', category: 'tool', weight: 1.4, decay: 1, description: 'A long sand mould for a wagon axle. It wears a little every time it is filled, and no mould can be mended.' },
   ribbon_mould: { name: 'Ribbon mould', category: 'tool', weight: 1.2, decay: 1, description: 'A mould that runs one lump out as a single metal ribbon. It wears like any mould and cannot be mended.' },
   nail: { name: 'Nails', category: 'material', weight: 0.01, stackable: true, decay: 1, description: 'Ten grams of metal apiece. Nothing is nailed together without them.' },
+  padlock: { name: 'Padlock', category: 'tool', weight: 0.6, description: 'A shackle, a body and a mechanism, and no key until it is fitted to something. Fit it to a crate, a cupboard, a cart or a chest and it cuts a key to itself as it closes.' },
+  key: { name: 'Key', category: 'tool', weight: 0.02, description: 'Cut to one lock and no other. Hand it over and you have handed over what it opens; lose it and the settlement\u2019s founder is the only way back in.' },
   arrow: { name: 'Arrows', category: 'material', weight: 0.05, stackable: true, decay: 3, description: 'Shaft, head and feather. A bow spends one with every shot.' },
   arrow_head: { name: 'Arrow heads', category: 'material', weight: 0.02, stackable: true, decay: 1 },
   feather: { name: 'Feathers', category: 'material', weight: 0.01, stackable: true, raw: true, decay: 20, description: 'Three to an arrow, and only a bird carries them.' },
@@ -480,6 +482,15 @@ export interface Item {
    * is the only way to keep your last good hatchet out of the next recipe.
    */
   locked?: boolean;
+  /**
+   * Which lock this opens, for a key, and nothing at all for anything else.
+   *
+   * The number is the uid of the padlock it was cut against at the moment it
+   * was fitted, so it is unique on an island for as long as the island lasts
+   * and there is nothing anywhere to keep in step. A store stamped with the
+   * same number is the one it opens.
+   */
+  keyed?: number;
   /**
    * The piece a casting is of: the id of what it becomes at the anvil. A
    * mould poured at a smelter gives one of these rather than the piece

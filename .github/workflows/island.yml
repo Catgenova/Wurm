@@ -670,6 +670,26 @@ jobs:
           npx esbuild supabase/test/range.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/range.mjs --log-level=error
           node node_modules/.cache/range.mjs
+      - name: What you are on a settlement, and what opens for you
+        run: |
+          # `deed_member` was a flat list: in or out, and everybody in it
+          # could dig up the gardens, empty the stores and pull the walls
+          # down. Four ranks now, and the shaping question goes through
+          # `may_shape` rather than "are you on the roll".
+          #
+          # And everything anybody built was open to everybody. A padlock is
+          # forged with no key and cuts one when it is fitted; the number they
+          # share is the padlock's own id. The one way back in is the ground —
+          # the founder of the settlement a store stands on — because a game
+          # where losing a small item costs you a building is a game nobody
+          # enjoys.
+          #
+          # Both refusals are compared word for word across the two sides.
+          # And "two people on one job", which I suggested was missing and is
+          # not, is measured so it stays true.
+          npx esbuild supabase/test/ranks.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/ranks.mjs --log-level=error
+          node node_modules/.cache/ranks.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

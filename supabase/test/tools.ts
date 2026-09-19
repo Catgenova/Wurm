@@ -58,6 +58,9 @@ void ACTIONS.length;
  */
 const NOT_MADE = new Map<string, string>([
   ['water_bucket', 'a bucket filled at a shore, a well or a barrel'],
+  // Cut by fitting a padlock to something, and there is deliberately no way
+  // to make a second one: a key you could simply forge is not a key.
+  ['key', 'cut when a padlock is fitted, and never any other way'],
 ]);
 
 const madeBy = new Map<string, string>();

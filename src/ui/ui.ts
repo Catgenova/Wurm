@@ -45,7 +45,7 @@ import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnit
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
-import { deedWorkersAt, MAX_DEED_LEVEL } from '../game/game';
+import { deedWorkersAt, MAX_DEED_LEVEL, type DeedRole } from '../game/game';
 import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
@@ -101,6 +101,16 @@ export interface UICallbacks {
 type Placing =
   | { kind: 'furniture'; itemUid: number; piece: string; facing: Side }
   | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side };
+
+/** What your rank on a settlement lets you do, in one line. */
+function standingWord(role: DeedRole | undefined): string {
+  switch (role ?? 'founder') {
+    case 'founder': return 'You founded this one: everything here is yours, locks included.';
+    case 'mayor': return 'You are a mayor here: you may build, and ask others in or out.';
+    case 'guest': return 'You are a guest here: you may walk it and shape nothing.';
+    default: return 'You are a citizen here: you may shape the ground and build on it.';
+  }
+}
 
 export class UI {
   readonly windows: WindowManager;
@@ -565,9 +575,25 @@ export class UI {
     lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);
     if (reading) lines.push(reading);
+    /*
+     * Whose ground this is, and what you are on it.
+     *
+     * Your own settlement has said its name here for a long time; somebody
+     * else's said nothing at all, so a stranger's land was a green border and
+     * a stake, and the only way to find out whose it was or whether you were
+     * allowed to dig was to try and be refused. A settlement is the most
+     * conspicuous thing a person builds and it is worth being able to read
+     * one from outside.
+     */
     const mine = this.game.deedOfMineAt(pick.x, pick.y);
-    if (mine && this.game.isToken(pick.x, pick.y)) lines.push(`Settlement token of ${mine.name}`);
-    else if (mine) lines.push(`Part of ${mine.name}`);
+    const here = mine ?? this.game.deedAt(pick.x, pick.y);
+    if (here) {
+      const token = this.game.isToken(pick.x, pick.y);
+      const who = 'holder' in here && here.holder ? `, ${here.holder}\u2019s` : '';
+      const level = here.level && here.level > 1 ? ` \u00b7 level ${here.level}` : '';
+      lines.push(`${token ? 'Settlement token of' : 'Part of'} ${here.name}${who}${level}`);
+      lines.push(mine ? standingWord(mine.role) : 'You are a stranger here: you may walk it and shape nothing.');
+    }
     const b = this.game.buildings.buildingAt(pick.x, pick.y);
     if (b) {
       const level = workLevel(b);

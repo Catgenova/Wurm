@@ -149,6 +149,7 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   take_apart_campfire: 'wood', set_trap: 'wood', pick_up_trap: 'wood',
   // Metal on metal, which is the loudest thing anybody does here.
   smith: 'metal', strike_coins: 'metal', improve_item: 'metal', shoe_creature: 'metal', ring_bell: 'metal',
+  fit_lock: 'metal', take_off_lock: 'metal',
   // Water, poured or drawn.
   fish: 'water', fill_bucket: 'water', fill_skin: 'water',
   empty_vessel: 'water', pour_into_barrel: 'water', empty_creel: 'water',

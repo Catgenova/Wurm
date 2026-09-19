@@ -679,6 +679,32 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>Who may do what on a settlement</h3>
+    <p>Being asked onto somebody's land used to be all or nothing: everybody on the roll could dig
+    up the gardens, empty the stores and pull the walls down. There are four standings now.</p>
+    <table>
+      <tr><td><b>Founder</b></td><td>Planted the stake. Everything, and the master key to every lock on their own land.</td></tr>
+      <tr><td><b>Mayor</b></td><td>Everything but founding: builds, and asks people in and out.</td></tr>
+      <tr><td><b>Builder</b></td><td>The ordinary citizen, and what an invitation makes you: shapes the ground, builds, takes from the stores.</td></tr>
+      <tr><td><b>Guest</b></td><td>Walks the land and shapes nothing. What you offer somebody you want to show round.</td></tr>
+    </table>
+    <p>A guest still belongs to the settlement — they may walk it, and their wildermon still work
+    there — they simply may not dig it up. Pointing at any ground says whose it is and what you are
+    on it, which is also how you read a <b>stranger's</b> settlement from outside: its name, who
+    founded it, and that you may walk it and shape nothing.</p>
+    <p>And a building on a settlement is every builder's to work on, not only its planner's, so two
+    people can fill one wall's bill between them.</p>
+    <h3>Padlocks and keys</h3>
+    <p>Everything anybody built has been open to everybody who could walk to it. A crate on your own
+    deed was safe because the <i>ground</i> was yours; a crate anywhere else, a cart at a work post,
+    a cupboard in a house you had invited somebody into, was a thing anybody could empty.</p>
+    <p>A <b>padlock</b> is forged at a smelter and comes with no key. <b>Fit</b> it to a crate or a
+    piece of storage furniture and it closes and cuts <b>one key</b> to itself, there and then. A key
+    is an ordinary item: hand it over and you have handed over what it opens, and there is no list
+    anywhere saying you did. Take the padlock off and the key goes with it.</p>
+    <p>One way back in, because losing a small item should not cost you a building: the
+    <b>founder</b> of the settlement a store stands on may open anything on their own land. So a
+    padlock is worth a great deal on somebody else's deed and rather less on your own.</p>
     <h3>Where the animals live</h3>
     <p>Everything wild has <b>a home</b>: a patch of country it keeps to, set where it was first
     put down. It wanders about that ground and turns back when it strays too far, so the places you
