@@ -835,19 +835,26 @@ jobs:
             --outfile=node_modules/.cache/shore.mjs --log-level=error
           node node_modules/.cache/shore.mjs
 
-      - name: What it costs to put the wildlife out
+      - name: Who pays for the wildlife
         run: |
-          # "Something is severely delaying server responses." It was this.
-          # The wildlife went from one head to a thirty-two tile square to
-          # three, because the country read as empty between settlements,
-          # which was fair — and trebling the density trebles the work of
-          # placing them, which happens inside `rpc_move`, the call a walking
-          # browser makes constantly. An eighth of the island is standable, so
-          # seven throws in eight miss. One block of Bigness, in the walk call:
-          # seven seconds at three a region against one and a half at one.
+          # "Something is severely delaying server responses." It was this: a
+          # block of country is stocked the first time anybody walks into it,
+          # and that used to happen inside `rpc_move` — the call a walking
+          # browser makes constantly — so the walker stood still for a second
+          # and a half. PostgREST answers eight at a time, so three people
+          # crossing fresh country held three of those eight and everything
+          # else queued behind them.
           #
-          # Back to one, and the price pinned here so the next change to that
-          # constant has to look at what it costs.
+          # It is on `stock_tick` now, a clock of its own with a lock of its
+          # own, putting out the block underfoot and the eight around it so
+          # the country is ready before anybody arrives. The assertion that
+          # matters here is the exact one: walk thirty steps across a block
+          # never stocked and nothing may appear. That is what fails if
+          # stocking is ever put back on a request path.
+          #
+          # The density is pinned here too, because a constant changed in
+          # TypeScript once made the server five times slower with every test
+          # still green.
           npx esbuild supabase/test/stock.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/stock.mjs --log-level=error
           node node_modules/.cache/stock.mjs
