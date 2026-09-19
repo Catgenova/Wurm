@@ -4580,9 +4580,13 @@ select world_tick()::text as tock \gset
 select '602. one round of the clock: ' || :'tock';
 -- The dig's own line rather than the last line: the same round of the clock
 -- now sweeps the furnaces too, and a kiln going cold is told in it as well.
+-- Either of the dig's two lines, because a spadeful that found nothing is
+-- still a spadeful the clock finished and told him about, and which of the two
+-- he gets is a roll the seed moves every time anything upstream of it changes.
 select '603. and now he is ' || coalesce((select act from player where world_id = :'world2' and uid = :'ivar'), 'finished')
      || ', having been told: '
-     || coalesce((select text from event where world_id = :'world2' and uid = :'ivar' and kind = 'event' and text like 'You dig%'
+     || coalesce((select text from event where world_id = :'world2' and uid = :'ivar' and kind = 'event'
+                   and (text like 'You dig%' or text like 'You fail to dig%')
                   order by n desc limit 1), 'nothing');
 
 -- A body nobody has been near for hours is a shut tab, not a person.

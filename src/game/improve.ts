@@ -114,7 +114,14 @@ function stockFor(g: Game, def: MaterialDef, made: string | undefined): Item | u
   let worst: Item | undefined;
   for (const it of g.inventory.items) {
     if (!def.stock.includes(it.id)) continue;
-    if (made && materialOfItem(it)?.name !== made) continue;
+    /*
+     * Stock that says what it is made of has to say the right thing; stock
+     * that says nothing — an unmarked plank, a shaft off an old save — is
+     * stock of no particular sort and will go into anything. A lump always
+     * says: its metal is in its name, which is what `materialOfItem` reads.
+     */
+    const its = materialOfItem(it)?.name;
+    if (made && its && its !== made) continue;
     if (!worst || it.ql < worst.ql) worst = it;
   }
   return worst;

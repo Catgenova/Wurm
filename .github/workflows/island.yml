@@ -483,6 +483,24 @@ jobs:
           npx esbuild supabase/test/tools.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/tools.mjs --log-level=error
           node node_modules/.cache/tools.mjs
+      - name: What the bench gives back, and what a click is worth
+        run: |
+          # Three reports in one message, all about the moment a go ends.
+          # "free body control gains from examining as well as keeping/putting
+          # back items" — thirty-two jobs that cost no wind and take no time
+          # were paying a body for them. "my bronze anvil isn't letting me
+          # improve it saying that i need bronze, but i have 37 bronze lumps on
+          # me ... actually it looks like everything i try to improve is
+          # telling me that" — the island looked for the metal in a column a
+          # lump does not use, so nothing in anybody's pack was ever the right
+          # material. "i've made a lot of whetstones and haven't managed
+          # anything other than QL 1" — a tool roll that missed paid nothing at
+          # all instead of paying what the tool was worth. Each is measured
+          # here rather than eyeballed, and the middle one is put to the island
+          # too, because that is the side it was reported from.
+          npx esbuild supabase/test/bench.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/bench.mjs --log-level=error
+          node node_modules/.cache/bench.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

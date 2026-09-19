@@ -2587,14 +2587,27 @@ export class Game {
      * items". The wind is still spent below — a cost is not a lesson — but a
      * body that empties a crate into its pack a hundred times is no steadier
      * for it. `TEACHES_NOTHING` is the list, and the island keeps its own.
+     *
+     * A list is the wrong shape for it, though, and the report that followed
+     * said so: "free body control gains from examining as well as
+     * keeping/putting back items". Those are two of thirty-two. A list is
+     * something somebody has to remember to add to, and every job written
+     * since that costs no wind and takes no time — examining a tile, a thing
+     * or a beast, locking one back, naming one, setting a stance, choosing a
+     * path — was paying a full measure of body control for a click.
+     *
+     * So that half of it is read off the job instead: a go that costs nothing
+     * and takes no time is not work, and the hands learn nothing from it. The
+     * list stays for the jobs that do cost something and still teach nothing.
      */
+    const isWork = cost > 0 || (a.def.baseTime ?? 0) > 0;
     if (!TEACHES_NOTHING.has(a.def.id)) {
       if (a.def.skill) this.gainSkill(a.def.skill, this.swingMissed ? TRY_LEARN : 1);
       // The body learns from the work itself: wind from spending it, control from doing it.
       if (cost > 0) this.gainSkill('body_stamina', WORK_WIND + cost * WORK_WIND_SPENT);
-      this.gainSkill('body_control', WORK_HAND);
+      if (isWork) this.gainSkill('body_control', WORK_HAND);
       // And the back, from the heavy trades: a shovel or a pick, whatever the go found.
-      if (a.def.skill && HEAVY_SKILLS.has(a.def.skill)) this.gainSkill('body_strength', WORK_BACK);
+      if (isWork && a.def.skill && HEAVY_SKILLS.has(a.def.skill)) this.gainSkill('body_strength', WORK_BACK);
     }
     this.swingMissed = false;
     if (this.action !== a) {
@@ -3164,7 +3177,25 @@ export class Game {
   productQl(skill: string, toolQl = 0): number {
     const s = Math.min(100, Math.max(1, this.skills.get(skill)));
     if (toolQl <= 0) return Math.min(100, Math.max(1, s * (0.6 + this.rand() * 0.8) + 1));
-    return this.rand() * 100 < toolQl ? s : 1;
+    /*
+     * And what a go that did not come off is worth.
+     *
+     * Reported: "i've made a lot of whetstones and haven't managed anything
+     * other than QL 1, even got a rare QL 1." Quite so. This used to hand back
+     * a flat 1 every time the tool's roll missed, and an issued copper chisel
+     * is quality fifteen — so five goes in six came off the bench as rubbish,
+     * and the sixth came off at your stonecutting, which on the day you start
+     * is also about one. A trade that makes nothing but QL 1 for its first
+     * afternoon is a trade nobody gets to the second afternoon of.
+     *
+     * A rough tool makes rough work, which is not the same as making rubbish.
+     * A miss comes out at what the tool itself is worth now, never above what
+     * your hands could have managed — so a poor chisel is the thing holding
+     * you back and says so, which is the whole reason to better one, and a
+     * good one puts nearly every piece at your own ceiling as it always did.
+     */
+    if (this.rand() * 100 < toolQl) return s;
+    return Math.min(s, Math.max(1, toolQl * (0.6 + this.rand() * 0.8)));
   }
 
   nearestCornerToPlayer(): { cx: number; cy: number } {
