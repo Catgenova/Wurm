@@ -65,7 +65,7 @@ import { DYEABLE_ITEMS } from '../src/game/dyes';
 import { PAIR_RANGE, GROOM_CAP, TIER_LEVEL } from '../src/game/husbandry';
 import { BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
-import { DAWN, DAY_SECONDS } from '../src/game/game';
+import { DAWN, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../src/game/game';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
@@ -995,6 +995,13 @@ for (const [fn, v] of [
   /* And how far a wild thing drifts, and how long it stands between. */
   ['wild_reach', WILD_REACH], ['wild_rest', WILD_REST], ['wild_rest_spread', WILD_REST_SPREAD],
   ['site_looks', SITE_LOOKS],
+  /*
+   * What a back takes, and where carrying stops being a drag and becomes a
+   * wall. The island never needed these while the pack was the browser's own
+   * business; it does now, because a body over the stop is one the island will
+   * not move, and a rule it does not hold is a rule a browser can decline.
+   */
+  ['carry_base', CARRY_BASE], ['carry_per_strength', CARRY_PER_STRENGTH], ['carry_stop', CARRY_STOP],
   ['hunger_rate', HUNGER_RATE], ['thirst_rate', THIRST_RATE],
   ['say_max', SAY_MAX], ['say_a_minute', SAY_A_MINUTE],
   ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],

@@ -10118,3 +10118,48 @@ select creature_stock_block(:'world2', 0, 0) as topped \gset
 select '1010c. a block put out: ' || :'first_fill' || ' head; asked again straight away: ' || :'straight_after'
      || '; five killed and the interval gone by: ' || :'topped' || ' went back out, and the block holds '
      || (select count(*) from creature where world_id = :'world2' and mode = 'wild');
+
+/*
+ * Nothing walks under half again what it can carry.
+ *
+ * Asked for: "when inventory is above 150% cap, movement speed becomes 0."
+ * What a body carries was the browser's own business; a stop only one side
+ * holds is a stop the other side can decline, so the island weighs the pack
+ * too, off the same two numbers.
+ */
+\echo ''
+\echo '--- nothing walks under half again what it can carry'
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+-- Somewhere flat and dry to walk, and an empty pack to start from.
+select land_set_height(:'world2', x, y, 40) from generate_series(2, 8) x, generate_series(2, 8) y \g /dev/null
+delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' \g /dev/null
+update player set x = 4.5, y = 4.5, level = 0, moved_at = now() - interval '2 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round(carry_limit(:'world2', :'ivar')::numeric, 1) as cap \gset
+select '1011. an empty pack against a back that takes ' || :'cap' || ' kg: '
+     || round(carried_weight(:'world2', :'ivar')::numeric, 1) || ' kg, '
+     || round((over_carry(:'world2', :'ivar') * 100)::numeric, 0) || '% of it, and the stop is at '
+     || round((carry_stop() * 100)::numeric, 0) || '%';
+-- A hundred and forty per cent of it: heavy going, and still going.
+insert into item (world_id, holder, holder_uid, def, ql, count)
+  select :'world2', 'player', :'ivar', 'iron_ore', 20, ceil(carry_limit(:'world2', :'ivar') * 1.4 / 2)::int;
+select rpc_move(:'world2', 6.5, 4.5, 0) as heavy \gset
+select '1011b. at ' || round((over_carry(:'world2', :'ivar') * 100)::numeric, 0) || '% a body still walks: it asked for 6.5 and the island put it at '
+     || round((select x from player where world_id = :'world2' and uid = :'ivar')::numeric, 2)
+     || ', blocked ' || (:'heavy'::jsonb->>'blocked');
+-- And another armful, which takes it over.
+insert into item (world_id, holder, holder_uid, def, ql, count)
+  select :'world2', 'player', :'ivar', 'iron_ore', 20, ceil(carry_limit(:'world2', :'ivar') * 0.4 / 2)::int;
+update player set moved_at = now() - interval '2 seconds' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select round((select x from player where world_id = :'world2' and uid = :'ivar')::numeric, 2) as stood \gset
+select rpc_move(:'world2', 8.5, 4.5, 0) as stuck \gset
+select '1011c. at ' || round((over_carry(:'world2', :'ivar') * 100)::numeric, 0) || '% it does not: it asked for 8.5 from ' || :'stood'
+     || ' and the island left it at ' || round((select x from player where world_id = :'world2' and uid = :'ivar')::numeric, 2)
+     || ', blocked ' || (:'stuck'::jsonb->>'blocked');
+-- Put it down and the road opens again.
+delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' and def = 'iron_ore' \g /dev/null
+update player set moved_at = now() - interval '2 seconds' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select rpc_move(:'world2', 3.5, 4.5, 0) as freed \gset
+select '1011d. emptied to ' || round((over_carry(:'world2', :'ivar') * 100)::numeric, 0) || '%, it walks again: it asked for 3.5 from 6.5 and stands at '
+     || round((select x from player where world_id = :'world2' and uid = :'ivar')::numeric, 2)
+     || ', blocked ' || (:'freed'::jsonb->>'blocked');

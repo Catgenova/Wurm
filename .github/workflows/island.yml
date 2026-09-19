@@ -383,6 +383,16 @@ jobs:
           npx esbuild supabase/test/body.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/body.mjs --log-level=error
           node node_modules/.cache/body.mjs
+      - name: Nothing walks under half again what it can carry
+        run: |
+          # Asked for: "when inventory is above 150% cap, movement speed
+          # becomes 0". What a body carries was the browser's own business, and
+          # a stop only one side holds is a stop the other can decline — so the
+          # two numbers behind it are generated into the island and this puts
+          # the browser's to them before loading a body until it cannot walk.
+          npx esbuild supabase/test/load.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/load.mjs --log-level=error
+          node node_modules/.cache/load.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

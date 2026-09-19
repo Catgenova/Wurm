@@ -124,6 +124,11 @@ export class Player {
   belt: Array<BeltPin | null> = Array.from({ length: BELT_MAX }, () => null);
   /** How much armour is weighing you down, 0 for nothing worn. */
   burden = 0;
+  /**
+   * Carrying more than a body can walk under. Set from `Game.stalled`, which
+   * is the same sum the island refuses a move on.
+   */
+  stalled = false;
   /** Steepest step allowed, raised by the climbing skill. */
   maxStep = MAX_STEP;
   /** Steepest tile that can be stood on, raised by the climbing skill. */
@@ -208,6 +213,18 @@ export class Player {
     this.swimming = !this.carried && h < -SWIM_DEPTH;
 
     if (vx === 0 && vy === 0) {
+      this.moving = false;
+      return 0;
+    }
+
+    /*
+     * And nothing moves under a load half again over the limit. The walk is
+     * dropped rather than paused, so a click across the deed does not set off
+     * the moment a stone comes out of the pack — and the island refuses the
+     * same body on the same sum, so a step taken here would be taken back.
+     */
+    if (this.stalled) {
+      this.path = null;
       this.moving = false;
       return 0;
     }

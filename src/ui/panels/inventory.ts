@@ -1,4 +1,4 @@
-import type { Game } from '../../game/game';
+import { CARRY_STOP, type Game } from '../../game/game';
 import { itemDef, itemName, type Item, type ItemCategory, itemWeight, rarityOf, bagRoom, bagUnits, isBag } from '../../game/items';
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
@@ -149,12 +149,19 @@ export class InventoryPanel {
     const weight = this.game.inventory.totalWeight();
     const limit = this.game.carryLimit();
     const over = this.game.overloaded();
-    const all = `${items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} / ${limit.toFixed(0)} kg`;
+    // Half again over the limit is where the drag becomes a wall, so the line
+    // says which of the two you are in rather than only that you are over.
+    const stuck = this.game.stalled();
+    const stop = limit * CARRY_STOP;
+    const all = `${items.reduce((n, it) => n + it.count, 0)} items · ${weight.toFixed(1)} / ${limit.toFixed(0)} kg${stuck ? ' · too heavy to walk' : ''}`;
     this.footer.textContent = this.query ? `${shown.reduce((n, it) => n + it.count, 0)} of ${all}` : all;
     this.footer.classList.toggle('inv-over', over > 0);
-    this.footer.title = over > 0
-      ? `${over.toFixed(1)} kg past what your back will take. You are slower and you tire faster; put something down or raise body strength.`
-      : `${(limit - weight).toFixed(1)} kg to spare.`;
+    this.footer.classList.toggle('inv-stuck', stuck);
+    this.footer.title = stuck
+      ? `${weight.toFixed(1)} kg on a back that takes ${limit.toFixed(0)}. Over ${stop.toFixed(0)} kg you cannot take a step: put ${(weight - stop).toFixed(1)} kg down, or into a cart or a crate.`
+      : over > 0
+        ? `${over.toFixed(1)} kg past what your back will take. You are slower and you tire faster; over ${stop.toFixed(0)} kg you stop where you stand.`
+        : `${(limit - weight).toFixed(1)} kg to spare.`;
   }
 
   private row(item: Item): HTMLDivElement {

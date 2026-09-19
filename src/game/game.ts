@@ -290,6 +290,16 @@ export const PLANTABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileTyp
 /** What a back takes before it tells on you, in kilos, and what each point of body strength adds. */
 export const CARRY_BASE = 120;
 export const CARRY_PER_STRENGTH = 5;
+/**
+ * Where carrying too much stops being a drag and becomes a wall.
+ *
+ * Past the limit everything is already slower and dearer in wind, and the
+ * curve was the whole of it: load a body with ten times what it can take and
+ * it still walked, at a crawl. Asked for: "when inventory is above 150% cap,
+ * movement speed becomes 0". So half again over the limit is the end of it —
+ * you may stand, work, and put things down, and you may not take a step.
+ */
+export const CARRY_STOP = 1.5;
 
 export class Game {
   readonly seed: number;
@@ -1468,6 +1478,21 @@ export class Game {
     return over > 0 ? over : 0;
   }
 
+  /** What is on your back as a share of what your back will take: 1 is exactly full. */
+  carryShare(): number {
+    const limit = this.carryLimit();
+    return limit > 0 ? this.inventory.totalWeight() / limit : 0;
+  }
+
+  /**
+   * Whether you are carrying so much that you cannot take a step. The island
+   * reads the same sum in `over_carry` and will not move a body that is over
+   * it, so a browser that drew you walking would only be drawing.
+   */
+  stalled(): boolean {
+    return this.carryShare() > CARRY_STOP;
+  }
+
   /** How much armour and a full pack slow you down and tire you. */
   burden(): number {
     let sum = 0;
@@ -2229,6 +2254,17 @@ export class Game {
 
     // What climbing and swimming have earned, and what the armour costs, before the next step.
     p.burden = this.burden();
+    /*
+     * And whether there is going to be a next step at all. Said once, when it
+     * happens: a line a frame while somebody shuffles about under a hill of
+     * ore would be the whole event log.
+     */
+    const stuck = this.stalled();
+    if (stuck !== p.stalled) {
+      p.stalled = stuck;
+      if (stuck) this.logMsg(`You cannot walk under ${this.inventory.totalWeight().toFixed(0)} kg. Your back takes ${this.carryLimit().toFixed(0)}; anything over ${(this.carryLimit() * CARRY_STOP).toFixed(0)} stops you where you stand.`, 'error');
+      else this.logMsg('You can walk again.', 'event');
+    }
     p.maxStep = this.climbStep();
     p.maxStand = this.standSlope();
     p.swimSpeed = Math.min(0.85, SWIM_SPEED + this.skills.get('swimming') * 0.0033);

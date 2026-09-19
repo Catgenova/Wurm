@@ -1762,6 +1762,8 @@ kbd {
 
 .inv-breaking { color: #e0574d; font-weight: 600; }
 .inv-footer.inv-over { color: #e0574d; font-weight: 600; }
+/* Over the stop it is not a warning any more: nothing moves until it comes off. */
+.inv-footer.inv-stuck { color: #ffb3ab; background: rgba(160, 36, 28, 0.35); }
 
 /* A small strip of controls at the head of a list. */
 .panel-bar { display: flex; gap: 6px; align-items: center; padding: 4px 6px 2px; }
