@@ -1265,6 +1265,10 @@ function shade(hex: string, by: number): string {
 }
 
 export interface CreaturePose {
+  /**
+   * Which of the eight ways it is turned, as `facingOf` counts them: 0 coming
+   * at you, 2 to screen right, 4 going away, 6 to screen left.
+   */
   facing: number;
   phase: number;
   moving: boolean;
@@ -1278,6 +1282,144 @@ export interface CreaturePose {
   fleece?: number;
   /** How much of its full size it is: a yearling is small and an old one heavy. */
   scale?: number;
+}
+
+/**
+ * A body seen from somewhere other than the side.
+ *
+ * Every animal on this island is drawn in profile, nose at +x and tail at -x,
+ * and for a long time the only thing the view could do with that was mirror
+ * it. So a rabba heading north and one heading east were the same picture, and
+ * turning the camera did not turn the animal — it flipped, once, when the
+ * heading crossed the screen's middle, and otherwise stood there showing you
+ * the same flank however far round you walked. Reported as models twisting in
+ * place, which is exactly what it looks like from inside the game.
+ *
+ * There is no second drawing here and there does not need to be one. A body is
+ * long one way and thin the other, so what the angle decides is how much of
+ * its length you are looking along:
+ *
+ *   `squash`  what is left of the length across the screen — all of it from
+ *             the side, and only the animal's own thickness end on, which is
+ *             why it never collapses to a line.
+ *   `mirror`  which way the nose points, as before.
+ *   `lean`    how far the far end rides up the screen. A thing pointed away
+ *             has its nose deeper into the picture than its tail, and in a
+ *             2:1 diamond a step into the picture is half a step up it.
+ *
+ * Eight angles out of one drawing, and every species gets them at once.
+ */
+/**
+ * What is left of a body's length when you are looking straight down it.
+ *
+ * Half rather than the third an animal really is, because the truth reads as a
+ * stick. A 2:1 diamond looks down steeply enough that a body end on is a tall
+ * narrow thing however it is drawn, and the last sliver of width is what keeps
+ * it an animal rather than a mark.
+ */
+const BODY_THICK = 0.5;
+/**
+ * And what is left of one that stands on two legs.
+ *
+ * A thing on four legs is long one way and narrow the other, which is the
+ * whole reason turning it does anything. A thing on two is as wide from the
+ * front as it is from the side — a goblin end on is a goblin, not a plank —
+ * so it barely narrows at all, and what turning it moves is the face and the
+ * arms rather than the outline.
+ */
+const UPRIGHT_THICK = 0.92;
+/**
+ * How far up the screen a step into the picture carries.
+ *
+ * A 2:1 diamond says a half exactly. A shade under, for the same reason the
+ * thickness is a shade over: the far end of a long animal riding a full half
+ * of its length up the screen puts its head above its own shoulders.
+ */
+const DEPTH_LEAN = 0.42;
+
+export interface BodyTurn {
+  mirror: number;
+  squash: number;
+  lean: number;
+  /** A step along the body, nose-wards, as a screen vector. */
+  along: [number, number];
+  /** And a step across it, as a screen vector: the width of the animal. */
+  across: [number, number];
+}
+
+export function beastTurn(facing: number, thick = BODY_THICK): BodyTurn {
+  // Facing 2 is screen right, which is the angle every one of these is drawn
+  // at, so that is where the turn is measured from.
+  const a = ((facing - 2) / FACINGS) * TAU;
+  const out = Math.cos(a);
+  const at = -Math.sin(a);
+  return {
+    mirror: out < 0 ? -1 : 1,
+    squash: Math.max(thick, Math.abs(out)),
+    lean: at * DEPTH_LEAN,
+    // The two directions anything on a body is placed along. Side on, the
+    // length runs across the screen and the width runs up it; end on they
+    // swap. Everything between falls out of the same two numbers.
+    along: [out, at * DEPTH_LEAN],
+    across: [at, -out * DEPTH_LEAN],
+  };
+}
+
+/**
+ * Step out of the turn at a point on the body, into plain drawing space.
+ *
+ * Inside the frame everything is squashed along the body and sheared, which is
+ * what a flank wants and not what a head wants: a head is a ball and stays a
+ * ball however you look at it, and what moves round is the face on it. So the
+ * head is placed in body space — where it belongs, so it lands right — and
+ * then drawn in a square space, out of the squash, with its ears and its eyes
+ * put on it along the two directions the turn hands back.
+ */
+export function atBody(ctx: CanvasRenderingContext2D, pose: CreaturePose, x: number, y: number,
+                       draw: (t: BodyTurn) => void): void {
+  const t = beastTurn(pose.facing);
+  const k = t.mirror * t.squash;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.transform(1 / k, -t.lean / k, 0, 1, 0, 0);
+  draw(t);
+  ctx.restore();
+}
+
+/**
+ * Put the canvas into a body's own space: the origin at its feet, x along it
+ * with the nose at +x, y up, turned to whichever way it is facing.
+ *
+ * Replaces the `translate` and `scale` every one of these used to open with,
+ * so a body drawn in profile needs to know nothing at all about the angle.
+ */
+export function bodyFrame(ctx: CanvasRenderingContext2D, sx: number, sy: number, k: number, pose: CreaturePose,
+                          thick = BODY_THICK): BodyTurn {
+  const t = beastTurn(pose.facing, thick);
+  ctx.transform(k * t.mirror * t.squash, 0, 0, k, sx, sy);
+  if (t.lean) ctx.transform(1, t.lean, 0, 1, 0, 0);
+  return t;
+}
+
+/**
+ * Run a drawing flat on the ground, out of the lean the body is drawn with.
+ *
+ * A body pointed into the picture has its far end higher up the screen, and
+ * the shear that does that is applied to the whole of it — which is right for
+ * a body and wrong for the shadow it casts, because a shadow lies on the
+ * ground and the ground does not lean. Left in, an animal coming at you stood
+ * on a long diagonal smear.
+ */
+export function onGround(ctx: CanvasRenderingContext2D, pose: CreaturePose, draw: () => void): void {
+  const { lean } = beastTurn(pose.facing);
+  if (!lean) {
+    draw();
+    return;
+  }
+  ctx.save();
+  ctx.transform(1, -lean, 0, 1, 0, 0);
+  draw();
+  ctx.restore();
 }
 
 /** Draws a wildermon of any species with its feet at (sx, sy), then its health bar and name. */
@@ -1308,15 +1450,16 @@ const MONSTER_SHAPES: Record<string, MonsterShape> = {
 /** A thing on two legs with something in its hand. Feet at (sx, sy). */
 function drawMonsterBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, m: MonsterShape): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * m.size * (pose.facing < 0 ? -1 : 1), zoom * m.size);
+  bodyFrame(ctx, sx, sy, zoom * m.size, pose, UPRIGHT_THICK);
   const swing = pose.moving ? Math.sin(pose.phase) * 3 : 0;
   const [tw, th] = m.torso;
   const hip = -(th + 6);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, tw * 1.3, tw * 0.55, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, tw * 1.3, tw * 0.55, 0, 0, TAU);
+    ctx.fill();
+  });
   // Legs: short, wide and bent.
   ctx.fillStyle = pose.colors[0];
   for (const side of [-1, 1]) {
@@ -1410,13 +1553,14 @@ function drawMonsterBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
 /** The one thing on the island with wings. Feet at (sx, sy). */
 function drawDragonBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * 2.1 * (pose.facing < 0 ? -1 : 1), zoom * 2.1);
+  bodyFrame(ctx, sx, sy, zoom * 2.1, pose);
   const beat = Math.sin(pose.phase * 0.9) * 3;
-  ctx.fillStyle = 'rgba(0,0,0,0.34)';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 15, 6, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 15, 6, 0, 0, TAU);
+    ctx.fill();
+  });
   // Wings behind, half spread.
   ctx.fillStyle = pose.colors[1];
   for (const side of [-1, 1]) {
@@ -1527,14 +1671,15 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 /** A Roxxen: a wall of ox, head low, horns forward. Feet at (sx, sy). */
 function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const plod = pose.moving ? Math.abs(Math.sin(pose.phase * 0.8)) * 0.8 : 0;
   const [hide, pale] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 14, 5.6, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 14, 5.6, 0, 0, TAU);
+    ctx.fill();
+  });
   // Four posts of legs, swinging slowly and barely leaving the ground.
   ctx.strokeStyle = hide;
   ctx.lineWidth = 3.4;
@@ -1599,14 +1744,15 @@ function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
 /** An Orse: long legs, deep chest, a mane over one side. Feet at (sx, sy). */
 function drawOrseBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const gait = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.4 : 0;
   const [coat, mane] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 12, 4.8, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 12, 4.8, 0, 0, TAU);
+    ctx.fill();
+  });
   // Long legs, a fore and a hind pair out of phase.
   ctx.strokeStyle = coat;
   ctx.lineWidth = 2.2;
@@ -1673,14 +1819,15 @@ function drawOrseBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 /** A Rowl: leaner than an Ulva, ruffed at the shoulder, nose down. */
 function drawRowlBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const lope = pose.moving ? Math.abs(Math.sin(pose.phase * 1.2)) * 1.1 : 0;
   const [coat, ruff] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 4.4, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 4.4, 0, 0, TAU);
+    ctx.fill();
+  });
   ctx.strokeStyle = coat;
   ctx.lineWidth = 2.2;
   ctx.lineCap = 'round';
@@ -1748,24 +1895,15 @@ function drawRowlBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 /** A Rabba: round body, long ears, twitchy. Feet at (sx, sy). */
 function drawRabbaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3 : 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [fur, belly] = pose.colors;
-  // ears
-  ctx.fillStyle = fur;
-  ctx.beginPath();
-  ctx.ellipse(3.5, -16 - hop, 1.7, 5, -0.15, 0, TAU);
-  ctx.ellipse(6.5, -15.5 - hop, 1.7, 4.6, 0.25, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#e8a6a6';
-  ctx.beginPath();
-  ctx.ellipse(3.5, -16 - hop, 0.7, 3, -0.15, 0, TAU);
-  ctx.fill();
   // body and belly
   ctx.fillStyle = fur;
   ctx.beginPath();
@@ -1775,23 +1913,54 @@ function drawRabbaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
   ctx.beginPath();
   ctx.ellipse(0.5, -4.5 - hop, 4.5, 2.6, 0, 0, TAU);
   ctx.fill();
-  // tail, head, eye, nose
+  // tail
   ctx.fillStyle = belly;
   ctx.beginPath();
   ctx.arc(-7.5, -6.5 - hop, 2, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = fur;
-  ctx.beginPath();
-  ctx.arc(5, -10 - hop, 4.2, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#2a1a10';
-  ctx.beginPath();
-  ctx.arc(6.5, -11 - hop, 0.9, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#d98f8f';
-  ctx.beginPath();
-  ctx.arc(9, -9.5 - hop, 0.8, 0, TAU);
-  ctx.fill();
+  /*
+   * The head, and the two ears over it, placed rather than drawn flat.
+   *
+   * A rabba is the commonest thing on the island and the one most often seen
+   * from behind, so the pair of ears wants to open out as it turns away from
+   * you and the face wants to be gone when it has. The two directions come
+   * from the turn; the drawing knows nothing about the angle.
+   */
+  atBody(ctx, pose, 5, -10 - hop, (t) => {
+    const out = (n: number): [number, number] => [t.along[0] * n, t.along[1] * n];
+    const wide = (n: number): [number, number] => [t.across[0] * n, t.across[1] * n];
+    const front = t.along[1] >= -1e-6;
+    const [bx, bY] = out(-1.2);
+    for (const side of [-1, 1]) {
+      const [ex, ey] = wide(side * 1.7);
+      ctx.fillStyle = fur;
+      ctx.beginPath();
+      ctx.ellipse(bx + ex, bY + ey - 5.8, 1.7, 5, side * 0.2, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#e8a6a6';
+      ctx.beginPath();
+      ctx.ellipse(bx + ex, bY + ey - 5.8, 0.7, 3, side * 0.2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = fur;
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.2, 0, TAU);
+    ctx.fill();
+    if (!front) return;
+    ctx.fillStyle = '#2a1a10';
+    for (const side of [-1, 1]) {
+      const [ex, ey] = wide(side * 1.4);
+      const [fx, fy] = out(1.5);
+      ctx.beginPath();
+      ctx.arc(fx + ex, fy + ey - 1, 0.9, 0, TAU);
+      ctx.fill();
+    }
+    const [nx, ny] = out(4);
+    ctx.fillStyle = '#d98f8f';
+    ctx.beginPath();
+    ctx.arc(nx, ny + 0.5, 0.8, 0, TAU);
+    ctx.fill();
+  });
   ctx.restore();
 }
 
@@ -1801,15 +1970,16 @@ function drawRabbaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
  */
 function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   // A waddle: the body rocks side to side instead of leaving the ground.
   const rock = pose.moving ? Math.sin(pose.phase) * 0.9 : Math.sin(pose.phase * 0.25) * 0.15;
   const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.8 : 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [fur, belly] = pose.colors;
   const paw = '#e9cdbd';
   // hind foot
@@ -1902,14 +2072,15 @@ function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
  */
 function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const waddle = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.1 : 0;
   const sway = pose.moving ? Math.sin(pose.phase) * 2.2 : Math.sin(pose.phase * 0.3) * 0.6;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [fur, belly] = pose.colors;
   // The tail: a broad paddle dragged behind, swinging as it walks.
   ctx.save();
@@ -1978,14 +2149,15 @@ function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
  */
 function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
   const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3.4 : 0;
   const flick = Math.sin(pose.phase * (pose.moving ? 1 : 0.35)) * 0.12;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [fur, belly] = pose.colors;
   // The tail: a broad plume sweeping up behind and over the back.
   ctx.save();
@@ -2065,14 +2237,15 @@ function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
  */
 function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const dig = pose.moving ? Math.sin(pose.phase) : Math.sin(pose.phase * 0.6) * 0.35;
   const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.9 : 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [fur, belly] = pose.colors;
   const claw = '#efe3d2';
   // Stubby tail and hind foot.
@@ -2149,15 +2322,16 @@ function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 /** An Embra: low, soot-dark and softly alight along the back. */
 function drawEmbraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
   const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1 : 0;
   const glow = 0.55 + Math.sin(pose.phase * 1.6) * 0.2;
   const [coat, ember] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 10, 4.6, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 10, 4.6, 0, 0, TAU);
+    ctx.fill();
+  });
   // The heat it carries, showing under it before the body is drawn.
   ctx.globalAlpha = glow * 0.5;
   ctx.fillStyle = ember;
@@ -2227,14 +2401,15 @@ function drawEmbraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
 /** A Quarra: a slab of a creature with a jaw made for stone. */
 function drawQuarraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const plod = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.8 : 0;
   const [stone, pale] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 12, 5.4, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 12, 5.4, 0, 0, TAU);
+    ctx.fill();
+  });
   // Four short, thick legs.
   ctx.fillStyle = stone;
   for (const [lx, ph] of [[-6.5, 0], [-2.5, Math.PI], [3, 0.8], [6.5, 3.6]] as Array<[number, number]>) {
@@ -2292,16 +2467,17 @@ function drawQuarraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
 /** A Woola: a fleece with a face, and the fleece shows what is on it. */
 function drawWoolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const bob = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.2 : 0;
   const [fleece, shade] = pose.colors;
   // How much wool is on it, passed through on the health slot's sibling.
   const full = pose.fleece ?? 1;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 10, 4.6, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 10, 4.6, 0, 0, TAU);
+    ctx.fill();
+  });
   // Legs, thin and dark under all that wool.
   ctx.strokeStyle = '#4a423a';
   ctx.lineWidth = 1.5;
@@ -2361,15 +2537,16 @@ function drawWoolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
 /** An Ulva: long in the leg, low in the head, and coming your way. */
 function drawUlvaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const run = pose.moving ? Math.sin(pose.phase) : Math.sin(pose.phase * 0.3) * 0.15;
   const lift = pose.moving ? Math.abs(Math.sin(pose.phase * 2)) * 0.9 : 0;
   const [coat, belly] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 4.6, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 11, 4.6, 0, 0, TAU);
+    ctx.fill();
+  });
   // Legs: two pairs, swinging opposite.
   ctx.strokeStyle = coat;
   ctx.lineWidth = 2.4;
@@ -2441,14 +2618,15 @@ function drawUlvaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 /** A Magga: black and white, long-tailed, and always about to take something. */
 function drawMaggaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3.2 : 0;
   const [feather, pale] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.26)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 7.5, 3.4, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.26)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 7.5, 3.4, 0, 0, TAU);
+    ctx.fill();
+  });
   // Spindly legs, tucked when it hops.
   ctx.strokeStyle = '#d8a04c';
   ctx.lineWidth = 1.1;
@@ -2506,15 +2684,16 @@ function drawMaggaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
 /** A Noot: upright, plump, bill first, with a flat tail to sit back on. */
 function drawNootBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
   // A waddle rather than a walk: it rocks from foot to foot.
   const rock = pose.moving ? Math.sin(pose.phase) * 0.16 : Math.sin(pose.phase * 0.35) * 0.04;
   const bob = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.2 : 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 10, 4.5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 10, 4.5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [coat, front] = pose.colors;
   const foot = '#e09340';
   // Feet, planted wide and turned out.
@@ -2591,14 +2770,15 @@ function drawNootBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 /** A Crawler: a broad crab on eight legs, one claw far bigger than the other. */
 function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const swing = pose.moving ? 1 : 0.18;
   const sway = Math.sin(pose.phase * (pose.moving ? 1 : 0.4)) * (pose.moving ? 0.5 : 0.2);
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 12, 5, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 12, 5, 0, 0, TAU);
+    ctx.fill();
+  });
   const [shell, pale] = pose.colors;
   const hips = [-6.2, -2.4, 1.2, 4.6];
   ctx.lineCap = 'round';
@@ -2777,17 +2957,18 @@ const BEASTS: Record<string, BeastShape> = {
 /** A wildermon on four legs, built to the numbers above. Feet at (sx, sy). */
 function drawBeastBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, s: BeastShape): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose);
   const [hide, pale] = pose.colors;
   const gait = s.gait ?? 1;
   const bob = pose.moving ? Math.abs(Math.sin(pose.phase * gait)) * (0.5 + s.ride * 0.08) : 0;
   const [bw, bh] = s.body;
   const by = -(s.ride + bh) - bob;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, bw * 1.25, bw * 0.48, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, bw * 1.25, bw * 0.48, 0, 0, TAU);
+    ctx.fill();
+  });
   // Four legs, the near pair a shade darker so the far pair reads as behind.
   ctx.lineCap = 'round';
   ctx.lineWidth = s.legW;
@@ -2878,87 +3059,142 @@ function drawBeastBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
       ctx.fill();
     }
   }
-  // Head, muzzle and whatever is on it.
-  const hx = s.neck[0];
-  const hy = by + s.neck[1];
-  ctx.fillStyle = hide;
-  ctx.beginPath();
-  ctx.ellipse(hx, hy, s.head, s.head * 0.86, 0.1, 0, TAU);
-  ctx.fill();
-  if (s.pouch) {
-    ctx.fillStyle = shade(pale, -0.08);
-    ctx.beginPath();
-    ctx.ellipse(hx - 0.5, hy + s.head * 0.75, s.pouch, s.pouch * 0.82, 0, 0, TAU);
-    ctx.fill();
-  }
-  if (s.ear) {
-    ctx.fillStyle = shade(hide, -0.1);
-    const ex = hx - s.head * 0.45;
-    const ey = hy - s.head * 0.8;
-    if (s.ear === 'round') {
+  /*
+   * Head, muzzle and whatever is on it — placed rather than drawn flat.
+   *
+   * A head is a ball and stays a ball whichever way the animal is turned; what
+   * moves is the face on it. So the head goes where the neck puts it, in body
+   * space, and everything hung on it is placed along the two directions the
+   * turn hands back: the muzzle out along the body, the ears and the eyes and
+   * the horns spread across it. Side on the across-axis is almost nothing and
+   * the pair lie on top of one another, which is the one eye and the one ear a
+   * profile has always shown; end on it opens out to the animal's full width
+   * and you are looking at a face.
+   */
+  atBody(ctx, pose, s.neck[0], by + s.neck[1], (t) => {
+    const [ax, ay] = t.across;
+    const [lx, ly] = t.along;
+    const r = s.head;
+    const out = (n: number): [number, number] => [lx * n, ly * n];
+    const wide = (n: number): [number, number] => [ax * n, ay * n];
+    /*
+     * Whether you are looking at the face or at the back of the head. A step
+     * towards the nose that carries *down* the screen is a nose pointed at
+     * you; level is a profile, and a profile still has a face on it.
+     */
+    const front = ly >= -1e-6;
+    const muzzle = (): void => {
+      if (!s.muzzle) return;
+      const [mx, my] = out(r * 0.85);
+      ctx.fillStyle = shade(hide, 0.1);
       ctx.beginPath();
-      ctx.ellipse(ex, ey, s.head * 0.38, s.head * 0.36, 0, 0, TAU);
+      ctx.ellipse(mx, my + r * 0.22, s.muzzle, s.muzzle * 0.62, 0, 0, TAU);
       ctx.fill();
-    } else if (s.ear === 'point') {
+      const [nx, ny] = out(r * 0.85 + s.muzzle * 0.8);
+      ctx.fillStyle = '#3a2c24';
       ctx.beginPath();
-      ctx.moveTo(ex - s.head * 0.3, ey + s.head * 0.3);
-      ctx.lineTo(ex + s.head * 0.12, ey - s.head * 0.75);
-      ctx.lineTo(ex + s.head * 0.42, ey + s.head * 0.24);
-      ctx.closePath();
+      ctx.ellipse(nx, ny + r * 0.22, 0.7, 0.6, 0, 0, TAU);
       ctx.fill();
-    } else if (s.ear === 'long') {
-      ctx.beginPath();
-      ctx.ellipse(ex, ey - s.head * 0.3, s.head * 0.2, s.head * 0.72, 0.2, 0, TAU);
-      ctx.fill();
-    } else {
-      ctx.beginPath();
-      ctx.ellipse(ex, ey + s.head * 0.5, s.head * 0.24, s.head * 0.64, -0.35, 0, TAU);
-      ctx.fill();
-    }
-  }
-  if (s.muzzle) {
-    ctx.fillStyle = shade(hide, 0.1);
-    ctx.beginPath();
-    ctx.ellipse(hx + s.head * 0.85, hy + s.head * 0.22, s.muzzle, s.muzzle * 0.62, 0.08, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#3a2c24';
-    ctx.beginPath();
-    ctx.ellipse(hx + s.head * 0.85 + s.muzzle * 0.8, hy + s.head * 0.22, 0.7, 0.6, 0, 0, TAU);
-    ctx.fill();
-  }
-  if (s.whisker) {
-    ctx.strokeStyle = 'rgba(240,235,225,0.75)';
-    ctx.lineWidth = 0.45;
-    for (const w of [-0.8, 0, 0.8]) {
-      ctx.beginPath();
-      ctx.moveTo(hx + s.head * 0.8, hy + s.head * 0.2);
-      ctx.lineTo(hx + s.head * 0.8 + (s.muzzle ?? 2) * 2.1, hy + s.head * 0.2 + w * 2.4);
-      ctx.stroke();
-    }
-  }
-  if (s.horn) {
-    ctx.strokeStyle = '#e6ddc8';
-    ctx.lineWidth = s.horn === 'sweep' ? 2.2 : 1.6;
-    ctx.lineCap = 'round';
-    for (const up of [-1, 1]) {
-      const ox = hx - s.head * 0.2;
-      const oy = hy - s.head * 0.8 + up * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      if (s.horn === 'curl') {
-        ctx.bezierCurveTo(ox - s.head * 1.2, oy - s.head * 0.9, ox - s.head * 2, oy + s.head * 0.4, ox - s.head * 0.9, oy + s.head * 0.9 + up);
-      } else if (s.horn === 'sweep') {
-        ctx.quadraticCurveTo(hx + s.head * 1.1, oy - s.head * 0.7 + up * 0.8, hx + s.head * 2.2, oy + s.head * 0.2 + up * 1.6);
-      } else {
-        ctx.lineTo(ox - s.head * 0.15, oy - s.head * 0.5);
+    };
+    // Ears first: they sit behind the skull and the skull laps over them.
+    if (s.ear) {
+      ctx.fillStyle = shade(hide, -0.1);
+      const [bx2, by2] = out(-r * 0.45);
+      for (const side of [-1, 1]) {
+        const [ex, ey] = wide(side * r * 0.52);
+        const cx2 = bx2 + ex;
+        const cy2 = by2 + ey - r * 0.8;
+        if (s.ear === 'round') {
+          ctx.beginPath();
+          ctx.ellipse(cx2, cy2, r * 0.38, r * 0.36, 0, 0, TAU);
+          ctx.fill();
+        } else if (s.ear === 'point') {
+          ctx.beginPath();
+          ctx.moveTo(cx2 - r * 0.3, cy2 + r * 0.3);
+          ctx.lineTo(cx2 + r * 0.12, cy2 - r * 0.75);
+          ctx.lineTo(cx2 + r * 0.42, cy2 + r * 0.24);
+          ctx.closePath();
+          ctx.fill();
+        } else if (s.ear === 'long') {
+          ctx.beginPath();
+          ctx.ellipse(cx2, cy2 - r * 0.3, r * 0.2, r * 0.72, side * 0.2, 0, TAU);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.ellipse(cx2, cy2 + r * 0.5, r * 0.24, r * 0.64, side * -0.35, 0, TAU);
+          ctx.fill();
+        }
       }
-      ctx.stroke();
     }
-  }
-  ctx.fillStyle = '#1c1712';
-  ctx.beginPath();
-  ctx.arc(hx + s.head * 0.4, hy - s.head * 0.2, Math.max(0.7, s.head * 0.17), 0, TAU);
-  ctx.fill();
+    if (s.horn) {
+      ctx.strokeStyle = '#e6ddc8';
+      ctx.lineWidth = s.horn === 'sweep' ? 2.2 : 1.6;
+      ctx.lineCap = 'round';
+      const [hbx, hby] = out(-r * 0.2);
+      for (const side of [-1, 1]) {
+        const [sx2, sy2] = wide(side * r * 0.45);
+        const ox = hbx + sx2;
+        const oy = hby + sy2 - r * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        if (s.horn === 'curl') {
+          const [cx3, cy3] = out(-r * 1.4);
+          ctx.bezierCurveTo(ox + cx3 * 0.8, oy + cy3 * 0.8 - r * 0.9, ox + cx3 * 1.4, oy + cy3 * 1.4 + r * 0.4,
+            ox + cx3 * 0.6 + sx2 * 0.6, oy + cy3 * 0.6 + r * 0.9);
+        } else if (s.horn === 'sweep') {
+          const [cx3, cy3] = out(r * 1.3);
+          ctx.quadraticCurveTo(ox + cx3 * 0.85, oy + cy3 * 0.85 - r * 0.7, ox + cx3 * 1.7 + sx2 * 0.8, oy + cy3 * 1.7 + r * 0.2);
+        } else {
+          ctx.lineTo(ox + sx2 * 0.2, oy - r * 0.5);
+        }
+        ctx.stroke();
+      }
+    }
+    // A snout you are looking up the back of is hidden by the head in front
+    // of it, which is what putting it down first amounts to.
+    if (!front) muzzle();
+    ctx.fillStyle = hide;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r, r * 0.86, 0, 0, TAU);
+    ctx.fill();
+    if (s.pouch) {
+      ctx.fillStyle = shade(pale, -0.08);
+      ctx.beginPath();
+      ctx.ellipse(0, r * 0.75, s.pouch, s.pouch * 0.82, 0, 0, TAU);
+      ctx.fill();
+    }
+    if (front) muzzle();
+    if (front && s.whisker) {
+      const [wx0, wy0] = out(r * 0.8);
+      ctx.strokeStyle = 'rgba(240,235,225,0.75)';
+      ctx.lineWidth = 0.45;
+      for (const w of [-1, 0, 1]) {
+        const [wx1, wy1] = out(r * 0.8 + (s.muzzle ?? 2) * 2.1);
+        const [sx2, sy2] = wide(w * 2.4);
+        ctx.beginPath();
+        ctx.moveTo(wx0, wy0 + r * 0.2);
+        ctx.lineTo(wx1 + sx2, wy1 + r * 0.2 + sy2);
+        ctx.stroke();
+      }
+    }
+    /*
+     * Two eyes on the front of a ball. Side on they lie almost on one another
+     * and read as the one eye a profile always had; coming at you they open
+     * out to the width of the face; going away there are none, because the
+     * back of a head has no eyes in it — which is the whole of what tells a
+     * beast walking towards you from one walking off.
+     */
+    if (front) {
+      ctx.fillStyle = '#1c1712';
+      const [ex0, ey0] = out(r * 0.4);
+      for (const side of [-1, 1]) {
+        const [sx2, sy2] = wide(side * r * 0.42);
+        ctx.beginPath();
+        ctx.arc(ex0 + sx2, ey0 + sy2 - r * 0.2, Math.max(0.7, r * 0.17), 0, TAU);
+        ctx.fill();
+      }
+    }
+  });
   ctx.restore();
 }
 
@@ -2985,17 +3221,18 @@ const BIRDS: Record<string, BirdShape> = {
 /** A wildermon that stands on two legs, built to the numbers above. */
 function drawBirdBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, s: BirdShape): void {
   ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * (pose.facing < 0 ? -1 : 1), zoom);
+  bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
   const [coat, front] = pose.colors;
   const gait = s.gait ?? 1;
   const bob = pose.moving ? Math.abs(Math.sin(pose.phase * gait)) * 1.1 : 0;
   const [bw, bh] = s.body;
   const by = -(s.ride + bh) - bob;
-  ctx.fillStyle = 'rgba(0,0,0,0.26)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, bw * 1.1, bw * 0.44, 0, 0, TAU);
-  ctx.fill();
+  onGround(ctx, pose, () => {
+    ctx.fillStyle = 'rgba(0,0,0,0.26)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, bw * 1.1, bw * 0.44, 0, 0, TAU);
+    ctx.fill();
+  });
   // Two legs with a backward knee, and a splayed foot on each.
   ctx.strokeStyle = '#c8975a';
   ctx.lineWidth = 1.4;

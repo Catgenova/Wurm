@@ -551,6 +551,20 @@ jobs:
           npx esbuild supabase/test/site.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/site.mjs --log-level=error
           node node_modules/.cache/site.mjs
+      - name: Eight ways round, not two
+        run: |
+          # Reported: "when changing camera angles models just twist in
+          # place." Every animal is drawn in profile and the only thing the
+          # view could do with that was mirror it, so a beast heading north
+          # and one heading east were the same picture and walking the camera
+          # round one showed you the same flank. What the angle decides now is
+          # how much of the length you are looking along, with the far end
+          # riding up the screen because it is further away. The failure is
+          # silent — a sign backwards and every beast walks backwards — so the
+          # eight are counted rather than eyeballed.
+          npx esbuild supabase/test/turned.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/turned.mjs --log-level=error
+          node node_modules/.cache/turned.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

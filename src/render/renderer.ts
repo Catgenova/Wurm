@@ -394,6 +394,8 @@ export class Renderer {
   private deckHits: HitRect[] = [];
   /** Painted materials, worked out once each and kept: there are not many. */
   private readonly paints = new Map<string, MaterialDef>();
+  /** Which way each beast is turned, so the answer holds still between frames. */
+  private readonly beastFacing = new Map<number, number>();
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -1386,12 +1388,21 @@ export class Renderer {
       if (ent.kind === 'creature' && ent.creature) {
         const cr = ent.creature;
         const def = SPECIES[cr.species] ?? SPECIES.rabba;
-        const dx = cam.rotateX(cr.dirX, cr.dirY) - cam.rotateY(cr.dirX, cr.dirY);
+        /*
+         * Which of the eight ways it is turned, kept between frames so a walk
+         * along a line that happens to sit on a boundary is not spent flicking
+         * between two of them. It used to be a sign — the flank, or the flank
+         * in the mirror — so a beast heading north and one heading east were
+         * the same picture and walking the camera round one turned it on the
+         * spot rather than showing you its other end.
+         */
+        const turned = this.facingOnScreen(cr.dirX, cr.dirY, this.beastFacing.get(cr.id));
+        this.beastFacing.set(cr.id, turned);
         const hit = this.flashOf(cr.attackedAt);
         this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx, ent.sy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
             species: def.id,
-            facing: dx >= 0 ? 1 : -1,
+            facing: turned,
             phase: cr.walkPhase,
             moving: cr.moving,
             colors: def.variants[cr.variant] ?? def.variants[0],
