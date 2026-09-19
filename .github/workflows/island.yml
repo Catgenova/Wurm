@@ -393,6 +393,16 @@ jobs:
           npx esbuild supabase/test/load.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/load.mjs --log-level=error
           node node_modules/.cache/load.mjs
+      - name: A field gets sown, and a load goes where there is room for it
+        run: |
+          # Reported: "seavic isn't planting seeds that are in crates on deed,
+          # and rabba are just overdelivering to the full deed crate instead of
+          # bringing anything to the empty crate." Both were the island being
+          # thinner than the browser, so both questions go to both sides over
+          # the same settlement, the same field and the same seed.
+          npx esbuild supabase/test/sow.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/sow.mjs --log-level=error
+          node node_modules/.cache/sow.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

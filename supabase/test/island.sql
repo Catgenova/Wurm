@@ -10163,3 +10163,100 @@ select rpc_move(:'world2', 3.5, 4.5, 0) as freed \gset
 select '1011d. emptied to ' || round((over_carry(:'world2', :'ivar') * 100)::numeric, 0) || '%, it walks again: it asked for 3.5 from 6.5 and stands at '
      || round((select x from player where world_id = :'world2' and uid = :'ivar')::numeric, 2)
      || ', blocked ' || (:'freed'::jsonb->>'blocked');
+
+\echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
+\echo '--- a field gets sown, and a load goes where there is room for it'
+/*
+ * Two reports off one afternoon of a deed working badly.
+ *
+ * "Seavic isn't planting seeds that are in crates on deed." It never could:
+ * the island knew how to weed a crop and how to reap one and not how to sow
+ * one, so a field with nothing in it was not work, so nothing ever walked to
+ * one. The browser has sown since the day fields existed.
+ *
+ * "Rabba are just overdelivering to the full deed crate instead of bringing
+ * anything to the empty crate." Also exactly so: every load went to the
+ * settlement's own crate and nowhere else, and a full crate refuses, so the
+ * load came home, was refused, and went back out to the fields for ever.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+-- Bare field on the deed, nothing growing, and seed in the settlement's crate
+-- rather than in anybody's cheeks — which is the whole of the report.
+select land_set_tile(:'world2', gx, gy, tile_id('Field')) from generate_series(3, 6) gx, generate_series(5, 8) gy \g /dev/null
+delete from crop where world_id = :'world2' \g /dev/null
+delete from item where world_id = :'world2' and def in (select seed from crop_def) \g /dev/null
+insert into item (world_id, holder, crate, def, ql, count)
+  select :'world2', 'crate', (deed_crate(:'world2', :'ivar')).id, 'wheat_seed', 30, 12;
+select '1012. ' || (select count(*) from generate_series(3,6) gx, generate_series(5,8) gy
+                    where land_tile(:'world2', gx, gy) = tile_id('Field'))
+     || ' tiles of bare field on the deed, '
+     || (select count(*) from crop where world_id = :'world2') || ' growing, and '
+     || (select sum(count) from item where world_id = :'world2' and holder = 'crate' and def = 'wheat_seed')
+     || ' of wheat seed in the settlement crate';
+select creature_spawn(:'world2', 'seavic', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as sower \gset
+update creature set job = 'farm', phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where world_id = :'world2' and id = :'sower';
+select worker_settle(:'world2', :'sower') as sown \gset
+select '1012b. ten minutes of a seavic: ' || :'sown' || ' goes at it, '
+     || (select count(*) from crop where world_id = :'world2') || ' tiles sown, and '
+     || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'wheat_seed'), '0')
+     || ' seed left of twelve — it sowed out of the crate, which is what it could not do';
+-- And set going again it weeds what it sowed rather than sowing over the top
+-- of it: the last of the seed goes in, and the rest of the time is spent on
+-- the rows already standing.
+update creature set phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where world_id = :'world2' and id = :'sower';
+select worker_settle(:'world2', :'sower') as tended \gset
+select '1012d. ten minutes more: ' || :'tended' || ' goes, '
+     || (select count(*) from crop where world_id = :'world2') || ' tiles sown of sixteen, '
+     || coalesce((select sum(count)::text from item where world_id = :'world2' and holder = 'crate' and def = 'wheat_seed'), '0')
+     || ' seed left, and ' || (select sum(tended) from crop where world_id = :'world2')
+     || ' weedings between them — what is in the ground gets looked after';
+
+-- Now the other half: the settlement's crate filled to the brim, and an empty
+-- one standing next to it.
+select coalesce(max(id), 0) + 1 as spare from crate where world_id = :'world2' \gset
+insert into item (world_id, holder, crate, def, ql, count)
+  select :'world2', 'crate', (deed_crate(:'world2', :'ivar')).id, 'rock_shards', 20,
+         crate_capacity((deed_crate(:'world2', :'ivar'))) - crate_units(:'world2', (deed_crate(:'world2', :'ivar')).id);
+insert into crate (world_id, id, kind, x, y, deed, made_by)
+  values (:'world2', :'spare', 'plank', 8, 11, false, :'ivar');
+select '1013. the settlement crate is ' || crate_units(:'world2', (deed_crate(:'world2', :'ivar')).id)
+     || '/' || crate_capacity((deed_crate(:'world2', :'ivar'))) || ' and the crate beside it '
+     || crate_units(:'world2', :'spare') || '/'
+     || crate_capacity((select c from crate c where c.world_id = :'world2' and c.id = :'spare'));
+select creature_spawn(:'world2', 'rabba', 5.5, 7.5, 'deed', now() - interval '3 hours', :'ivar') as carrier \gset
+update creature set job = 'forage', phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds' where world_id = :'world2' and id = :'carrier';
+select worker_settle(:'world2', :'carrier') as rounds \gset
+select '1013b. ten minutes of a rabba: ' || :'rounds' || ' rounds; the full crate still holds '
+     || crate_units(:'world2', (deed_crate(:'world2', :'ivar')).id) || ' and the empty one now holds '
+     || crate_units(:'world2', :'spare') || ' — the load went where the room was';
+
+-- And when there is no room anywhere: held, not tipped out, and said once.
+delete from event where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item i where i.world_id = :'world2' and i.holder = 'ground'
+  and on_my_deed(:'world2', :'ivar', i.gx, i.gy) \g /dev/null
+insert into item (world_id, holder, crate, def, ql, count)
+  select :'world2', 'crate', :'spare', 'rock_shards', 20,
+         crate_capacity((select c from crate c where c.world_id = :'world2' and c.id = :'spare'))
+           - crate_units(:'world2', :'spare');
+update creature set phase = 'idle', until = now() - interval '600 seconds',
+    leg_at = now() - interval '600 seconds', leg_ends = now() - interval '600 seconds',
+    settled_at = now() - interval '600 seconds', told_at = null
+  where world_id = :'world2' and id = :'carrier';
+select worker_settle(:'world2', :'carrier') as jammed \gset
+select '1013c. every crate on the deed full: ' || :'jammed' || ' rounds, it is holding '
+     || coalesce((select carrying->>'def' from creature where world_id = :'world2' and id = :'carrier'), 'nothing')
+     || ' rather than tipping it out, with '
+     || (select count(*) from item i where i.world_id = :'world2' and i.holder = 'ground'
+          and on_my_deed(:'world2', :'ivar', i.gx, i.gy)) || ' things lying about the deed, and Ivar was told: '
+     || coalesce((select string_agg(text, ' | ') from event where world_id = :'world2' and uid = :'ivar'
+                  and text like '%nowhere on the deed%'), 'nothing');

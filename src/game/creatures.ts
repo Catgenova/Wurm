@@ -4059,7 +4059,7 @@ export class Creatures {
    * place on the deed is full, which is a reason to stop rather than to tip the
    * load out on the ground.
    */
-  private storeFor(game: Game, c: Creature, item: Item): DeedStore | null {
+  storeFor(game: Game, c: Creature, item: Item): DeedStore | null {
     // A worker out on a post fills whatever stands beside the post before it
     // walks the load all the way home; a worker on the deed fills the
     // settlement's own crate first, as it always has.
