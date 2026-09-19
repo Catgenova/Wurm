@@ -58,6 +58,16 @@ export class SocialPanel {
   private readonly tabs = new Map<string, HTMLButtonElement>();
   private tab: 'waiting' | 'friends' | 'letters' = 'waiting';
   private seen: Social | null = null;
+
+  /**
+   * Everybody this body could reasonably deal with, which is the same roll it
+   * could write to: friends, whoever shares land with you, and anybody who
+   * has written. Handed out so the Market window has one list rather than a
+   * second one that could disagree with this.
+   */
+  folk(): Folk[] {
+    return this.seen ? writeTo(this.seen) : [];
+  }
   private asking = false;
   private lastAsk = -1e9;
   /** Whose thread is open on the letters tab, and what is in it. */

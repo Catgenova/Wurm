@@ -69,6 +69,7 @@ import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
 import { SocialPanel } from './panels/social';
+import { MarketPanel } from './panels/market';
 import { HoardPanel } from './panels/hoard';
 import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
@@ -128,6 +129,7 @@ export class UI {
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
   private readonly social: SocialPanel;
+  private readonly market: MarketPanel;
   private readonly hoard: HoardPanel;
   /** The island, for the one window that asks it things directly. */
   private readonly island: Island | null;
@@ -215,6 +217,13 @@ export class UI {
     // you know and where they are, and what has been written.
     const socialWin = this.windows.create({ id: 'social', title: 'Social', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
     this.social = new SocialPanel(socialWin, game, this.island);
+    /*
+     * Where goods change hands. Beside the social window because it is the
+     * same subject — other people — and reads its roll of who you know rather
+     * than keeping a second one.
+     */
+    const marketWin = this.windows.create({ id: 'market', title: 'Market', x: 12, y: 56, width: 360, height: 440, anchor: 'tr', open: false });
+    this.market = new MarketPanel(marketWin, game, this.island, () => this.social.folk());
     /*
      * Not on the Menu, because it is not a window you open — it is a window a
      * particular map opens. Reading a second map while the first is up shows
@@ -354,6 +363,7 @@ export class UI {
     this.stores.update(performance.now());
     this.deedPanel.update(performance.now());
     this.social.update(performance.now() / 1000);
+    this.market.update(1 / 60);
     this.hoard.update(performance.now() / 1000);
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());

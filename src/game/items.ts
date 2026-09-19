@@ -492,6 +492,11 @@ export interface Item {
    */
   keyed?: number;
   /**
+   * What it is asking, in silver, laid out on a stall. Absent on everything
+   * that is not for sale, which is nearly everything.
+   */
+  price?: number;
+  /**
    * The piece a casting is of: the id of what it becomes at the anvil. A
    * mould poured at a smelter gives one of these rather than the piece
    * itself, and the anvil beats it true. The island keeps the same column.

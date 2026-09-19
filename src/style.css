@@ -757,6 +757,31 @@ kbd {
   color: var(--ui-text);
 }
 
+/* The market: a tickable pack, and a price you type in. */
+.market-pick {
+  display: grid;
+  gap: 2px;
+  max-height: 170px;
+  margin: 4px 0;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.market-pick label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.market-price {
+  width: 74px;
+}
+
+.market-note {
+  margin: 4px 0;
+  line-height: 1.45;
+}
+
 .goal-next-how {
   margin-top: 2px;
   color: var(--ui-dim);

@@ -58,6 +58,7 @@ export const WINDOWS: Array<{ label: string; bind: string; id: string }> = [
   { label: 'Events', bind: 'win_events', id: 'events' },
   { label: 'Map', bind: 'win_map', id: 'map' },
   { label: 'Wildermon', bind: 'win_wildermon', id: 'wildermon' },
+  { label: 'Market', bind: 'win_market', id: 'market' },
   { label: 'Journal', bind: 'win_journal', id: 'journal' },
   { label: 'Ledger', bind: 'win_ledger', id: 'ledger' },
   { label: 'Stores', bind: 'win_stores', id: 'stores' },

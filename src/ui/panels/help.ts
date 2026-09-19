@@ -679,6 +679,28 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>Money, and three ways to spend it</h3>
+    <p>Coins have been struck on this island since there was an anvil to strike them on, and until
+    now they have bought nothing at all. One number settles it: <b>a gold coin is worth ten
+    silver</b>, every price is named in silver, and change comes back in silver. Paying takes your
+    largest coins first, so eleven silver out of a gold and five leaves you the four rather than
+    breaking the small change.</p>
+    <p>Three ways goods change hands, and they are three because they answer three different
+    questions. The <b>Market</b> window (<kbd>U</kbd>) holds all of them.</p>
+    <p><b>A deal</b> is two people standing together. Tick what you are giving, name what you want
+    for it, and choose who: the offer goes out with its terms written down, and whatever you put up
+    is held out of your pack while it stands, so nothing offered can be eaten, sold or promised
+    twice. They take it whole or turn it down whole — there is nothing to re-read at the last
+    moment — and you can take it back until they answer. You both have to be within a few tiles to
+    shake on it.</p>
+    <p><b>A stall</b> is for when you are not there. Nail one up, put goods on the counter, set a
+    price on each, and it sells while you are asleep: the coins go into its till and wait for you.
+    It is the only thing on this island that does anything for you while you are away, and it is
+    the whole reason coins are worth striking.</p>
+    <p><b>A parcel</b> is for when neither of you is there. A letter has carried four hundred
+    characters and nothing else; it carries things now, posted at a <b>mailbox</b> and drawn out at
+    any other. Both ends want a box — without one you may still write, and nothing but words will
+    cross the island.</p>
     <h3>Who may do what on a settlement</h3>
     <p>Being asked onto somebody's land used to be all or nothing: everybody on the roll could dig
     up the gardens, empty the stores and pull the walls down. There are four standings now.</p>

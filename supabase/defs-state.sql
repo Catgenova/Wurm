@@ -132,6 +132,8 @@ alter table furniture_def add column if not exists well real;
 alter table furniture_def add column if not exists raw boolean not null default false;
 alter table furniture_def add column if not exists hive real;
 alter table furniture_def add column if not exists trash real;
+alter table furniture_def add column if not exists stall boolean not null default false;
+alter table furniture_def add column if not exists post boolean not null default false;
 alter table tile_def add column if not exists diggable boolean not null default false;
 create table if not exists relic_def (
   name text primary key, parts int not null, result text not null, difficulty real not null
@@ -1284,6 +1286,8 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_bookshelf', 'Build bookshelf', 'building a bookshelf', 'fine_carpentry', 'mallet', false, null, 0.05, 14, 20, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_larder', 'Build larder', 'building a larder', 'fine_carpentry', 'mallet', false, null, 0.05, 20, 26, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_barrel', 'Build barrel', 'building a barrel', 'fine_carpentry', 'mallet', false, null, 0.05, 10, 18, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_stall', 'Build market stall', 'building a market stall', 'fine_carpentry', 'mallet', false, null, 0.05, 18, 22, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_mailbox', 'Build mailbox', 'building a mailbox', 'fine_carpentry', 'mallet', false, null, 0.05, 10, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_lectern', 'Build lectern', 'building a lectern', 'fine_carpentry', 'mallet', false, null, 0.05, 9, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_coat_rack', 'Build coat rack', 'building a coat rack', 'fine_carpentry', 'mallet', false, null, 0.05, 6, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_planter', 'Build planter', 'building a planter', 'fine_carpentry', 'mallet', false, null, 0.05, 7, 10, false, true);
@@ -1709,6 +1713,8 @@ update species_def set glow = 5 where id = 'dragon';
 insert into item_def values ('altar', 'altar', 'misc', 1, false, null, null);
 insert into item_def values ('bell', 'bell', 'misc', 1, false, null, null);
 insert into item_def values ('brazier', 'brazier', 'misc', 1, false, null, null);
+insert into item_def values ('mailbox', 'mailbox', 'misc', 1, false, null, null);
+insert into item_def values ('stall', 'stall', 'misc', 1, false, null, null);
 insert into item_def values ('statue', 'statue', 'misc', 1, false, null, null);
 insert into plantable values (0);
 insert into plantable values (1);
@@ -3858,6 +3864,10 @@ insert into furniture_def values ('bookshelf', 'Bookshelf', 2, 1, 90, false, fal
 insert into furniture_def values ('larder', 'Larder', 2, 2, 150, false, false);
 insert into furniture_def values ('barrel', 'Barrel', 1, 1, null, false, false);
 update furniture_def set liquid = 80 where id = 'barrel';
+insert into furniture_def values ('stall', 'Market stall', 3, 2, 60, false, false);
+update furniture_def set stall = true where id = 'stall';
+insert into furniture_def values ('mailbox', 'Mailbox', 1, 1, 30, false, false);
+update furniture_def set post = true where id = 'mailbox';
 insert into furniture_def values ('lectern', 'Lectern', 1, 1, null, false, false);
 insert into furniture_def values ('coat_rack', 'Coat rack', 1, 1, null, false, false);
 insert into furniture_def values ('planter', 'Planter', 2, 1, null, false, false);
@@ -4525,6 +4535,15 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_barrel', 0, 'plank', 6);
 insert into recipe_input values ('make_barrel', 1, 'shaft', 2);
 insert into recipe_input values ('make_barrel', 2, 'nail', 10);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_stall', 'stall', 1, 'mallet', null, 'fine_carpentry', 'Build market stall', 'building a market stall', 18, 0.05, 22, false, false, 'wood', null, null, 'You nail up a counter, stretch the awning over it and stand back. Set a price on anything you lay out and it sells whether you are here or not. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the market stall apart again.');
+insert into recipe_input values ('make_stall', 0, 'plank', 12);
+insert into recipe_input values ('make_stall', 1, 'timber', 4);
+insert into recipe_input values ('make_stall', 2, 'cloth', 4);
+insert into recipe_input values ('make_stall', 3, 'nail', 26);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_mailbox', 'mailbox', 1, 'mallet', null, 'fine_carpentry', 'Build mailbox', 'building a mailbox', 10, 0.05, 18, false, false, 'wood', null, null, 'You nail up a box with a slot in it and a door on the back. A parcel goes in at one and comes out at any other. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the mailbox apart again.');
+insert into recipe_input values ('make_mailbox', 0, 'plank', 4);
+insert into recipe_input values ('make_mailbox', 1, 'ribbon', 2);
+insert into recipe_input values ('make_mailbox', 2, 'nail', 8);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_lectern', 'lectern', 1, 'mallet', null, 'fine_carpentry', 'Build lectern', 'building a lectern', 9, 0.05, 16, false, false, 'wood', null, null, 'You nail up a lectern with a good slant on it. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the lectern apart again.');
 insert into recipe_input values ('make_lectern', 0, 'plank', 4);
 insert into recipe_input values ('make_lectern', 1, 'shaft', 2);

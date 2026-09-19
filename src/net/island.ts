@@ -298,6 +298,37 @@ export interface Letter {
   at: number;
 }
 
+/**
+ * A deal standing between this body and somebody else, either way round.
+ *
+ * `mine` is whether this is one you are offering rather than one being
+ * offered to you, which decides whether the answer is "take it or turn it
+ * down" or "take it back".
+ */
+export interface Deal {
+  n: number;
+  mine: boolean;
+  who: string;
+  uid: string;
+  /** Silver asked for it, or silver offered with it. One or the other, never both. */
+  want: number;
+  give: number;
+  things: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null; rare: number | null }>;
+}
+
+/** A thing waiting in the post, and who sent it. */
+export interface Parcel {
+  id: number;
+  def: string;
+  ql: number;
+  dmg: number;
+  count: number;
+  extra: string | null;
+  rare: number | null;
+  letter: number | null;
+  from: string | null;
+}
+
 export interface IslandHooks {
   /** A line for the log, from the island rather than from here. */
   /**
@@ -1857,6 +1888,67 @@ export class Island {
   }
 
   /** One conversation, oldest first — and read, by the reading of it. */
+  /**
+   * The nine doors goods change hands through.
+   *
+   * Three shapes, because they answer three different questions: a deal is
+   * two people standing together, a stall is for when you are not there, and
+   * a parcel is for when neither of you is.
+   */
+  async offer(uid: string, items: number[], want = 0, give = 0): Promise<string | null> {
+    return this.asked('rpc_deal', { p_uid: uid, p_items: items, p_want: want, p_give: give });
+  }
+
+  async deals(): Promise<Deal[]> {
+    if (!this.info) return [];
+    const { data, error } = await supabase().rpc('rpc_deals', { p_world: this.info.id });
+    if (error || !data) return [];
+    return rowsIn<Deal>(data);
+  }
+
+  async answerDeal(n: number, yes: boolean): Promise<string | null> {
+    return this.asked('rpc_deal_answer', { p_n: n, p_yes: yes });
+  }
+
+  async setPrice(item: number, silver: number): Promise<string | null> {
+    return this.asked('rpc_price', { p_item: item, p_silver: silver });
+  }
+
+  async buy(item: number): Promise<string | null> {
+    return this.asked('rpc_buy', { p_item: item });
+  }
+
+  async takings(placed: number): Promise<string | null> {
+    return this.asked('rpc_takings', { p_id: placed });
+  }
+
+  async post(uid: string, text: string, items: number[]): Promise<string | null> {
+    return this.asked('rpc_parcel', { p_uid: uid, p_text: text, p_items: items });
+  }
+
+  async waiting(): Promise<{ at_box: boolean; things: Parcel[] }> {
+    if (!this.info) return { at_box: false, things: [] };
+    const { data, error } = await supabase().rpc('rpc_parcels', { p_world: this.info.id });
+    if (error || !data) return { at_box: false, things: [] };
+    const got = data as { at_box?: boolean; things?: unknown };
+    return { at_box: !!got.at_box, things: rowsIn<Parcel>(got.things) };
+  }
+
+  async collect(): Promise<string | null> {
+    return this.asked('rpc_collect', {});
+  }
+
+  /**
+   * One shape for every door that answers with a refusal or nothing: the
+   * refusal when there is one, null when it went through.
+   */
+  private async asked(fn: string, args: Record<string, unknown>): Promise<string | null> {
+    if (!this.info) return 'You are not on an island.';
+    const { data, error } = await supabase().rpc(fn, { p_world: this.info.id, ...args });
+    if (error) return error.message;
+    return ((data as { why?: string } | null)?.why) ?? null;
+  }
+
   async letters(uid: string, limit = 60): Promise<Letter[]> {
     if (!this.info) return [];
     const { data, error } = await supabase().rpc('rpc_letters', {

@@ -301,6 +301,9 @@ out.push(`alter table furniture_def add column if not exists well real;`);
 out.push(`alter table furniture_def add column if not exists raw boolean not null default false;`);
 out.push(`alter table furniture_def add column if not exists hive real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
+/* A counter that sells while you are away, and a box the post uses. */
+out.push(`alter table furniture_def add column if not exists stall boolean not null default false;`);
+out.push(`alter table furniture_def add column if not exists post boolean not null default false;`);
 /* Ground worth turning over with a trowel: soil and sand, not bare rock or
  * standing water. */
 out.push(`alter table tile_def add column if not exists diggable boolean not null default false;`);
@@ -1230,6 +1233,8 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.liquid !== undefined) out.push(`update furniture_def set liquid = ${q(f.liquid)} where id = ${q(f.id)};`);
   if (f.well !== undefined) out.push(`update furniture_def set well = ${q(f.well)} where id = ${q(f.id)};`);
   if (f.raw) out.push(`update furniture_def set raw = true where id = ${q(f.id)};`);
+  if (f.stall) out.push(`update furniture_def set stall = true where id = ${q(f.id)};`);
+  if (f.post) out.push(`update furniture_def set post = true where id = ${q(f.id)};`);
   if (f.bell) out.push(`update furniture_def set bell = true where id = ${q(f.id)};`);
   if (f.landmark) out.push(`update furniture_def set landmark = true where id = ${q(f.id)};`);
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);

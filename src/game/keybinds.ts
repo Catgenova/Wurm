@@ -61,6 +61,7 @@ export const BINDS: BindDef[] = [
   { id: 'win_map', label: 'Map', hint: 'The island as far as you have seen it.', group: 'Windows', keys: ['KeyM'] },
   { id: 'win_wildermon', label: 'Wildermon', hint: 'Your tamed creatures, what they carry and what they are set to.', group: 'Windows', keys: ['KeyP'] },
   { id: 'win_deed', label: 'Settlement', hint: 'Your deed at a glance.', group: 'Windows', keys: ['KeyN'] },
+  { id: 'win_market', label: 'Market', hint: 'Deals offered and taken, what your stall has sold, and parcels waiting in the post.', group: 'Windows', keys: ['KeyU'] },
   { id: 'win_social', label: 'Social', hint: 'Who is waiting on you, who you know and where they are, and what has been written to you.', group: 'Windows', keys: ['KeyY'] },
   { id: 'win_ledger', label: 'Ledger', hint: 'Everything you have ever made.', group: 'Windows', keys: ['KeyB'] },
   { id: 'win_stores', label: 'Stores', hint: 'What is in every crate and cupboard on your deed, in one list.', group: 'Windows', keys: ['KeyU'] },

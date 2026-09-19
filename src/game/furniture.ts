@@ -18,6 +18,17 @@ export interface FurnitureDef {
   h: number;
   /** Things it holds, for the pieces that hold anything. */
   capacity?: number;
+  /**
+   * A counter that sells. What is in it carries a price, anybody may buy from
+   * it, and the coins wait in its till for whoever set it up.
+   */
+  stall?: boolean;
+  /**
+   * A box the post uses. A parcel goes in at one and comes out at any other,
+   * which is the only way anything but words crosses an island between two
+   * people who are not standing together.
+   */
+  post?: boolean;
   /** A board made to be written on: its name is painted across the world. */
   sign?: boolean;
   /** Boards, shafts and nails it is nailed together from. */
@@ -146,6 +157,26 @@ export const FURNITURE: FurnitureDef[] = [
   piece('bookshelf', 'Bookshelf', 2, 1, [['plank', 10], ['timber', 2], ['nail', 22]], 20, 14, 'You nail up a bookshelf with a cornice on top.', 90),
   piece('larder', 'Larder', 2, 2, [['plank', 16], ['timber', 4], ['nail', 34]], 26, 20, 'You nail up a deep larder, the biggest thing you can store in.', 150),
   piece('barrel', 'Barrel', 1, 1, [['plank', 6], ['shaft', 2], ['nail', 10]], 18, 10, 'You raise the staves and hoop a barrel.', undefined, { liquid: 80 }),
+  /*
+   * The two pieces that exist for other people.
+   *
+   * A **stall** is a counter with goods on it and a price on each, and it
+   * sells while you are asleep: anybody standing at it may buy, the coins go
+   * into its till, and you empty the till when you next come by. It is the
+   * only thing on this island that does anything for you while you are not
+   * here, and it is the whole reason coins are worth striking.
+   *
+   * A **mailbox** is the other half of the post. A letter has carried four
+   * hundred characters and nothing else since letters landed; a parcel goes
+   * in at one of these and comes out at another, which is what turns writing
+   * to somebody into sending them something.
+   */
+  piece('stall', 'Market stall', 3, 2, [['plank', 12], ['timber', 4], ['cloth', 4], ['nail', 26]], 22, 18,
+    'You nail up a counter, stretch the awning over it and stand back. Set a price on anything you lay out and it sells whether you are here or not.', 60,
+    { stall: true }),
+  piece('mailbox', 'Mailbox', 1, 1, [['plank', 4], ['ribbon', 2], ['nail', 8]], 18, 10,
+    'You nail up a box with a slot in it and a door on the back. A parcel goes in at one and comes out at any other.', 30,
+    { post: true }),
   piece('lectern', 'Lectern', 1, 1, [['plank', 4], ['shaft', 2], ['nail', 8]], 16, 9, 'You nail up a lectern with a good slant on it.'),
   piece('coat_rack', 'Coat rack', 1, 1, [['plank', 1], ['shaft', 4], ['nail', 6]], 10, 6, 'You nail up a rack of pegs for the door.'),
   piece('planter', 'Planter', 2, 1, [['plank', 6], ['nail', 10]], 10, 7, 'You nail up a planter and fill it with earth.'),
@@ -270,6 +301,14 @@ export interface PlacedFurniture {
    * `locks.ts`. Only means anything on a piece that holds things.
    */
   lock?: number;
+  /**
+   * What a stall has taken, in silver, waiting for whoever set it up.
+   *
+   * It goes into the till rather than into a pocket because the pocket is
+   * very likely asleep — which is the whole point of a stall and the only
+   * thing on this island that does anything for you while you are away.
+   */
+  till?: number;
 }
 
 /** The two liquids worth keeping a barrel for. */

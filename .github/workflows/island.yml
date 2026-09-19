@@ -690,6 +690,24 @@ jobs:
           npx esbuild supabase/test/ranks.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/ranks.mjs --log-level=error
           node node_modules/.cache/ranks.mjs
+      - name: Coins that buy something, three ways
+        run: |
+          # Coins have existed since there was an anvil to strike them on and
+          # have never bought anything, because there was nothing to buy them
+          # with and nobody to buy from. One number settles the money — a gold
+          # coin is worth ten silver — and three ways goods change hands,
+          # because they answer three different questions: a deal is two
+          # people standing together, a stall is for when you are not there,
+          # and a parcel is for when neither of you is.
+          #
+          # The arithmetic is checked on both sides, including that change
+          # comes back in the fewest coins and that a purse which cannot cover
+          # a price pays nothing at all rather than part of it. And that the
+          # two functions which mint and destroy coins are the island's alone:
+          # a door onto either would be a door onto making money.
+          npx esbuild supabase/test/trade.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/trade.mjs --log-level=error
+          node node_modules/.cache/trade.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

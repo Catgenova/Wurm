@@ -290,6 +290,7 @@ const PRESSES: Record<string, () => void> = {
   win_ledger: () => ui.toggleWindow('ledger'),
   win_stores: () => ui.toggleWindow('stores'),
   win_journal: () => ui.toggleWindow('journal'),
+  win_market: () => ui.toggleWindow('market'),
   win_settings: () => ui.toggleWindow('settings'),
   win_help: () => ui.toggleWindow('help'),
   walk_home: () => game.walkHome(),
