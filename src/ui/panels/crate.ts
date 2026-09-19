@@ -1,7 +1,7 @@
 import { crateCentre, crateName, crateCapacity, crateUnits } from '../../game/crates';
 import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
 import { bloodMul } from '../../game/creatures';
-import { ACTION_BY_ID } from '../../game/actions';
+import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { bagAdd, bagRefuses, bagRoom, bagTake, itemDef, type Item, itemName } from '../../game/items';
 import type { MenuItem } from '../contextmenu';
@@ -11,6 +11,16 @@ import type { UIWindow } from '../windows';
 /** A crate or a piece of storage furniture, seen through the same window. */
 export interface Store {
   title: string;
+  /**
+   * Which one it is: a crate id, a placed id, a bag's uid, a beast's id.
+   *
+   * The window knew which container it was showing and the ask did not, so a
+   * put went into whichever container stood nearest — "trying to place any
+   * items in any of the pine crates gives an error that the maple crate is
+   * full", off a rack with eight crates on one tile. This is what the ask
+   * carries now.
+   */
+  id: number;
   items: Item[];
   capacity: number;
   centre: [number, number];
@@ -110,6 +120,7 @@ export class CratePanel {
     if (crate) {
       return {
         title: crateName(crate),
+        id: crate.id,
         items: crate.items,
         capacity: crateCapacity(crate),
         centre: crateCentre(crate),
@@ -126,6 +137,7 @@ export class CratePanel {
       const units = (): number => beast.pannier.reduce((n, it) => n + it.count, 0);
       return {
         title: `${beast.name}'s panniers`,
+        id: beast.id,
         items: beast.pannier,
         capacity: cap,
         centre: [beast.x, beast.y],
@@ -141,6 +153,7 @@ export class CratePanel {
     if (bag && bagRoom(bag)) {
       return {
         title: `${itemName(bag)} (QL ${bag.ql.toFixed(0)})`,
+        id: bag.uid,
         kind: 'bag',
         items: bag.inside ?? [],
         capacity: bagRoom(bag),
@@ -164,6 +177,7 @@ export class CratePanel {
     if (piece) {
       return {
         title: `${furnitureName(piece)} (QL ${piece.ql.toFixed(0)})`,
+        id: piece.id,
         items: piece.items,
         capacity: furnitureCapacity(piece),
         centre: furnitureCentre(piece),
@@ -177,12 +191,39 @@ export class CratePanel {
     return undefined;
   }
 
+  /**
+   * The island's door for the store that is open, when there is an island.
+   *
+   * Every button on this bar moved rows about in the browser's own copy and
+   * told nobody, which on an island means the next answer puts them back:
+   * "container inventories need to update visually live on the browser. they
+   * show as empty when transferring in items." A per-row Take has gone through
+   * `take_from_store` since the rubber-banding was reported; the bar had not
+   * caught up.
+   */
+  private door(store: Store, what: 'in' | 'out'): ActionDef | undefined {
+    if (!this.game.ask || store.kind === 'carried') return undefined;
+    const id = what === 'out'
+      ? store.kind === 'crate' ? 'crate_take_all' : store.kind === 'bag' ? 'empty_bag' : 'furniture_take_all'
+      : store.kind === 'crate' ? 'store_in_crate' : store.kind === 'bag' ? 'stow_item' : 'store_in_furniture';
+    return ACTION_BY_ID.get(id);
+  }
+
   /** Empty the open store into the pack, as far as it will go. */
   private takeAll(): void {
     const store = this.store();
     if (!store) return;
     if (!this.withinReach()) {
       this.game.logMsg(`Stand next to the ${store.what} to take things out.`, 'error');
+      return;
+    }
+    const door = this.door(store, 'out');
+    if (door) {
+      // A bag is emptied by naming the bag; a crate and a chest by naming
+      // themselves. The island says what came out.
+      this.game.requestAction(door, store.kind === 'bag'
+        ? { kind: 'item', uid: store.id }
+        : { kind: store.kind === 'crate' ? 'crate' : 'furniture', id: store.id });
       return;
     }
     let moved = 0;
@@ -210,6 +251,24 @@ export class CratePanel {
       return;
     }
     const kinds = new Set(store.items.map((it) => it.id));
+    const door = this.door(store, 'in');
+    if (door) {
+      /*
+       * One ask a stack, which is what dragging them in one at a time already
+       * did. The island decides what each store will hold — a raw material bin
+       * takes no tools — so the asks go out and it answers for each of them,
+       * rather than this side guessing and being corrected a moment later.
+       */
+      let asked = 0;
+      for (const item of [...this.game.inventory.items]) {
+        if (item.locked || this.game.isEquipped(item.uid)) continue;
+        if (sameKinds && !kinds.has(item.id)) continue;
+        asked++;
+        this.game.requestAction(door, { kind: 'item', uid: item.uid, count: item.count, into: store.id });
+      }
+      if (!asked) this.game.logMsg(`There is nothing loose to put in the ${store.what}.`, 'error');
+      return;
+    }
     let moved = 0;
     let refused = '';
     for (const item of [...this.game.inventory.items]) {

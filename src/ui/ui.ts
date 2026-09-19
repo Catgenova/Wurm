@@ -278,7 +278,9 @@ export class UI {
       const held = to === 'inventory'
         ? store.items.find((it) => it.uid === p.uid)
         : g.inventory.get(p.uid);
-      g.requestAction(def, { kind: 'item', uid: p.uid, count: held?.count ?? 1 });
+      // Which store it was dragged into, so that it goes into that one rather
+      // than into whichever happens to stand nearest.
+      g.requestAction(def, { kind: 'item', uid: p.uid, count: held?.count ?? 1, into: store.id });
       return;
     }
     if (to === 'inventory') {

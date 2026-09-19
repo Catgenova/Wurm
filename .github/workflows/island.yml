@@ -403,6 +403,15 @@ jobs:
           npx esbuild supabase/test/sow.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/sow.mjs --log-level=error
           node node_modules/.cache/sow.mjs
+      - name: The store you aimed at is the store it goes in
+        run: |
+          # Reported off a crate rack: "trying to place any items in any of the
+          # pine crates gives an error that the maple crate is full". Putting a
+          # thing away never said which container, so it went into whichever
+          # stood nearest — which on a rack of eight is always the same one.
+          npx esbuild supabase/test/into.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/into.mjs --log-level=error
+          node node_modules/.cache/into.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

@@ -10260,3 +10260,89 @@ select '1013c. every crate on the deed full: ' || :'jammed' || ' rounds, it is h
           and on_my_deed(:'world2', :'ivar', i.gx, i.gy)) || ' things lying about the deed, and Ivar was told: '
      || coalesce((select string_agg(text, ' | ') from event where world_id = :'world2' and uid = :'ivar'
                   and text like '%nowhere on the deed%'), 'nothing');
+
+\echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
+\echo '--- the store you aimed at is the store it goes in'
+/*
+ * Reported off a crate rack with eight plank crates on it: "trying to place
+ * any items in any of the pine crates gives an error that the maple crate is
+ * full", and with it "container inventories ... show as empty when
+ * transferring in items".
+ *
+ * One cause. Putting a thing into a container never said which container:
+ * `store_in_crate` took `nearest_crate` and `store_in_furniture` took
+ * `nearest_store`. A crate standing on its own is its own nearest and nobody
+ * noticed; a rack stands eight of them on one tile, so every put went into the
+ * one nearest the feet, the crate on the screen stayed empty, and once the
+ * near one was full every put was refused in its name.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+-- Nothing in hand and nothing lined up behind it: a put made with a job
+-- already running is queued rather than done, and this is about where the
+-- thing lands rather than about the queue.
+update player set act = null, act_target = null, act_started = null, act_ends = null,
+    act_left = null, act_queue = '[]' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+-- A rack in miniature: a full maple crate and an empty pine one on one tile,
+-- Ivar standing at the maple with ten planks in his pack.
+delete from item i where i.world_id = :'world2' and i.holder = 'crate' and i.crate in (91, 92) \g /dev/null
+delete from crate where world_id = :'world2' and id in (91, 92) \g /dev/null
+insert into crate (world_id, id, kind, x, y, sx, sy, deed, made_by, material) values
+  (:'world2', 91, 'plank', 6, 7, 0, 0, false, :'ivar', 'maple'),
+  (:'world2', 92, 'plank', 6, 7, 3, 3, false, :'ivar', 'pine');
+insert into item (world_id, holder, crate, def, ql, count)
+  select :'world2', 'crate', 91, 'rock_shards', 20, crate_capacity(c)
+  from crate c where c.world_id = :'world2' and c.id = 91;
+update player set x = 6.1, y = 7.1, moved_at = now() - interval '2 seconds'
+  where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' and def = 'plank' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count)
+  values (:'world2', 'player', :'ivar', 'plank', 40, 10) returning id as plank \gset
+select '1014. two crates on one tile, as they stand on a rack: '
+     || crate_name((select c from crate c where c.world_id = :'world2' and c.id = 91)) || ' '
+     || crate_units(:'world2', 91) || '/' || crate_capacity((select c from crate c where c.world_id = :'world2' and c.id = 91))
+     || ' and ' || crate_name((select c from crate c where c.world_id = :'world2' and c.id = 92)) || ' '
+     || crate_units(:'world2', 92) || '/' || crate_capacity((select c from crate c where c.world_id = :'world2' and c.id = 92))
+     || ' — the nearest is ' || crate_name(nearest_crate(:'world2', 6.1, 7.1));
+select '1014b. naming no crate still means the nearest: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate',
+          jsonb_build_object('kind', 'item', 'uid', :'plank', 'count', 10)), 'ALLOWED')
+     || ' | naming the empty one: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate',
+          jsonb_build_object('kind', 'item', 'uid', :'plank', 'count', 10, 'into', 92)), 'ALLOWED')
+     || ' | naming the full one: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate',
+          jsonb_build_object('kind', 'item', 'uid', :'plank', 'count', 10, 'into', 91)), 'ALLOWED');
+select rpc_act(:'world2', 'store_in_crate',
+  jsonb_build_object('kind', 'item', 'uid', :'plank', 'count', 10, 'into', 92), 1) \g /dev/null
+select '1014c. put in the one that was named: maple ' || crate_units(:'world2', 91)
+     || ', pine ' || crate_units(:'world2', 92) || ', and Ivar was told: '
+     || (select text from event where world_id = :'world2' and uid = :'ivar' order by n desc limit 1);
+
+-- The same for the things a chest is: a coffer full to the lid and a chest
+-- beside it with room, and the ask names one of them.
+insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by)
+  values (:'world2', 'furniture', 'coffer', 6, 7, 0, 0, 6.2, 7.2, 40, :'ivar') returning id as near \gset
+insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by)
+  values (:'world2', 'furniture', 'chest', 6, 7, 2, 2, 6.7, 7.7, 40, :'ivar') returning id as far \gset
+insert into item (world_id, holder, placed, def, ql, count)
+  select :'world2', 'furniture', :'near', 'plank', 20, furniture_capacity(p) from placed p where p.id = :'near';
+insert into item (world_id, holder, holder_uid, def, ql, count)
+  values (:'world2', 'player', :'ivar', 'plank', 40, 5) returning id as five \gset
+select '1015. a full ' || placed_name((select p from placed p where p.id = :'near'))
+     || ' and an empty ' || placed_name((select p from placed p where p.id = :'far'))
+     || ' side by side: naming none: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_furniture',
+          jsonb_build_object('kind', 'item', 'uid', :'five', 'count', 5)), 'ALLOWED')
+     || ' | naming the full one: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_furniture',
+          jsonb_build_object('kind', 'item', 'uid', :'five', 'count', 5, 'into', :'near')), 'ALLOWED');
+select rpc_act(:'world2', 'store_in_furniture',
+  jsonb_build_object('kind', 'item', 'uid', :'five', 'count', 5, 'into', :'far'), 1) \g /dev/null
+select '1015b. put in the chest that was named: coffer '
+     || furniture_units((select p from placed p where p.id = :'near'))
+     || ', chest ' || furniture_units((select p from placed p where p.id = :'far')) || ', and Ivar was told: '
+     || (select text from event where world_id = :'world2' and uid = :'ivar' order by n desc limit 1);

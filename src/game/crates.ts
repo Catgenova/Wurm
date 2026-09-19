@@ -84,6 +84,28 @@ const nearCrate = (g: Game, c: PlacedCrate): boolean => {
   return Math.hypot(cx - g.player.x, cy - g.player.y) <= 2.4;
 };
 
+/**
+ * The crate a thing is being put into: the one the ask names, and the nearest
+ * when it names none.
+ *
+ * It was always the nearest, which is fine at a crate standing on its own and
+ * wrong everywhere else. Reported from a rack: "trying to place any items in
+ * any of the pine crates gives an error that the maple crate is full". Eight
+ * crates stand on one tile on a rack; the nearest of the eight was the maple;
+ * so every drag into an open pine crate was aimed at the maple, and once the
+ * maple was full every one of them was refused in the maple's name. A crate
+ * window that says which crate it is has to be able to say so in the ask.
+ */
+const crateInto = (g: Game, t: Target): PlacedCrate | undefined => {
+  if (t.kind === 'item' && t.into !== undefined) {
+    const named = g.crates.get(t.into);
+    // Named and within reach: a crate you have walked away from is not the
+    // crate you are putting something in, and the island reads it the same way.
+    if (named && nearCrate(g, named)) return named;
+  }
+  return g.nearestCrate();
+};
+
 export const CRATE_ACTIONS: ActionDef[] = [
   {
     id: 'place_crate',
@@ -180,26 +202,27 @@ export const CRATE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => t.kind === 'item' && g.crates.size > 0 && !crateKindOfItem(g.inventory.get(t.uid)?.id ?? ''),
     check: (t, g) => {
-      const c = g.nearestCrate();
+      const c = crateInto(g, t);
       if (!c || !nearCrate(g, c)) return 'Stand next to a crate.';
       if (t.kind === 'item') {
         const item = g.inventory.get(t.uid);
-        if (item && crateUnits(c) + (t.count ?? 1) > crateCapacity(c)) return `The ${CRATE_DEFS[c.kind].name.toLowerCase()} is full.`;
+        // Named, so that a refusal is about the crate you were aiming at.
+        if (item && crateUnits(c) + (t.count ?? 1) > crateCapacity(c)) return `The ${crateName(c).toLowerCase()} is full.`;
       }
       return null;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
-      const c = g.nearestCrate();
+      const c = crateInto(g, t);
       if (!c) return;
       const item = g.inventory.take(t.uid, t.count ?? 1);
       if (!item) return;
       if (!g.crateAdd(c, item)) {
         g.inventory.addItem(item);
-        g.logMsg('The crate is full.', 'error');
+        g.logMsg(`The ${crateName(c).toLowerCase()} is full.`, 'error');
         return;
       }
-      g.logMsg(`You put ${item.count > 1 ? `${item.count} × ` : 'the '}${itemName(item).toLowerCase()} in the ${CRATE_DEFS[c.kind].name.toLowerCase()}.`, 'event');
+      g.logMsg(`You put ${item.count > 1 ? `${item.count} × ` : 'the '}${itemName(item).toLowerCase()} in the ${crateName(c).toLowerCase()}.`, 'event');
     },
   },
 ];

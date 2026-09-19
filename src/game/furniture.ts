@@ -409,6 +409,20 @@ const nearPiece = (g: Game, f: PlacedFurniture): boolean => {
   return Math.hypot(cx - g.player.x, cy - g.player.y) <= 2.4;
 };
 
+/**
+ * The piece a thing is being put away into: the one the ask names, and
+ * otherwise the nearest that will have it — which is all it used to be. Two
+ * chests side by side took what you gave either of them into whichever stood
+ * closer, the same way a rack of crates did.
+ */
+const storeInto = (g: Game, t: Target, item: Item): PlacedFurniture | undefined => {
+  if (t.kind === 'item' && t.into !== undefined) {
+    const named = g.furniture.get(t.into);
+    if (named && furnitureCapacity(named)) return named;
+  }
+  return g.nearestStore(item);
+};
+
 export const FURNITURE_ACTIONS: ActionDef[] = [
   {
     id: 'place_furniture',
@@ -540,12 +554,12 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && !isFurniture(item.id) && g.nearestStore(item) !== undefined;
+      return !!item && !isFurniture(item.id) && storeInto(g, t, item) !== undefined;
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
-      const f = item && g.nearestStore(item);
+      const f = item && storeInto(g, t, item);
       if (!item) return 'It is gone.';
       if (!f || !nearPiece(g, f)) {
         // Say why the thing beside you will not take it, rather than that nothing will.
@@ -565,7 +579,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const held = g.inventory.get(t.uid);
-      const f = held && g.nearestStore(held);
+      const f = held && storeInto(g, t, held);
       if (!f) return;
       const item = g.inventory.take(t.uid, t.count ?? 1);
       if (!item) return;

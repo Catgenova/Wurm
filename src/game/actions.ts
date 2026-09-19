@@ -79,7 +79,25 @@ export type Target =
   | { kind: 'post'; id: number; creatureId?: number }
   | { kind: 'trap'; id: number }
   | { kind: 'bridge'; id: number }
-  | { kind: 'item'; uid: number; count?: number; spell?: string }
+  | {
+      kind: 'item';
+      uid: number;
+      count?: number;
+      spell?: string;
+      /**
+       * The store this is going into, when the ask knows which one.
+       *
+       * It did not, and everything went into whichever container happened to
+       * be nearest. Reported from a crate rack: "trying to place any items in
+       * any of the pine crates gives an error that the maple crate is full" —
+       * eight crates stand on one tile there, the nearest of them was the
+       * maple, and every put was aimed at it however carefully you had opened
+       * one of the others. A crate id for `store_in_crate`, a placed id for
+       * `store_in_furniture`; left out, the nearest is still taken, which is
+       * what an item's own menu means by "Put in crate".
+       */
+      into?: number;
+    }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string };
 
