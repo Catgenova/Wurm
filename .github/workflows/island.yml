@@ -989,6 +989,11 @@ jobs:
                  -c "$CLOCKS" \
             || echo "::warning::No clocks listed — either pg_cron is not installed on this project or cron.job could not be read. The island's heartbeat and its stocking both depend on it."
 
+          # `cron.job_run_details` keys on `jobid`, not `jobname` -- the first
+          # cut of this asked for `d.jobname` and got `column d.jobname does
+          # not exist` three times over, which is how a diagnostic that has
+          # never run once tends to go. The join is the whole fix.
+          #
           # And how those clocks have actually been getting on, which is the
           # line this step was missing when somebody first said the island had
           # gone slow.
@@ -1002,14 +1007,15 @@ jobs:
           # the log with no other sign of itself. Grouped, because three
           # thousand copies of one sentence is one fact.
           RUNS=$(cat <<'EOSQL'
-          select d.jobname,
+          select j.jobname,
                  d.status,
                  count(*) as runs,
                  to_char(max(d.end_time), 'MM-DD HH24:MI') as last_seen,
                  left(coalesce(d.return_message, ''), 120) as said
             from cron.job_run_details d
+            join cron.job j on j.jobid = d.jobid
            where d.start_time > now() - interval '6 hours'
-           group by d.jobname, d.status, left(coalesce(d.return_message, ''), 120)
+           group by j.jobname, d.status, left(coalesce(d.return_message, ''), 120)
            order by d.status <> 'succeeded' desc, count(*) desc
            limit 20;
           EOSQL
