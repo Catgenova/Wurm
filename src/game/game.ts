@@ -52,6 +52,7 @@ import { hasStep, MEDITATION, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
+import { strokeOf } from '../audio/sound';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
 
@@ -2567,6 +2568,33 @@ export class Game {
     this.events.emit('action');
   }
 
+  /**
+   * Say what a go sounded like, and where.
+   *
+   * The place is the target when the job has one out in the world and the
+   * body when it does not, because a needle and a hammer both happen where
+   * you are standing. The jobs that are not work make no sound at all — the
+   * same rule that decides whether they teach the hands anything, asked the
+   * same way, so a click that costs nothing stays silent.
+   */
+  private soundOfWork(def: ActionDef, target: Target): void {
+    const kind = strokeOf(def);
+    if (!kind) return;
+    let x = this.player.x;
+    let y = this.player.y;
+    if (target.kind === 'tile') {
+      x = target.x + 0.5;
+      y = target.y + 0.5;
+    } else if (target.kind === 'creature') {
+      const c = this.creatures.get(target.id);
+      if (c) {
+        x = c.x;
+        y = c.y;
+      }
+    }
+    this.events.emit('work', x, y, kind);
+  }
+
   private completeAction(): void {
     const a = this.action;
     if (!a) return;
@@ -2586,6 +2614,7 @@ export class Game {
       const c = this.creatures.get(a.target.id);
       if (c) this.events.emit('strike', c.x, c.y);
     }
+    this.soundOfWork(a.def, a.target);
     const again = a.def.perform(a.target, this) === true;
     if (a.def.tool) this.wearTool(a.def.tool);
     const cost = this.staminaCost(a.def.stamina);
@@ -2802,6 +2831,12 @@ export class Game {
       goes,
     };
     if (!same) this.events.emit('action');
+    // On an island the work is done over there and only reported here, so
+    // `completeAction` never runs and the sound has to come off the report.
+    // A go has landed when the same job comes back with one fewer to do.
+    if (had && had.def.id === def.id && left !== undefined && had.left !== undefined && left < had.left) {
+      this.soundOfWork(def, this.action.target);
+    }
   }
 
   requestAction(def: ActionDef, target: Target, goes?: number): void {

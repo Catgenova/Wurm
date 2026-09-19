@@ -11,16 +11,23 @@
 # megabytes of island survives the trip.
 name: Island
 
+# The paths are the whole of `src`, which they were not. They used to be
+# `supabase/**` and `src/net/**`, from when everything in this suite was about
+# the island and the wire. That has not been true for a while: half the tests
+# under `supabase/test/` now measure browser code — what a beast is drawn
+# turned to, what a building shelters, what a job sounds like — and a change
+# to `src/render/sprites.ts` that broke `turned.ts` would have gone through
+# without the suite running at all.
 on:
   push:
     paths:
       - 'supabase/**'
-      - 'src/net/**'
+      - 'src/**'
       - '.github/workflows/island.yml'
   pull_request:
     paths:
       - 'supabase/**'
-      - 'src/net/**'
+      - 'src/**'
   workflow_dispatch:
     inputs:
       live:
@@ -572,6 +579,24 @@ jobs:
           npx esbuild supabase/test/turned.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/turned.mjs --log-level=error
           node node_modules/.cache/turned.mjs
+      - name: The island heard from where the camera is standing
+        run: |
+          # There was no sound in this game at all — no AudioContext anywhere
+          # in the source — so a pickaxe in marble and a needle in linen were
+          # both silence. Everything is synthesised now, and placed in the mix
+          # off the screen rather than out of the world, so the camera is the
+          # ear and what you have looked away from goes quiet.
+          #
+          # Whether any of it sounds good is what ears are for. What is
+          # measured here is that every one of the three hundred and
+          # ninety-three jobs that costs time or wind is either given a noise
+          # or named as making none — a job missing from the tables would be
+          # silent, and silently — and that the mix is the shape it claims:
+          # centre loud, either side panned opposite ways, and far enough off
+          # the view not started at all.
+          npx esbuild supabase/test/heard.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/heard.mjs --log-level=error
+          node node_modules/.cache/heard.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

@@ -43,6 +43,15 @@ export const SETTING_DEFAULTS = {
   follow: true,
   /** Push the view along when the cursor rests against the edge of the screen. */
   edgePan: true,
+  /**
+   * How loud the island is, 0 for silence.
+   *
+   * Kept beside the camera and the keys rather than in the save, for the same
+   * reason they are: how loud a room is, is a fact about the room, and
+   * carrying it in a save means a volume that changes under you when you load
+   * somebody else's world.
+   */
+  volume: 0.55,
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {

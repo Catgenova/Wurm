@@ -679,6 +679,23 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>What you can hear</h3>
+    <p>The island makes a noise now, and what the noise is depends on what is being hit.
+    <b>Footfalls</b> take their sound from the ground: grass is a brush with no edge on it, sand
+    and gravel are sharper, laid stone is a hard click, a plank deck answers under you with a note
+    in it, and snow is a squeak. Water closes over a boot rather than being stepped on.</p>
+    <p><b>Work</b> is the same idea: the trade decides, because a mason is hitting stone whatever
+    he is making out of it. A spade going into clay, a point cracking into rock, an axe biting a
+    trunk, a hammer on an anvil — the anvil is the loud one, and the only thing in the game with a
+    real ring to it.</p>
+    <p>Everything is placed where it is happening, and the <b>camera is the ear</b>: a smelter you
+    have walked away from goes quiet, and so does one you have merely looked away from, because
+    both pan and volume are measured off the screen. Pull the view back and the whole island gets
+    further away and quieter together.</p>
+    <p>Nothing here is a recording. Every sound in the game is made out of filtered noise and a
+    handful of oscillators at the moment it is wanted, which is why there is nothing to download.
+    <b>Settings</b> (<kbd>O</kbd>) has the volume at the top of the Display tab; sliding it to
+    nothing turns the island off entirely.</p>
     <h3>Light after dark</h3>
     <p>Night takes <b>three quarters</b> of your sight, which is enough to be a reason to stop walking.
     Two things go in your hand against it.</p>

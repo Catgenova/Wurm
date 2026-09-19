@@ -71,6 +71,36 @@ export class SettingsPanel {
       display.append(row);
       this.toggles.push({ input, read });
     };
+    /**
+     * The one setting here that is not a yes or a no.
+     *
+     * It sits at the top because it is the one somebody reaches for in a
+     * hurry — the island has only just learned to make a noise at all, and
+     * the first thing anybody wants from a game that has started making one
+     * is the means to stop it.
+     */
+    {
+      const row = document.createElement('label');
+      row.className = 'setting-row';
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0';
+      input.max = '100';
+      input.step = '5';
+      input.value = String(Math.round(game.settings.volume * 100));
+      const text = document.createElement('span');
+      const say = (): void => {
+        const pc = Math.round(game.settings.volume * 100);
+        text.innerHTML = `<b>Volume &mdash; ${pc === 0 ? 'silent' : `${pc}%`}</b><small>Footfalls, tools and blows, placed where they are happening. Nothing is recorded: every sound is made out of noise and a few oscillators as it is wanted.</small>`;
+      };
+      say();
+      input.addEventListener('input', () => {
+        game.settings.volume = Number(input.value) / 100;
+        say();
+      });
+      row.append(input, text);
+      display.append(row);
+    }
     add('Show tile grid', 'Outline every tile. Also toggled with G.', () => game.settings.grid, (v) => (game.settings.grid = v));
     add(
       'Cut away walls facing you',

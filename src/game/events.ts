@@ -35,6 +35,18 @@ export type GameEvents = {
    * effort where the effort is going.
    */
   strike: [x: number, y: number];
+  /**
+   * The same go, said again for the ear rather than the eye.
+   *
+   * `strike` is where the effort went and is only ever raised for work done
+   * out in the world, because dust in the air over your own hands would be
+   * wrong. Sound has the opposite need: filing a nail is one of the noisiest
+   * things a person does and it happens nowhere but where you are standing.
+   * So this one is raised for every go at every job, positioned at the
+   * target when there is one and at the body when there is not, and it
+   * carries what the go sounded like.
+   */
+  work: [x: number, y: number, stroke: string];
   reset: [];
 };
 
