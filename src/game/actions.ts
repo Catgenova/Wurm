@@ -40,7 +40,7 @@ import { DEED_RADIUS, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf } from './boons';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, isBag } from './items';
+import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine } from './items';
 import { knackable, RECIPE_ACTIONS } from './recipes';
 
 /**
@@ -1665,7 +1665,9 @@ export const ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.uid);
       if (!item) return 'It is gone.';
       if (isBag(item)) return 'One bag will not go inside another.';
-      const bag = g.inventory.items.find((b) => isBag(b) && !bagRefuses(b, { ...item, count: t.count ?? 1 }));
+      // A bag with room for one of them is a bag worth walking a stack to:
+      // what fits goes in and the rest stays loose in the pack.
+      const bag = g.inventory.items.find((b) => isBag(b) && !bagRefuses(b, { ...item, count: 1 }));
       return bag ? null : 'There is no bag with room for it.';
     },
     maxRepeat: (t, g) => (t.kind === 'item' ? (g.inventory.get(t.uid)?.count ?? 1) : 1),
@@ -1674,15 +1676,17 @@ export const ACTIONS: ActionDef[] = [
       const held = g.inventory.get(t.uid);
       if (!held) return;
       const want = Math.min(t.count ?? 1, held.count);
-      const bag = g.inventory.items.find((b) => isBag(b) && !bagRefuses(b, { ...held, count: want }));
+      const bag = g.inventory.items.find((b) => isBag(b) && !bagRefuses(b, { ...held, count: 1 }));
       if (!bag) return;
-      const taken = g.inventory.take(held.uid, want);
+      const fits = Math.min(want, bagSpare(bag));
+      if (fits <= 0) return;
+      const taken = g.inventory.take(held.uid, fits);
       if (!taken || !bagAdd(bag, taken)) {
         if (taken) g.inventory.addItem(taken);
         return;
       }
       g.events.emit('inventory');
-      g.logMsg(`You put ${want > 1 ? `${want} × ` : ''}${itemName(taken).toLowerCase()} in the ${itemDef(bag.id).name.toLowerCase()}.`, 'event');
+      g.logMsg(storedLine(taken.count, itemName(taken), itemDef(bag.id).name, want - taken.count), 'event');
     },
   },
   {

@@ -22,7 +22,7 @@ import {
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
-import { itemDef, itemName, type Item } from '../game/items';
+import { itemDef, itemName, storedLine, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
@@ -301,14 +301,20 @@ export class UI {
       g.logMsg(refused, 'error');
       return;
     }
-    const item = g.inventory.take(held.uid, held.count);
-    if (!item) return;
+    // What there is room for rather than the whole armful: the rest stays in
+    // the pack and is said so, instead of the drag being refused outright.
+    const fits = store.fits(held);
+    const item = fits > 0 ? g.inventory.take(held.uid, fits) : null;
+    if (!item) {
+      g.logMsg(`The ${store.what} is full.`, 'error');
+      return;
+    }
     if (!store.add(item)) {
       g.inventory.addItem(item);
       g.logMsg(`The ${store.what} will not take the ${p.name.toLowerCase()}.`, 'error');
       return;
     }
-    g.logMsg(`You put the ${p.name.toLowerCase()} in the ${store.what}.`, 'event');
+    g.logMsg(storedLine(item.count, p.name, store.what, held.count - item.count), 'event');
   }
 
   /**

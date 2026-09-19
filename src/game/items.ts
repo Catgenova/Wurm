@@ -609,6 +609,24 @@ export const itemWeight = (item: { id: string; extra?: string; count: number; in
 export const bagRoom = (item: Item): number => itemDef(item.id).holds ?? 0;
 export const isBag = (item: Item): boolean => bagRoom(item) > 0;
 export const bagUnits = (item: Item): number => (item.inside ?? []).reduce((n, it) => n + it.count, 0);
+/** How much more a bag will take. */
+export const bagSpare = (item: Item): number => Math.max(0, bagRoom(item) - bagUnits(item));
+
+/**
+ * What a put says, including what would not go in.
+ *
+ * Asked for: "when trying to put 48 items in a container that has room for 13,
+ * deposit 13 and reject the 35." It used to be all or nothing — a stack that
+ * would not fit whole came back whole, and the answer to an armful of ore and
+ * a nearly full crate was to count the difference yourself and split the stack
+ * by hand. So a put now takes what there is room for and leaves the rest where
+ * it was, and says how much stayed behind rather than letting you find out by
+ * looking. Written once here because the island says the same sentence, and a
+ * sentence said twice is a sentence that drifts.
+ */
+export const storedLine = (count: number, what: string, where: string, left: number): string =>
+  `You put ${count > 1 ? `${count} × ` : 'the '}${what.toLowerCase()} in the ${where.toLowerCase()}.`
+  + (left > 0 ? ` The other ${left} would not fit.` : '');
 
 /**
  * Why a bag will not take something, or null. Nothing that holds things may

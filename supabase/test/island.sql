@@ -1383,7 +1383,16 @@ select '219. ' || (select text from event where uid = :'ivar' order by n desc li
      || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log' and extra = 'Pine');
 insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 45, 40, 'Pine')
   returning id as more \gset
-select '220. forty more into a crate with room for twenty-two: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'more' || ',"count":40}')::jsonb), 'allowed');
+-- Forty into room for twenty-two, which used to be refused outright and is
+-- now twenty-two of them put away: asked for as "when trying to put 48 items
+-- in a container that has room for 13, deposit 13 and reject the 35".
+select '220. forty more into a crate with room for '
+     || crate_spare(:'world2', (select c from crate c where c.world_id = :'world2' and c.id = :'box')) || ': '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'more' || ',"count":40}')::jsonb), 'allowed');
+select act_perform(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'more' || ',"count":40}')::jsonb) \g /dev/null
+select '220b. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
+     || ' — the crate holds ' || crate_units(:'world2', :'box') || ' and the pack holds '
+     || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log' and extra = 'Pine');
 select '221. and a crate inside a crate: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'boxes' || ',"count":1}')::jsonb), 'allowed');
 update player set x = 12.5, y = 12.5 where uid = :'ivar';
 select '222. from across the deed: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate', ('{"kind":"item","uid":' || :'more' || ',"count":1}')::jsonb), 'allowed')
@@ -10346,3 +10355,77 @@ select '1015b. put in the chest that was named: coffer '
      || furniture_units((select p from placed p where p.id = :'near'))
      || ', chest ' || furniture_units((select p from placed p where p.id = :'far')) || ', and Ivar was told: '
      || (select text from event where world_id = :'world2' and uid = :'ivar' order by n desc limit 1);
+
+\echo ''
+-- A body rests between one subject and the next. This suite runs hundreds of
+-- goes with no wall-clock time between them, so nothing ever gets its wind
+-- back on its own and everybody would be face down by the third section.
+update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
+\echo '--- what fits goes in, and the rest stays in your pack'
+/*
+ * Asked for: "when trying to put 48 items in a container that has room for 13,
+ * deposit 13 and reject the 35." It was all or nothing, so an armful that
+ * would not fit whole came back whole and the way through was to count the
+ * difference yourself and split the stack by hand.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set act = null, act_target = null, act_started = null, act_ends = null,
+    act_left = null, act_queue = '[]' where world_id = :'world2' and uid = :'ivar' \g /dev/null
+delete from item i where i.world_id = :'world2' and i.holder = 'crate' and i.crate in (91, 92, 93) \g /dev/null
+delete from crate where world_id = :'world2' and id in (91, 92, 93) \g /dev/null
+insert into crate (world_id, id, kind, x, y, sx, sy, deed, made_by, material)
+  values (:'world2', 93, 'plank', 6, 7, 0, 0, false, :'ivar', 'pine');
+insert into item (world_id, holder, crate, def, ql, count)
+  select :'world2', 'crate', 93, 'rock_shards', 20, crate_capacity(c) - 13
+  from crate c where c.world_id = :'world2' and c.id = 93;
+delete from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar' and def = 'iron_ore' \g /dev/null
+insert into item (world_id, holder, holder_uid, def, ql, count)
+  values (:'world2', 'player', :'ivar', 'iron_ore', 40, 48) returning id as ore \gset
+select '1016. a crate with room for ' || crate_spare(:'world2', (select c from crate c where c.world_id = :'world2' and c.id = 93))
+     || ' and 48 of iron ore in the pack: '
+     || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate',
+          jsonb_build_object('kind', 'item', 'uid', :'ore', 'count', 48)), 'ALLOWED');
+select rpc_act(:'world2', 'store_in_crate',
+  jsonb_build_object('kind', 'item', 'uid', :'ore', 'count', 48), 1) \g /dev/null
+select '1016b. the crate holds ' || crate_units(:'world2', 93) || '/'
+     || crate_capacity((select c from crate c where c.world_id = :'world2' and c.id = 93))
+     || ', the pack holds ' || coalesce((select sum(count)::text from item where world_id = :'world2'
+          and holder = 'player' and holder_uid = :'ivar' and def = 'iron_ore'), '0')
+     || ', and Ivar was told: ' || (select text from event where world_id = :'world2' and uid = :'ivar' order by n desc limit 1);
+select '1016c. and with it full: ' || coalesce(act_refusal(:'world2', :'ivar', 'store_in_crate',
+  jsonb_build_object('kind', 'item', 'uid', :'ore', 'count', 35)), 'ALLOWED');
+
+\echo ''
+\echo '--- which storey, which side, and how many to go'
+/*
+ * Reported: "cant plan roof on when conditions are met. make sure that doors
+ * and window walls etc count as elligible walls if completed." They do, and
+ * always have — a border wants something standing on it with its bill paid and
+ * has never asked what kind. What was wrong was an answer that named no storey
+ * and no side, on a building whose *upper* storey was the one short of a wall.
+ */
+delete from wall where world_id = :'world2' and building = 90 \g /dev/null
+delete from building_tile where world_id = :'world2' and building = 90 \g /dev/null
+delete from building where world_id = :'world2' and id = 90 \g /dev/null
+insert into building (world_id, id, name, levels, work_level, planned_by)
+  values (:'world2', 90, 'Roofless', 1, 0, :'ivar');
+insert into building_tile (world_id, building, x, y) values (:'world2', 90, 30, 30), (:'world2', 90, 31, 30);
+-- A solid wall, a door, a window and a bay: every side closed in by something,
+-- and not one of them a plain wall on all six.
+insert into wall (world_id, level, dir, x, y, building, type, material, needed, total) values
+  (:'world2', 0, 'h', 30, 30, 90, 'solid', 'log', '{"log": 0}', '{"log": 4}'),
+  (:'world2', 0, 'v', 30, 30, 90, 'door', 'log', '{"log": 0, "hinge": 0}', '{"log": 3, "hinge": 2}'),
+  (:'world2', 0, 'h', 30, 31, 90, 'window', 'log', '{"log": 0}', '{"log": 3}'),
+  (:'world2', 0, 'h', 31, 30, 90, 'bay', 'log', '{"log": 0}', '{"log": 5}'),
+  (:'world2', 0, 'v', 32, 30, 90, 'solid', 'log', '{"log": 0}', '{"log": 4}'),
+  (:'world2', 0, 'h', 31, 31, 90, 'solid', 'log', '{"log": 0}', '{"log": 4}');
+select '1017. a room closed in by a solid wall, a door, a window and a bay: '
+     || coalesce(level_gap(:'world2', 90, 0, 30.5, 30.5), 'CLOSED IN')
+     || ' — and level_complete says ' || level_complete(:'world2', 90, 0);
+delete from wall where world_id = :'world2' and building = 90 and dir = 'v' and x = 32 and y = 30 \g /dev/null
+update wall set needed = '{"log": 3}' where world_id = :'world2' and building = 90 and dir = 'h' and x = 30 and y = 30 \g /dev/null
+select '1017b. one side opened up and one wall left half built: '
+     || coalesce(level_gap(:'world2', 90, 0, 30.5, 30.5), 'CLOSED IN');
+update building set levels = 2 where world_id = :'world2' and id = 90 \g /dev/null
+select '1017c. and a second storey planned over it, with nothing on it at all: '
+     || coalesce(level_gap(:'world2', 90, 1, 30.5, 30.5), 'CLOSED IN');

@@ -8,6 +8,7 @@ import {
   MATERIAL_BY_ID,
   MAX_LEVELS,
   SIDE_NAMES,
+  gapText,
   WALL_TYPE_BY_ID,
   type Bill,
   type Building,
@@ -275,7 +276,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (b.levels >= MAX_LEVELS) return `Buildings cannot be taller than ${MAX_LEVELS} storeys.`;
       if (g.buildings.hasRoof(b)) return 'Take the roof off first.';
       if (g.buildings.hasLowWall(b, b.levels - 1)) return 'Nothing rests on a fence or a half wall. The storey below needs walls all round.';
-      if (!g.buildings.levelComplete(b, b.levels - 1)) return 'All walls of the storey below must be built first.';
+      const below = gapText(b.levels, g.buildings.levelGaps(b, b.levels - 1, g.player.x, g.player.y));
+      if (below) return below;
       return null;
     },
     perform: (t, g) => {
@@ -305,7 +307,11 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const kind: FloorKind = t.floorKind ?? 'floor';
       const level = kind === 'roof' ? b.levels : topLevel(b);
       if (kind === 'roof') {
-        if (!g.buildings.levelComplete(b, b.levels - 1)) return 'All walls of the top storey must be built before roofing.';
+        // Which storey and which border, because "all walls must be built"
+        // reads like a lie while you are standing in a finished room and the
+        // storey that is short of a wall is the one planned over your head.
+        const top = gapText(b.levels, g.buildings.levelGaps(b, b.levels - 1, g.player.x, g.player.y));
+        if (top) return top;
       } else if (kind === 'stairs' || kind === 'ladder') {
         if (level < 1) return 'Stairs and ladders belong to an upper storey; plan another storey first.';
         if (!t.side) return 'Choose the side to climb from.';

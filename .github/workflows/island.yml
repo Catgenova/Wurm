@@ -412,6 +412,24 @@ jobs:
           npx esbuild supabase/test/into.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/into.mjs --log-level=error
           node node_modules/.cache/into.mjs
+      - name: What fits goes in, and the rest stays in your pack
+        run: |
+          # Asked for: "when trying to put 48 items in a container that has
+          # room for 13, deposit 13 and reject the 35." It was all or nothing,
+          # so the way through was to count the difference yourself and split
+          # the stack by hand.
+          npx esbuild supabase/test/part.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/part.mjs --log-level=error
+          node node_modules/.cache/part.mjs
+      - name: Which storey, which side, and how many to go
+        run: |
+          # Reported: "cant plan roof on when conditions are met. make sure
+          # that doors and window walls etc count as elligible walls if
+          # completed." They do; what was wrong was a refusal that named
+          # neither the storey it meant nor the side that was short.
+          npx esbuild supabase/test/roof.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/roof.mjs --log-level=error
+          node node_modules/.cache/roof.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

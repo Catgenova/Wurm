@@ -170,6 +170,30 @@ export const workLevel = (b: Building): number => Math.min(b.workLevel ?? b.leve
 
 export const isDone = (b: Bill): boolean => Object.values(b.needed).every((n) => n <= 0);
 
+/**
+ * What is left before a storey is closed in: sides with nothing on them at
+ * all, walls that are up but not finished, and the nearest of either.
+ */
+export interface LevelGap {
+  bare: number;
+  unfinished: number;
+  at?: { x: number; y: number; side: Side };
+}
+
+/**
+ * That, as the sentence both sides say. A door, a window and a gate are walls
+ * here — what a border wants is something on it with its bill paid, and it has
+ * never cared which kind.
+ */
+export function gapText(storey: number, gap: LevelGap): string | null {
+  if (!gap.bare && !gap.unfinished) return null;
+  const parts: string[] = [];
+  if (gap.bare) parts.push(`${gap.bare} side${gap.bare === 1 ? '' : 's'} with no wall`);
+  if (gap.unfinished) parts.push(`${gap.unfinished} still going up`);
+  const where = gap.at ? `, nearest the ${SIDE_NAMES[gap.at.side]} side of ${gap.at.x},${gap.at.y}` : '';
+  return `Storey ${storey} is not closed in: ${parts.join(' and ')}${where}.`;
+}
+
 export function progressOf(b: Bill): number {
   const total = Object.values(b.total).reduce((s, n) => s + n, 0);
   const left = Object.values(b.needed).reduce((s, n) => s + n, 0);
@@ -373,6 +397,60 @@ export class Buildings {
       for (const [side, nx, ny] of sides) if (this.tileIndex.get(tileKey(nx, ny)) !== b.id) out.push(borderOf(x, y, side));
     }
     return out;
+  }
+
+  /**
+   * What is stopping a storey being closed in, counted and pointed at.
+   *
+   * `levelComplete` answers yes or no, and a no is no help at all on a
+   * building of any size: reported as "cant plan roof on when conditions are
+   * met", with the suspicion that a door or a window did not count as a wall.
+   * They do, and always have — what counts is that a border carries a wall and
+   * that its bill is paid, whatever kind of wall it is. What the answer never
+   * said was *which* storey and *which* border, and on a building whose upper
+   * storey has been planned but not walled, "all walls of the top storey must
+   * be built" reads like a lie while you are standing in a finished room.
+   *
+   * So: how many sides have nothing on them, how many walls are still going
+   * up, and where the nearest of them is from wherever you are standing.
+   */
+  levelGaps(b: Building, level: number, fromX: number, fromY: number): LevelGap {
+    const gap: LevelGap = { bare: 0, unfinished: 0 };
+    const holes: Array<{ x: number; y: number; side: Side }> = [];
+    for (const key of b.tiles) {
+      const [xs, ys] = key.split(',');
+      const x = Number(xs);
+      const y = Number(ys);
+      const sides: Array<[Side, number, number]> = [
+        ['n', x, y - 1],
+        ['e', x + 1, y],
+        ['s', x, y + 1],
+        ['w', x - 1, y],
+      ];
+      for (const [side, nx, ny] of sides) {
+        if (this.tileIndex.get(tileKey(nx, ny)) === b.id) continue;
+        const w = this.wallOnBorder(level, borderOf(x, y, side));
+        if (w && isDone(w)) continue;
+        if (w) gap.unfinished++;
+        else gap.bare++;
+        holes.push({ x, y, side });
+      }
+    }
+    // Nearest to whoever asked, and the same one the island would name: the
+    // tie is broken the same way on both sides, so the two sentences match
+    // even on a square building with a hole at each corner.
+    holes.sort((p, q) =>
+      (p.x + 0.5 - fromX) ** 2 + (p.y + 0.5 - fromY) ** 2 - ((q.x + 0.5 - fromX) ** 2 + (q.y + 0.5 - fromY) ** 2)
+      || p.x - q.x || p.y - q.y || 'nesw'.indexOf(p.side) - 'nesw'.indexOf(q.side));
+    gap.at = holes[0];
+    // And anything inside it that was planned and never finished, which stops
+    // a storey being closed in just as surely as a hole in the outside wall.
+    for (const w of this.walls.values()) {
+      if (w.building !== b.id || w.level !== level || isDone(w)) continue;
+      if (this.exteriorBorders(b).some((e) => e.dir === w.dir && e.x === w.x && e.y === w.y)) continue;
+      gap.unfinished++;
+    }
+    return gap;
   }
 
   /** True when every exterior border of the level carries a finished wall and no wall on the level is unfinished. */

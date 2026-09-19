@@ -1,9 +1,9 @@
-import { crateCentre, crateName, crateCapacity, crateUnits } from '../../game/crates';
-import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureUnits } from '../../game/furniture';
+import { crateCentre, crateName, crateCapacity, crateSpare } from '../../game/crates';
+import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureSpare } from '../../game/furniture';
 import { bloodMul } from '../../game/creatures';
 import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
 import type { Game } from '../../game/game';
-import { bagAdd, bagRefuses, bagRoom, bagTake, itemDef, type Item, itemName } from '../../game/items';
+import { bagAdd, bagRefuses, bagRoom, bagSpare, bagTake, itemDef, type Item, itemName } from '../../game/items';
 import type { MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
@@ -35,8 +35,17 @@ export interface Store {
    */
   kind: 'crate' | 'furniture' | 'bag' | 'carried';
   take: (uid: number) => Item | null;
-  /** Why it will not take this, or null. */
+  /** Why it will not take this at all, or null. */
   refuses: (item: Item) => string | null;
+  /**
+   * How many of a stack it will take, which is not always all of them.
+   *
+   * Asked for: "when trying to put 48 items in a container that has room for
+   * 13, deposit 13 and reject the 35." `refuses` answers about the whole
+   * armful and is still the right question for a bin that will not have a
+   * tool; this is the other question, and the one a part-full crate answers.
+   */
+  fits: (item: Item) => number;
   add: (item: Item) => boolean;
 }
 
@@ -127,7 +136,8 @@ export class CratePanel {
         what: 'crate',
         kind: 'crate',
         take: (uid) => this.game.crateTake(crate, uid),
-        refuses: (item) => (crateUnits(crate) + item.count > crateCapacity(crate) ? `The ${crateName(crate).toLowerCase()} is full.` : null),
+        refuses: (item) => (crateSpare(crate) <= 0 ? `The ${crateName(crate).toLowerCase()} is full.` : null),
+        fits: (item) => Math.min(item.count, crateSpare(crate)),
         add: (item) => this.game.crateAdd(crate, item),
       };
     }
@@ -144,7 +154,8 @@ export class CratePanel {
         what: 'panniers',
         kind: 'carried',
         take: (uid) => this.game.pannierTake(beast, uid),
-        refuses: (item) => (units() + item.count > cap ? `${beast.name} is loaded as it is.` : null),
+        refuses: () => (units() >= cap ? `${beast.name} is loaded as it is.` : null),
+        fits: (item) => Math.min(item.count, Math.max(0, cap - units())),
         add: (item) => this.game.pannierAdd(beast, item),
       };
     }
@@ -165,7 +176,8 @@ export class CratePanel {
           this.game.events.emit('inventory');
           return it;
         },
-        refuses: (item) => bagRefuses(bag, item),
+        refuses: (item) => bagRefuses(bag, { ...item, count: 1 }),
+        fits: (item) => (bagRefuses(bag, { ...item, count: 1 }) ? 0 : Math.min(item.count, bagSpare(bag))),
         add: (item) => {
           const ok = bagAdd(bag, item);
           this.game.events.emit('inventory');
@@ -184,7 +196,8 @@ export class CratePanel {
         what: furnitureName(piece).toLowerCase(),
         kind: 'furniture',
         take: (uid) => this.game.furnitureTake(piece, uid),
-        refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureUnits(piece) + item.count > furnitureCapacity(piece) ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
+        refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureSpare(piece) <= 0 ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
+        fits: (item) => (furnitureRefuses(piece, item) ? 0 : Math.min(item.count, furnitureSpare(piece))),
         add: (item) => this.game.furnitureAdd(piece, item),
       };
     }
@@ -270,6 +283,7 @@ export class CratePanel {
       return;
     }
     let moved = 0;
+    let left = 0;
     let refused = '';
     for (const item of [...this.game.inventory.items]) {
       if (item.locked || this.game.isEquipped(item.uid)) continue;
@@ -279,11 +293,21 @@ export class CratePanel {
         refused ||= why;
         continue;
       }
-      const taken = this.game.inventory.take(item.uid, item.count);
+      // What there is room for, which may be part of a stack and may by now
+      // be none of it: the last few went in and filled the thing.
+      const fits = store.fits(item);
+      if (fits <= 0) {
+        left += item.count;
+        continue;
+      }
+      const taken = this.game.inventory.take(item.uid, fits);
       if (!taken) continue;
-      if (store.add(taken)) moved += taken.count;
-      else this.game.inventory.addItem(taken);
+      if (store.add(taken)) {
+        moved += taken.count;
+        left += item.count - taken.count;
+      } else this.game.inventory.addItem(taken);
     }
+    if (left && !refused) refused = `${left} of them would not fit.`;
     this.game.events.emit('inventory');
     this.game.logMsg(
       moved ? `You put ${moved} things into the ${store.what}.${refused ? ` ${refused}` : ''}` : refused || `There is nothing loose to put in the ${store.what}.`,

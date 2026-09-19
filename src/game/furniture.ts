@@ -2,7 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { SIDE_NAMES, type Side } from './building';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import { itemDef, itemName, storedLine, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -289,6 +289,8 @@ export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', ly
 export const furnitureName = (f: PlacedFurniture): string =>
   f.name ? f.name : f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name;
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
+/** How much more a piece will take, which is what a put is allowed to be. */
+export const furnitureSpare = (f: PlacedFurniture): number => Math.max(0, furnitureCapacity(f) - furnitureUnits(f));
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const furnitureCapacity = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold);
 /** The four ways a piece can face, in the order a turn to the right takes them: south, west, north, east. */
@@ -573,7 +575,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       }
       const refused = furnitureRefuses(f, item);
       if (refused) return refused;
-      if (furnitureUnits(f) + (t.count ?? 1) > furnitureCapacity(f)) return `The ${furnitureName(f).toLowerCase()} is full.`;
+      // Room for some of it is enough; what will not fit stays in the pack.
+      if (furnitureSpare(f) <= 0) return `The ${furnitureName(f).toLowerCase()} is full.`;
       return null;
     },
     perform: (t, g) => {
@@ -581,14 +584,20 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const held = g.inventory.get(t.uid);
       const f = held && storeInto(g, t, held);
       if (!f) return;
-      const item = g.inventory.take(t.uid, t.count ?? 1);
+      const want = t.count ?? 1;
+      const fits = Math.min(want, furnitureSpare(f));
+      if (fits <= 0) {
+        g.logMsg(`The ${furnitureName(f).toLowerCase()} is full.`, 'error');
+        return;
+      }
+      const item = g.inventory.take(t.uid, fits);
       if (!item) return;
       if (!g.furnitureAdd(f, item)) {
         g.inventory.addItem(item);
         g.logMsg(`The ${furnitureName(f).toLowerCase()} is full.`, 'error');
         return;
       }
-      g.logMsg(`You put ${item.count > 1 ? `${item.count} × ` : 'the '}${itemName(item).toLowerCase()} in the ${furnitureName(f).toLowerCase()}.`, 'event');
+      g.logMsg(storedLine(item.count, itemName(item), furnitureName(f), want - item.count), 'event');
     },
   },
 ];

@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemName, type Item } from './items';
+import { itemName, storedLine, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -62,6 +62,8 @@ export const crateUnits = (c: PlacedCrate): number =>
   c.items.length ? c.items.reduce((n, it) => n + it.count, 0) : c.units ?? 0;
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const crateCapacity = (c: PlacedCrate): number => Math.round(CRATE_DEFS[c.kind].capacity * matOf(c.material).hold);
+/** How much more it will take, which is what a put is allowed to be. */
+export const crateSpare = (c: PlacedCrate): number => Math.max(0, crateCapacity(c) - crateUnits(c));
 export const crateName = (c: PlacedCrate): string => {
   if (c.name) return c.name;
   const wood = c.material ? ` (${c.material.toLowerCase()})` : '';
@@ -204,25 +206,30 @@ export const CRATE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const c = crateInto(g, t);
       if (!c || !nearCrate(g, c)) return 'Stand next to a crate.';
-      if (t.kind === 'item') {
-        const item = g.inventory.get(t.uid);
-        // Named, so that a refusal is about the crate you were aiming at.
-        if (item && crateUnits(c) + (t.count ?? 1) > crateCapacity(c)) return `The ${crateName(c).toLowerCase()} is full.`;
-      }
+      // Room for some of it is enough: what fits goes in and the rest stays in
+      // the pack. Only a crate with no room at all has anything to refuse, and
+      // the refusal names the crate you were aiming at.
+      if (crateSpare(c) <= 0) return `The ${crateName(c).toLowerCase()} is full.`;
       return null;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const c = crateInto(g, t);
       if (!c) return;
-      const item = g.inventory.take(t.uid, t.count ?? 1);
+      const want = t.count ?? 1;
+      const fits = Math.min(want, crateSpare(c));
+      if (fits <= 0) {
+        g.logMsg(`The ${crateName(c).toLowerCase()} is full.`, 'error');
+        return;
+      }
+      const item = g.inventory.take(t.uid, fits);
       if (!item) return;
       if (!g.crateAdd(c, item)) {
         g.inventory.addItem(item);
         g.logMsg(`The ${crateName(c).toLowerCase()} is full.`, 'error');
         return;
       }
-      g.logMsg(`You put ${item.count > 1 ? `${item.count} × ` : 'the '}${itemName(item).toLowerCase()} in the ${crateName(c).toLowerCase()}.`, 'event');
+      g.logMsg(storedLine(item.count, itemName(item), crateName(c), want - item.count), 'event');
     },
   },
 ];
