@@ -3127,6 +3127,32 @@ export class Game {
       this.beginPerform();
       return;
     }
+    /*
+     * Within reach is always allowed under any load. Setting off across the
+     * deed under one is not.
+     *
+     * While the load stopped a body outright this took care of itself: the
+     * walk was dropped the same frame it was asked for, so the job came
+     * straight back with "you are too far away from that" and you knew where
+     * you stood. Letting an overloaded body creep took that away — the path
+     * survives now, and a job waits on `player.path` going empty, so what used
+     * to be an immediate answer became a quarter of an hour of shuffling with
+     * the bar sitting there and nothing said. That is worse than the refusal
+     * it replaced.
+     *
+     * So the reach is what changes, not the load: everything you can already
+     * touch works exactly as it does unladen — put things down, into a cart,
+     * into a crate, anything on the tiles around you — and anything further
+     * off says so now instead of setting out at a twentieth of a pace.
+     */
+    if (this.stalled()) {
+      this.logMsg(`That is too far to reach under ${this.inventory.totalWeight().toFixed(0)} kg. `
+        + 'You can still work what is beside you, or put something down.', 'error');
+      this.action = null;
+      this.nextInQueue();
+      this.events.emit('action');
+      return;
+    }
     // A tamed wildermon comes to you, rather than being chased around the field.
     const pet = target.kind === 'creature' ? this.creatures.get(target.id) : undefined;
     if (pet && pet.mode !== 'wild' && pet.mode !== 'stored') {

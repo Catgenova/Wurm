@@ -24,6 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { Game, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../../src/game/game';
 import { BASE_SPEED, CARRY_CRAWL } from '../../src/game/player';
 import { itemWeight } from '../../src/game/items';
+import { ACTION_BY_ID } from '../../src/game/actions';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -96,6 +97,41 @@ say(crept < 0.25 * BASE_SPEED * 4,
   `which is a crawl rather than a walk: ${(crept / (BASE_SPEED * 4) * 100).toFixed(1)}% of what it would have covered unladen`);
 say(game.player.path !== null || crept > 0,
   'and the walk was kept rather than dropped, because a body at a twentieth is still going somewhere');
+
+/* ---- and what is beside you still works under any load ------------------ */
+/*
+ * The crawl introduced a trap the flat stop did not have. A job out of reach
+ * used to come straight back with "you are too far away from that", because
+ * the walk was dropped the same frame it was asked for. Letting an overloaded
+ * body creep keeps the path alive, and a job waits on that path going empty —
+ * so an immediate refusal became a quarter of an hour of shuffling with the
+ * bar sitting there and nothing said.
+ *
+ * So the reach is what changes under a load, not the load: everything already
+ * within arm's length works exactly as it does unladen, and anything further
+ * off says so at once.
+ */
+const said: string[] = [];
+(game as unknown as { logMsg: (t: string) => void }).logMsg = (t: string) => said.push(t);
+const here = { kind: 'tile' as const, x: game.player.tileX, y: game.player.tileY,
+               cx: game.player.tileX, cy: game.player.tileY };
+const yonder = { kind: 'tile' as const, x: game.player.tileX + 9, y: game.player.tileY + 9,
+                 cx: game.player.tileX + 9, cy: game.player.tileY + 9 };
+// `loadTo` empties the pack to weigh it, so the tool has to go back in —
+// and it is still far over the line with one shovel on top of the ore.
+game.inventory.add('shovel', { ql: 30 });
+const job = ACTION_BY_ID.get('cultivate');
+game.player.stalled = game.stalled();
+game.action = null;
+if (job) {
+  game.requestAction(job, here);
+  say(game.action !== null, `overloaded, the tile underfoot is still work: ${said.at(-1) ?? '(nothing said)'}`);
+  said.length = 0;
+  game.action = null;
+  game.requestAction(job, yonder);
+  say(game.action === null && (said.at(-1) ?? '').includes('too far to reach'),
+    `and one nine tiles off is refused there and then: ${said.at(-1) ?? '(nothing said)'}`);
+}
 
 /* Put it down and the road opens again. */
 const light = loadTo(0.5);
