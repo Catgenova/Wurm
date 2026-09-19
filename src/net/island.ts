@@ -1645,8 +1645,13 @@ export class Island {
 
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
-    const { data } = await supabase().from('player').select('*')
+    const { data, error } = await supabase().from('player').select('*')
       .eq('world_id', this.info.id).eq('away', false);
+    // A call that failed is not an island with nobody on it. See `refreshMobs`,
+    // which learned this first: clearing on a dropped read empties the roster
+    // and the next answer puts it straight back, so all it ever does is flicker
+    // — and on a slow island it is not a flicker, it is everybody gone.
+    if (error || !Array.isArray(data)) return;
     this.people.clear();
     for (const p of rowsIn<PlayerRow>(data)) {
       this.people.set(p.uid, p);
@@ -1674,8 +1679,13 @@ export class Island {
      * backpack on an island was an empty backpack however much was in it, and
      * `packed` nests the two back together on the way in.
      */
-    const { data } = await supabase().from('item').select('*')
+    const { data, error } = await supabase().from('item').select('*')
       .eq('world_id', this.info.id).in('holder', ['player', 'bag']).eq('holder_uid', this.uid);
+    // And a call that failed is not an empty pack. This cleared and refilled
+    // from whatever came back, so one dropped read took everything a player was
+    // carrying off the screen — which is the same mistake `refreshMobs` has a
+    // paragraph about, in the place where it frightens people most.
+    if (error || !Array.isArray(data)) return;
     // Asked before one of our own asks was answered, so it is the pack as it
     // was before the thing moved. The answer to that ask is newer and already
     // laid down.

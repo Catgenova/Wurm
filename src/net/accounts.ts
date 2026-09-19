@@ -338,20 +338,67 @@ export async function signInAs(rawName: string, password: string): Promise<strin
 }
 
 /**
+ * The name out of an address, which is the address less the suffix it wears.
+ *
+ * The same thing `email_name()` does in SQL, and only ever used as the second
+ * answer below.
+ */
+const emailName = (email: string): string => {
+  const at = foldName(email);
+  for (const suffix of [DOMAIN, ...OLD_DOMAINS]) {
+    if (at.endsWith(suffix)) return at.slice(0, -suffix.length);
+  }
+  return '';
+};
+
+/**
  * Who is signed in here, or null.
  *
  * Asks the island keeper rather than reading the address out of the stored
  * session, which would be the same string arrived at by a route where nothing
  * had to be true. Anonymous sessions have no name and answer null, which is
  * how the game tells "signed in as somebody" from "signed in as anybody".
+ *
+ * ---- and what a call that never arrived does not mean --------------------
+ *
+ * Reported as "logging in is denying and sending me to the old localstorage
+ * island before we went online", with no error shown anywhere. Nothing was
+ * denying. This line was:
+ *
+ *     if (error) return null;
+ *
+ * and `null` here does not mean "the call failed", it means **there is no
+ * account** — which is what `play.ts` acts on by sending the player to the
+ * landing page, and from there to the single-player island, which of course
+ * has none of their deed, none of their wildermon and none of their work on
+ * it. One slow answer and you are somebody else, somewhere else.
+ *
+ * And it was slow: this is the same island that was taking a second and a
+ * half on the walk call to put wildlife out. A read that times out is exactly
+ * the case this turned into a verdict.
+ *
+ * `rpc_creatures` has the whole of this written on it already — "a call that
+ * failed is not an island with nothing on it" — and the lesson was applied
+ * there and nowhere else. It matters far more here: emptying the field for a
+ * second is a blink, and logging somebody out of their own island is not.
+ *
+ * So a failure falls back to the address in the session we are already
+ * holding, which is the very string the keeper reads that name out of. The
+ * keeper is still asked first and still decides whenever it answers; this is
+ * only about refusing to turn "I could not ask" into "you are nobody". It
+ * gives up nothing either: the session is signed by Auth, and every call the
+ * island serves takes the identity from `auth.uid()` on its own side, so a
+ * name arrived at this way buys no access it did not already have.
  */
 export async function whoAmI(): Promise<string | null> {
   const sb = supabase();
   const had = await sb.auth.getSession();
-  if (!had.data.session) return null;
+  const session = had.data.session;
+  if (!session) return null;
   const { data, error } = await sb.rpc('rpc_my_name');
-  if (error) return null;
-  return typeof data === 'string' && data ? data : null;
+  if (!error) return typeof data === 'string' && data ? data : null;
+  const named = emailName(session.user?.email ?? '');
+  return named && nameTrouble(named) === null ? named : null;
 }
 
 /** Put the account down. The single-player game is still there without one. */
