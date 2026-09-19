@@ -175,12 +175,31 @@ const smith = (ql: number): { g: Game; item: Item } => {
 {
   const { g, item } = smith(20);
   g.requestAction(improve, { kind: 'item', uid: item.uid, upto: 50 });
-  for (let t = 0; t < 4000 && g.action; t++) {
+  /*
+   * The wind and the wear are held off deliberately, and so is the damage.
+   *
+   * A pass that misses marks the piece, and at ten points of damage improving
+   * refuses until it is repaired — which is a real rule and a real reason a
+   * run stops short, and nothing at all to do with the mark. Left in, this
+   * measures how a seeded island's dice fell rather than whether the ceiling
+   * works, and it is not even stable between runs: `growTrees` is handed
+   * `Date.now()`, so the wall clock reaches into the same stream of random
+   * numbers. It stopped at 46.2 on a CI runner and 51.3 here, which is the
+   * test being wrong rather than the feature.
+   *
+   * So the piece is kept sound and the body kept fresh, and what is left is
+   * the one thing under test: where it stops.
+   */
+  for (let t = 0; t < 8000 && g.action; t++) {
     g.player.stats.stamina = 1;
+    item.dmg = 0;
     g.update(0.25);
   }
-  check('so "take it to fifty" takes it to fifty and stops, with no count named',
-    item.ql >= 50 && item.ql < 58, `QL ${item.ql.toFixed(1)} from 20`);
+  check('so "take it to fifty" takes it to fifty and stops there, with no count named',
+    item.ql >= 50 && item.ql < 53, `QL ${item.ql.toFixed(1)} from 20, and nothing in hand after`);
+  check('and it is the mark that stopped it rather than the job running out',
+    g.action === null && (improve.check?.({ kind: 'item', uid: item.uid, upto: 50 }, g) ?? '').includes('what you asked for'),
+    improve.check?.({ kind: 'item', uid: item.uid, upto: 50 }, g) ?? 'still allowed');
 }
 
 /* ---- and the island refuses in the same words ----------------------------- */
