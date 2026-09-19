@@ -989,6 +989,58 @@ jobs:
                  -c "$CLOCKS" \
             || echo "::warning::No clocks listed — either pg_cron is not installed on this project or cron.job could not be read. The island's heartbeat and its stocking both depend on it."
 
+          # And how those clocks have actually been getting on, which is the
+          # line this step was missing when somebody first said the island had
+          # gone slow.
+          #
+          # Both ticks run every second and both take an advisory lock, so a
+          # round that arrives while the last one is still going returns
+          # `busy` and costs nothing. That is by design and is not what this
+          # is looking for. What it is looking for is a round that *failed*:
+          # `cron.job_run_details` keeps the message, and one failing job on a
+          # one-second schedule is three and a half thousand errors an hour in
+          # the log with no other sign of itself. Grouped, because three
+          # thousand copies of one sentence is one fact.
+          RUNS=$(cat <<'EOSQL'
+          select d.jobname,
+                 d.status,
+                 count(*) as runs,
+                 to_char(max(d.end_time), 'MM-DD HH24:MI') as last_seen,
+                 left(coalesce(d.return_message, ''), 120) as said
+            from cron.job_run_details d
+           where d.start_time > now() - interval '6 hours'
+           group by d.jobname, d.status, left(coalesce(d.return_message, ''), 120)
+           order by d.status <> 'succeeded' desc, count(*) desc
+           limit 20;
+          EOSQL
+          )
+          supabase db query --linked "$RUNS" \
+            || printf '%s\n' "$RUNS" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$RUNS" \
+            || echo "::warning::No clock runs listed — cron.job_run_details could not be read, so a failing heartbeat would be invisible here."
+          # And where the time is actually going, when the project keeps the
+          # numbers. `pg_stat_statements` is not on every project and is not
+          # worth installing from a deploy, so this asks and shrugs.
+          SLOW=$(cat <<'EOSQL'
+          select left(regexp_replace(s.query, '\s+', ' ', 'g'), 70) as statement,
+                 s.calls,
+                 round(s.total_exec_time)::bigint as ms_total,
+                 round(s.mean_exec_time::numeric, 2) as ms_each
+            from pg_stat_statements s
+           where s.query not like '%pg_stat_statements%'
+           order by s.total_exec_time desc
+           limit 12;
+          EOSQL
+          )
+          supabase db query --linked "$SLOW" \
+            || printf '%s\n' "$SLOW" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$SLOW" \
+            || echo "::notice::No statement timings — pg_stat_statements is not enabled on this project."
+
   found:
     name: Found an island on the project
     if: github.event_name == 'workflow_dispatch' && inputs.found
