@@ -44,7 +44,7 @@ import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { gemOf, JEWEL_BONUS } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
-import { TileIndex } from './tileindex';
+import { TileIndex, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
@@ -311,6 +311,22 @@ export const ISLAND_SIZE = 4096;
  * against that fifteen-and-a-half-minute night, which is most of one: the
  * night was cut back to a quarter of the cycle and the torch was not.
  */
+/**
+ * What `groundAt` hands back for a tile with nothing on it.
+ *
+ * One array, shared, never written to. The renderer asks about every tile it
+ * draws and the answer is almost always nothing, so the old `?? []` was a
+ * fresh empty array a few hundred thousand times a second.
+ */
+const NO_ITEMS: readonly Item[] = [];
+/**
+ * Rows of the island turned over per tick when the woods have a day owing.
+ * Sixty-four rows of a four-thousand-wide map is a quarter of a million tiles,
+ * which is under a millisecond, and the whole island is done inside a minute
+ * of looking at it.
+ */
+const TREE_STRIP = 64;
+
 export const DAY_SECONDS = world(1440);
 /**
  * When the sun comes up and goes down, in game hours.
@@ -568,7 +584,7 @@ export class Game {
   readonly anvils = new Map<number, PlacedAnvil>();
   nextAnvilId = 1;
   /** Crops growing on tilled fields, keyed by "x,y". */
-  readonly crops = new Map<string, Crop>();
+  readonly crops = new Map<number, Crop>();
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
@@ -594,6 +610,12 @@ export class Game {
    * Wednesday whether or not this tab was open for any of it.
    */
   treesAt = Date.now() / 1000;
+  /** How far down the island a tree turn has got, or -1 when none is running. */
+  private treeRow = -1;
+  /** The moment the turn in progress is for, banked until it finishes. */
+  private treeTurn = 0;
+  /** Stumps left by the turn in progress, seeded once the whole island is done. */
+  private treeStumps: Array<[number, number, number]> = [];
   /**
    * The height everything that shapes the ground is working towards, or null.
    *
@@ -621,7 +643,7 @@ export class Game {
     return this.acting.queue;
   }
   /** Items lying on tiles, keyed by "x,y". */
-  readonly ground = new Map<string, Item[]>();
+  readonly ground = new Map<number, Item[]>();
   /** Game seconds since the world was created. */
   time = 0;
 
@@ -707,7 +729,8 @@ export class Game {
     this.inventory.onChange = () => this.events.emit('inventory');
     if (init.ground) {
       for (const [key, items] of Object.entries(init.ground)) {
-        if (items.length) this.ground.set(key, items);
+        const [kx, ky] = key.split(',');
+        if (items.length) this.ground.set(tileKey(Number(kx), Number(ky)), items);
         for (const it of items) if (it.uid >= this.inventory.nextUid) this.inventory.nextUid = it.uid + 1;
       }
     }
@@ -752,7 +775,7 @@ export class Game {
       this.campfires.set(f.id, f);
       if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
     }
-    for (const c of init.crops ?? []) this.crops.set(`${c.x},${c.y}`, c);
+    for (const c of init.crops ?? []) this.crops.set(tileKey(c.x, c.y), c);
     for (const k of init.kilns ?? []) {
       this.kilns.set(k.id, k);
       if (k.id >= this.nextKilnId) this.nextKilnId = k.id + 1;
@@ -2522,10 +2545,15 @@ export class Game {
     const hours = seconds / 3600;
     let lost = 0;
     for (const [key, pile] of this.ground) {
-      const [xs, ys] = key.split(',');
-      const x = Number(xs);
-      const y = Number(ys);
+      const x = keyX(key);
+      const y = keyY(key);
       const mult = this.decayMultiplier(x, y);
+      // Only a pile that actually lost something is worth telling anybody
+      // about. Every pile on the island raised a `world` event on every decay
+      // step whether or not a thing on it had moved, which on a settlement
+      // with a few hundred piles on it is a few hundred repaints asked for,
+      // several times a minute, to say that nothing had happened.
+      let changed = false;
       for (let i = pile.length - 1; i >= 0; i--) {
         const item = pile[i];
         item.dmg = Math.min(100, item.dmg + groundDecayRate(item) * hours * mult);
@@ -2535,19 +2563,23 @@ export class Game {
           for (let k = item.inside.length - 1; k >= 0; k--) {
             const held = item.inside[k];
             held.dmg = Math.min(100, held.dmg + groundDecayRate(held) * hours * mult * shelter);
-            if (held.dmg >= 100) item.inside.splice(k, 1);
+            if (held.dmg >= 100) {
+              item.inside.splice(k, 1);
+              changed = true;
+            }
           }
         }
         if (item.dmg >= 100) {
           pile.splice(i, 1);
           lost += item.count;
+          changed = true;
           if (seconds < 60 && Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y) < 16) {
             this.logMsg(`The ${itemName(item).toLowerCase()} lying on the ground rots away.`, 'event');
           }
         }
       }
       if (!pile.length) this.ground.delete(key);
-      this.events.emit('world', x, y);
+      if (changed) this.events.emit('world', x, y);
     }
     return lost;
   }
@@ -4549,7 +4581,8 @@ export class Game {
   /** Something rotting on the ground in reach, for whatever eats such things. */
   rottingNear(near: (x: number, y: number) => boolean): { x: number; y: number; uid: number } | undefined {
     for (const [key, pile] of this.ground) {
-      const [x, y] = key.split(',').map(Number);
+      const x = keyX(key);
+      const y = keyY(key);
       if (!near(x, y)) continue;
       const item = pile.find((it) => it.id === 'corpse' || it.dmg >= 40);
       if (item) return { x, y, uid: item.uid };
@@ -4864,7 +4897,8 @@ export class Game {
     if (ground.lying) {
       this.ground.clear();
       for (const row of ground.lying) {
-        const key = `${row.gx},${row.gy}`;
+        if (row.gx === null || row.gy === null) continue;
+        const key = tileKey(row.gx, row.gy);
         const pile = this.ground.get(key) ?? [];
         pile.push(packed(row, aged));
         this.ground.set(key, pile);
@@ -5046,7 +5080,7 @@ export class Game {
     if (ground.crops !== undefined) {
       this.crops.clear();
       for (const c of ground.crops) {
-        this.crops.set(`${c.x},${c.y}`, {
+        this.crops.set(tileKey(c.x, c.y), {
           x: c.x, y: c.y, id: c.id, stage: c.stage,
           stageAt: this.time - (Number.isFinite(c.ago) ? c.ago : 0),
           tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
@@ -5598,18 +5632,18 @@ export class Game {
   }
 
   cropAt(x: number, y: number): Crop | undefined {
-    return this.crops.get(`${x},${y}`);
+    return this.crops.get(tileKey(x, y));
   }
 
   plantCrop(x: number, y: number, id: string, seedQl: number): Crop {
     const c: Crop = { x, y, id, stage: 0, stageAt: this.time, tended: 0, tendedNow: false, ql: seedQl };
-    this.crops.set(`${x},${y}`, c);
+    this.crops.set(tileKey(x, y), c);
     this.events.emit('world', x, y);
     return c;
   }
 
   removeCrop(x: number, y: number): void {
-    this.crops.delete(`${x},${y}`);
+    this.crops.delete(tileKey(x, y));
     this.events.emit('world', x, y);
   }
 
@@ -5631,12 +5665,18 @@ export class Game {
     }
   }
 
-  groundAt(x: number, y: number): Item[] {
-    return this.ground.get(`${x},${y}`) ?? [];
+  /**
+   * What is lying on a tile. The array is the game's own — read it, do not
+   * keep it or add to it — and an empty tile hands back one shared empty
+   * array rather than a fresh one, because the renderer asks this of every
+   * tile it draws and nearly every answer is nothing.
+   */
+  groundAt(x: number, y: number): readonly Item[] {
+    return this.ground.get(tileKey(x, y)) ?? NO_ITEMS;
   }
 
   dropOnGround(x: number, y: number, item: Item): void {
-    const key = `${x},${y}`;
+    const key = tileKey(x, y);
     const pile = this.ground.get(key) ?? [];
     const def = ITEM_DEFS[item.id];
     const stack = def?.stackable ? pile.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
@@ -5677,7 +5717,7 @@ export class Game {
   }
 
   takeFromGround(x: number, y: number, uid: number | null): Item[] {
-    const key = `${x},${y}`;
+    const key = tileKey(x, y);
     const pile = this.ground.get(key);
     if (!pile) return [];
     let taken: Item[];
@@ -5692,9 +5732,10 @@ export class Game {
     return taken;
   }
 
+  /** Out to a save, which has always written the tile as `"x,y"` and still does. */
   groundToJSON(): Record<string, Item[]> {
     const out: Record<string, Item[]> = {};
-    for (const [k, v] of this.ground) out[k] = v;
+    for (const [k, v] of this.ground) out[`${keyX(k)},${keyY(k)}`] = v;
     return out;
   }
 
@@ -5730,11 +5771,34 @@ export class Game {
    */
   growTrees(nowSeconds: number): void {
     if (this.ask) return; // On a live island the woods are the island's.
-    if (this.treesAt >= lastDawn(nowSeconds)) return;
-    this.treesAt = nowSeconds;
     const w = this.world;
-    const stumps: Array<[number, number, number]> = [];
-    for (let y = 0; y < w.h; y++) {
+    /*
+     * A day's growth, a strip of the island at a time.
+     *
+     * The woods turn at one moment for everybody, and turning them means
+     * looking at every tile there is: aging the trees, clearing yesterday's
+     * stumps and counting the days a lawn has been kept cut. On a four
+     * thousand square map that is sixteen and three quarter million tiles in
+     * one go, in the middle of a frame — and it fires the moment a saved
+     * world is opened, because a world that has been shut since before the
+     * last dawn has a dawn owing.
+     *
+     * So the walk is cut into strips and carried across frames. The day still
+     * turns at the one moment — `treesAt` is only moved on when the last
+     * strip is done, so an interrupted pass starts again rather than leaving
+     * half an island a day behind — and the stumps still seed after the whole
+     * island has turned, which is the rule that stops a sapling dropped into
+     * ground the walk has not reached yet being aged the same day.
+     */
+    if (this.treeRow < 0) {
+      if (this.treesAt >= lastDawn(nowSeconds)) return;
+      this.treeRow = 0;
+      this.treeTurn = nowSeconds;
+      this.treeStumps.length = 0;
+    }
+    const stumps = this.treeStumps;
+    const until = Math.min(w.h, this.treeRow + TREE_STRIP);
+    for (let y = this.treeRow; y < until; y++) {
       for (let x = 0; x < w.w; x++) {
         const here = w.getTile(x, y);
         // A stump left a day is gone.
@@ -5765,11 +5829,17 @@ export class Game {
         }
       }
     }
+    this.treeRow = until;
+    if (this.treeRow < w.h) return;
+    // The whole island has turned. Only now is the day counted as turned.
+    this.treeRow = -1;
+    this.treesAt = this.treeTurn;
     // A year's growth closes whatever was cut into anything.
     w.notches.clear();
     // The stumps seed after the whole island has turned, so a sapling dropped
     // into ground the walk had not reached yet cannot be aged the same day.
     for (const [x, y, species] of stumps) this.seedTrees(x, y, species);
+    stumps.length = 0;
   }
 
   /**

@@ -38,7 +38,12 @@ const CONTOUR_STEP = 20;
 const CONTOUR_INDEX = 5;
 
 /** A small overview map, re-painted per tile as the world changes. */
+/** How often the minimap redraws itself, in milliseconds. */
+const MAP_EVERY = 60;
+
 export class MinimapPanel {
+  /** When the map last drew itself, so it does so a few times a second. */
+  private lastDraw = -1e9;
   private base: HTMLCanvasElement;
   /** Tiles to a base pixel, and the size of the base picture in pixels. */
   private readonly step: number;
@@ -341,8 +346,21 @@ export class MinimapPanel {
     this.dirty = true;
   }
 
+  /**
+   * Redraw the map, a few times a second rather than on every frame.
+   *
+   * It is a second canvas: the base blitted, the camera's own quadrilateral,
+   * the deed, and every mark on the island with its name written beside it in
+   * text the browser has to lay out. All of that was happening sixty times a
+   * second alongside the world being drawn once. Sixteen times a second is
+   * smooth enough for a rectangle following a camera, and a quarter of the
+   * work.
+   */
   update(): void {
     if (this.view.closest('.win')?.hasAttribute('hidden')) return;
+    const now = performance.now();
+    if (now - this.lastDraw < MAP_EVERY) return;
+    this.lastDraw = now;
     this.followVision();
     if (this.dirty) {
       this.baseCtx.putImageData(this.image, 0, 0);

@@ -45,6 +45,13 @@ const VOICE_WINDOW = 0.12;
 /** Tiles between one footfall and the next. The dust uses the same stride. */
 const STRIDE = 0.58;
 
+/** The player's own feet, and where a peer's sit, in the one keyed-by-number table. */
+const EARS_PLAYER = -1;
+const EARS_PEER = -2;
+/** Pairs of feet held before the stale ones are swept, and how stale is stale. */
+const FEET_KEEP = 256;
+const FEET_STALE = 600;
+
 /** What each kind of ground sounds like underfoot. */
 export const FOOTINGS: Partial<Record<number, Footing>> = {
   [TileType.Grass]: 'soft',
@@ -215,7 +222,17 @@ export function mixAt(ear: Ear, wx: number, wy: number, h: number): { pan: numbe
 export class Sound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  private feet = new Map<string, { x: number; y: number }>();
+  /**
+   * Where each pair of feet last put one down, for working out when the next
+   * step lands. Keyed by a number — the player is -1, a peer is below that,
+   * a creature is its own id — because this is asked of everything walking on
+   * the island on every frame, and `'c' + id` was a string apiece for all of
+   * them. Stamped, so pairs of feet that have walked out of the world can be
+   * swept rather than kept for the session.
+   */
+  private feet = new Map<number, { x: number; y: number; at: number }>();
+  /** How many frames since the last sweep of the above. */
+  private swept = 0;
   private started: number[] = [];
   private levels = new Map<string, number>();
   private vary = 0;
@@ -305,12 +322,34 @@ export class Sound {
   step(): void {
     if (!this.ctx || this.volume <= 0) return;
     const g = this.game;
-    const foot = (id: string, x: number, y: number, level: number): void => {
+    const ear = this.ear;
+    const now = ++this.swept;
+    /*
+     * Out of earshot before anything else is asked.
+     *
+     * This runs on every frame for every creature on the island, and on a live
+     * one that is every creature the island has told us about — hundreds of
+     * them, nearly all of them nowhere near the screen. It was doing a string
+     * concat, a map lookup and a square root for each, to reach `place` and be
+     * told the sound was inaudible. The same question, asked first, is two
+     * multiplications: `mixAt` measures in half-screens from the middle, so
+     * anything more than `EARSHOT` of them away can never make a sound.
+     */
+    const halfW = ear.width / 2;
+    const halfH = ear.height / 2;
+    const heard = (x: number, y: number): boolean => {
+      const dx = (ear.worldToScreenX(x, y) - halfW) / halfW;
+      if (dx < -EARSHOT || dx > EARSHOT) return false;
+      const dy = (ear.worldToScreenY(x, y, 0) - halfH) / halfH;
+      return dy >= -EARSHOT && dy <= EARSHOT;
+    };
+    const foot = (id: number, x: number, y: number, level: number): void => {
       const last = this.feet.get(id);
       if (!last) {
-        this.feet.set(id, { x, y });
+        this.feet.set(id, { x, y, at: now });
         return;
       }
+      last.at = now;
       if (Math.hypot(last.x - x, last.y - y) < STRIDE) return;
       last.x = x;
       last.y = y;
@@ -319,9 +358,18 @@ export class Sound {
       footfall(this.ctx!, put.node, put.at, footingAt(g, x, y, level), this.next());
     };
     const p = g.player;
-    foot('player', p.x, p.y, p.level);
-    for (const cr of g.creatures.list.values()) foot('c' + cr.id, cr.x, cr.y, 0);
-    for (const other of g.roster.list()) foot('o' + other.id, other.x, other.y, other.level);
+    foot(EARS_PLAYER, p.x, p.y, p.level);
+    for (const cr of g.creatures.list.values()) {
+      if (heard(cr.x, cr.y)) foot(cr.id, cr.x, cr.y, 0);
+    }
+    for (const other of g.roster.list()) {
+      if (heard(other.x, other.y)) foot(EARS_PEER - other.id, other.x, other.y, other.level);
+    }
+    // And the pairs of feet nobody has heard in a while, which otherwise pile
+    // up for as long as the tab is open.
+    if (this.feet.size > FEET_KEEP) {
+      for (const [id, was] of this.feet) if (now - was.at > FEET_STALE) this.feet.delete(id);
+    }
   }
 
   private say(wx: number, wy: number, play: (ctx: AudioContext, node: AudioNode, at: number) => void): void {

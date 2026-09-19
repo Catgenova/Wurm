@@ -1,4 +1,8 @@
 import type { PeerId, PeerState } from '../net/protocol';
+import { tileKey } from './tileindex';
+
+/** Handed back for a tile nobody is standing on, so the common answer is free. */
+const NOBODY: readonly Peer[] = [];
 
 /**
  * The other people on the island.
@@ -93,6 +97,10 @@ export class Roster {
   private readonly peers = new Map<PeerId, Peer>();
   /** Who we are on this island. Zero is the host; -1 means nobody, which is single player. */
   self: PeerId = -1;
+  /** Who is standing where, rebuilt once a frame by `ease`. */
+  private byTile = new Map<number, Peer[]>();
+  /** The tiles written to this frame, so the rest are left alone. */
+  private filled: number[] = [];
 
   get size(): number {
     return this.peers.size;
@@ -106,13 +114,16 @@ export class Roster {
     return this.peers.get(id);
   }
 
-  /** Everyone standing on a given tile, for the renderer, which asks per tile. */
-  atTile(x: number, y: number, out: Peer[]): Peer[] {
-    out.length = 0;
-    for (const p of this.peers.values()) {
-      if (Math.floor(p.x) === x && Math.floor(p.y) === y) out.push(p);
-    }
-    return out;
+  /**
+   * Everyone standing on a given tile, for the renderer, which asks per tile.
+   *
+   * Filed rather than searched. This used to walk every peer on the island for
+   * every tile on screen — two thousand tiles against twenty people is forty
+   * thousand comparisons a frame to answer "nobody" forty thousand times. The
+   * index is built once a frame in `ease`, which already walks all of them.
+   */
+  atTile(x: number, y: number): readonly Peer[] {
+    return this.byTile.get(tileKey(x, y)) ?? NOBODY;
   }
 
   /**
@@ -165,6 +176,13 @@ export class Roster {
    */
   ease(dt: number): void {
     const now = clock();
+    // The tile index goes with the easing: one walk of the list does both, and
+    // the renderer asks `atTile` immediately afterwards.
+    for (const key of this.filled) {
+      const at = this.byTile.get(key);
+      if (at) at.length = 0;
+    }
+    this.filled.length = 0;
     for (const p of this.peers.values()) {
       if (p.span > 0) {
         const t = Math.min(1, (now - p.at) / p.span);
@@ -173,6 +191,14 @@ export class Roster {
         if (t >= 1) p.span = 0;
       }
       if (p.moving) p.walkPhase += dt * 11;
+      const key = tileKey(Math.floor(p.x), Math.floor(p.y));
+      let at = this.byTile.get(key);
+      if (!at) {
+        at = [];
+        this.byTile.set(key, at);
+      }
+      if (!at.length) this.filled.push(key);
+      at.push(p);
     }
   }
 

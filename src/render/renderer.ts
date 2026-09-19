@@ -61,6 +61,7 @@ import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { SWAY_MAX, swayAt } from './sway';
+import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -278,6 +279,9 @@ export function sunAt(hour: number): [number, number, number] {
 /** How finely the sun's walk is cut up: the ground is re-shaded on each step. */
 const SUN_STEPS = 48;
 
+/** How often a still cursor is told again what it is over, in milliseconds. */
+const PICK_EVERY = 90;
+
 /**
  * The wash over everything at this hour: warm at the two ends of the day, cold
  * in the middle of the night, nothing at all at noon. Dusk and dawn overlap
@@ -332,13 +336,13 @@ export class Renderer {
   /** The tile the tile window is looking at, outlined so you can see which it is. */
   selected: { x: number; y: number } | null = null;
   fps = 0;
-  private colors: (string | null)[];
+  private colors: ColourPages;
   /** Which step of the sun's walk the ground was last shaded for. */
   private lastSun = -1;
   /** Where a shadow falls this frame, in screen pixels, and how dark it is. */
   private shadow = { dx: 0, dy: 0, alpha: 0 };
   /** Tile colours as the map remembers them, for ground nobody is watching. */
-  private memColors: (string | null)[];
+  private memColors: ColourPages;
   private lastVision = -1;
   private pts = new Float64Array(8);
   /** The tile's outline in screen pixels from its anchor corner, worked out once a frame. */
@@ -354,14 +358,22 @@ export class Renderer {
    */
   private colorBuf = [0, 0, 0, 0];
   private ents: Entity[] = [];
-  /** Scratch for asking the roster who is on a tile, so the question costs no garbage. */
-  private peerBuf: Peer[] = [];
   private waterPoly = new Float64Array(16);
   /** Every water polygon drawn this frame, so a wake can be kept on the water. */
   private waterEdge = new Float64Array(4);
   /** Grain on bare ground, gathered a diagonal at a time so it costs two fills, not two a tile. */
-  private grainDark = new Path2D();
-  private grainPale = new Path2D();
+  /**
+   * The grain speckles for the row being drawn: three numbers apiece — x, y and
+   * size — in two buffers that are filled and emptied rather than replaced.
+   *
+   * This was two fresh `Path2D` objects per row of the island, every frame,
+   * zoomed in. They are filled onto the context's own path instead, which
+   * `beginPath` empties for nothing.
+   */
+  private grainDark = new Float32Array(3 * 4096);
+  private grainPale = new Float32Array(3 * 4096);
+  private grainN = 0;
+  private grainM = 0;
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
@@ -382,6 +394,11 @@ export class Renderer {
   /** The wind as the surface sees it, worked out once a frame rather than per tile. */
   private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
+  /** What the cursor was last told it was over, and when. */
+  private picked: Pick | null = null;
+  private pickedAt = -1e9;
+  private pickX = NaN;
+  private pickY = NaN;
   private playerFacing = 1;
   private creatureHits: HitRect[] = [];
   private peerHits: HitRect[] = [];
@@ -429,8 +446,8 @@ export class Renderer {
     private readonly canvas: FullscreenCanvas,
     private readonly game: Game,
   ) {
-    this.colors = new Array<string | null>(game.world.w * game.world.h).fill(null);
-    this.memColors = new Array<string | null>(game.world.w * game.world.h).fill(null);
+    this.colors = new ColourPages(game.world.w);
+    this.memColors = new ColourPages(game.world.w);
     game.world.onChange((x, y) => this.invalidate(x, y));
     // Damage and skill both go up over the thing they happened to. Damage adds
     // up per target, skill per skill, so a flurry of either reads as one
@@ -453,7 +470,7 @@ export class Renderer {
       const ty = Math.floor(y);
       const w = game.world;
       if (!w.inBounds(tx, ty) || w.heightAt(x, y) < 0) return;
-      const tone = dustTone(this.groundColor(tx, ty, ty * w.w + tx, true, this.sunNow));
+      const tone = dustTone(this.groundColor(tx, ty, true, this.sunNow));
       this.dust.burst(x, y, this.time, tone, Math.max(0.45, dustiness(w.viewTile(tx, ty, true))));
     });
     game.events.on('reset', () => {
@@ -510,8 +527,8 @@ export class Renderer {
     for (let yy = y - 1; yy <= y + 1; yy++) {
       for (let xx = x - 1; xx <= x + 1; xx++) {
         if (w.inBounds(xx, yy)) {
-          this.colors[yy * w.w + xx] = null;
-          this.memColors[yy * w.w + xx] = null;
+          this.colors.forget(xx, yy);
+          this.memColors.forget(xx, yy);
         }
       }
     }
@@ -624,13 +641,13 @@ export class Renderer {
   }
 
   /** A tile's colour as drawn, worked out once and kept until something changes it. */
-  private groundColor(x: number, y: number, idx: number, lit: boolean, sun: [number, number, number]): string {
+  private groundColor(x: number, y: number, lit: boolean, sun: [number, number, number]): string {
     const cache = lit ? this.colors : this.memColors;
-    let color = cache[idx];
+    let color = cache.get(x, y);
     if (!color) {
       const w = this.game.world;
       color = this.computeColor(x, y, w.viewTile(x, y, lit), w.viewData(x, y, lit), sun, lit);
-      cache[idx] = color;
+      cache.set(x, y, color);
     }
     return color;
   }
@@ -646,8 +663,9 @@ export class Renderer {
    * It costs nothing over open country: a field of grass has no edges to
    * blend, so the work is proportional to how broken up the ground is.
    */
-  private blendEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, mine: TileType, lit: boolean, sun: [number, number, number], pts: Float64Array): void {
+  private blendEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, mine: TileType, lit: boolean, sun: [number, number, number], pts: Float64Array): boolean {
     const world = this.game.world;
+    let drew = false;
     const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
     const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
     for (let e = 0; e < 4; e++) {
@@ -663,7 +681,7 @@ export class Renderer {
       const ay = pts[e * 2 + 1];
       const bx = pts[((e + 1) & 3) * 2];
       const by = pts[((e + 1) & 3) * 2 + 1];
-      ctx.fillStyle = this.groundColor(nx, ny, ny * world.w + nx, lit, sun);
+      ctx.fillStyle = this.groundColor(nx, ny, lit, sun);
       ctx.globalAlpha = BLEND_ALPHA;
       ctx.beginPath();
       ctx.moveTo(ax, ay);
@@ -673,7 +691,9 @@ export class Renderer {
       ctx.closePath();
       ctx.fill();
       ctx.globalAlpha = 1;
+      drew = true;
     }
+    return drew;
   }
 
   /**
@@ -773,9 +793,27 @@ export class Renderer {
       const top = 1 - b;
       const sx = (pts[0] * (1 - a) + pts[2] * a) * top + (pts[6] * (1 - a) + pts[4] * a) * b;
       const sy = (pts[1] * (1 - a) + pts[3] * a) * top + (pts[7] * (1 - a) + pts[5] * a) * b;
-      const path = hash2(x, y, 42 + i * 3) < 0.5 ? this.grainDark : this.grainPale;
-      path.rect(sx - size * 0.5, sy - size * 0.5, size, size);
+      if (hash2(x, y, 42 + i * 3) < 0.5) {
+        if (this.grainN + 3 > this.grainDark.length) continue;
+        this.grainDark[this.grainN++] = sx - size * 0.5;
+        this.grainDark[this.grainN++] = sy - size * 0.5;
+        this.grainDark[this.grainN++] = size;
+      } else {
+        if (this.grainM + 3 > this.grainPale.length) continue;
+        this.grainPale[this.grainM++] = sx - size * 0.5;
+        this.grainPale[this.grainM++] = sy - size * 0.5;
+        this.grainPale[this.grainM++] = size;
+      }
     }
+  }
+
+  /** Lay a row's worth of speckles down in one fill. */
+  private specks(ctx: CanvasRenderingContext2D, buf: Float32Array, n: number, ink: string): void {
+    if (!n) return;
+    ctx.beginPath();
+    for (let i = 0; i < n; i += 3) ctx.rect(buf[i], buf[i + 1], buf[i + 2], buf[i + 2]);
+    ctx.fillStyle = ink;
+    ctx.fill();
   }
 
   render(dt: number): void {
@@ -854,10 +892,9 @@ export class Renderer {
       this.lastVision = vision.revision;
       const box = vision.dirty;
       if (box) {
-        for (let y = Math.max(0, box.y0); y <= Math.min(world.h - 1, box.y1); y++) {
-          for (let x = Math.max(0, box.x0); x <= Math.min(world.w - 1, box.x1); x++) this.memColors[y * world.w + x] = null;
-        }
-      } else this.memColors.fill(null);
+        this.memColors.forgetBox(Math.max(0, box.x0), Math.max(0, box.y0),
+          Math.min(world.w - 1, box.x1), Math.min(world.h - 1, box.y1));
+      } else this.memColors.clear();
     }
     // The sun moves through the day, so the ground has to be shaded again as it
     // goes. It is cut into steps rather than recomputed every frame: a repaint
@@ -868,7 +905,7 @@ export class Renderer {
     const sunStep = Math.floor((hour / 24) * SUN_STEPS);
     if (sunStep !== this.lastSun) {
       this.lastSun = sunStep;
-      this.colors.fill(null);
+      this.colors.clear();
     }
     /*
      * Where a shadow falls, and how long it is. Straight down and invisible at
@@ -930,8 +967,8 @@ export class Renderer {
     for (let d = dLo; d <= dHi; d++) {
       this.ents.length = 0;
       if (grain) {
-        this.grainDark = new Path2D();
-        this.grainPale = new Path2D();
+        this.grainN = 0;
+        this.grainM = 0;
       }
       const baseY = (d * stepH - cam.cy) * zoom + H / 2;
       let e = eMin;
@@ -958,7 +995,6 @@ export class Renderer {
         if (maxY < 0 || minY > H + bottomMargin) continue;
         this.drawnTiles++;
 
-        const idx = y * world.w + x;
         // Three states: land nobody has seen is not drawn at all, land in sight
         // is drawn as it is, and land only remembered is drawn as it was.
         const fog = vision.state(x, y);
@@ -976,7 +1012,7 @@ export class Renderer {
           continue;
         }
         const lit = fog === VISIBLE;
-        const color = this.groundColor(x, y, idx, lit, sun);
+        const color = this.groundColor(x, y, lit, sun);
         ctx.beginPath();
         ctx.moveTo(pts[0], pts[1]);
         ctx.lineTo(pts[2], pts[3]);
@@ -987,7 +1023,21 @@ export class Renderer {
         ctx.fill();
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
         const t0 = world.viewTile(x, y, lit) as TileType;
-        if (blend && !wet && !HARD_EDGED.has(t0)) this.blendEdges(ctx, V, x, y, t0, lit, sun, pts);
+        if (blend && !wet && !HARD_EDGED.has(t0)) {
+          /*
+           * Most ground has the same ground all round it, and finding that out
+           * costs four tile reads and four bounds checks per tile per frame.
+           * The answer goes stale exactly when the colour does, so it is kept
+           * beside the colour: one means there was nothing to blend here and
+           * this tile can be passed over, two means there was.
+           */
+          const seams = lit ? this.colors : this.memColors;
+          const known = seams.flag(x, y);
+          if (known !== 1) {
+            const drew = this.blendEdges(ctx, V, x, y, t0, lit, sun, pts);
+            if (known === 0) seams.setFlag(x, y, drew ? 2 : 1);
+          }
+        }
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
@@ -1113,7 +1163,7 @@ export class Renderer {
         }
         // Other people on the island stand on tiles like anything else does.
         if (this.game.roster.size) {
-          for (const peer of this.game.roster.atTile(x, y, this.peerBuf)) {
+          for (const peer of this.game.roster.atTile(x, y)) {
             const [px, py] = this.game.roster.drawnAt(peer);
             this.ents.push({
               kind: 'peer',
@@ -1173,10 +1223,8 @@ export class Renderer {
         });
       }
       if (grain) {
-        ctx.fillStyle = 'rgba(0,0,0,0.095)';
-        ctx.fill(this.grainDark);
-        ctx.fillStyle = 'rgba(255,255,255,0.07)';
-        ctx.fill(this.grainPale);
+        this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
+        this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
       }
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }
@@ -3165,7 +3213,7 @@ export class Renderer {
       const tx = Math.floor(x);
       const ty = Math.floor(y);
       if (!w.inBounds(tx, ty) || !dry(x, y)) return;
-      this.dust.step(id, x, y, now, dustTone(this.groundColor(tx, ty, ty * w.w + tx, true, sun)), dustiness(w.viewTile(tx, ty, true)));
+      this.dust.step(id, x, y, now, dustTone(this.groundColor(tx, ty, true, sun)), dustiness(w.viewTile(tx, ty, true)));
     };
     // Whether a thing counts as walking is settled by how far it has actually
     // gone, not by a flag: a pace covered is a pace, whoever or whatever moved
@@ -3803,6 +3851,32 @@ export class Renderer {
    * on it — its canopy leans over the tiles behind it, and catching clicks with
    * it put the cursor on a tile a long way from where it was pointing.
    */
+  /**
+   * What is under the cursor, asked no oftener than it can have changed.
+   *
+   * `pick` walks eleven lists of hit boxes and then searches back along the
+   * lattice for the tile under the point, and it was being asked on every
+   * frame whether or not anything had moved — including while the cursor sat
+   * still on a menu-less screen. A cursor that has not moved is re-asked a few
+   * times a second, which is quicker than anything on the island can walk out
+   * from under it and a sixth of the work.
+   */
+  hoverPick(sx: number, sy: number): Pick | null {
+    const now = performance.now();
+    if (sx === this.pickX && sy === this.pickY && now - this.pickedAt < PICK_EVERY) return this.picked;
+    this.pickX = sx;
+    this.pickY = sy;
+    this.pickedAt = now;
+    this.picked = this.pick(sx, sy);
+    return this.picked;
+  }
+
+  /** The cursor has left the canvas: what was under it is not under it now. */
+  forgetPick(): void {
+    this.pickX = NaN;
+    this.picked = null;
+  }
+
   pick(sx: number, sy: number): Pick | null {
     for (let i = this.peerHits.length - 1; i >= 0; i--) {
       const h = this.peerHits[i];

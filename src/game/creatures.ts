@@ -12,6 +12,7 @@ import { fishable, fishHere, waterDepth } from './fishing';
 import { itemDef, type Item } from './items';
 import { groundStep, standsOn } from './player';
 import { skillGain } from './skills';
+import { keyX, keyY, tileKey } from './tileindex';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
 import type { WoundKind } from './wounds';
@@ -128,6 +129,15 @@ export const HERD_REACH = 14;
  * mostly sea, eight throws into the water are no goes at all.
  */
 export const SITE_LOOKS = 8;
+
+/** Handed back for a tile nothing is standing on, so the common answer is free. */
+const NOBODY: readonly Creature[] = [];
+/**
+ * How many tiles the creature index may keep arrays for before the lot go.
+ * A tick fills as many tiles as there are creatures; this is slack enough
+ * that a settled island never pays for the clear.
+ */
+const TILE_SLACK = 4096;
 
 export const GATHER_SKILL: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'woodcutting', farm: 'farming', mine: 'mining', sand: 'digging', clay: 'digging', quarry: 'mining', stoke: 'smelting', fetch: 'foraging', guard: 'body_strength', hunt: 'fighting', peat: 'digging', reed: 'foraging', water: 'carrying', prospect: 'prospecting', plant: 'forestry', hod: 'masonry', mend: 'repair', compost: 'farming', seek: 'archaeology', fish: 'fishing', prune: 'forestry', stump: 'digging', fruit: 'forestry' };
 export const GATHER_VERB: Record<GatherKind, string> = { forage: 'foraging', botanize: 'botanizing', woodcut: 'felling trees', farm: 'working the fields', mine: 'working the seams', sand: 'digging sand', clay: 'digging clay', quarry: 'cutting stone', stoke: 'keeping the fires in', fetch: 'clearing up', guard: 'keeping watch', hunt: 'hunting', peat: 'cutting peat', reed: 'cutting reeds', water: 'carrying water', prospect: 'reading the ground', plant: 'planting', hod: 'carrying the hod', mend: 'mending', compost: 'clearing up', seek: 'nosing about', fish: 'fishing', prune: 'pruning the wood', stump: 'digging out stumps', fruit: 'picking fruit' };
@@ -2038,7 +2048,17 @@ const HURT_FLOOR = 0.05;
 export class Creatures {
   readonly list = new Map<number, Creature>();
   nextId = 1;
-  private byTile = new Map<string, Creature[]>();
+  /**
+   * Who is standing where, filed under the tile and rebuilt every tick.
+   *
+   * Numbers for keys rather than `"x,y"` strings, and the arrays are emptied
+   * and kept rather than thrown away: this is rebuilt from scratch on every
+   * frame for every creature on the island, so it was making a string and an
+   * array per creature per frame and handing both straight to the collector.
+   */
+  private byTile = new Map<number, Creature[]>();
+  /** Tiles written to this tick, so the rest can be left alone. */
+  private filled: number[] = [];
   /**
    * Wildlife that belongs to a stretch of country but is not in memory just
    * now, by region. A number apiece: what comes back is of the country rather
@@ -2329,9 +2349,13 @@ export class Creatures {
     this.list.delete(id);
   }
 
-  /** Creatures standing on a tile, from the index rebuilt each update. */
-  atTile(x: number, y: number): Creature[] {
-    return this.byTile.get(`${x},${y}`) ?? [];
+  /**
+   * Creatures standing on a tile, from the index rebuilt each update. The
+   * array is the index's own — read it, do not keep it or reorder it — and an
+   * empty tile hands back one shared empty array.
+   */
+  atTile(x: number, y: number): readonly Creature[] {
+    return this.byTile.get(tileKey(x, y)) ?? NOBODY;
   }
 
   /** How far this one ranges from the token at the skill it has now. */
@@ -2518,7 +2542,7 @@ export class Creatures {
    * map grow: the cost follows what is being looked at rather than what exists.
    */
   update(dt: number, game: Game): void {
-    this.byTile.clear();
+    this.clearTiles();
     if (this.fromIsland) {
       this.walkLegs();
       return;
@@ -2759,10 +2783,36 @@ export class Creatures {
 
   /** File a creature under the tile it is standing on, for quick lookups. */
   private place(c: Creature): void {
-    const key = `${Math.floor(c.x)},${Math.floor(c.y)}`;
-    const arr = this.byTile.get(key);
-    if (arr) arr.push(c);
-    else this.byTile.set(key, [c]);
+    const key = tileKey(Math.floor(c.x), Math.floor(c.y));
+    let arr = this.byTile.get(key);
+    if (!arr) {
+      arr = [];
+      this.byTile.set(key, arr);
+    }
+    if (!arr.length) this.filled.push(key);
+    arr.push(c);
+  }
+
+  /**
+   * Empty the tile index for the tick about to be filled.
+   *
+   * Only the tiles that were written to, and the arrays are kept: a creature
+   * that is standing still stands on the same tile next frame, so the array is
+   * wanted again in a moment. The whole map goes only when it has grown past
+   * what any one tick could want, which is a herd having wandered over a great
+   * deal of country since the map was last thrown away.
+   */
+  private clearTiles(): void {
+    if (this.byTile.size > TILE_SLACK) {
+      this.byTile.clear();
+      this.filled.length = 0;
+      return;
+    }
+    for (const key of this.filled) {
+      const arr = this.byTile.get(key);
+      if (arr) arr.length = 0;
+    }
+    this.filled.length = 0;
   }
 
   /**
@@ -3702,7 +3752,8 @@ export class Creatures {
       let bestD = Infinity;
       for (const [key, pile] of game.ground) {
         if (!pile.some((it) => it.id === 'corpse')) continue;
-        const [gx, gy] = key.split(',').map(Number);
+        const gx = keyX(key);
+        const gy = keyY(key);
         if (Math.max(Math.abs(gx - deed.x), Math.abs(gy - deed.y)) > range) continue;
         const d = Math.hypot(gx + 0.5 - c.x, gy + 0.5 - c.y);
         if (d < bestD) {

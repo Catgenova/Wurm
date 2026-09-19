@@ -94,7 +94,17 @@ function ordinal(n: number): string {
   return `${n}${suffix}`;
 }
 
+/**
+ * How often the hud is allowed to redraw itself, in milliseconds. Ten times a
+ * second is quicker than anybody reads and a sixth of the work.
+ */
+const HUD_EVERY = 100;
+
 export class Hud {
+  /** When the hud last drew itself, so it does so a few times a second. */
+  private lastAt = -1e9;
+  /** What each node was last told to say, so it is not told the same thing twice. */
+  private readonly said = new WeakMap<HTMLElement, string>();
   private bars: Record<string, Bar> = {};
   /** Toolbar buttons that name a key, and which binding each one names. */
   private keyed: Array<{ btn: HTMLButtonElement; label: string; bind: string }> = [];
@@ -545,21 +555,49 @@ export class Hud {
     this.cutBtn.classList.toggle('active', s.cutaway);
   }
 
+  /** Write to a node only when what it would say has changed. */
+  private say(el: HTMLElement, text: string): void {
+    if (this.said.get(el) === text) return;
+    this.said.set(el, text);
+    el.textContent = text;
+  }
+
+  /**
+   * Everything along the top and down the side, a few times a second.
+   *
+   * This used to run on every frame: a dozen `textContent` writes, a handful
+   * of template strings, `Object.entries` over the bars, and the whole wound
+   * list torn down and built again out of fresh elements — sixty times a
+   * second, for figures that change a few times a minute. Every one of those
+   * writes can make the browser lay the page out again, and the hud sits over
+   * the canvas, so it was doing it in the middle of the frame.
+   *
+   * Every other panel in the game has gone through `Repaint` since it was
+   * written. This one had been missed. Ten times a second is quicker than
+   * anybody reads, and nothing is written at all unless it differs from what
+   * is already on the screen.
+   */
   update(renderer: Renderer, fps: number): void {
+    const now = performance.now();
+    if (now - this.lastAt < HUD_EVERY) return;
+    this.lastAt = now;
     this.refreshStorey();
     this.refreshGuide();
     const p = this.game.player;
-    this.nameEl.textContent = p.name;
+    this.say(this.nameEl, p.name);
     for (const [id, bar] of Object.entries(this.bars)) {
       const v = p.stats[id as keyof typeof p.stats];
-      bar.fill.style.width = `${Math.round(v * 100)}%`;
-      bar.value.textContent = `${Math.round(v * 100)}%`;
+      const pct = `${Math.round(v * 100)}%`;
+      if (this.said.get(bar.value) === pct) continue;
+      this.said.set(bar.value, pct);
+      bar.fill.style.width = pct;
+      bar.value.textContent = pct;
     }
     const h = this.game.world.heightAt(p.x, p.y);
     const standing = this.game.deedOfMineAt(p.tileX, p.tileY);
     const deed = standing ? `  ·  ${standing.name}` : '';
     const title = this.game.titleName();
-    this.posEl.textContent = `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}${title ? `  ·  ${title}` : ''}`;
+    this.say(this.posEl, `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}${p.swimming ? '  ·  swimming' : ''}${deed}${title ? `  ·  ${title}` : ''}`);
     // Rest and the knacks running off what you have eaten, when there are any.
     const rested = this.game.player.rested;
     const boons = this.game.activeBoons();
@@ -592,7 +630,7 @@ export class Hud {
       parts.push(`${name} +${Math.round(b.bonus * 100)}% · ${clockLeft(b.until - this.game.time)}`);
     }
     this.boonEl.hidden = !parts.length;
-    if (parts.length) this.boonEl.textContent = parts.join('  ·  ');
+    if (parts.length) this.say(this.boonEl, parts.join('  ·  '));
     // The wind, which only matters when there is a sail over you.
     const boat = this.game.afloat();
     const sailing = boat && FURNITURE_BY_ID.get(boat.kind)?.boat?.sail;
@@ -615,7 +653,9 @@ export class Hud {
     // What is open on you, worst first, with the herb each one wants.
     const wounds = this.game.player.wounds;
     this.woundEl.hidden = !wounds.length;
-    if (wounds.length) {
+    const hurts = wounds.map((w) => `${w.kind}${w.severity.toFixed(1)}${w.infected ? 'i' : ''}${w.bleeding ? 'b' : ''}`).join('|');
+    if (wounds.length && this.said.get(this.woundEl) !== hurts) {
+      this.said.set(this.woundEl, hurts);
       const sorted = [...wounds].sort((a, b) => (b.infected ? 1 : 0) - (a.infected ? 1 : 0) || b.severity - a.severity);
       this.woundEl.replaceChildren();
       for (const w of sorted.slice(0, 4)) {
@@ -636,7 +676,7 @@ export class Hud {
     }
     const mobs = this.game.creatures.ticked;
     const watched = this.game.settings.fog ? ` · ${mobs.thought}/${mobs.near + mobs.far + mobs.asleep} mobs` : '';
-    this.fpsEl.textContent = `${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`;
+    this.say(this.fpsEl, `${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`);
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
     // What is in your hands and how much armour is on you.

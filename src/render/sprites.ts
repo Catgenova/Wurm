@@ -54,8 +54,27 @@ export function spriteScaleFor(zoom: number): void {
   }
   if (want === SPRITE_SCALE) return;
   SPRITE_SCALE = want;
-  cache.clear();
+  /*
+   * The step a sprite was drawn at is part of its name now, so stepping in and
+   * straight out again finds what was drawn a second ago rather than drawing
+   * the whole island twice. Two steps are kept — the one in use and the one
+   * most recently left — because a zoom is nearly always a wobble between two
+   * of them; a third pushes the oldest out, since a sprite at 5× is a canvas
+   * fifty-odd times the area of the same sprite at 2× and three of every one
+   * of them is not worth the memory.
+   */
+  const tag = `${want}|`;
+  const i = LIVE.indexOf(tag);
+  if (i >= 0) LIVE.splice(i, 1);
+  LIVE.push(tag);
+  while (LIVE.length > 2) {
+    const dead = LIVE.shift()!;
+    for (const k of cache.keys()) if (k.startsWith(dead)) cache.delete(k);
+  }
 }
+
+/** The scale tags with sprites still cached under them, oldest first. */
+const LIVE: string[] = [`${SPRITE_STEPS[0]}|`];
 
 const nextStep = (step: number): number => SPRITE_STEPS[Math.min(SPRITE_STEPS.length - 1, SPRITE_STEPS.indexOf(step) + 1)];
 
@@ -148,7 +167,7 @@ function branches(ctx: CanvasRenderingContext2D, bx: number, top: number, size: 
 }
 
 export function treeSprite(species: number, variant: number): Sprite {
-  const key = `tree:${species}:${variant}`;
+  const key = `${SPRITE_SCALE}|tree:${species}:${variant}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const def = TREE_DEFS[species];
@@ -273,7 +292,7 @@ export function treeSprite(species: number, variant: number): Sprite {
 
 /** What a felled tree leaves: a short wide stub of its trunk, cut flat. */
 export function stumpSprite(species: number): Sprite {
-  const key = `stump:${species}`;
+  const key = `${SPRITE_SCALE}|stump:${species}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const def = TREE_DEFS[species];
@@ -311,7 +330,7 @@ export function stumpSprite(species: number): Sprite {
 }
 
 export function bushSprite(species: number): Sprite {
-  const key = `bush:${species}`;
+  const key = `${SPRITE_SCALE}|bush:${species}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const def = BUSH_DEFS[species];
@@ -343,7 +362,7 @@ export function bushSprite(species: number): Sprite {
 
 /** A small heap of dropped goods. */
 export function pileSprite(): Sprite {
-  const key = 'pile';
+  const key = `${SPRITE_SCALE}|pile`;
   let spr = cache.get(key);
   if (spr) return spr;
   spr = makeSprite(36, 30, 18, 27, (ctx) => {
@@ -378,7 +397,7 @@ export function pileSprite(): Sprite {
 
 /** The settlement token: a carved stone pillar with a gilded cap. */
 export function tokenSprite(): Sprite {
-  const key = 'token';
+  const key = `${SPRITE_SCALE}|token`;
   let spr = cache.get(key);
   if (spr) return spr;
   spr = makeSprite(40, 76, 20, 72, (ctx) => {
@@ -444,7 +463,7 @@ export function tokenSprite(): Sprite {
 
 /** A crate sized to one subtile (a quarter of a tile each way). */
 export function crateSprite(kind: 'log' | 'plank' = 'plank'): Sprite {
-  const key = `crate:${kind}`;
+  const key = `${SPRITE_SCALE}|crate:${kind}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const left = kind === 'log' ? '#7d5c38' : '#8a6a42';
@@ -507,7 +526,7 @@ export function crateSprite(kind: 'log' | 'plank' = 'plank'): Sprite {
  * bushy, and fibre opens into bolls. Ripe plants carry their produce.
  */
 export function cropSprite(cropId: string, stage: number, look: string, leaf: string, fruit: string): Sprite {
-  const key = `crop:${cropId}:${stage}`;
+  const key = `${SPRITE_SCALE}|crop:${cropId}:${stage}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const rng = mulberry32(hashString(cropId) + stage * 7919);
@@ -1731,29 +1750,28 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   // Age is drawn rather than written: a yearling is two thirds the size of
   // its parents and an old one has put weight on.
   zoom *= pose.scale ?? 1;
-  if (pose.species === 'vola') drawVolaBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'bevere') drawBevereBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'seavic') drawSeavicBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'mola') drawMolaBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'crawler') drawCrawlerBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'noot') drawNootBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'embra') drawEmbraBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'quarra') drawQuarraBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'woola') drawWoolaBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'ulva') drawUlvaBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'magga') drawMaggaBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'roxxen') drawRoxxenBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'orse') drawOrseBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'rowl') drawRowlBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'vesp') drawVespBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'lume') drawLumeBody(ctx, sx, sy, zoom, pose);
-  else if (pose.species === 'dragon') drawDragonBody(ctx, sx, sy, zoom, pose);
+  const own = pose.species ? OWN_BODY[pose.species] : undefined;
+  if (own) own(ctx, sx, sy, zoom, pose);
   else if (pose.species && MONSTER_SHAPES[pose.species]) drawMonsterBody(ctx, sx, sy, zoom, pose, MONSTER_SHAPES[pose.species]);
   else if (pose.species && BEASTS[pose.species]) drawBeastBody(ctx, sx, sy, zoom, pose, BEASTS[pose.species]);
   else if (pose.species && BIRDS[pose.species]) drawBirdBody(ctx, sx, sy, zoom, pose, BIRDS[pose.species]);
   else drawRabbaBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
 }
+
+/**
+ * The species that are drawn by hand rather than off one of the three shape
+ * tables. This was a ladder of twenty-odd string comparisons walked for every
+ * creature on screen on every frame, with a dragon — the last of them — paying
+ * for all nineteen in front of it.
+ */
+const OWN_BODY: Record<string, (ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose) => void> = {
+  vola: drawVolaBody, bevere: drawBevereBody, seavic: drawSeavicBody, mola: drawMolaBody,
+  crawler: drawCrawlerBody, noot: drawNootBody, embra: drawEmbraBody, quarra: drawQuarraBody,
+  woola: drawWoolaBody, ulva: drawUlvaBody, magga: drawMaggaBody, roxxen: drawRoxxenBody,
+  orse: drawOrseBody, rowl: drawRowlBody, vesp: drawVespBody, lume: drawLumeBody,
+  dragon: drawDragonBody,
+};
 
 /** A Roxxen: a wall of ox, head low, horns forward. Feet at (sx, sy). */
 function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {

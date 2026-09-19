@@ -393,11 +393,12 @@ const loop = new GameLoop(
     sound.step();
 
     if (input.pointer.overCanvas && !input.dragging && !ui.menu.isOpen) {
-      renderer.hover = renderer.pick(input.pointer.x, input.pointer.y);
+      renderer.hover = renderer.hoverPick(input.pointer.x, input.pointer.y);
       ui.setHover(renderer.hover, input.pointer.x, input.pointer.y);
       ui.syncGhost(renderer.hover);
     } else {
       renderer.hover = null;
+      renderer.forgetPick();
       ui.setHover(null, 0, 0);
       ui.syncGhost(null);
     }

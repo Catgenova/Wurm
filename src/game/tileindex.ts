@@ -20,13 +20,28 @@ const NONE: never[] = [];
  * Rows are this far apart in the key. Bigger than any map we would make, so
  * the index needs to know nothing about the world it is filing.
  */
-const STRIDE = 8192;
+export const STRIDE = 8192;
+
+/**
+ * A tile as one number, for anything filing things by tile.
+ *
+ * Exported because this index is not the only place that does it: the piles on
+ * the ground and the crops in the fields were both kept under a `"x,y"` string
+ * built fresh on every lookup — and the renderer asks both of them about every
+ * tile it draws, sixty times a second. A few hundred thousand short-lived
+ * strings a second is not a cost anybody can see in a profile as one line, and
+ * it is exactly the sort of thing that makes a whole game feel slack.
+ */
+export const tileKey = (x: number, y: number): number => y * STRIDE + x;
+/** And back again, for the two places that iterate and want the tile. */
+export const keyX = (key: number): number => key % STRIDE;
+export const keyY = (key: number): number => (key - (key % STRIDE)) / STRIDE;
 
 export class TileIndex<T extends Placed> {
   private byTile = new Map<number, T[]>();
 
   private key(x: number, y: number): number {
-    return y * STRIDE + x;
+    return tileKey(x, y);
   }
 
   add(item: T): void {
