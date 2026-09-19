@@ -28,10 +28,12 @@ import { isSeam, TileType } from '../../src/world/tiles';
 
 /*
  * Enough rolls that a species living on a twentieth of the island is counted
- * in dozens rather than in ones: this is a measurement, and a bar it clears by
- * luck half the time is not a measurement of anything.
+ * in hundreds rather than in ones: this is a measurement, and a bar it clears
+ * by luck half the time is not a measurement of anything. Two thousand was not
+ * enough — a snout is one roll in a hundred and fifty, so a run held a dozen
+ * of them and a dozen wanders by four, which is most of the bar.
  */
-const HOW_MANY = 2000;
+const HOW_MANY = 20000;
 
 let bad = 0;
 const say = (ok: boolean, line: string): void => {
@@ -106,6 +108,14 @@ console.log('');
  * ground is under one tile in fifty here is not being measured by 900 rolls.
  */
 let thin = 0;
+/*
+ * And every bar below is set three draws' worth of luck under where it is
+ * aimed. A count out of a bag wanders by about its own square root, so a bar a
+ * true scheme trips over one run in twenty is not a bar, it is a coin — which
+ * is what a snout at 0.30% against a weight of 0.68% turned out to be, six of
+ * them where thirteen were due.
+ */
+const slack = (rate: number): number => 3 * Math.sqrt(Math.max(1, rate * placed)) / Math.max(1, placed);
 for (const [id, wt] of WILD_SPECIES) {
   const share = suitShare.get(id) ?? 0;
   if (share < 0.02) continue;
@@ -113,10 +123,10 @@ for (const [id, wt] of WILD_SPECIES) {
   const was = (oldWeighted.get(id) ?? 0) / oldTotal;
   const now = (got.get(id) ?? 0) / Math.max(1, placed);
   if (share >= 0.1) {
-    if (now < want * 0.5) say(false, `${id} came out at ${(now * 100).toFixed(2)}% against a weight of ${(want * 100).toFixed(2)}% (${(share * 100).toFixed(0)}% of the ground suits it)`);
+    if (now + slack(want) < want * 0.5) say(false, `${id} came out at ${(now * 100).toFixed(2)}% against a weight of ${(want * 100).toFixed(2)}% (${(share * 100).toFixed(0)}% of the ground suits it)`);
   } else {
     thin++;
-    if (now < was * 1.5) say(false, `${id} came out at ${(now * 100).toFixed(2)}%, no better than the ${(was * 100).toFixed(2)}% the old scheme gave it`);
+    if (now + slack(was * 1.5) < was * 1.5) say(false, `${id} came out at ${(now * 100).toFixed(2)}%, no better than the ${(was * 100).toFixed(2)}% the old scheme gave it`);
   }
 }
 say(true, `every species with a tenth of the island to live on is within half its weight, and the ${thin} living on less are worth half again as much as they were`);
@@ -125,7 +135,7 @@ const molaWant = (weight.get('mola') as number) / total;
 const molaNow = (got.get('mola') ?? 0) / Math.max(1, placed);
 const molaWas = (oldWeighted.get('mola') ?? 0) / oldTotal;
 say(molaNow > molaWas * 2, `a mola is ${(molaNow / Math.max(1e-9, molaWas)).toFixed(1)} times commoner than the old scheme put it`);
-say(molaNow >= molaWant * 0.5, `one in ${Math.round(1 / Math.max(1e-9, molaNow))} of the wild rather than one in ${Math.round(1 / Math.max(1e-9, molaWas))}`);
+say(molaNow + slack(molaWant) >= molaWant * 0.5, `one in ${Math.round(1 / Math.max(1e-9, molaNow))} of the wild rather than one in ${Math.round(1 / Math.max(1e-9, molaWas))}`);
 say(SITE_LOOKS > 0, `${SITE_LOOKS} looks at ground per roll, which is what the island reads as site_looks()`);
 
 if (bad) {
