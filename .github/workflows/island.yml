@@ -963,6 +963,31 @@ jobs:
                  "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
                  -c "$SQL" \
             || echo "::warning::Could not read the island; see the CLI's own help above."
+          # And which clocks are actually wound, which no run has ever shown.
+          #
+          # Both `world-tick` and `stock-tick` are scheduled from a `do` block
+          # ending `exception when others then raise notice`. That is
+          # deliberate — a project without `pg_cron` is not a failed
+          # deployment, and the suite's bare postgres has none — but it means
+          # a green migrate job has never been evidence that the jobs exist.
+          # Asked after the wildlife for a reason: `blocks` above only grows
+          # if something is turning `stock_tick`, and this is the line that
+          # says whether anything is.
+          #
+          # `cron.job` is not there to be read on a project without the
+          # extension, so this is allowed to fail the same way the island read
+          # is: loudly, in a warning, without taking the deployment with it.
+          CLOCKS=$(cat <<'EOSQL'
+          select j.jobname, j.schedule, j.active, left(j.command, 32) as runs
+            from cron.job j order by j.jobname;
+          EOSQL
+          )
+          supabase db query --linked "$CLOCKS" \
+            || printf '%s\n' "$CLOCKS" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$CLOCKS" \
+            || echo "::warning::No clocks listed — either pg_cron is not installed on this project or cron.job could not be read. The island's heartbeat and its stocking both depend on it."
 
   found:
     name: Found an island on the project
