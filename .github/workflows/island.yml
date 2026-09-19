@@ -615,6 +615,25 @@ jobs:
           npx esbuild supabase/test/hands.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/hands.mjs --log-level=error
           node node_modules/.cache/hands.mjs
+      - name: A run is not a fast walk, and a wall knows whose room it is in
+        run: |
+          # walkPhase advances quicker when you move quicker, so a horse at a
+          # gallop took a body's steps — more of them a second, the same reach,
+          # never leaving the ground. Three things separate a run from a walk
+          # and all three now come off one number read from the ground a thing
+          # actually covers.
+          #
+          # The load-bearing check is the first: at a walk every one of the
+          # fifty-two drawings is what it was, bit for bit. Only a run is new.
+          # And the sign of the lean, because getting it backwards would have
+          # everything on the island sprinting while leaning away from where
+          # it is going — obvious in a picture, invisible in a diff.
+          #
+          # Plus the cutaway, which used to fade the near walls of the whole
+          # building you stood in, the far bedroom's included.
+          npx esbuild supabase/test/paced.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/paced.mjs --log-level=error
+          node node_modules/.cache/paced.mjs
       - name: Everybody you may write to, each of them once
         run: |
           # Friends, the people off your own land, and anybody who has written

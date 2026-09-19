@@ -679,6 +679,16 @@ function helpText(): string {
     everything you do go in <b>a fifth faster</b> &mdash; but that one reads off whichever of the four
     is <b>shortest</b>, so three of them full and the fourth empty is worth nothing at all. A week of
     bread buys you nothing; it is the spread that pays.</p>
+    <h3>Walking, running, and looking into a room</h3>
+    <p>A <b>run is not a walk gone faster</b>. Anything covering ground quickly — you on a good
+    road, a mount at full stretch, a hunter closing on you — reaches further with each step,
+    drives back harder than it recovers, leans at the ground ahead of it and leaves the ground
+    twice a stride. Nothing has to be switched on: it is read from how much ground the thing is
+    actually covering, so every animal and every person on the island has it.</p>
+    <p>And standing <b>inside a building</b>, the walls between you and the camera fade — the walls
+    of <i>your room</i>, not of the whole house, so the far end of a longhouse keeps its own and
+    you can still tell where the building is. <kbd>X</kbd> is still there for taking every near
+    wall away at once, everywhere.</p>
     <h3>Walking away from a job</h3>
     <p>Walking somewhere <b>puts the work down</b> rather than forgetting it. Whatever was in hand
     goes to the front of the list with however many goes it had left, everything queued behind it

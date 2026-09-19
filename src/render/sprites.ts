@@ -1272,6 +1272,15 @@ export interface CreaturePose {
   facing: number;
   phase: number;
   moving: boolean;
+  /**
+   * How hard it is going: 0 at an ordinary walk, 1 at a run.
+   *
+   * Read off the ground it actually covers rather than set by anything, so
+   * every body gets one — a person, a peer, a hunter running you down, a
+   * wildermon in the traces — with nothing added to any of them. Left out, it
+   * is a walk, and every drawing here comes out exactly as it did before.
+   */
+  gait?: number;
   colors: [string, string];
   /** 0..1 health fraction; a bar shows when below 1. */
   health: number;
@@ -1283,6 +1292,55 @@ export interface CreaturePose {
   /** How much of its full size it is: a yearling is small and an old one heavy. */
   scale?: number;
 }
+
+/**
+ * A limb through its swing, shaped by how hard the thing is going.
+ *
+ * A walk and a run are not the same cycle at different speeds, which is what
+ * this island has drawn for its whole life. Three things change:
+ *
+ *   **It swings further.** A run reaches, and by the better part of double.
+ *
+ *   **It stops being a sine.** A walking leg swings like a pendulum, because
+ *   at a walk it more or less is one. A running leg is driven back hard and
+ *   recovers fast, which is a wave leaning forward in time rather than a
+ *   symmetrical one. A touch of the second harmonic is all that takes, and it
+ *   is the difference between a thing trotting and a thing running for its
+ *   life.
+ *
+ *   **A foot is always down at a walk and often not at a run**, which is what
+ *   `gaitLift` is for: at a run the whole body leaves the ground twice a
+ *   stride, and a run drawn without that reads as a very fast walk.
+ *
+ * At a gait of nought this is `Math.sin(phase * k + at)` and nothing else, to
+ * the last bit. Every drawing in this file is untouched at a walk, which is
+ * the only way to change fifty-two of them at once and sleep.
+ */
+export interface Moving {
+  phase: number;
+  moving: boolean;
+  gait?: number;
+}
+
+export function gaitSin(pose: Moving, k = 1, at = 0): number {
+  const p = pose.phase * k + at;
+  const g = pose.gait ?? 0;
+  if (g <= 0) return Math.sin(p);
+  return (Math.sin(p) + g * 0.3 * Math.sin(2 * p)) * (1 + g * 0.55);
+}
+
+/**
+ * How far a running body is off the ground, over and above whatever bob the
+ * drawing already has. Twice a stride, and nothing at all at a walk.
+ */
+export const gaitLift = (pose: Moving): number =>
+  pose.moving ? (pose.gait ?? 0) * Math.max(0, gaitSin(pose, 2)) * 1.6 : 0;
+
+/**
+ * And how far it is pitched into the run. A body at a sprint is leaning at
+ * the ground ahead of it; a body strolling is upright.
+ */
+export const gaitPitch = (pose: Moving): number => (pose.moving ? (pose.gait ?? 0) * -0.13 : 0);
 
 /**
  * A body seen from somewhere other than the side.
@@ -1396,7 +1454,22 @@ export function atBody(ctx: CanvasRenderingContext2D, pose: CreaturePose, x: num
 export function bodyFrame(ctx: CanvasRenderingContext2D, sx: number, sy: number, k: number, pose: CreaturePose,
                           thick = BODY_THICK): BodyTurn {
   const t = beastTurn(pose.facing, thick);
-  ctx.transform(k * t.mirror * t.squash, 0, 0, k, sx, sy);
+  /*
+   * And off the ground, if it is running.
+   *
+   * Every drawing in here puts its feet at the origin and builds upward, so
+   * lifting the whole body is one number here rather than a change to
+   * nineteen bodies — and a run without it reads as a very fast walk, because
+   * the one thing a walk never does is leave the ground.
+   *
+   * The pitch goes with it: a body at a sprint leans at the ground ahead of
+   * it. It is applied about the feet, which is where a leaning body pivots,
+   * and it is mirrored with the rest of the frame so a thing running to
+   * screen left leans left.
+   */
+  ctx.transform(k * t.mirror * t.squash, 0, 0, k, sx, sy - gaitLift(pose) * k);
+  const pitch = gaitPitch(pose);
+  if (pitch) ctx.transform(1, 0, pitch, 1, 0, 0);
   if (t.lean) ctx.transform(1, t.lean, 0, 1, 0, 0);
   return t;
 }
@@ -1412,12 +1485,26 @@ export function bodyFrame(ctx: CanvasRenderingContext2D, sx: number, sy: number,
  */
 export function onGround(ctx: CanvasRenderingContext2D, pose: CreaturePose, draw: () => void): void {
   const { lean } = beastTurn(pose.facing);
-  if (!lean) {
+  /*
+   * And back down, if it is running.
+   *
+   * The lean was the whole of this when bodies learned to turn; a running
+   * body that leaves the ground added the other half. A shadow does not go up
+   * with the thing casting it — it stays where the light puts it, which for a
+   * thing overhead is under the feet that left — so the lift has to come off
+   * here as surely as the shear does. Left in, a galloping orse carries its
+   * own shadow around at chest height.
+   */
+  const lift = gaitLift(pose);
+  const pitch = gaitPitch(pose);
+  if (!lean && !lift && !pitch) {
     draw();
     return;
   }
   ctx.save();
-  ctx.transform(1, -lean, 0, 1, 0, 0);
+  if (pitch) ctx.transform(1, 0, pitch, 1, 0, 0);
+  if (lift) ctx.translate(0, lift);
+  if (lean) ctx.transform(1, -lean, 0, 1, 0, 0);
   draw();
   ctx.restore();
 }
@@ -1451,7 +1538,7 @@ const MONSTER_SHAPES: Record<string, MonsterShape> = {
 function drawMonsterBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, m: MonsterShape): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom * m.size, pose, UPRIGHT_THICK);
-  const swing = pose.moving ? Math.sin(pose.phase) * 3 : 0;
+  const swing = pose.moving ? gaitSin(pose) * 3 : 0;
   const [tw, th] = m.torso;
   const hip = -(th + 6);
   onGround(ctx, pose, () => {
@@ -1554,7 +1641,7 @@ function drawMonsterBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
 function drawDragonBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom * 2.1, pose);
-  const beat = Math.sin(pose.phase * 0.9) * 3;
+  const beat = gaitSin(pose, 0.9) * 3;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.34)';
     ctx.beginPath();
@@ -1672,7 +1759,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const plod = pose.moving ? Math.abs(Math.sin(pose.phase * 0.8)) * 0.8 : 0;
+  const plod = pose.moving ? Math.abs(gaitSin(pose, 0.8)) * 0.8 : 0;
   const [hide, pale] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -1685,7 +1772,7 @@ function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
   ctx.lineWidth = 3.4;
   ctx.lineCap = 'round';
   for (const [lx, ph] of [[-7, 0], [-5, Math.PI], [5.5, Math.PI], [7.5, 0]] as Array<[number, number]>) {
-    const step = pose.moving ? Math.sin(pose.phase * 0.8 + ph) * 1.6 : 0;
+    const step = pose.moving ? gaitSin(pose, 0.8, ph) * 1.6 : 0;
     ctx.beginPath();
     ctx.moveTo(lx, -10 - plod);
     ctx.lineTo(lx + step, -0.8);
@@ -1745,7 +1832,7 @@ function drawRoxxenBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
 function drawOrseBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const gait = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.4 : 0;
+  const gait = pose.moving ? Math.abs(gaitSin(pose)) * 1.4 : 0;
   const [coat, mane] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -1758,7 +1845,7 @@ function drawOrseBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.lineWidth = 2.2;
   ctx.lineCap = 'round';
   for (const [lx, ph] of [[-6.4, 0], [-4.6, Math.PI], [5, Math.PI], [7, 0]] as Array<[number, number]>) {
-    const swing = pose.moving ? Math.sin(pose.phase + ph) * 3 : 0;
+    const swing = pose.moving ? gaitSin(pose, 1, ph) * 3 : 0;
     ctx.beginPath();
     ctx.moveTo(lx, -13 - gait);
     ctx.quadraticCurveTo(lx + swing * 0.4, -7 - gait, lx + swing, -0.7);
@@ -1820,7 +1907,7 @@ function drawOrseBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 function drawRowlBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const lope = pose.moving ? Math.abs(Math.sin(pose.phase * 1.2)) * 1.1 : 0;
+  const lope = pose.moving ? Math.abs(gaitSin(pose, 1.2)) * 1.1 : 0;
   const [coat, ruff] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -1832,7 +1919,7 @@ function drawRowlBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.lineWidth = 2.2;
   ctx.lineCap = 'round';
   for (const [lx, ph] of [[-5.4, 0], [-3.8, Math.PI], [4.2, Math.PI], [6, 0]] as Array<[number, number]>) {
-    const swing = pose.moving ? Math.sin(pose.phase * 1.2 + ph) * 2.6 : 0.2;
+    const swing = pose.moving ? gaitSin(pose, 1.2, ph) * 2.6 : 0.2;
     ctx.beginPath();
     ctx.moveTo(lx, -9.5 - lope);
     ctx.quadraticCurveTo(lx + swing * 0.5, -5 - lope, lx + swing, -0.7);
@@ -1896,7 +1983,7 @@ function drawRowlBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 function drawRabbaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3 : 0;
+  const hop = pose.moving ? Math.abs(gaitSin(pose)) * 3 : 0;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -1972,8 +2059,8 @@ function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
   // A waddle: the body rocks side to side instead of leaving the ground.
-  const rock = pose.moving ? Math.sin(pose.phase) * 0.9 : Math.sin(pose.phase * 0.25) * 0.15;
-  const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.8 : 0;
+  const rock = pose.moving ? gaitSin(pose) * 0.9 : gaitSin(pose, 0.25) * 0.15;
+  const lift = pose.moving ? Math.abs(gaitSin(pose)) * 0.8 : 0;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2041,7 +2128,7 @@ function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.fill();
   ctx.restore();
   // digging paws: broad, pale and turned outward, swinging as it walks
-  const dig = pose.moving ? Math.sin(pose.phase) * 1.6 : 0;
+  const dig = pose.moving ? gaitSin(pose) * 1.6 : 0;
   ctx.fillStyle = paw;
   for (const [px, py, ph] of [
     [5.6, -1.2, dig],
@@ -2073,8 +2160,8 @@ function drawVolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const waddle = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.1 : 0;
-  const sway = pose.moving ? Math.sin(pose.phase) * 2.2 : Math.sin(pose.phase * 0.3) * 0.6;
+  const waddle = pose.moving ? Math.abs(gaitSin(pose)) * 1.1 : 0;
+  const sway = pose.moving ? gaitSin(pose) * 2.2 : gaitSin(pose, 0.3) * 0.6;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2138,7 +2225,7 @@ function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
   // Front paw.
   ctx.fillStyle = '#3f342c';
   ctx.beginPath();
-  ctx.ellipse(5.4 + (pose.moving ? Math.sin(pose.phase) * 1.2 : 0), -0.9, 2.3, 1.4, 0, 0, TAU);
+  ctx.ellipse(5.4 + (pose.moving ? gaitSin(pose) * 1.2 : 0), -0.9, 2.3, 1.4, 0, 0, TAU);
   ctx.fill();
   ctx.restore();
 }
@@ -2150,8 +2237,8 @@ function drawBevereBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
 function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
-  const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3.4 : 0;
-  const flick = Math.sin(pose.phase * (pose.moving ? 1 : 0.35)) * 0.12;
+  const hop = pose.moving ? Math.abs(gaitSin(pose)) * 3.4 : 0;
+  const flick = gaitSin(pose, pose.moving ? 1 : 0.35) * 0.12;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2224,7 +2311,7 @@ function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
   ctx.fill();
   // Forepaws held up at the chest, the way a squirrel holds a nut.
   ctx.fillStyle = belly;
-  const paw = pose.moving ? Math.sin(pose.phase) * 0.8 : 0;
+  const paw = pose.moving ? gaitSin(pose) * 0.8 : 0;
   ctx.beginPath();
   ctx.ellipse(4, -9.5 - hop + paw, 1.5, 1.1, 0.3, 0, TAU);
   ctx.fill();
@@ -2238,8 +2325,8 @@ function drawSeavicBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
 function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const dig = pose.moving ? Math.sin(pose.phase) : Math.sin(pose.phase * 0.6) * 0.35;
-  const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.9 : 0;
+  const dig = pose.moving ? gaitSin(pose) : gaitSin(pose, 0.6) * 0.35;
+  const lift = pose.moving ? Math.abs(gaitSin(pose)) * 0.9 : 0;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2323,8 +2410,8 @@ function drawMolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 function drawEmbraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
-  const lift = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1 : 0;
-  const glow = 0.55 + Math.sin(pose.phase * 1.6) * 0.2;
+  const lift = pose.moving ? Math.abs(gaitSin(pose)) * 1 : 0;
+  const glow = 0.55 + gaitSin(pose, 1.6) * 0.2;
   const [coat, ember] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -2343,7 +2430,7 @@ function drawEmbraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
   ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
   for (const [lx, ph] of [[-5, 0], [-1.5, 1.6], [2, 3.1], [5, 4.6]] as Array<[number, number]>) {
-    const step = pose.moving ? Math.sin(pose.phase + ph) * 1.4 : 0;
+    const step = pose.moving ? gaitSin(pose, 1, ph) * 1.4 : 0;
     ctx.beginPath();
     ctx.moveTo(lx, -5 - lift);
     ctx.lineTo(lx + step, -0.8);
@@ -2402,7 +2489,7 @@ function drawEmbraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
 function drawQuarraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const plod = pose.moving ? Math.abs(Math.sin(pose.phase)) * 0.8 : 0;
+  const plod = pose.moving ? Math.abs(gaitSin(pose)) * 0.8 : 0;
   const [stone, pale] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -2413,7 +2500,7 @@ function drawQuarraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
   // Four short, thick legs.
   ctx.fillStyle = stone;
   for (const [lx, ph] of [[-6.5, 0], [-2.5, Math.PI], [3, 0.8], [6.5, 3.6]] as Array<[number, number]>) {
-    const step = pose.moving ? Math.max(0, Math.sin(pose.phase + ph)) * 1.2 : 0;
+    const step = pose.moving ? Math.max(0, gaitSin(pose, 1, ph)) * 1.2 : 0;
     ctx.beginPath();
     ctx.ellipse(lx, -2.4 - step, 2.2, 2.6, 0, 0, TAU);
     ctx.fill();
@@ -2468,7 +2555,7 @@ function drawQuarraBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, z
 function drawWoolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const bob = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.2 : 0;
+  const bob = pose.moving ? Math.abs(gaitSin(pose)) * 1.2 : 0;
   const [fleece, shade] = pose.colors;
   // How much wool is on it, passed through on the health slot's sibling.
   const full = pose.fleece ?? 1;
@@ -2483,7 +2570,7 @@ function drawWoolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
   ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
   for (const [lx, ph] of [[-4.5, 0], [-2, 2.2], [2.5, 1.1], [5, 3.3]] as Array<[number, number]>) {
-    const step = pose.moving ? Math.sin(pose.phase + ph) * 1.3 : 0;
+    const step = pose.moving ? gaitSin(pose, 1, ph) * 1.3 : 0;
     ctx.beginPath();
     ctx.moveTo(lx, -6 - bob);
     ctx.lineTo(lx + step, -0.6);
@@ -2538,8 +2625,8 @@ function drawWoolaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
 function drawUlvaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const run = pose.moving ? Math.sin(pose.phase) : Math.sin(pose.phase * 0.3) * 0.15;
-  const lift = pose.moving ? Math.abs(Math.sin(pose.phase * 2)) * 0.9 : 0;
+  const run = pose.moving ? gaitSin(pose) : gaitSin(pose, 0.3) * 0.15;
+  const lift = pose.moving ? Math.abs(gaitSin(pose, 2)) * 0.9 : 0;
   const [coat, belly] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -2557,7 +2644,7 @@ function drawUlvaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
     [4.4, Math.PI, 8.5],
     [5.8, 0, 8.5],
   ] as Array<[number, number, number]>) {
-    const swing = Math.sin(pose.phase + ph) * (pose.moving ? 2.4 : 0.3);
+    const swing = gaitSin(pose, 1, ph) * (pose.moving ? 2.4 : 0.3);
     ctx.beginPath();
     ctx.moveTo(lx, -9 - lift);
     ctx.quadraticCurveTo(lx + swing * 0.5, -9 + len * 0.5 - lift, lx + swing, -0.8);
@@ -2619,7 +2706,7 @@ function drawUlvaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
 function drawMaggaBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
-  const hop = pose.moving ? Math.abs(Math.sin(pose.phase)) * 3.2 : 0;
+  const hop = pose.moving ? Math.abs(gaitSin(pose)) * 3.2 : 0;
   const [feather, pale] = pose.colors;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.26)';
@@ -2686,8 +2773,8 @@ function drawNootBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
   // A waddle rather than a walk: it rocks from foot to foot.
-  const rock = pose.moving ? Math.sin(pose.phase) * 0.16 : Math.sin(pose.phase * 0.35) * 0.04;
-  const bob = pose.moving ? Math.abs(Math.sin(pose.phase)) * 1.2 : 0;
+  const rock = pose.moving ? gaitSin(pose) * 0.16 : gaitSin(pose, 0.35) * 0.04;
+  const bob = pose.moving ? Math.abs(gaitSin(pose)) * 1.2 : 0;
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2702,7 +2789,7 @@ function drawNootBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
     [-3.4, 0],
     [3.2, Math.PI],
   ] as Array<[number, number]>) {
-    const lift = pose.moving ? Math.max(0, Math.sin(pose.phase + ph)) * 1.4 : 0;
+    const lift = pose.moving ? Math.max(0, gaitSin(pose, 1, ph)) * 1.4 : 0;
     ctx.beginPath();
     ctx.ellipse(fx, -1 - lift, 3.4, 1.6, 0, 0, TAU);
     ctx.fill();
@@ -2725,7 +2812,7 @@ function drawNootBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.ellipse(1.2, -9.4 - bob, 5.2, 7.4, 0.04, 0, TAU);
   ctx.fill();
   // Flippers: one tucked against the near side, one swinging behind.
-  const swing = pose.moving ? Math.sin(pose.phase) * 1.6 : 0;
+  const swing = pose.moving ? gaitSin(pose) * 1.6 : 0;
   ctx.fillStyle = coat;
   ctx.beginPath();
   ctx.ellipse(-6.6, -10 - bob + swing * 0.3, 2.1, 5, 0.3 + swing * 0.06, 0, TAU);
@@ -2772,7 +2859,7 @@ function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
   const swing = pose.moving ? 1 : 0.18;
-  const sway = Math.sin(pose.phase * (pose.moving ? 1 : 0.4)) * (pose.moving ? 0.5 : 0.2);
+  const sway = gaitSin(pose, pose.moving ? 1 : 0.4) * (pose.moving ? 0.5 : 0.2);
   onGround(ctx, pose, () => {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2787,7 +2874,7 @@ function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
   ctx.strokeStyle = pale;
   ctx.lineWidth = 1.1;
   hips.forEach((hx, i) => {
-    const lift = Math.max(0, Math.sin(pose.phase + i * 0.9)) * swing * 1.3;
+    const lift = Math.max(0, gaitSin(pose, 1, i * 0.9)) * swing * 1.3;
     const tip = hx - 3.2 + i * 1.7;
     ctx.beginPath();
     ctx.moveTo(hx, -8.6);
@@ -2841,7 +2928,7 @@ function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
   ctx.strokeStyle = shell;
   ctx.lineWidth = 1.5;
   hips.forEach((hx, i) => {
-    const lift = Math.max(0, Math.sin(pose.phase + 1.6 + i * 0.9)) * swing * 1.6;
+    const lift = Math.max(0, gaitSin(pose, 1, 1.6 + i * 0.9)) * swing * 1.6;
     const tip = hx - 3.4 + i * 1.8;
     ctx.beginPath();
     ctx.moveTo(hx, -5.4);
@@ -2850,8 +2937,8 @@ function drawCrawlerBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
   });
   // Both claws held out front, the big one first: it does the digging.
   for (const [px, py, scale, tilt, ph] of [
-    [6, -2.6, 0.66, 0.16, -swing * Math.sin(pose.phase + 1.1)],
-    [7.4, -5.6, 1.08, -0.2, swing * Math.sin(pose.phase)],
+    [6, -2.6, 0.66, 0.16, -swing * gaitSin(pose, 1, 1.1)],
+    [7.4, -5.6, 1.08, -0.2, swing * gaitSin(pose)],
   ] as Array<[number, number, number, number, number]>) {
     ctx.save();
     ctx.translate(px, py);
@@ -2928,30 +3015,37 @@ interface BeastShape {
   whisker?: boolean;
   /** Moss growing along the back. */
   moss?: boolean;
-  /** How quickly the legs go over. */
-  gait?: number;
+  /**
+   * How quickly its legs go over, as a multiple of everything else's.
+   *
+   * A cadence, not a gait: this is a fact about the species — a dowse takes
+   * quick short steps and a holla takes slow long ones — and it does not
+   * change with how hard the animal is working. `CreaturePose.gait` is that
+   * other thing, and the two used to share a name.
+   */
+  cadence?: number;
 }
 
 const BEASTS: Record<string, BeastShape> = {
-  bogga: { body: [10, 5.5], ride: 3.5, leg: 4, legW: 2.6, span: 7, head: 4, neck: [11, 0.5], muzzle: 2.4, ear: 'round', tail: 'flat', gait: 0.9 },
-  holla: { body: [11, 7], ride: 5, leg: 6, legW: 3.2, span: 8, head: 4.6, neck: [12, -1], muzzle: 2.6, ear: 'round', tail: 'stub', pouch: 4, gait: 0.8 },
-  dowse: { body: [7.5, 4.4], ride: 2.6, leg: 3.2, legW: 2, span: 5, head: 3.4, neck: [8.5, 0.6], muzzle: 2.8, ear: 'round', tail: 'stub', whisker: true, gait: 1.3 },
-  sappa: { body: [9, 5.4], ride: 5, leg: 6, legW: 2.4, span: 6.5, head: 4, neck: [10, -1.4], muzzle: 2, ear: 'long', tail: 'brush', moss: true, gait: 1.1 },
+  bogga: { body: [10, 5.5], ride: 3.5, leg: 4, legW: 2.6, span: 7, head: 4, neck: [11, 0.5], muzzle: 2.4, ear: 'round', tail: 'flat', cadence: 0.9 },
+  holla: { body: [11, 7], ride: 5, leg: 6, legW: 3.2, span: 8, head: 4.6, neck: [12, -1], muzzle: 2.6, ear: 'round', tail: 'stub', pouch: 4, cadence: 0.8 },
+  dowse: { body: [7.5, 4.4], ride: 2.6, leg: 3.2, legW: 2, span: 5, head: 3.4, neck: [8.5, 0.6], muzzle: 2.8, ear: 'round', tail: 'stub', whisker: true, cadence: 1.3 },
+  sappa: { body: [9, 5.4], ride: 5, leg: 6, legW: 2.4, span: 6.5, head: 4, neck: [10, -1.4], muzzle: 2, ear: 'long', tail: 'brush', moss: true, cadence: 1.1 },
   // Neck up in the branches, and a head that is mostly mouth.
-  snedda: { body: [8.5, 5], ride: 5.5, leg: 6.5, legW: 2.2, span: 6, head: 3.6, neck: [10, -4.2], muzzle: 2.8, ear: 'long', tail: 'brush', gait: 1.15 },
+  snedda: { body: [8.5, 5], ride: 5.5, leg: 6.5, legW: 2.2, span: 6, head: 3.6, neck: [10, -4.2], muzzle: 2.8, ear: 'long', tail: 'brush', cadence: 1.15 },
   // Shoulders over the head, and the head at the ground.
-  grubba: { body: [10, 6], ride: 3, leg: 3.8, legW: 3.4, span: 7, head: 4.2, neck: [10.5, 1.4], muzzle: 3.6, ear: 'round', tail: 'stub', hump: 4, gait: 0.9 },
+  grubba: { body: [10, 6], ride: 3, leg: 3.8, legW: 3.4, span: 7, head: 4.2, neck: [10.5, 1.4], muzzle: 3.6, ear: 'round', tail: 'stub', hump: 4, cadence: 0.9 },
   // Arms as long as its body, and a tail to hang by.
-  plucka: { body: [7.5, 4.2], ride: 4.5, leg: 5.8, legW: 1.8, span: 5.4, head: 3.4, neck: [9, -3], muzzle: 2, ear: 'round', tail: 'brush', gait: 1.35 },
-  cobbe: { body: [10, 6], ride: 4, leg: 5, legW: 3.6, span: 7.5, head: 4.4, neck: [11, 0], muzzle: 2.2, ear: 'point', tail: 'stub', hump: 4.5, gait: 0.85 },
-  tinka: { body: [6, 4], ride: 3.4, leg: 4, legW: 1.8, span: 4.2, head: 3.6, neck: [6.8, -2.2], muzzle: 1.6, ear: 'point', tail: 'brush', whisker: true, gait: 1.5 },
-  middun: { body: [9, 4.6], ride: 3, leg: 3.6, legW: 2.2, span: 6.4, head: 3.4, neck: [10, 0.4], muzzle: 3.6, ear: 'round', tail: 'brush', gait: 1.1 },
-  bura: { body: [12, 7], ride: 6.5, leg: 7.5, legW: 3.4, span: 9, head: 4.6, neck: [13.5, -2], muzzle: 2.6, ear: 'long', tail: 'tuft', gait: 0.75 },
-  gorral: { body: [9, 5], ride: 6.5, leg: 7.5, legW: 2.2, span: 6.5, head: 3.8, neck: [10.5, -2.6], muzzle: 2.2, ear: 'point', horn: 'curl', tail: 'stub', shag: 2, gait: 1.25 },
-  wadd: { body: [11, 4.8], ride: 2.8, leg: 3.4, legW: 2.4, span: 7.5, head: 3.8, neck: [11.5, 0.4], muzzle: 2.4, ear: 'round', tail: 'flat', gait: 1.2 },
-  shaggan: { body: [14, 8.5], ride: 5.5, leg: 6.5, legW: 4.4, span: 10, head: 5.4, neck: [15, 0.5], muzzle: 2.6, horn: 'sweep', tail: 'tuft', hump: 6, shag: 5, gait: 0.6 },
-  cudda: { body: [11.5, 7], ride: 5.5, leg: 6.5, legW: 3, span: 8, head: 4.4, neck: [12.5, -1], muzzle: 2.6, ear: 'long', horn: 'nub', tail: 'tuft', udder: true, gait: 0.8 },
-  snout: { body: [9, 5], ride: 3.4, leg: 4, legW: 2.6, span: 6.4, head: 3.6, neck: [9.8, 0.2], muzzle: 4.2, ear: 'flop', tail: 'stub', whisker: true, gait: 1.05 },
+  plucka: { body: [7.5, 4.2], ride: 4.5, leg: 5.8, legW: 1.8, span: 5.4, head: 3.4, neck: [9, -3], muzzle: 2, ear: 'round', tail: 'brush', cadence: 1.35 },
+  cobbe: { body: [10, 6], ride: 4, leg: 5, legW: 3.6, span: 7.5, head: 4.4, neck: [11, 0], muzzle: 2.2, ear: 'point', tail: 'stub', hump: 4.5, cadence: 0.85 },
+  tinka: { body: [6, 4], ride: 3.4, leg: 4, legW: 1.8, span: 4.2, head: 3.6, neck: [6.8, -2.2], muzzle: 1.6, ear: 'point', tail: 'brush', whisker: true, cadence: 1.5 },
+  middun: { body: [9, 4.6], ride: 3, leg: 3.6, legW: 2.2, span: 6.4, head: 3.4, neck: [10, 0.4], muzzle: 3.6, ear: 'round', tail: 'brush', cadence: 1.1 },
+  bura: { body: [12, 7], ride: 6.5, leg: 7.5, legW: 3.4, span: 9, head: 4.6, neck: [13.5, -2], muzzle: 2.6, ear: 'long', tail: 'tuft', cadence: 0.75 },
+  gorral: { body: [9, 5], ride: 6.5, leg: 7.5, legW: 2.2, span: 6.5, head: 3.8, neck: [10.5, -2.6], muzzle: 2.2, ear: 'point', horn: 'curl', tail: 'stub', shag: 2, cadence: 1.25 },
+  wadd: { body: [11, 4.8], ride: 2.8, leg: 3.4, legW: 2.4, span: 7.5, head: 3.8, neck: [11.5, 0.4], muzzle: 2.4, ear: 'round', tail: 'flat', cadence: 1.2 },
+  shaggan: { body: [14, 8.5], ride: 5.5, leg: 6.5, legW: 4.4, span: 10, head: 5.4, neck: [15, 0.5], muzzle: 2.6, horn: 'sweep', tail: 'tuft', hump: 6, shag: 5, cadence: 0.6 },
+  cudda: { body: [11.5, 7], ride: 5.5, leg: 6.5, legW: 3, span: 8, head: 4.4, neck: [12.5, -1], muzzle: 2.6, ear: 'long', horn: 'nub', tail: 'tuft', udder: true, cadence: 0.8 },
+  snout: { body: [9, 5], ride: 3.4, leg: 4, legW: 2.6, span: 6.4, head: 3.6, neck: [9.8, 0.2], muzzle: 4.2, ear: 'flop', tail: 'stub', whisker: true, cadence: 1.05 },
 };
 
 /** A wildermon on four legs, built to the numbers above. Feet at (sx, sy). */
@@ -2959,8 +3053,8 @@ function drawBeastBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose);
   const [hide, pale] = pose.colors;
-  const gait = s.gait ?? 1;
-  const bob = pose.moving ? Math.abs(Math.sin(pose.phase * gait)) * (0.5 + s.ride * 0.08) : 0;
+  const cadence = s.cadence ?? 1;
+  const bob = pose.moving ? Math.abs(gaitSin(pose, cadence)) * (0.5 + s.ride * 0.08) : 0;
   const [bw, bh] = s.body;
   const by = -(s.ride + bh) - bob;
   onGround(ctx, pose, () => {
@@ -2979,7 +3073,7 @@ function drawBeastBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zo
     [-s.span + 1.6, Math.PI, 1],
     [s.span, 0, 1],
   ] as Array<[number, number, number]>) {
-    const step = pose.moving ? Math.sin(pose.phase * gait + ph) * (s.leg * 0.28) : 0;
+    const step = pose.moving ? gaitSin(pose, cadence, ph) * (s.leg * 0.28) : 0;
     ctx.strokeStyle = near ? hide : shade(hide, -0.22);
     ctx.beginPath();
     ctx.moveTo(lx, hip);
@@ -3209,13 +3303,14 @@ interface BirdShape {
   /** Long feathers trailing behind, which is what a Quill is kept for. */
   plume?: number;
   eye?: number;
-  gait?: number;
+  /** How quickly its legs go over. See `BeastShape.cadence`. */
+  cadence?: number;
 }
 
 const BIRDS: Record<string, BirdShape> = {
-  sedra: { body: [5.5, 4.6], ride: 9, leg: 10, neck: 9, beak: 'shear', gait: 1 },
-  warda: { body: [6, 6], ride: 7.5, leg: 8.5, neck: 7, beak: 'hook', crest: 3, eye: 1.5, gait: 0.9 },
-  quill: { body: [8, 7], ride: 4.5, leg: 5, neck: 4.5, beak: 'stub', plume: 9, gait: 1.3 },
+  sedra: { body: [5.5, 4.6], ride: 9, leg: 10, neck: 9, beak: 'shear', cadence: 1 },
+  warda: { body: [6, 6], ride: 7.5, leg: 8.5, neck: 7, beak: 'hook', crest: 3, eye: 1.5, cadence: 0.9 },
+  quill: { body: [8, 7], ride: 4.5, leg: 5, neck: 4.5, beak: 'stub', plume: 9, cadence: 1.3 },
 };
 
 /** A wildermon that stands on two legs, built to the numbers above. */
@@ -3223,8 +3318,8 @@ function drawBirdBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.save();
   bodyFrame(ctx, sx, sy, zoom, pose, UPRIGHT_THICK);
   const [coat, front] = pose.colors;
-  const gait = s.gait ?? 1;
-  const bob = pose.moving ? Math.abs(Math.sin(pose.phase * gait)) * 1.1 : 0;
+  const cadence = s.cadence ?? 1;
+  const bob = pose.moving ? Math.abs(gaitSin(pose, cadence)) * 1.1 : 0;
   const [bw, bh] = s.body;
   const by = -(s.ride + bh) - bob;
   onGround(ctx, pose, () => {
@@ -3241,7 +3336,7 @@ function drawBirdBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
     [-1.6, 0],
     [1.6, Math.PI],
   ] as Array<[number, number]>) {
-    const step = pose.moving ? Math.sin(pose.phase * gait + ph) * 2.2 : 0;
+    const step = pose.moving ? gaitSin(pose, cadence, ph) * 2.2 : 0;
     ctx.beginPath();
     ctx.moveTo(lx, by + bh * 0.6);
     ctx.quadraticCurveTo(lx - 1.2, by + bh * 0.6 + s.leg * 0.55, lx + step, -0.8);
@@ -3375,7 +3470,7 @@ function drawLumeBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.translate(sx, sy);
   ctx.scale(zoom, zoom);
   const [pale, bright] = pose.colors;
-  const drift = Math.sin(pose.phase * 0.5) * 1.6;
+  const drift = gaitSin(pose, 0.5) * 1.6;
   const cy = -11 + drift;
   const glow = ctx.createRadialGradient(0, cy, 0.5, 0, cy, 13);
   glow.addColorStop(0, bright);
@@ -3423,6 +3518,8 @@ function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 export interface PlayerPose {
   phase: number;
   moving: boolean;
+  /** How hard they are going: 0 at a walk, 1 at a run. See `CreaturePose.gait`. */
+  gait?: number;
   /** Which of the eight ways it is turned. See `facingOf`. */
   facing: number;
   swimming: boolean;
@@ -3895,7 +3992,7 @@ function bothSides(ctx: CanvasRenderingContext2D, t: Turn, draw: () => void): vo
  * on the reins, and no shadow, because what is under it is the cart.
  */
 function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose, w: Worn, t: Turn): void {
-  const jolt = pose.moving ? Math.sin(pose.phase * 0.9) * 0.6 : 0;
+  const jolt = pose.moving ? gaitSin(pose, 0.9) * 0.6 : 0;
   const chest = 4.5 * w.build.shoulder;
   // thighs forward, shins down
   ctx.fillStyle = w.trousers;
@@ -3945,7 +4042,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
     ctx.restore();
     return;
   }
-  const swing = pose.moving ? Math.sin(pose.phase) : 0;
+  const swing = pose.moving ? gaitSin(pose) : 0;
   /*
    * A hop lifts the whole figure and a wave swings one arm, and both of them
    * ride the numbers that were already here: `bob` is subtracted from every y
@@ -3985,7 +4082,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
   ctx.fillStyle = w.trousers;
   ctx.fillRect(-apart - legW / 2, -12 + swing * 2 - lift, legW, 12 - swing * 2);
   // arms
-  const armSwing = pose.working ? Math.sin(pose.phase * 2.2) * 5 : swing * 3;
+  const armSwing = pose.working ? gaitSin(pose, 2.2) * 5 : swing * 3;
   const arm = (span + 0.9) * t.depth;
   const sleeve = 3.3;
   const hand = 2.5;

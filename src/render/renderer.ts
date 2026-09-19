@@ -8,6 +8,7 @@ import {
   borderPoints,
   floorKind,
   isDone,
+  bordersRoom,
   MATERIAL_BY_ID,
   progressOf,
   ROOF_RISE,
@@ -52,6 +53,7 @@ import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
+import { Gaits } from './gait';
 import type { Peer } from '../game/roster';
 import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 import { FLOAT_COLOURS, Floaters } from './floaters';
@@ -396,6 +398,32 @@ export class Renderer {
   private readonly paints = new Map<string, MaterialDef>();
   /** Which way each beast is turned, so the answer holds still between frames. */
   private readonly beastFacing = new Map<number, number>();
+  /**
+   * How hard every body on screen is going, read off the ground it covers.
+   *
+   * Kept by the renderer rather than by the game because it is a drawing
+   * question — nothing in the rules cares whether a rabba is trotting — and
+   * because reading it here gets a person, a peer and a wildermon all at once
+   * without a field on any of them.
+   */
+  private readonly gaits = new Gaits();
+  /** How long the frame being drawn is, for anything worked out per second. */
+  private frameDt = 1 / 60;
+  /**
+   * The tiles of the room the player is standing in, for the cutaway.
+   *
+   * Walls facing the camera used to be taken away — or faded — by *building*:
+   * step inside a longhouse and every near wall of the whole house went
+   * translucent, the far bedroom's included, though nothing in the bedroom
+   * was between you and anything. There are rooms now, so the question can be
+   * asked properly: a wall is in your way when it stands on the edge of the
+   * room you are actually in.
+   *
+   * Worked out once a frame rather than once a wall, because it is a flood
+   * fill; null when you are out of doors, which is most of the time and
+   * costs nothing.
+   */
+  private roomTiles: Set<string> | null = null;
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -432,6 +460,7 @@ export class Renderer {
       this.floaters.clear();
       this.dust.clear();
       this.wakes.clear();
+      this.gaits.clear();
     });
     canvas.onResize(() => this.camera.setViewport(canvas.width, canvas.height));
     this.camera.setViewport(canvas.width, canvas.height);
@@ -751,6 +780,8 @@ export class Renderer {
 
   render(dt: number): void {
     this.time += dt;
+    this.frameDt = dt;
+    this.roomTiles = this.myRoom();
     // Other people are walked along between one word about them and the next,
     // on the drawing clock rather than the world's: it is smoothing, not
     // simulation, and should stay smooth even when nothing is being simulated.
@@ -1301,6 +1332,7 @@ export class Renderer {
           drawPlayer(g, px, py, zoom, {
             phase: player.moving ? player.walkPhase : this.time * 6,
             moving: player.moving,
+            gait: this.gaits.of('player', player.x, player.y, this.frameDt),
             facing: this.playerFacing,
             swimming: player.swimming,
             working: this.game.action?.state === 'performing',
@@ -1334,6 +1366,7 @@ export class Renderer {
           drawPlayer(g, px, py, zoom, {
             phase: peer.moving ? peer.walkPhase : this.time * 6,
             moving: peer.moving,
+            gait: this.gaits.of('o' + peer.id, peer.x, peer.y, this.frameDt),
             facing: peer.facing,
             swimming: peer.swimming,
             working: peer.working,
@@ -1405,6 +1438,7 @@ export class Renderer {
             facing: turned,
             phase: cr.walkPhase,
             moving: cr.moving,
+            gait: this.gaits.of('c' + cr.id, cr.x, cr.y, this.frameDt),
             colors: def.variants[cr.variant] ?? def.variants[0],
             health: cr.health / maxHealth(cr, def),
             fleece: cr.fleece,
@@ -1523,8 +1557,8 @@ export class Renderer {
    * Floors and walls belonging to a tile. Walls are drawn on the two borders
    * that are the tile's back edges under the current viewpoint, so every wall
    * is drawn exactly once, after the ground behind it and before whatever
-   * stands in front. Walls of the building the player is inside go translucent
-   * once they would hide the player.
+   * once they would hide the player. What counts as "the player's" is the room
+   * they are standing in rather than the whole building.
    *
    * Looked at square on — the four diagonal viewpoints — the two borders
    * running away from the viewer are edge on and draw as nothing at all, which
@@ -1568,6 +1602,29 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * Which tiles are in the room the player is standing in, or null for
+   * somebody out of doors.
+   *
+   * An unenclosed room still counts: a house with one wall left to build is
+   * exactly the house you most want to see into, and a cutaway that waited
+   * for the last wall would switch itself on at the moment it stopped being
+   * needed.
+   */
+  private myRoom(): Set<string> | null {
+    const p = this.game.player;
+    const bld = this.game.buildings;
+    if (!bld.list.size) return null;
+    if (!bld.buildingAt(p.tileX, p.tileY)) return null;
+    const room = bld.room(p.level, p.tileX, p.tileY);
+    return room ? new Set(room.tiles) : null;
+  }
+
+  /** Whether a border is one of the room's own edges, or stands over it. */
+  private wallsMyRoom(b: Border): boolean {
+    return !!this.roomTiles && bordersRoom(this.roomTiles, b);
+  }
+
   private drawStructures(x: number, y: number, V: View, inFront: boolean): void {
     const bld = this.game.buildings;
     const w = this.game.world;
@@ -1588,7 +1645,9 @@ export class Renderer {
         const floor = bld.floor(level, x, y);
         // Looking at one storey means lifting the ceilings above it off.
         if (floor && !(viewLevel !== null && floor.level > viewLevel)) {
-          const dim = inside?.id === building.id && level > playerLevel;
+          // A floor over your head is the ceiling of the room you are in, and
+          // only of that room: the far end of a longhouse keeps its own.
+          const dim = level > playerLevel && !!this.roomTiles?.has(`${x},${y}`);
           const alpha = dim ? 0.35 : 1;
           switch (floorKind(floor)) {
             case 'stairs':
@@ -1635,8 +1694,8 @@ export class Renderer {
          * cutaway takes away.
          */
         if (cutaway && building?.id !== wall.building) continue;
-        const dim = inside?.id === wall.building && inFront;
-        this.drawWall(wall, border, base, dim ? 0.35 : 1);
+        const dim = inFront && this.wallsMyRoom(border);
+        this.drawWall(wall, border, base, dim ? 0.3 : 1);
       }
     }
   }

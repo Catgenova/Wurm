@@ -311,6 +311,22 @@ export interface Room {
   covered: boolean;
 }
 
+/**
+ * Whether a border is one of a room's own edges, or stands over one.
+ *
+ * What the cutaway asks of every wall it is about to draw. A border has two
+ * tiles either side of it; it walls this room when either of them is in it.
+ * The storey is deliberately not part of the question — a wall on the floor
+ * above, standing over the room you are in, is as much in the way as one
+ * beside you, and a cutaway that let it stand would show you a room with a
+ * lid on it.
+ */
+export function bordersRoom(tiles: ReadonlySet<string>, b: Border): boolean {
+  return b.dir === 'h'
+    ? tiles.has(tileKey(b.x, b.y - 1)) || tiles.has(tileKey(b.x, b.y))
+    : tiles.has(tileKey(b.x - 1, b.y)) || tiles.has(tileKey(b.x, b.y));
+}
+
 export interface Building {
   id: number;
   name: string;
