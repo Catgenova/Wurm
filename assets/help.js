@@ -1108,7 +1108,10 @@ function e(){return`
     <b>Mola</b> is a heavier mole built around its claws, found sitting on metal, living on spices, and
     working the seams for its deed: it takes the nearest ore no other Mola has claimed, and the quality
     of what it brings back is its own mining skill, up to whatever the seam holds, and it leaves alone
-    any metal beyond its skill. Its range grows by 5
+    any metal beyond its skill &mdash; so a fresh one takes copper and coal, and starts on iron the day
+    its mining reaches 5. It works <b>ten units of water</b> deep, the same as you do, and a face it
+    cannot stand on it works from the bank beside it: a shore seam is a Mola's to cut, and so is a
+    seabed under wading depth. The same goes for a <b>Quarra</b> and plain rock. Its range grows by 5
     tiles every 10 levels rather than the usual 10. The <b>Crawler</b> is a broad crab that lives on the
     sand, eats vegetables, and digs sand for its deed &mdash; a clawful at a time, taken from the highest
     corner of the tile and carried to the crate, which is where the sand for mortar and moulds comes from

@@ -5,7 +5,7 @@ import { BOTANIZE_TABLE, FORAGE_TABLE, rollTable } from './forage';
 import type { DeedStore, Game } from './game';
 import { DAY_SECONDS } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
-import { MINE_COLLAPSE } from './actions';
+import { MINE_COLLAPSE, MINE_DEPTH } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { fishable, fishHere, waterDepth } from './fishing';
@@ -2440,6 +2440,59 @@ export class Creatures {
   }
 
   /**
+   * Whether a rock face can be worked at all, which is not the same question
+   * as whether a body can stand on it.
+   *
+   * A person may put a pick to a corner under ten units of water — that is
+   * `MINE_DEPTH`, about waist deep, and the comment on it says in as many
+   * words that you work standing in it. A wildermon could only ever work one
+   * under a single unit, because the only question ever asked was whether it
+   * could stand there, and a shore face is the whole reason anybody digs at a
+   * shore. Reported as a mola that would not touch ore, seam or rock below the
+   * tide line.
+   *
+   * So the same ten units, and a face too deep to stand on is worked from the
+   * bank instead — which is what `beside` is for and what a feller, a pruner,
+   * an angler and a fruit picker have always done. Past ten it is over
+   * everybody's head and nobody swings anything.
+   *
+   * The tile's own centre rather than one of its corners, which is where this
+   * and the person's rule differ and have to: a person puts a pick to a named
+   * corner and a worker takes the tile, so the tile's middle is the closest
+   * thing it has to the corner being asked about.
+   */
+  reachableFace(game: Game, x: number, y: number): boolean {
+    // Standing on it is still the first answer, and the usual one: dry rock
+    // is worked from on top of it exactly as it always was.
+    if (this.tileOk(game, x, y)) return true;
+    const w = game.world;
+    if (!w.inBounds(x, y)) return false;
+    // Otherwise the only two questions are how much water is over the face and
+    // whether there is a bank to swing from. Its own slope is not asked about
+    // — that is a question about standing on it, and nobody is going to.
+    if (w.centerHeight(x, y) < -MINE_DEPTH) return false;
+    return !!this.beside(game, x, y);
+  }
+
+  /**
+   * Whether a job is done from the tile beside the one it is done to.
+   *
+   * A tree, a rod and a fruit bough are always worked from beside, because
+   * nothing stands on them. A rock face is worked from beside only when it is
+   * standing in water too deep to work from — dry rock is worked from on top
+   * of it, as it always was.
+   *
+   * One function because it used to be two lists that did not agree: the one
+   * that chose where to walk had `prune` in it and the one that checked on
+   * arrival did not, so a pruner walked to the tile beside a tree and then
+   * asked whether the tile it was standing on was a tree worth pruning.
+   */
+  private worksBeside(game: Game, kind: GatherKind, x: number, y: number): boolean {
+    if (kind === 'woodcut' || kind === 'prune' || kind === 'fish' || kind === 'fruit') return true;
+    return (kind === 'mine' || kind === 'quarry') && !this.tileOk(game, x, y);
+  }
+
+  /**
    * Whether a stretch of ground is the sort a species settles on. A Mola
    * settles over metal, bare or buried, a Crawler on the sand and a Gorral on
    * bare rock; the rest want something growing. Beyond the ground itself a
@@ -2922,13 +2975,23 @@ export class Creatures {
     return false;
   }
 
-  /** Whether a tile can be foraged, botanized, felled, farmed or mined right now. */
+  /**
+   * Whether a tile can be foraged, botanized, felled, farmed or mined right now.
+   *
+   * The floor under the two mining trades is the person's floor — ten units of
+   * water, `MINE_DEPTH` — and not the waterline. It read `rockHeight > 1`,
+   * which is a waterline rule wearing the clothes of an "is there any rock
+   * here" one: bedrock at minus three is bedrock three under the sea, so every
+   * tile under water failed it however shallow, and no depth allowance
+   * anywhere else could have helped. A person has no such rule; their pick
+   * stops at ten under and so does this.
+   */
   private gatherable(game: Game, x: number, y: number, kind: GatherKind, c?: Creature): boolean {
     if (kind === 'mine') {
       // One seam to a miner, and only metal its skill can work.
       const ore = oreAt(game.world, x, y);
       if (!ore || (c && (c.skills[GATHER_SKILL.mine] ?? 1) < ore.level)) return false;
-      return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
+      return game.world.rockHeight(x, y) > -MINE_DEPTH && this.reachableFace(game, x, y) && !this.claimed(x, y, c);
     }
     if (kind === 'sand' || kind === 'clay') {
       // Soft ground left on a corner of the right sort of tile, and one digger to it.
@@ -2941,7 +3004,7 @@ export class Creatures {
       // Bare stone with no metal in it, and one cutter to a face.
       const rock = bedrockAt(game.world, x, y);
       if (game.world.getTile(x, y) !== TileType.Rock || isSeam(rock)) return false;
-      return game.world.rockHeight(x, y) > 1 && this.tileOk(game, x, y) && !this.claimed(x, y, c);
+      return game.world.rockHeight(x, y) > -MINE_DEPTH && this.reachableFace(game, x, y) && !this.claimed(x, y, c);
     }
     if (kind === 'peat') {
       // A bed of the black stuff, taken off the top and left as it was.
@@ -4242,9 +4305,9 @@ export class Creatures {
     if (c.state === 'toForage') {
       const r = this.stepToward(game, c, c.tx, c.ty, dt);
       if (r === 'arrived') {
-        const stands = kind === 'woodcut' || kind === 'fish' || kind === 'fruit';
-        const wx = stands ? c.workX : Math.floor(c.x);
-        const wy = stands ? c.workY : Math.floor(c.y);
+        const apart = !!kind && this.worksBeside(game, kind, c.workX, c.workY);
+        const wx = apart ? c.workX : Math.floor(c.x);
+        const wy = apart ? c.workY : Math.floor(c.y);
         if (kind && this.gatherable(game, wx, wy, kind, c)) this.beginForage(game, c, kind);
         else c.state = 'idle';
       } else if (r === 'blocked') {
@@ -4268,7 +4331,7 @@ export class Creatures {
       if (t) {
         // A tree cannot be stood on, so a feller walks to the tile beside it.
         // A tree cannot be stood on and neither can the water: both are worked from beside.
-        const spot = kind === 'woodcut' || kind === 'prune' || kind === 'fish' || kind === 'fruit' ? this.beside(game, t.x, t.y, c.x, c.y) : t;
+        const spot = kind && this.worksBeside(game, kind, t.x, t.y) ? this.beside(game, t.x, t.y, c.x, c.y) : t;
         if (kind === 'mine') c.job = null;
         if (spot) {
           c.job = kind === 'farm' ? this.farmJobAt(game, c, t.x, t.y) : null;

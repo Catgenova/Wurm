@@ -817,6 +817,24 @@ jobs:
             --outfile=node_modules/.cache/cull.mjs --log-level=error
           node node_modules/.cache/cull.mjs
 
+      - name: A shore face is work and the sea floor is not
+        run: |
+          # "Allow mola to mine ore, seams and rock at up to -10 water level
+          # just like players." Three rules were in the way and only one of
+          # them was about depth. The browser asked whether a body could stand
+          # on the tile, which allows one unit of water; this island asked
+          # nothing at all, so a worker here would set about the sea floor at
+          # forty fathoms; and both sides had `rock_height > 1`, which reads
+          # as "is there rock here" and is really the waterline again, so no
+          # depth allowance anywhere else could have helped.
+          #
+          # The person's rule now, on both: ten units of water, the same floor
+          # under the pick, a bank on any of the eight sides to swing from,
+          # and a face too deep to stand on worked from that bank.
+          npx esbuild supabase/test/shore.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/shore.mjs --log-level=error
+          node node_modules/.cache/shore.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live
