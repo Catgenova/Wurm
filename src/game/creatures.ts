@@ -1846,7 +1846,14 @@ export const isShod = (now: number, c: { shodAt: number }): boolean => now - c.s
 /** How close it comes before standing still, well inside arm's reach. */
 const CALL_DISTANCE = 0.9;
 
-export const WILD_TARGET = 32;
+/**
+ * The floor under an island's wildlife, however small the island is.
+ *
+ * Three times what it was, with `PER_REGION`: a 64-tile island is four
+ * stretches of country and would otherwise hold four head, so on anything you
+ * can walk across in a minute this number is the whole of the answer.
+ */
+export const WILD_TARGET = 96;
 const RESPAWN_EVERY = 22;
 /**
  * How closely creatures are followed, by tiles from the player. Anything being
@@ -1875,8 +1882,30 @@ const REGION = 32;
 const STREAM_EVERY = 2;
 /** Most creatures let out in one pass, so a walk never stalls on it. */
 const STREAM_BATCH = 6;
-/** Wildlife a stretch of country holds, which is what the island adds up to. */
-const PER_REGION = 1;
+/**
+ * Wildlife a stretch of country holds, which is what the island adds up to.
+ *
+ * Reported: "wildermon are too rare." One head to a thirty-two tile square is
+ * a creature every thousand tiles, and a thousand tiles is a long walk — so
+ * the island read as empty between settlements, which is exactly the half of
+ * it a player spends their time in. Three now, which is the same country with
+ * something alive in sight of most of it.
+ *
+ * The island reads this number rather than keeping one of its own, so the two
+ * of them cannot drift: `wild_per_region()` and `wild_floor()` are emitted
+ * from here with the rest of the rulebook.
+ */
+export const PER_REGION = 3;
+
+/**
+ * How much wildlife a piece of country that size should hold.
+ *
+ * A function of the measurements rather than of the world, because the island
+ * asks the same question of a block of 256 tiles as this asks of a whole map,
+ * and because it is the one thing both sides have to answer the same way.
+ */
+export const wildTargetFor = (w: number, h: number): number =>
+  Math.max(WILD_TARGET, Math.round(Math.ceil(w / REGION) * Math.ceil(h / REGION) * PER_REGION));
 /**
  * Coaxing. A wild thing offered food again and again grows used to the hand
  * holding it, so every attempt in a row makes the next a little likelier. A
@@ -2491,8 +2520,7 @@ export class Creatures {
 
   /** How much wildlife an island of this size should hold in all. */
   private islandTarget(game: Game): number {
-    const regions = Math.ceil(game.world.w / REGION) * Math.ceil(game.world.h / REGION);
-    return Math.max(WILD_TARGET, Math.round(regions * PER_REGION));
+    return wildTargetFor(game.world.w, game.world.h);
   }
 
   /** Put one more head of wildlife on the books, somewhere out there. */

@@ -70,7 +70,7 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
-import { CARE_BONUS, GRAZE_FILL, GRAZE_HUNGRY } from '../src/game/creatures';
+import { CARE_BONUS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
 import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
@@ -1058,6 +1058,16 @@ for (const [fn, v] of [
   ['dark_swing', DARK_SWING], ['dark_shot', DARK_SHOT], ['dark_hit', DARK_HIT],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/*
+ * How much wildlife a stretch of country holds, and the floor under an island
+ * too small to have many stretches. Both sides work an island's head count out
+ * the same way and neither may keep its own copy of the numbers.
+ */
+for (const [fn, v] of [
+  ['wild_per_region', PER_REGION], ['wild_floor', WILD_TARGET],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns int language sql immutable as $fn$ select ${q(v)}::int $fn$;`);
 }
 /* How often a chip finds a line in the rock, and what a swing that misses teaches. */
 for (const [fn, v] of [

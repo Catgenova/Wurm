@@ -21,8 +21,9 @@
  * creature could stand on). This measures the mix that comes out against the
  * weights, and against the arithmetic of the old scheme.
  */
+import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { SITE_LOOKS, SPECIES, WILD_SPECIES } from '../../src/game/creatures';
+import { PER_REGION, SITE_LOOKS, SPECIES, WILD_SPECIES, WILD_TARGET, wildTargetFor } from '../../src/game/creatures';
 import { bedrockAt } from '../../src/world/ore';
 import { isSeam, TileType } from '../../src/world/tiles';
 
@@ -136,7 +137,45 @@ const molaNow = (got.get('mola') ?? 0) / Math.max(1, placed);
 const molaWas = (oldWeighted.get('mola') ?? 0) / oldTotal;
 say(molaNow > molaWas * 2, `a mola is ${(molaNow / Math.max(1e-9, molaWas)).toFixed(1)} times commoner than the old scheme put it`);
 say(molaNow + slack(molaWant) >= molaWant * 0.5, `one in ${Math.round(1 / Math.max(1e-9, molaNow))} of the wild rather than one in ${Math.round(1 / Math.max(1e-9, molaWas))}`);
-say(SITE_LOOKS > 0, `${SITE_LOOKS} looks at ground per roll, which is what the island reads as site_looks()`);
+
+/*
+ * And how many of them there are, which is a different question from which
+ * ones they are and was reported separately: "wildermon are too rare."
+ *
+ * Both sides work an island's head count out from the same shape, and each of
+ * them used to keep its own copy of the two numbers in it. Tripling one and
+ * not the other would have given a solo world and an island different
+ * populations on the same ground with nothing to say so — so the numbers cross
+ * with the rest of the rulebook now, and this is where that is held to.
+ */
+const psql = (sql: string): string =>
+  execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
+    input: sql,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PGHOST: process.env.PGHOST ?? '/var/run/postgresql',
+      PGPORT: process.env.PGPORT ?? '5433',
+      PGUSER: process.env.PGUSER ?? 'wurm',
+      PGDATABASE: process.env.PGDATABASE ?? 'postgres',
+    },
+  }).trim();
+
+const knobs = psql(`select wild_per_region() || '|' || wild_floor() || '|' || site_looks();`).split('|');
+say(Number(knobs[0]) === PER_REGION && Number(knobs[1]) === WILD_TARGET,
+  `a stretch of country holds ${PER_REGION} and an island never fewer than ${WILD_TARGET}, and the island reads both off this list`);
+say(Number(knobs[2]) === SITE_LOOKS, `${SITE_LOOKS} looks at ground per roll, and the island reads the same`);
+
+const sizes = psql(`select distinct w.size || '|' || creature_target(w.id) from world w order by 1;`)
+  .split('\n').map((l) => l.trim()).filter(Boolean);
+let matched = 0;
+for (const row of sizes) {
+  const [size, target] = row.split('|').map(Number);
+  if (wildTargetFor(size, size) === target) matched++;
+  else say(false, `an island ${size} across: the browser wants ${wildTargetFor(size, size)} and the island ${target}`);
+}
+say(matched === sizes.length && sizes.length > 2,
+  `and an island holds the same head count on both sides at every size there is to try: ${sizes.map((r) => r.split('|')[0]).join(', ')} across`);
 
 if (bad) {
   console.error(`${bad} of them are not what they should be`);
