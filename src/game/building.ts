@@ -78,23 +78,30 @@ export interface MaterialDef {
   color: RGB;
   trim: RGB;
   floor: RGB;
+  /**
+   * How many courses of it cover a roof slope, and how many boards a floor of
+   * it is laid in — one number for both, because both are the same question:
+   * how big a piece the stuff comes in. Slate splits small and goes on in many
+   * narrow courses; a marble slab is cut big and goes on in few wide ones.
+   */
+  courses: number;
   /** Items consumed by one solid wall. */
   bill: Array<[string, number]>;
 }
 
 export const MATERIALS: MaterialDef[] = [
-  { id: 'log', name: 'Log', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [139, 106, 62], trim: [92, 66, 38], floor: [150, 118, 74], bill: [['log', 4]] },
-  { id: 'plank', name: 'Plank', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [178, 138, 84], trim: [112, 82, 46], floor: [186, 148, 96], bill: [['plank', 6]] },
-  { id: 'timbercraft', name: 'Timbercraft', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [206, 184, 142], trim: [88, 62, 38], floor: [176, 140, 92], bill: [['plank', 2], ['thatch', 2], ['timber', 2]] },
-  { id: 'cobblestone', name: 'Cobblestone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [140, 136, 128], trim: [92, 88, 82], floor: [126, 122, 116], bill: [['rock_shards', 5]] },
-  { id: 'slate', name: 'Slate', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [96, 104, 118], trim: [60, 66, 78], floor: [88, 96, 110], bill: [['slate_brick', 4], ['mortar', 4]] },
-  { id: 'marble', name: 'Marble', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [228, 226, 220], trim: [170, 168, 160], floor: [216, 214, 208], bill: [['marble_brick', 4], ['mortar', 4]] },
-  { id: 'sandstone', name: 'Sandstone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 184, 132], trim: [150, 122, 78], floor: [200, 172, 124], bill: [['sandstone_brick', 4], ['mortar', 4]] },
-  { id: 'stone_brick', name: 'Stone brick', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [160, 154, 144], trim: [104, 98, 90], floor: [148, 142, 132], bill: [['stone_brick', 4], ['mortar', 4]] },
-  { id: 'clay_adobe', name: 'Clay adobe', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [198, 154, 106], trim: [138, 100, 62], floor: [184, 142, 98], bill: [['adobe', 5]] },
-  { id: 'clay_bricks', name: 'Clay bricks', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [176, 85, 60], trim: [110, 50, 36], floor: [164, 82, 60], bill: [['clay_brick', 4], ['mortar', 4]] },
-  { id: 'ornate_silver', name: 'Ornate silver', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [200, 204, 212], trim: [120, 126, 140], floor: [190, 194, 202], bill: [['stone_brick', 3], ['mortar', 3], ['silver_lump', 2]] },
-  { id: 'ornate_gold', name: 'Ornate gold', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [217, 180, 81], trim: [150, 112, 34], floor: [206, 172, 84], bill: [['stone_brick', 3], ['mortar', 3], ['gold_lump', 2]] },
+  { id: 'log', name: 'Log', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [139, 106, 62], trim: [92, 66, 38], floor: [150, 118, 74], courses: 3, bill: [['log', 4]] },
+  { id: 'plank', name: 'Plank', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [178, 138, 84], trim: [112, 82, 46], floor: [186, 148, 96], courses: 4, bill: [['plank', 6]] },
+  { id: 'timbercraft', name: 'Timbercraft', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [206, 184, 142], trim: [88, 62, 38], floor: [176, 140, 92], courses: 4, bill: [['plank', 2], ['thatch', 2], ['timber', 2]] },
+  { id: 'cobblestone', name: 'Cobblestone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [140, 136, 128], trim: [92, 88, 82], floor: [126, 122, 116], courses: 4, bill: [['rock_shards', 5]] },
+  { id: 'slate', name: 'Slate', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [96, 104, 118], trim: [60, 66, 78], floor: [88, 96, 110], courses: 5, bill: [['slate_brick', 4], ['mortar', 4]] },
+  { id: 'marble', name: 'Marble', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [228, 226, 220], trim: [170, 168, 160], floor: [216, 214, 208], courses: 2, bill: [['marble_brick', 4], ['mortar', 4]] },
+  { id: 'sandstone', name: 'Sandstone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 184, 132], trim: [150, 122, 78], floor: [200, 172, 124], courses: 3, bill: [['sandstone_brick', 4], ['mortar', 4]] },
+  { id: 'stone_brick', name: 'Stone brick', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [160, 154, 144], trim: [104, 98, 90], floor: [148, 142, 132], courses: 3, bill: [['stone_brick', 4], ['mortar', 4]] },
+  { id: 'clay_adobe', name: 'Clay adobe', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [198, 154, 106], trim: [138, 100, 62], floor: [184, 142, 98], courses: 3, bill: [['adobe', 5]] },
+  { id: 'clay_bricks', name: 'Clay bricks', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [176, 85, 60], trim: [110, 50, 36], floor: [164, 82, 60], courses: 5, bill: [['clay_brick', 4], ['mortar', 4]] },
+  { id: 'ornate_silver', name: 'Ornate silver', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [200, 204, 212], trim: [120, 126, 140], floor: [190, 194, 202], courses: 3, bill: [['stone_brick', 3], ['mortar', 3], ['silver_lump', 2]] },
+  { id: 'ornate_gold', name: 'Ornate gold', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [217, 180, 81], trim: [150, 112, 34], floor: [206, 172, 84], courses: 3, bill: [['stone_brick', 3], ['mortar', 3], ['gold_lump', 2]] },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 
@@ -111,6 +118,15 @@ export const WALL_HEIGHT = 30;
  */
 export const WALL_THICK = 0.055;
 export const FENCE_THICK = 0.028;
+/**
+ * How deep a floor deck is, in terrain units: the joists and the boards over
+ * them. Only ever seen at an edge with nothing beyond it, which is exactly
+ * where a floor without one stops looking like a floor and starts looking like
+ * a sheet of paper laid over the storey below.
+ */
+export const FLOOR_DEEP = 2.2;
+/** And how deep an eave is: the rafter ends, and the courses lapped over them. */
+export const EAVE_DEEP = 2.6;
 export const MAX_LEVELS = 10;
 
 export type Side = 'n' | 'e' | 's' | 'w';

@@ -185,14 +185,31 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
 };
 
 /**
+ * The grounds that were laid by somebody rather than grown, taken off the
+ * definitions rather than listed a second time.
+ *
+ * A paved tile used to draw as a flat lozenge of one colour like any other
+ * ground, which is fair for grass and wrong for work somebody did with a
+ * trowel: slabs have joints, cobbles are separate stones, gravel is a heap of
+ * chips. Derived, because a list of three written out by hand is a list that
+ * will be four one day and still say three.
+ */
+export const PAVED: ReadonlySet<number> = new Set<number>(
+  Object.entries(TILE_DEFS).filter(([, d]) => d.paved).map(([id]) => Number(id)));
+
+/**
  * Slab paving comes in the four stones it is cut from, kept in the tile's data
  * byte the way a rock tile keeps its seam.
  */
-export const SLAB_VARIANTS: Array<{ name: string; color: RGB; item: string }> = [
-  { name: 'Stone slabs', color: [172, 170, 164], item: 'stone_slab' },
-  { name: 'Slate slabs', color: [104, 112, 126], item: 'slate_slab' },
-  { name: 'Marble slabs', color: [224, 222, 216], item: 'marble_slab' },
-  { name: 'Sandstone slabs', color: [204, 180, 134], item: 'sandstone_slab' },
+export const SLAB_VARIANTS: Array<{ name: string; color: RGB; item: string; courses: number }> = [
+  // `courses` is how many flags run across a tile, which is how big the stone
+  // is cut: marble comes off the block whole and slate splits into small
+  // pieces. It is the difference between a temple floor and a garden path, and
+  // it costs one number a stone to say it.
+  { name: 'Stone slabs', color: [172, 170, 164], item: 'stone_slab', courses: 3 },
+  { name: 'Slate slabs', color: [104, 112, 126], item: 'slate_slab', courses: 4 },
+  { name: 'Marble slabs', color: [224, 222, 216], item: 'marble_slab', courses: 2 },
+  { name: 'Sandstone slabs', color: [204, 180, 134], item: 'sandstone_slab', courses: 3 },
 ];
 export const slabVariant = (data: number): number => Math.min(SLAB_VARIANTS.length - 1, data & 3);
 export const SLAB_BY_ITEM = new Map(SLAB_VARIANTS.map((v, i) => [v.item, i]));
