@@ -3009,7 +3009,12 @@ export class Creatures {
    * anywhere else could have helped. A person has no such rule; their pick
    * stops at ten under and so does this.
    */
-  private gatherable(game: Game, x: number, y: number, kind: GatherKind, c?: Creature): boolean {
+  /**
+   * Whether a tile is this kind of work, which `shore.ts` asks of both sides
+   * over the same ground — so it is open the way `reachableFace` is, and for
+   * the same reason.
+   */
+  gatherable(game: Game, x: number, y: number, kind: GatherKind, c?: Creature): boolean {
     if (kind === 'mine') {
       // One seam to a miner, and only metal its skill can work.
       const ore = oreAt(game.world, x, y);

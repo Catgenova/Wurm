@@ -23,7 +23,8 @@
 import { Game } from '../../src/game/game';
 import { execFileSync } from 'node:child_process';
 import { ACTION_BY_ID, MINE_DEPTH } from '../../src/game/actions';
-import { TileType } from '../../src/world/tiles';
+import { TileType, isSeam } from '../../src/world/tiles';
+import { oreAt, bedrockAt } from '../../src/world/ore';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -212,6 +213,74 @@ for (const [what, at, want] of cases) {
   check(`a worker can${want ? '' : 'not'} reach ${what}, in the browser`, here === want, `${here}`);
   const there = psql(`select face_reach(${W}, ${at[0]}, ${at[1]})`) === 't';
   check(`and the island says the same of ${what}`, there === want, `${there}`);
+}
+
+/* ---- a vein under a road is not a face ----------------------------------- */
+/*
+ * Reported: a mola stood on a paved deed doing nothing, and the tile it had
+ * picked read "stone slabs, twenty soil over rock, copper vein, buried".
+ *
+ * The bedrock runs under the whole island, so the question "is there metal
+ * here" is answered yes almost anywhere, paving and houses included. The
+ * browser's miner asked only that, and `rockHeight > 1` had been hiding it —
+ * ground with anything on top sits low, so the old bound refused it by
+ * accident while looking like a question about the water. Letting a shore
+ * face be worked under water took the accident away.
+ *
+ * So: one tile, one seam, asked twice — bare, and then with a road over it.
+ * The seam is found rather than placed, because bedrock comes off the seed and
+ * both sides read the same seed.
+ */
+const VEIN: [number, number] = [24, 34];
+const COPPER = 4;
+{
+  const [sx, sy] = VEIN;
+  // Bare rock with a copper vein in it, on both sides, and the same vein:
+  // bedrock comes off the seed and the island's setup has flattened it here,
+  // so it is placed rather than hunted for.
+  for (const [cx, cy] of [[sx, sy], [sx + 1, sy], [sx, sy + 1], [sx + 1, sy + 1]] as Array<[number, number]>) {
+    w.setHeight(cx, cy, 4);
+    w.setDirt(cx, cy, 0);
+  }
+  w.setTile(sx, sy, TileType.Rock, 0);
+  w.setRockKind(sx, sy, COPPER);
+  psql(`
+do $$
+declare w uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  perform land_set_height(w, ${sx}, ${sy}, 4);     perform land_set_dirt(w, ${sx}, ${sy}, 0);
+  perform land_set_height(w, ${sx + 1}, ${sy}, 4); perform land_set_dirt(w, ${sx + 1}, ${sy}, 0);
+  perform land_set_height(w, ${sx}, ${sy + 1}, 4); perform land_set_dirt(w, ${sx}, ${sy + 1}, 0);
+  perform land_set_height(w, ${sx + 1}, ${sy + 1}, 4); perform land_set_dirt(w, ${sx + 1}, ${sy + 1}, 0);
+  perform land_set_tile(w, ${sx}, ${sy}, tile_id('Rock'));
+  perform land_set_rock(w, ${sx}, ${sy}, ${COPPER});
+end $$;`);
+
+  check('the vein is there to be found, on both sides',
+    oreAt(w, sx, sy) !== null && psql(`select (bedrock_at(${W}, ${sx}, ${sy})).seam`) === 't',
+    `${oreAt(w, sx, sy)?.name}`);
+  check('bare rock over a seam is work for a miner, in the browser',
+    game.creatures.gatherable(game, sx, sy, 'mine'));
+  check('and the island says the same',
+    psql(`select worker_gatherable(${W}, ${sx}, ${sy}, 'mine', ${HAND})`) === 't');
+
+  // Now a road over it. Nothing about the metal below has changed.
+  w.setTile(sx, sy, TileType.Slabs, 0);
+  psql(`select land_set_tile(${W}, ${sx}, ${sy}, tile_id('Stone slabs'))`);
+  // `bedrockAt`, not `oreAt`: the rock under a tile is there whatever is laid
+  // on top, and `oreAt` is the one that already answers null for anything that
+  // is not bare — which is the whole reason neither side was ever fooled.
+  check('the metal is still under it', isSeam(bedrockAt(w, sx, sy))
+    && psql(`select (bedrock_at(${W}, ${sx}, ${sy})).seam`) === 't');
+  check('but a vein under a road is not a face, in the browser',
+    !game.creatures.gatherable(game, sx, sy, 'mine'));
+  check('and the island says the same',
+    psql(`select worker_gatherable(${W}, ${sx}, ${sy}, 'mine', ${HAND})`) === 'f');
+
+  // And put it back, so nothing after this is standing on a road.
+  w.setTile(sx, sy, TileType.Rock, 0);
+  psql(`select land_set_tile(${W}, ${sx}, ${sy}, tile_id('Rock'))`);
 }
 
 /* ---- the floor under a pick, which used to be the waterline -------------- */
