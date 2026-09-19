@@ -1948,7 +1948,7 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && item.id !== 'dirt' && !item.locked;
+      return !!item && !item.locked;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
