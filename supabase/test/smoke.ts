@@ -110,8 +110,24 @@ async function walkTo(id: string, world: World, uid: string, x: number, y: numbe
       .eq('world_id', id).eq('uid', uid).single();
     const from = (here ?? { x, y }) as { x: number; y: number };
     if (Math.hypot(from.x - x, from.y - y) < 0.6) return true;
-    const path = findPath(world, Math.floor(from.x), Math.floor(from.y), 0,
-      Math.floor(x), Math.floor(y), pathOptions(world));
+    const fx = Math.floor(from.x);
+    const fy = Math.floor(from.y);
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    /*
+     * Already on the tile, and not yet near enough to the middle of it.
+     *
+     * There is no path to where you are standing and `findPath` says so by
+     * giving nothing, so this read as no way there at all. A live run put it
+     * plainly: "no way onto 38,46 from where we stand", four lines under
+     * another check saying the body was at 38,46. It happens whenever the spot
+     * the island picks is the one under our own feet — which, since the search
+     * started looking from where the body actually is rather than from where
+     * it came ashore, is now the likeliest answer rather than an odd one.
+     */
+    const path = fx === tx && fy === ty
+      ? [{ x: tx, y: ty }]
+      : findPath(world, fx, fy, 0, tx, ty, pathOptions(world));
     if (!path) return false;
     for (const wp of path) {
       const { data } = await supabase().rpc('rpc_move',
