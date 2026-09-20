@@ -120,6 +120,28 @@ jobs:
             exit 1
           fi
           echo "nothing added out of order (latest before this commit: ${last:-none})"
+      - name: No migration alters a table without a lock timeout
+        run: |
+          # `alter table` wants ACCESS EXCLUSIVE, and the moment it starts
+          # waiting for one, every query behind it waits too -- so an ALTER on
+          # a table the doors write to can stop the island dead for as long as
+          # one open transaction holds a row. `lock_timeout` turns that from an
+          # unbounded stall into a failed deploy, which is the cheaper of the
+          # two. This looks only at statements: prose about an ALTER in a
+          # comment starts with `--` or ` *`, never at the margin.
+          added=$(git diff --diff-filter=AM --name-only HEAD~1 HEAD -- supabase/migrations/ || true)
+          bad=""
+          for m in $added; do
+            [ -f "$m" ] || continue
+            grep -Eiq '^[[:space:]]*(alter|drop)[[:space:]]+table' "$m" || continue
+            grep -q 'lock_timeout' "$m" || bad="$bad $m"
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::These migrations alter a table with no lock timeout in front of it:$bad"
+            echo "::error::Put \"set local lock_timeout = '3s';\" at the top of the file."
+            exit 1
+          fi
+          echo "every altering migration bounds its lock wait"
       # `git diff` cannot see a file that is not tracked yet, and a fresh
       # `_defs.sql` is exactly that — so the old form of this check would have
       # let a brand new definitions migration through without noticing. Asking
@@ -858,6 +880,43 @@ jobs:
           npx esbuild supabase/test/stock.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/stock.mjs --log-level=error
           node node_modules/.cache/stock.mjs
+
+      - name: A spadeful you could not put down
+        run: |
+          # "Allow dropping dirt on the ground as a pile." Dirt was the one
+          # thing in the game a person could pick up and then not put back
+          # down: both sides refused it by name, on the reasoning that dirt
+          # belongs in a hole. It does, and it also belongs in a heap beside
+          # the hole while you decide which hole.
+          npx esbuild supabase/test/heap.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/heap.mjs --log-level=error
+          node node_modules/.cache/heap.mjs
+
+      - name: A function the planner could not see into
+        run: |
+          # Postgres folds a `language sql` scalar function into its caller
+          # and refuses when the body holds a sublink. `max_health` held one,
+          # so every creature in every `rpc_creatures` answer paid a whole
+          # function call with the entire row handed in as a composite — and
+          # handed in again to `beast_mul` underneath. This pins both the
+          # property that makes them fold and the numbers they answer.
+          npx esbuild supabase/test/folded.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/folded.mjs --log-level=error
+          node node_modules/.cache/folded.mjs
+
+      - name: The woods turn over once, at dawn, and finish
+        run: |
+          # `tree-tick` was wound at ten-minute intervals against a job with
+          # one day's work in it, and the one go a day with work to do was
+          # being killed by the statement timeout. The reason is a cliff that
+          # opens on the fourth line of an island: a four-kilobyte line is
+          # stored packed, `select into` copies it packed, and once plpgsql
+          # keeps the plan every `get_byte` unpacks the whole line again to
+          # read one byte. Measured here rather than asserted, because it is
+          # one character away from coming back.
+          npx esbuild supabase/test/dawn.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/dawn.mjs --log-level=error
+          node node_modules/.cache/dawn.mjs
 
   migrate:
     name: Push the migrations to the project

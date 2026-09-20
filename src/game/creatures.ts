@@ -78,21 +78,29 @@ export type GatherKind =
  */
 export const WILD_REACH = 1.5;
 /*
- * Eight to thirty seconds between turns was nineteen on average, and an
- * island of N wild things therefore obliged the clock to settle N/19 of them
- * every second. Measured beside a player a settle costs about 15.7 ms, so the
- * island that went slow tonight -- 1,204 of them, grown from 954 in the
- * twenty-two minutes after the stocking clock went live -- was asking for
- * something close to a full second of work per second of clock on the real
- * box. Past 1.0 the backlog never drains.
+ * Eight to thirty seconds between turns, which is nineteen on average.
  *
- * Doubled, the mean turn is thirty-eight seconds and the obligation halves.
- * A wild thing grazes and stands about; standing about for twice as long is
- * the cheapest thing on this island that can give, and it is one constant to
- * put back when the density question is settled properly.
+ * These were doubled the night the island went slow, as the cheapest thing on
+ * it that could give: a wild thing grazes and stands about, and standing about
+ * for twice as long costs the clock half as much. It bought the round back.
+ *
+ * It was the wrong lever, though, and it is put back here. What was actually
+ * broken was that a round had no end: `creature_sweep` took a hundred and
+ * twenty at a time and the clock called it once per player per island, so a
+ * backlog multiplied instead of draining, and `order by id` meant the same
+ * near creatures were looked at every round while the overdue ones waited.
+ * Both are fixed -- a round now spends `settle_budget()` on wildlife and no
+ * more, and takes the longest-waiting first -- and with them fixed a live
+ * round measures 72 ms against a budget of 250.
+ *
+ * So the rest goes back to the figure the game was designed around, and the
+ * budget rather than the rest interval is what keeps a round short. If the
+ * demand ever does outrun the budget the queue simply lags: every wild thing
+ * moves a little less often, which is what doubling this did by hand, only
+ * without a hand.
  */
-export const WILD_REST = 16;
-export const WILD_REST_SPREAD = 44;
+export const WILD_REST = 8;
+export const WILD_REST_SPREAD = 22;
 
 /**
  * How far from its home ground a wild thing will get.
