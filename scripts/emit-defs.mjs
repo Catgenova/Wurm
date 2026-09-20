@@ -47,7 +47,7 @@ const stamp = [now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(),
   .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, '0')).join('');
 const name = `${stamp}_defs.sql`;
 /*
- * A whole snapshot carries the rulebook's own DDL -- `create table if not
+ * A migration that carries DDL -- `create table if not
  * exists`, `alter table ... add column if not exists` -- over tables every
  * door on the island reads. An `alter table` wants ACCESS EXCLUSIVE, and the
  * moment it starts waiting for one, every query behind it waits too, so a
@@ -60,14 +60,19 @@ const name = `${stamp}_defs.sql`;
  * the TypeScript says. A delta carries no DDL and needs none of this.
  *
  * There is a CI guard that will not let an altering migration through without
- * it. That guard caught this file before this line existed, which is the only
- * reason the line is here.
+ * it. That guard caught a definitions file before this line existed, which is
+ * the only reason the line is here -- and the *next* deploy showed why the
+ * line is not enough on its own: three seconds was not long enough to get
+ * ACCESS EXCLUSIVE on `tile_def` against a live island, and nothing ever
+ * would be. `defs-delta.mjs` leaves the DDL out now unless it is genuinely
+ * new, so this applies to the rare migration that really does change a
+ * table's shape, which is the only kind that should ever wait for a lock.
  */
-const guard = made.whole
+const guard = made.ddl
   ? "set local lock_timeout = '3s';\n\n"
   : '';
 const [firstLine, ...rest] = made.sql.split('\n');
-const body = made.whole
+const body = made.ddl
   ? [firstLine, rest[0], '', guard.trimEnd(), ...rest.slice(1)].join('\n')
   : made.sql;
 writeFileSync(join(DIR, name), body);
