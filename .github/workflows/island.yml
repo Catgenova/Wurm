@@ -147,6 +147,25 @@ jobs:
             exit 1
           fi
           echo "every migration that wants a table's lock bounds its wait"
+          # And a wait it steps back from is still a wait, which is how the
+          # *next* deploy died: `truncate a, b, c` takes its locks one at a
+          # time and holds each while it asks for the next, so an island query
+          # holding `tile_def` and wanting `item_def` closes a ring round it.
+          # A deadlock is 40P01 and a timeout is 55P03; catching one and not
+          # the other made a ring a dead deploy where a wait was a retry. If a
+          # migration handles either, it handles both.
+          bad=""
+          for m in $added; do
+            [ -f "$m" ] || continue
+            grep -q 'lock_not_available' "$m" || continue
+            grep -q 'deadlock_detected' "$m" || bad="$bad $m"
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::These migrations retry on a lock timeout but die on a deadlock:$bad"
+            echo "::error::Catch both: \"exception when lock_not_available or deadlock_detected then\"."
+            exit 1
+          fi
+          echo "and a migration that steps back from a wait steps back from a ring too"
       # `git diff` cannot see a file that is not tracked yet, and a fresh
       # `_defs.sql` is exactly that — so the old form of this check would have
       # let a brand new definitions migration through without noticing. Asking

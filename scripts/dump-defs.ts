@@ -721,22 +721,56 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
  * not enough and no single number ever would be.
  *
  * So it is asked for the way the class columns were: a short wait and another
- * go, thirty times, rather than one long wait that queues. A go that fails
- * costs two seconds and blocks nobody -- the locks an attempt did get are
- * released with its subtransaction, so every retry starts from nothing, which
- * is the part that makes this safe for a group of fifty tables rather than
- * one.
+ * go, rather than one long wait that queues. A go that fails blocks nobody --
+ * the locks an attempt did get are released with its subtransaction, so every
+ * retry starts from nothing, which is the part that makes this safe for a
+ * group of fifty tables rather than one.
+ *
+ * ## And waiting for a lock is how you deadlock
+ *
+ * The next deploy died anyway, differently:
+ *
+ *     ERROR: deadlock detected (SQLSTATE 40P01)
+ *     Process 133573 waits for AccessExclusiveLock on relation 17662;
+ *       blocked by process 133620.
+ *     Process 133620 waits for AccessShareLock on relation 17654;
+ *       blocked by process 133573.
+ *
+ * `truncate a, b, c` does not take its locks together. It takes them one at a
+ * time, in the order written, and holds each while it asks for the next. So
+ * the moment it holds `item_def` and waits on `tile_def`, any island query
+ * that already holds `tile_def` and then wants `item_def` closes the ring --
+ * and there is no order to write the tables in that fixes it, because the
+ * island reads them in every order there is.
+ *
+ * Two things follow, and both are here.
+ *
+ * `deadlock_detected` is 40P01 and `lock_not_available` is 55P03: the handler
+ * caught one and not the other, so a deadlock was a dead deploy where a
+ * timeout was a retry. It is the same situation -- an attempt that got some of
+ * its locks and not the rest -- and it wants the same answer.
+ *
+ * And the wait is now shorter than `deadlock_timeout`, which is a second by
+ * default. A cycle only exists while both ends are waiting, so bowing out at
+ * nine hundred milliseconds means that in the ordinary case there is nothing
+ * left to detect: the deploy steps back before the detector runs, and the
+ * island never has a query chosen as the victim. The handler is for losing
+ * that race, not for the usual course of it.
+ *
+ * The sleep is jittered because the thing being waited on is a clock that
+ * ticks once a second. A fixed two-second retry against a one-second round is
+ * a phase lock, which is thirty goes at the same instant of the round.
  */
 const patiently = (what: string, sql: string): string => `do $patient$
 declare i int;
 begin
-  for i in 1 .. 30 loop
+  for i in 1 .. 40 loop
     begin
-      set local lock_timeout = '2s';
+      set local lock_timeout = '900ms';
       ${sql}
       return;
-    exception when lock_not_available then
-      perform pg_sleep(2);
+    exception when lock_not_available or deadlock_detected then
+      perform pg_sleep(0.5 + random() * 2);
     end;
   end loop;
   raise exception ${q(`could not get a moment to replace ${what}`)};

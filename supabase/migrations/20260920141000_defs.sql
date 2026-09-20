@@ -18,13 +18,13 @@ create table if not exists rite_def (
 do $patient$
 declare i int;
 begin
-  for i in 1 .. 30 loop
+  for i in 1 .. 40 loop
     begin
-      set local lock_timeout = '2s';
+      set local lock_timeout = '900ms';
       truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;
       return;
-    exception when lock_not_available then
-      perform pg_sleep(2);
+    exception when lock_not_available or deadlock_detected then
+      perform pg_sleep(0.5 + random() * 2);
     end;
   end loop;
   raise exception 'could not get a moment to replace the things, the ground and the skills';
@@ -595,13 +595,13 @@ insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak,
 do $patient$
 declare i int;
 begin
-  for i in 1 .. 30 loop
+  for i in 1 .. 40 loop
     begin
-      set local lock_timeout = '2s';
+      set local lock_timeout = '900ms';
       truncate action_def;
       return;
-    exception when lock_not_available then
-      perform pg_sleep(2);
+    exception when lock_not_available or deadlock_detected then
+      perform pg_sleep(0.5 + random() * 2);
     end;
   end loop;
   raise exception 'could not get a moment to replace what can be done';
@@ -1053,9 +1053,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 do $patient$
 declare i int;
 begin
-  for i in 1 .. 30 loop
+  for i in 1 .. 40 loop
     begin
-      set local lock_timeout = '2s';
+      set local lock_timeout = '900ms';
       truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
@@ -1063,8 +1063,8 @@ begin
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node, rite_def,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;
       return;
-    exception when lock_not_available then
-      perform pg_sleep(2);
+    exception when lock_not_available or deadlock_detected then
+      perform pg_sleep(0.5 + random() * 2);
     end;
   end loop;
   raise exception 'could not get a moment to replace the recipes, the beasts and everything they are made of,
@@ -1073,13 +1073,13 @@ end $patient$;
 do $patient$
 declare i int;
 begin
-  for i in 1 .. 30 loop
+  for i in 1 .. 40 loop
     begin
-      set local lock_timeout = '2s';
+      set local lock_timeout = '900ms';
       truncate look_option;
       return;
-    exception when lock_not_available then
-      perform pg_sleep(2);
+    exception when lock_not_available or deadlock_detected then
+      perform pg_sleep(0.5 + random() * 2);
     end;
   end loop;
   raise exception 'could not get a moment to replace the looks somebody may be given';
