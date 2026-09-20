@@ -77,8 +77,22 @@ export type GatherKind =
  * a poll two seconds apart nearly always finds a thing that has not moved.
  */
 export const WILD_REACH = 1.5;
-export const WILD_REST = 8;
-export const WILD_REST_SPREAD = 22;
+/*
+ * Eight to thirty seconds between turns was nineteen on average, and an
+ * island of N wild things therefore obliged the clock to settle N/19 of them
+ * every second. Measured beside a player a settle costs about 15.7 ms, so the
+ * island that went slow tonight -- 1,204 of them, grown from 954 in the
+ * twenty-two minutes after the stocking clock went live -- was asking for
+ * something close to a full second of work per second of clock on the real
+ * box. Past 1.0 the backlog never drains.
+ *
+ * Doubled, the mean turn is thirty-eight seconds and the obligation halves.
+ * A wild thing grazes and stands about; standing about for twice as long is
+ * the cheapest thing on this island that can give, and it is one constant to
+ * put back when the density question is settled properly.
+ */
+export const WILD_REST = 16;
+export const WILD_REST_SPREAD = 44;
 
 /**
  * How far from its home ground a wild thing will get.
