@@ -1,9 +1,17 @@
 import type { ActionDef, Target } from './actions';
 import { SIDE_NAMES, type Side } from './building';
 import { SUBTILES } from './crates';
+import { CROP_BY_SEED } from './farming';
 import type { Game } from './game';
 import { isWorked, itemDef, itemName, storedLine, type Item } from './items';
 import { matOf } from './materials';
+
+/**
+ * What a store takes, for the five that take one sort of thing: raw materials,
+ * worked materials, food, seed, sprouts. `TAKES` below holds the test and the
+ * sentence for each.
+ */
+export type Takes = 'raw' | 'worked' | 'food' | 'seed' | 'sprout';
 
 /**
  * Furniture: everything a fine carpenter nails together and sets down indoors.
@@ -56,17 +64,16 @@ export interface FurnitureDef {
   /** Trade that builds it; fine carpentry with a mallet unless it says otherwise. */
   skill?: string;
   tool?: string;
-  /** Takes raw materials and nothing else: ore, logs, dirt, by the pile. */
-  raw?: boolean;
   /**
-   * Takes worked materials and nothing else: planks, nails, ribbons, hinges.
+   * What this store takes, for the ones that take one sort of thing.
    *
-   * The exact complement of `raw` inside the material category, which is what
-   * makes the pair of bins a partition rather than two overlapping boxes:
-   * every material is one or the other, and nothing that is not a material is
-   * either.
+   * It was two booleans, `raw` and `crafted`, while the raw material bin and
+   * the craft material bin were the only two restricted stores. There are five
+   * now, and five parallel flags would be five places to forget one: instead a
+   * single field naming the kind, and `TAKES` holding the test and the
+   * sentence for each, so the sixth is a row rather than a branch in two files.
    */
-  crafted?: boolean;
+  takes?: Takes;
   /** What is put in rots this many times faster than it would in the open. */
   trash?: number;
   /** Can be taken hold of and pulled along behind you. */
@@ -160,8 +167,8 @@ const piece = (
 ): FurnitureDef => ({ id, name, w, h, bill, difficulty, time, done, capacity, ...extra });
 
 /**
- * The twenty pieces, from a three-legged stool to a larder. Everything here is
- * nailed rather than pegged, so every one of them takes nails.
+ * Every piece, from a three-legged stool to a wagon. Everything a carpenter
+ * builds here is nailed rather than pegged, so every one of them takes nails.
  */
 export const FURNITURE: FurnitureDef[] = [
   piece('stool', 'Stool', 1, 1, [['plank', 1], ['shaft', 3], ['nail', 6]], 8, 6, 'You nail up a three-legged stool.'),
@@ -178,7 +185,9 @@ export const FURNITURE: FurnitureDef[] = [
   piece('wardrobe', 'Wardrobe', 2, 2, [['plank', 14], ['timber', 4], ['nail', 30]], 24, 18, 'You nail up a wardrobe tall enough to hang a cloak in.', 100),
   piece('shelves', 'Shelves', 3, 1, [['plank', 12], ['timber', 2], ['nail', 26]], 18, 15, 'You nail up a long rack of shelves.', 120),
   piece('bookshelf', 'Bookshelf', 2, 1, [['plank', 10], ['timber', 2], ['nail', 22]], 20, 14, 'You nail up a bookshelf with a cornice on top.', 90),
-  piece('larder', 'Larder', 2, 2, [['plank', 16], ['timber', 4], ['nail', 34]], 26, 20, 'You nail up a deep larder, the biggest thing you can store in.', 150),
+  piece('larder', 'Larder', 2, 2, [['plank', 16], ['timber', 4], ['nail', 34]], 26, 20,
+    'You nail up a deep larder and slate the floor of it cold. Food and drink go in it, and nothing else.', 250,
+    { takes: 'food' }),
   piece('barrel', 'Barrel', 1, 1, [['plank', 6], ['shaft', 2], ['nail', 10]], 18, 10, 'You raise the staves and hoop a barrel.', undefined, { liquid: 80 }),
   /*
    * The two pieces that exist for other people.
@@ -242,7 +251,7 @@ export const FURNITURE: FurnitureDef[] = [
   piece('banner', 'Banner', 1, 1, [['cloth', 4], ['shaft', 2], ['rope', 1], ['nail', 6]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
   piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: raw materials, rubbish, and something to pull it in.
-  piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { raw: true }),
+  piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { takes: 'raw' }),
   /*
    * Its opposite number, off the same bill of materials.
    *
@@ -256,7 +265,22 @@ export const FURNITURE: FurnitureDef[] = [
    * two hundred and fifty thousand nails or twelve hundred planks. There is
    * no count limit on it at all.
    */
-  piece('craft_bin', 'Craft material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a partitioned lid, the sort a morning at the anvil goes into.', undefined, { heft: 2500, crafted: true }),
+  piece('craft_bin', 'Craft material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a partitioned lid, the sort a morning at the anvil goes into.', undefined, { heft: 2500, takes: 'worked' }),
+  /*
+   * And the two small ones, for the two things a farmer and a forester carry
+   * home by the handful.
+   *
+   * Both are weighed rather than counted, for the same reason the craft bin
+   * is: a sprout weighs 0.1 kg and a wheat seed 0.02, so a hundred kilograms
+   * is a thousand sprouts or five thousand seeds, and no one number of things
+   * would have been right for both.
+   */
+  piece('seed_bin', 'Seed bin', 1, 1, [['plank', 5], ['nail', 10]], 12, 9,
+    'You build a bin with a tight lid and a scoop, the sort a season\'s seed keeps dry in.',
+    undefined, { heft: 100, takes: 'seed' }),
+  piece('sprout_bin', 'Sprout bin', 1, 1, [['plank', 5], ['nail', 10]], 12, 9,
+    'You build a bin with a damp cloth under the lid. Sprouts wilt in the open; they will keep in this.',
+    undefined, { heft: 100, takes: 'sprout' }),
   piece('trash_crate', 'Trash crate', 1, 1, [['plank', 3], ['nail', 6]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
   piece('cart', 'Small cart', 2, 1, [['plank', 8], ['shaft', 4], ['nail', 16]], 18, 14, 'You build a small cart on two wheels, light enough for one person to pull.', 100, { cart: true }),
   // The two that are driven rather than carried. A wheelwright's bill: wheels
@@ -499,11 +523,31 @@ export const RAW_BIN_REFUSAL = 'A raw material bin takes raw materials — ore, 
  */
 export const CRAFT_BIN_REFUSAL = 'A craft material bin takes worked materials — planks, nails, ribbons, hinges — and nothing that has not been through a bench.';
 
+export const LARDER_REFUSAL = 'A larder takes food — raw, cooked, and what is drunk — and nothing else.';
+export const SEED_BIN_REFUSAL = 'A seed bin takes seeds and nothing else.';
+export const SPROUT_BIN_REFUSAL = 'A sprout bin takes sprouts and nothing else.';
+
 /**
- * Why a piece will not take something, or null if it will. A raw material bin
- * takes raw materials (`ItemDef.raw`) and nothing else, a craft material bin
- * takes exactly the rest of the materials, and a barrel takes no solids at
- * all.
+ * The five restricted stores: what each takes, and what it says to the rest.
+ *
+ * One table rather than a flag apiece, because the door is the same door five
+ * times over and the only thing that varies is the question at it. The island
+ * holds the same five under the same names, in `furniture_takes`, and the two
+ * of them have to answer alike or a put the browser allows is a put the
+ * island refuses.
+ */
+export const TAKES: Record<Takes, { is: (id: string) => boolean; refusal: string }> = {
+  raw: { is: (id) => !!itemDef(id).raw, refusal: RAW_BIN_REFUSAL },
+  worked: { is: isWorked, refusal: CRAFT_BIN_REFUSAL },
+  food: { is: (id) => itemDef(id).category === 'food', refusal: LARDER_REFUSAL },
+  seed: { is: (id) => CROP_BY_SEED.has(id), refusal: SEED_BIN_REFUSAL },
+  sprout: { is: (id) => id === 'sprout', refusal: SPROUT_BIN_REFUSAL },
+};
+
+/**
+ * Why a piece will not take something, or null if it will. A barrel takes no
+ * solids at all, a hive is the swarm's, and the five restricted stores each
+ * ask `TAKES` the one question they were built around.
  */
 export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null {
   const def = furnitureDef(f.kind);
@@ -511,8 +555,8 @@ export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null 
   if (holdsLiquid(f)) return `${it} holds liquid and nothing else.`;
   if (def.hive) return `${it} is the swarm's, not yours. Take what is in it; do not put anything back.`;
   if (!furnitureHolds(f)) return `${it} does not hold things.`;
-  if (def.raw && !itemDef(item.id).raw) return RAW_BIN_REFUSAL;
-  if (def.crafted && !isWorked(item.id)) return CRAFT_BIN_REFUSAL;
+  const takes = def.takes && TAKES[def.takes];
+  if (takes && !takes.is(item.id)) return takes.refusal;
   return null;
 }
 

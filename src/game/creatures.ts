@@ -4411,16 +4411,21 @@ export class Creatures {
   }
 
   /**
-   * Where a load should go: a raw material bin for anything raw, then the
+   * Where a load should go: the store built for exactly this thing, then the
    * settlement's own crate while it has room, then the nearest other store
    * that will take it. Null means every place on the deed is full, which is a
    * reason to stop rather than to tip the load out on the ground.
    *
-   * The bin comes first because that is what it is for. A bin holds four
-   * hundred where a crate holds a fraction of that, it takes nothing a bench
-   * has touched, and a worker that filled the deed crate with ore left nowhere
-   * for the things only a crate will hold. Asked for: "molas should prioritize
-   * storing into raw material bins."
+   * The purpose-built store comes first because that is what it is for. A raw
+   * material bin holds four hundred where a crate holds a fraction of that and
+   * takes nothing a bench has touched, and a worker that filled the deed crate
+   * with ore left nowhere for the things only a crate will hold. Asked for:
+   * "molas should prioritize storing into raw material bins."
+   *
+   * It needs no test on what the load is: the list has already been through
+   * `furnitureRefuses`, so a restricted store still in it is the one built for
+   * this thing. Which is how the craft bin, and then the larder, the seed bin
+   * and the sprout bin, joined the rule without a clause each.
    */
   storeFor(game: Game, c: Creature, item: Item): DeedStore | null {
     // A worker out on a post fills whatever stands beside the post before it

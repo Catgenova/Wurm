@@ -67,6 +67,8 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   well: 22,
   bulk_bin: 24,
   craft_bin: 24,
+  seed_bin: 13,
+  sprout_bin: 13,
   trash_crate: 12,
   cart: 15,
   large_cart: 26,
@@ -506,6 +508,24 @@ const DRAW: Record<string, Draw> = {
     ctx.moveTo(0, -h - D * 0.9);
     ctx.lineTo(0, -h + D * 0.9);
     ctx.stroke();
+  },
+  /*
+   * The two small bins, one carcass between them. The lid is the whole visible
+   * difference: a board with the scoop lying on it for seed, and a damp cloth
+   * over the sprouts, which is the only thing that keeps them from wilting.
+   */
+  seed_bin: (ctx, W, D, h) => {
+    box(ctx, 0, 0, W * 0.84, D * 0.84, h - 2, WOODS.oak);
+    box(ctx, 0, 0, W * 0.9, D * 0.9, 2, WOODS.dark, h - 2);
+    box(ctx, -W * 0.14, 0, W * 0.3, D * 0.14, 1.4, WOODS.pale, h);
+  },
+  sprout_bin: (ctx, W, D, h) => {
+    box(ctx, 0, 0, W * 0.84, D * 0.84, h - 2, WOODS.pale);
+    box(ctx, 0, 0, W * 0.9, D * 0.9, 2, WOODS.grey, h - 2);
+    ctx.fillStyle = 'rgba(112,150,88,0.75)';
+    ctx.beginPath();
+    ctx.ellipse(0, -h, W * 0.62, D * 0.62, 0, 0, TAU);
+    ctx.fill();
   },
   trash_crate: (ctx, W, D, h) => {
     const w = WOODS.grey;

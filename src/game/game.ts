@@ -74,10 +74,11 @@ export interface DeedStore {
    * anything else.
    *
    * It is not asked whether the load is raw. The list has already been through
-   * `room`, which is `furnitureRefuses` -- so a bin standing in it is a bin
+   * `room`, which is `furnitureRefuses` -- so a store standing in it is one
    * that has agreed to take this thing, and that makes it the store built for
-   * it whichever of the two it is. Ore goes to the raw bin and a morning at the
-   * anvil goes to the craft bin by one rule rather than two.
+   * it, whichever of the five it is. Ore goes to the raw bin, a morning at the
+   * anvil to the craft bin, dinner to the larder and a handful of seed to the
+   * seed bin, by one rule rather than five.
    */
   bin: boolean;
   /** Whether this would take the thing being carried. */
@@ -5443,7 +5444,7 @@ export class Game {
       items: f.items,
       name: def.name,
       deed: false,
-      bin: !!def.raw || !!def.crafted,
+      bin: !!def.takes,
       room: (item) => !furnitureRefuses(f, item) && item.count <= furnitureRoom(f, item),
       add: (item) => this.furnitureAdd(f, item),
       changed: () => this.events.emit('crate'),

@@ -302,14 +302,18 @@ out.push(`create table if not exists slab_def (
 /* What a barrel holds and what a well finds for itself, in litres. */
 out.push(`alter table furniture_def add column if not exists liquid real;`);
 out.push(`alter table furniture_def add column if not exists well real;`);
-/* A bin that takes bulk and nothing else, a hive that is the swarm's, and a
- * crate whose bottom is rotten through. */
-out.push(`alter table furniture_def add column if not exists raw boolean not null default false;`);
-/* And the bin that takes exactly the rest of the materials, measured in
- * kilograms rather than counted: `heft` is the limit and `capacity` is null
- * on it, which is what makes `furniture_room` the only place that has to know
- * which sort of bin it is looking at. */
-out.push(`alter table furniture_def add column if not exists crafted boolean not null default false;`);
+/*
+ * What a restricted store takes, for the five that take one sort of thing:
+ * 'raw', 'worked', 'food', 'seed', 'sprout'. It was two booleans, `raw` and
+ * `crafted`, while the two material bins were the only restricted stores;
+ * `furniture_takes` holds the test for each now, so the sixth is a row rather
+ * than a column and a branch.
+ */
+out.push(`alter table furniture_def add column if not exists takes text;`);
+/* Kilograms, for the bins measured that way rather than counted: `heft` is
+ * the limit and `capacity` is null on them, which is what makes
+ * `furniture_room` the only place that has to know which sort it is looking
+ * at. */
 out.push(`alter table furniture_def add column if not exists heft real;`);
 out.push(`alter table furniture_def add column if not exists hive real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
@@ -1394,8 +1398,7 @@ for (const f of FURNITURE as unknown as A[]) {
   out.push(`insert into furniture_def values (${q(f.id)}, ${q(f.name)}, ${q(f.w)}, ${q(f.h)}, ${q(f.capacity)}, ${q(!!f.hearth)}, ${q(!!f.altar)});`);
   if (f.liquid !== undefined) out.push(`update furniture_def set liquid = ${q(f.liquid)} where id = ${q(f.id)};`);
   if (f.well !== undefined) out.push(`update furniture_def set well = ${q(f.well)} where id = ${q(f.id)};`);
-  if (f.raw) out.push(`update furniture_def set raw = true where id = ${q(f.id)};`);
-  if (f.crafted) out.push(`update furniture_def set crafted = true where id = ${q(f.id)};`);
+  if (f.takes) out.push(`update furniture_def set takes = ${q(f.takes)} where id = ${q(f.id)};`);
   if (f.heft !== undefined) out.push(`update furniture_def set heft = ${q(f.heft)} where id = ${q(f.id)};`);
   if (f.stall) out.push(`update furniture_def set stall = true where id = ${q(f.id)};`);
   if (f.post) out.push(`update furniture_def set post = true where id = ${q(f.id)};`);

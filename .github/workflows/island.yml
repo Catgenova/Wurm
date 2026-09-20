@@ -414,7 +414,7 @@ jobs:
             --outfile=node_modules/.cache/trades.mjs --log-level=error
           node node_modules/.cache/trades.mjs
 
-      - name: Two bins, and the line drawn between them
+      - name: Five stores that take one sort of thing
         run: |
           # Ore, logs, dirt, shards and wool go in the raw bin; a plank, a
           # brick, a lump, a hatchet and wheat are refused in the island's
@@ -425,6 +425,13 @@ jobs:
           # both sides. It is measured in kilograms rather than counted, which
           # the island agrees to the unit: 250,000 nails, 1,250 planks or 416
           # timbers in the same bin.
+          #
+          # And the three that came after: a larder of 250 that takes food and
+          # drink only -- flour, dough and cornmeal among what it turns away,
+          # being material rather than food -- and a seed bin and a sprout bin
+          # of a hundred kilograms each, which is 5,000 wheat seeds or 1,000
+          # sprouts. All five ask one field, `furniture_def.takes`, and both
+          # sides refuse in the same words to the dash.
           npx esbuild supabase/test/bins.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/bins.mjs --log-level=error
           node node_modules/.cache/bins.mjs
