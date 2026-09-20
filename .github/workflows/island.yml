@@ -1179,6 +1179,17 @@ jobs:
           # It is also the only way to see from a run whether the thing that was
           # just deployed is there. Four deploys in a row failed this afternoon
           # and the only way to know how far each had got was to read the error.
+          #
+          # It reads `furniture_def.takes` rather than the `crafted` boolean it
+          # was written against. That boolean was dropped when the five
+          # restricted stores went to one field, and the readout was left
+          # pointing at it: run 502 answered `column "crafted" does not exist`
+          # and fell through to its warning, so the first deploy this was
+          # supposed to describe is the one it could not describe. It is
+          # allowed to fail without taking the deploy with it, which is right,
+          # and is also exactly how a broken diagnostic stays broken -- so
+          # `fussy` and `larder_mats` come with the fix, since a rulebook whose
+          # shape changes is the thing this line exists to notice.
           RULES=$(cat <<'EOSQL'
           select (select count(*) from class_def) as trades,
                  (select count(*) from class_node) as nodes,
@@ -1189,8 +1200,10 @@ jobs:
                  (select count(*) from item_def where raw) as raw_mats,
                  (select count(*) from recipe) as recipes,
                  (select count(*) from furniture_def) as pieces,
+                 (select count(*) from furniture_def where takes is not null) as fussy,
+                 (select count(*) from item_def where larder) as larder_mats,
                  (select coalesce(max(heft)::text, 'none')
-                    from furniture_def where crafted) as craft_bin_kg;
+                    from furniture_def where takes = 'worked') as craft_bin_kg;
           EOSQL
           )
           supabase db query --linked "$RULES" \
