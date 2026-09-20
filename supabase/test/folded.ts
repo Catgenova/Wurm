@@ -26,6 +26,22 @@
  *     box in the same second, so a loaded machine moves both and not the
  *     verdict.
  *
+ * That last one only works while both halves are the same arithmetic, and for
+ * a day they were not. `max_health` took a third factor when the fighting
+ * trades landed -- `class_mul(..., 'hide', ...)`, so that a beastmaster's
+ * animals are hardier -- and the half written out beside it did not. The ratio
+ * then measured the extra multiply rather than the call, drifted up to 2.6
+ * here and 3.12 on a CI runner, and failed a threshold of 3 having said
+ * nothing at all about folding. With the same arithmetic on both sides:
+ *
+ *     through the function                14.8 ms
+ *     written out, as the test had it      5.7 ms  ->  2.60x
+ *     written out, same arithmetic        15.1 ms  ->  0.98x
+ *
+ * So the thing it is named for was true the whole time. The threshold is 2
+ * rather than 3 now: against a measured 0.98 that is ample headroom on a
+ * shared runner, and it catches the next drift while it is still small.
+ *
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
@@ -107,7 +123,8 @@ begin
     perform sum(max_health(c)) from creature c;
     v_fn := least(v_fn, extract(epoch from (clock_timestamp() - t0)) * 1000);
     t0 := clock_timestamp();
-    perform sum(round(species_health(c.species) * trait_mul(c.traits, 'hardy') * deed_aura(c, 'hardy')))
+    perform sum(round(species_health(c.species) * trait_mul(c.traits, 'hardy') * deed_aura(c, 'hardy')
+                    * class_mul(c.world_id, c.keeper, 'hide', 'soul_strength')))
       from creature c;
     v_body := least(v_body, extract(epoch from (clock_timestamp() - t0)) * 1000);
   end loop;
@@ -132,7 +149,7 @@ check('and the number agrees with the tables it is made of, owing nothing to eit
 
 const [fn, body, ratio] = said('COST').split('|');
 check('and calling it costs about what its own body costs, where it used to cost eleven times as much',
-  Number(ratio) <= 3, `${fn} ms through the function, ${body} ms written out — ${ratio}×`);
+  Number(ratio) <= 2, `${fn} ms through the function, ${body} ms written out — ${ratio}×`);
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {
