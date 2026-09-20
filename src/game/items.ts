@@ -68,6 +68,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   pendant: { name: 'Pendant', category: 'material', weight: 0.1, stackable: true, decay: 1, description: 'A plain drop on a loop, two to a lump. It wants a stone.' },
   ring_mould: { name: 'Ring mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, two rings to a filling. It wears a little every time it is filled, and no mould can be mended.' },
   pendant_mould: { name: 'Pendant mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, two pendants to a filling. It wears a little every time it is filled, and no mould can be mended.' },
+  focus: { name: 'Focus', category: 'tool', weight: 0.3, description: 'A cut stone in a silver claw. A spell is cast out of it, and casting wears it away; when it is gone it is gone.' },
   jewelled_ring: { name: 'Jewelled ring', category: 'misc', weight: 0.06, decay: 1, description: 'A band with a stone set in it. Worn, the stone favours its trade in you, a knack\'s worth, for as long as it is on your hand.' },
   jewelled_pendant: { name: 'Jewelled pendant', category: 'misc', weight: 0.12, decay: 1, description: 'A drop with a stone set in it, on a loop. Worn, the stone favours its trade in you, a knack\'s worth, for as long as it hangs there.' },
   horseshoe: { name: 'Horseshoes', category: 'material', weight: 0.25, stackable: true, decay: 1, description: 'Four to a lump. Nailed onto a mount by a farrier with a mallet, they hold a week of riding: quicker on stone, and up what it would have baulked at.' },

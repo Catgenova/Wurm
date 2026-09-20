@@ -204,6 +204,17 @@ create table if not exists class_node (
   name text not null, note text not null, channel text not null,
   cost int not null, needs text, mul double precision not null
 );
+create table if not exists school_def (
+  id text primary key, name text not null, skill text not null, note text not null
+);
+create table if not exists school_stone (
+  school text not null, gem text not null, ord int not null, primary key (school, gem)
+);
+create table if not exists spell_def (
+  id text primary key, school text not null, name text not null, level real not null,
+  gem text not null, wear real not null, power real not null, secs real not null,
+  range real not null, at_what text not null, note text not null, done text not null
+);
 create table if not exists rite_def (
   id text primary key, class text not null, name text not null,
   cost real not null, level real not null, secs real not null, rest real not null,
@@ -450,6 +461,7 @@ insert into item_def values ('ring', 'Ring', 'material', 0.05, true, 1, null);
 insert into item_def values ('pendant', 'Pendant', 'material', 0.1, true, 1, null);
 insert into item_def values ('ring_mould', 'Ring mould', 'tool', 1.2, false, 1, null);
 insert into item_def values ('pendant_mould', 'Pendant mould', 'tool', 1.2, false, 1, null);
+insert into item_def values ('focus', 'Focus', 'tool', 0.3, false, null, null);
 insert into item_def values ('jewelled_ring', 'Jewelled ring', 'misc', 0.06, false, 1, null);
 insert into item_def values ('jewelled_pendant', 'Jewelled pendant', 'misc', 0.12, false, 1, null);
 insert into item_def values ('horseshoe', 'Horseshoes', 'material', 0.25, true, 1, null);
@@ -928,6 +940,9 @@ insert into skill_def values ('knives', 'Knives', 1, null);
 insert into skill_def values ('polearms', 'Polearms', 1, null);
 insert into skill_def values ('archery', 'Archery', 1, null);
 insert into skill_def values ('throwing', 'Throwing', 1, null);
+insert into skill_def values ('kindling', 'Kindling', 1, null);
+insert into skill_def values ('binding', 'Binding', 1, null);
+insert into skill_def values ('warding', 'Warding', 1, null);
 insert into skill_def values ('shields', 'Shields', 1, null);
 insert into skill_def values ('cloth_armour', 'Cloth armour', 1, null);
 insert into skill_def values ('leather_armour', 'Leather armour', 1, null);
@@ -1262,6 +1277,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_cherry_preserves', 'Preserve cherries', 'preserving cherries', 'cooking', 'clay_bowl', false, null, 0.03, 14, 14, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('press_olives', 'Press into oil', 'pressing olives', 'milling', 'quern', false, null, 0.05, 16, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_stew', 'Simmer a stew', 'simmering a stew', 'cooking', 'clay_bowl', false, null, 0.03, 16, 10, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('set_focus', 'Set a focus', 'setting a focus', 'jewellery', 'file', false, null, 0.04, 14, 20, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('set_ring', 'Set in a ring', 'setting a stone', 'jewellery', 'file', false, null, 0.03, 10, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('set_pendant', 'Set in a pendant', 'setting a stone', 'jewellery', 'file', false, null, 0.03, 10, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_anvil_mould', 'Fire an anvil mould', 'firing a mould', 'blacksmithing', null, false, null, 0.03, 12, 6, false, true);
@@ -1454,6 +1470,7 @@ begin
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node, rite_def,
+  school_def, school_stone, spell_def,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;
       return;
     exception when lock_not_available then
@@ -1980,6 +1997,7 @@ update item_def set description = 'A plain band, two to a lump. It wants a stone
 update item_def set description = 'A plain drop on a loop, two to a lump. It wants a stone.' where id = 'pendant';
 update item_def set description = 'A sand mould, two rings to a filling. It wears a little every time it is filled, and no mould can be mended.' where id = 'ring_mould';
 update item_def set description = 'A sand mould, two pendants to a filling. It wears a little every time it is filled, and no mould can be mended.' where id = 'pendant_mould';
+update item_def set description = 'A cut stone in a silver claw. A spell is cast out of it, and casting wears it away; when it is gone it is gone.' where id = 'focus';
 update item_def set description = 'A band with a stone set in it. Worn, the stone favours its trade in you, a knack''s worth, for as long as it is on your hand.' where id = 'jewelled_ring';
 update item_def set description = 'A drop with a stone set in it, on a loop. Worn, the stone favours its trade in you, a knack''s worth, for as long as it hangs there.' where id = 'jewelled_pendant';
 update item_def set description = 'Four to a lump. Nailed onto a mount by a farrier with a mallet, they hold a week of riding: quicker on stone, and up what it would have baulked at.' where id = 'horseshoe';
@@ -2408,13 +2426,16 @@ insert into boon_skill values (46, 'knives');
 insert into boon_skill values (47, 'polearms');
 insert into boon_skill values (48, 'archery');
 insert into boon_skill values (49, 'throwing');
-insert into boon_skill values (50, 'shields');
-insert into boon_skill values (51, 'cloth_armour');
-insert into boon_skill values (52, 'leather_armour');
-insert into boon_skill values (53, 'chain_armour');
-insert into boon_skill values (54, 'plate_armour');
-insert into boon_skill values (55, 'climbing');
-insert into boon_skill values (56, 'swimming');
+insert into boon_skill values (50, 'kindling');
+insert into boon_skill values (51, 'binding');
+insert into boon_skill values (52, 'warding');
+insert into boon_skill values (53, 'shields');
+insert into boon_skill values (54, 'cloth_armour');
+insert into boon_skill values (55, 'leather_armour');
+insert into boon_skill values (56, 'chain_armour');
+insert into boon_skill values (57, 'plate_armour');
+insert into boon_skill values (58, 'climbing');
+insert into boon_skill values (59, 'swimming');
 create or replace function boon_seconds() returns double precision language sql immutable as $fn$ select 3000::double precision $fn$;
 create or replace function boon_bonus() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 insert into title_def values ('digging:50', 'digging', 50, 'Digger');
@@ -4118,6 +4139,12 @@ insert into class_skill values ('chirurgeon', 'chirurgy');
 insert into class_skill values ('chirurgeon', 'cloth_armour');
 insert into class_def values ('beastmaster', 'combat', 'Beastmaster', 'Fights with what fights beside it. The hand on the animal, not the blade.', 'soul_strength', 'What travels with you does more of the fighting, and bites far harder doing it.');
 insert into class_skill values ('beastmaster', 'soul_strength');
+insert into class_def values ('kindler', 'combat', 'Kindler', 'Heat, out of the warm stones. What it touches burns, and goes on burning.', 'kindling', 'Burns hotter, further, and for less of the stone.');
+insert into class_skill values ('kindler', 'kindling');
+insert into class_def values ('binder', 'combat', 'Binder', 'Stillness, out of the clear stones. What it touches stops where it stands.', 'binding', 'Holds longer, over more ground, and for less of the stone.');
+insert into class_skill values ('binder', 'binding');
+insert into class_def values ('warder', 'combat', 'Warder', 'A skin, out of the soft stones, standing between a blow and whoever it was meant for.', 'warding', 'A thicker skin over more people, and a stone that lasts twice as long.');
+insert into class_skill values ('warder', 'warding');
 insert into class_channel values ('hands', 'Hands', 'How long a go takes.', true);
 insert into class_channel values ('learn', 'Learning', 'What a go teaches you.', false);
 insert into class_channel values ('wind', 'Wind', 'What a go takes out of you.', true);
@@ -4129,6 +4156,9 @@ insert into class_channel values ('knit', 'Knitting', 'How fast what is open clo
 insert into class_channel values ('hide', 'Hide', 'How much what travels with you can take.', false);
 insert into class_channel values ('fang', 'Fang', 'How hard what travels with you bites.', false);
 insert into class_channel values ('tame', 'Quiet', 'How readily a wild thing decides about you.', false);
+insert into class_channel values ('force', 'Force', 'What a spell does when it arrives.', false);
+insert into class_channel values ('reach', 'Reach', 'How far it carries before it stops being yours.', false);
+insert into class_channel values ('thrift', 'Thrift', 'How little of the stone one cast takes.', true);
 insert into class_node values ('terraformer_1_1', 'terraformer', 1, 1, 'Spadework I', 'The spade goes in and comes up without thinking about it.', 'hands', 1, null, 0.97);
 insert into class_node values ('terraformer_1_2', 'terraformer', 1, 2, 'Spadework II', 'The spade goes in and comes up without thinking about it.', 'hands', 1, 'terraformer_1_1', 0.96);
 insert into class_node values ('terraformer_1_3', 'terraformer', 1, 3, 'Ditcher', 'The spade goes in and comes up without thinking about it.', 'hands', 3, 'terraformer_1_2', 0.9);
@@ -4318,6 +4348,48 @@ insert into class_node values ('beastmaster_2_3', 'beastmaster', 2, 3, 'Twice It
 insert into class_node values ('beastmaster_3_1', 'beastmaster', 3, 1, 'Quiet Word I', 'A wild thing decides about you sooner than it meant to.', 'tame', 1, null, 1.03);
 insert into class_node values ('beastmaster_3_2', 'beastmaster', 3, 2, 'Quiet Word II', 'A wild thing decides about you sooner than it meant to.', 'tame', 1, 'beastmaster_3_1', 1.04);
 insert into class_node values ('beastmaster_3_3', 'beastmaster', 3, 3, 'Given', 'A wild thing decides about you sooner than it meant to.', 'tame', 3, 'beastmaster_3_2', 1.1);
+insert into class_node values ('kindler_1_1', 'kindler', 1, 1, 'Heat I', 'What comes out of the stone arrives hotter.', 'force', 1, null, 1.04);
+insert into class_node values ('kindler_1_2', 'kindler', 1, 2, 'Heat II', 'What comes out of the stone arrives hotter.', 'force', 1, 'kindler_1_1', 1.05);
+insert into class_node values ('kindler_1_3', 'kindler', 1, 3, 'White', 'What comes out of the stone arrives hotter.', 'force', 3, 'kindler_1_2', 1.12);
+insert into class_node values ('kindler_2_1', 'kindler', 2, 1, 'Throw I', 'You can put it further away than you can see it land.', 'reach', 1, null, 1.05);
+insert into class_node values ('kindler_2_2', 'kindler', 2, 2, 'Throw II', 'You can put it further away than you can see it land.', 'reach', 1, 'kindler_2_1', 1.06);
+insert into class_node values ('kindler_2_3', 'kindler', 2, 3, 'Far Coal', 'You can put it further away than you can see it land.', 'reach', 3, 'kindler_2_2', 1.15);
+insert into class_node values ('kindler_3_1', 'kindler', 3, 1, 'Sparing I', 'A stone goes further in your hand than in anybody else’s.', 'thrift', 1, null, 0.97);
+insert into class_node values ('kindler_3_2', 'kindler', 3, 2, 'Sparing II', 'A stone goes further in your hand than in anybody else’s.', 'thrift', 1, 'kindler_3_1', 0.96);
+insert into class_node values ('kindler_3_3', 'kindler', 3, 3, 'Last Ember', 'A stone goes further in your hand than in anybody else’s.', 'thrift', 3, 'kindler_3_2', 0.9);
+insert into class_node values ('binder_1_1', 'binder', 1, 1, 'Hold I', 'What you stop stays stopped considerably longer.', 'force', 1, null, 1.04);
+insert into class_node values ('binder_1_2', 'binder', 1, 2, 'Hold II', 'What you stop stays stopped considerably longer.', 'force', 1, 'binder_1_1', 1.05);
+insert into class_node values ('binder_1_3', 'binder', 1, 3, 'Rooted', 'What you stop stays stopped considerably longer.', 'force', 3, 'binder_1_2', 1.12);
+insert into class_node values ('binder_2_1', 'binder', 2, 1, 'Cast I', 'The stillness carries out past where you are standing.', 'reach', 1, null, 1.05);
+insert into class_node values ('binder_2_2', 'binder', 2, 2, 'Cast II', 'The stillness carries out past where you are standing.', 'reach', 1, 'binder_2_1', 1.06);
+insert into class_node values ('binder_2_3', 'binder', 2, 3, 'Wide Still', 'The stillness carries out past where you are standing.', 'reach', 3, 'binder_2_2', 1.15);
+insert into class_node values ('binder_3_1', 'binder', 3, 1, 'Sparing I', 'The clear stones give up what is in them without complaint.', 'thrift', 1, null, 0.97);
+insert into class_node values ('binder_3_2', 'binder', 3, 2, 'Sparing II', 'The clear stones give up what is in them without complaint.', 'thrift', 1, 'binder_3_1', 0.96);
+insert into class_node values ('binder_3_3', 'binder', 3, 3, 'Cold Water', 'The clear stones give up what is in them without complaint.', 'thrift', 3, 'binder_3_2', 0.9);
+insert into class_node values ('warder_1_1', 'warder', 1, 1, 'Weave I', 'The skin takes a great deal more before it goes.', 'force', 1, null, 1.04);
+insert into class_node values ('warder_1_2', 'warder', 1, 2, 'Weave II', 'The skin takes a great deal more before it goes.', 'force', 1, 'warder_1_1', 1.05);
+insert into class_node values ('warder_1_3', 'warder', 1, 3, 'Close Skin', 'The skin takes a great deal more before it goes.', 'force', 3, 'warder_1_2', 1.12);
+insert into class_node values ('warder_2_1', 'warder', 2, 1, 'Spread I', 'It closes over everybody, not only over you.', 'reach', 1, null, 1.05);
+insert into class_node values ('warder_2_2', 'warder', 2, 2, 'Spread II', 'It closes over everybody, not only over you.', 'reach', 1, 'warder_2_1', 1.06);
+insert into class_node values ('warder_2_3', 'warder', 2, 3, 'Over All', 'It closes over everybody, not only over you.', 'reach', 3, 'warder_2_2', 1.15);
+insert into class_node values ('warder_3_1', 'warder', 3, 1, 'Sparing I', 'You take out of a stone exactly what you meant to and no more.', 'thrift', 1, null, 0.97);
+insert into class_node values ('warder_3_2', 'warder', 3, 2, 'Sparing II', 'You take out of a stone exactly what you meant to and no more.', 'thrift', 1, 'warder_3_1', 0.96);
+insert into class_node values ('warder_3_3', 'warder', 3, 3, 'Deep Cut', 'You take out of a stone exactly what you meant to and no more.', 'thrift', 3, 'warder_3_2', 0.9);
+insert into school_def values ('kindling', 'Kindling', 'kindling', 'Heat, out of the warm stones. What it touches burns, and goes on burning.');
+insert into school_stone values ('kindling', 'garnet', 0);
+insert into school_stone values ('kindling', 'ruby', 1);
+insert into school_def values ('binding', 'Binding', 'binding', 'Stillness, out of the clear stones. What it touches stops, and stays stopped.');
+insert into school_stone values ('binding', 'sapphire', 0);
+insert into school_stone values ('binding', 'diamond', 1);
+insert into school_def values ('warding', 'Warding', 'warding', 'A skin, out of the soft stones. It stands between a blow and whoever it was aimed at.');
+insert into school_stone values ('warding', 'topaz', 0);
+insert into school_stone values ('warding', 'emerald', 1);
+insert into spell_def values ('ember', 'kindling', 'Ember', 1, 'garnet', 3, 12, 0, 5, 'creature', 'A coal out of the stone, put where you are looking.', 'The garnet goes cold in your hand and the {t} is burning. ({n})');
+insert into spell_def values ('pyre', 'kindling', 'Pyre', 30, 'ruby', 7, 9, 0, 3, 'around', 'Everything close enough to feel it, at once.', 'The air goes white and everything near you is alight. ({n})');
+insert into spell_def values ('snare', 'binding', 'Snare', 1, 'sapphire', 3, 0, 8, 5, 'creature', 'One thing, standing exactly where it is.', 'The {t} puts a foot down and does not pick it up again. ({n})');
+insert into spell_def values ('stillfield', 'binding', 'Still field', 30, 'diamond', 7, 0, 5, 3, 'around', 'Everything close enough, for rather less time each.', 'Everything around you stops where it stands. ({n})');
+insert into spell_def values ('aegis', 'warding', 'Aegis', 1, 'topaz', 4, 20, 0, 0, 'self', 'A skin over you that takes the blows instead, until it is used up.', 'Something closes over you, a half inch out from the skin. ({n})');
+insert into spell_def values ('bulwark', 'warding', 'Bulwark', 30, 'emerald', 8, 16, 0, 3, 'around', 'The same skin, over everybody standing near you.', 'It closes over everybody within reach of you. ({n})');
 insert into rite_def values ('ward', 'blade', 'Ward', 20, 10, 30, 900, '{"guard":1.6}', 'You set your feet and the shield stops being a thing you are holding.', 'For half a minute the shield is everywhere you need it.');
 insert into rite_def values ('redhour', 'berserker', 'Red Hour', 24, 12, 30, 1200, '{"edge":1.5,"guard":0.7}', 'It goes red at the edges, and you stop minding what lands on you.', 'Half again on what you land, and three tenths off what you turn. It is not a bargain; it is a decision.');
 insert into rite_def values ('set', 'pikeman', 'Set', 20, 10, 45, 900, '{"guard":1.4,"aim":1.15}', 'You set the butt of it in the ground and the line stops where you are.', 'Braced, with the haft down, and nothing coming through.');
@@ -4325,6 +4397,9 @@ insert into rite_def values ('farsight', 'archer', 'Farsight', 22, 14, 45, 900, 
 insert into rite_def values ('quickhand', 'skirmisher', 'Quick Hand', 18, 8, 30, 720, '{"hands":0.7}', 'Your hands get ahead of you and you let them.', 'Everything you do happens a third quicker, which is most of a fight.');
 insert into rite_def values ('staunch', 'chirurgeon', 'Staunch', 26, 16, 60, 1200, '{"knit":3}', 'You get your hands on it and it begins closing under them.', 'For a minute, what you have dressed closes three times as fast.');
 insert into rite_def values ('pack', 'beastmaster', 'Call the Pack', 28, 18, 60, 1200, '{"fang":1.5,"hide":1.3}', 'You say the word and everything that answers to you stops being tame.', 'What travels with you fights like something with nothing to lose.');
+insert into rite_def values ('whiteheat', 'kindler', 'White Heat', 22, 12, 30, 900, '{"force":1.6}', 'The stone goes hot enough to hurt and you hold on to it anyway.', 'For half a minute everything out of the stone arrives half again as hot.');
+insert into rite_def values ('longhold', 'binder', 'Long Hold', 24, 14, 45, 900, '{"force":1.4,"reach":1.4}', 'The air goes thick and slow as far out as you can see.', 'Everything you stop stays stopped longer, and from further off.');
+insert into rite_def values ('deepstone', 'warder', 'Deep Stone', 26, 16, 60, 1200, '{"thrift":0.35}', 'You reach further into it than you have any business reaching, and it lets you.', 'For a minute a stone gives up what is in it for almost nothing.');
 insert into path_def values ('love', 'Love', 'The gardener’s way. Things grow for you, things trust you, and what is hurt mends.');
 insert into path_step values ('love', 1, 3, 'Green thumb', 'Everything sown on your settlement comes on a fifth faster.', null, null, null);
 insert into path_step values ('love', 2, 12, 'Refresh', 'Hunger and thirst, both full, in a breath.', 'refresh', 1200, 'You are neither hungry nor thirsty.');
@@ -4698,6 +4773,9 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_stew', 0, 'cooked_meat', 1);
 insert into recipe_input values ('make_stew', 1, 'potato', 1);
 insert into recipe_input values ('make_stew', 2, 'onion', 1);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('set_focus', 'focus', 1, 'file', null, 'jewellery', 'Set a focus', 'setting a focus', 14, 0.04, 20, true, false, 'gem', null, null, 'You draw the silver up into four claws and close them over the stone.', 'The claw goes over too far, the stone splits, and there is silver and grit in your palm.');
+insert into recipe_input values ('set_focus', 0, 'gem', 1);
+insert into recipe_input values ('set_focus', 1, 'silver_lump', 1);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('set_ring', 'jewelled_ring', 1, 'file', null, 'jewellery', 'Set in a ring', 'setting a stone', 10, 0.03, 10, false, false, 'gem', null, null, 'You seat the stone in the band and close the claws over it with the file.', null);
 insert into recipe_input values ('set_ring', 0, 'gem', 1);
 insert into recipe_input values ('set_ring', 1, 'ring', 1);

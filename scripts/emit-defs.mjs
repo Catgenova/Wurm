@@ -45,7 +45,22 @@ const now = new Date();
 const stamp = [now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(),
   now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()]
   .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, '0')).join('');
-const name = `${stamp}_defs.sql`;
+/*
+ * And never before a migration that already exists.
+ *
+ * The stamp comes off the clock, which is right until somebody writes a
+ * migration by hand and dates it a few minutes ahead -- and then the next
+ * definitions run sorts *before* a file that has already been applied to the
+ * project, which `supabase db push` will not have. CI catches it with the
+ * out-of-order guard; this stops it happening twice, which it has.
+ *
+ * A second past the newest is enough: the order is what matters, not the hour.
+ */
+const newest = readdirSync(DIR).map((f) => f.slice(0, 14)).filter((t) => /^\d{14}$/.test(t)).sort().pop();
+const safe = newest && newest >= stamp
+  ? String(BigInt(newest) + 1n).padStart(14, '0')
+  : stamp;
+const name = `${safe}_defs.sql`;
 /*
  * A migration that carries DDL -- `create table if not
  * exists`, `alter table ... add column if not exists` -- over tables every

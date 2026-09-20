@@ -52,16 +52,23 @@ const out = psql(`
 begin;
 create temp table said (k text);
 
+-- The seven that are not schools, told apart by data rather than by a list:
+-- a school's class is the one whose main skill a school_def names.
 insert into said select 'LIST|' || string_agg(c.id || ':' || c.main || ':' ||
   (select string_agg(cs.skill, '+' order by cs.skill) from class_skill cs where cs.class = c.id),
-  '|' order by c.id) from class_def c where c.kind = 'combat';
+  '|' order by c.id) from class_def c where c.kind = 'combat'
+   and not exists (select 1 from school_def sc where sc.skill = c.main);
+insert into said select 'ALLRITES|' || count(*) || '|'
+  || (select count(*) from class_def where kind = 'combat') from rite_def;
 -- The muls as a sorted key=value list rather than raw jsonb text, because
 -- Postgres prints a space after the colon and JSON.stringify does not, and
 -- that is a difference in printing rather than in the rulebook.
 insert into said select 'RITES|' || string_agg(r.id || ':' || r.class || ':' || r.name || ':'
   || r.cost::int || ':' || r.level::int || ':' || r.secs::int || ':' || r.rest::int || ':'
   || (select string_agg(e.k || '=' || e.v, ';' order by e.k) from jsonb_each_text(r.muls) e(k, v)),
-  '|' order by r.id) from rite_def r;
+  '|' order by r.id) from rite_def r
+ where r.class in (select c.id from class_def c where c.kind = 'combat'
+   and not exists (select 1 from school_def sc where sc.skill = c.main));
 
 do $$
 declare w record; v jsonb; a double precision; b double precision;
@@ -179,11 +186,18 @@ begin
   insert into said select 'ACTIONS|' || string_agg(id || ':' || skill, ',' order by id)
     from action_def where id in ('bind_wound', 'clean_wound', 'treat_creature');
 
-  -- fang, hide and quiet: the keeper's trade, on the animal.
-  select * into v_c from creature where world_id = w.world_id order by id limit 1;
+  /*
+   * fang, hide and quiet: the keeper's trade, on the animal.
+   *
+   * Put one there rather than looking for one. Asking the island for whatever
+   * animal it happens to have leaves the measurement at the mercy of whatever
+   * ran before it -- and in a full sweep, what ran before it had killed them.
+   */
+  v_id := creature_spawn(w.world_id, 'sappa',
+    (select x from player where world_id = w.world_id and uid = w.uid),
+    (select y from player where world_id = w.world_id and uid = w.uid), 'active', null, w.uid);
+  select * into v_c from creature where world_id = w.world_id and id = v_id;
   if v_c.id is not null then
-    update creature set keeper = w.uid, mode = 'active' where world_id = w.world_id and id = v_c.id;
-    select * into v_c from creature where world_id = w.world_id and id = v_c.id;
     a := attack_of(v_c); c := max_health(v_c);
     update player set combat_class = null, class_mul = null where world_id = w.world_id and uid = w.uid;
     delete from player_node where world_id = w.world_id and uid = w.uid;
@@ -223,15 +237,17 @@ check('both sides hold the same seven fighting trades, skill for skill',
     : `island ${island.length}, browser ${browser.length}`);
 
 const islandR = said('RITES').split('|').sort();
-const browserR = RITES.map((r) => `${r.id}:${r.class}:${r.name}:${r.cost}:${r.level}:${r.secs}:${r.rest}:`
+const browserR = RITES.filter((r) => COMBAT_CLASSES.some((c) => c.id === r.class))
+  .map((r) => `${r.id}:${r.class}:${r.name}:${r.cost}:${r.level}:${r.secs}:${r.rest}:`
   + Object.keys(r.muls).sort().map((k) => `${k}=${r.muls[k as keyof typeof r.muls]}`).join(';')).sort();
 check('and the same seven rites, field for field',
   islandR.join() === browserR.join(),
   islandR.join() === browserR.join() ? `${islandR.length} of them`
     : `island ${islandR[0]}, browser ${browserR[0]}`);
-check('one rite to a trade, and every trade has one',
-  RITES.length === COMBAT_CLASSES.length
-    && COMBAT_CLASSES.every((c) => RITES.some((r) => r.class === c.id)));
+const [riteCount, combatCount] = said('ALLRITES').split('|').map(Number);
+check('one rite to a trade, and every fighting trade has one',
+  riteCount === combatCount && COMBAT_CLASSES.every((c) => RITES.some((r) => r.class === c.id)),
+  `${riteCount} rites over ${combatCount} fighting trades`);
 
 check('a fighting trade goes in the combat slot and leaves the craft one alone',
   said('SLOTS') === 'none|blade', said('SLOTS'));

@@ -219,8 +219,42 @@ export const COMBAT_CLASSES: ClassDef[] = [
   },
 ];
 
-/** Every class there is. The three magic trades land beside these. */
-export const CLASSES: ClassDef[] = [...CRAFT_CLASSES, ...COMBAT_CLASSES];
+/**
+ * And the three schools of the one art.
+ *
+ * Each gates on its own school skill and on nothing else, so none of them
+ * touches a skill any other trade wanted -- which is what let the arcane
+ * arrive without moving a single boundary that was already drawn.
+ *
+ * They share their three channels on purpose. A kindler and a warder are not
+ * two kinds of person with different hands; they are two people who learned
+ * different things to say to a stone, and it is the spell list that says
+ * which. `force`, `reach` and `thrift` are what *any* of them can get better
+ * at, and the scope key keeps a kindler's thrift out of a warder's topaz.
+ */
+export const MAGIC_CLASSES: ClassDef[] = [
+  {
+    id: 'kindler', kind: 'combat', name: 'Kindler', main: 'kindling',
+    note: 'Heat, out of the warm stones. What it touches burns, and goes on burning.',
+    skills: ['kindling'],
+    lever: 'Burns hotter, further, and for less of the stone.',
+  },
+  {
+    id: 'binder', kind: 'combat', name: 'Binder', main: 'binding',
+    note: 'Stillness, out of the clear stones. What it touches stops where it stands.',
+    skills: ['binding'],
+    lever: 'Holds longer, over more ground, and for less of the stone.',
+  },
+  {
+    id: 'warder', kind: 'combat', name: 'Warder', main: 'warding',
+    note: 'A skin, out of the soft stones, standing between a blow and whoever it was meant for.',
+    skills: ['warding'],
+    lever: 'A thicker skin over more people, and a stone that lasts twice as long.',
+  },
+];
+
+/** Every class there is: fourteen trades, seven ways to fight, three schools. */
+export const CLASSES: ClassDef[] = [...CRAFT_CLASSES, ...COMBAT_CLASSES, ...MAGIC_CLASSES];
 
 export const classDef = (id: string): ClassDef | undefined => CLASSES.find((c) => c.id === id);
 
@@ -280,7 +314,8 @@ export const classRefusal = (c: ClassDef, at: (skill: string) => number): string
  */
 export type Channel =
   | 'hands' | 'learn' | 'wind' | 'fine'
-  | 'edge' | 'aim' | 'guard' | 'knit' | 'hide' | 'fang' | 'tame';
+  | 'edge' | 'aim' | 'guard' | 'knit' | 'hide' | 'fang' | 'tame'
+  | 'force' | 'reach' | 'thrift';
 
 /** What each channel means, and which way its numbers run. */
 export const CHANNELS: Record<Channel, { name: string; note: string; lower: boolean }> = {
@@ -295,6 +330,9 @@ export const CHANNELS: Record<Channel, { name: string; note: string; lower: bool
   hide: { name: 'Hide', note: 'How much what travels with you can take.', lower: false },
   fang: { name: 'Fang', note: 'How hard what travels with you bites.', lower: false },
   tame: { name: 'Quiet', note: 'How readily a wild thing decides about you.', lower: false },
+  force: { name: 'Force', note: 'What a spell does when it arrives.', lower: false },
+  reach: { name: 'Reach', note: 'How far it carries before it stops being yours.', lower: false },
+  thrift: { name: 'Thrift', note: 'How little of the stone one cast takes.', lower: true },
 };
 
 /** A column of three: two minor, then the major that wants them both. */
@@ -353,6 +391,9 @@ const STEP: Record<Channel, readonly [number, number, number]> = {
   hide: [1.04, 1.05, 1.12],
   fang: [1.04, 1.05, 1.12],
   tame: [1.03, 1.04, 1.10],
+  force: [1.04, 1.05, 1.12],
+  reach: [1.05, 1.06, 1.15],
+  thrift: [0.97, 0.96, 0.90],
 };
 
 /** Nothing at all below this, so the first point is earned rather than given. */
@@ -499,9 +540,28 @@ const COMBAT_COLUMNS: Record<string, [Column, Column, Column]> = {
   ],
 };
 
-/** Every trade's columns, craft and fighting alike. */
+/** And the three schools', which are the same three and mean different things. */
+const MAGIC_COLUMNS: Record<string, [Column, Column, Column]> = {
+  kindler: [
+    { name: 'Heat', major: 'White', channel: 'force', note: 'What comes out of the stone arrives hotter.' },
+    { name: 'Throw', major: 'Far Coal', channel: 'reach', note: 'You can put it further away than you can see it land.' },
+    { name: 'Sparing', major: 'Last Ember', channel: 'thrift', note: 'A stone goes further in your hand than in anybody else’s.' },
+  ],
+  binder: [
+    { name: 'Hold', major: 'Rooted', channel: 'force', note: 'What you stop stays stopped considerably longer.' },
+    { name: 'Cast', major: 'Wide Still', channel: 'reach', note: 'The stillness carries out past where you are standing.' },
+    { name: 'Sparing', major: 'Cold Water', channel: 'thrift', note: 'The clear stones give up what is in them without complaint.' },
+  ],
+  warder: [
+    { name: 'Weave', major: 'Close Skin', channel: 'force', note: 'The skin takes a great deal more before it goes.' },
+    { name: 'Spread', major: 'Over All', channel: 'reach', note: 'It closes over everybody, not only over you.' },
+    { name: 'Sparing', major: 'Deep Cut', channel: 'thrift', note: 'You take out of a stone exactly what you meant to and no more.' },
+  ],
+};
+
+/** Every trade's columns: craft, fighting and arcane alike. */
 export const CLASS_COLUMNS: Record<string, [Column, Column, Column]> =
-  { ...CRAFT_COLUMNS, ...COMBAT_COLUMNS };
+  { ...CRAFT_COLUMNS, ...COMBAT_COLUMNS, ...MAGIC_COLUMNS };
 
 /** Every node there is, built from the columns rather than written out twice. */
 export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
@@ -656,6 +716,27 @@ export const RITES: RiteDef[] = [
     said: 'You say the word and everything that answers to you stops being tame.',
   },
 ];
+
+RITES.push(
+  {
+    id: 'whiteheat', class: 'kindler', name: 'White Heat', cost: 22, level: 12, secs: 30, rest: 900,
+    muls: { force: 1.6 },
+    note: 'For half a minute everything out of the stone arrives half again as hot.',
+    said: 'The stone goes hot enough to hurt and you hold on to it anyway.',
+  },
+  {
+    id: 'longhold', class: 'binder', name: 'Long Hold', cost: 24, level: 14, secs: 45, rest: 900,
+    muls: { force: 1.4, reach: 1.4 },
+    note: 'Everything you stop stays stopped longer, and from further off.',
+    said: 'The air goes thick and slow as far out as you can see.',
+  },
+  {
+    id: 'deepstone', class: 'warder', name: 'Deep Stone', cost: 26, level: 16, secs: 60, rest: 1200,
+    muls: { thrift: 0.35 },
+    note: 'For a minute a stone gives up what is in it for almost nothing.',
+    said: 'You reach further into it than you have any business reaching, and it lets you.',
+  },
+);
 
 export const riteOf = (classId: string | null): RiteDef | undefined =>
   classId ? RITES.find((r) => r.class === classId) : undefined;

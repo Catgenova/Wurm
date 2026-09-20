@@ -82,6 +82,14 @@ export const SKILL_DEFS: SkillDef[] = [
    * arm behind them.
    */
   { id: 'throwing', name: 'Throwing', group: 'Fighting', start: 1 },
+  /*
+   * The three schools of the one art. Each is a trade's gate and the scope of
+   * its nodes, and each is learned the only way anything here is: by doing it
+   * until the stone is gone and cutting another.
+   */
+  { id: 'kindling', name: 'Kindling', group: 'Fighting', start: 1 },
+  { id: 'binding', name: 'Binding', group: 'Fighting', start: 1 },
+  { id: 'warding', name: 'Warding', group: 'Fighting', start: 1 },
   { id: 'shields', name: 'Shields', group: 'Fighting', start: 1 },
   { id: 'cloth_armour', name: 'Cloth armour', group: 'Fighting', start: 1 },
   { id: 'leather_armour', name: 'Leather armour', group: 'Fighting', start: 1 },

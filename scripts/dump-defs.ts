@@ -63,6 +63,7 @@ import {
   CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
   CLASS_POINT_FLOOR, CLASS_POINT_STEP,
 } from '../src/game/classes';
+import { SCHOOLS, SPELLS } from '../src/game/arcane';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
 import { DYEABLE_ITEMS } from '../src/game/dyes';
@@ -445,6 +446,25 @@ out.push(`create table if not exists class_node (
  * turns, and that is two numbers in the same map as everything else rather
  * than a rule of its own.
  */
+/*
+ * The three schools, the stones each works, and what may be cast out of them.
+ *
+ * `spell_def` is `cast_def`'s shape asked of a stone rather than of a god: a
+ * name, what it takes, what it costs and what it reaches. The cost is in marks
+ * of wear on the focus rather than in favour, which is the whole difference
+ * between the two arts.
+ */
+out.push(`create table if not exists school_def (
+  id text primary key, name text not null, skill text not null, note text not null
+);`);
+out.push(`create table if not exists school_stone (
+  school text not null, gem text not null, ord int not null, primary key (school, gem)
+);`);
+out.push(`create table if not exists spell_def (
+  id text primary key, school text not null, name text not null, level real not null,
+  gem text not null, wear real not null, power real not null, secs real not null,
+  range real not null, at_what text not null, note text not null, done text not null
+);`);
 out.push(`create table if not exists rite_def (
   id text primary key, class text not null, name text not null,
   cost real not null, level real not null, secs real not null, rest real not null,
@@ -838,6 +858,7 @@ out.push(patiently('the recipes, the beasts and everything they are made of,\n *
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node, rite_def,
+  school_def, school_stone, spell_def,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`));
 
 /*
@@ -1372,6 +1393,15 @@ for (const [id, ch] of Object.entries(CLASS_CHANNELS)) {
 for (const n of CLASS_NODES) {
   out.push(`insert into class_node values (` + [q(n.id), q(n.class), q(n.col),
     q(n.rank), q(n.name), q(n.note), q(n.channel), q(n.cost), q(n.needs), q(n.mul)].join(', ') + `);`);
+}
+for (const sc of SCHOOLS) {
+  out.push(`insert into school_def values (${q(sc.id)}, ${q(sc.name)}, ${q(sc.skill)}, ${q(sc.note)});`);
+  sc.stones.forEach((g, i) => out.push(`insert into school_stone values (${q(sc.id)}, ${q(g)}, ${q(i)});`));
+}
+for (const sp of SPELLS) {
+  out.push(`insert into spell_def values (` + [q(sp.id), q(sp.school), q(sp.name), q(sp.level),
+    q(sp.gem), q(sp.wear), q(sp.power), q(sp.secs), q(sp.range), q(sp.at), q(sp.note),
+    q(sp.done)].join(', ') + `);`);
 }
 for (const r of RITES) {
   out.push(`insert into rite_def values (` + [q(r.id), q(r.class), q(r.name), q(r.cost),

@@ -988,6 +988,20 @@ jobs:
             --outfile=node_modules/.cache/fight.mjs --log-level=error
           node node_modules/.cache/fight.mjs
 
+      - name: A stone, and what you can get out of it
+        run: |
+          # The arcane, which has no mana in it. A focus is a cut gem in a
+          # silver claw and every number the system needs was already on the
+          # item: the kind, the cut, the find, and how much is left. A stone
+          # worn through crumbles down the same path that takes a rotten
+          # haunch off the ground. This asks both sides for the three schools
+          # and six spells, compares the four pieces of arithmetic fed the
+          # same inputs, and lands all three effects — a burn, a hold and a
+          # skin — including that a skin spent against a blow stays spent.
+          npx esbuild supabase/test/arcane.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/arcane.mjs --log-level=error
+          node node_modules/.cache/arcane.mjs
+
       - name: What is lying about, going off where it lies
         run: |
           # ground_sweep rewrote every thing on an island's ground once a
