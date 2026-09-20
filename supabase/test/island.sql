@@ -833,12 +833,21 @@ select '127. halfway along a leg from 4,4 to 8,4: ' || round(creature_x(c)::nume
 update creature set leg_at = now() - interval '9 seconds', leg_ends = now() - interval '5 seconds' where id = :'cid';
 select '128. and once the leg is over it stays put: ' || round(creature_x(c)::numeric, 1) || ',' || round(creature_y(c)::numeric, 1)
   from creature c where id = :'cid';
--- An hour with nobody near it at all.
+/*
+ * An hour with nobody near it at all.
+ *
+ * The number in this line is `catch_up_legs()` rather than a number written
+ * out, because it was written out as forty and then the cap came down to four
+ * and the sentence went on saying forty. The point of the measurement is that
+ * a creature nobody watched walks the cap and then the clock catches it up --
+ * which is true at any cap, and is what makes the cap cheap to lower.
+ */
 update creature set from_x = 6.8, from_y = 7.4, to_x = 6.8, to_y = 7.4, leg = 0,
     until = now() - interval '1 hour', leg_at = now() - interval '1 hour', leg_ends = now() - interval '1 hour',
     settled_at = now() - interval '1 hour', hunger = 0.8 where id = :'cid';
 select creature_settle(:'world2', :'cid') \g /dev/null
-select '129. an hour alone: leg ' || leg || ' (forty is as far back as anyone walks), it is at '
+select '129. an hour alone: leg ' || leg || ' (' || catch_up_legs()
+     || ' is as far back as anyone walks), it is at '
      || round(to_x::numeric, 1) || ',' || round(to_y::numeric, 1) || ', and it fed itself: hunger '
      || round(hunger::numeric, 2) from creature where id = :'cid';
 

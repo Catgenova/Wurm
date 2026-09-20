@@ -1295,6 +1295,30 @@ jobs:
                  "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
                  -c "$SLOW" \
             || echo "::notice::No statement timings — pg_stat_statements is not enabled on this project."
+          # And which part of a round the time went into, which is the one
+          # thing `pg_stat_statements` cannot say: it gives a single mean for
+          # `world_tick` and nothing about the four stages inside it. Written
+          # by the clock itself, a row a round, kept for an hour.
+          TICK=$(cat <<'EOSQL'
+          select count(*) as rounds,
+                 round(avg(ms)::numeric, 1) as ms_avg,
+                 round((percentile_cont(0.5) within group (order by ms))::numeric, 1) as ms_p50,
+                 round((percentile_cont(0.95) within group (order by ms))::numeric, 1) as ms_p95,
+                 round(max(ms)::numeric, 1) as ms_worst,
+                 round(avg((stages->>'settle')::numeric), 1) as settle,
+                 round(avg((stages->>'stir')::numeric), 1) as stir,
+                 round(avg((stages->>'sweeps')::numeric), 1) as sweeps,
+                 round(avg((stages->>'tidy')::numeric), 1) as tidy,
+                 round(avg(worlds)::numeric, 2) as worlds
+            from tick_time where at > now() - interval '30 minutes';
+          EOSQL
+          )
+          supabase db query --linked "$TICK" \
+            || printf '%s\n' "$TICK" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$TICK" \
+            || echo "::notice::No round timings yet — tick_time is filled by world_tick, so the first deploy that creates it has nothing to show."
 
   found:
     name: Found an island on the project
