@@ -44,20 +44,21 @@ check('the piece is named for what it takes', furnitureDef('bulk_bin').name === 
   `${furnitureDef('bulk_bin').name} / ${ITEM_DEFS.bulk_bin.name}`);
 check('and is the one piece that takes raw materials only', FURNITURE.filter((f) => f.raw).map((f) => f.id).join() === 'bulk_bin',
   FURNITURE.filter((f) => f.raw).map((f) => f.id).join() || 'none');
-// Ash moved across on the word of the person playing: "count Ash as a raw
-// material." It is raked out of a fire and no bench has touched it, which is
-// the whole of the test, and it is the one thing a furnace turns out by the
-// cartload with nowhere bulk to put it.
-const taken = ['iron_ore', 'log', 'dirt', 'rock_shards', 'wool', 'clay', 'coal', 'hide', 'ash'];
-check('ore, a log, dirt, shards, wool, clay, coal, a hide and ash go in', taken.every((id) => said(id) === 'taken'), taken.map((id) => `${id}: ${said(id)}`).join(' | '));
-const refused = ['plank', 'stone_brick', 'iron_lump', 'wheat', 'hatchet', 'nail', 'casting', 'wax'];
-check('a plank, a brick, a lump, wheat, a hatchet, nails, a casting and wax do not', refused.every((id) => said(id) === RAW_BIN_REFUSAL),
+// Ash went across to the raw bin once -- "count Ash as a raw material" -- and
+// has come back: "change Ash back to a crafted item from a raw item." It was
+// only ever there because a furnace turns it out by the cartload and there was
+// nowhere bulk to put it. There is now. A fire is a bench like any other, so
+// ash is a worked material and goes in the other bin.
+const taken = ['iron_ore', 'log', 'dirt', 'rock_shards', 'wool', 'clay', 'coal', 'hide'];
+check('ore, a log, dirt, shards, wool, clay, coal and a hide go in', taken.every((id) => said(id) === 'taken'), taken.map((id) => `${id}: ${said(id)}`).join(' | '));
+const refused = ['plank', 'stone_brick', 'iron_lump', 'wheat', 'hatchet', 'nail', 'casting', 'wax', 'ash'];
+check('a plank, a brick, a lump, wheat, a hatchet, nails, a casting, wax and ash do not', refused.every((id) => said(id) === RAW_BIN_REFUSAL),
   refused.map((id) => `${id}: ${said(id) === RAW_BIN_REFUSAL ? 'refused' : said(id)}`).join(' | '));
 check('in the same words the island uses', RAW_BIN_REFUSAL === 'A raw material bin takes raw materials — ore, logs, dirt, shards, wool — and nothing a bench has touched.', RAW_BIN_REFUSAL);
 
 const raw = Object.entries(ITEM_DEFS).filter(([, d]) => d.raw).map(([id]) => id);
 const made = new Set(RECIPES.map((r) => r.result));
-check('forty-one raw materials on the list', raw.length === 41, String(raw.length));
+check('forty raw materials on the list', raw.length === 40, String(raw.length));
 check('every one of them a stackable material', raw.every((id) => ITEM_DEFS[id].stackable && ITEM_DEFS[id].category === 'material'),
   raw.filter((id) => !(ITEM_DEFS[id].stackable && ITEM_DEFS[id].category === 'material')).join() || 'all of them');
 check('none of them what a recipe makes', raw.every((id) => !made.has(id)), raw.filter((id) => made.has(id)).join() || 'none');
@@ -91,8 +92,8 @@ check('and it is counted in kilograms rather than in things',
 check('which still makes it a thing that holds things',
   furnitureHolds(cbin) && furnitureHeft(cbin) === 2500, `holds ${furnitureHolds(cbin)}, ${furnitureHeft(cbin)} kg`);
 
-const worked = ['plank', 'nail', 'ribbon', 'hinge', 'iron_lump', 'stone_brick', 'cloth', 'arrow'];
-check('planks, nails, ribbons, hinges, a lump, a brick, cloth and an arrow go in',
+const worked = ['plank', 'nail', 'ribbon', 'hinge', 'iron_lump', 'stone_brick', 'cloth', 'arrow', 'ash'];
+check('planks, nails, ribbons, hinges, a lump, a brick, cloth, an arrow and ash go in',
   worked.every((id) => csaid(id) === 'taken'), worked.map((id) => `${id}: ${csaid(id)}`).join(' | '));
 const notWorked = ['iron_ore', 'log', 'dirt', 'wool', 'hatchet', 'bread', 'sage', 'coin'];
 check('ore, a log, dirt, wool, a hatchet, bread, sage and a coin do not',
@@ -111,9 +112,9 @@ check('nothing at all goes in both bins', both.length === 0, both.join() || 'non
 const mats = Object.keys(ITEM_DEFS).filter((id) => ITEM_DEFS[id].category === 'material');
 const homeless = mats.filter((id) => said(id) !== 'taken' && csaid(id) !== 'taken');
 check(`and every one of the ${mats.length} materials goes in one of them`, homeless.length === 0, homeless.join() || 'all placed');
-check('which is the forty-one raw and the rest worked',
-  mats.filter((id) => said(id) === 'taken').length === 41
-    && mats.filter((id) => csaid(id) === 'taken').length === mats.length - 41,
+check('which is the forty raw and the rest worked',
+  mats.filter((id) => said(id) === 'taken').length === 40
+    && mats.filter((id) => csaid(id) === 'taken').length === mats.length - 40,
   `${mats.filter((id) => said(id) === 'taken').length} raw, ${mats.filter((id) => csaid(id) === 'taken').length} worked`);
 
 /*
@@ -194,7 +195,7 @@ const say = (key: string): string =>
 
 check('the island stands one up and calls it a store, measured in kilograms',
   say('HOLDS') === 'true|2500|0', say('HOLDS'));
-check('and takes the same eight worked things the browser takes',
+check('and takes the same nine worked things the browser takes',
   say('TAKEN') === worked.map((id) => `${id}:taken`).sort().join(' | '), say('TAKEN'));
 check('and refuses the same eight, in the browser’s words',
   say('REFUSED') === notWorked.map((id) => `${id}:${CRAFT_BIN_REFUSAL}`).sort().join(' | '),
@@ -207,7 +208,7 @@ check('and counts out the same room as the browser does',
 check('five hundred planks in leaves the same seven hundred and fifty',
   say('PART') === `${furnitureKg(part)}|${furnitureRoom(part, { id: 'plank' })}`, say('PART'));
 check('and the island splits the materials the way the browser does',
-  say('SPLIT') === `41|${mats.length - 41}|0`, `${say('SPLIT')} raw | worked | both`);
+  say('SPLIT') === `40|${mats.length - 40}|0`, `${say('SPLIT')} raw | worked | both`);
 
 for (const line of [...ok, ...bad]) console.log(`  ${line}`);
 console.log(bad.length ? `\n${bad.length} of ${ok.length + bad.length} went wrong` : `\nall ${ok.length} right`);

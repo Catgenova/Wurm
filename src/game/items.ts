@@ -164,7 +164,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   // Raked out of a fire, and nothing a bench has touched — which is the whole
   // of the test. A raw material bin refused it until now, so the one thing a
   // furnace produces by the cartload had nowhere bulk to go.
-  ash: { name: 'Ashes', category: 'material', weight: 0.3, stackable: true, raw: true, decay: 4, description: 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' },
+  ash: { name: 'Ashes', category: 'material', weight: 0.3, stackable: true, decay: 4, description: 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' },
   tar: { name: 'Tar', category: 'material', weight: 2, stackable: true, raw: true },
   rock_shards: { name: 'Rock shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5, description: 'Chunks of rock. Paves gravel, builds cobblestone walls or becomes bricks.' },
   slate_shards: { name: 'Slate shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5 },

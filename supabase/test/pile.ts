@@ -16,14 +16,18 @@
  *     locking is how somebody says *not this one*;
  *   * the two sides agree, pair by pair, rather than being trusted to;
  *   * the doors that move rows fold them on arrival;
- *   * ash is a raw material on both sides, and a bin will take it;
- *   * and a worker carrying anything raw walks to a raw material bin even
- *     when a crate is nearer.
+ *   * ash is a worked material on both sides, and the craft material bin will
+ *     take it -- it went across to the raw bin once, for want of anywhere bulk
+ *     to put what a furnace turns out, and came back when there was somewhere;
+ *   * and a worker walks past the crate under its feet to whichever bin is
+ *     built for what it is carrying: ash to the craft bin, peat to the raw
+ *     one, and a hatchet, which is neither, to the crate.
  *
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
-import { sameStack, itemDef } from '../../src/game/items';
+import { sameStack, itemDef, isWorked } from '../../src/game/items';
+import { RAW_BIN_REFUSAL } from '../../src/game/furniture';
 import type { Item } from '../../src/game/items';
 
 const psql = (sql: string): string =>
@@ -159,7 +163,7 @@ end $$;
 
 -- 5. Ash, and 6. where a worker carrying it goes.
 do $$
-declare w record; d record; v_bin bigint; v_c int; v_who creature; r record;
+declare w record; d record; v_bin bigint; v_craft bigint; v_c int; v_who creature; r record;
 begin
   select * into w from who;
   select dd.* into d from deed dd
@@ -168,13 +172,22 @@ begin
                    and c.keeper = dd.founded_by and c.mode = 'deed')
    order by dd.founded_by limit 1;
   if d is null then insert into said values ('ASH|no deed'); return; end if;
-  -- A bin at the far corner of the deed, and a crate right under the worker's feet.
+  -- Both bins at the far corner of the deed, and a crate right under the
+  -- worker's feet. Two bins rather than one, because the rule is that a worker
+  -- goes to the bin built for what it is holding, and one bin cannot tell that
+  -- from a worker that simply likes bins.
   insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, made_by)
   values (w.world_id, 'furniture', 'bulk_bin', d.x + d.radius - 1, d.y + d.radius - 1, 0, 0,
           d.x + d.radius - 1 + 0.5, d.y + d.radius - 1 + 0.5, d.founded_by)
   returning id into v_bin;
-  insert into said select 'ASH|' || item_raw('ash') || '|'
-    || coalesce(furniture_refuses(p, 'ash'), 'takes it') from placed p where p.id = v_bin;
+  insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, made_by)
+  values (w.world_id, 'furniture', 'craft_bin', d.x + d.radius - 2, d.y + d.radius - 1, 0, 0,
+          d.x + d.radius - 2 + 0.5, d.y + d.radius - 1 + 0.5, d.founded_by)
+  returning id into v_craft;
+  insert into said select 'ASH|' || item_worked('ash') || '|'
+    || coalesce(furniture_refuses(p, 'ash'), 'takes it') from placed p where p.id = v_craft;
+  insert into said select 'ASHRAW|' || coalesce(furniture_refuses(p, 'ash'), 'takes it')
+    from placed p where p.id = v_bin;
 
   select coalesce(max(id), 0) + 1 into v_c from crate where world_id = w.world_id;
   insert into crate (world_id, id, kind, x, y, sx, sy, deed)
@@ -190,8 +203,17 @@ begin
 
   select * into r from worker_store(w.world_id, v_who, 'ash', 1);
   insert into said values ('BIN|' || coalesce(r.kind, 'nowhere') || '|'
-    || case when r.kind = 'furniture' and r.id = v_bin then 'the bin' else 'something else' end);
-  select * into r from worker_store(w.world_id, v_who, 'plank', 1);
+    || case when r.kind = 'furniture' and r.id = v_craft then 'the craft bin'
+            when r.kind = 'furniture' and r.id = v_bin then 'the raw bin'
+            else 'something else' end);
+  select * into r from worker_store(w.world_id, v_who, 'peat', 1);
+  insert into said values ('RAW|' || coalesce(r.kind, 'nowhere') || '|'
+    || case when r.kind = 'furniture' and r.id = v_bin then 'the raw bin'
+            when r.kind = 'furniture' and r.id = v_craft then 'the craft bin'
+            else 'something else' end);
+  -- A hatchet is a tool: neither bin will have it, so it goes where it always
+  -- went, which is the crate under the worker's feet.
+  select * into r from worker_store(w.world_id, v_who, 'hatchet', 1);
   insert into said values ('MADE|' || coalesce(r.kind, 'nowhere'));
 end $$;
 
@@ -234,15 +256,20 @@ check('at the average of the five and the whole of the count', crateWhat === '30
 check('and adding to a pile writes to it rather than writing a new row and deleting it',
   said('IDS') === '0', `${said('IDS')} row numbers burnt over two goes that both went on the pile`);
 
-const [ashRaw, ashBin] = said('ASH').split('|');
-check('ash is a raw material on the island', ashRaw === 'true', `item_raw('ash') = ${ashRaw}`);
-check('and the browser says the same', itemDef('ash').raw === true, `${itemDef('ash').raw}`);
-check('so a raw material bin will take it', ashBin === 'takes it', ashBin);
+const [ashWorked, ashBin] = said('ASH').split('|');
+check('ash is a worked material on the island', ashWorked === 'true', `item_worked('ash') = ${ashWorked}`);
+check('and the browser says the same', isWorked('ash') === true && itemDef('ash').raw !== true,
+  `worked ${isWorked('ash')}, raw ${itemDef('ash').raw ?? false}`);
+check('so the craft material bin will take it', ashBin === 'takes it', ashBin);
+check('and the raw material bin will not', said('ASHRAW') === RAW_BIN_REFUSAL, said('ASHRAW').slice(0, 60));
 
 const [binKind, binWhich] = said('BIN').split('|');
-check('a worker carrying something raw walks past the crate under its feet to the bin',
-  binKind === 'furniture' && binWhich === 'the bin', `${binKind}, ${binWhich}`);
-check('and a worker carrying something a bench has touched goes where it always went',
+check('a worker carrying ash walks past the crate under its feet to the craft bin',
+  binKind === 'furniture' && binWhich === 'the craft bin', `${binKind}, ${binWhich}`);
+const [rawKind, rawWhich] = said('RAW').split('|');
+check('and carrying peat, to the raw one standing beside it',
+  rawKind === 'furniture' && rawWhich === 'the raw bin', `${rawKind}, ${rawWhich}`);
+check('and carrying a hatchet, which neither will have, where it always went',
   said('MADE') === 'crate', said('MADE'));
 
 for (const line of [...ok, ...bad]) console.log(line);

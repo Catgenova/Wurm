@@ -69,8 +69,17 @@ export interface DeedStore {
   name: string;
   /** The settlement's own crate, which a worker fills before any other. */
   deed: boolean;
-  /** A raw material bin, which a worker fills before any other with a raw load. */
-  raw: boolean;
+  /**
+   * A bin built for exactly this sort of thing, which a worker fills before
+   * anything else.
+   *
+   * It is not asked whether the load is raw. The list has already been through
+   * `room`, which is `furnitureRefuses` -- so a bin standing in it is a bin
+   * that has agreed to take this thing, and that makes it the store built for
+   * it whichever of the two it is. Ore goes to the raw bin and a morning at the
+   * anvil goes to the craft bin by one rule rather than two.
+   */
+  bin: boolean;
   /** Whether this would take the thing being carried. */
   room(item: Item): boolean;
   add(item: Item): boolean;
@@ -5416,7 +5425,7 @@ export class Game {
       items: c.items,
       name: crateName(c),
       deed: !!c.deed,
-      raw: false,
+      bin: false,
       room: (item) => crateUnits(c) + item.count <= cap,
       add: (item) => this.crateAdd(c, item),
       changed: () => this.events.emit('crate'),
@@ -5434,7 +5443,7 @@ export class Game {
       items: f.items,
       name: def.name,
       deed: false,
-      raw: !!def.raw,
+      bin: !!def.raw || !!def.crafted,
       room: (item) => !furnitureRefuses(f, item) && item.count <= furnitureRoom(f, item),
       add: (item) => this.furnitureAdd(f, item),
       changed: () => this.events.emit('crate'),

@@ -4441,10 +4441,11 @@ export class Creatures {
       }
       return best;
     };
-    if (itemDef(item.id).raw) {
-      const bin = nearest(stores.filter((s) => s.raw));
-      if (bin) return bin;
-    }
+    // A bin that will have it is the bin built for it: the island's
+    // `worker_store` orders by the same one flag, with no second test on what
+    // the load is.
+    const bin = nearest(stores.filter((s) => s.bin));
+    if (bin) return bin;
     const own = near.length ? undefined : stores.find((s) => s.deed);
     if (own) return own;
     return nearest(stores) ?? stores[0];
