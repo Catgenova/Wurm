@@ -18,7 +18,20 @@ create table if not exists class_node (
   cost int not null, needs text, mul double precision not null
 );
 
-truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;
+do $patient$
+declare i int;
+begin
+  for i in 1 .. 30 loop
+    begin
+      set local lock_timeout = '2s';
+      truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;
+      return;
+    exception when lock_not_available then
+      perform pg_sleep(2);
+    end;
+  end loop;
+  raise exception 'could not get a moment to replace the things, the ground and the skills';
+end $patient$;
 insert into gem_def values ('diamond', 'Diamond', 'mining', 1, 'Clear as water and harder than anything else out of the ground.', 0);
 insert into gem_def values ('ruby', 'Ruby', 'fighting', 2, 'Red as a coal, and as warm in the hand.', 1);
 insert into gem_def values ('sapphire', 'Sapphire', 'fishing', 2, 'Blue as deep water.', 2);
@@ -578,7 +591,20 @@ insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak,
 insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane, note) values ('garnet', 'Garnet', 3, 1, 1, 1, 1, 1, 1, 1, false, 'Dark red, the colour of iron in the fire. It favours blacksmithing.');
 insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak, bite, hold, bane, note) values ('topaz', 'Topaz', 3, 1, 1, 1, 1, 1, 1, 1, false, 'Yellow as new-cut pine. It favours carpentry.');
 
-truncate action_def;
+do $patient$
+declare i int;
+begin
+  for i in 1 .. 30 loop
+    begin
+      set local lock_timeout = '2s';
+      truncate action_def;
+      return;
+    exception when lock_not_available then
+      perform pg_sleep(2);
+    end;
+  end loop;
+  raise exception 'could not get a moment to replace what can be done';
+end $patient$;
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('examine', 'Examine', 'examining', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('collect', 'Collect', 'filling a shovel', 'digging', 'shovel', false, 0, 0.05, 7, 6, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_worms', 'Turn it over for worms', 'turning the dirt over', 'digging', 'shovel', false, null, 0.04, 6, null, false, true);
@@ -1021,13 +1047,40 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('clear_field', 'Clear the field', 'clearing the field', 'farming', null, false, null, 0.03, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt_here', 'Drop (raises the ground)', 'dropping dirt', 'digging', null, false, null, 0.02, 2, null, false, false);
 
-truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+do $patient$
+declare i int;
+begin
+  for i in 1 .. 30 loop
+    begin
+      set local lock_timeout = '2s';
+      truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;
-truncate look_option;
+      return;
+    exception when lock_not_available then
+      perform pg_sleep(2);
+    end;
+  end loop;
+  raise exception 'could not get a moment to replace the recipes, the beasts and everything they are made of,
+ * the trades and their trees';
+end $patient$;
+do $patient$
+declare i int;
+begin
+  for i in 1 .. 30 loop
+    begin
+      set local lock_timeout = '2s';
+      truncate look_option;
+      return;
+    exception when lock_not_available then
+      perform pg_sleep(2);
+    end;
+  end loop;
+  raise exception 'could not get a moment to replace the looks somebody may be given';
+end $patient$;
 insert into look_option values ('gender', 'woman', 0, 'Woman', null, false);
 insert into look_option values ('gender', 'man', 1, 'Man', null, false);
 insert into look_option values ('gender', 'neither', 2, 'Neither', null, true);

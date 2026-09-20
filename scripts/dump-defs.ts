@@ -670,10 +670,47 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
  * this has to happen first, every time, on a fresh database as much as an old
  * one.
  */
+/**
+ * A statement that wants a lock the island is using, asked for in short goes.
+ *
+ * The rulebook is replaced by truncating a group of tables and filling them
+ * again, and `truncate` wants ACCESS EXCLUSIVE on every table in the group.
+ * `tile_def`, `skill_def` and `item_def` are read by the clock and by every
+ * door on the island, so on a live island the gap may not come while anybody
+ * is mid-action -- and the moment the truncate starts waiting, every reader
+ * queues behind it.
+ *
+ * Measured: a deploy died on exactly this, at 13:00:30 UTC, which is the
+ * minute the daily tree pass runs and holds the woods open. Three seconds was
+ * not enough and no single number ever would be.
+ *
+ * So it is asked for the way the class columns were: a short wait and another
+ * go, thirty times, rather than one long wait that queues. A go that fails
+ * costs two seconds and blocks nobody -- the locks an attempt did get are
+ * released with its subtransaction, so every retry starts from nothing, which
+ * is the part that makes this safe for a group of fifty tables rather than
+ * one.
+ */
+const patiently = (what: string, sql: string): string => `do $patient$
+declare i int;
+begin
+  for i in 1 .. 30 loop
+    begin
+      set local lock_timeout = '2s';
+      ${sql}
+      return;
+    exception when lock_not_available then
+      perform pg_sleep(2);
+    end;
+  end loop;
+  raise exception ${q(`could not get a moment to replace ${what}`)};
+end $patient$;`;
+
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push('truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;');
+out.push(patiently('the things, the ground and the skills',
+  'truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;'));
 GEMS.forEach((g, i) => out.push(`insert into gem_def values (${q(g.id)}, ${q(g.name)}, ${q(g.skill)}, ${q(g.weight)}, ${q(g.flavour)}, ${q(i)});`));
 for (const id of JEWEL_PIECES) out.push(`insert into jewel_def values (${q(id)});`);
 out.push('');
@@ -762,7 +799,7 @@ clash('actions', (ACTIONS as unknown as A[]).map((a) => String(a.id)));
 clash('recipes', RECIPES.map((r) => r.id));
 
 out.push('');
-out.push(`truncate action_def;`);
+out.push(patiently('what can be done', 'truncate action_def;'));
 for (const a of ACTIONS as unknown as A[]) {
   out.push(`insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values (` +
     [q(a.id), q(a.label), q(a.verb), q(a.skill), q(a.tool), q(!!a.corner), q(a.range === undefined ? null : a.range),
@@ -779,12 +816,13 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(`truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
+out.push(patiently('the recipes, the beasts and everything they are made of,\n * the trades and their trees',
+  `truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
   vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node,
-  bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
+  bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`));
 
 /*
  * Every choice the character creator offers.
@@ -806,7 +844,7 @@ out.push(`create table if not exists look_option (
   kind text not null, id text not null, ord int not null, name text not null,
   colour text, fallback boolean not null default false, primary key (kind, id)
 );`);
-out.push('truncate look_option;');
+out.push(patiently('the looks somebody may be given', 'truncate look_option;'));
 for (const [kind, table] of Object.entries(LOOK_TABLES)) {
   table.forEach((o, n) => {
     const colour = (o as { colour?: string }).colour ?? null;

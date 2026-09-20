@@ -120,7 +120,7 @@ jobs:
             exit 1
           fi
           echo "nothing added out of order (latest before this commit: ${last:-none})"
-      - name: No migration alters a table without a lock timeout
+      - name: No migration alters or empties a table without a lock timeout
         run: |
           # `alter table` wants ACCESS EXCLUSIVE, and the moment it starts
           # waiting for one, every query behind it waits too -- so an ALTER on
@@ -129,19 +129,24 @@ jobs:
           # unbounded stall into a failed deploy, which is the cheaper of the
           # two. This looks only at statements: prose about an ALTER in a
           # comment starts with `--` or ` *`, never at the margin.
+          #
+          # `truncate` is in here because it wants the same lock and a deploy
+          # died on one: the definitions snapshot empties the rulebook tables
+          # to refill them, and it asked for `tile_def` at 13:00:30 UTC, which
+          # is the minute the daily tree pass holds the woods open.
           added=$(git diff --diff-filter=AM --name-only HEAD~1 HEAD -- supabase/migrations/ || true)
           bad=""
           for m in $added; do
             [ -f "$m" ] || continue
-            grep -Eiq '^[[:space:]]*(alter|drop)[[:space:]]+table' "$m" || continue
+            grep -Eiq '^[[:space:]]*((alter|drop)[[:space:]]+table|truncate[[:space:]])' "$m" || continue
             grep -q 'lock_timeout' "$m" || bad="$bad $m"
           done
           if [ -n "$bad" ]; then
-            echo "::error::These migrations alter a table with no lock timeout in front of it:$bad"
+            echo "::error::These migrations alter or empty a table with no lock timeout in front of it:$bad"
             echo "::error::Put \"set local lock_timeout = '3s';\" at the top of the file."
             exit 1
           fi
-          echo "every altering migration bounds its lock wait"
+          echo "every migration that wants a table's lock bounds its wait"
       # `git diff` cannot see a file that is not tracked yet, and a fresh
       # `_defs.sql` is exactly that — so the old form of this check would have
       # let a brand new definitions migration through without noticing. Asking
@@ -968,6 +973,20 @@ jobs:
           npx esbuild supabase/test/tree.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/tree.mjs --log-level=error
           node node_modules/.cache/tree.mjs
+
+      - name: What is lying about, going off where it lies
+        run: |
+          # ground_sweep rewrote every thing on an island's ground once a
+          # second — 95 microseconds a row, whether anything had changed or
+          # not, which was the whole of a world round on a busy island. It is
+          # charged in steps now, and the claim that makes that safe is that
+          # the elapsed terms telescope: two hours then one is three hours.
+          # That is asked here to the last bit, along with the cap, the order,
+          # and — in buffers rather than milliseconds, so it means the same on
+          # a slow runner — that a quiet round does not read the ground.
+          npx esbuild supabase/test/rot.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/rot.mjs --log-level=error
+          node node_modules/.cache/rot.mjs
 
   migrate:
     name: Push the migrations to the project

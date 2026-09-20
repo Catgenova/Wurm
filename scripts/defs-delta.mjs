@@ -78,7 +78,18 @@ export function statements(sql) {
   return out;
 }
 
-const DATA = /^\s*(insert\s+into|update\s|truncate\s)/i;
+/**
+ * A statement that only means anything beside the others in its group.
+ *
+ * The `m` flag is load-bearing. A truncate is wrapped in a retry loop now --
+ * `do $patient$ ... truncate a, b, c; ... $patient$;` -- because on a live
+ * island it may have to ask for its lock several times. Without `m` the
+ * wrapper reads as ordinary DDL, and a snapshot whose truncate had not changed
+ * since the last one would drop it as already-applied and leave every insert
+ * behind it filling a table that was never cleared. Every rulebook table
+ * doubled, on every deploy, silently.
+ */
+const DATA = /^\s*(insert\s+into|update\s|truncate\s)/im;
 
 /** The statements that only mean anything next to their truncate. */
 export const dataOnly = (list) => list.filter((s) => DATA.test(s));
