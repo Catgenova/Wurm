@@ -85,7 +85,16 @@ const asRow = (it: Partial<Item> & { id?: string }): string =>
 const out = psql(`
 begin;
 create temp table said (k text);
-select world_id, uid into temp who from player limit 1;
+-- A player on an island that has a settlement with a worker on it, because
+-- the last third of this asks where a worker takes a load. Picking any player
+-- and hoping worked until the sweep ran in a different order and picked one
+-- ashore on an empty island.
+select p.world_id, p.uid into temp who from player p
+ where exists (select 1 from deed d
+                where d.world_id = p.world_id
+                  and exists (select 1 from creature c where c.world_id = d.world_id
+                                and c.keeper = d.founded_by and c.mode = 'deed'))
+ order by p.world_id, p.uid limit 1;
 
 -- 1. The pack from the screenshot, six piles of cotton seeds.
 insert into item (world_id, holder, holder_uid, def, ql, count)
@@ -153,7 +162,11 @@ do $$
 declare w record; d record; v_bin bigint; v_c int; v_who creature; r record;
 begin
   select * into w from who;
-  select * into d from deed where world_id = w.world_id order by founded_by limit 1;
+  select dd.* into d from deed dd
+   where dd.world_id = w.world_id
+     and exists (select 1 from creature c where c.world_id = dd.world_id
+                   and c.keeper = dd.founded_by and c.mode = 'deed')
+   order by dd.founded_by limit 1;
   if d is null then insert into said values ('ASH|no deed'); return; end if;
   -- A bin at the far corner of the deed, and a crate right under the worker's feet.
   insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, made_by)

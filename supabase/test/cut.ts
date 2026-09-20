@@ -37,6 +37,24 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 };
 
 const game = Game.create(4242);
+/*
+ * A seeded hand, for the whole file.
+ *
+ * `Game.create` seeds the *world*; it leaves `game.rand` as `Math.random`,
+ * because a game of this should not be predictable. A test of it should be.
+ *
+ * The run of spadefuls below allows ten goes for a three-go job, and a go that
+ * misses is still a go -- so with an unseeded hand this file fails whenever
+ * eight of the ten miss. Measured after CI caught it once: 199 passes and one
+ * failure in two hundred runs, which is a flake that would have gone on
+ * costing a deploy every few hundred goes and been blamed on whatever else was
+ * in the commit. It was blamed on a definitions migration first.
+ */
+let hand = 4242;
+game.rand = () => {
+  hand = (hand * 1103515245 + 12345) & 0x7fffffff;
+  return hand / 0x7fffffff;
+};
 const w = game.world;
 for (let y = 0; y < 40; y++) for (let x = 0; x < 40; x++) { w.setTile(x, y, TileType.Dirt); w.setHeight(x, y, 100); w.setDirt(x, y, 20); }
 game.skills.values.set('digging', 20);
