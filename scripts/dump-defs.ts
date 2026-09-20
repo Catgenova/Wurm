@@ -713,80 +713,80 @@ for (const t of ['action_def', 'recipe', 'recipe_input', 'recipe_gives', 'furnit
  * one.
  */
 /**
- * A statement that wants a lock the island is using, asked for in short goes.
+ * Emptying the rulebook without asking the island to stand still.
  *
- * The rulebook is replaced by truncating a group of tables and filling them
- * again, and `truncate` wants ACCESS EXCLUSIVE on every table in the group.
- * `tile_def`, `skill_def` and `item_def` are read by the clock and by every
- * door on the island, so on a live island the gap may not come while anybody
- * is mid-action -- and the moment the truncate starts waiting, every reader
- * queues behind it.
+ * The rulebook is replaced by clearing a group of tables and filling them
+ * again, and it used to be cleared with `truncate`. Two deploys died on it and
+ * the second one said why.
  *
- * Measured: a deploy died on exactly this, at 13:00:30 UTC, which is the
- * minute the daily tree pass runs and holds the woods open. Three seconds was
- * not enough and no single number ever would be.
+ * `truncate` wants ACCESS EXCLUSIVE, which conflicts with the ACCESS SHARE
+ * every reader takes, and it takes its locks one table at a time while holding
+ * the ones it already has. So a deploy needs every table in the group free at
+ * the same instant. It was asked for patiently -- a short wait and another go
+ * -- and that worked for fifteen tables:
  *
- * So it is asked for the way the class columns were: a short wait and another
- * go, rather than one long wait that queues. A go that fails blocks nobody --
- * the locks an attempt did get are released with its subtransaction, so every
- * retry starts from nothing, which is the part that makes this safe for a
- * group of fifty tables rather than one.
+ *     Applying migration 20260920141000_defs.sql...
+ *     ERROR: could not get a moment to replace the recipes, the beasts and
+ *     everything they are made of, the trades and their trees
+ *     At statement: 1008
  *
- * ## And waiting for a lock is how you deadlock
+ * The first group got in. This one is **seventy-one tables**, and against a
+ * clock that ticks once a second all forty goes lost, over two minutes. No
+ * number of retries fixes that: the window being waited for is every one of
+ * seventy-one tables quiet at once, and it does not come.
  *
- * The next deploy died anyway, differently:
+ * ## So do not ask for that lock
  *
- *     ERROR: deadlock detected (SQLSTATE 40P01)
- *     Process 133573 waits for AccessExclusiveLock on relation 17662;
- *       blocked by process 133620.
- *     Process 133620 waits for AccessShareLock on relation 17654;
- *       blocked by process 133573.
+ * `delete from` takes ROW EXCLUSIVE, which does **not** conflict with ACCESS
+ * SHARE. A reader never waits behind it, it never waits behind a reader,
+ * there is no lottery and there is no ring to deadlock in. The rulebook is a
+ * few thousand rows, so the cost of a delete over a truncate is milliseconds
+ * and some dead tuples for the next vacuum.
  *
- * `truncate a, b, c` does not take its locks together. It takes them one at a
- * time, in the order written, and holds each while it asks for the next. So
- * the moment it holds `item_def` and waits on `tile_def`, any island query
- * that already holds `tile_def` and then wants `item_def` closes the ring --
- * and there is no order to write the tables in that fixes it, because the
- * island reads them in every order there is.
+ * The only thing `truncate` was buying is that it clears a group of tables in
+ * one statement, so foreign keys between them never see a parent without its
+ * children. Asked of the real schema, those seventy-one tables have **three**
+ * foreign keys between them:
  *
- * Two things follow, and both are here.
+ *     recipe_input  -> recipe
+ *     recipe_gives  -> recipe
+ *     bait_favours  -> bait_def
  *
- * `deadlock_detected` is 40P01 and `lock_not_available` is 55P03: the handler
- * caught one and not the other, so a deadlock was a dead deploy where a
- * timeout was a retry. It is the same situation -- an attempt that got some of
- * its locks and not the rest -- and it wants the same answer.
- *
- * And the wait is now shorter than `deadlock_timeout`, which is a second by
- * default. A cycle only exists while both ends are waiting, so bowing out at
- * nine hundred milliseconds means that in the ordinary case there is nothing
- * left to detect: the deploy steps back before the detector runs, and the
- * island never has a query chosen as the victim. The handler is for losing
- * that race, not for the usual course of it.
- *
- * The sleep is jittered because the thing being waited on is a clock that
- * ticks once a second. A fixed two-second retry against a one-second round is
- * a phase lock, which is thirty goes at the same instant of the round.
+ * Three edges, and a sledgehammer to satisfy them. Children go first now and
+ * the rest follow in the order they are written.
  */
-const patiently = (what: string, sql: string): string => `do $patient$
-declare i int;
-begin
-  for i in 1 .. 40 loop
-    begin
-      set local lock_timeout = '900ms';
-      ${sql}
-      return;
-    exception when lock_not_available or deadlock_detected then
-      perform pg_sleep(0.5 + random() * 2);
-    end;
-  end loop;
-  raise exception ${q(`could not get a moment to replace ${what}`)};
-end $patient$;`;
+/** Child before parent, for the few pairs that have an order at all. */
+const CHILD_FIRST: Record<string, string> = {
+  recipe_input: 'recipe',
+  recipe_gives: 'recipe',
+  bait_favours: 'bait_def',
+};
+
+/**
+ * Clear a group of tables, children first, one statement each.
+ *
+ * Asserts that every parent it knows about is in the same group -- a child
+ * emptied without its parent, or a parent whose child is somewhere else
+ * entirely, is a foreign key violation on the next deploy rather than here.
+ */
+const emptied = (tables: string[]): string => {
+  const set = new Set(tables);
+  for (const [child, parent] of Object.entries(CHILD_FIRST)) {
+    if (set.has(child) && !set.has(parent)) {
+      throw new Error(`${child} is emptied without ${parent}, which it points at`);
+    }
+  }
+  const kids = tables.filter((t) => CHILD_FIRST[t]);
+  return [...kids, ...tables.filter((t) => !CHILD_FIRST[t])]
+    .map((t) => `delete from ${t};`).join('\n');
+};
 
 out.push('');
 out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
-out.push(patiently('the things, the ground and the skills',
-  'truncate item_def, tile_def, skill_def, material_def, rarity_def, dye_def, slab_def, vessel_def, liquid_def, relic_def, trap_def, treasure_def, map_band, gem_def, jewel_def;'));
+out.push(emptied(['item_def', 'tile_def', 'skill_def', 'material_def', 'rarity_def', 'dye_def',
+  'slab_def', 'vessel_def', 'liquid_def', 'relic_def', 'trap_def', 'treasure_def', 'map_band',
+  'gem_def', 'jewel_def']));
 GEMS.forEach((g, i) => out.push(`insert into gem_def values (${q(g.id)}, ${q(g.name)}, ${q(g.skill)}, ${q(g.weight)}, ${q(g.flavour)}, ${q(i)});`));
 for (const id of JEWEL_PIECES) out.push(`insert into jewel_def values (${q(id)});`);
 out.push('');
@@ -875,7 +875,7 @@ clash('actions', (ACTIONS as unknown as A[]).map((a) => String(a.id)));
 clash('recipes', RECIPES.map((r) => r.id));
 
 out.push('');
-out.push(patiently('what can be done', 'truncate action_def;'));
+out.push(emptied(['action_def']));
 for (const a of ACTIONS as unknown as A[]) {
   out.push(`insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values (` +
     [q(a.id), q(a.label), q(a.verb), q(a.skill), q(a.tool), q(!!a.corner), q(a.range === undefined ? null : a.range),
@@ -892,14 +892,19 @@ for (const a of ACTIONS as unknown as A[]) {
  * the doing — one `craft` knows how to read a row.
  */
 out.push('');
-out.push(patiently('the recipes, the beasts and everything they are made of,\n * the trades and their trees',
-  `truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_def, rock_def, tree_def, tree_age_def, bush_def, loot_table, crop_def, fish_def, bait_favours, bait_def, wall_type_def, roof_shape_def, build_material_def, build_material_bill, species_def, species_diet, wild_table, trait_def, trait_effect, channel_def, age_def, tier_odds, gather_def, weapon_def, armour_class_def, armour_def,
-  shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
-  improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
-  title_def, knack_kin, category_decay,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node, rite_def,
-  school_def, school_stone, spell_def,
-  bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`));
+out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_gives',
+  'furniture_def', 'rock_def', 'tree_def', 'tree_age_def', 'bush_def', 'loot_table',
+  'crop_def', 'fish_def', 'bait_favours', 'bait_def', 'wall_type_def', 'roof_shape_def',
+  'build_material_def', 'build_material_bill', 'species_def', 'species_diet', 'wild_table',
+  'trait_def', 'trait_effect', 'channel_def', 'age_def', 'tier_odds', 'gather_def',
+  'weapon_def', 'armour_class_def', 'armour_def', 'shield_def', 'hit_location',
+  'wound_kind_def', 'butcher_part', 'species_butcher', 'hoard_metal', 'crate_def', 'metal_def',
+  'pottery_def', 'mould_def', 'improve_material_def', 'improve_tool', 'improve_stock',
+  'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'title_def',
+  'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
+  'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'rite_def',
+  'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'brew_def',
+  'dyeable_item', 'dyeable_class']));
 
 /*
  * Every choice the character creator offers.
@@ -921,7 +926,7 @@ out.push(`create table if not exists look_option (
   kind text not null, id text not null, ord int not null, name text not null,
   colour text, fallback boolean not null default false, primary key (kind, id)
 );`);
-out.push(patiently('the looks somebody may be given', 'truncate look_option;'));
+out.push(emptied(['look_option']));
 for (const [kind, table] of Object.entries(LOOK_TABLES)) {
   table.forEach((o, n) => {
     const colour = (o as { colour?: string }).colour ?? null;
