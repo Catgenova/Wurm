@@ -507,8 +507,9 @@ function e(){return`
     choosing the side you climb from.</p>
     <p>Ten of the twenty hold things, and hold far more than a crate does: a coffer takes 25, a barrel or
     a firewood rack 40, a chest 60, a cupboard 80, a bookshelf 90, a wardrobe 100, shelves 120 and a
-    <b>larder</b> 250. The larder is the only one of them that is fussy: it takes food and drink and
-    nothing else, raw or cooked. Right-click one and <b>Open</b> it to see inside, or
+    <b>larder</b> 250. The larder is the only one of them that is fussy: it takes food and drink, raw
+    or cooked, and the flour, dough and cornmeal a kitchen bakes from &mdash; and nothing else.
+    Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
     <h3>Calling things by name</h3>
@@ -1273,7 +1274,7 @@ function e(){return`
     <b>dragged</b> from one window to the other. The rules are the same as the menu's: you have to be
     standing next to the container, and it has to be willing to hold what you are giving it &mdash; a
     raw material bin takes nothing worked, a craft material bin takes nothing unworked, a larder takes
-    food and drink only, a seed bin takes seed only, a sprout bin takes sprouts only, a barrel takes no
+    food, drink and flour, a seed bin takes seed only, a sprout bin takes sprouts only, a barrel takes no
     solids, a full crate is full. It says which when
     it will not go.</p>
     <p>Ground does not advertise what it is holding. Grass is grass to look at, wherever it stands in

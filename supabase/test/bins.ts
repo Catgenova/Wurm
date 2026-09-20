@@ -157,33 +157,51 @@ const lsaid = asked(larder);
 check('the larder holds 250 things rather than 150',
   furnitureDef('larder').capacity === 250 && furnitureCapacity(larder) === 250,
   `${furnitureCapacity(larder)} things`);
-const eaten = ['meat', 'cooked_meat', 'bread', 'stew', 'apple', 'wheat', 'cheese', 'ale_bucket', 'cooked_fish'];
-check('raw meat, cooked meat, bread, stew, an apple, wheat, cheese, ale and fish go in it',
+const eaten = ['meat', 'cooked_meat', 'bread', 'stew', 'apple', 'wheat', 'cheese', 'ale_bucket', 'cooked_fish',
+  'flour', 'dough', 'cornmeal'];
+check('meat raw and cooked, bread, stew, an apple, wheat, cheese, ale, fish, flour, dough and cornmeal go in it',
   eaten.every((id) => lsaid(id) === 'taken'), eaten.map((id) => `${id}: ${lsaid(id)}`).join(' | '));
 /*
- * Four of these are on the list deliberately, and are the whole of what is
- * arguable about a larder of food.
+ * The last three are what is arguable about a larder, and are written down
+ * here so they are decisions rather than surprises.
  *
- * Flour, dough and cornmeal are `material` and not `food` -- nobody eats a
- * sack of flour -- so the larder turns them away and the craft material bin
- * takes them. A bucket of water is a `tool`: it is what lye is mixed in, it
- * has no drink in it, and the buckets that *are* drunk -- ale, cider, milk,
- * mead, wine, juice -- are food and go in. All four are the honest reading of
- * the word, and they are written down here so they are decisions rather than
- * surprises.
+ * A **bucket of water** is a `tool`: it is what lye is mixed in, it has no
+ * drink in it, and the buckets that *are* drunk -- ale, cider, milk, mead,
+ * wine, juice -- are food and go in. A **sprout** and a **seed** have bins of
+ * their own two paragraphs down.
+ *
+ * Flour, dough and cornmeal were on this list for an hour and are now on the
+ * other one. Asked for: "flour and dough should go in the larder too." They
+ * are still `material` rather than `food` -- they keep and rot like materials
+ * because that is what they are, and moving them into the category would have
+ * flour going off eight times faster -- so it is `ItemDef.larder` that puts
+ * them in a larder, which is a statement about where a thing is kept and not
+ * about what it is. Cornmeal comes with them because it is flour in every
+ * respect that matters.
  */
-const notEaten = ['plank', 'log', 'iron_ore', 'hatchet', 'flour', 'dough', 'cornmeal', 'water_bucket', 'sprout', 'wheat_seed'];
-check('planks, ore, a hatchet, flour, dough, cornmeal, water, a sprout and seed do not',
+const notEaten = ['plank', 'log', 'iron_ore', 'hatchet', 'water_bucket', 'sprout', 'wheat_seed'];
+check('planks, ore, a hatchet, a bucket of water, a sprout and a seed do not',
   notEaten.every((id) => lsaid(id) === LARDER_REFUSAL),
   notEaten.map((id) => `${id}: ${lsaid(id) === LARDER_REFUSAL ? 'refused' : lsaid(id)}`).join(' | '));
-check('and the three that are turned away for being material go in the craft bin',
-  ['flour', 'dough', 'cornmeal'].every((id) => csaid(id) === 'taken'),
-  ['flour', 'dough', 'cornmeal'].map((id) => `${id}: ${csaid(id)}`).join(' | '));
+const kept = Object.keys(ITEM_DEFS).filter((id) => ITEM_DEFS[id].larder);
+check('three things are kept in a larder without being food',
+  kept.join() === 'flour,cornmeal,dough', kept.join() || 'none');
+/*
+ * And they are still worked materials, so the craft material bin takes them as
+ * well. That is not a contradiction: the two material bins partition the
+ * materials between them and still do, and the larder was never part of that
+ * partition. Flour may be kept in either, and a worker carrying some walks to
+ * whichever is nearer, which is the right answer for both.
+ */
+check('and all three go in the craft material bin as well, being materials still',
+  kept.every((id) => csaid(id) === 'taken' && ITEM_DEFS[id].category === 'material'),
+  kept.map((id) => `${id}: ${ITEM_DEFS[id].category}, ${csaid(id)}`).join(' | '));
 const foods = Object.keys(ITEM_DEFS).filter((id) => ITEM_DEFS[id].category === 'food');
-check(`every one of the ${foods.length} foods goes in and nothing else does`,
-  foods.every((id) => lsaid(id) === 'taken')
-    && Object.keys(ITEM_DEFS).filter((id) => lsaid(id) === 'taken').length === foods.length,
-  `${Object.keys(ITEM_DEFS).filter((id) => lsaid(id) === 'taken').length} of ${foods.length}`);
+const larderTakes = Object.keys(ITEM_DEFS).filter((id) => lsaid(id) === 'taken');
+check(`every one of the ${foods.length} foods goes in, those three, and nothing else`,
+  foods.every((id) => lsaid(id) === 'taken') && kept.every((id) => lsaid(id) === 'taken')
+    && larderTakes.length === foods.length + kept.length,
+  `${larderTakes.length} of ${foods.length} + ${kept.length}`);
 
 const seedBin = store('seed_bin');
 const ssaid = asked(seedBin);
@@ -380,13 +398,14 @@ check('and the island splits the materials the way the browser does',
 
 check('the island stands a larder up and it holds 250 counted things',
   say('LARDER') === '250|0', say('LARDER'));
-check('and takes the same nine foods the browser takes',
+check('and takes the same twelve the browser takes',
   say('ATE') === eaten.map((id) => `${id}:taken`).sort().join(' | '), say('ATE'));
-check('and turns away the same ten, flour and a bucket of water among them',
+check('and turns away the same seven, a bucket of water among them',
   say('NOTATE') === notEaten.map((id) => `${id}:${LARDER_REFUSAL}`).sort().join(' | '),
   say('NOTATE').slice(0, 90));
-check('every food on the island goes in it and nothing else does',
-  say('FOODS') === `${foods.length}|${foods.length}`, `${say('FOODS')} foods | taken`);
+check('every food on the island goes in it, and the three kept things, and nothing else',
+  say('FOODS') === `${foods.length}|${foods.length + kept.length}`,
+  `${say('FOODS')} foods | taken, against ${foods.length} + ${kept.length}`);
 check('the two small bins are a hundred kilograms apiece and count nothing',
   say('SMALL') === '100|0|100|0', say('SMALL'));
 check(`and the seed bin takes the ${seeds.length} seeds, the sprout bin the one sprout`,

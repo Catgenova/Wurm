@@ -19,6 +19,21 @@ export interface ItemDef {
    * the island reads the same word off `item_def.raw`.
    */
   raw?: boolean;
+  /**
+   * Kept in a larder, though it is not food.
+   *
+   * Flour, dough and cornmeal are ground grain and what is made of it before
+   * an oven gets near it. Nobody eats them, they keep like a material and they
+   * decay like one, so they are not in the `food` category and should not be
+   * -- but the place they live is a larder, which is what was asked for. It is
+   * a flag rather than a category for exactly that reason: where a thing is
+   * kept and what a thing is are two questions, and this is the first one.
+   *
+   * They stay worked materials, so the craft material bin still takes them.
+   * The larder is not part of the partition the two material bins make between
+   * them; it simply also has room for these three.
+   */
+  larder?: boolean;
   /** Restores this much hunger (0..1) when eaten. */
   food?: number;
   /** Restores this much thirst (0..1) per drink. */
@@ -300,9 +315,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   bread: { name: 'Bread', category: 'food', weight: 0.35, stackable: true, food: 0.42, decay: 70, description: 'A baked loaf. The first food that keeps and travels.', feeds: { starch: 0.3, fat: 0.04 } },
   porridge: { name: 'Porridge', category: 'food', weight: 0.4, stackable: true, food: 0.32, decay: 80, description: 'Cornmeal boiled thick in a bowl.', feeds: { starch: 0.24, fat: 0.08, greens: 0.05 } },
   preserves: { name: 'Preserves', category: 'food', weight: 0.3, stackable: true, food: 0.28, decay: 12, description: 'Berries put up in a sealed jar. They keep for a very long time.', feeds: { greens: 0.18, starch: 0.1 } },
-  flour: { name: 'Flour', category: 'material', weight: 0.1, stackable: true, decay: 30, description: 'Wheat ground between two stones. Wet it and it becomes dough.' },
-  cornmeal: { name: 'Cornmeal', category: 'material', weight: 0.12, stackable: true, decay: 30, description: 'Corn ground coarse. Boiled up it makes porridge.' },
-  dough: { name: 'Dough', category: 'material', weight: 0.3, stackable: true, decay: 150, description: 'Flour and water worked together. It wants a fire under it.' },
+  flour: { name: 'Flour', category: 'material', weight: 0.1, stackable: true, decay: 30, larder: true, description: 'Wheat ground between two stones. Wet it and it becomes dough. Keeps in a larder or a craft material bin.' },
+  cornmeal: { name: 'Cornmeal', category: 'material', weight: 0.12, stackable: true, decay: 30, larder: true, description: 'Corn ground coarse. Boiled up it makes porridge. Keeps in a larder or a craft material bin.' },
+  dough: { name: 'Dough', category: 'material', weight: 0.3, stackable: true, decay: 150, larder: true, description: 'Flour and water worked together. It wants a fire under it. Keeps in a larder or a craft material bin.' },
   bandage: { name: 'Bandage', category: 'misc', weight: 0.05, stackable: true, decay: 10, description: 'A strip of cloth for binding a wound. One strip, one wound.' },
   reed: { name: 'Reed', category: 'material', weight: 0.2, stackable: true, raw: true, decay: 60, description: 'Cut from a reed bed. Soaked and pressed it becomes papyrus.' },
   papyrus: { name: 'Papyrus', category: 'material', weight: 0.05, stackable: true, decay: 14, description: 'A pressed sheet, smooth enough to take ink.' },
@@ -381,7 +396,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   wardrobe: { name: 'Wardrobe', category: 'misc', weight: 42, decay: 4, description: 'Tall enough to hang a cloak full length. Holds 100 things.' },
   shelves: { name: 'Shelves', category: 'misc', weight: 34, decay: 4, description: 'A long open rack of shelves. Holds 120 things.' },
   bookshelf: { name: 'Bookshelf', category: 'misc', weight: 30, decay: 4, description: 'Shelves with a back and a cornice. Holds 90 things.' },
-  larder: { name: 'Larder', category: 'misc', weight: 48, decay: 4, description: 'A deep cool cupboard for a kitchen. Holds 250 things, and takes food and drink only.' },
+  larder: { name: 'Larder', category: 'misc', weight: 48, decay: 4, description: 'A deep cool cupboard for a kitchen. Holds 250 things: food, drink, and the flour, dough and cornmeal a kitchen bakes from.' },
   crate_shelf: { name: 'Crate shelf', category: 'misc', weight: 64, decay: 4, description: 'A decked rack two spots across and four deep. It holds nothing itself: eight plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' },
   barrel: { name: 'Barrel', category: 'misc', weight: 14, decay: 4, description: 'Staves and hoops. Holds 80 litres of one liquid, and nothing solid.' },
   lectern: { name: 'Lectern', category: 'misc', weight: 12, decay: 4, description: 'A slanted stand to read from.' },

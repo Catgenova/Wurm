@@ -291,6 +291,9 @@ out.push(`alter table item_def add column if not exists description text;`);
 /* Raw: out of the ground, off a tree, out of a vein, off a beast or a field,
  * and no bench has touched it. What a raw material bin takes. */
 out.push(`alter table item_def add column if not exists raw boolean not null default false;`);
+/* Kept in a larder though it is not food: flour, dough, cornmeal. Where a
+ * thing lives and what a thing is are two questions, and this is the first. */
+out.push(`alter table item_def add column if not exists larder boolean not null default false;`);
 /* Ground with anything living in it, and the damp ground that is full of them. */
 out.push(`alter table tile_def add column if not exists wormy boolean not null default false;`);
 out.push(`alter table tile_def add column if not exists rich_worms boolean not null default false;`);
@@ -821,6 +824,7 @@ for (const r of RECIPES) {
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
   out.push(`insert into item_def values (${q(id)}, ${q(d.name)}, ${q(d.category)}, ${q(d.weight)}, ${q(!!d.stackable)}, ${q(d.decay)}, ${q(d.charges)});`);
   if (d.raw) out.push(`update item_def set raw = true where id = ${q(id)};`);
+  if (d.larder) out.push(`update item_def set larder = true where id = ${q(id)};`);
 }
 for (const [id, d] of Object.entries(TILE_DEFS)) {
   out.push(`insert into tile_def values (${q(Number(id))}, ${q(d.name)}, ${q(d.speed)}, ${q(!!d.blocks)}, ${q(d.digYield)}, ${q(!!d.mineable)}, ${q(!!d.forage)}, ${q(!!d.botanize)}, ${q(!!d.pavable)}, ${q(!!d.turnsToDirt)}, ${q(!!d.collect)});`);

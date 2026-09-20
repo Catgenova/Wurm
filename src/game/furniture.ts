@@ -186,7 +186,7 @@ export const FURNITURE: FurnitureDef[] = [
   piece('shelves', 'Shelves', 3, 1, [['plank', 12], ['timber', 2], ['nail', 26]], 18, 15, 'You nail up a long rack of shelves.', 120),
   piece('bookshelf', 'Bookshelf', 2, 1, [['plank', 10], ['timber', 2], ['nail', 22]], 20, 14, 'You nail up a bookshelf with a cornice on top.', 90),
   piece('larder', 'Larder', 2, 2, [['plank', 16], ['timber', 4], ['nail', 34]], 26, 20,
-    'You nail up a deep larder and slate the floor of it cold. Food and drink go in it, and nothing else.', 250,
+    'You nail up a deep larder and slate the floor of it cold. Food, drink, flour and dough go in it, and nothing else.', 250,
     { takes: 'food' }),
   piece('barrel', 'Barrel', 1, 1, [['plank', 6], ['shaft', 2], ['nail', 10]], 18, 10, 'You raise the staves and hoop a barrel.', undefined, { liquid: 80 }),
   /*
@@ -523,7 +523,7 @@ export const RAW_BIN_REFUSAL = 'A raw material bin takes raw materials — ore, 
  */
 export const CRAFT_BIN_REFUSAL = 'A craft material bin takes worked materials — planks, nails, ribbons, hinges — and nothing that has not been through a bench.';
 
-export const LARDER_REFUSAL = 'A larder takes food — raw, cooked, and what is drunk — and nothing else.';
+export const LARDER_REFUSAL = 'A larder takes food and drink, and the flour, dough and cornmeal a kitchen bakes from — and nothing else.';
 export const SEED_BIN_REFUSAL = 'A seed bin takes seeds and nothing else.';
 export const SPROUT_BIN_REFUSAL = 'A sprout bin takes sprouts and nothing else.';
 
@@ -539,7 +539,14 @@ export const SPROUT_BIN_REFUSAL = 'A sprout bin takes sprouts and nothing else.'
 export const TAKES: Record<Takes, { is: (id: string) => boolean; refusal: string }> = {
   raw: { is: (id) => !!itemDef(id).raw, refusal: RAW_BIN_REFUSAL },
   worked: { is: isWorked, refusal: CRAFT_BIN_REFUSAL },
-  food: { is: (id) => itemDef(id).category === 'food', refusal: LARDER_REFUSAL },
+  /*
+   * Food, drink, and the three things that are kept in a larder without being
+   * food: flour, dough and cornmeal. Asked for: "flour and dough should go in
+   * the larder too." They are ground grain and what is made of it, they keep
+   * and decay like materials because that is what they are, and `ItemDef.larder`
+   * says where they live rather than what they are.
+   */
+  food: { is: (id) => itemDef(id).category === 'food' || !!itemDef(id).larder, refusal: LARDER_REFUSAL },
   seed: { is: (id) => CROP_BY_SEED.has(id), refusal: SEED_BIN_REFUSAL },
   sprout: { is: (id) => id === 'sprout', refusal: SPROUT_BIN_REFUSAL },
 };
