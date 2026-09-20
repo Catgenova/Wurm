@@ -71,7 +71,22 @@ do $$
 declare w record; v jsonb; f bigint; f2 bigint; r creature; a double precision; b double precision;
         v_was double precision; v_x int; v_y int; v_id int;
 begin
-  select p.world_id, p.uid into w from player p order by p.world_id, p.uid limit 1;
+  /*
+   * A body with ground under it.
+   *
+   * This took whichever player sorted first, and a world id is a uuid made
+   * fresh every run -- so which one that was came out differently each time.
+   * One of them stands at 1,1 on an island with no land row there, which makes
+   * land_height null, and a null in a concatenation is a null all the way out:
+   * the whole SUMS line vanished and every number below it read as nothing at
+   * all. It is the same shape as the mould that had no name.
+   *
+   * Any body will do -- the inputs are read back off the island and fed to
+   * both sides -- so long as it is standing somewhere that has a height.
+   */
+  select p.world_id, p.uid into w from player p
+   where land_height(p.world_id, floor(p.x)::int, floor(p.y)::int) is not null
+   order by p.world_id, p.uid limit 1;
   update player set craft_class = null, combat_class = null, class_mul = null,
          act = null, act_target = null, act_ends = null, act_left = null, act_queue = '[]'::jsonb,
          wounds = '[]'::jsonb, equipped = '{}'::jsonb,
@@ -102,16 +117,22 @@ begin
   f := give(w.world_id, w.uid, 'focus', 1, 70, 'Garnet');
   select floor(x)::int, floor(y)::int into v_x, v_y from player
     where world_id = w.world_id and uid = w.uid;
-  insert into said select 'SUMS|' || 60 || '|' || 70 || '|'
-    || land_height(w.world_id, v_x, v_y) || '|' || darkness(w.world_id) || '|'
-    || land_ease(w.world_id, v_x, v_y) || '|'
-    || spell_wear(w.world_id, w.uid, (select d from spell_def d where id = 'ember'),
-                  focus_for(w.world_id, w.uid, 'garnet')) || '|'
-    || spell_force(w.world_id, w.uid, (select d from spell_def d where id = 'ember'),
-                   focus_for(w.world_id, w.uid, 'garnet')) || '|'
-    || spell_secs(w.world_id, w.uid, (select d from spell_def d where id = 'snare')) || '|'
-    || skill_of(w.world_id, w.uid, 'binding') || '|'
-    || spell_range(w.world_id, w.uid, (select d from spell_def d where id = 'ember'));
+  /*
+   * concat_ws rather than a chain of ||, so that one null is one empty field
+   * and one check failing by name, instead of the whole line disappearing and
+   * nine of them failing at once with nothing to say why.
+   */
+  insert into said select 'SUMS|' || concat_ws('|',
+    60, 70,
+    land_height(w.world_id, v_x, v_y), darkness(w.world_id),
+    land_ease(w.world_id, v_x, v_y),
+    spell_wear(w.world_id, w.uid, (select d from spell_def d where id = 'ember'),
+               focus_for(w.world_id, w.uid, 'garnet')),
+    spell_force(w.world_id, w.uid, (select d from spell_def d where id = 'ember'),
+                focus_for(w.world_id, w.uid, 'garnet')),
+    spell_secs(w.world_id, w.uid, (select d from spell_def d where id = 'snare')),
+    skill_of(w.world_id, w.uid, 'binding'),
+    spell_range(w.world_id, w.uid, (select d from spell_def d where id = 'ember')));
   insert into said values ('READY|' || coalesce(spell_refusal(w.world_id, w.uid, 'ember'), 'may be cast'));
 
   -- A better cut wastes less.
