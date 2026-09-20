@@ -930,6 +930,18 @@ jobs:
             --outfile=node_modules/.cache/pile.mjs --log-level=error
           node node_modules/.cache/pile.mjs
 
+      - name: A worker that can reach the larder
+        run: |
+          # `worker_feed` looked in crates and nowhere else, so a wildermon
+          # could stand beside a larder holding a hundred and fifty of exactly
+          # what it eats and starve. The browser never had that fault. This
+          # asks both halves: every store on the deed is somewhere to look,
+          # and a locked stack, priced stock, post and goods under a deal are
+          # not lunch — none of which were checked before.
+          npx esbuild supabase/test/larder.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/larder.mjs --log-level=error
+          node node_modules/.cache/larder.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

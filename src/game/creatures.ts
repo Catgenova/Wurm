@@ -1545,6 +1545,17 @@ export function nearTrees(game: Game, x: number, y: number, range = WATER_RANGE)
 }
 
 export const isBaitFor = (species: SpeciesDef, itemId: string): boolean => species.diet.includes(itemId);
+/**
+ * What a working wildermon may help itself to out of a store on the deed.
+ *
+ * Its own diet, and then the two things that are somebody's: a locked thing,
+ * because locking is how a person says *not this one, not the next thing the
+ * game reaches for*, and a thing with a price on it, because that is stock on
+ * a stall and not lunch. The island adds post in a mailbox and goods promised
+ * in a deal to that list, which this side does not model.
+ */
+export const mayEat = (species: SpeciesDef, item: Item): boolean =>
+  isBaitFor(species, item.id) && !item.locked && item.price === undefined;
 /** What a wild one does to feed itself; felling trees puts no food in its belly. */
 /** The jobs that are errands rather than a walk out for a load of something. */
 const ERRAND_JOBS = new Set<GatherKind>(['water', 'hod', 'mend', 'plant', 'prospect', 'compost']);
@@ -4339,7 +4350,7 @@ export class Creatures {
       if (larder) {
         const [lx, ly] = larder.centre;
         if (Math.hypot(lx - c.x, ly - c.y) <= 1.3) {
-          const idx = larder.items.findIndex((it) => isBaitFor(def, it.id));
+          const idx = larder.items.findIndex((it) => mayEat(def, it));
           if (idx >= 0) {
             const it = larder.items[idx];
             it.count -= 1;
@@ -4439,12 +4450,20 @@ export class Creatures {
     return nearest(stores) ?? stores[0];
   }
 
-  /** The nearest store on the deed holding something this creature will eat. */
+  /**
+   * The nearest store on the deed holding something this creature will eat.
+   *
+   * Every store on the deed, not only the crates: a larder holds a hundred and
+   * fifty and is where anybody would actually keep the food, and a worker that
+   * looked in crates alone starved standing next to one. `deedStores` is the
+   * same list a load gets put away into, so a cupboard, a chest, a shelf or a
+   * cart all count, and a trash crate does not.
+   */
   private foodCrate(game: Game, c: Creature, def: SpeciesDef): DeedStore | null {
     let best: DeedStore | null = null;
     let bestD = Infinity;
     for (const store of game.deedStores()) {
-      if (!store.items.some((it: Item) => isBaitFor(def, it.id))) continue;
+      if (!store.items.some((it: Item) => mayEat(def, it))) continue;
       const d = Math.hypot(store.centre[0] - c.x, store.centre[1] - c.y);
       if (d < bestD) {
         bestD = d;

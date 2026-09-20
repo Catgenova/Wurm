@@ -46,7 +46,31 @@ const stamp = [now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(),
   now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()]
   .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, '0')).join('');
 const name = `${stamp}_defs.sql`;
-writeFileSync(join(DIR, name), made.sql);
+/*
+ * A whole snapshot carries the rulebook's own DDL -- `create table if not
+ * exists`, `alter table ... add column if not exists` -- over tables every
+ * door on the island reads. An `alter table` wants ACCESS EXCLUSIVE, and the
+ * moment it starts waiting for one, every query behind it waits too, so a
+ * deploy that lands while somebody is mid-action can stop the island until
+ * that action finishes. Bounded, it is a failed deploy instead, which is the
+ * cheaper of the two and the thing you want to be told about.
+ *
+ * It goes on here rather than in the dump itself so that `defs-state.sql` and
+ * the statement-by-statement comparison that makes a delta stay exactly what
+ * the TypeScript says. A delta carries no DDL and needs none of this.
+ *
+ * There is a CI guard that will not let an altering migration through without
+ * it. That guard caught this file before this line existed, which is the only
+ * reason the line is here.
+ */
+const guard = made.whole
+  ? "set local lock_timeout = '3s';\n\n"
+  : '';
+const [firstLine, ...rest] = made.sql.split('\n');
+const body = made.whole
+  ? [firstLine, rest[0], '', guard.trimEnd(), ...rest.slice(1)].join('\n')
+  : made.sql;
+writeFileSync(join(DIR, name), body);
 writeFileSync(STATE, sql);
 console.log(made.whole
   ? `definitions changed: the rulebook itself moved, so ${name} is the whole snapshot (${made.sql.split('\n').length} lines)`
