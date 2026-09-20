@@ -98,7 +98,7 @@ export const ARMOUR: ArmourDef[] = [
 export const ARMOUR_BY_ID = new Map(ARMOUR.map((a) => [a.id, a]));
 export const isArmour = (id: string): boolean => ARMOUR_BY_ID.has(id);
 
-export type WeaponKind = 'swords' | 'axes' | 'mauls' | 'knives' | 'polearms' | 'archery' | 'shields';
+export type WeaponKind = 'swords' | 'axes' | 'mauls' | 'knives' | 'polearms' | 'archery' | 'throwing' | 'shields';
 
 export const WEAPON_SKILL_NAMES: Record<WeaponKind, string> = {
   swords: 'Swords',
@@ -107,6 +107,7 @@ export const WEAPON_SKILL_NAMES: Record<WeaponKind, string> = {
   knives: 'Knives',
   polearms: 'Polearms',
   archery: 'Archery',
+  throwing: 'Throwing',
   shields: 'Shields',
 };
 
@@ -123,6 +124,14 @@ export interface WeaponDef {
   ammo?: string;
   /** Both hands, so no shield with it. */
   twoHanded?: boolean;
+  /**
+   * It is meant to leave your hand, and it does not come back on its own.
+   *
+   * A thrown weapon has no `ammo` -- it *is* the ammunition -- so it stays a
+   * perfectly good thing to hit somebody with while you still have hold of it,
+   * and `isBow` goes on meaning what it meant.
+   */
+  thrown?: boolean;
 }
 
 const weapon = (id: string, kind: WeaponKind, damage: number, swing: number, extra: Partial<WeaponDef> = {}): WeaponDef => ({ id, kind, damage, swing, ...extra });
@@ -145,11 +154,24 @@ export const WEAPONS: WeaponDef[] = [
   // Tusk on the belly, sinew on the back, and both taken off something that
   // was trying to kill you. There is nothing further to shoot with.
   weapon('composite_bow', 'archery', 21, 3.6, { range: 17, ammo: 'arrow', twoHanded: true }),
+  /*
+   * Thrown, and reaching further than anything held.
+   *
+   * `range` already existed for the spear and `melee_reach` already reads it
+   * on both sides, so a javelin fights at five tiles today with nothing new
+   * written. It hits harder than a bow of comparable reach and costs no
+   * arrows; a bow buys the distance back and then some. What is still to come
+   * is the thing actually leaving your hand and landing on the ground, which
+   * wants a throw of its own.
+   */
+  weapon('javelin', 'throwing', 9, 2.2, { range: 4, thrown: true }),
+  weapon('throwing_axe', 'throwing', 11, 2.6, { range: 3, thrown: true }),
 ];
 
 export const WEAPON_BY_ID = new Map(WEAPONS.map((w) => [w.id, w]));
 export const isWeapon = (id: string): boolean => WEAPON_BY_ID.has(id);
 export const isBow = (id: string): boolean => !!WEAPON_BY_ID.get(id)?.ammo;
+export const isThrown = (id: string): boolean => !!WEAPON_BY_ID.get(id)?.thrown;
 
 export interface ShieldDef {
   id: string;

@@ -42,12 +42,19 @@ const check = (what: string, passed: boolean, detail = ''): void => {
   (passed ? ok : bad).push(`${passed ? 'ok  ' : 'FAIL'} ${what}${detail ? ` — ${detail}` : ''}`);
 };
 
-/* The skills the craft trades deliberately leave for the combat ones. */
-const RESERVED = [
-  'archery', 'awareness', 'axes', 'body_control', 'body_stamina', 'body_strength',
-  'chain_armour', 'cloth_armour', 'climbing', 'fighting', 'knives', 'leather_armour',
-  'mauls', 'meditation', 'mind_logic', 'plate_armour', 'polearms', 'prayer', 'shields',
-  'soul_strength', 'swimming', 'swords',
+/*
+ * The skills that belong to no trade at all, craft or fighting.
+ *
+ * The craft side partitions cleanly -- every one of its thirty-nine skills is
+ * in exactly one trade -- and the fighting side deliberately does not. These
+ * eight are the body and the soul, common to all twenty-one, and `fighting` in
+ * particular *could not* be owned even if it should be: it is the scope key
+ * every melee swing carries, so a trade that held it would move everybody's
+ * numbers rather than its own.
+ */
+const NOBODY_OWNS = [
+  'body_control', 'body_stamina', 'body_strength', 'fighting',
+  'meditation', 'mind_logic', 'prayer', 'swimming',
 ].sort();
 
 const out = psql(`
@@ -57,7 +64,7 @@ create temp table said (k text);
 -- 1. The list, as the island holds it.
 insert into said select 'LIST|' || string_agg(c.id || ':' || c.main || ':' ||
   (select string_agg(cs.skill, '+' order by cs.skill) from class_skill cs where cs.class = c.id),
-  '|' order by c.id) from class_def c;
+  '|' order by c.id) from class_def c where c.kind = 'craft';
 insert into said select 'NUMBERS|' || class_at()::int || '|' || class_change_cost()::bigint;
 insert into said select 'LEFTOVER|' || coalesce(string_agg(s.id, ',' order by s.id), 'none')
   from skill_def s where not exists (select 1 from class_skill cs where cs.skill = s.id);
@@ -131,9 +138,9 @@ check('and the same two numbers', Number(at) === CLASS_AT && Number(cost) === CL
 const all = CRAFT_CLASSES.flatMap((c) => c.skills);
 check('every craft skill belongs to exactly one trade', new Set(all).size === all.length,
   `${all.length} covered, ${new Set(all).size} distinct`);
-check('and what is left over is exactly what the combat trades want',
-  said('LEFTOVER').split(',').sort().join() === RESERVED.join(),
-  `${said('LEFTOVER').split(',').length} left over`);
+check('and what is left over is exactly the eight that belong to nobody',
+  said('LEFTOVER').split(',').sort().join() === NOBODY_OWNS.join(),
+  `${said('LEFTOVER').split(',').length} left over: ${said('LEFTOVER')}`);
 
 check('a card is shut below fifty, in the island’s words',
   said('SHUT').startsWith('You are not a terraformer yet.'), said('SHUT'));

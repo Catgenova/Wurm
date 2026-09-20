@@ -94,6 +94,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   long_sword: { name: 'Long sword', category: 'tool', weight: 3, description: 'Two hands, a long reach and a heavy blow.' },
   hunting_knife: { name: 'Hunting knife', category: 'tool', weight: 0.8, description: 'Fast, light, and never quite enough on its own.' },
   battle_axe: { name: 'Battle axe', category: 'tool', weight: 4, description: 'Two hands. Slow, and it does not matter how slow when it lands.' },
+  javelin: { name: 'Javelin', category: 'tool', weight: 1.4, description: 'A light shaft with a point on it, made to leave your hand and not come back.' },
+  throwing_axe: { name: 'Throwing axe', category: 'tool', weight: 1.8, description: 'Short haft, heavy head. It turns once in the air and arrives edge first.' },
   club: { name: 'Club', category: 'tool', weight: 2.5, description: 'A shaped length of oak. The first weapon anybody makes.' },
   maul: { name: 'Maul', category: 'tool', weight: 5, description: 'A block of metal on a long shaft. Chain and plate care very little; ribs care a great deal.' },
   spear: { name: 'Spear', category: 'tool', weight: 2.2, description: 'Reaches a tile further than anything else in the hand.' },

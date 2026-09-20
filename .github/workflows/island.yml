@@ -974,6 +974,20 @@ jobs:
             --outfile=node_modules/.cache/tree.mjs --log-level=error
           node node_modules/.cache/tree.mjs
 
+      - name: Seven ways to fight, and a rite for each
+        run: |
+          # Three melee, two ranged, a healer and one that fights with what
+          # fights beside it. Five new channels, every one of them a line that
+          # already decided its number — weapon_damage, hit_chance,
+          # hurt_player, wound_close, attack_of — plus hands and wind, which
+          # only wanted act_scope to call a swing by the thing in your hand
+          # rather than by `fighting`. And the rite, which is a node with an
+          # hour on it: same channels, same scope, same fold, so there is no
+          # second machinery for a number to disagree with itself in.
+          npx esbuild supabase/test/fight.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/fight.mjs --log-level=error
+          node node_modules/.cache/fight.mjs
+
       - name: What is lying about, going off where it lies
         run: |
           # ground_sweep rewrote every thing on an island's ground once a

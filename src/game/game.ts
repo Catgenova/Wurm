@@ -1813,7 +1813,7 @@ export class Game {
   private tendWounds(dt: number): void {
     const p = this.player;
     if (!p.wounds.length) return;
-    const aid = this.skills.get('first_aid');
+    const aid = this.skills.get('chirurgy');
     let bad = false;
     for (const w of p.wounds) {
       const drain = woundDrain(w);

@@ -28,7 +28,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import {
-  CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CRAFT_CLASSES,
+  CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES,
   classPoints, foldNodes, nodeDef, nodeRefusal,
 } from '../../src/game/classes';
 
@@ -71,7 +71,9 @@ insert into said select 'POINTS|' || string_agg(class_points_for(v)::text, '|' o
 insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
     select count(*) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
      where ns.nspname = 'public' and p.prokind = 'f'
-       and strpos(pg_get_functiondef(p.oid), concat(', ', quote_literal(ch.id), ', ')) > 0
+       -- The argument and not what follows it: a call long enough to wrap puts
+       -- a newline after the comma, and the channel is wired just the same.
+       and strpos(pg_get_functiondef(p.oid), concat(', ', quote_literal(ch.id))) > 0
        and strpos(pg_get_functiondef(p.oid), 'class_mul(') > 0), '|' order by ch.id)
   from class_channel ch;
 
@@ -246,11 +248,11 @@ check('and the same four channels', islandCh.join() === browserCh.join(),
   islandCh.join(' / '));
 
 check('nine nodes to a trade, in three columns of three',
-  CRAFT_CLASSES.every((c) => {
+  CLASSES.every((c) => {
     const mine = CLASS_NODES.filter((n) => n.class === c.id);
     return mine.length === 9 && [1, 2, 3].every((col) =>
       mine.filter((n) => n.col === col).map((n) => n.rank).sort().join() === '1,2,3');
-  }), `${CLASS_NODES.length} over ${CRAFT_CLASSES.length} trades`);
+  }), `${CLASS_NODES.length} over ${CLASSES.length} trades`);
 check('a minor is a point, a major is three, and a major wants the one under it',
   CLASS_NODES.every((n) => n.cost === (n.rank === 3 ? 3 : 1)
     && (n.rank === 1 ? n.needs === null : nodeDef(n.needs ?? '')?.rank === n.rank - 1)));

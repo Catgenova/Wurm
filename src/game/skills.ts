@@ -51,6 +51,15 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'meditation', name: 'Meditation', group: 'Skills', start: 1 },
   { id: 'repair', name: 'Repair', group: 'Skills', start: 1 },
   { id: 'first_aid', name: 'First aid', group: 'Skills', start: 1 },
+  /*
+   * Making a dressing and putting one on are two different pieces of
+   * knowledge, and only the first belongs to somebody who knows which leaf is
+   * which. `first_aid` stays with the forager: bandages, covers, what goes in
+   * them. `chirurgy` is the hands -- closing a wound, on a field, on somebody
+   * who is still being shot at -- and it is what decides how fast what is open
+   * closes over.
+   */
+  { id: 'chirurgy', name: 'Chirurgy', group: 'Skills', start: 1 },
   { id: 'papyrusmaking', name: 'Papyrusmaking', group: 'Skills', start: 1 },
   { id: 'archaeology', name: 'Archaeology', group: 'Skills', start: 1 },
   { id: 'restoration', name: 'Restoration', group: 'Skills', start: 1 },
@@ -67,6 +76,12 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'knives', name: 'Knives', group: 'Fighting', start: 1 },
   { id: 'polearms', name: 'Polearms', group: 'Fighting', start: 1 },
   { id: 'archery', name: 'Archery', group: 'Fighting', start: 1 },
+  /*
+   * Three knives at three, four and five damage are a butcher's kit, not a
+   * ranged trade. This is the one that is: a javelin, a throwing axe, and the
+   * arm behind them.
+   */
+  { id: 'throwing', name: 'Throwing', group: 'Fighting', start: 1 },
   { id: 'shields', name: 'Shields', group: 'Fighting', start: 1 },
   { id: 'cloth_armour', name: 'Cloth armour', group: 'Fighting', start: 1 },
   { id: 'leather_armour', name: 'Leather armour', group: 'Fighting', start: 1 },

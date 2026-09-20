@@ -155,8 +155,72 @@ export const CRAFT_CLASSES: ClassDef[] = [
   },
 ];
 
-/** Every class there is. The combat trades land beside these. */
-export const CLASSES: ClassDef[] = [...CRAFT_CLASSES];
+/**
+ * The seven trades that are not magic.
+ *
+ * Drawn from the twenty-two skills the craft trades leave alone, plus two that
+ * had to be made: `throwing`, because three utility knives at five damage
+ * cannot carry a ranged trade, and `chirurgy`, because closing a wound and
+ * making the thing you close it with are two different pieces of knowledge and
+ * only one of them belongs to a forager.
+ *
+ * Eight of the twenty-two belong to nobody on purpose -- `fighting`,
+ * `body_control`, `body_stamina`, `body_strength`, `swimming`, `mind_logic`,
+ * `prayer` and `meditation`. They are the body and the soul, common to all ten,
+ * and `fighting` could not be owned even if it should be: it is the scope key
+ * every melee swing already carries, so a trade that held it would move
+ * everybody's numbers.
+ *
+ * The three magic trades land beside these and are drawn from stones rather
+ * than from skills anybody already has.
+ */
+export const COMBAT_CLASSES: ClassDef[] = [
+  {
+    id: 'blade', kind: 'combat', name: 'Sworn Blade', main: 'swords',
+    note: 'The disciplined line: a sword, a shield and mail. A blow turned is a blow you may answer.',
+    skills: ['swords', 'shields', 'chain_armour'],
+    lever: 'Turns more of what is aimed at you, and answers it harder.',
+  },
+  {
+    id: 'berserker', kind: 'combat', name: 'Berserker', main: 'axes',
+    note: 'Two hands on something heavy, and no thought at all for what comes back.',
+    skills: ['axes', 'mauls'],
+    lever: 'Hits harder than anything else on this island, faster, and for longer.',
+  },
+  {
+    id: 'pikeman', kind: 'combat', name: 'Pikeman', main: 'polearms',
+    note: 'A long haft and a wall of plate. Nothing gets past you and nothing gets near.',
+    skills: ['polearms', 'plate_armour'],
+    lever: 'Strikes first from a rank back, and stands in what would flatten anybody else.',
+  },
+  {
+    id: 'archer', kind: 'combat', name: 'Archer', main: 'archery',
+    note: 'The first blow of any fight, from further off than the thing can answer.',
+    skills: ['archery', 'awareness', 'leather_armour'],
+    lever: 'Hits harder and truer at range, and holds a full draw for nothing.',
+  },
+  {
+    id: 'skirmisher', kind: 'combat', name: 'Skirmisher', main: 'throwing',
+    note: 'Comes from where nobody was looking, opens something up, and is not there afterwards.',
+    skills: ['throwing', 'knives', 'climbing'],
+    lever: 'Throws hard and true, and is quick over ground nobody else will cross.',
+  },
+  {
+    id: 'chirurgeon', kind: 'combat', name: 'Chirurgeon', main: 'chirurgy',
+    note: 'Closes what is open, on a field, on somebody who is still being shot at.',
+    skills: ['chirurgy', 'cloth_armour'],
+    lever: 'What you dress closes at a pace nothing else on the island comes near.',
+  },
+  {
+    id: 'beastmaster', kind: 'combat', name: 'Beastmaster', main: 'soul_strength',
+    note: 'Fights with what fights beside it. The hand on the animal, not the blade.',
+    skills: ['soul_strength'],
+    lever: 'What travels with you does more of the fighting, and bites far harder doing it.',
+  },
+];
+
+/** Every class there is. The three magic trades land beside these. */
+export const CLASSES: ClassDef[] = [...CRAFT_CLASSES, ...COMBAT_CLASSES];
 
 export const classDef = (id: string): ClassDef | undefined => CLASSES.find((c) => c.id === id);
 
@@ -199,8 +263,24 @@ export const classRefusal = (c: ClassDef, at: (skill: string) => number): string
  * people with the same node in different trades are not the same person.
  */
 
-/** The four things a node can move, each wired at exactly one place. */
-export type Channel = 'hands' | 'learn' | 'wind' | 'fine';
+/**
+ * The things a node can move, each wired at exactly one place.
+ *
+ * Four came with the craft trades. Five more were wanted by the fighting ones,
+ * and every one of them had to pass the same test before it was allowed to
+ * exist: is there already exactly one line in the rules where this number is
+ * decided? There was, for all five -- `weapon_damage`, `hit_chance`,
+ * `hurt_player`, `wound_close`, and `attack_of` beside `max_health` and
+ * `tame_chance`.
+ *
+ * `hands` and `wind` are shared between the two halves and needed nothing new
+ * at all, because a swing is an action like any other: it has a duration and it
+ * costs wind. The only thing it wanted was a truer name for what it was done
+ * *with* -- see `act_scope` on the island.
+ */
+export type Channel =
+  | 'hands' | 'learn' | 'wind' | 'fine'
+  | 'edge' | 'aim' | 'guard' | 'knit' | 'hide' | 'fang' | 'tame';
 
 /** What each channel means, and which way its numbers run. */
 export const CHANNELS: Record<Channel, { name: string; note: string; lower: boolean }> = {
@@ -208,6 +288,13 @@ export const CHANNELS: Record<Channel, { name: string; note: string; lower: bool
   learn: { name: 'Learning', note: 'What a go teaches you.', lower: false },
   wind: { name: 'Wind', note: 'What a go takes out of you.', lower: true },
   fine: { name: 'Fineness', note: 'The quality of what comes off the bench.', lower: false },
+  edge: { name: 'Edge', note: 'How hard a blow lands.', lower: false },
+  aim: { name: 'Aim', note: 'Whether it lands at all.', lower: false },
+  guard: { name: 'Guard', note: 'How much of what is aimed at you is turned.', lower: false },
+  knit: { name: 'Knitting', note: 'How fast what is open closes.', lower: false },
+  hide: { name: 'Hide', note: 'How much what travels with you can take.', lower: false },
+  fang: { name: 'Fang', note: 'How hard what travels with you bites.', lower: false },
+  tame: { name: 'Quiet', note: 'How readily a wild thing decides about you.', lower: false },
 };
 
 /** A column of three: two minor, then the major that wants them both. */
@@ -237,15 +324,36 @@ export interface NodeDef {
   mul: number;
 }
 
-/** What each rank costs, and what it is worth. `lower` channels run the other way. */
-const RANK = [
-  { cost: 1, up: 1.03, down: 0.97 },
-  { cost: 1, up: 1.04, down: 0.96 },
-  { cost: 3, up: 1.10, down: 0.90 },
-] as const;
+/** What a rank costs: two minors at a point, then the major at three. */
+const COST = [1, 1, 3] as const;
 
-/** Fineness is the strongest thing on this island, so it moves least. */
-const FINE = [1.02, 1.03, 1.06] as const;
+/**
+ * What each rank of each channel is worth.
+ *
+ * One table rather than an up-and-down pair with a special case bolted on,
+ * because once there were nine channels the special case was the rule. The
+ * craft four are the numbers they always were, to the digit -- `hands` and
+ * `wind` fall, `learning` rises, and `fineness` moves least of the four
+ * because quality is the strongest thing on this island.
+ *
+ * The fighting five are scaled by how much room the number they move has.
+ * `aim` moves least: it is a probability with a hard ceiling at 0.96, so a
+ * tenth on it is mostly spent against the cap. `knit` moves most: closing a
+ * wound is slow enough that a fifth is still slower than a bandage.
+ */
+const STEP: Record<Channel, readonly [number, number, number]> = {
+  hands: [0.97, 0.96, 0.90],
+  wind: [0.97, 0.96, 0.90],
+  learn: [1.03, 1.04, 1.10],
+  fine: [1.02, 1.03, 1.06],
+  edge: [1.03, 1.04, 1.09],
+  aim: [1.02, 1.02, 1.05],
+  guard: [1.03, 1.04, 1.09],
+  knit: [1.05, 1.06, 1.15],
+  hide: [1.04, 1.05, 1.12],
+  fang: [1.04, 1.05, 1.12],
+  tame: [1.03, 1.04, 1.10],
+};
 
 /** Nothing at all below this, so the first point is earned rather than given. */
 export const CLASS_POINT_FLOOR = 40;
@@ -270,8 +378,8 @@ export const COLUMN_COST = 5;
 
 const ROMAN = ['I', 'II'];
 
-/** The three columns of every trade, in the order they are drawn. */
-export const CLASS_COLUMNS: Record<string, [Column, Column, Column]> = {
+/** The three columns of every craft trade, in the order they are drawn. */
+const CRAFT_COLUMNS: Record<string, [Column, Column, Column]> = {
   terraformer: [
     { name: 'Spadework', major: 'Ditcher', channel: 'hands', note: 'The spade goes in and comes up without thinking about it.' },
     { name: 'Back', major: 'Tireless', channel: 'wind', note: 'A day of moving ground costs you less of one.' },
@@ -344,12 +452,61 @@ export const CLASS_COLUMNS: Record<string, [Column, Column, Column]> = {
   ],
 };
 
+/**
+ * And the three columns of every fighting trade.
+ *
+ * Two trades sharing a channel are not the same trade, because a node only
+ * tells on the skills its own class covers: a Sworn Blade's guard is mail and a
+ * shield, a Pikeman's is plate, and neither does anything for the other. The
+ * scope is what separates them, and it is checked in one place rather than
+ * written into every node.
+ */
+const COMBAT_COLUMNS: Record<string, [Column, Column, Column]> = {
+  blade: [
+    { name: 'Shieldwork', major: 'Iron Door', channel: 'guard', note: 'What is aimed at you meets the shield first, and the shield is where you want it.' },
+    { name: 'Edge', major: 'Riposte', channel: 'edge', note: 'The sword goes into the gap the turned blow left open.' },
+    { name: 'Guard’s Eye', major: 'Unhurried', channel: 'aim', note: 'You see the opening a moment before it is one.' },
+  ],
+  berserker: [
+    { name: 'Heft', major: 'Whole Body', channel: 'edge', note: 'Everything you swing lands with all of you behind it.' },
+    { name: 'Rhythm', major: 'No Pause', channel: 'hands', note: 'The next blow is already on its way when this one lands.' },
+    { name: 'Lungs', major: 'Long Red Day', channel: 'wind', note: 'A fight that goes on costs you less of one.' },
+  ],
+  pikeman: [
+    { name: 'Point', major: 'Through the Gap', channel: 'aim', note: 'A long haft finds the seam at the end of it.' },
+    { name: 'Harness', major: 'Anvil', channel: 'guard', note: 'Plate turns what it was beaten out to turn.' },
+    { name: 'Footing', major: 'Set', channel: 'wind', note: 'Standing in all of it, all day, and still standing.' },
+  ],
+  archer: [
+    { name: 'Draw', major: 'Full Weight', channel: 'edge', note: 'The whole weight of the bow goes into the shaft.' },
+    { name: 'Sighting', major: 'Windage', channel: 'aim', note: 'Distance stops being a guess and becomes a number.' },
+    { name: 'Stillness', major: 'Held', channel: 'wind', note: 'A full draw held is a full draw that costs nothing.' },
+  ],
+  skirmisher: [
+    { name: 'Cast', major: 'Whole Arm', channel: 'edge', note: 'What leaves your hand arrives with everything you put into it.' },
+    { name: 'Eye', major: 'Thousandth Throw', channel: 'aim', note: 'You have thrown at exactly that distance a thousand times.' },
+    { name: 'Footing', major: 'Gone', channel: 'hands', note: 'You are moving again before it has landed.' },
+  ],
+  chirurgeon: [
+    { name: 'Needle', major: 'Closed Over', channel: 'knit', note: 'What you have dressed closes at a pace nothing else matches.' },
+    { name: 'Steady Hand', major: 'Under Fire', channel: 'hands', note: 'Dressing a wound in a fight takes no longer than at a bench.' },
+    { name: 'Apron', major: 'Cloth Enough', channel: 'guard', note: 'What you wear is cloth, and it is enough, because you mend it.' },
+  ],
+  beastmaster: [
+    { name: 'Hide', major: 'Hard to Put Down', channel: 'hide', note: 'What goes with you takes far more killing than its kind should.' },
+    { name: 'Fang', major: 'Twice Its Size', channel: 'fang', note: 'What goes with you bites like something far bigger.' },
+    { name: 'Quiet Word', major: 'Given', channel: 'tame', note: 'A wild thing decides about you sooner than it meant to.' },
+  ],
+};
+
+/** Every trade's columns, craft and fighting alike. */
+export const CLASS_COLUMNS: Record<string, [Column, Column, Column]> =
+  { ...CRAFT_COLUMNS, ...COMBAT_COLUMNS };
+
 /** Every node there is, built from the columns rather than written out twice. */
-export const CLASS_NODES: NodeDef[] = CRAFT_CLASSES.flatMap((c) =>
+export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
   CLASS_COLUMNS[c.id].flatMap((col, ci) => ([1, 2, 3] as const).map((rank) => {
-    const r = RANK[rank - 1];
-    const lower = CHANNELS[col.channel].lower;
-    const mul = col.channel === 'fine' ? FINE[rank - 1] : (lower ? r.down : r.up);
+    const mul = STEP[col.channel][rank - 1];
     return {
       id: `${c.id}_${ci + 1}_${rank}`,
       class: c.id,
@@ -358,7 +515,7 @@ export const CLASS_NODES: NodeDef[] = CRAFT_CLASSES.flatMap((c) =>
       note: col.note,
       channel: col.channel,
       rank,
-      cost: r.cost,
+      cost: COST[rank - 1],
       needs: rank === 1 ? null : `${c.id}_${ci + 1}_${rank - 1}`,
       mul,
     } as NodeDef;
@@ -407,6 +564,124 @@ export function nodeRefusal(
   if (left < n.cost) {
     return `${n.name} wants ${n.cost} point${n.cost === 1 ? '' : 's'} and you have ${left}.`
       + ` Every ${CLASS_POINT_STEP} in the trade is another one.`;
+  }
+  return null;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The rites.
+ * ---------------------------------------------------------------------------
+ *
+ * Every trade is footed in two things: the skills it covers, and a rite.
+ *
+ * A rite is the one thing a class may ask the island for out loud, and it is
+ * paid for out of the same favour, at the same altar, on the same prayer that
+ * the six open casts are. Nothing about the faith economy is duplicated -- what
+ * differs is only which card may call which line.
+ *
+ * And a rite is not a new kind of rule. **It is a node with an hour on it**:
+ * the same channels, the same scope, folded into the same jsonb on the body.
+ * `class_mul` multiplies it in alongside the permanent nodes while it holds and
+ * stops the moment it lapses, so there is no second machinery to keep, no
+ * second place a number can disagree with itself, and no read on the hot path
+ * that was not already happening.
+ *
+ * That is also why a rite may push a channel *down*. Red Hour buys a half again
+ * on what you land by giving away three tenths of what you turn, and it does it
+ * with two numbers in the same map as everything else.
+ */
+
+export interface RiteDef {
+  id: string;
+  /** The class that alone may call it. */
+  class: string;
+  name: string;
+  /** Favour it costs, against a cap of 25 + prayer × 0.95. */
+  cost: number;
+  /** Prayer it takes, on the same ladder the six open casts use. */
+  level: number;
+  /** How long it holds. */
+  secs: number;
+  /** How long until it may be called again. */
+  rest: number;
+  /** What it multiplies while it holds, on the class's own skills. */
+  muls: Partial<Record<Channel, number>>;
+  /** What the island says when it takes. */
+  said: string;
+  note: string;
+}
+
+export const RITES: RiteDef[] = [
+  {
+    id: 'ward', class: 'blade', name: 'Ward', cost: 20, level: 10, secs: 30, rest: 900,
+    muls: { guard: 1.6 },
+    note: 'For half a minute the shield is everywhere you need it.',
+    said: 'You set your feet and the shield stops being a thing you are holding.',
+  },
+  {
+    id: 'redhour', class: 'berserker', name: 'Red Hour', cost: 24, level: 12, secs: 30, rest: 1200,
+    muls: { edge: 1.5, guard: 0.7 },
+    note: 'Half again on what you land, and three tenths off what you turn. It is not a bargain; it is a decision.',
+    said: 'It goes red at the edges, and you stop minding what lands on you.',
+  },
+  {
+    id: 'set', class: 'pikeman', name: 'Set', cost: 20, level: 10, secs: 45, rest: 900,
+    muls: { guard: 1.4, aim: 1.15 },
+    note: 'Braced, with the haft down, and nothing coming through.',
+    said: 'You set the butt of it in the ground and the line stops where you are.',
+  },
+  {
+    id: 'farsight', class: 'archer', name: 'Farsight', cost: 22, level: 14, secs: 45, rest: 900,
+    muls: { aim: 1.3, edge: 1.2 },
+    note: 'Distance stops mattering for as long as it lasts.',
+    said: 'The far end of the field comes close enough to touch.',
+  },
+  {
+    id: 'quickhand', class: 'skirmisher', name: 'Quick Hand', cost: 18, level: 8, secs: 30, rest: 720,
+    muls: { hands: 0.7 },
+    note: 'Everything you do happens a third quicker, which is most of a fight.',
+    said: 'Your hands get ahead of you and you let them.',
+  },
+  {
+    id: 'staunch', class: 'chirurgeon', name: 'Staunch', cost: 26, level: 16, secs: 60, rest: 1200,
+    muls: { knit: 3 },
+    note: 'For a minute, what you have dressed closes three times as fast.',
+    said: 'You get your hands on it and it begins closing under them.',
+  },
+  {
+    id: 'pack', class: 'beastmaster', name: 'Call the Pack', cost: 28, level: 18, secs: 60, rest: 1200,
+    muls: { fang: 1.5, hide: 1.3 },
+    note: 'What travels with you fights like something with nothing to lose.',
+    said: 'You say the word and everything that answers to you stops being tame.',
+  },
+];
+
+export const riteOf = (classId: string | null): RiteDef | undefined =>
+  classId ? RITES.find((r) => r.class === classId) : undefined;
+
+export const riteDef = (id: string): RiteDef | undefined => RITES.find((r) => r.id === id);
+
+/**
+ * Why a rite cannot be called, or nothing.
+ *
+ * The same four refusals the island builds, in the same order, so the two
+ * sides can be asked to agree on the sentence rather than on the idea.
+ */
+export function riteRefusal(
+  r: RiteDef, mine: string | null, prayer: number, favour: number, restLeft: number,
+): string | null {
+  if (r.class !== mine) {
+    return `That is the ${(classDef(r.class)?.name ?? r.class).toLowerCase()}’s to call, and you are not one.`;
+  }
+  if (prayer < r.level) {
+    return `${r.name} takes ${r.level} prayer; you have ${Math.floor(prayer)}.`;
+  }
+  if (favour < r.cost) {
+    return `${r.name} costs ${r.cost} favour; you hold ${Math.floor(favour)}. Pray at an altar.`;
+  }
+  if (restLeft > 0) {
+    return `${r.name} again in ${Math.ceil(restLeft / 60)} minutes.`;
   }
   return null;
 }

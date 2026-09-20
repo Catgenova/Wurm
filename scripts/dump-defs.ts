@@ -60,7 +60,7 @@ import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
 import {
-  CRAFT_CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS,
+  CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
   CLASS_POINT_FLOOR, CLASS_POINT_STEP,
 } from '../src/game/classes';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
@@ -433,6 +433,22 @@ out.push(`create table if not exists class_node (
   id text primary key, class text not null, col int not null, rank int not null,
   name text not null, note text not null, channel text not null,
   cost int not null, needs text, mul double precision not null
+);`);
+/*
+ * And the rites: one per class, and the only thing a class may ask the island
+ * for out loud.
+ *
+ * `muls` is a map of channel to multiplier rather than a column apiece,
+ * because a rite is a node with an hour on it and a node moves one channel --
+ * but a rite may move two, and one of them may move the wrong way. Red Hour
+ * buys half again on what it lands by giving away three tenths of what it
+ * turns, and that is two numbers in the same map as everything else rather
+ * than a rule of its own.
+ */
+out.push(`create table if not exists rite_def (
+  id text primary key, class text not null, name text not null,
+  cost real not null, level real not null, secs real not null, rest real not null,
+  muls jsonb not null, said text not null, note text not null
 );`);
 out.push(`create table if not exists path_def (
   id text primary key, name text not null, note text not null
@@ -821,7 +837,7 @@ out.push(patiently('the recipes, the beasts and everything they are made of,\n *
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node,
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node, rite_def,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`));
 
 /*
@@ -1345,7 +1361,7 @@ for (const cls of ['cloth', 'leather']) out.push(`insert into dyeable_class valu
 for (const [tier, level] of Object.entries(TIER_LEVEL)) {
   out.push(`update tier_odds set level = ${q(level)} where tier = ${q(tier)};`);
 }
-for (const c of CRAFT_CLASSES) {
+for (const c of CLASSES) {
   out.push(`insert into class_def values (` + [q(c.id), q(c.kind), q(c.name), q(c.note),
     q(c.main), q(c.lever)].join(', ') + `);`);
   for (const skill of c.skills) out.push(`insert into class_skill values (${q(c.id)}, ${q(skill)});`);
@@ -1356,6 +1372,10 @@ for (const [id, ch] of Object.entries(CLASS_CHANNELS)) {
 for (const n of CLASS_NODES) {
   out.push(`insert into class_node values (` + [q(n.id), q(n.class), q(n.col),
     q(n.rank), q(n.name), q(n.note), q(n.channel), q(n.cost), q(n.needs), q(n.mul)].join(', ') + `);`);
+}
+for (const r of RITES) {
+  out.push(`insert into rite_def values (` + [q(r.id), q(r.class), q(r.name), q(r.cost),
+    q(r.level), q(r.secs), q(r.rest), q(JSON.stringify(r.muls)), q(r.said), q(r.note)].join(', ') + `);`);
 }
 for (const path of PATH_LIST) {
   out.push(`insert into path_def values (${q(path.id)}, ${q(path.name)}, ${q(path.note)});`);

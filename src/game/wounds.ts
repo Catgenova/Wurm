@@ -87,12 +87,12 @@ export function woundDrain(w: Wound): number {
 }
 
 /** How fast a wound closes, given what is on it. */
-export function woundClose(w: Wound, firstAid: number): number {
+export function woundClose(w: Wound, chirurgy: number): number {
   if (w.infected) return 0;
   const k = WOUND_KINDS[w.kind];
   // Nothing on it closes slowly; cloth is better; the right herb is better again.
   const dressed = w.dressing === null ? 0.25 : w.dressing === '' ? 0.7 : w.dressing === k.herb ? 1.6 : 0.9;
-  return w.severity * dressed * (0.0006 + firstAid * 0.00002);
+  return w.severity * dressed * (0.0006 + chirurgy * 0.00002);
 }
 
 /**

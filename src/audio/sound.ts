@@ -181,7 +181,7 @@ const BY_SKILL: Record<string, Stroke> = {
   chainsmithing: 'metal', platesmithing: 'metal', jewellery: 'metal',
   smelting: 'fire', cooking: 'fire', milling: 'fire', brewing: 'fire', alchemy: 'fire',
   tailoring: 'cloth', leatherworking: 'cloth', ropemaking: 'cloth', repair: 'cloth',
-  first_aid: 'cloth', butchering: 'cloth', restoration: 'cloth',
+  first_aid: 'cloth', chirurgy: 'cloth', butchering: 'cloth', restoration: 'cloth',
   foraging: 'cloth', botanizing: 'cloth',
   fishing: 'water',
 };
