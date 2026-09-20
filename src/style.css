@@ -2637,22 +2637,6 @@ kbd {
   letter-spacing: 0.05em;
 }
 
-/*
- * The column's sentence, once, under its heading rather than on each card.
- *
- * Three lines' worth of room whether it needs them or not, so that the first
- * node of each column starts on the same line as its neighbours. Without it a
- * two-line note and a three-line note set their columns half a card apart, and
- * the ranks stop reading across.
- */
-.trade-col-note {
-  min-height: 3.1em;
-  color: var(--ui-text);
-  font-size: 11px;
-  line-height: 1.4;
-  opacity: 0.8;
-}
-
 .trade-node-name {
   color: var(--ui-text);
   font-size: 12px;

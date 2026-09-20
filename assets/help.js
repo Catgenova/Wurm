@@ -217,14 +217,19 @@ function e(){return`
     covers and it opens; you may hold <b>one craft trade and one fighting trade</b> at once, and the
     <b>Trades</b> window (<kbd>F</kbd>) is where you take them up and spend what they earn.</p>
     <p>Each trade earns <b>points</b> off the best skill it covers, and its tree is <b>three columns of
-    three</b>. A column is one <b>channel</b> &mdash; one number in the rules that trade leans on, like how
-    hard a blow lands or how little of a stone a cast wastes &mdash; and a node buys a step along it.
-    Most push a number up; a few, like the hands a carpenter works with, push one down, and the card
-    says which way it goes.</p>
-    <p>A <b>rite</b> is the one thing a trade may ask for out loud: a minute or so of a channel pushed
-    much harder, paid out of the same <b>favour</b> a prayer is paid from, and then a rest before you may
-    ask again. Only the <b>fighting</b> trades have one; a craft trade has its nine nodes and no rite.
-    It sits at the head of its trade's tree, with the reason underneath when you cannot call it.</p>
+    three</b>. A column is one <b>channel</b>: one number in the rules, and every card names it and says
+    exactly what that node does to it &mdash; <i>time per action &minus;3%</i>, <i>chance to hit +2%</i>,
+    <i>wound healing speed +15%</i>. The two lower nodes cost a point each, the one above them costs
+    three, and the lower must be bought first. A few channels are better lower &mdash; time per action,
+    stamina per action, stone wear per cast &mdash; and the sign on the card is the change to the number,
+    so those read as a minus.</p>
+    <p>A <b>rite</b> is the one thing a trade may ask for out loud: one or two channels pushed much
+    harder for a fixed number of seconds, paid out of the same <b>favour</b> a prayer is paid from, and
+    then a rest before you may ask again. The card gives all three figures. Some trade one channel away
+    for another &mdash; Red Hour is <i>damage per hit +50%, damage stopped by shield and armour
+    &minus;30%</i> &mdash; so read both halves before you call one. Only the <b>fighting</b> trades have a
+    rite; a craft trade has its nine nodes and none. It sits at the head of its trade's tree, with the
+    reason underneath when you cannot call it.</p>
     <p>Everything on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
     what you have spent, what is in your purse, whether the altar will hear you &mdash; so when a button
     will not press, the sentence under it is the island's own, and it is the truth.</p>

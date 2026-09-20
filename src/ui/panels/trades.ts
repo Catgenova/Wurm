@@ -237,13 +237,13 @@ export class TradesPanel {
     }
     const chans = new Map(tree.channels.map((ch) => [ch.id, ch]));
     for (const t of tree.trades) {
-      this.page.append(this.trade(t, chans));
+      this.page.append(this.trade(t));
       for (const r of tree.rites.filter((x) => x.class === t.class)) this.page.append(this.rite(r));
       this.page.append(this.columns(t, chans));
     }
   }
 
-  private trade(t: TreeTrade, chans: Map<string, ChannelCard>): HTMLDivElement {
+  private trade(t: TreeTrade): HTMLDivElement {
     const head = document.createElement('div');
     head.className = 'trade-tree-head';
     const name = document.createElement('span');
@@ -255,7 +255,6 @@ export class TradesPanel {
     left.textContent = `${spare} of ${t.points} to spend`;
     if (spare > 0) left.classList.add('trade-spare');
     head.append(name, left);
-    void chans;
     return head;
   }
 
@@ -309,27 +308,13 @@ export class TradesPanel {
       cap.textContent = ch ? ch.name : '';
       if (ch) cap.title = ch.note;
       column.append(cap);
-      /*
-       * The column's sentence, said once.
-       *
-       * All three ranks carry the same note — `class_node.note` is the
-       * column's, for every one of the two hundred and sixteen — so putting it
-       * on each card printed the same line three times down every column. It
-       * describes the column, so it goes at the head of the column.
-       */
-      if (nodes.length) {
-        const what = document.createElement('div');
-        what.className = 'trade-col-note';
-        what.textContent = nodes[0].note;
-        column.append(what);
-      }
-      for (const n of nodes) column.append(this.node(n, ch));
+      for (const n of nodes) column.append(this.node(n));
       grid.append(column);
     }
     return grid;
   }
 
-  private node(n: TreeNode, ch: ChannelCard | undefined): HTMLDivElement {
+  private node(n: TreeNode): HTMLDivElement {
     const box = document.createElement('div');
     box.className = `trade-node${n.taken ? ' trade-node-taken' : ''}${!n.taken && n.why ? ' trade-node-shut' : ''}`;
     const top = document.createElement('div');
@@ -341,20 +326,17 @@ export class TradesPanel {
     cost.className = 'trade-points';
     cost.textContent = n.taken ? 'taken' : `${n.cost}`;
     top.append(name, cost);
-    box.append(top);
-
     /*
-     * What the node is actually worth, said the way the channel runs. Most
-     * push a number up; `hands`, `wind` and `thrift` push it down, and
-     * `downward` is the island saying which — so a 0.90 reads as a tenth off
-     * rather than as a tenth of.
+     * The exact benefit, which is the whole of what a node has to say: the
+     * number this channel multiplies and what this rank does to it. It arrives
+     * that way from the island, so there is nothing here to work out and
+     * nothing to say twice.
      */
-    const worth = document.createElement('div');
-    worth.className = 'trade-worth';
-    worth.textContent = ch?.downward
-      ? `−${Math.round((1 - n.mul) * 100)}% ${ch.name.toLowerCase()}`
-      : `+${Math.round((n.mul - 1) * 100)}% ${ch?.name.toLowerCase() ?? ''}`.trimEnd();
-    box.append(worth);
+    const note = document.createElement('div');
+    note.className = 'trade-worth';
+    note.textContent = n.note;
+    box.append(top, note);
+
 
     if (!n.taken) {
       const buy = document.createElement('button');

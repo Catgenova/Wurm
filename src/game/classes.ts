@@ -324,22 +324,30 @@ export type Channel =
   | 'edge' | 'aim' | 'guard' | 'knit' | 'hide' | 'fang' | 'tame'
   | 'force' | 'reach' | 'thrift';
 
-/** What each channel means, and which way its numbers run. */
+/**
+ * What each channel means, and which way its numbers run.
+ *
+ * `note` names the one number the channel multiplies, in the terms the rest of
+ * the game uses for it, and nothing else. It is read straight onto the cards
+ * somebody is looking at to decide how to spend a point, and prose that sets a
+ * mood instead of naming a mechanic is worse there than saying nothing. Each
+ * of these is the line in the rules where the number is decided, in words.
+ */
 export const CHANNELS: Record<Channel, { name: string; note: string; lower: boolean }> = {
-  hands: { name: 'Hands', note: 'How long a go takes.', lower: true },
-  learn: { name: 'Learning', note: 'What a go teaches you.', lower: false },
-  wind: { name: 'Wind', note: 'What a go takes out of you.', lower: true },
-  fine: { name: 'Fineness', note: 'The quality of what comes off the bench.', lower: false },
-  edge: { name: 'Edge', note: 'How hard a blow lands.', lower: false },
-  aim: { name: 'Aim', note: 'Whether it lands at all.', lower: false },
-  guard: { name: 'Guard', note: 'How much of what is aimed at you is turned.', lower: false },
-  knit: { name: 'Knitting', note: 'How fast what is open closes.', lower: false },
-  hide: { name: 'Hide', note: 'How much what travels with you can take.', lower: false },
-  fang: { name: 'Fang', note: 'How hard what travels with you bites.', lower: false },
-  tame: { name: 'Quiet', note: 'How readily a wild thing decides about you.', lower: false },
-  force: { name: 'Force', note: 'What a spell does when it arrives.', lower: false },
-  reach: { name: 'Reach', note: 'How far it carries before it stops being yours.', lower: false },
-  thrift: { name: 'Thrift', note: 'How little of the stone one cast takes.', lower: true },
+  hands: { name: 'Hands', note: 'Time per action', lower: true },
+  learn: { name: 'Learning', note: 'Skill gained per action', lower: false },
+  wind: { name: 'Wind', note: 'Stamina per action', lower: true },
+  fine: { name: 'Fineness', note: 'Quality of what you make', lower: false },
+  edge: { name: 'Edge', note: 'Damage per hit', lower: false },
+  aim: { name: 'Aim', note: 'Chance to hit', lower: false },
+  guard: { name: 'Guard', note: 'Damage stopped by shield and armour', lower: false },
+  knit: { name: 'Knitting', note: 'Wound healing speed', lower: false },
+  hide: { name: 'Hide', note: 'Maximum health of creatures you keep', lower: false },
+  fang: { name: 'Fang', note: 'Damage dealt by creatures you keep', lower: false },
+  tame: { name: 'Quiet', note: 'Chance to tame', lower: false },
+  force: { name: 'Force', note: 'Spell damage, hold and skin', lower: false },
+  reach: { name: 'Reach', note: 'Spell range', lower: false },
+  thrift: { name: 'Thrift', note: 'Stone wear per cast', lower: true },
 };
 
 /** A column of three: two minor, then the major that wants them both. */
@@ -349,7 +357,6 @@ export interface Column {
   /** The major at the top of the column, which has a name of its own. */
   major: string;
   channel: Channel;
-  note: string;
 }
 
 export interface NodeDef {
@@ -402,6 +409,27 @@ const STEP: Record<Channel, readonly [number, number, number]> = {
   reach: [1.05, 1.06, 1.15],
   thrift: [0.97, 0.96, 0.90],
 };
+/**
+ * A multiplier said as the change it makes, which is what a card shows.
+ *
+ * The change to the number, and nothing about whether the change is welcome:
+ * `0.97` is "−3%" and `1.04` is "+4%". Which of those is good is the
+ * channel's own business -- less time per action and less stone per cast are
+ * both wanted -- and a rite may push one of its channels the wrong way on
+ * purpose, so the sign comes off the multiplier rather than off the channel.
+ *
+ * Derived from the number itself rather than written beside it, so the two can
+ * never come apart.
+ */
+export const channelSays = (mul: number): string => {
+  const pct = Math.round((mul - 1) * 100);
+  return `${pct < 0 ? '\u2212' : '+'}${Math.abs(pct)}%`;
+};
+
+/** What a whole column of three comes to, which is what a trade is worth fully bought. */
+export const channelFull = (channel: Channel): number =>
+  STEP[channel][0] * STEP[channel][1] * STEP[channel][2];
+
 
 /** Nothing at all below this, so the first point is earned rather than given. */
 export const CLASS_POINT_FLOOR = 40;
@@ -429,74 +457,74 @@ const ROMAN = ['I', 'II'];
 /** The three columns of every craft trade, in the order they are drawn. */
 const CRAFT_COLUMNS: Record<string, [Column, Column, Column]> = {
   terraformer: [
-    { name: 'Spadework', major: 'Ditcher', channel: 'hands', note: 'The spade goes in and comes up without thinking about it.' },
-    { name: 'Back', major: 'Tireless', channel: 'wind', note: 'A day of moving ground costs you less of one.' },
-    { name: 'Eye for a Level', major: 'Surveyor', channel: 'learn', note: 'You read what the ground is doing while you change it.' },
+    { name: 'Spadework', major: 'Ditcher', channel: 'hands' },
+    { name: 'Back', major: 'Tireless', channel: 'wind' },
+    { name: 'Eye for a Level', major: 'Surveyor', channel: 'learn' },
   ],
   miner: [
-    { name: 'Swing', major: 'Facewright', channel: 'hands', note: 'The pick finds the seam rather than the rock beside it.' },
-    { name: 'Lungs', major: 'Deep Breath', channel: 'wind', note: 'Bad air and long shifts trouble you less.' },
-    { name: 'Ear for Rock', major: 'Dowser', channel: 'learn', note: 'You hear what is behind a face before you open it.' },
+    { name: 'Swing', major: 'Facewright', channel: 'hands' },
+    { name: 'Lungs', major: 'Deep Breath', channel: 'wind' },
+    { name: 'Ear for Rock', major: 'Dowser', channel: 'learn' },
   ],
   mason: [
-    { name: 'Chisel', major: 'Straight Cut', channel: 'hands', note: 'Stone parts where you meant it to.' },
-    { name: 'Dressing', major: 'True Face', channel: 'fine', note: 'A block comes off the bench square.' },
-    { name: 'Grain', major: 'Quarryman', channel: 'learn', note: 'You learn a stone by the way it breaks.' },
+    { name: 'Chisel', major: 'Straight Cut', channel: 'hands' },
+    { name: 'Dressing', major: 'True Face', channel: 'fine' },
+    { name: 'Grain', major: 'Quarryman', channel: 'learn' },
   ],
   carpenter: [
-    { name: 'Plane', major: 'Sure Hand', channel: 'hands', note: 'Less measuring, fewer passes.' },
-    { name: 'Joinery', major: 'Dovetail', channel: 'fine', note: 'What you fit together stays fitted.' },
-    { name: 'Grain', major: 'Woodwise', channel: 'learn', note: 'Every board teaches you the next one.' },
+    { name: 'Plane', major: 'Sure Hand', channel: 'hands' },
+    { name: 'Joinery', major: 'Dovetail', channel: 'fine' },
+    { name: 'Grain', major: 'Woodwise', channel: 'learn' },
   ],
   smith: [
-    { name: 'Hammer', major: 'Quick Heat', channel: 'hands', note: 'The metal is worked before it cools.' },
-    { name: 'Temper', major: 'Watered Steel', channel: 'fine', note: 'The edge holds because you knew when to stop.' },
-    { name: 'Forge Sense', major: 'Mastersmith', channel: 'learn', note: 'Colour, sound and smell, all telling you the same thing.' },
+    { name: 'Hammer', major: 'Quick Heat', channel: 'hands' },
+    { name: 'Temper', major: 'Watered Steel', channel: 'fine' },
+    { name: 'Forge Sense', major: 'Mastersmith', channel: 'learn' },
   ],
   forester: [
-    { name: 'Felling', major: 'Clean Drop', channel: 'hands', note: 'The tree comes down where you said it would.' },
-    { name: 'Stride', major: 'Long Day', channel: 'wind', note: 'A day in the woods is a walk, not a march.' },
-    { name: 'Woodcraft', major: 'Silvanist', channel: 'learn', note: 'You read a stand the way other people read a page.' },
+    { name: 'Felling', major: 'Clean Drop', channel: 'hands' },
+    { name: 'Stride', major: 'Long Day', channel: 'wind' },
+    { name: 'Woodcraft', major: 'Silvanist', channel: 'learn' },
   ],
   farmer: [
-    { name: 'Rhythm', major: 'Broad Sweep', channel: 'hands', note: 'Sowing and reaping fall into a pace that does not break.' },
-    { name: 'Stoop', major: 'Strong Back', channel: 'wind', note: 'Bent double all day and still standing at the end of it.' },
-    { name: 'Weather Eye', major: 'Husbandman', channel: 'learn', note: 'The field tells you what it wants and you hear it.' },
+    { name: 'Rhythm', major: 'Broad Sweep', channel: 'hands' },
+    { name: 'Stoop', major: 'Strong Back', channel: 'wind' },
+    { name: 'Weather Eye', major: 'Husbandman', channel: 'learn' },
   ],
   cook: [
-    { name: 'Knife', major: 'Quick Prep', channel: 'hands', note: 'Everything is ready before the pot is hot.' },
-    { name: 'Palate', major: 'Feast', channel: 'fine', note: 'You taste what is missing and put it in.' },
-    { name: 'Recipe Sense', major: 'Kitchenwise', channel: 'learn', note: 'One good dish teaches you three more.' },
+    { name: 'Knife', major: 'Quick Prep', channel: 'hands' },
+    { name: 'Palate', major: 'Feast', channel: 'fine' },
+    { name: 'Recipe Sense', major: 'Kitchenwise', channel: 'learn' },
   ],
   tailor: [
-    { name: 'Needle', major: 'Running Stitch', channel: 'hands', note: 'The seam goes down in one pass.' },
-    { name: 'Cut', major: 'Fitted', channel: 'fine', note: 'Cloth falls the way it was meant to.' },
-    { name: 'Cloth Sense', major: 'Draper', channel: 'learn', note: 'You know a weave by feel and what it will take.' },
+    { name: 'Needle', major: 'Running Stitch', channel: 'hands' },
+    { name: 'Cut', major: 'Fitted', channel: 'fine' },
+    { name: 'Cloth Sense', major: 'Draper', channel: 'learn' },
   ],
   herdsman: [
-    { name: 'Handling', major: 'Quiet Voice', channel: 'hands', note: 'Beasts do what you ask the first time.' },
-    { name: 'Stockman’s Eye', major: 'Bloodline', channel: 'learn', note: 'You see what a beast will become while it is still small.' },
-    { name: 'Patience', major: 'All Day', channel: 'wind', note: 'Waiting on an animal costs you nothing.' },
+    { name: 'Handling', major: 'Quiet Voice', channel: 'hands' },
+    { name: 'Stockman’s Eye', major: 'Bloodline', channel: 'learn' },
+    { name: 'Patience', major: 'All Day', channel: 'wind' },
   ],
   naturalist: [
-    { name: 'Gathering', major: 'Full Basket', channel: 'hands', note: 'Your hands are on it before your eyes have finished.' },
-    { name: 'Herb Lore', major: 'Apothecary', channel: 'learn', note: 'Every leaf you pick tells you about the next.' },
-    { name: 'Wandering', major: 'Far Walk', channel: 'wind', note: 'A day off the path takes nothing out of you.' },
+    { name: 'Gathering', major: 'Full Basket', channel: 'hands' },
+    { name: 'Herb Lore', major: 'Apothecary', channel: 'learn' },
+    { name: 'Wandering', major: 'Far Walk', channel: 'wind' },
   ],
   fisher: [
-    { name: 'Cast', major: 'Set the Hook', channel: 'hands', note: 'The line goes where you looked.' },
-    { name: 'Standing', major: 'Sea Legs', channel: 'wind', note: 'Hours in the water and on a deck, and no weight in your legs.' },
-    { name: 'Watercraft', major: 'Reads the Water', channel: 'learn', note: 'You know where they are before you have caught one.' },
+    { name: 'Cast', major: 'Set the Hook', channel: 'hands' },
+    { name: 'Standing', major: 'Sea Legs', channel: 'wind' },
+    { name: 'Watercraft', major: 'Reads the Water', channel: 'learn' },
   ],
   mender: [
-    { name: 'Repair', major: 'Good as New', channel: 'hands', note: 'You find the fault at once instead of looking for it.' },
-    { name: 'Restoration', major: 'Better Than Found', channel: 'fine', note: 'What you mend comes back better than it went.' },
-    { name: 'Wear Sense', major: 'Keeper', channel: 'learn', note: 'You learn a thing by what broke it.' },
+    { name: 'Repair', major: 'Good as New', channel: 'hands' },
+    { name: 'Restoration', major: 'Better Than Found', channel: 'fine' },
+    { name: 'Wear Sense', major: 'Keeper', channel: 'learn' },
   ],
   artisan: [
-    { name: 'Setting', major: 'Sure Claw', channel: 'hands', note: 'The stone seats first time.' },
-    { name: 'Finish', major: 'Jeweller’s Eye', channel: 'fine', note: 'The last tenth of the work, which is most of the worth.' },
-    { name: 'Craft Sense', major: 'Maker', channel: 'learn', note: 'Fine work teaches fast, when you are paying attention.' },
+    { name: 'Setting', major: 'Sure Claw', channel: 'hands' },
+    { name: 'Finish', major: 'Jeweller’s Eye', channel: 'fine' },
+    { name: 'Craft Sense', major: 'Maker', channel: 'learn' },
   ],
 };
 
@@ -511,64 +539,92 @@ const CRAFT_COLUMNS: Record<string, [Column, Column, Column]> = {
  */
 const COMBAT_COLUMNS: Record<string, [Column, Column, Column]> = {
   blade: [
-    { name: 'Shieldwork', major: 'Iron Door', channel: 'guard', note: 'What is aimed at you meets the shield first, and the shield is where you want it.' },
-    { name: 'Edge', major: 'Riposte', channel: 'edge', note: 'The sword goes into the gap the turned blow left open.' },
-    { name: 'Guard’s Eye', major: 'Unhurried', channel: 'aim', note: 'You see the opening a moment before it is one.' },
+    { name: 'Shieldwork', major: 'Iron Door', channel: 'guard' },
+    { name: 'Edge', major: 'Riposte', channel: 'edge' },
+    { name: 'Guard’s Eye', major: 'Unhurried', channel: 'aim' },
   ],
   berserker: [
-    { name: 'Heft', major: 'Whole Body', channel: 'edge', note: 'Everything you swing lands with all of you behind it.' },
-    { name: 'Rhythm', major: 'No Pause', channel: 'hands', note: 'The next blow is already on its way when this one lands.' },
-    { name: 'Lungs', major: 'Long Red Day', channel: 'wind', note: 'A fight that goes on costs you less of one.' },
+    { name: 'Heft', major: 'Whole Body', channel: 'edge' },
+    { name: 'Rhythm', major: 'No Pause', channel: 'hands' },
+    { name: 'Lungs', major: 'Long Red Day', channel: 'wind' },
   ],
   pikeman: [
-    { name: 'Point', major: 'Through the Gap', channel: 'aim', note: 'A long haft finds the seam at the end of it.' },
-    { name: 'Harness', major: 'Anvil', channel: 'guard', note: 'Plate turns what it was beaten out to turn.' },
-    { name: 'Footing', major: 'Set', channel: 'wind', note: 'Standing in all of it, all day, and still standing.' },
+    { name: 'Point', major: 'Through the Gap', channel: 'aim' },
+    { name: 'Harness', major: 'Anvil', channel: 'guard' },
+    { name: 'Footing', major: 'Set', channel: 'wind' },
   ],
   archer: [
-    { name: 'Draw', major: 'Full Weight', channel: 'edge', note: 'The whole weight of the bow goes into the shaft.' },
-    { name: 'Sighting', major: 'Windage', channel: 'aim', note: 'Distance stops being a guess and becomes a number.' },
-    { name: 'Stillness', major: 'Held', channel: 'wind', note: 'A full draw held is a full draw that costs nothing.' },
+    { name: 'Draw', major: 'Full Weight', channel: 'edge' },
+    { name: 'Sighting', major: 'Windage', channel: 'aim' },
+    { name: 'Stillness', major: 'Held', channel: 'wind' },
   ],
   skirmisher: [
-    { name: 'Cast', major: 'Whole Arm', channel: 'edge', note: 'What leaves your hand arrives with everything you put into it.' },
-    { name: 'Eye', major: 'Thousandth Throw', channel: 'aim', note: 'You have thrown at exactly that distance a thousand times.' },
-    { name: 'Footing', major: 'Gone', channel: 'hands', note: 'You are moving again before it has landed.' },
+    { name: 'Cast', major: 'Whole Arm', channel: 'edge' },
+    { name: 'Eye', major: 'Thousandth Throw', channel: 'aim' },
+    { name: 'Footing', major: 'Gone', channel: 'hands' },
   ],
   chirurgeon: [
-    { name: 'Needle', major: 'Closed Over', channel: 'knit', note: 'What you have dressed closes at a pace nothing else matches.' },
-    { name: 'Steady Hand', major: 'Under Fire', channel: 'hands', note: 'Dressing a wound in a fight takes no longer than at a bench.' },
-    { name: 'Apron', major: 'Cloth Enough', channel: 'guard', note: 'What you wear is cloth, and it is enough, because you mend it.' },
+    { name: 'Needle', major: 'Closed Over', channel: 'knit' },
+    { name: 'Steady Hand', major: 'Under Fire', channel: 'hands' },
+    { name: 'Apron', major: 'Cloth Enough', channel: 'guard' },
   ],
   beastmaster: [
-    { name: 'Hide', major: 'Hard to Put Down', channel: 'hide', note: 'What goes with you takes far more killing than its kind should.' },
-    { name: 'Fang', major: 'Twice Its Size', channel: 'fang', note: 'What goes with you bites like something far bigger.' },
-    { name: 'Quiet Word', major: 'Given', channel: 'tame', note: 'A wild thing decides about you sooner than it meant to.' },
+    { name: 'Hide', major: 'Hard to Put Down', channel: 'hide' },
+    { name: 'Fang', major: 'Twice Its Size', channel: 'fang' },
+    { name: 'Quiet Word', major: 'Given', channel: 'tame' },
   ],
 };
 
 /** And the three schools', which are the same three and mean different things. */
 const MAGIC_COLUMNS: Record<string, [Column, Column, Column]> = {
   kindler: [
-    { name: 'Heat', major: 'White', channel: 'force', note: 'What comes out of the stone arrives hotter.' },
-    { name: 'Throw', major: 'Far Coal', channel: 'reach', note: 'You can put it further away than you can see it land.' },
-    { name: 'Sparing', major: 'Last Ember', channel: 'thrift', note: 'A stone goes further in your hand than in anybody else’s.' },
+    { name: 'Heat', major: 'White', channel: 'force' },
+    { name: 'Throw', major: 'Far Coal', channel: 'reach' },
+    { name: 'Sparing', major: 'Last Ember', channel: 'thrift' },
   ],
   binder: [
-    { name: 'Hold', major: 'Rooted', channel: 'force', note: 'What you stop stays stopped considerably longer.' },
-    { name: 'Cast', major: 'Wide Still', channel: 'reach', note: 'The stillness carries out past where you are standing.' },
-    { name: 'Sparing', major: 'Cold Water', channel: 'thrift', note: 'The clear stones give up what is in them without complaint.' },
+    { name: 'Hold', major: 'Rooted', channel: 'force' },
+    { name: 'Cast', major: 'Wide Still', channel: 'reach' },
+    { name: 'Sparing', major: 'Cold Water', channel: 'thrift' },
   ],
   warder: [
-    { name: 'Weave', major: 'Close Skin', channel: 'force', note: 'The skin takes a great deal more before it goes.' },
-    { name: 'Spread', major: 'Over All', channel: 'reach', note: 'It closes over everybody, not only over you.' },
-    { name: 'Sparing', major: 'Deep Cut', channel: 'thrift', note: 'You take out of a stone exactly what you meant to and no more.' },
+    { name: 'Weave', major: 'Close Skin', channel: 'force' },
+    { name: 'Spread', major: 'Over All', channel: 'reach' },
+    { name: 'Sparing', major: 'Deep Cut', channel: 'thrift' },
   ],
 };
 
 /** Every trade's columns: craft, fighting and arcane alike. */
 export const CLASS_COLUMNS: Record<string, [Column, Column, Column]> =
   { ...CRAFT_COLUMNS, ...COMBAT_COLUMNS, ...MAGIC_COLUMNS };
+
+/** "a, b and c", for a list somebody reads rather than parses. */
+const listed = (xs: readonly string[]): string =>
+  xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+
+const skillWords = (id: string): string => id.replace(/_/g, ' ');
+
+/*
+ * What a trade says about itself, derived rather than written.
+ *
+ * Both lines used to be prose -- "works wood, from a plank to a storey" and
+ * "builds higher, wastes less timber, and the fine joinery comes off the bench
+ * better" -- which is a mood rather than a number, on a card somebody is
+ * reading to decide where five hundred silver goes.
+ *
+ * `note` is the scope: which skills the trade's nodes tell on, and nothing
+ * else decides that. `lever` is what the whole tree is worth bought out, which
+ * is three multiplied columns and so is computed from `STEP` rather than
+ * restated beside it. `rpc_take_class` puts the lever in the line it tells you
+ * when you take the trade up, which is exactly when the number is wanted.
+ */
+for (const c of CLASSES) {
+  const chans = CLASS_COLUMNS[c.id].map((col) => col.channel);
+  c.note = `Nodes apply to ${listed(c.skills.map(skillWords))}.`;
+  c.lever = `Bought out: ${chans
+    .map((ch) => `${CHANNELS[ch].note.toLowerCase()} ${channelSays(channelFull(ch))}`)
+    .join(', ')}.`;
+}
 
 /** Every node there is, built from the columns rather than written out twice. */
 export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
@@ -579,7 +635,14 @@ export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
       class: c.id,
       col: ci + 1,
       name: rank === 3 ? col.major : `${col.name} ${ROMAN[rank - 1]}`,
-      note: col.note,
+      /*
+       * The exact benefit, derived: the one number this channel multiplies,
+       * and what this rank does to it. Written out it was flavour -- "the
+       * spade goes in and comes up without thinking about it" -- repeated on
+       * all three ranks of a column, and it told somebody deciding how to
+       * spend a point precisely nothing.
+       */
+      note: `${CHANNELS[col.channel].note} ${channelSays(mul)}`,
       channel: col.channel,
       rank,
       cost: COST[rank - 1],
@@ -679,71 +742,80 @@ export interface RiteDef {
   note: string;
 }
 
-export const RITES: RiteDef[] = [
+/**
+ * What a rite says it does, from what it does.
+ *
+ * It was a sentence of mood -- "for half a minute the shield is everywhere you
+ * need it" -- sitting beside a `muls` map that says the same thing exactly.
+ * This reads that map out, with the seconds it lasts and the rest before it
+ * may be called again. A rite that trades one channel away for another says so
+ * in the sign, because `channelSays` takes the sign off the multiplier.
+ */
+const riteNote = (r: Omit<RiteDef, 'note'>): string => {
+  const what = Object.entries(r.muls)
+    .map(([ch, mul]) => `${CHANNELS[ch as Channel].note.toLowerCase()} ${channelSays(mul)}`)
+    .join(', ');
+  return `${what[0].toUpperCase()}${what.slice(1)} for ${r.secs}s. `
+    + `${Math.round(r.rest / 60)}m before it may be called again.`;
+};
+
+const rite = (r: Omit<RiteDef, 'note'>): RiteDef => ({ ...r, note: riteNote(r) });
+
+export const RITES: RiteDef[] = ([
   {
     id: 'ward', class: 'blade', name: 'Ward', cost: 20, level: 10, secs: 30, rest: 900,
     muls: { guard: 1.6 },
-    note: 'For half a minute the shield is everywhere you need it.',
     said: 'You set your feet and the shield stops being a thing you are holding.',
   },
   {
     id: 'redhour', class: 'berserker', name: 'Red Hour', cost: 24, level: 12, secs: 30, rest: 1200,
     muls: { edge: 1.5, guard: 0.7 },
-    note: 'Half again on what you land, and three tenths off what you turn. It is not a bargain; it is a decision.',
     said: 'It goes red at the edges, and you stop minding what lands on you.',
   },
   {
     id: 'set', class: 'pikeman', name: 'Set', cost: 20, level: 10, secs: 45, rest: 900,
     muls: { guard: 1.4, aim: 1.15 },
-    note: 'Braced, with the haft down, and nothing coming through.',
     said: 'You set the butt of it in the ground and the line stops where you are.',
   },
   {
     id: 'farsight', class: 'archer', name: 'Farsight', cost: 22, level: 14, secs: 45, rest: 900,
     muls: { aim: 1.3, edge: 1.2 },
-    note: 'Distance stops mattering for as long as it lasts.',
     said: 'The far end of the field comes close enough to touch.',
   },
   {
     id: 'quickhand', class: 'skirmisher', name: 'Quick Hand', cost: 18, level: 8, secs: 30, rest: 720,
     muls: { hands: 0.7 },
-    note: 'Everything you do happens a third quicker, which is most of a fight.',
     said: 'Your hands get ahead of you and you let them.',
   },
   {
     id: 'staunch', class: 'chirurgeon', name: 'Staunch', cost: 26, level: 16, secs: 60, rest: 1200,
     muls: { knit: 3 },
-    note: 'For a minute, what you have dressed closes three times as fast.',
     said: 'You get your hands on it and it begins closing under them.',
   },
   {
     id: 'pack', class: 'beastmaster', name: 'Call the Pack', cost: 28, level: 18, secs: 60, rest: 1200,
     muls: { fang: 1.5, hide: 1.3 },
-    note: 'What travels with you fights like something with nothing to lose.',
     said: 'You say the word and everything that answers to you stops being tame.',
   },
-];
+] as Array<Omit<RiteDef, 'note'>>).map(rite);
 
-RITES.push(
+RITES.push(...([
   {
     id: 'whiteheat', class: 'kindler', name: 'White Heat', cost: 22, level: 12, secs: 30, rest: 900,
     muls: { force: 1.6 },
-    note: 'For half a minute everything out of the stone arrives half again as hot.',
     said: 'The stone goes hot enough to hurt and you hold on to it anyway.',
   },
   {
     id: 'longhold', class: 'binder', name: 'Long Hold', cost: 24, level: 14, secs: 45, rest: 900,
     muls: { force: 1.4, reach: 1.4 },
-    note: 'Everything you stop stays stopped longer, and from further off.',
     said: 'The air goes thick and slow as far out as you can see.',
   },
   {
     id: 'deepstone', class: 'warder', name: 'Deep Stone', cost: 26, level: 16, secs: 60, rest: 1200,
     muls: { thrift: 0.35 },
-    note: 'For a minute a stone gives up what is in it for almost nothing.',
     said: 'You reach further into it than you have any business reaching, and it lets you.',
   },
-);
+] as Array<Omit<RiteDef, 'note'>>).map(rite));
 
 export const riteOf = (classId: string | null): RiteDef | undefined =>
   classId ? RITES.find((r) => r.class === classId) : undefined;
