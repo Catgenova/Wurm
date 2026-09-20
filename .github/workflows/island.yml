@@ -1144,6 +1144,38 @@ jobs:
                  "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
                  -c "$SQL" \
             || echo "::warning::Could not read the island; see the CLI's own help above."
+          # And what rulebook the island is actually holding, which no run has
+          # ever shown either.
+          #
+          # A green "Link and push" says the files applied. It does not say what
+          # is in the tables afterwards, and the difference matters: the
+          # definitions migrations empty the rulebook and fill it again, and the
+          # one failure mode that would be silent is filling a table that was
+          # never emptied. A count that has doubled says so at a glance.
+          #
+          # It is also the only way to see from a run whether the thing that was
+          # just deployed is there. Four deploys in a row failed this afternoon
+          # and the only way to know how far each had got was to read the error.
+          RULES=$(cat <<'EOSQL'
+          select (select count(*) from class_def) as trades,
+                 (select count(*) from class_node) as nodes,
+                 (select count(*) from rite_def) as rites,
+                 (select count(*) from school_def) as schools,
+                 (select count(*) from spell_def) as spells,
+                 (select count(*) from item_def) as things,
+                 (select count(*) from item_def where raw) as raw_mats,
+                 (select count(*) from recipe) as recipes,
+                 (select count(*) from furniture_def) as pieces,
+                 (select coalesce(max(heft)::text, 'none')
+                    from furniture_def where crafted) as craft_bin_kg;
+          EOSQL
+          )
+          supabase db query --linked "$RULES" \
+            || printf '%s\n' "$RULES" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$RULES" \
+            || echo "::warning::Could not read the rulebook. If the tables are missing, the definitions have not landed."
           # And which clocks are actually wound, which no run has ever shown.
           #
           # Both `world-tick` and `stock-tick` are scheduled from a `do` block
