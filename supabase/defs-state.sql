@@ -492,6 +492,7 @@ update item_def set raw = true where id = 'clay';
 insert into item_def values ('peat', 'Peat', 'material', 2, true, null, null);
 update item_def set raw = true where id = 'peat';
 insert into item_def values ('ash', 'Ashes', 'material', 0.3, true, 4, null);
+update item_def set raw = true where id = 'ash';
 insert into item_def values ('tar', 'Tar', 'material', 2, true, null, null);
 update item_def set raw = true where id = 'tar';
 insert into item_def values ('rock_shards', 'Rock shards', 'material', 20, true, 5, null);

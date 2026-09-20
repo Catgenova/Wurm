@@ -4400,10 +4400,16 @@ export class Creatures {
   }
 
   /**
-   * Where a load should go: the settlement's own crate while it has room, and
-   * failing that the nearest other store that will take it. Null means every
-   * place on the deed is full, which is a reason to stop rather than to tip the
-   * load out on the ground.
+   * Where a load should go: a raw material bin for anything raw, then the
+   * settlement's own crate while it has room, then the nearest other store
+   * that will take it. Null means every place on the deed is full, which is a
+   * reason to stop rather than to tip the load out on the ground.
+   *
+   * The bin comes first because that is what it is for. A bin holds four
+   * hundred where a crate holds a fraction of that, it takes nothing a bench
+   * has touched, and a worker that filled the deed crate with ore left nowhere
+   * for the things only a crate will hold. Asked for: "molas should prioritize
+   * storing into raw material bins."
    */
   storeFor(game: Game, c: Creature, item: Item): DeedStore | null {
     // A worker out on a post fills whatever stands beside the post before it
@@ -4412,18 +4418,25 @@ export class Creatures {
     const near = game.postStores(c).filter((s) => s.room(item));
     const stores = near.length ? near : game.deedStores().filter((s) => s.room(item));
     if (!stores.length) return null;
+    const nearest = (of: DeedStore[]): DeedStore | null => {
+      let best: DeedStore | null = null;
+      let bestD = Infinity;
+      for (const s of of) {
+        const d = Math.hypot(s.centre[0] - c.x, s.centre[1] - c.y);
+        if (d < bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      return best;
+    };
+    if (itemDef(item.id).raw) {
+      const bin = nearest(stores.filter((s) => s.raw));
+      if (bin) return bin;
+    }
     const own = near.length ? undefined : stores.find((s) => s.deed);
     if (own) return own;
-    let best = stores[0];
-    let bestD = Infinity;
-    for (const s of stores) {
-      const d = Math.hypot(s.centre[0] - c.x, s.centre[1] - c.y);
-      if (d < bestD) {
-        bestD = d;
-        best = s;
-      }
-    }
-    return best;
+    return nearest(stores) ?? stores[0];
   }
 
   /** The nearest store on the deed holding something this creature will eat. */

@@ -69,6 +69,8 @@ export interface DeedStore {
   name: string;
   /** The settlement's own crate, which a worker fills before any other. */
   deed: boolean;
+  /** A raw material bin, which a worker fills before any other with a raw load. */
+  raw: boolean;
   /** Whether this would take the thing being carried. */
   room(item: Item): boolean;
   add(item: Item): boolean;
@@ -5411,6 +5413,7 @@ export class Game {
       items: c.items,
       name: crateName(c),
       deed: !!c.deed,
+      raw: false,
       room: (item) => crateUnits(c) + item.count <= cap,
       add: (item) => this.crateAdd(c, item),
       changed: () => this.events.emit('crate'),
@@ -5428,6 +5431,7 @@ export class Game {
       items: f.items,
       name: def.name,
       deed: false,
+      raw: !!def.raw,
       room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= furnitureCapacity(f),
       add: (item) => this.furnitureAdd(f, item),
       changed: () => this.events.emit('crate'),

@@ -918,6 +918,18 @@ jobs:
             --outfile=node_modules/.cache/dawn.mjs --log-level=error
           node node_modules/.cache/dawn.mjs
 
+      - name: One pile and not six
+        run: |
+          # Reported off a screenshot of a pack holding six separate piles of
+          # cotton seeds. `give` had always folded a harvest into a matching
+          # stack; the eight statements that *move* a row into a pack folded
+          # nothing, so every one of them started a rival pile. One rule now,
+          # `stack_key`, with `sameStack` in the browser saying the same thing
+          # — which this asks pair by pair rather than trusting.
+          npx esbuild supabase/test/pile.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pile.mjs --log-level=error
+          node node_modules/.cache/pile.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

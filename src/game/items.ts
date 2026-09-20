@@ -145,7 +145,10 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     description: 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' },
   clay: { name: 'Clay', category: 'material', weight: 20, stackable: true, raw: true },
   peat: { name: 'Peat', category: 'material', weight: 2, stackable: true, raw: true },
-  ash: { name: 'Ashes', category: 'material', weight: 0.3, stackable: true, decay: 4, description: 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' },
+  // Raked out of a fire, and nothing a bench has touched — which is the whole
+  // of the test. A raw material bin refused it until now, so the one thing a
+  // furnace produces by the cartload had nowhere bulk to go.
+  ash: { name: 'Ashes', category: 'material', weight: 0.3, stackable: true, raw: true, decay: 4, description: 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' },
   tar: { name: 'Tar', category: 'material', weight: 2, stackable: true, raw: true },
   rock_shards: { name: 'Rock shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5, description: 'Chunks of rock. Paves gravel, builds cobblestone walls or becomes bricks.' },
   slate_shards: { name: 'Slate shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5 },
@@ -660,16 +663,45 @@ export function bagRefuses(bag: Item, item: Item): string | null {
   return null;
 }
 
+/**
+ * Whether two things may share a stack.
+ *
+ * Everything that shows in the name or changes what the thing *is* has to
+ * match, because a stack has one of each: one quality, one damage, one maker's
+ * mark. What is left over is quality and damage, and those average by the
+ * unit — a stack is worth what is in it.
+ *
+ * A locked thing stacks with nothing. Locking is how somebody says *this one,
+ * not the next one the game reaches for*, and folding it into a pile would
+ * throw that away the moment it was set.
+ *
+ * `pack_stacks` on the island is this sentence in SQL and the two are asked to
+ * agree in the suite. A difference between them is a stack that merges on one
+ * side and splits on the other.
+ */
+export function sameStack(a: Item, b: Item): boolean {
+  if (!ITEM_DEFS[a.id]?.stackable) return false;
+  return a.id === b.id && !a.locked && !b.locked && !a.lit && !b.lit
+    && a.extra === b.extra && a.rare === b.rare && a.dye === b.dye
+    && a.bless === b.bless && a.maker === b.maker && a.piece === b.piece
+    && !!a.issued === !!b.issued && a.charges === b.charges;
+}
+
+/** Fold one thing into another, both quality and damage by the unit. */
+export function foldInto(stack: Item, item: Item): void {
+  const units = stack.count + item.count;
+  stack.ql = (stack.ql * stack.count + item.ql * item.count) / units;
+  stack.dmg = (stack.dmg * stack.count + item.dmg * item.count) / units;
+  stack.count = units;
+}
+
 /** Put something in a bag, stacking with what is already in it where it will. */
 export function bagAdd(bag: Item, item: Item): boolean {
   if (bagRefuses(bag, item)) return false;
   if (!bag.inside) bag.inside = [];
-  const def = ITEM_DEFS[item.id];
-  const stack = def?.stackable ? bag.inside.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye && it.piece === item.piece) : undefined;
-  if (stack) {
-    stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
-    stack.count += item.count;
-  } else bag.inside.push(item);
+  const stack = bag.inside.find((it) => sameStack(it, item));
+  if (stack) foldInto(stack, item);
+  else bag.inside.push(item);
   return true;
 }
 
@@ -753,16 +785,12 @@ export class Inventory {
 
   /** Put an existing item into the inventory, merging it into a matching stack. */
   addItem(item: Item): Item {
-    const def = itemDef(item.id);
     if (item.uid >= this.nextUid) this.nextUid = item.uid + 1;
-    if (def.stackable) {
-      const existing = this.items.find((it) => it.id === item.id && it.extra === item.extra && it.rare === item.rare && it.dye === item.dye && it.piece === item.piece && it.uid !== item.uid);
-      if (existing) {
-        existing.ql = (existing.ql * existing.count + item.ql * item.count) / (existing.count + item.count);
-        existing.count += item.count;
-        this.onChange?.();
-        return existing;
-      }
+    const existing = this.items.find((it) => it.uid !== item.uid && sameStack(it, item));
+    if (existing) {
+      foldInto(existing, item);
+      this.onChange?.();
+      return existing;
     }
     this.items.push(item);
     this.onChange?.();
