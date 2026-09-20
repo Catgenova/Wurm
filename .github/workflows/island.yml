@@ -954,6 +954,21 @@ jobs:
             --outfile=node_modules/.cache/craft.mjs --log-level=error
           node node_modules/.cache/craft.mjs
 
+      - name: Nine nodes to a trade
+        run: |
+          # Three columns of three per trade, two points at fifty and twelve at
+          # a hundred — so twelve buys two whole columns and two over, never
+          # all three. Both sides are asked for the 126 nodes field for field
+          # and for all four refusal sentences, and then each of the four
+          # channels is measured at the site that reads it: skill_mult,
+          # spend_wind, act_duration, and a bench and a mend with the roll
+          # taken out, so the ratio that comes back is the node and nothing
+          # else. A channel nothing is wired to is nine dead nodes the browser
+          # cannot see, so that is counted too.
+          npx esbuild supabase/test/tree.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/tree.mjs --log-level=error
+          node node_modules/.cache/tree.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

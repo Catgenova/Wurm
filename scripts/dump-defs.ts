@@ -59,7 +59,10 @@ import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
-import { CRAFT_CLASSES, CLASS_AT, CLASS_CHANGE_COST } from '../src/game/classes';
+import {
+  CRAFT_CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS,
+  CLASS_POINT_FLOOR, CLASS_POINT_STEP,
+} from '../src/game/classes';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
 import { DYEABLE_ITEMS } from '../src/game/dyes';
@@ -411,6 +414,26 @@ out.push(`create table if not exists class_def (
 out.push(`create table if not exists class_skill (
   class text not null, skill text not null, primary key (class, skill)
 );`);
+/*
+ * And the trees. Nine nodes to a trade, in three columns of three: two minor
+ * at a point each and a major over them at three, which wants the minor under
+ * it first. `needs` is that, and it is the whole of the shape -- there is no
+ * second kind of edge and nothing crosses between columns.
+ *
+ * `channel` is one of four things a node moves and `mul` is what it multiplies
+ * it by, so a fold is a product and nothing here needs a rule of its own.
+ * `downward` says which way that channel's numbers run, because a tenth off
+ * the time a job takes and a tenth on what it teaches are both good news and
+ * a panel that does not know which is which draws one of them red.
+ */
+out.push(`create table if not exists class_channel (
+  id text primary key, name text not null, note text not null, downward boolean not null
+);`);
+out.push(`create table if not exists class_node (
+  id text primary key, class text not null, col int not null, rank int not null,
+  name text not null, note text not null, channel text not null,
+  cost int not null, needs text, mul double precision not null
+);`);
 out.push(`create table if not exists path_def (
   id text primary key, name text not null, note text not null
 );`);
@@ -760,7 +783,7 @@ out.push(`truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, f
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill,
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
 
 /*
@@ -1071,6 +1094,8 @@ for (const [fn, v] of [
   ['wall_height', WALL_HEIGHT],
   /* What a trade asks before its card is on the table, and what changing one costs. */
   ['class_at', CLASS_AT], ['class_change_cost', CLASS_CHANGE_COST],
+  /* And what a trade is worth in points: nothing under forty, one more every five. */
+  ['class_point_floor', CLASS_POINT_FLOOR], ['class_point_step', CLASS_POINT_STEP],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
@@ -1286,6 +1311,13 @@ for (const c of CRAFT_CLASSES) {
   out.push(`insert into class_def values (` + [q(c.id), q(c.kind), q(c.name), q(c.note),
     q(c.main), q(c.lever)].join(', ') + `);`);
   for (const skill of c.skills) out.push(`insert into class_skill values (${q(c.id)}, ${q(skill)});`);
+}
+for (const [id, ch] of Object.entries(CLASS_CHANNELS)) {
+  out.push(`insert into class_channel values (${q(id)}, ${q(ch.name)}, ${q(ch.note)}, ${q(ch.lower)});`);
+}
+for (const n of CLASS_NODES) {
+  out.push(`insert into class_node values (` + [q(n.id), q(n.class), q(n.col),
+    q(n.rank), q(n.name), q(n.note), q(n.channel), q(n.cost), q(n.needs), q(n.mul)].join(', ') + `);`);
 }
 for (const path of PATH_LIST) {
   out.push(`insert into path_def values (${q(path.id)}, ${q(path.name)}, ${q(path.note)});`);

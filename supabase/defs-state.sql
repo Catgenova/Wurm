@@ -196,6 +196,14 @@ create table if not exists class_def (
 create table if not exists class_skill (
   class text not null, skill text not null, primary key (class, skill)
 );
+create table if not exists class_channel (
+  id text primary key, name text not null, note text not null, downward boolean not null
+);
+create table if not exists class_node (
+  id text primary key, class text not null, col int not null, rank int not null,
+  name text not null, note text not null, channel text not null,
+  cost int not null, needs text, mul double precision not null
+);
 create table if not exists path_def (
   id text primary key, name text not null, note text not null
 );
@@ -1402,7 +1410,7 @@ truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_d
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill,
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill, class_channel, class_node,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;
 create table if not exists look_option (
   kind text not null, id text not null, ord int not null, name text not null,
@@ -3560,6 +3568,8 @@ create or replace function indoors_rest() returns double precision language sql 
 create or replace function wall_height() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function class_at() returns double precision language sql immutable as $fn$ select 50::double precision $fn$;
 create or replace function class_change_cost() returns double precision language sql immutable as $fn$ select 500::double precision $fn$;
+create or replace function class_point_floor() returns double precision language sql immutable as $fn$ select 40::double precision $fn$;
+create or replace function class_point_step() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function craft_head() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function smith_gain() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function brew_gain() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
@@ -4012,6 +4022,136 @@ insert into class_def values ('artisan', 'craft', 'Artisan', 'The fine work. A s
 insert into class_skill values ('artisan', 'jewellery');
 insert into class_skill values ('artisan', 'pottery');
 insert into class_skill values ('artisan', 'papyrusmaking');
+insert into class_channel values ('hands', 'Hands', 'How long a go takes.', true);
+insert into class_channel values ('learn', 'Learning', 'What a go teaches you.', false);
+insert into class_channel values ('wind', 'Wind', 'What a go takes out of you.', true);
+insert into class_channel values ('fine', 'Fineness', 'The quality of what comes off the bench.', false);
+insert into class_node values ('terraformer_1_1', 'terraformer', 1, 1, 'Spadework I', 'The spade goes in and comes up without thinking about it.', 'hands', 1, null, 0.97);
+insert into class_node values ('terraformer_1_2', 'terraformer', 1, 2, 'Spadework II', 'The spade goes in and comes up without thinking about it.', 'hands', 1, 'terraformer_1_1', 0.96);
+insert into class_node values ('terraformer_1_3', 'terraformer', 1, 3, 'Ditcher', 'The spade goes in and comes up without thinking about it.', 'hands', 3, 'terraformer_1_2', 0.9);
+insert into class_node values ('terraformer_2_1', 'terraformer', 2, 1, 'Back I', 'A day of moving ground costs you less of one.', 'wind', 1, null, 0.97);
+insert into class_node values ('terraformer_2_2', 'terraformer', 2, 2, 'Back II', 'A day of moving ground costs you less of one.', 'wind', 1, 'terraformer_2_1', 0.96);
+insert into class_node values ('terraformer_2_3', 'terraformer', 2, 3, 'Tireless', 'A day of moving ground costs you less of one.', 'wind', 3, 'terraformer_2_2', 0.9);
+insert into class_node values ('terraformer_3_1', 'terraformer', 3, 1, 'Eye for a Level I', 'You read what the ground is doing while you change it.', 'learn', 1, null, 1.03);
+insert into class_node values ('terraformer_3_2', 'terraformer', 3, 2, 'Eye for a Level II', 'You read what the ground is doing while you change it.', 'learn', 1, 'terraformer_3_1', 1.04);
+insert into class_node values ('terraformer_3_3', 'terraformer', 3, 3, 'Surveyor', 'You read what the ground is doing while you change it.', 'learn', 3, 'terraformer_3_2', 1.1);
+insert into class_node values ('miner_1_1', 'miner', 1, 1, 'Swing I', 'The pick finds the seam rather than the rock beside it.', 'hands', 1, null, 0.97);
+insert into class_node values ('miner_1_2', 'miner', 1, 2, 'Swing II', 'The pick finds the seam rather than the rock beside it.', 'hands', 1, 'miner_1_1', 0.96);
+insert into class_node values ('miner_1_3', 'miner', 1, 3, 'Facewright', 'The pick finds the seam rather than the rock beside it.', 'hands', 3, 'miner_1_2', 0.9);
+insert into class_node values ('miner_2_1', 'miner', 2, 1, 'Lungs I', 'Bad air and long shifts trouble you less.', 'wind', 1, null, 0.97);
+insert into class_node values ('miner_2_2', 'miner', 2, 2, 'Lungs II', 'Bad air and long shifts trouble you less.', 'wind', 1, 'miner_2_1', 0.96);
+insert into class_node values ('miner_2_3', 'miner', 2, 3, 'Deep Breath', 'Bad air and long shifts trouble you less.', 'wind', 3, 'miner_2_2', 0.9);
+insert into class_node values ('miner_3_1', 'miner', 3, 1, 'Ear for Rock I', 'You hear what is behind a face before you open it.', 'learn', 1, null, 1.03);
+insert into class_node values ('miner_3_2', 'miner', 3, 2, 'Ear for Rock II', 'You hear what is behind a face before you open it.', 'learn', 1, 'miner_3_1', 1.04);
+insert into class_node values ('miner_3_3', 'miner', 3, 3, 'Dowser', 'You hear what is behind a face before you open it.', 'learn', 3, 'miner_3_2', 1.1);
+insert into class_node values ('mason_1_1', 'mason', 1, 1, 'Chisel I', 'Stone parts where you meant it to.', 'hands', 1, null, 0.97);
+insert into class_node values ('mason_1_2', 'mason', 1, 2, 'Chisel II', 'Stone parts where you meant it to.', 'hands', 1, 'mason_1_1', 0.96);
+insert into class_node values ('mason_1_3', 'mason', 1, 3, 'Straight Cut', 'Stone parts where you meant it to.', 'hands', 3, 'mason_1_2', 0.9);
+insert into class_node values ('mason_2_1', 'mason', 2, 1, 'Dressing I', 'A block comes off the bench square.', 'fine', 1, null, 1.02);
+insert into class_node values ('mason_2_2', 'mason', 2, 2, 'Dressing II', 'A block comes off the bench square.', 'fine', 1, 'mason_2_1', 1.03);
+insert into class_node values ('mason_2_3', 'mason', 2, 3, 'True Face', 'A block comes off the bench square.', 'fine', 3, 'mason_2_2', 1.06);
+insert into class_node values ('mason_3_1', 'mason', 3, 1, 'Grain I', 'You learn a stone by the way it breaks.', 'learn', 1, null, 1.03);
+insert into class_node values ('mason_3_2', 'mason', 3, 2, 'Grain II', 'You learn a stone by the way it breaks.', 'learn', 1, 'mason_3_1', 1.04);
+insert into class_node values ('mason_3_3', 'mason', 3, 3, 'Quarryman', 'You learn a stone by the way it breaks.', 'learn', 3, 'mason_3_2', 1.1);
+insert into class_node values ('carpenter_1_1', 'carpenter', 1, 1, 'Plane I', 'Less measuring, fewer passes.', 'hands', 1, null, 0.97);
+insert into class_node values ('carpenter_1_2', 'carpenter', 1, 2, 'Plane II', 'Less measuring, fewer passes.', 'hands', 1, 'carpenter_1_1', 0.96);
+insert into class_node values ('carpenter_1_3', 'carpenter', 1, 3, 'Sure Hand', 'Less measuring, fewer passes.', 'hands', 3, 'carpenter_1_2', 0.9);
+insert into class_node values ('carpenter_2_1', 'carpenter', 2, 1, 'Joinery I', 'What you fit together stays fitted.', 'fine', 1, null, 1.02);
+insert into class_node values ('carpenter_2_2', 'carpenter', 2, 2, 'Joinery II', 'What you fit together stays fitted.', 'fine', 1, 'carpenter_2_1', 1.03);
+insert into class_node values ('carpenter_2_3', 'carpenter', 2, 3, 'Dovetail', 'What you fit together stays fitted.', 'fine', 3, 'carpenter_2_2', 1.06);
+insert into class_node values ('carpenter_3_1', 'carpenter', 3, 1, 'Grain I', 'Every board teaches you the next one.', 'learn', 1, null, 1.03);
+insert into class_node values ('carpenter_3_2', 'carpenter', 3, 2, 'Grain II', 'Every board teaches you the next one.', 'learn', 1, 'carpenter_3_1', 1.04);
+insert into class_node values ('carpenter_3_3', 'carpenter', 3, 3, 'Woodwise', 'Every board teaches you the next one.', 'learn', 3, 'carpenter_3_2', 1.1);
+insert into class_node values ('smith_1_1', 'smith', 1, 1, 'Hammer I', 'The metal is worked before it cools.', 'hands', 1, null, 0.97);
+insert into class_node values ('smith_1_2', 'smith', 1, 2, 'Hammer II', 'The metal is worked before it cools.', 'hands', 1, 'smith_1_1', 0.96);
+insert into class_node values ('smith_1_3', 'smith', 1, 3, 'Quick Heat', 'The metal is worked before it cools.', 'hands', 3, 'smith_1_2', 0.9);
+insert into class_node values ('smith_2_1', 'smith', 2, 1, 'Temper I', 'The edge holds because you knew when to stop.', 'fine', 1, null, 1.02);
+insert into class_node values ('smith_2_2', 'smith', 2, 2, 'Temper II', 'The edge holds because you knew when to stop.', 'fine', 1, 'smith_2_1', 1.03);
+insert into class_node values ('smith_2_3', 'smith', 2, 3, 'Watered Steel', 'The edge holds because you knew when to stop.', 'fine', 3, 'smith_2_2', 1.06);
+insert into class_node values ('smith_3_1', 'smith', 3, 1, 'Forge Sense I', 'Colour, sound and smell, all telling you the same thing.', 'learn', 1, null, 1.03);
+insert into class_node values ('smith_3_2', 'smith', 3, 2, 'Forge Sense II', 'Colour, sound and smell, all telling you the same thing.', 'learn', 1, 'smith_3_1', 1.04);
+insert into class_node values ('smith_3_3', 'smith', 3, 3, 'Mastersmith', 'Colour, sound and smell, all telling you the same thing.', 'learn', 3, 'smith_3_2', 1.1);
+insert into class_node values ('forester_1_1', 'forester', 1, 1, 'Felling I', 'The tree comes down where you said it would.', 'hands', 1, null, 0.97);
+insert into class_node values ('forester_1_2', 'forester', 1, 2, 'Felling II', 'The tree comes down where you said it would.', 'hands', 1, 'forester_1_1', 0.96);
+insert into class_node values ('forester_1_3', 'forester', 1, 3, 'Clean Drop', 'The tree comes down where you said it would.', 'hands', 3, 'forester_1_2', 0.9);
+insert into class_node values ('forester_2_1', 'forester', 2, 1, 'Stride I', 'A day in the woods is a walk, not a march.', 'wind', 1, null, 0.97);
+insert into class_node values ('forester_2_2', 'forester', 2, 2, 'Stride II', 'A day in the woods is a walk, not a march.', 'wind', 1, 'forester_2_1', 0.96);
+insert into class_node values ('forester_2_3', 'forester', 2, 3, 'Long Day', 'A day in the woods is a walk, not a march.', 'wind', 3, 'forester_2_2', 0.9);
+insert into class_node values ('forester_3_1', 'forester', 3, 1, 'Woodcraft I', 'You read a stand the way other people read a page.', 'learn', 1, null, 1.03);
+insert into class_node values ('forester_3_2', 'forester', 3, 2, 'Woodcraft II', 'You read a stand the way other people read a page.', 'learn', 1, 'forester_3_1', 1.04);
+insert into class_node values ('forester_3_3', 'forester', 3, 3, 'Silvanist', 'You read a stand the way other people read a page.', 'learn', 3, 'forester_3_2', 1.1);
+insert into class_node values ('farmer_1_1', 'farmer', 1, 1, 'Rhythm I', 'Sowing and reaping fall into a pace that does not break.', 'hands', 1, null, 0.97);
+insert into class_node values ('farmer_1_2', 'farmer', 1, 2, 'Rhythm II', 'Sowing and reaping fall into a pace that does not break.', 'hands', 1, 'farmer_1_1', 0.96);
+insert into class_node values ('farmer_1_3', 'farmer', 1, 3, 'Broad Sweep', 'Sowing and reaping fall into a pace that does not break.', 'hands', 3, 'farmer_1_2', 0.9);
+insert into class_node values ('farmer_2_1', 'farmer', 2, 1, 'Stoop I', 'Bent double all day and still standing at the end of it.', 'wind', 1, null, 0.97);
+insert into class_node values ('farmer_2_2', 'farmer', 2, 2, 'Stoop II', 'Bent double all day and still standing at the end of it.', 'wind', 1, 'farmer_2_1', 0.96);
+insert into class_node values ('farmer_2_3', 'farmer', 2, 3, 'Strong Back', 'Bent double all day and still standing at the end of it.', 'wind', 3, 'farmer_2_2', 0.9);
+insert into class_node values ('farmer_3_1', 'farmer', 3, 1, 'Weather Eye I', 'The field tells you what it wants and you hear it.', 'learn', 1, null, 1.03);
+insert into class_node values ('farmer_3_2', 'farmer', 3, 2, 'Weather Eye II', 'The field tells you what it wants and you hear it.', 'learn', 1, 'farmer_3_1', 1.04);
+insert into class_node values ('farmer_3_3', 'farmer', 3, 3, 'Husbandman', 'The field tells you what it wants and you hear it.', 'learn', 3, 'farmer_3_2', 1.1);
+insert into class_node values ('cook_1_1', 'cook', 1, 1, 'Knife I', 'Everything is ready before the pot is hot.', 'hands', 1, null, 0.97);
+insert into class_node values ('cook_1_2', 'cook', 1, 2, 'Knife II', 'Everything is ready before the pot is hot.', 'hands', 1, 'cook_1_1', 0.96);
+insert into class_node values ('cook_1_3', 'cook', 1, 3, 'Quick Prep', 'Everything is ready before the pot is hot.', 'hands', 3, 'cook_1_2', 0.9);
+insert into class_node values ('cook_2_1', 'cook', 2, 1, 'Palate I', 'You taste what is missing and put it in.', 'fine', 1, null, 1.02);
+insert into class_node values ('cook_2_2', 'cook', 2, 2, 'Palate II', 'You taste what is missing and put it in.', 'fine', 1, 'cook_2_1', 1.03);
+insert into class_node values ('cook_2_3', 'cook', 2, 3, 'Feast', 'You taste what is missing and put it in.', 'fine', 3, 'cook_2_2', 1.06);
+insert into class_node values ('cook_3_1', 'cook', 3, 1, 'Recipe Sense I', 'One good dish teaches you three more.', 'learn', 1, null, 1.03);
+insert into class_node values ('cook_3_2', 'cook', 3, 2, 'Recipe Sense II', 'One good dish teaches you three more.', 'learn', 1, 'cook_3_1', 1.04);
+insert into class_node values ('cook_3_3', 'cook', 3, 3, 'Kitchenwise', 'One good dish teaches you three more.', 'learn', 3, 'cook_3_2', 1.1);
+insert into class_node values ('tailor_1_1', 'tailor', 1, 1, 'Needle I', 'The seam goes down in one pass.', 'hands', 1, null, 0.97);
+insert into class_node values ('tailor_1_2', 'tailor', 1, 2, 'Needle II', 'The seam goes down in one pass.', 'hands', 1, 'tailor_1_1', 0.96);
+insert into class_node values ('tailor_1_3', 'tailor', 1, 3, 'Running Stitch', 'The seam goes down in one pass.', 'hands', 3, 'tailor_1_2', 0.9);
+insert into class_node values ('tailor_2_1', 'tailor', 2, 1, 'Cut I', 'Cloth falls the way it was meant to.', 'fine', 1, null, 1.02);
+insert into class_node values ('tailor_2_2', 'tailor', 2, 2, 'Cut II', 'Cloth falls the way it was meant to.', 'fine', 1, 'tailor_2_1', 1.03);
+insert into class_node values ('tailor_2_3', 'tailor', 2, 3, 'Fitted', 'Cloth falls the way it was meant to.', 'fine', 3, 'tailor_2_2', 1.06);
+insert into class_node values ('tailor_3_1', 'tailor', 3, 1, 'Cloth Sense I', 'You know a weave by feel and what it will take.', 'learn', 1, null, 1.03);
+insert into class_node values ('tailor_3_2', 'tailor', 3, 2, 'Cloth Sense II', 'You know a weave by feel and what it will take.', 'learn', 1, 'tailor_3_1', 1.04);
+insert into class_node values ('tailor_3_3', 'tailor', 3, 3, 'Draper', 'You know a weave by feel and what it will take.', 'learn', 3, 'tailor_3_2', 1.1);
+insert into class_node values ('herdsman_1_1', 'herdsman', 1, 1, 'Handling I', 'Beasts do what you ask the first time.', 'hands', 1, null, 0.97);
+insert into class_node values ('herdsman_1_2', 'herdsman', 1, 2, 'Handling II', 'Beasts do what you ask the first time.', 'hands', 1, 'herdsman_1_1', 0.96);
+insert into class_node values ('herdsman_1_3', 'herdsman', 1, 3, 'Quiet Voice', 'Beasts do what you ask the first time.', 'hands', 3, 'herdsman_1_2', 0.9);
+insert into class_node values ('herdsman_2_1', 'herdsman', 2, 1, 'Stockman’s Eye I', 'You see what a beast will become while it is still small.', 'learn', 1, null, 1.03);
+insert into class_node values ('herdsman_2_2', 'herdsman', 2, 2, 'Stockman’s Eye II', 'You see what a beast will become while it is still small.', 'learn', 1, 'herdsman_2_1', 1.04);
+insert into class_node values ('herdsman_2_3', 'herdsman', 2, 3, 'Bloodline', 'You see what a beast will become while it is still small.', 'learn', 3, 'herdsman_2_2', 1.1);
+insert into class_node values ('herdsman_3_1', 'herdsman', 3, 1, 'Patience I', 'Waiting on an animal costs you nothing.', 'wind', 1, null, 0.97);
+insert into class_node values ('herdsman_3_2', 'herdsman', 3, 2, 'Patience II', 'Waiting on an animal costs you nothing.', 'wind', 1, 'herdsman_3_1', 0.96);
+insert into class_node values ('herdsman_3_3', 'herdsman', 3, 3, 'All Day', 'Waiting on an animal costs you nothing.', 'wind', 3, 'herdsman_3_2', 0.9);
+insert into class_node values ('naturalist_1_1', 'naturalist', 1, 1, 'Gathering I', 'Your hands are on it before your eyes have finished.', 'hands', 1, null, 0.97);
+insert into class_node values ('naturalist_1_2', 'naturalist', 1, 2, 'Gathering II', 'Your hands are on it before your eyes have finished.', 'hands', 1, 'naturalist_1_1', 0.96);
+insert into class_node values ('naturalist_1_3', 'naturalist', 1, 3, 'Full Basket', 'Your hands are on it before your eyes have finished.', 'hands', 3, 'naturalist_1_2', 0.9);
+insert into class_node values ('naturalist_2_1', 'naturalist', 2, 1, 'Herb Lore I', 'Every leaf you pick tells you about the next.', 'learn', 1, null, 1.03);
+insert into class_node values ('naturalist_2_2', 'naturalist', 2, 2, 'Herb Lore II', 'Every leaf you pick tells you about the next.', 'learn', 1, 'naturalist_2_1', 1.04);
+insert into class_node values ('naturalist_2_3', 'naturalist', 2, 3, 'Apothecary', 'Every leaf you pick tells you about the next.', 'learn', 3, 'naturalist_2_2', 1.1);
+insert into class_node values ('naturalist_3_1', 'naturalist', 3, 1, 'Wandering I', 'A day off the path takes nothing out of you.', 'wind', 1, null, 0.97);
+insert into class_node values ('naturalist_3_2', 'naturalist', 3, 2, 'Wandering II', 'A day off the path takes nothing out of you.', 'wind', 1, 'naturalist_3_1', 0.96);
+insert into class_node values ('naturalist_3_3', 'naturalist', 3, 3, 'Far Walk', 'A day off the path takes nothing out of you.', 'wind', 3, 'naturalist_3_2', 0.9);
+insert into class_node values ('fisher_1_1', 'fisher', 1, 1, 'Cast I', 'The line goes where you looked.', 'hands', 1, null, 0.97);
+insert into class_node values ('fisher_1_2', 'fisher', 1, 2, 'Cast II', 'The line goes where you looked.', 'hands', 1, 'fisher_1_1', 0.96);
+insert into class_node values ('fisher_1_3', 'fisher', 1, 3, 'Set the Hook', 'The line goes where you looked.', 'hands', 3, 'fisher_1_2', 0.9);
+insert into class_node values ('fisher_2_1', 'fisher', 2, 1, 'Standing I', 'Hours in the water and on a deck, and no weight in your legs.', 'wind', 1, null, 0.97);
+insert into class_node values ('fisher_2_2', 'fisher', 2, 2, 'Standing II', 'Hours in the water and on a deck, and no weight in your legs.', 'wind', 1, 'fisher_2_1', 0.96);
+insert into class_node values ('fisher_2_3', 'fisher', 2, 3, 'Sea Legs', 'Hours in the water and on a deck, and no weight in your legs.', 'wind', 3, 'fisher_2_2', 0.9);
+insert into class_node values ('fisher_3_1', 'fisher', 3, 1, 'Watercraft I', 'You know where they are before you have caught one.', 'learn', 1, null, 1.03);
+insert into class_node values ('fisher_3_2', 'fisher', 3, 2, 'Watercraft II', 'You know where they are before you have caught one.', 'learn', 1, 'fisher_3_1', 1.04);
+insert into class_node values ('fisher_3_3', 'fisher', 3, 3, 'Reads the Water', 'You know where they are before you have caught one.', 'learn', 3, 'fisher_3_2', 1.1);
+insert into class_node values ('mender_1_1', 'mender', 1, 1, 'Repair I', 'You find the fault at once instead of looking for it.', 'hands', 1, null, 0.97);
+insert into class_node values ('mender_1_2', 'mender', 1, 2, 'Repair II', 'You find the fault at once instead of looking for it.', 'hands', 1, 'mender_1_1', 0.96);
+insert into class_node values ('mender_1_3', 'mender', 1, 3, 'Good as New', 'You find the fault at once instead of looking for it.', 'hands', 3, 'mender_1_2', 0.9);
+insert into class_node values ('mender_2_1', 'mender', 2, 1, 'Restoration I', 'What you mend comes back better than it went.', 'fine', 1, null, 1.02);
+insert into class_node values ('mender_2_2', 'mender', 2, 2, 'Restoration II', 'What you mend comes back better than it went.', 'fine', 1, 'mender_2_1', 1.03);
+insert into class_node values ('mender_2_3', 'mender', 2, 3, 'Better Than Found', 'What you mend comes back better than it went.', 'fine', 3, 'mender_2_2', 1.06);
+insert into class_node values ('mender_3_1', 'mender', 3, 1, 'Wear Sense I', 'You learn a thing by what broke it.', 'learn', 1, null, 1.03);
+insert into class_node values ('mender_3_2', 'mender', 3, 2, 'Wear Sense II', 'You learn a thing by what broke it.', 'learn', 1, 'mender_3_1', 1.04);
+insert into class_node values ('mender_3_3', 'mender', 3, 3, 'Keeper', 'You learn a thing by what broke it.', 'learn', 3, 'mender_3_2', 1.1);
+insert into class_node values ('artisan_1_1', 'artisan', 1, 1, 'Setting I', 'The stone seats first time.', 'hands', 1, null, 0.97);
+insert into class_node values ('artisan_1_2', 'artisan', 1, 2, 'Setting II', 'The stone seats first time.', 'hands', 1, 'artisan_1_1', 0.96);
+insert into class_node values ('artisan_1_3', 'artisan', 1, 3, 'Sure Claw', 'The stone seats first time.', 'hands', 3, 'artisan_1_2', 0.9);
+insert into class_node values ('artisan_2_1', 'artisan', 2, 1, 'Finish I', 'The last tenth of the work, which is most of the worth.', 'fine', 1, null, 1.02);
+insert into class_node values ('artisan_2_2', 'artisan', 2, 2, 'Finish II', 'The last tenth of the work, which is most of the worth.', 'fine', 1, 'artisan_2_1', 1.03);
+insert into class_node values ('artisan_2_3', 'artisan', 2, 3, 'Jeweller’s Eye', 'The last tenth of the work, which is most of the worth.', 'fine', 3, 'artisan_2_2', 1.06);
+insert into class_node values ('artisan_3_1', 'artisan', 3, 1, 'Craft Sense I', 'Fine work teaches fast, when you are paying attention.', 'learn', 1, null, 1.03);
+insert into class_node values ('artisan_3_2', 'artisan', 3, 2, 'Craft Sense II', 'Fine work teaches fast, when you are paying attention.', 'learn', 1, 'artisan_3_1', 1.04);
+insert into class_node values ('artisan_3_3', 'artisan', 3, 3, 'Maker', 'Fine work teaches fast, when you are paying attention.', 'learn', 3, 'artisan_3_2', 1.1);
 insert into path_def values ('love', 'Love', 'The gardener’s way. Things grow for you, things trust you, and what is hurt mends.');
 insert into path_step values ('love', 1, 3, 'Green thumb', 'Everything sown on your settlement comes on a fifth faster.', null, null, null);
 insert into path_step values ('love', 2, 12, 'Refresh', 'Hunger and thirst, both full, in a breath.', 'refresh', 1200, 'You are neither hungry nor thirsty.');
