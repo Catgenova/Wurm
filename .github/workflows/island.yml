@@ -399,6 +399,21 @@ jobs:
             --outfile=node_modules/.cache/turn.mjs --log-level=error
           node node_modules/.cache/turn.mjs
 
+      - name: A window that draws the trades, and the answers it is drawn from
+        run: |
+          # Five doors existed for a day with nothing drawing them. The trades
+          # window draws them now and works out none of it for itself, which
+          # makes the shape of the answer a contract: a field renamed on the
+          # island is a blank card in the browser, and nothing else in the
+          # suite would say so. This asks that every field the panel reads is
+          # on every card, that the two sides describe all twenty-four trades
+          # identically, and that the three write-doors do what the buttons
+          # promise -- take a trade of each, buy a node, and find a rite on the
+          # fighting one and none on the craft one.
+          npx esbuild supabase/test/trades.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/trades.mjs --log-level=error
+          node node_modules/.cache/trades.mjs
+
       - name: Two bins, and the line drawn between them
         run: |
           # Ore, logs, dirt, shards and wool go in the raw bin; a plank, a

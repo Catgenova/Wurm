@@ -67,6 +67,7 @@ import { EventLogPanel } from './panels/eventlog';
 import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
+import { TradesPanel } from './panels/trades';
 import { SocialPanel } from './panels/social';
 import { MarketPanel } from './panels/market';
 import { HoardPanel } from './panels/hoard';
@@ -125,6 +126,7 @@ export class UI {
   private readonly stores: StoresPanel;
   private readonly craftPanel: CraftPanel;
   private readonly ledgerPanel: LedgerPanel;
+  private readonly trades: TradesPanel;
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
   private readonly social: SocialPanel;
@@ -232,6 +234,14 @@ export class UI {
     this.hoard = new HoardPanel(hoardWin, game, this.island);
     const ledgerWin = this.windows.create({ id: 'ledger', title: 'Ledger', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
     this.ledgerPanel = new LedgerPanel(ledgerWin, game);
+    /*
+     * Wider than most, because a tree is three columns of three and a node has
+     * a sentence on it: at this width the grid opens in three, and narrowing
+     * the window stacks them rather than squeezing them. 560 is what three
+     * readable cards and their gaps come to.
+     */
+    const tradesWin = this.windows.create({ id: 'trades', title: 'Trades', x: 12, y: 56, width: 560, height: 560, anchor: 'tl', open: false });
+    this.trades = new TradesPanel(tradesWin, game, this.island);
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (uiBox().w - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (uiBox().h - 460) / 2)}px`;
@@ -382,6 +392,7 @@ export class UI {
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());
     this.ledgerPanel.update(performance.now());
+    this.trades.update(performance.now() / 1000);
   }
 
   /** Describe what is under the cursor. */

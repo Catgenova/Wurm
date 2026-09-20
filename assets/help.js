@@ -199,6 +199,7 @@ function e(){return`
       <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Look at the storey above or below</td></tr>
       <tr><td><kbd>X</kbd></td><td>Cut away the walls facing you</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Trades: the trade you took up, its tree, and its rite</td></tr>
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
@@ -211,6 +212,24 @@ function e(){return`
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
+    <h3>Trades</h3>
+    <p>A trade is the thing you are, on top of the things you know. Take one to <b>50</b> in any skill it
+    covers and it opens; you may hold <b>one craft trade and one fighting trade</b> at once, and the
+    <b>Trades</b> window (<kbd>F</kbd>) is where you take them up and spend what they earn.</p>
+    <p>Each trade earns <b>points</b> off the best skill it covers, and its tree is <b>three columns of
+    three</b>. A column is one <b>channel</b> &mdash; one number in the rules that trade leans on, like how
+    hard a blow lands or how little of a stone a cast wastes &mdash; and a node buys a step along it.
+    Most push a number up; a few, like the hands a carpenter works with, push one down, and the card
+    says which way it goes.</p>
+    <p>A <b>rite</b> is the one thing a trade may ask for out loud: a minute or so of a channel pushed
+    much harder, paid out of the same <b>favour</b> a prayer is paid from, and then a rest before you may
+    ask again. Only the <b>fighting</b> trades have one; a craft trade has its nine nodes and no rite.
+    It sits at the head of its trade's tree, with the reason underneath when you cannot call it.</p>
+    <p>Everything on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
+    what you have spent, what is in your purse, whether the altar will hear you &mdash; so when a button
+    will not press, the sentence under it is the island's own, and it is the truth.</p>
+    <p>Putting a trade down for another costs <b>silver</b>, and the nodes you bought for the old one go
+    with it. The other slot keeps what it had.</p>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
     <p>The <b>map</b> (<kbd>M</kbd>) shows the same three states: dark where you have not been, dim
     where you have, and bright where somebody is looking now. The island is a thousand tiles a side, so

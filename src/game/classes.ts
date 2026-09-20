@@ -272,11 +272,18 @@ export const classOfSkill = (skill: string): ClassDef | undefined =>
 export const classOpen = (c: ClassDef, at: (skill: string) => number): boolean =>
   c.skills.some((s) => at(s) >= CLASS_AT);
 
-/** What to say when somebody asks for a trade they have not earned. */
+/**
+ * What to say when somebody asks for a trade they have not earned.
+ *
+ * "An" before a vowel, the way the bins have said it since they were named.
+ * Twenty-two of the twenty-four read the same either way; the archer and the
+ * artisan did not, and the trades window puts this sentence on the card rather
+ * than in a log line nobody rereads.
+ */
 export const classRefusal = (c: ClassDef, at: (skill: string) => number): string | null =>
   classOpen(c, at) ? null
-    : `You are not a ${c.name.toLowerCase()} yet. That wants ${CLASS_AT} in one of ${
-      c.skills.map((s) => s.replace(/_/g, ' ')).join(', ')}.`;
+    : `You are not ${/^[aeiou]/i.test(c.name) ? 'an' : 'a'} ${c.name.toLowerCase()} yet. `
+      + `That wants ${CLASS_AT} in one of ${c.skills.map((s) => s.replace(/_/g, ' ')).join(', ')}.`;
 
 /*
  * ---------------------------------------------------------------------------

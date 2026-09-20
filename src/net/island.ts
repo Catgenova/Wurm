@@ -329,6 +329,94 @@ export interface Parcel {
   from: string | null;
 }
 
+/**
+ * A trade as the island offers it, for the panel that lets somebody take one.
+ *
+ * `points`, `open` and `why` are the island's arithmetic and not the
+ * browser's: how many points the trade would be worth to *this* body, whether
+ * it may be taken at all, and the one sentence saying why not. The browser has
+ * the rulebook -- `src/game/classes.ts` generated these rows -- but it has no
+ * idea what anybody has spent, so it asks.
+ */
+export interface ClassCard {
+  id: string;
+  kind: 'craft' | 'combat';
+  name: string;
+  note: string;
+  main: string;
+  lever: string;
+  skills: string[] | null;
+  points: number;
+  open: boolean;
+  why: string | null;
+}
+
+export interface ClassesSaid {
+  taken: { craft: string | null; combat: string | null };
+  /** The skill level a trade opens at. */
+  at: number;
+  /** What putting one down and taking another costs in silver. */
+  change_cost: number;
+  purse: number;
+  classes: ClassCard[];
+  why?: string;
+}
+
+/** One node of a trade's tree: what it costs, what it does, and whether it is yours. */
+export interface TreeNode {
+  id: string;
+  col: number;
+  rank: number;
+  name: string;
+  note: string;
+  channel: string;
+  cost: number;
+  needs: string | null;
+  mul: number;
+  taken: boolean;
+  why: string | null;
+}
+
+export interface TreeTrade {
+  class: string;
+  kind: 'craft' | 'combat';
+  name: string;
+  lever: string;
+  points: number;
+  spent: number;
+  nodes: TreeNode[];
+}
+
+/** The one thing a trade may ask for out loud, and why it may not right now. */
+export interface RiteCard {
+  id: string;
+  class: string;
+  name: string;
+  cost: number;
+  level: number;
+  secs: number;
+  rest: number;
+  muls: Record<string, number>;
+  note: string;
+  why: string | null;
+}
+
+export interface ChannelCard {
+  id: string;
+  name: string;
+  note: string;
+  downward: boolean;
+}
+
+export interface TreeSaid {
+  /** The fold itself, which is what every number on the island is multiplied by. */
+  mul: Record<string, unknown>;
+  rites: RiteCard[];
+  channels: ChannelCard[];
+  trades: TreeTrade[];
+  why?: string;
+}
+
 export interface IslandHooks {
   /** A line for the log, from the island rather than from here. */
   /**
@@ -1847,6 +1935,45 @@ export class Island {
     return data as TreasureMap;
   }
 
+  /**
+   * The trades, as this body may take them up.
+   *
+   * Nothing about a trade is kept in the browser: `src/game/classes.ts` is the
+   * rulebook these rows were generated from, and the live half -- which trade
+   * is yours, what you have spent, what you may afford -- exists only on the
+   * island. So the panel asks rather than working any of it out, which is the
+   * same rule as everywhere else: the island is the authority.
+   */
+  async classes(): Promise<ClassesSaid | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_classes', { p_world: this.info.id });
+    if (error || !data) return null;
+    return data as ClassesSaid;
+  }
+
+  /** The trees of the trades you hold, their rites, and the fold they come to. */
+  async tree(): Promise<TreeSaid | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_tree', { p_world: this.info.id });
+    if (error || !data) return null;
+    return data as TreeSaid;
+  }
+
+  /** Take up a trade, or put one down for another and pay for the change. */
+  async takeClass(id: string): Promise<string | null> {
+    return this.door('rpc_take_class', { p_class: id });
+  }
+
+  /** Buy one node of a tree with the points that trade has earned. */
+  async takeNode(id: string): Promise<string | null> {
+    return this.door('rpc_take_node', { p_node: id });
+  }
+
+  /** Call your trade's rite, out of the same favour every prayer is paid from. */
+  async callRite(id: string): Promise<string | null> {
+    return this.door('rpc_rite', { p_rite: id });
+  }
+
   /** How warm you are: a band, and never a bearing. */
   async treasureWarm(item: number): Promise<{ here: boolean; say: string } | null> {
     if (!this.info) return null;
@@ -1895,12 +2022,12 @@ export class Island {
 
   /** Ask somebody to come and live on your land. */
   async invite(uid: string): Promise<string | null> {
-    return this.socialDoor('rpc_invite', { p_uid: uid });
+    return this.door('rpc_invite', { p_uid: uid });
   }
 
   /** Yes or no to an invitation of your own. */
   async answerInvite(founder: string, yes: boolean): Promise<string | null> {
-    return this.socialDoor('rpc_invite_answer', { p_founder: founder, p_yes: yes });
+    return this.door('rpc_invite_answer', { p_founder: founder, p_yes: yes });
   }
 
   /**
@@ -1909,22 +2036,22 @@ export class Island {
    * Which settlement has to be named now that a person may be on several.
    */
   async leaveDeed(founder: string, uid?: string): Promise<string | null> {
-    return this.socialDoor('rpc_leave_deed', { p_founder: founder, p_uid: uid ?? null });
+    return this.door('rpc_leave_deed', { p_founder: founder, p_uid: uid ?? null });
   }
 
   /** Ask to be somebody's friend, or say yes when they asked first. */
   async befriend(uid: string): Promise<string | null> {
-    return this.socialDoor('rpc_friend', { p_uid: uid });
+    return this.door('rpc_friend', { p_uid: uid });
   }
 
   /** No, or not any more. */
   async unfriend(uid: string): Promise<string | null> {
-    return this.socialDoor('rpc_unfriend', { p_uid: uid });
+    return this.door('rpc_unfriend', { p_uid: uid });
   }
 
   /** A word to one person, which is still there tomorrow. */
   async writeTo(uid: string, text: string): Promise<string | null> {
-    return this.socialDoor('rpc_letter', { p_uid: uid, p_text: text });
+    return this.door('rpc_letter', { p_uid: uid, p_text: text });
   }
 
   /** One conversation, oldest first — and read, by the reading of it. */
@@ -1999,13 +2126,15 @@ export class Island {
   }
 
   /**
-   * One shape for all six, because all six are the same shape: a door that
-   * either does the thing or says in one sentence why it will not.
+   * One shape for all of them, because they are all the same shape: a door
+   * that either does the thing or says in one sentence why it will not.
    *
    * Returns the sentence, or null when it went through — which is what every
-   * caller wants to put in the log and nothing more.
+   * caller wants to put in the log and nothing more. It was named for the
+   * social doors while they were the only six; taking up a trade, buying a
+   * node and calling a rite are the same shape and wanted no second helper.
    */
-  private async socialDoor(door: string, args: Record<string, unknown>): Promise<string | null> {
+  private async door(door: string, args: Record<string, unknown>): Promise<string | null> {
     if (!this.info) return 'You are not on an island.';
     const { data, error } = await supabase().rpc(door, { p_world: this.info.id, ...args });
     if (error) return error.message;

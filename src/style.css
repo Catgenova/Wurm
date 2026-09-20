@@ -2447,3 +2447,224 @@ kbd {
 .hoard-dig {
   align-self: flex-start;
 }
+
+/* The trades: the one you took, its nine nodes, and its rite -------------- */
+
+.trade-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.trade-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.trade-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 6px 6px 10px;
+}
+
+.trade-note,
+.trade-head {
+  color: var(--ui-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.trade-group {
+  padding: 4px 0 0;
+  color: var(--ui-accent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.trade-card,
+.trade-rite,
+.trade-node {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  background: var(--ui-bg-2);
+}
+
+.trade-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trade-name {
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.trade-points {
+  color: var(--ui-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Points going spare are the reason to have opened this window. */
+.trade-points.trade-spare {
+  color: var(--ui-accent);
+}
+
+.trade-card-note {
+  color: var(--ui-text);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
+.trade-covers,
+.trade-lever,
+.trade-worth {
+  color: var(--ui-dim);
+  font-size: 11px;
+}
+
+.trade-lever {
+  font-style: italic;
+}
+
+.trade-worth {
+  color: var(--ui-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The island's sentence, never ours: why this button will not do anything. */
+.trade-why {
+  color: #c98d6a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.trade-mine {
+  border-color: var(--ui-accent);
+}
+
+.trade-worn {
+  color: var(--ui-accent);
+  font-size: 11px;
+}
+
+/* A trade whose main skill is not there yet: readable, and plainly not open. */
+.trade-shut {
+  opacity: 0.55;
+}
+
+.trade-take,
+.trade-call,
+.trade-buy {
+  align-self: flex-start;
+}
+
+.trade-tree-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-accent);
+}
+
+.trade-rite {
+  border-color: var(--ui-border-light);
+}
+
+/* One that can actually be called, which is the whole question mid-fight. */
+.trade-rite-ready {
+  border-color: var(--ui-accent);
+  box-shadow: inset 0 0 0 1px rgba(227, 182, 87, 0.18);
+}
+
+/*
+ * Three columns of three, which is the shape of the tree — but only when this
+ * window is wide enough for three, and stacked when it is not.
+ *
+ * A viewport media query is the wrong instrument here and was the first cut:
+ * these are draggable, resizable windows, so what decides whether three
+ * columns fit is the width of *this window*, not of the screen behind it.
+ * Measured at 460 wide on a 1280 screen, a media query left it in three and
+ * each card came out a third of a narrow window: six lines of wrapped prose
+ * under a heading, with a button below that. A container query asks the
+ * question that actually matters, and the stacked form is the default because
+ * it is the one that works at any width.
+ */
+.trade-page {
+  container-type: inline-size;
+}
+
+.trade-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+
+@container (min-width: 520px) {
+  .trade-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.trade-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.trade-col-head {
+  color: var(--ui-accent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/*
+ * The column's sentence, once, under its heading rather than on each card.
+ *
+ * Three lines' worth of room whether it needs them or not, so that the first
+ * node of each column starts on the same line as its neighbours. Without it a
+ * two-line note and a three-line note set their columns half a card apart, and
+ * the ranks stop reading across.
+ */
+.trade-col-note {
+  min-height: 3.1em;
+  color: var(--ui-text);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.trade-node-name {
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trade-node-taken {
+  border-color: var(--ui-accent);
+  background: rgba(227, 182, 87, 0.08);
+}
+
+.trade-node-shut {
+  opacity: 0.6;
+}
+
