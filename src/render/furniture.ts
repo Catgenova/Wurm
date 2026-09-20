@@ -66,6 +66,7 @@ export const FURNITURE_HEIGHT: Record<string, number> = {
   oven: 24,
   well: 22,
   bulk_bin: 24,
+  craft_bin: 24,
   trash_crate: 12,
   cart: 15,
   large_cart: 26,
@@ -477,6 +478,33 @@ const DRAW: Record<string, Draw> = {
     ctx.beginPath();
     ctx.moveTo(-W * 0.99, -h);
     ctx.lineTo(W * 0.99, -h);
+    ctx.stroke();
+  },
+  /*
+   * The same carcass as the raw bin, in a paler wood, with the lid divided
+   * across into compartments -- which is the whole visible difference between
+   * a bin you tip a cartload of ore into and a bin you sort nails, hinges and
+   * ribbons into.
+   */
+  craft_bin: (ctx, W, D, h) => {
+    const w = WOODS.pale;
+    box(ctx, 0, 0, W * 0.96, D * 0.96, h - 2, w);
+    box(ctx, 0, 0, W * 0.99, D * 0.99, 2, WOODS.oak, h - 2);
+    ctx.strokeStyle = 'rgba(30,24,16,0.28)';
+    ctx.lineWidth = 0.8;
+    // Board lines down the faces, as on the other bin.
+    for (const t of [-0.5, 0, 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(W * t * 0.96, -h + 2 + D * 0.96 * (1 - Math.abs(t)));
+      ctx.lineTo(W * t * 0.96, -2 + D * 0.96 * (1 - Math.abs(t)));
+      ctx.stroke();
+    }
+    // And the lid quartered rather than split in two.
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.99, -h);
+    ctx.lineTo(W * 0.99, -h);
+    ctx.moveTo(0, -h - D * 0.9);
+    ctx.lineTo(0, -h + D * 0.9);
     ctx.stroke();
   },
   trash_crate: (ctx, W, D, h) => {

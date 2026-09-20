@@ -305,6 +305,12 @@ out.push(`alter table furniture_def add column if not exists well real;`);
 /* A bin that takes bulk and nothing else, a hive that is the swarm's, and a
  * crate whose bottom is rotten through. */
 out.push(`alter table furniture_def add column if not exists raw boolean not null default false;`);
+/* And the bin that takes exactly the rest of the materials, measured in
+ * kilograms rather than counted: `heft` is the limit and `capacity` is null
+ * on it, which is what makes `furniture_room` the only place that has to know
+ * which sort of bin it is looking at. */
+out.push(`alter table furniture_def add column if not exists crafted boolean not null default false;`);
+out.push(`alter table furniture_def add column if not exists heft real;`);
 out.push(`alter table furniture_def add column if not exists hive real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
 /* A counter that sells while you are away, and a box the post uses. */
@@ -1384,6 +1390,8 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.liquid !== undefined) out.push(`update furniture_def set liquid = ${q(f.liquid)} where id = ${q(f.id)};`);
   if (f.well !== undefined) out.push(`update furniture_def set well = ${q(f.well)} where id = ${q(f.id)};`);
   if (f.raw) out.push(`update furniture_def set raw = true where id = ${q(f.id)};`);
+  if (f.crafted) out.push(`update furniture_def set crafted = true where id = ${q(f.id)};`);
+  if (f.heft !== undefined) out.push(`update furniture_def set heft = ${q(f.heft)} where id = ${q(f.id)};`);
   if (f.stall) out.push(`update furniture_def set stall = true where id = ${q(f.id)};`);
   if (f.post) out.push(`update furniture_def set post = true where id = ${q(f.id)};`);
   if (f.bell) out.push(`update furniture_def set bell = true where id = ${q(f.id)};`);

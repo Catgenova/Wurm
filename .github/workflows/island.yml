@@ -399,12 +399,17 @@ jobs:
             --outfile=node_modules/.cache/turn.mjs --log-level=error
           node node_modules/.cache/turn.mjs
 
-      - name: A raw material bin takes raw materials and nothing else
+      - name: Two bins, and the line drawn between them
         run: |
-          # Ore, logs, dirt, shards and wool go in; a plank, a brick, a lump,
-          # a hatchet and wheat are refused in the island's words. And the list
-          # holds to its own rule: forty stackable materials, every ore and
-          # every shard among them, none of them what a recipe makes.
+          # Ore, logs, dirt, shards and wool go in the raw bin; a plank, a
+          # brick, a lump, a hatchet and wheat are refused in the island's
+          # words. The craft material bin is its opposite number off the same
+          # bill, and takes exactly what the other refuses -- so the pair of
+          # them partitions the materials: nothing goes in both, every material
+          # goes in one, and the split is forty-one raw to eighty worked on
+          # both sides. It is measured in kilograms rather than counted, which
+          # the island agrees to the unit: 250,000 nails, 1,250 planks or 416
+          # timbers in the same bin.
           npx esbuild supabase/test/bins.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/bins.mjs --log-level=error
           node node_modules/.cache/bins.mjs

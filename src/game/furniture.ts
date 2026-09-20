@@ -2,7 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { SIDE_NAMES, type Side } from './building';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, itemName, storedLine, type Item } from './items';
+import { isWorked, itemDef, itemName, storedLine, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -18,6 +18,20 @@ export interface FurnitureDef {
   h: number;
   /** Things it holds, for the pieces that hold anything. */
   capacity?: number;
+  /**
+   * Kilograms it holds, for a piece measured that way instead.
+   *
+   * A count is the wrong unit for worked materials. Twelve hundred nails and
+   * twelve hundred planks are the same number and not remotely the same load,
+   * and a smith who has spent a morning at the anvil has thousands of the one
+   * and dozens of the other. So the craft material bin has no count limit at
+   * all: what fills it is weight, and a bin of nails takes a quarter of a
+   * million of them where a bin of timber takes four hundred.
+   *
+   * Capacity and this are exclusive. A piece has one or the other, and
+   * `furnitureRoom` is the one place that knows which.
+   */
+  heft?: number;
   /**
    * A counter that sells. What is in it carries a price, anybody may buy from
    * it, and the coins wait in its till for whoever set it up.
@@ -44,6 +58,15 @@ export interface FurnitureDef {
   tool?: string;
   /** Takes raw materials and nothing else: ore, logs, dirt, by the pile. */
   raw?: boolean;
+  /**
+   * Takes worked materials and nothing else: planks, nails, ribbons, hinges.
+   *
+   * The exact complement of `raw` inside the material category, which is what
+   * makes the pair of bins a partition rather than two overlapping boxes:
+   * every material is one or the other, and nothing that is not a material is
+   * either.
+   */
+  crafted?: boolean;
   /** What is put in rots this many times faster than it would in the open. */
   trash?: number;
   /** Can be taken hold of and pulled along behind you. */
@@ -220,6 +243,20 @@ export const FURNITURE: FurnitureDef[] = [
   piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: raw materials, rubbish, and something to pull it in.
   piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { raw: true }),
+  /*
+   * Its opposite number, off the same bill of materials.
+   *
+   * The raw bin solved half the problem: a cartload of ore has somewhere to
+   * go. What a smith and a carpenter turn out all day had nowhere -- nails,
+   * ribbons, hinges, planks, lumps, bricks -- and they fill a chest in an
+   * afternoon because a chest counts things.
+   *
+   * Counting is the wrong unit for them. This one is measured in kilograms
+   * instead: two and a half tonnes of whatever a bench has touched, which is
+   * two hundred and fifty thousand nails or twelve hundred planks. There is
+   * no count limit on it at all.
+   */
+  piece('craft_bin', 'Craft material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a partitioned lid, the sort a morning at the anvil goes into.', undefined, { heft: 2500, crafted: true }),
   piece('trash_crate', 'Trash crate', 1, 1, [['plank', 3], ['nail', 6]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
   piece('cart', 'Small cart', 2, 1, [['plank', 8], ['shaft', 4], ['nail', 16]], 18, 14, 'You build a small cart on two wheels, light enough for one person to pull.', 100, { cart: true }),
   // The two that are driven rather than carried. A wheelwright's bill: wheels
@@ -333,10 +370,53 @@ export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', ly
 export const furnitureName = (f: PlacedFurniture): string =>
   f.name ? f.name : f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name;
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
-/** How much more a piece will take, which is what a put is allowed to be. */
+/** How much more a counting piece will take. `furnitureRoom` is the general one. */
 export const furnitureSpare = (f: PlacedFurniture): number => Math.max(0, furnitureCapacity(f) - furnitureUnits(f));
 /** What it holds: its build, and how strong a wood it was built out of. */
 export const furnitureCapacity = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold);
+/** Kilograms it holds, for a piece measured that way. Nought for the rest. */
+export const furnitureHeft = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).heft ?? 0) * matOf(f.material).hold);
+/** Kilograms standing in it, which is the only thing a heft bin counts. */
+export const furnitureKg = (f: PlacedFurniture): number =>
+  f.items.reduce((kg, it) => kg + itemDef(it.id).weight * it.count, 0);
+/**
+ * Whether a piece holds things at all.
+ *
+ * This used to be `furnitureCapacity(f) > 0` written out in eight places, and
+ * every one of them would have said no to a bin whose limit is weight. One
+ * question, asked once.
+ */
+export const furnitureHolds = (f: PlacedFurniture): boolean => furnitureCapacity(f) > 0 || furnitureHeft(f) > 0;
+/**
+ * How big a store a piece is for a given thing: what it holds when empty.
+ *
+ * The straight generalisation of `furnitureCapacity`, and what two stores
+ * standing beside each other are ranked by -- so a counting piece is ranked on
+ * exactly the number it always was, and a bin measured in kilograms joins the
+ * ranking rather than sorting last on a capacity of nought.
+ */
+export const furnitureSize = (f: PlacedFurniture, item: { id: string }): number => {
+  const heft = furnitureHeft(f);
+  if (!heft) return furnitureCapacity(f);
+  const each = itemDef(item.id).weight;
+  return each > 0 ? Math.floor(heft / each) : furnitureCapacity(f);
+};
+/**
+ * How many of a thing will go in.
+ *
+ * The one place that knows a piece may be measured either way, and the reason
+ * it takes the thing as well as the piece: once weight is the limit, how much
+ * room there is depends on what you are putting in it. Two hundred and fifty
+ * thousand nails and four hundred timbers are the same bin.
+ */
+export const furnitureRoom = (f: PlacedFurniture, item: { id: string }): number => {
+  const heft = furnitureHeft(f);
+  if (!heft) return furnitureSpare(f);
+  // Nothing on this island weighs nothing, but a divide is a divide.
+  const each = itemDef(item.id).weight;
+  if (each <= 0) return furnitureUnits(f) > 0 ? 0 : 1;
+  return Math.max(0, Math.floor((heft - furnitureKg(f)) / each));
+};
 /** The four ways a piece can face, in the order a turn to the right takes them: south, west, north, east. */
 export const FACINGS: readonly Side[] = ['s', 'w', 'n', 'e'];
 /** Which way a piece faces; everything stood facing south before pieces could be turned. */
@@ -414,17 +494,25 @@ export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hi
 export const RAW_BIN_REFUSAL = 'A raw material bin takes raw materials — ore, logs, dirt, shards, wool — and nothing a bench has touched.';
 
 /**
+ * And what the other bin says to anything straight out of the ground. The
+ * island says it in the same words (`furniture_refuses`).
+ */
+export const CRAFT_BIN_REFUSAL = 'A craft material bin takes worked materials — planks, nails, ribbons, hinges — and nothing that has not been through a bench.';
+
+/**
  * Why a piece will not take something, or null if it will. A raw material bin
- * takes raw materials (`ItemDef.raw`) and nothing else; a barrel takes no
- * solids at all.
+ * takes raw materials (`ItemDef.raw`) and nothing else, a craft material bin
+ * takes exactly the rest of the materials, and a barrel takes no solids at
+ * all.
  */
 export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null {
   const def = furnitureDef(f.kind);
   const it = `${/^[aeiou]/i.test(def.name) ? 'An' : 'A'} ${def.name.toLowerCase()}`;
   if (holdsLiquid(f)) return `${it} holds liquid and nothing else.`;
   if (def.hive) return `${it} is the swarm's, not yours. Take what is in it; do not put anything back.`;
-  if (!def.capacity) return `${it} does not hold things.`;
+  if (!furnitureHolds(f)) return `${it} does not hold things.`;
   if (def.raw && !itemDef(item.id).raw) return RAW_BIN_REFUSAL;
+  if (def.crafted && !isWorked(item.id)) return CRAFT_BIN_REFUSAL;
   return null;
 }
 
@@ -441,6 +529,9 @@ export function furnitureState(f: PlacedFurniture): string {
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
   if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} of comb`;
+  // A bin measured in kilograms says so; everything else counts things.
+  const heft = furnitureHeft(f);
+  if (heft) return `${ql} · ${furnitureKg(f).toFixed(0)} / ${heft} kg`;
   const cap = furnitureCapacity(f);
   const held = cap ? `${ql} · ${furnitureUnits(f)} / ${cap} things` : ql;
   const v = def.vehicle;
@@ -464,7 +555,7 @@ const nearPiece = (g: Game, f: PlacedFurniture): boolean => {
 const storeInto = (g: Game, t: Target, item: Item): PlacedFurniture | undefined => {
   if (t.kind === 'item' && t.into !== undefined) {
     const named = g.furniture.get(t.into);
-    if (named && furnitureCapacity(named)) return named;
+    if (named && furnitureHolds(named)) return named;
   }
   return g.nearestStore(item);
 };
@@ -612,7 +703,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (!f || !nearPiece(g, f)) {
         // Say why the thing beside you will not take it, rather than that nothing will.
         const beside = [...g.furniture.values()].filter((o) => nearPiece(g, o));
-        beside.sort((a, b) => furnitureCapacity(b) - furnitureCapacity(a));
+        beside.sort((a, b) => furnitureSize(b, item) - furnitureSize(a, item));
         for (const other of beside) {
           const why = furnitureRefuses(other, item);
           if (why) return why;
@@ -624,7 +715,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const refused = furnitureRefuses(f, item);
       if (refused) return refused;
       // Room for some of it is enough; what will not fit stays in the pack.
-      if (furnitureSpare(f) <= 0) return `The ${furnitureName(f).toLowerCase()} is full.`;
+      if (furnitureRoom(f, item) <= 0) return `The ${furnitureName(f).toLowerCase()} is full.`;
       return null;
     },
     perform: (t, g) => {
@@ -633,7 +724,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const f = held && storeInto(g, t, held);
       if (!f) return;
       const want = t.count ?? 1;
-      const fits = Math.min(want, furnitureSpare(f));
+      const fits = Math.min(want, furnitureRoom(f, held));
       if (fits <= 0) {
         g.logMsg(`The ${furnitureName(f).toLowerCase()} is full.`, 'error');
         return;

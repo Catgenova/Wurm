@@ -41,7 +41,7 @@ import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, MOULD_BY_MAKES, isCa
 import { meltable } from '../game/melt';
 import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureName, furnitureState, furnitureUnits, isFurniture, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureName, furnitureState, furnitureUnits, isFurniture, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
 import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
@@ -551,7 +551,7 @@ export class UI {
       lines.push(furnitureName(fu));
       lines.push(furnitureState(fu));
       if (rackSpots(fu)) lines.push(this.rackLine(fu));
-      if (furnitureCapacity(fu)) lines.push('Stand next to it to put things away.');
+      if (furnitureHolds(fu)) lines.push('Stand next to it to put things away.');
       this.tooltip.show(sx, sy, lines);
       return;
     }
@@ -1322,8 +1322,10 @@ export class UI {
         });
       }
     }
-    if (furnitureCapacity(f)) {
-      entries.push({ label: 'Open', note: `${furnitureUnits(f)} / ${furnitureCapacity(f)} things`, onSelect: () => this.cratePanel.openFurniture(f.id) });
+    if (furnitureHolds(f)) {
+      const heft = furnitureHeft(f);
+      const note = heft ? `${furnitureKg(f).toFixed(0)} / ${heft} kg` : `${furnitureUnits(f)} / ${furnitureCapacity(f)} things`;
+      entries.push({ label: 'Open', note, onSelect: () => this.cratePanel.openFurniture(f.id) });
     }
     /*
      * A rack, and the crates standing on it.

@@ -46,6 +46,19 @@ export interface ItemDef {
   shelter?: number;
 }
 
+/**
+ * A material a bench has touched: the exact complement of `raw` inside the
+ * material category, and what a craft material bin takes.
+ *
+ * Written down rather than spelled out at the door, because the island has the
+ * same predicate under the same name (`item_worked`) and the pair of bins only
+ * partitions the materials so long as the two of them agree.
+ */
+export const isWorked = (id: string): boolean => {
+  const d = ITEM_DEFS[id];
+  return !!d && d.category === 'material' && !d.raw;
+};
+
 /** Ground decay per hour by category: food rots in about half an hour, tools last most of a day. */
 export const CATEGORY_DECAY: Record<ItemCategory, number> = { food: 200, plant: 100, material: 25, tool: 12, misc: 12 };
 
@@ -415,6 +428,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   oven: { name: 'Oven', category: 'misc', weight: 46, decay: 3, description: 'A bread oven of brick and mortar. Feed it wood, light it, and cook at it as you would a fire — only it does not burn the dinner.' },
   well: { name: 'Well', category: 'misc', weight: 58, decay: 3, description: 'A lined shaft with a windlass over it. It draws its own water, faster the better it was sunk, and holds 50 litres.' },
   bulk_bin: { name: 'Raw material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for raw materials: ore, logs, dirt, shards, hides. Holds 400, and nothing a bench has touched.' },
+  craft_bin: { name: 'Craft material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for worked materials: planks, nails, ribbons, hinges, lumps, bricks. It does not count what is in it — it weighs it, and holds 2500 kg of whatever a bench has turned out.' },
   trash_crate: { name: 'Trash crate', category: 'misc', weight: 6, decay: 4, description: 'An open crate with a rotten bottom. Anything put in it rots thirty times faster than it would in the rain.' },
   cart: { name: 'Small cart', category: 'misc', weight: 26, decay: 4, description: 'Two wheels and a pair of shafts. Take hold of it and it follows you about, carrying 100 things you do not have to.' },
   large_cart: { name: 'Large cart', category: 'misc', weight: 180, decay: 4, description: 'A two-wheeled cart with a box body and a seat over the axle. It holds 1000 things of any weight, and nothing under a hitched wildermon will move it.' },

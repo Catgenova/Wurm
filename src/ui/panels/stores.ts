@@ -1,5 +1,5 @@
 import { crateCentre, crateCapacity, crateName, crateUnits } from '../../game/crates';
-import { furnitureCapacity, furnitureCentre, furnitureName, furnitureUnits } from '../../game/furniture';
+import { furnitureCapacity, furnitureCentre, furnitureHeft, furnitureHolds, furnitureKg, furnitureName, furnitureUnits } from '../../game/furniture';
 import type { Game } from '../../game/game';
 import { itemDef, itemName, type Item } from '../../game/items';
 import type { UIWindow } from '../windows';
@@ -20,10 +20,21 @@ interface Holder {
   items: Item[];
   units: number;
   capacity: number;
+  /**
+   * Kilograms in it and kilograms it holds, for a store measured that way
+   * rather than by count. A craft material bin has no count limit at all, so
+   * `capacity` is nought on one and reading fullness off it would call an
+   * empty bin full.
+   */
+  kg?: number;
+  heft?: number;
   /** A crate id or a furniture id, for opening it. */
   crate?: number;
   piece?: number;
 }
+
+/** Whether a store has nothing left, whichever way it is measured. */
+const brimming = (h: Holder): boolean => (h.heft ? (h.kg ?? 0) >= h.heft : h.units >= h.capacity);
 
 export class StoresPanel {
   private list: HTMLDivElement;
@@ -79,9 +90,12 @@ export class StoresPanel {
       out.push({ name: crateName(c), centre: crateCentre(c), items: c.items, units: crateUnits(c), capacity: crateCapacity(c), crate: c.id });
     }
     for (const f of g.furniture.values()) {
-      const cap = furnitureCapacity(f);
-      if (!cap) continue;
-      out.push({ name: furnitureName(f), centre: furnitureCentre(f), items: f.items, units: furnitureUnits(f), capacity: cap, piece: f.id });
+      if (!furnitureHolds(f)) continue;
+      out.push({
+        name: furnitureName(f), centre: furnitureCentre(f), items: f.items,
+        units: furnitureUnits(f), capacity: furnitureCapacity(f),
+        kg: furnitureKg(f), heft: furnitureHeft(f) || undefined, piece: f.id,
+      });
     }
     return out;
   }
@@ -118,7 +132,7 @@ export class StoresPanel {
     for (const h of shown.slice(0, 60)) this.list.append(this.row(h));
     const held = all.reduce((n, h) => n + h.units, 0);
     const room = all.reduce((n, h) => n + h.capacity, 0);
-    const full = all.filter((h) => h.units >= h.capacity).length;
+    const full = all.filter(brimming).length;
     this.footer.textContent = `${all.length} stores · ${held} of ${room} things${full ? ` · ${full} full` : ''}`;
     this.footer.classList.toggle('inv-over', full > 0 && full === all.length);
   }
@@ -132,8 +146,8 @@ export class StoresPanel {
     name.textContent = `${h.name} · ${d < 1.5 ? 'here' : `${Math.round(d)} tiles`}`;
     const fill = document.createElement('span');
     fill.className = 'store-fill';
-    fill.textContent = `${h.units}/${h.capacity}`;
-    if (h.units >= h.capacity) fill.classList.add('store-full');
+    fill.textContent = h.heft ? `${(h.kg ?? 0).toFixed(0)}/${h.heft} kg` : `${h.units}/${h.capacity}`;
+    if (brimming(h)) fill.classList.add('store-full');
     name.append(fill);
     const what = document.createElement('div');
     what.className = 'store-what';

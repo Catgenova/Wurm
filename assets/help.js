@@ -529,12 +529,20 @@ function e(){return`
     slots your deed level allows. That, and the fact you can put one down anywhere, is what a post is
     for: a logging camp in a far wood, a digger on a clay bank, a Snout turned loose over an old ruin
     &mdash; for as long as a stake in wet ground lasts.</p>
-    <h3>Raw materials, rubbish, and something to pull it in</h3>
-    <p>Three more things to put things in, each for a job a chest does badly.</p>
+    <h3>Raw materials, worked materials, rubbish, and something to pull it in</h3>
+    <p>Four more things to put things in, each for a job a chest does badly.</p>
     <p>A <b>raw material bin</b> holds <b>400</b> of what comes out of the ground, off a tree, out of a
     vein or off a beast unworked &mdash; ore, logs, dirt, sand, clay, shards, wool, hides &mdash; and
     refuses everything a bench, a kiln or a smelter has touched: no bricks, planks or lumps, and no
     food. It is where a mine's output goes.</p>
+    <p>A <b>craft material bin</b> is its opposite number, off the same bill of materials, and takes
+    exactly what the other one refuses: planks, nails, ribbons, hinges, lumps, bricks, cloth, arrows
+    &mdash; every material a bench, a kiln or a smelter has turned out, and nothing else. Between them
+    the two bins take every material in the game, and neither takes a tool, a crop or a meal.</p>
+    <p>It is the one store in the game that <b>does not count what is in it</b>. It weighs it: <b>2500
+    kg</b>, which is a quarter of a million nails or twelve hundred planks, and there is no limit on the
+    number of things at all. Built of a stronger wood it holds proportionally more, the way every other
+    store does. It is where a forge's and a carpenter's output goes.</p>
     <p>A <b>trash crate</b> is built with a rotten bottom on purpose: anything put in it rots <b>thirty
     times faster</b> than it would out in the rain, and is gone in minutes. <b>Put away</b> never picks
     it, whatever you are standing beside; you have to choose <b>Throw it in the trash</b> on the thing
@@ -1235,7 +1243,8 @@ function e(){return`
     <p><b>Moving things by hand.</b> Anything in the inventory or in an open container can be
     <b>dragged</b> from one window to the other. The rules are the same as the menu's: you have to be
     standing next to the container, and it has to be willing to hold what you are giving it &mdash; a
-    raw material bin takes nothing worked, a barrel takes no solids, a full crate is full. It says which when
+    raw material bin takes nothing worked, a craft material bin takes nothing unworked, a barrel takes no
+    solids, a full crate is full. It says which when
     it will not go.</p>
     <p>Ground does not advertise what it is holding. Grass is grass to look at, wherever it stands in
     its cycle &mdash; click a tile, or press <b>T</b>, and the Tile window says whether there is

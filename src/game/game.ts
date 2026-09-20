@@ -18,7 +18,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureRefuses, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { knackable, type Station } from './recipes';
@@ -1018,8 +1018,9 @@ export class Game {
     const weather = def.sail ? sailFactor(this.heading(), this.wind()) : 1;
     // What is in the hold rides on the hull, and the hull feels it: a boat
     // loaded to her marks is a third slower than one running empty.
+    const heft = furnitureHeft(f);
     const cap = furnitureCapacity(f);
-    const load = cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
+    const load = heft ? Math.min(1, furnitureKg(f) / heft) : cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
     return def.speed * body * hull * weather * (1 - load * 0.33);
   }
 
@@ -4381,6 +4382,8 @@ export class Game {
 
   /** How full a vehicle is, 0..1. An empty one rolls over anything. */
   vehicleLoad(f: PlacedFurniture): number {
+    const heft = furnitureHeft(f);
+    if (heft) return Math.min(1, furnitureKg(f) / heft);
     const cap = furnitureCapacity(f);
     return cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
   }
@@ -5374,7 +5377,7 @@ export class Game {
     let best: PlacedFurniture | undefined;
     let bestD = Infinity;
     for (const f of this.furnitureWithin(range)) {
-      if (!furnitureCapacity(f)) continue;
+      if (!furnitureHolds(f)) continue;
       // A raw material bin that will not take a tool is not the nearest store for a tool.
       if (item && furnitureRefuses(f, item)) continue;
       // Nothing goes in the trash by accident: that one has to be asked for.
@@ -5423,7 +5426,7 @@ export class Game {
   /** One piece of furniture, the same way; undefined for the ones that hold nothing. */
   private furnitureStore(f: PlacedFurniture): DeedStore | undefined {
     const def = furnitureDef(f.kind);
-    if (!def.capacity || def.trash) return undefined;
+    if (!furnitureHolds(f) || def.trash) return undefined;
     return {
       x: f.x,
       y: f.y,
@@ -5432,7 +5435,7 @@ export class Game {
       name: def.name,
       deed: false,
       raw: !!def.raw,
-      room: (item) => !furnitureRefuses(f, item) && furnitureUnits(f) + item.count <= furnitureCapacity(f),
+      room: (item) => !furnitureRefuses(f, item) && item.count <= furnitureRoom(f, item),
       add: (item) => this.furnitureAdd(f, item),
       changed: () => this.events.emit('crate'),
     };
@@ -5502,7 +5505,7 @@ export class Game {
 
   /** Put something away; false when it would not fit. */
   furnitureAdd(f: PlacedFurniture, item: Item): boolean {
-    if (furnitureUnits(f) + item.count > furnitureCapacity(f)) return false;
+    if (item.count > furnitureRoom(f, item)) return false;
     const def = ITEM_DEFS[item.id];
     const stack = def?.stackable ? f.items.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
     if (stack) {

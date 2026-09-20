@@ -1,5 +1,5 @@
 import { crateCentre, crateName, crateCapacity, crateSpare } from '../../game/crates';
-import { furnitureCapacity, furnitureCentre, furnitureName, furnitureRefuses, furnitureSpare } from '../../game/furniture';
+import { furnitureCapacity, furnitureCentre, furnitureHeft, furnitureName, furnitureRefuses, furnitureRoom } from '../../game/furniture';
 import { bloodMul } from '../../game/creatures';
 import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
 import type { Game } from '../../game/game';
@@ -24,6 +24,13 @@ export interface Store {
   id: number;
   items: Item[];
   capacity: number;
+  /**
+   * Kilograms it holds, where that is the limit rather than a count. Set on
+   * the craft material bin and nothing else, and the footer reads the other
+   * way round when it is: weight against the limit, and the count as an
+   * aside, because the count is not what fills it.
+   */
+  heft?: number;
   centre: [number, number];
   /**
    * The padlock on it, when it is one of the things that can carry one, with
@@ -229,13 +236,14 @@ export class CratePanel {
         id: piece.id,
         items: piece.items,
         capacity: furnitureCapacity(piece),
+        heft: furnitureHeft(piece),
         centre: furnitureCentre(piece),
         what: furnitureName(piece).toLowerCase(),
         kind: 'furniture',
         lock: piece,
         take: (uid) => this.game.furnitureTake(piece, uid),
-        refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureSpare(piece) <= 0 ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
-        fits: (item) => (furnitureRefuses(piece, item) ? 0 : Math.min(item.count, furnitureSpare(piece))),
+        refuses: (item) => furnitureRefuses(piece, item) ?? (furnitureRoom(piece, item) <= 0 ? `The ${furnitureName(piece).toLowerCase()} is full.` : null),
+        fits: (item) => (furnitureRefuses(piece, item) ? 0 : Math.min(item.count, furnitureRoom(piece, item))),
         add: (item) => this.game.furnitureAdd(piece, item),
       };
     }
@@ -439,7 +447,9 @@ export class CratePanel {
     }
     const weight = store.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);
     const used = store.items.reduce((n, it) => n + it.count, 0);
-    this.footer.textContent = `${used} / ${store.capacity} things · ${weight.toFixed(1)} kg`;
+    this.footer.textContent = store.heft
+      ? `${weight.toFixed(1)} / ${store.heft} kg · ${used} things`
+      : `${used} / ${store.capacity} things · ${weight.toFixed(1)} kg`;
   }
 
   /**
