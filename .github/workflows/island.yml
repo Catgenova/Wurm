@@ -942,6 +942,18 @@ jobs:
             --outfile=node_modules/.cache/larder.mjs --log-level=error
           node node_modules/.cache/larder.mjs
 
+      - name: Fourteen trades, and one of them yours
+        run: |
+          # Sixty-one skills and no way of saying what you *are*. A class is
+          # that: fourteen craft trades, one locked in, opening at fifty in any
+          # skill it covers, free the first time and 500 silver to swap. This
+          # asks both sides for the list and adds it up — every craft skill in
+          # exactly one trade, and what is left over exactly the twenty-two the
+          # combat trades will be drawn from, so no skill gates two cards.
+          npx esbuild supabase/test/craft.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/craft.mjs --log-level=error
+          node node_modules/.cache/craft.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

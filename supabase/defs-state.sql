@@ -189,6 +189,13 @@ create table if not exists cast_def (
   id text primary key, name text not null, cost real not null, level real not null,
   on_what text not null, note text not null
 );
+create table if not exists class_def (
+  id text primary key, kind text not null, name text not null, note text not null,
+  main text not null, lever text not null
+);
+create table if not exists class_skill (
+  class text not null, skill text not null, primary key (class, skill)
+);
 create table if not exists path_def (
   id text primary key, name text not null, note text not null
 );
@@ -1395,7 +1402,7 @@ truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, furniture_d
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step,
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;
 create table if not exists look_option (
   kind text not null, id text not null, ord int not null, name text not null,
@@ -3551,6 +3558,8 @@ create or replace function storey_skill() returns double precision language sql 
 create or replace function indoors_decay() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function indoors_rest() returns double precision language sql immutable as $fn$ select 1.35::double precision $fn$;
 create or replace function wall_height() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
+create or replace function class_at() returns double precision language sql immutable as $fn$ select 50::double precision $fn$;
+create or replace function class_change_cost() returns double precision language sql immutable as $fn$ select 500::double precision $fn$;
 create or replace function craft_head() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function smith_gain() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function brew_gain() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
@@ -3950,6 +3959,59 @@ update tier_odds set level = 0 where tier = 'common';
 update tier_odds set level = 15 where tier = 'rare';
 update tier_odds set level = 35 where tier = 'supreme';
 update tier_odds set level = 60 where tier = 'fantastic';
+insert into class_def values ('terraformer', 'craft', 'Terraformer', 'Moves the ground. Dirt out of a bank, a slope made walkable, a road laid over it.', 'digging', 'Ground comes away in bigger bites, and slopes the island would refuse are yours to shift.');
+insert into class_skill values ('terraformer', 'digging');
+insert into class_skill values ('terraformer', 'paving');
+insert into class_def values ('miner', 'craft', 'Miner', 'Works the rock. Ore out of a seam, a tunnel through the hill, and what is buried in it.', 'mining', 'More out of a vein, a seam found further off, and a face too deep to stand on worked anyway.');
+insert into class_skill values ('miner', 'mining');
+insert into class_skill values ('miner', 'prospecting');
+insert into class_skill values ('miner', 'archaeology');
+insert into class_def values ('mason', 'craft', 'Mason', 'Cuts and lays stone. Bricks, slabs, cobble and the walls that go up out of them.', 'masonry', 'Stone goes further: fewer shards to the brick, fewer bricks to the wall.');
+insert into class_skill values ('mason', 'masonry');
+insert into class_skill values ('mason', 'stonecutting');
+insert into class_def values ('carpenter', 'craft', 'Carpenter', 'Works wood, from a plank to a storey. The bench, the frame and the bow.', 'carpentry', 'Builds higher, wastes less timber, and the fine joinery comes off the bench better.');
+insert into class_skill values ('carpenter', 'carpentry');
+insert into class_skill values ('carpenter', 'fine_carpentry');
+insert into class_skill values ('carpenter', 'bowyery');
+insert into class_skill values ('carpenter', 'fletching');
+insert into class_def values ('smith', 'craft', 'Smith', 'The forge and the anvil. Lumps out of the smelter, and everything beaten out of them.', 'blacksmithing', 'Quality on the anvil, less fuel at the forge, and less ash for the same lump.');
+insert into class_skill values ('smith', 'blacksmithing');
+insert into class_skill values ('smith', 'smelting');
+insert into class_skill values ('smith', 'weaponsmithing');
+insert into class_skill values ('smith', 'armorsmithing');
+insert into class_skill values ('smith', 'platesmithing');
+insert into class_skill values ('smith', 'chainsmithing');
+insert into class_def values ('forester', 'craft', 'Forester', 'Keeps the woods. Felling, planting, and an orchard that bears.', 'woodcutting', 'Fells faster, takes more from a tree, and the orchard carries a heavier crop.');
+insert into class_skill values ('forester', 'woodcutting');
+insert into class_skill values ('forester', 'forestry');
+insert into class_def values ('farmer', 'craft', 'Farmer', 'Works the field. Sowing, tending, harvest and the mill after it.', 'farming', 'A heavier crop and more seed back from it; a field goes longer between tends.');
+insert into class_skill values ('farmer', 'farming');
+insert into class_skill values ('farmer', 'milling');
+insert into class_def values ('cook', 'craft', 'Cook', 'Feeds the settlement. The carcass, the pot and the barrel.', 'cooking', 'Food that feeds more and keeps longer, which nothing else on this island touches.');
+insert into class_skill values ('cook', 'cooking');
+insert into class_skill values ('cook', 'butchering');
+insert into class_skill values ('cook', 'brewing');
+insert into class_def values ('tailor', 'craft', 'Tailor', 'Cloth, hide and rope. What is worn, what is slept under and what holds a sail up.', 'tailoring', 'Cloth and hide go further, dye takes deeper, and rigging holds longer.');
+insert into class_skill values ('tailor', 'tailoring');
+insert into class_skill values ('tailor', 'leatherworking');
+insert into class_skill values ('tailor', 'ropemaking');
+insert into class_def values ('herdsman', 'craft', 'Herdsman', 'Raises and works wildermon. Taming, breeding, and a deed full of them earning their keep.', 'animal_husbandry', 'Better foals, more workers to a settlement, and workers that work faster.');
+insert into class_skill values ('herdsman', 'animal_husbandry');
+insert into class_skill values ('herdsman', 'taming');
+insert into class_def values ('naturalist', 'craft', 'Naturalist', 'Reads the wild. What can be picked, what it is good for, and what it mends.', 'foraging', 'Finds more and finds rarer, and herbs and covers do more when they are used.');
+insert into class_skill values ('naturalist', 'foraging');
+insert into class_skill values ('naturalist', 'botanizing');
+insert into class_skill values ('naturalist', 'alchemy');
+insert into class_skill values ('naturalist', 'first_aid');
+insert into class_def values ('fisher', 'craft', 'Fisher', 'Takes from the water. Rod, net, trap and bait.', 'fishing', 'Nets and traps pull heavier, bait lasts, and water others cannot work is workable.');
+insert into class_skill values ('fisher', 'fishing');
+insert into class_def values ('mender', 'craft', 'Mender', 'Keeps things alive. Damage off, quality on, and nothing thrown away that could be saved.', 'repair', 'Damage comes off faster and improvement sticks -- on anybody’s things, not only your own.');
+insert into class_skill values ('mender', 'repair');
+insert into class_skill values ('mender', 'restoration');
+insert into class_def values ('artisan', 'craft', 'Artisan', 'The fine work. A stone set in a band, a pot off the wheel, a sheet of papyrus.', 'jewellery', 'Rarity comes up oftener on fine work, and a worn stone favours its trade harder.');
+insert into class_skill values ('artisan', 'jewellery');
+insert into class_skill values ('artisan', 'pottery');
+insert into class_skill values ('artisan', 'papyrusmaking');
 insert into path_def values ('love', 'Love', 'The gardener’s way. Things grow for you, things trust you, and what is hurt mends.');
 insert into path_step values ('love', 1, 3, 'Green thumb', 'Everything sown on your settlement comes on a fifth faster.', null, null, null);
 insert into path_step values ('love', 2, 12, 'Refresh', 'Hunger and thirst, both full, in a breath.', 'refresh', 1200, 'You are neither hungry nor thirsty.');

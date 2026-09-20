@@ -59,6 +59,7 @@ import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
+import { CRAFT_CLASSES, CLASS_AT, CLASS_CHANGE_COST } from '../src/game/classes';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
 import { DYEABLE_ITEMS } from '../src/game/dyes';
@@ -397,6 +398,18 @@ out.push(`alter table trait_def add column if not exists family text;`);
 out.push(`create table if not exists cast_def (
   id text primary key, name text not null, cost real not null, level real not null,
   on_what text not null, note text not null
+);`);
+/*
+ * The trades. A class is a card somebody locks in, and `class_skill` is the
+ * set of skills it covers -- fifty in any one of them opens the card, and no
+ * skill belongs to two classes.
+ */
+out.push(`create table if not exists class_def (
+  id text primary key, kind text not null, name text not null, note text not null,
+  main text not null, lever text not null
+);`);
+out.push(`create table if not exists class_skill (
+  class text not null, skill text not null, primary key (class, skill)
 );`);
 out.push(`create table if not exists path_def (
   id text primary key, name text not null, note text not null
@@ -747,7 +760,7 @@ out.push(`truncate melt_def, wall_fitting, recipe, recipe_input, recipe_gives, f
   shield_def, hit_location, wound_kind_def, butcher_part, species_butcher, hoard_metal, crate_def, metal_def, pottery_def, mould_def,
   improve_material_def, improve_tool, improve_stock, improvable_def, item_feeds, boon_skill, plantable, buryable,
   title_def, knack_kin, category_decay,
-  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step,
+  vehicle_def, boat_def, tack_def, cast_def, path_def, path_step, class_def, class_skill,
   bridge_def, bridge_bill, brew_def, dyeable_item, dyeable_class;`);
 
 /*
@@ -1056,6 +1069,8 @@ for (const [fn, v] of [
   ['indoors_decay', INDOORS_DECAY], ['indoors_rest', INDOORS_REST],
   /* And how high one storey stands, which a bridge landing on one has to know. */
   ['wall_height', WALL_HEIGHT],
+  /* What a trade asks before its card is on the table, and what changing one costs. */
+  ['class_at', CLASS_AT], ['class_change_cost', CLASS_CHANGE_COST],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
@@ -1266,6 +1281,11 @@ for (const id of [...DYEABLE_ITEMS].sort()) out.push(`insert into dyeable_item v
 for (const cls of ['cloth', 'leather']) out.push(`insert into dyeable_class values (${q(cls)});`);
 for (const [tier, level] of Object.entries(TIER_LEVEL)) {
   out.push(`update tier_odds set level = ${q(level)} where tier = ${q(tier)};`);
+}
+for (const c of CRAFT_CLASSES) {
+  out.push(`insert into class_def values (` + [q(c.id), q(c.kind), q(c.name), q(c.note),
+    q(c.main), q(c.lever)].join(', ') + `);`);
+  for (const skill of c.skills) out.push(`insert into class_skill values (${q(c.id)}, ${q(skill)});`);
 }
 for (const path of PATH_LIST) {
   out.push(`insert into path_def values (${q(path.id)}, ${q(path.name)}, ${q(path.note)});`);
