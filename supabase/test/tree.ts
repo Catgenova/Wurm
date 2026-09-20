@@ -77,7 +77,8 @@ insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
 
 -- 2. Somebody to hand a tree to.
 do $$
-declare w record; v jsonb; v_a double precision; v_b double precision; v_it bigint;
+declare w record; v jsonb; v_a double precision; v_b double precision;
+        v_c double precision; v_d double precision; v_it bigint;
 begin
   /*
    * A named body rather than whichever row the heap hands over first, and a
@@ -132,11 +133,24 @@ begin
     || '|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid)
                 * class_mul(w.world_id, w.uid, 'hands', 'mining')));
 
-  -- Learning, at the one site that reads it.
+  /*
+   * Learning, at the one site that reads it -- and the other trade measured
+   * the same way rather than against this one.
+   *
+   * Both skills are read before and after, because the only thing this can
+   * honestly claim is that the node moved one of them and left the other
+   * where it was. An earlier version asked masonry to equal mining's starting
+   * figure, which is true only of a body with no knack, no stone, no path and
+   * an empty table -- and false the moment the suite hands over one that has
+   * been used. Every measurement in this file is a ratio across one change on
+   * one body for that reason: whatever else is true of the body cancels.
+   */
   v_a := skill_mult(w.world_id, w.uid, 'mining');
+  v_c := skill_mult(w.world_id, w.uid, 'masonry');
   perform rpc_take_node(w.world_id, 'miner_3_1');
   v_b := skill_mult(w.world_id, w.uid, 'mining');
-  insert into said values ('LEARN|' || v_a || '|' || v_b || '|' || skill_mult(w.world_id, w.uid, 'masonry'));
+  v_d := skill_mult(w.world_id, w.uid, 'masonry');
+  insert into said values ('LEARN|' || v_a || '|' || v_b || '|' || v_c || '|' || v_d);
 
   -- Wind, ditto, with the body pinned so the only thing that moved is the node.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'body_stamina', 20)
@@ -281,10 +295,10 @@ const [handsPlain, handsTree] = said('HANDS').split('|').map(Number);
 check('hands: a whole column takes a sixth off the time a go takes',
   near(handsTree / handsPlain, 0.97 * 0.96 * 0.9), `${handsPlain} → ${handsTree}`);
 
-const [learnPlain, learnTree, learnStone] = said('LEARN').split('|').map(Number);
-check('learning: one minor is three per cent more out of every go',
-  near(learnTree / learnPlain, 1.03) && learnStone === learnPlain,
-  `${learnPlain} → ${learnTree}, and masonry still ${learnStone}`);
+const [learnPlain, learnTree, stonePlain, stoneTree] = said('LEARN').split('|').map(Number);
+check('learning: one minor is three per cent more out of every go, and nothing on another trade',
+  near(learnTree / learnPlain, 1.03) && stoneTree === stonePlain,
+  `mining ${learnPlain} → ${learnTree}, masonry ${stonePlain} → ${stoneTree}`);
 
 const [windPlain, windTree] = said('WIND').split('|').map(Number);
 check('wind: one minor is three per cent less out of you',
