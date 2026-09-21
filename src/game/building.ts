@@ -47,7 +47,14 @@ export interface WallTypeDef {
 export const WALL_TYPES: WallTypeDef[] = [
   { id: 'solid', name: 'Solid', factor: 1, passable: false },
   { id: 'window', name: 'Window', factor: 0.75, passable: false, fittings: [['glass', 2]] },
-  { id: 'bay', name: 'Bay window', factor: 1.25, passable: false, thick: 1.7, fittings: [['glass', 4]] },
+  /*
+   * No `thick`. It used to carry 1.7 of it, which moved the whole section
+   * that much nearer the camera and left a slice of ground showing at the
+   * joint with its neighbours -- a wall a bay is set into is the thickness
+   * the wall is. What a bay projects by, it projects by: the box stands out
+   * in front of the face, which is where a bay actually is.
+   */
+  { id: 'bay', name: 'Bay window', factor: 1.25, passable: false, fittings: [['glass', 4]] },
   { id: 'door', name: 'Door', factor: 0.75, passable: true, fittings: [['hinge', 2]] },
   { id: 'double_door', name: 'Double door', factor: 1, passable: true, wide: true, fittings: [['hinge', 4]] },
   /*

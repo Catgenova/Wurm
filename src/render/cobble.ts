@@ -109,6 +109,19 @@ export const DOOR = { t0: 0.34, t1: 0.66, k1: 0.74 } as const;
  */
 export const DOUBLE = { t0: 0.2, t1: 0.8, k1: 0.7 } as const;
 
+/**
+ * And a bay, which is a window that does not stay in the wall.
+ *
+ * Narrower than the old one, and for a reason the picture cares about and the
+ * flat colours did not: the jambs of an opening this wide are drawn stones,
+ * and at 0.18 they reached into the courses that straddle the section's seam
+ * and cut them in half. At 0.24 there is a stone's width of ordinary field
+ * between the jamb and the seam, so a bay butts its neighbours like anything
+ * else. The head comes down for the same reason the window's did -- the
+ * lintel and the wedges over it have to fit under the band.
+ */
+export const BAY = { t0: 0.24, t1: 0.76, k0: 0.33, k1: 0.72 } as const;
+
 /** The painted wall, in the pieces a renderer fills its faces with. */
 export interface Cobble {
   /** One per variant: the stone of a storey, which butts any other left or right and stacks on any. */
@@ -130,6 +143,8 @@ export interface Cobble {
   gate: HTMLCanvasElement[];
   gateIvy: HTMLCanvasElement[];
   gateWeed: HTMLCanvasElement[];
+  /** And a bay: the hole and the shelf it stands on. What stands on it is not flat, so it is not here. */
+  bay: HTMLCanvasElement[];
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -1017,24 +1032,34 @@ export function cobble(): Cobble {
    */
   const W_X0 = TW * WINDOW.t0, W_X1 = TW * WINDOW.t1;
   const W_HEAD = TH * (1 - WINDOW.k1), W_SILL = TH * (1 - WINDOW.k0);
-  /** How deep the lintel is, and where its top sits. */
-  const LINTEL = 22, L_TOP = W_HEAD - LINTEL + 3;
+  const Y_X0 = TW * BAY.t0, Y_X1 = TW * BAY.t1;
+  const Y_HEAD = TH * (1 - BAY.k1), Y_SILL = TH * (1 - BAY.k0);
+  /** How deep the lintel is. */
+  const LINTEL = 22;
+  /** Where the top of it sits under a given head. */
+  const lintelTop = (head: number): number => head - LINTEL + 3;
 
   /** The mortar the field was broken out for, ragged all round and buried by what goes over it. */
-  function winPocket(g: Ctx, R: Rand, top: number): void {
-    const box: Pt[] = [[W_X0 - 24, top], [W_X1 + 24, top], [W_X1 + 24, W_SILL + 26], [W_X0 - 24, W_SILL + 26]];
+  function winPocket(g: Ctx, R: Rand, x0: number, x1: number, top: number, sill: number): void {
+    const box: Pt[] = [[x0 - 24, top], [x1 + 24, top], [x1 + 24, sill + 26], [x0 - 24, sill + 26]];
     shape(g, roughen(box, R, 6, 4.5));
     g.fillStyle = PASTEL.ringJoint;
     g.fill();
   }
 
-  /** A column of stone up one side of the opening, built from the sill and overhanging into it. */
-  function winJamb(g: Ctx, R: Rand, side: number): void {
-    const line = side < 0 ? W_X0 : W_X1;
-    let y = W_SILL - 2, course = side < 0 ? 0 : 1;
-    while (y > W_HEAD - 4) {
+  /**
+   * A column of stone up one side of the opening, built from the sill and
+   * overhanging into it. `wide` is how big a stone he could spare for it: a
+   * window gets the long ones, a bay the short ones, because a bay is already
+   * most of the section across and a long jamb stone would reach the courses
+   * that straddle the seam.
+   */
+  function winJamb(g: Ctx, R: Rand, side: number, x0: number, x1: number, head: number, sill: number, wide: number): void {
+    const line = side < 0 ? x0 : x1;
+    let y = sill - 2, course = side < 0 ? 0 : 1;
+    while (y > head - 4) {
       const h = 34 + R() * 20;
-      const w = (course++ % 2 ? 44 : 66) + R() * 14;
+      const w = (course++ % 2 ? wide * 0.68 : wide) + R() * 14;
       const x = side < 0 ? line + OVER - w : line - OVER;
       wearOne(g, stone(g, x, y - h, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.03), R);
       y -= h + MORTAR + R() * 3;
@@ -1048,11 +1073,11 @@ export function cobble(): Cobble {
    * rather than ornament -- it is there to throw the load out to the jambs,
    * and a mason who wanted it to look like an arch would have given it more.
    */
-  function relieving(g: Ctx, R: Rand): void {
-    const half = (W_X1 - W_X0) / 2 + 20, cx = (W_X0 + W_X1) / 2;
+  function relieving(g: Ctx, R: Rand, x0: number, x1: number, head: number): void {
+    const half = (x1 - x0) / 2 + 20, cx = (x0 + x1) / 2;
     const rise = 15 + R() * 7;
     const rad = (half * half + rise * rise) / (2 * rise);
-    const cy = L_TOP + rad - rise;
+    const cy = lintelTop(head) + rad - rise;
     const a0 = Math.asin(Math.min(1, half / rad));
     // Five or seven, so the stones are lumps rather than tally marks, and odd
     // so one of them caps the middle.
@@ -1081,22 +1106,30 @@ export function cobble(): Cobble {
     }
   }
 
-  /** Sill, jambs, lintel and the wedges over it, in the order they went up. */
-  function surround(g: Ctx, R: Rand): void {
-    winPocket(g, R, L_TOP - 46);
+  /**
+   * Sill, jambs, lintel and the wedges over it, in the order they went up.
+   *
+   * `shelf` is how far the sill stands proud and how deep it is. A window's
+   * is a sill and a bay's is a shelf, because a bay is a box of glass standing
+   * on it, and a stone that is only a sill under a bay is a stone that comes
+   * out of the wall one winter with the bay on top of it.
+   */
+  function surround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, wide: number, shelf: number): void {
+    const top = lintelTop(head);
+    winPocket(g, R, x0, x1, top - 46, sill);
     // The sill first, because everything either side of the hole stands on it.
-    wearOne(g, stone(g, W_X0 - 16, W_SILL - 4, W_X1 - W_X0 + 32, 24, R, 'dress', false, (R() - 0.5) * 0.012), R);
-    winJamb(g, R, -1);
-    winJamb(g, R, 1);
-    relieving(g, R);
+    wearOne(g, stone(g, x0 - 16 - shelf, sill - 4, x1 - x0 + 32 + shelf * 2, 24 + shelf, R, 'dress', false, (R() - 0.5) * 0.012), R);
+    winJamb(g, R, -1, x0, x1, head, sill, wide);
+    winJamb(g, R, 1, x0, x1, head, sill, wide);
+    relieving(g, R, x0, x1, head);
     // And the lintel over the jambs, under the wedges: one lump if he was
     // lucky with the quarry, two meeting over the middle if he was not.
-    if (R() < 0.42) {
-      wearOne(g, stone(g, W_X0 - 18, L_TOP, W_X1 - W_X0 + 36, LINTEL, R, 'dress', false, (R() - 0.5) * 0.008), R);
+    if (R() < 0.42 && x1 - x0 < 250) {
+      wearOne(g, stone(g, x0 - 18, top, x1 - x0 + 36, LINTEL, R, 'dress', false, (R() - 0.5) * 0.008), R);
     } else {
-      const mid = (W_X0 + W_X1) / 2 + (R() - 0.5) * 30;
-      wearOne(g, stone(g, W_X0 - 18, L_TOP, mid - W_X0 + 18, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
-      wearOne(g, stone(g, mid, L_TOP, W_X1 + 18 - mid, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
+      const mid = (x0 + x1) / 2 + (R() - 0.5) * 30;
+      wearOne(g, stone(g, x0 - 18, top, mid - x0 + 18, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
+      wearOne(g, stone(g, mid, top, x1 + 18 - mid, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
     }
   }
 
@@ -1344,7 +1377,7 @@ export function cobble(): Cobble {
   const WINDOWED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
-    surround(g, rand(v.seed * 197 + 61));
+    surround(g, rand(v.seed * 197 + 61), W_X0, W_X1, W_HEAD, W_SILL, 66, 0);
     g.globalAlpha = 1;
     g.fillStyle = '#000';
     g.globalCompositeOperation = 'destination-out';
@@ -1382,6 +1415,20 @@ export function cobble(): Cobble {
       const x = (W_X0 + W_X1) / 2 + side * (W_X1 - W_X0) * (0.18 + R() * 0.28);
       tussock(g, x, W_SILL - 2, 22 + R() * 18, 14 + R() * 12, R);
     }
+    return c;
+  });
+  /** And with a bay: the same hole and surround, on a shelf rather than a sill. */
+  const BAYED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    surround(g, rand(v.seed * 251 + 13), Y_X0, Y_X1, Y_HEAD, Y_SILL, 46, 10);
+    g.globalAlpha = 1;
+    g.fillStyle = '#000';
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath();
+    g.rect(Y_X0, Y_HEAD, Y_X1 - Y_X0, Y_SILL - Y_HEAD);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
     return c;
   });
   /** And the same section with a doorway in it. */
@@ -1522,6 +1569,7 @@ export function cobble(): Cobble {
     gate: GATED,
     gateIvy: GATE_IVY,
     gateWeed: GATE_WEED,
+    bay: BAYED,
     spill: SPILL,
     base: BASE,
     foot: FOOT,

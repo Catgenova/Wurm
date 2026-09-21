@@ -34,7 +34,7 @@ import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, T
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, DOOR, DOUBLE, WINDOW, type Cobble, cobble } from './cobble';
+import { ARCH, BAY, DOOR, DOUBLE, WINDOW, type Cobble, cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -2690,7 +2690,8 @@ export class Renderer {
       const windowed = wall.type === 'window';
       const doored = wall.type === 'door';
       const gated = wall.type === 'double_door';
-      const cut = arched || windowed || doored || gated;
+      const bayed = wall.type === 'bay';
+      const cut = arched || windowed || doored || gated || bayed;
       /** Whichever hole this section has, added to the path that is open. */
       const hole = (s: number): void => {
         if (arched) { this.archGeom({ px, py, quad }, zoom).hole(s); return; }
@@ -2698,7 +2699,9 @@ export class Renderer {
           ? [DOOR.t0, DOOR.t1, 0, DOOR.k1]
           : gated
             ? [DOUBLE.t0, DOUBLE.t1, 0, DOUBLE.k1]
-            : [WINDOW.t0, WINDOW.t1, WINDOW.k0, WINDOW.k1];
+            : bayed
+              ? [BAY.t0, BAY.t1, BAY.k0, BAY.k1]
+              : [WINDOW.t0, WINDOW.t1, WINDOW.k0, WINDOW.k1];
         ctx.moveTo(px(t0, k0, s), py(t0, k0, s));
         ctx.lineTo(px(t1, k0, s), py(t1, k0, s));
         ctx.lineTo(px(t1, k1, s), py(t1, k1, s));
@@ -2733,6 +2736,7 @@ export class Renderer {
         : windowed ? cob.window[v]
         : doored ? cob.door[v]
         : gated ? cob.gate[v]
+        : bayed ? cob.bay[v]
         : cob.face[v], 0, 1);
       /*
        * The way through goes in before anything that grows, and unlit,
@@ -2794,6 +2798,17 @@ export class Renderer {
         ctx.lineWidth = Math.max(1, 1.5 * zoom);
         ctx.lineJoin = 'round';
         ctx.stroke();
+      }
+      /*
+       * A bay is not in the wall, so it is not clipped to the hole: what fills
+       * the hole is the inside of the box, and the box itself stands out in
+       * front of the stone and over the shelf it was built on.
+       */
+      if (bayed) {
+        ctx.beginPath();
+        hole(1);
+        ctx.fillStyle = rgb(cob.reveal, 0.42);
+        ctx.fill();
       }
       if (wall.level === 0 && !indoors) {
         onStone();
@@ -2860,6 +2875,7 @@ export class Renderer {
         if (doored) blit(cob.doorIvy[v], 0, 1);
         if (gated) blit(cob.gateIvy[v], 0, 1);
       }
+      if (bayed) this.cobBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
       return;
@@ -2913,7 +2929,7 @@ export class Renderer {
         this.wallOpening(mat, lit, g, WINDOW.t0, WINDOW.t1, WINDOW.k0, WINDOW.k1, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'bay':
-        this.wallOpening(mat, lit, g, 0.18, 0.82, 0.33, 0.82, 'glass', zoom, this.lampBehind(wall, border));
+        this.wallOpening(mat, lit, g, BAY.t0, BAY.t1, BAY.k0, BAY.k1, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'door':
         this.wallOpening(mat, lit, g, DOOR.t0, DOOR.t1, 0, DOOR.k1, 'door', zoom);
@@ -3597,6 +3613,110 @@ export class Renderer {
       ctx.arc(cx, cy, Math.max(2, 3.6 * zoom * (leaves === 2 ? 0.72 : 1)), 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.lineWidth = 1;
+  }
+
+  /**
+   * The bay, which is the only part of a wall that is not in it.
+   *
+   * Everything else an opening is made of lies between the two faces of the
+   * wall and comes out of `px` with an `s` of one or minus one. A bay is a box
+   * of glass standing on a shelf, three sides of it out in the weather, and it
+   * is drawn where it actually is: `OUT` past the near face, canted back to
+   * the jambs so the two cheeks look along the wall.
+   *
+   * Which cheek you can see depends on which way the section is turned, and
+   * there is no depth buffer here to work it out, so each face is wound the
+   * same way round and one whose projected area comes out with the wrong sign
+   * is facing away and is not drawn. That is the whole of it: a bay is four
+   * quads and a rule about which of them are yours to look at.
+   */
+  private cobBay(cob: Cobble, g: WallGeom, zoom: number, alight: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py } = g;
+    const { t0, t1, k0, k1 } = BAY;
+    /** How far the box stands off the near face, in half-thicknesses of wall. */
+    const OUT = 3.4;
+    /** How far in the cheeks come, so they look along the wall and not across it. */
+    const CANT = 0.1;
+    /** The lid falls away from the wall, because a flat one would hold the rain. */
+    const kLid = k1 - 0.045;
+    const a0 = t0 + CANT, a1 = t1 - CANT;
+    type P = [number, number, number];
+    const pt = ([t, k, s]: P): [number, number] => [px(t, k, s), py(t, k, s)];
+    /** Twice the signed area of a projected face: negative means it is turned away. */
+    const facing = (q: Array<[number, number]>): number => {
+      let a = 0;
+      for (let i = 0; i < q.length; i++) { const p = q[i], r = q[(i + 1) % q.length]; a += p[0] * r[1] - r[0] * p[1]; }
+      return a;
+    };
+    const path = (q: Array<[number, number]>): void => {
+      ctx.beginPath();
+      ctx.moveTo(q[0][0], q[0][1]);
+      for (let i = 1; i < q.length; i++) ctx.lineTo(q[i][0], q[i][1]);
+      ctx.closePath();
+    };
+    const front: P[] = [[a0, k1, OUT], [a1, k1, OUT], [a1, k0, OUT], [a0, k0, OUT]];
+    const sign = Math.sign(facing(front.map(pt)));
+    /** A light of the bay: the glass, the frame round it and the bars across it. */
+    const light = (face: P[], bars: number): void => {
+      const q = face.map(pt);
+      if (Math.sign(facing(q)) !== sign) return;
+      path(q);
+      ctx.fillStyle = this.pane({ px, py, quad: g.quad }, t0, t1, k0, k1, alight);
+      ctx.fill();
+      ctx.strokeStyle = rgb(cob.line, 0.95, 0.8);
+      ctx.lineWidth = Math.max(1, 1.6 * zoom);
+      ctx.stroke();
+      if (zoom < 0.7) return;
+      // The bars: `bars` up the light and one across it, struck between the
+      // corners of the face itself so they follow it however it is turned.
+      const lerp = (p: [number, number], r: [number, number], u: number): [number, number] =>
+        [p[0] + (r[0] - p[0]) * u, p[1] + (r[1] - p[1]) * u];
+      ctx.lineWidth = Math.max(1, 1.2 * zoom);
+      ctx.beginPath();
+      for (let i = 1; i <= bars; i++) {
+        const u = i / (bars + 1);
+        const a = lerp(q[0], q[1], u), b = lerp(q[3], q[2], u);
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+      }
+      const l = lerp(q[0], q[3], 0.5), r = lerp(q[1], q[2], 0.5);
+      ctx.moveTo(l[0], l[1]); ctx.lineTo(r[0], r[1]);
+      ctx.stroke();
+    };
+    // The apron under it, so the box is standing on something rather than
+    // hanging: the shelf's own edge, following the bay's plan.
+    const apron: P[] = [[t0, k0, 1], [a0, k0, OUT], [a1, k0, OUT], [t1, k0, 1]];
+    const skirt = apron.map(pt).concat(apron.slice().reverse().map(([t, , s]) => pt([t, k0 - 0.05, s])));
+    /*
+     * And the two brackets under it, before the apron, so the apron sits on
+     * their heads. A box of glass a metre off the ground with nothing under
+     * it is a box of glass floating, and the eye says so before it has
+     * worked out why.
+     */
+    ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
+    ctx.lineWidth = Math.max(1, 1.4 * zoom);
+    for (const t of [t0 + 0.07, t1 - 0.07]) {
+      const wedge: P[] = [[t, k0, 1], [t, k0, OUT * 0.85], [t, k0 - 0.19, 1]];
+      path(wedge.map(pt));
+      ctx.fillStyle = rgb(cob.reveal, 0.74);
+      ctx.fill();
+      ctx.stroke();
+    }
+    path(skirt);
+    ctx.fillStyle = rgb(cob.reveal, 0.82);
+    ctx.fill();
+    ctx.stroke();
+    light([[t0, k1, 1], [a0, kLid, OUT], [a0, k0, OUT], [t0, k0, 1]], 1);
+    light([[a1, kLid, OUT], [t1, k1, 1], [t1, k0, 1], [a1, k0, OUT]], 1);
+    light([[a0, kLid, OUT], [a1, kLid, OUT], [a1, k0, OUT], [a0, k0, OUT]], 2);
+    // And the lid over the lot, which is the same slab the wall is capped with.
+    const lid: P[] = [[t0, k1, 1], [t1, k1, 1], [a1, kLid, OUT], [a0, kLid, OUT]];
+    path(lid.map(pt));
+    ctx.fillStyle = rgb(cob.reveal, 1.1);
+    ctx.fill();
+    ctx.strokeStyle = rgb(cob.line, 0.95, 0.7);
+    ctx.stroke();
     ctx.lineWidth = 1;
   }
 
