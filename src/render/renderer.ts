@@ -1023,7 +1023,7 @@ export class Renderer {
       for (let k = 0; k < 4; k++) {
         const dx = q[i + k * 2] - cx;
         const dy = q[i + k * 2 + 1] - cy;
-        const out = 0.34 / (Math.hypot(dx, dy) || 1);
+        const out = 0.75 / (Math.hypot(dx, dy) || 1);
         const px = q[i + k * 2] + dx * out;
         const py = q[i + k * 2 + 1] + dy * out;
         if (k === 0) ctx.moveTo(px, py);

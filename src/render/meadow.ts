@@ -114,11 +114,13 @@ const MOSS = { lit: '#9dba80', shade: '#7f9c67', line: '#5f7a4c' };
  * the same thing about a surface this flat, goes on with no blend at all, and
  * dims and greys with the ground under it because it is barely there.
  */
-const SOD = {
-  dark: 'rgba(38, 44, 28, 0.13)',
-  mid: 'rgba(48, 56, 34, 0.09)',
-  pale: 'rgba(255, 253, 236, 0.15)',
-};
+const SOD: Array<readonly [string, string]> = [
+  // Each is the clump and the breath of it: the same ink again, wider and
+  // fainter, which is what turns a hard-edged splodge into a soft one.
+  ['rgba(38, 44, 28, 0.085)', 'rgba(38, 44, 28, 0.04)'],
+  ['rgba(48, 56, 34, 0.06)', 'rgba(48, 56, 34, 0.028)'],
+  ['rgba(255, 253, 236, 0.095)', 'rgba(255, 253, 236, 0.042)'],
+];
 
 /* ---- the machinery ------------------------------------------------------- */
 
@@ -358,32 +360,57 @@ function swardSheet(): HTMLCanvasElement {
     });
   }
   /*
-   * And the clumps. Three or four little strokes together, leaning the same
-   * way as their neighbours because grass grows the way the last wind left
-   * it, with the lean turning slowly across the sheet. Whole waves, so the
-   * turning wraps with everything else.
+   * And the clumps: lobes, the way the ivy and the hedges are built, laid
+   * flat and squashed the way the ground is.
+   *
+   * They were a thousand little strokes of blade grass, which is honest about
+   * what grass is and wrong about what it looks like from here. Nobody sees a
+   * blade from standing height; what you see is where the grass is thicker
+   * and where it is thinner, which is a shape and not a hatch -- and a field
+   * of hatching seen from above reads as carpet, or as static.
+   *
+   * Each clump is a few circles run together and filled once, so an overlap
+   * does not come out twice as dark and the whole of it is one soft shape.
+   * They are drawn in the drifts the last wind left, which is what the slow
+   * turn across the sheet is for.
    */
   const R = rand(4409);
-  for (let i = 0; i < 1150; i++) {
+  for (let i = 0; i < 460; i++) {
     const cx = R() * SWARD_W, cy = R() * SWARD_W;
-    const lean = Math.sin((cx / SWARD_W) * Math.PI * 2 + 0.7) * 0.5
-      + Math.sin((cy / SWARD_W) * Math.PI * 4 + 2.1) * 0.35
-      + (R() - 0.5) * 0.5;
-    const len = 6 + R() * 9;
-    const n = 3 + Math.floor(R() * 3);
-    const pale = R() < 0.34;
-    wrapped(cx, cy, len + 4, (dx, dy) => {
-      g.strokeStyle = pale ? SOD.pale : R() < 0.5 ? SOD.dark : SOD.mid;
-      for (let k = 0; k < n; k++) {
-        const a = lean + (k - (n - 1) / 2) * 0.32;
-        const l = len * (0.7 + ((k * 37) % 11) / 22);
-        g.lineWidth = 0.9 + ((k * 13) % 5) / 6;
-        g.beginPath();
-        g.moveTo(cx + dx, cy + dy);
-        g.quadraticCurveTo(cx + dx + Math.sin(a) * l * 0.4, cy + dy - Math.cos(a) * l * 0.55,
-          cx + dx + Math.sin(a) * l, cy + dy - Math.cos(a) * l * 0.8);
-        g.stroke();
+    /*
+     * Sizes from a squared roll, so most are small and a few are wide. All
+     * one size was the tell: three hundred blots of one diameter at one
+     * strength came out as camouflage, which is exactly what camouflage is
+     * for and exactly what a field is not.
+     */
+    const r = 3.5 + R() * R() * 19;
+    const lean = Math.sin((cx / SWARD_W) * Math.PI * 2 + 0.7) * 0.6
+      + Math.sin((cy / SWARD_W) * Math.PI * 4 + 2.1) * 0.4;
+    const lobes = 3 + Math.floor(R() * 4);
+    const t = R();
+    const [ink, soft] = SOD[t < 0.46 ? 0 : t < 0.78 ? 1 : 2];
+    // The lobes of this one, settled here so every wrapped copy is the same.
+    const at: Array<[number, number, number]> = [];
+    for (let k = 0; k < lobes; k++) {
+      const u = (k / Math.max(1, lobes - 1) - 0.5) * 2;
+      at.push([
+        Math.cos(lean) * u * r * 1.15 + (R() - 0.5) * r * 0.6,
+        (Math.sin(lean) * u * r * 1.15 + (R() - 0.5) * r * 0.6) * 0.58,
+        r * (0.5 + R() * 0.55),
+      ]);
+    }
+    const lay = (dx: number, dy: number, grow: number, fill: string): void => {
+      g.beginPath();
+      for (const [lx, ly, lr] of at) {
+        g.moveTo(cx + dx + lx + lr * grow, cy + dy + ly);
+        g.ellipse(cx + dx + lx, cy + dy + ly, lr * grow, lr * grow * 0.66, 0, 0, 7);
       }
+      g.fillStyle = fill;
+      g.fill();
+    };
+    wrapped(cx, cy, r * 3.2, (dx, dy) => {
+      lay(dx, dy, 1.5, soft);
+      lay(dx, dy, 1, ink);
     });
   }
   // A few scrapes where it has been walked thin or a mole has been at it.
