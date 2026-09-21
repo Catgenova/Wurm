@@ -56,7 +56,7 @@ export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, T
  * above and it costs four tile reads: a beach without it is a flat cream
  * ribbon, and a beach with it is a beach.
  */
-export const DAMP_SAND: readonly [number, number, number] = [182, 162, 118];
+export const DAMP_SAND: readonly [number, number, number] = [204, 190, 160];
 
 /**
  * The grounds drawn as one flat colour: no grain, and no nudge of brightness
@@ -255,29 +255,36 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    */
   [TileType.Grass]: { name: 'Grass', color: [110, 188, 142], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   /*
-   * A pale sandy tan, not the dark chocolate it was. Bare earth against a
-   * teal field is the loudest join on the island: at 121, 92, 60 a footpath
-   * read as a trench cut through it. Packed dirt stays the lighter of the
-   * two -- it is earth somebody walked flat and dusty -- and a ploughed field
-   * the darker, because turned soil is wet soil.
+   * A dusty clay leaning a little rose: not the dark chocolate it started as
+   * and not the sandy tan it went to next. Bare earth against a teal field is
+   * the loudest join on the island -- at 121, 92, 60 a footpath read as a
+   * trench cut through it, and a saturated brown is a trench however light
+   * you make it. Packed dirt stays the lighter and greyer of the two -- it is
+   * earth somebody walked flat and dusty -- and a ploughed field the darkest,
+   * because turned soil is wet soil.
    */
-  [TileType.Dirt]: { name: 'Dirt', color: [168, 131, 92], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
+  [TileType.Dirt]: { name: 'Dirt', color: [186, 155, 135], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
   /*
    * Greyer and dustier than the dirt it was made from, not just lighter.
    * Both of them were the same brown at two brightnesses and a road beside a
    * dug plot read as one ground somebody had shaded in: earth that has been
    * walked flat for a season has the colour trodden out of it.
    */
-  [TileType.PackedDirt]: { name: 'Packed dirt', color: [186, 172, 148], speed: 1.05, pavable: true, roll: 0.9 },
+  [TileType.PackedDirt]: { name: 'Packed dirt', color: [194, 182, 168], speed: 1.05, pavable: true, roll: 0.9 },
   /*
-   * The one ground that was already pastel, and the only one that has not had
-   * to move for the rest of them. It is flat like the others now -- no grain,
-   * no nudge from one tile to the next -- a field runs out over the top of it
-   * rather than stopping at a ruled line, and where the sea is against it it
-   * is damp. That last is most of what makes a beach read as a beach rather
-   * than as a cream stripe between a field and the water.
+   * Clean cream, and the palest ground on the island. It was a saturated
+   * yellow-tan for a long while -- the last colour on the map still picked
+   * for a yellow-green field -- and between a blue sea and a teal shore that
+   * was the loudest thing in the picture, when the whole use of a beach is to
+   * be the quiet strip between the two.
+   *
+   * It is flat like the others -- no grain, no nudge from one tile to the
+   * next -- a field runs out over the top of it rather than stopping at a
+   * ruled line, and where the sea is against it it is damp. That last is most
+   * of what makes a beach read as a beach rather than as a cream stripe
+   * between a field and the water.
    */
-  [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
+  [TileType.Sand]: { name: 'Sand', color: [228, 219, 195], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
   [TileType.Rock]: { name: 'Rock', color: [168, 166, 178], speed: 0.9, mineable: true, roll: 0.85 },
   /*
    * Dry grass, pale and clean, rather than the mustard it was. 156, 150, 84
@@ -287,7 +294,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    *
    * It stops here rather than going paler still. Two hundred and four, a
    * hundred and ninety-eight, a hundred and fifty read better on its own and
-   * sat within ten of the sand, and a beach you cannot tell from a steppe is
+   * came far too near the sand, and a beach you cannot tell from a steppe is
    * worse than a steppe that is a little green.
    */
   [TileType.Steppe]: { name: 'Steppe', color: [178, 190, 140], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
@@ -299,7 +306,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Moss]: { name: 'Moss', color: [72, 124, 93], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
   [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
-  [TileType.Field]: { name: 'Field', color: [150, 121, 82], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
+  [TileType.Field]: { name: 'Field', color: [158, 122, 104], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
   [TileType.Tree]: { name: 'Tree', color: [62, 122, 86], speed: 1, blocks: true, roll: 0.6 },
   [TileType.Bush]: { name: 'Bush', color: [66, 134, 92], speed: 0.5, roll: 0.4 },
   // Walked over, and in the way of everything else until it is dug out or

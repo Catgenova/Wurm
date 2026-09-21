@@ -1059,7 +1059,7 @@ export class Renderer {
       (pts[A] * (1 - u) + pts[B] * u) * (1 - v) + (pts[D] * (1 - u) + pts[C] * u) * v;
     const atY = (u: number, v: number): number =>
       (pts[A + 1] * (1 - u) + pts[B + 1] * u) * (1 - v) + (pts[D + 1] * (1 - u) + pts[C + 1] * u) * v;
-    const look = m.looks[strewLook(x, y)];
+    const look = m.looks[strewLook(m.cuts, x, y)];
     const lo = look.blobN[0];
     const n = lo + Math.floor(hash2(x, y, 301) * (look.blobN[1] - lo + 1));
     // Where the first one stands. The rest are placed off it rather than off

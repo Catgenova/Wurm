@@ -8,34 +8,38 @@ import { STREWN, TILE_DEFS, TileType } from '../world/tiles';
  * and it is sixty per cent of what anybody looks at. Next to a painted wall
  * or a cobbled road it was the weakest surface in the game.
  *
- * It is built in two layers.
+ * The ground itself is one flat colour and stays that way. It carried a
+ * texture for a while -- a sward of soft light and shade laid over the whole
+ * field -- and flat is better, and cheaper by a good deal: the references it
+ * is drawn from are one colour with the detail sitting on it in pieces you
+ * can count, and a wash over the lot puts the field into the same range of
+ * light and dark as the things standing in it.
  *
- * The **sward** is the ground itself: one picture, three tiles by three, laid
- * across the whole field as a repeating pattern hung off the world's own axes
- * rather than blitted onto a tile at a time. It is black and white at a tenth
- * of an alpha and nothing else -- the same thing the fourteen speckles it
- * replaces always were -- so the tile keeps its own green, the hour's sun,
- * the slope it lies on and the grey of land you only remember.
+ * So the **blobs** are the only thing on it. There were tufts of blade grass
+ * and daisies and buttercups and dandelion clocks and pebbles, and the whole
+ * of that went: a meadow drawn from standing height is not a botany plate, it
+ * is lumps of green in grass. So they are lumps of green -- built out of
+ * lobes with an outline round them, a lighter green shifted up into the light
+ * and a pale crown on the top of it, which is the same language the ivy on
+ * the walls is drawn in, at a twentieth of the size.
  *
- * It is a pattern and not nine hundred little blits because nine hundred
- * little blits, each one sheared onto a rhombus, was the whole cost of this:
- * sixteen milliseconds of a frame, against two for everything else here put
- * together. One fill a row draws the lot.
+ * Bare earth and sand are here too, and they get the other painter. What
+ * sits on them is not a thing standing on the ground, it is the ground: a
+ * heap of turned earth, a dune on a beach. So those are drawn with no lobes
+ * and no line at all -- light gathered on the side facing the sun, shade
+ * gathering in the lee, and no edge anywhere. Drawn as clumps they came out
+ * as gravel scattered over a road, which is the grain all of this was to be
+ * rid of.
  *
- * The **blobs** are what grows in it, and they are the only thing that does.
- * There were tufts of blade grass and daisies and buttercups and dandelion
- * clocks and pebbles, and the whole of that went: a meadow drawn from
- * standing height is not a botany plate, it is lumps of green in grass. So
- * they are lumps of green -- built out of lobes with an outline round them,
- * a lighter green shifted up into the light and a pale crown on the top of
- * it, which is the same language the ivy on the walls is drawn in, at a
- * twentieth of the size.
+ * Either way the colours are the tile's own, worked out from it, so bringing
+ * a ground into this is a matter of saying what colour it is and how big and
+ * how often its lumps come. None of them needs a palette of its own.
  *
  * Which of the ten a tile is comes out of where it is and nothing else: a
  * slow noise over the map so that the bigger clumps come in drifts, with
- * three tiles in ten jumping to a neighbouring look so the drifts have ragged
- * edges. Nothing is stored, nothing is sent, and two people standing on the
- * same tile see the same grass.
+ * about a fifth of the tiles jumping to a neighbouring look so the drifts
+ * have ragged edges. Nothing is stored, nothing is sent, and two people
+ * standing on the same tile see the same grass.
  */
 
 type Ctx = CanvasRenderingContext2D;
@@ -87,6 +91,8 @@ export interface Strew {
   clumps: number;
   /** The tone its ruffle is painted in where it runs out onto bare earth. */
   hem: Green;
+  /** Where its ten fall, as running shares: how bare this ground is. */
+  cuts: readonly number[];
 }
 
 /* ---- the paints ---------------------------------------------------------- */
@@ -97,7 +103,7 @@ export interface Strew {
  * The same four the ivy on a wall is built from, because a clump of grass seen
  * from here and a clump of ivy seen from here are the same kind of thing.
  */
-interface Green { line: string; shade: string; lit: string; top: string }
+interface Green { line: string; shade: string; lit: string; top: string; foot: string }
 
 /**
  * Those four, in three strengths, as offsets from the ground they grow out of:
@@ -136,8 +142,8 @@ function hueOf(c: readonly number[]): [number, number, number] {
   return [h / 6, l, sat];
 }
 
-/** And back again, as a colour a canvas will take. */
-function hexOf(h: number, l: number, s: number): string {
+/** And back again. */
+function rgbOf(h: number, l: number, s: number): [number, number, number] {
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
   const p = 2 * l - q;
   const at = (t: number): number => {
@@ -148,16 +154,33 @@ function hexOf(h: number, l: number, s: number): string {
           : p;
     return Math.round(Math.max(0, Math.min(1, v)) * 255);
   };
-  return `#${[at(h + 1 / 3), at(h), at(h - 1 / 3)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+  return [at(h + 1 / 3), at(h), at(h - 1 / 3)];
 }
 
-/** The three strengths a given ground grows its clumps in. */
-function greensOf(color: readonly number[]): [deep: Green, mid: Green, pale: Green] {
+/** And as a colour a canvas will take. */
+const hexOf = (h: number, l: number, s: number): string =>
+  `#${rgbOf(h, l, s).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+
+/**
+ * The three strengths a given ground grows its clumps in.
+ *
+ * `stand` is how far off the ground those tones are allowed to get: one gives
+ * the offsets above as measured, and less pulls all of them back towards the
+ * tile's own colour.
+ */
+function greensOf(color: readonly number[], stand = 1): [deep: Green, mid: Green, pale: Green] {
   const [h, l, s] = hueOf(color);
+  /*
+   * The shade a thing throws at its own foot, in the ground's hue rather than
+   * in one fixed green-black. A dune with a green smudge under it is a stain
+   * on the beach; the sand's own shadow is the sand, darker.
+   */
+  const [fr, fg, fb] = rgbOf(h, Math.max(0.02, l - 0.42), s * 0.55);
+  const foot = `rgba(${fr}, ${fg}, ${fb}, 0.13)`;
   const one = (rows: readonly [Tone, Tone, Tone, Tone]): Green => {
     const [line, shade, lit, top] = rows.map(([dl, ks]) =>
-      hexOf(h, Math.max(0.02, Math.min(0.97, l + dl)), s * ks));
-    return { line, shade, lit, top };
+      hexOf(h, Math.max(0.02, Math.min(0.97, l + dl * stand)), s * ks));
+    return { line, shade, lit, top, foot };
   };
   return [one(TONES.deep), one(TONES.mid), one(TONES.pale)];
 }
@@ -259,7 +282,7 @@ function union(g: Ctx, cs: Lobe[], dx: number, dy: number, grow: number): void {
 function clump(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pal: Green): void {
   const cs = lobesOf(cx, cy, w, h, R);
   /*
-   * Where it meets the ground. The sward runs on behind a clump unchanged, so
+   * Where it meets the ground. The field runs on behind a clump unchanged, so
    * without this the bottom edge of one is the only thing saying where it
    * stands and a clump reads as printed on the field rather than growing out
    * of it. It goes on first, under everything, and it is away from the sun,
@@ -267,13 +290,13 @@ function clump(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pa
    */
   g.beginPath();
   g.ellipse(cx + w * 0.06, cy + h * 0.34, w * 0.46, h * 0.13, 0, 0, 7);
-  g.fillStyle = 'rgba(46, 62, 34, 0.13)';
+  g.fillStyle = pal.foot;
   g.fill();
   // The line is a share of a lobe, not a fixed weight. At a pixel and a bit
   // round a lobe two pixels across, a small clump came out as more outline
   // than clump and the hollows between its lobes filled in solid.
-  const ink = Math.max(0.32, Math.min(w, h) * 0.3 * 0.2);
-  union(g, cs, 0, 0, ink);
+  const line = Math.max(0.32, Math.min(w, h) * 0.3 * 0.2);
+  union(g, cs, 0, 0, line);
   g.fillStyle = pal.line;
   g.fill();
   union(g, cs, 0, 0, 0);
@@ -296,6 +319,63 @@ function clump(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pa
     g.fill();
   }
   g.restore();
+}
+
+/* ---- and what the ground does on its own ---------------------------------- */
+
+/**
+ * How far a swell's tones are let stand off the ground it is a swell of.
+ *
+ * A clump is a thing in its own right and may be any shade; a dune is the
+ * same sand at another angle to the sun, and half a shade is the whole of the
+ * difference between a beach with dunes on it and a beach with stains on it.
+ */
+const SWELL_STAND = 0.72;
+
+/**
+ * A swell of the ground itself: a dune on a beach, a heap of turned earth.
+ *
+ * Not lobes with a line round them, because this is not a thing *standing on*
+ * the ground -- it is the ground, lying at another angle to the sun. All you
+ * see of a dune from here is light gathered along the side facing the sun and
+ * shade gathering in the lee of it, and no edge anywhere. An edge of any sort
+ * is exactly what turns a dune into a pebble lying on the beach, which is
+ * what drawing it out of lobes gave and what this is here to be rid of.
+ *
+ * So: two soft fills, one up into the sun and one down out of it, each flat
+ * through the middle and gone by its rim, set either side of where the crest
+ * runs. Between them they are the whole of the thing.
+ */
+function swell(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pal: Green): void {
+  // Its own roll for size and lie, so a stretch of beach is not one oval
+  // stamped out twenty times.
+  const rx = (w / 2) * (0.86 + R() * 0.28);
+  const ry = (h / 2) * (0.86 + R() * 0.28);
+  const tilt = (R() - 0.5) * 0.5;
+  const lay = (dx: number, dy: number, k: number, c: string): void => {
+    g.save();
+    g.translate(cx + dx, cy + dy);
+    g.rotate(tilt);
+    g.scale(rx * k, ry * k);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    grad.addColorStop(0, c);
+    grad.addColorStop(0.42, c);
+    grad.addColorStop(1, `${c}00`);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(0, 0, 1, 0, 7);
+    g.fill();
+    g.restore();
+  };
+  /*
+   * The lee, and the sunlit back of it. They sit either side of where the
+   * crest runs rather than one over the other: laid concentrically they cover
+   * each other over most of their width, the light and the shade cancel, and
+   * all that is left of a dune is two thin crescents. The sun comes over the
+   * top left here, as it does for everything else in the game.
+   */
+  lay(w * 0.2, h * 0.24, 0.85, pal.shade);
+  lay(-w * 0.18, -h * 0.22, 0.85, pal.top);
 }
 
 /* ---- the ruffled edge ---------------------------------------------------- */
@@ -399,19 +479,18 @@ export function ruffle(
  * something that is everywhere.
  */
 const WEIGHTS = [560, 32, 22, 15, 12, 10, 8, 6, 4, 3];
-const TOTAL = WEIGHTS.reduce((a, b) => a + b, 0);
+
 /**
- * What share of the field is bare, and how many clumps a tile grows on
- * average -- both read off the weights rather than written down beside them,
- * so neither can drift from the thing it describes when the weights move.
+ * A weighted list as running shares of the whole, which is the shape a noise
+ * between nought and one can be looked up in. Every ground works its own out,
+ * because how bare a beach is and how bare a meadow is are not the same
+ * question.
  */
-export const BARE_SHARE = WEIGHTS[0] / TOTAL;
-const CUTS = ((): number[] => {
-  const out: number[] = [];
+const cutsOf = (ws: readonly number[]): number[] => {
+  const total = ws.reduce((a, b) => a + b, 0);
   let sum = 0;
-  for (const w of WEIGHTS) { sum += w; out.push(sum / TOTAL); }
-  return out;
-})();
+  return ws.map((w) => { sum += w; return sum / total; });
+};
 
 /** Value noise over the map, smooth over six tiles. */
 function drift(x: number, y: number): number {
@@ -424,27 +503,49 @@ function drift(x: number, y: number): number {
   return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
 }
 
-/** Which of the ten this tile is. The drift is the place's, not the ground's. */
-export function strewLook(x: number, y: number): number {
+/**
+ * Which of the ten this tile is.
+ *
+ * The drift is the place's and the cuts are the ground's: the same patch of
+ * country comes out thick or thin wherever you are standing, and what thick
+ * amounts to is the one thing a beach and a meadow differ by here.
+ */
+export function strewLook(cuts: readonly number[], x: number, y: number): number {
   const n = drift(x, y);
-  let base = CUTS.length - 1;
-  for (let i = 0; i < CUTS.length; i++) if (n < CUTS[i]) { base = i; break; }
+  let base = cuts.length - 1;
+  for (let i = 0; i < cuts.length; i++) if (n < cuts[i]) { base = i; break; }
   const j = hash2(x, y, 71);
   const step = j < 0.12 ? 1 : j < 0.22 ? -1 : 0;
-  return Math.min(WEIGHTS.length - 1, Math.max(0, base + step));
+  return Math.min(cuts.length - 1, Math.max(0, base + step));
 }
 
 /* ---- the whole of it ----------------------------------------------------- */
 
 /** What one ground calls the things lying on it, for the tells. */
 interface Ground {
-  /** The one word for what grows on it: a clump in the lightest of it. */
+  /** The one word for the stuff it is made of: a lump in the lightest of it. */
   word: string;
-  /** What its palest clumps mean, and what its deepest ones do. */
+  /** What its palest lumps mean, and what its deepest ones do. */
   palest: string;
   deepest: string;
   /** So two grounds do not grow the same lumps in two colours. */
   seed: number;
+  /**
+   * How big the things on it are against a meadow's clumps, how far they are
+   * squashed down, and how much rarer they are.
+   */
+  scale: number;
+  flat: number;
+  rarity: number;
+  /**
+   * And whether what sits on it is a thing *on* the ground or a swell *of*
+   * it. A clump of grass is an object: lobes of leaf, a line round it, a good
+   * deal darker or lighter than the field it stands in. A dune is the beach
+   * at another angle to the sun: no line, no edge worth the name, and barely
+   * a shade off the sand it is made of. Nothing is both, so this is not a
+   * dial -- it picks which of the two painters above does the work.
+   */
+  swells?: true;
 }
 
 const GROUNDS: Partial<Record<TileType, Ground>> = {
@@ -452,34 +553,46 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'green',
     palest: 'where the sun has been on it',
     deepest: 'the wet corner of a field',
-    seed: 0,
+    seed: 0, scale: 1, flat: 1, rarity: 1,
   },
   [TileType.Steppe]: {
     word: 'straw',
     palest: 'bleached out: the crown of a rise, where the wind gets at it',
     deepest: 'a hollow that held its water longer than the rest of it did',
-    seed: 1000,
+    seed: 1000, scale: 1, flat: 1, rarity: 1,
   },
-  // Turned earth: clods, and the stones that come up with them.
+  /*
+   * Turned earth: mounds of it, broad and low and a good deal wider than a
+   * clump of grass. What was here first was stones -- a dozen little
+   * hard-edged things a tile -- and a road of those reads as grit, which is
+   * the grain all of this was drawn to be rid of. Earth lies in heaps; it
+   * does not lie in gravel.
+   */
   [TileType.Dirt]: {
     word: 'earth',
-    palest: 'dried out on top, the way a clod does in a day of sun',
+    palest: 'dried out on top, the way a heap does in a day of sun',
     deepest: 'turned up wet from under the rest of it',
-    seed: 2000,
+    seed: 2000, scale: 2.6, flat: 0.6, rarity: 1.5, swells: true,
   },
-  // Earth somebody has walked flat: what is left is what would not go down.
+  // Earth walked flat: the same, lower and rarer, because a road is a road.
   [TileType.PackedDirt]: {
-    word: 'stone',
-    palest: 'a pale one, trodden proud of the rest',
-    deepest: 'a dark one, half of it still under',
-    seed: 3000,
+    word: 'earth',
+    palest: 'a rise of it, trodden pale on top',
+    deepest: 'a hollow where the wheels go',
+    seed: 3000, scale: 2.8, flat: 0.5, rarity: 2.2, swells: true,
   },
-  // A beach: shells and pebbles, and nothing else worth drawing on sand.
+  /*
+   * And a beach is dunes: the widest of the lot and the rarest, so a stretch
+   * of sand is clean colour with one swell in it here and there. A dune is
+   * not a thing lying on the beach, it is the beach -- the sun along the top
+   * of it, the lee behind it, and nothing anywhere cutting it out from what
+   * it is made of.
+   */
   [TileType.Sand]: {
-    word: 'shell',
-    palest: 'bleached white by the sun, the way a shell goes',
-    deepest: 'a wet pebble, or one the tide has not turned for a while',
-    seed: 4000,
+    word: 'sand',
+    palest: 'the top of one, where the sun has dried it',
+    deepest: 'the lee of one, out of the wind',
+    seed: 4000, scale: 4.2, flat: 0.5, rarity: 3, swells: true,
   },
 };
 
@@ -490,16 +603,17 @@ const painted = new Map<TileType, Strew>();
  *
  * Every colour in here is a share of the tile's own rather than a number of
  * its own, so bringing a ground into this is a matter of saying what colour
- * it is and what the stuff growing on it is called. The sizes and the ten
- * arrangements are the same for all of them: a clump of dry steppe grass seen
- * from standing height is a clump the same way a clump of meadow is, and the
- * thing that makes a steppe a steppe is that it is the colour of straw.
+ * it is, what the stuff on it is called, and how big and how often its lumps
+ * come. The ten arrangements are the same for all of them: a clump of dry
+ * steppe grass seen from standing height sits in a field the way a clump of
+ * meadow does, and the thing that makes a steppe a steppe is that it is the
+ * colour of straw.
  */
 export function strew(type: TileType): Strew {
   const had = painted.get(type);
   if (had) return had;
   const ground = GROUNDS[type] ?? (GROUNDS[TileType.Grass] as Ground);
-  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color);
+  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color, ground.swells ? SWELL_STAND : 1);
 
   /*
    * The blobs. Sizes are screen pixels at zoom one, where a tile is
@@ -508,17 +622,33 @@ export function strew(type: TileType): Strew {
    * is a bush nobody has cut back.
    */
   const blobs: Sprig[] = [];
-  const grow = (w: number, h: number, pal: Green, seed: number): number => {
+  const grow = (across: number, up: number, pal: Green, seed: number): number => {
     /*
-     * Room round it for the lobes to stick out into. A lobe sits on the edge
-     * of the oval and reaches a lobe's radius past it, and the outline reaches
-     * past that again: painted into a picture three pixels wider than the
-     * clump, every one of them came out with its sides cut off square.
+     * The ladder below is written at a meadow's size and every other ground
+     * takes it times its own, which is how a mound of turned earth comes out
+     * wider than a clump of grass and a dune wider again, and both of them
+     * flatter than either.
      */
-    const pad = Math.min(w, h) * 0.6 + 3;
+    const w = across * ground.scale, h = up * ground.scale * ground.flat;
+    /*
+     * Room round it to reach into. A lobe sits on the edge of the oval and
+     * reaches a lobe's radius past it, and the outline reaches past that
+     * again: painted into a picture three pixels wider than the clump, every
+     * one of them came out with its sides cut off square. A swell is worse --
+     * its two fills sit out either side of the crest and fade to nothing a
+     * good way past the size it is nominally drawn at, and a fade that runs
+     * into the edge of its own picture is a straight line across a dune.
+     */
+    const pad = 3 + (ground.swells ? Math.max(w, h) * 0.22 : Math.min(w, h) * 0.6);
     const cw = w + pad * 2, ch = h + pad * 2;
-    blobs.push(sprig(cw, ch, cw / 2, ch / 2 + h * 0.34,
-      (g) => clump(g, cw / 2, ch / 2, w, h, rand(seed + ground.seed), pal)));
+    // A clump stands on the ground and is rooted at its foot; a swell lies
+    // flat in it and is rooted in the middle of itself.
+    const ay = ch / 2 + (ground.swells ? 0 : h * 0.34);
+    blobs.push(sprig(cw, ch, cw / 2, ay, (g) => {
+      const R = rand(seed + ground.seed);
+      if (ground.swells) swell(g, cw / 2, ch / 2, w, h, R, pal);
+      else clump(g, cw / 2, ch / 2, w, h, R, pal);
+    }));
     return blobs.length - 1;
   };
   /*
@@ -555,7 +685,7 @@ export function strew(type: TileType): Strew {
       blobs: [...TINY, ...SMALL], blobN: [2, 3], spread: 0.5 },
     { name: 'Deep', tells: `one or two in the darkest ${ground.word}: ${ground.deepest}`,
       blobs: [SMALL[1], MEDIUM[1], BIG[1]], blobN: [1, 2], spread: 0.24 },
-    { name: 'Mound', tells: 'one big clump on its own, which is what a tile of it is for',
+    { name: 'Mound', tells: 'one big one on its own, which is what a tile of it is for',
       blobs: BIG, blobN: [1, 1], spread: 0.4 },
     { name: 'Ridge', tells: 'a long low one, lying the way the ground does',
       blobs: LONG, blobN: [1, 2], spread: 0.3 },
@@ -565,17 +695,24 @@ export function strew(type: TileType): Strew {
       blobs: [...BIG, ...SMALL], blobN: [2, 2], spread: 0.11, slots: [BIG, SMALL] },
   ];
 
-  // The average number of clumps a tile grows, off the weights and the counts
-  // and nothing written down: `looks` is in the same order as `WEIGHTS`.
+  /*
+   * How often it grows anything at all. Only the empty look's weight moves:
+   * the nine that carry something keep their shares of whatever is left, so a
+   * rarer ground comes out barer without also coming out differently arranged.
+   */
+  const weights = WEIGHTS.map((w, i) => (i ? w : w * ground.rarity));
+  const total = weights.reduce((a, b) => a + b, 0);
+  // The average number of clumps a tile grows, off those weights and the
+  // counts and nothing written down: `looks` is in the order they are.
   const clumps = looks.reduce(
-    (a, l, i) => a + WEIGHTS[i] * (l.blobN[0] + l.blobN[1]) / 2, 0) / TOTAL;
-  const made: Strew = { blobs, looks, clumps, hem: MID };
+    (a, l, i) => a + weights[i] * (l.blobN[0] + l.blobN[1]) / 2, 0) / total;
+  const made: Strew = { blobs, looks, clumps, hem: MID, cuts: cutsOf(weights) };
   painted.set(type, made);
   return made;
 }
 
 /**
- * Paint every sward while nobody is waiting on it, the way the walls are.
+ * Paint what every ground grows while nobody is waiting on it, as the walls are.
  *
  * It is a field's worth of drawing per ground, and all of it is done the
  * first time a blade of grass comes into view, which is the first frame.
