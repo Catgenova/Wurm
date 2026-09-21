@@ -69,12 +69,14 @@ export class CraftPanel {
 
   /**
    * Whether a recipe answers to what has been typed. Everything on the row is
-   * searchable: what it makes, the trade it takes, where it is worked and what
-   * goes into it, so "leather", "mason" and "nail" all find their own.
+   * searchable: what it makes, the trade it takes, where it is worked, what
+   * goes into it and the line under the name, so "leather", "mason", "nail"
+   * and "big axle" all find their own -- the last of those being a mould,
+   * which is the only way to an axle and was findable under no other word.
    */
   private matches(r: Recipe): boolean {
     if (!this.query) return true;
-    const parts = [itemDef(r.result).name, r.label, r.category, skillName(r.skill), r.tool ? lower(r.tool) : '', r.station ? stationName(r.station) : '', ...r.inputs.map((i) => lower(i.item))];
+    const parts = [itemDef(r.result).name, r.label, r.note ?? '', r.category, skillName(r.skill), r.tool ? lower(r.tool) : '', r.station ? stationName(r.station) : '', ...r.inputs.map((i) => lower(i.item))];
     return parts.join(' ').toLowerCase().includes(this.query);
   }
 
@@ -166,6 +168,13 @@ export class CraftPanel {
         ? `Your ${lower(r.tool as string)} is what is holding this back, not your hands. A better one reaches your skill more often.`
         : 'Your skill is the ceiling; the tool decides how often a go reaches it.';
     name.append(worth);
+    // What the name does not say: for a mould, the piece it is the only way to.
+    if (r.note) {
+      const note = document.createElement('small');
+      note.className = 'craft-note';
+      note.textContent = r.note;
+      name.append(note);
+    }
     const needs = document.createElement('div');
     needs.className = 'craft-needs';
     const parts: HTMLElement[] = [];

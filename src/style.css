@@ -1380,6 +1380,17 @@ kbd {
   font-weight: 400;
 }
 
+/* What the name does not say: a mould's piece, and how it is got out of it. */
+.craft-note {
+  display: block;
+  margin: 1px 0 0;
+  color: var(--ui-dim);
+  font-size: 11px;
+  font-weight: 400;
+  font-style: italic;
+  white-space: normal;
+}
+
 /* What a go would come out at, and a warning when the tool is the limit. */
 .craft-ql {
   display: block;

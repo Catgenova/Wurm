@@ -3,7 +3,7 @@ import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemDef, rollRarity, RARITY_WORD } from './items';
 import { FURNITURE } from './furniture';
-import { MOULDS } from './metal';
+import { castWhole, MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
 import { WOUND_KINDS } from './wounds';
@@ -14,6 +14,11 @@ import { TREE_DEFS } from '../world/tiles';
 
 /** What working a thing out with your hands teaches the head. */
 export const CRAFT_HEAD = 0.25;
+
+const lower = (id: string): string => itemDef(id).name.toLowerCase();
+const plural = (id: string, n: number): string => (n === 1 ? lower(id) : `${lower(id)}${itemDef(id).stackable && !lower(id).endsWith('s') ? 's' : ''}`);
+/** "a" or "an", off the name rather than the id: an anvil, a big axle. */
+const article = (id: string): string => (/^[aeiou]/.test(lower(id)) ? 'an ' : 'a ');
 
 /**
  * Everything the player can make from what they carry. A recipe is a tool
@@ -47,6 +52,14 @@ export interface Recipe {
   skill: string;
   /** Menu label on the material, such as "Saw into planks". */
   label: string;
+  /**
+   * One short line under the name in the crafting book, for a recipe whose
+   * result is not the thing anybody is actually after -- and, because the
+   * book searches it along with everything else on the row, the words that
+   * find it. A mould is the case: nobody wants an axle mould, they want the
+   * axle, and "big axle" turned up nothing at all.
+   */
+  note?: string;
   verb: string;
   baseTime: number;
   stamina: number;
@@ -236,7 +249,17 @@ export const RECIPES: Recipe[] = [
   ...[],
 ];
 
-/** Every mould is fired from sand at a smelter; the table decides the rest. */
+/**
+ * Every mould is fired from sand at a smelter; the table decides the rest.
+ *
+ * Each one says what it casts and how many of them a filling makes, so a
+ * search for the piece finds the mould that is the only way to one. Reported
+ * as a hole in the game -- "is there no crafting recipe for Big Axle?" -- and
+ * it was never a hole: an axle is cast, and the word "axle" appeared nowhere
+ * in the book except in the name of the mould, which nobody thinks to look
+ * for. The piece, its count and its metal all come off the mould's own row,
+ * so none of this can say something the table does not.
+ */
 const MOULD_RECIPES: Recipe[] = MOULDS.map((m) => ({
   id: `make_${m.id}`,
   category: 'Smelting' as RecipeCategory,
@@ -245,6 +268,7 @@ const MOULD_RECIPES: Recipe[] = MOULDS.map((m) => ({
   station: 'smelter' as Station,
   skill: m.skill,
   label: `Fire ${/^[aeiou]/i.test(m.name) ? 'an' : 'a'} ${m.name.toLowerCase()}`,
+  note: `Casts ${(m.per ?? 1) > 1 ? `${m.per} ` : article(m.makes)}${plural(m.makes, m.per ?? 1)} from ${m.lumps} ${m.lumps === 1 ? 'lump' : 'lumps'} of metal, poured at a smelter${castWhole(m) ? '' : ' and beaten true on an anvil'}`,
   verb: 'firing a mould',
   baseTime: 8 + m.sand,
   stamina: 0.03,
@@ -557,9 +581,6 @@ export function recipeStatus(r: Recipe, g: Game, want?: string): RecipeStatus {
   const max = tool && station ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
   return { tool, station, inputs, ready: max >= 1, max, material };
 }
-
-const lower = (id: string): string => itemDef(id).name.toLowerCase();
-const plural = (id: string, n: number): string => (n === 1 ? lower(id) : `${lower(id)}${itemDef(id).stackable && !lower(id).endsWith('s') ? 's' : ''}`);
 
 /**
  * How many of an item are on hand for a craft. Once a material has been

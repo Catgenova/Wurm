@@ -5,7 +5,7 @@ import type { Game } from './game';
 import { itemDef, itemName, rarityOf, roomFor, type Item } from './items';
 import { MELT_HEAT, meltLumps, meltQl, meltRefusal, metalOfItem } from './melt';
 import { matOf } from './materials';
-import { METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, ORE_PER_LUMP, castSeconds, isOreItem, mouldLumps, mouldUsesLeft, mouldWear, pourSeconds, smeltSeconds } from './metal';
+import { castSeconds, castWhole, isOreItem, METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, mouldLumps, mouldUsesLeft, mouldWear, ORE_PER_LUMP, pourSeconds, smeltSeconds } from './metal';
 
 /**
  * A stone smelter: the deed's second building after the campfire. It fills a
@@ -408,9 +408,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       // The pour is the smelter's work: the metal, the mould and the hands at the furnace.
       const ql = Math.max(1, Math.min(100, (lump.ql + mouldQl + g.productQl('smelting')) / 3));
       const seconds = pourSeconds(def, metal.id, ql);
-      // A bell or a statue is a casting already and wants no anvil; everything
-      // else comes out as a casting of the piece, for the anvil to beat true.
-      const whole = def.makes.endsWith('_casting');
+      const whole = castWhole(def);
       s.jobs.push({
         item: { ...lump, count: need }, makes: whole ? def.makes : 'casting', left: seconds, total: seconds, ql,
         extra: metal.name, piece: whole ? undefined : def.makes,

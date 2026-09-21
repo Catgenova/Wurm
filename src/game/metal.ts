@@ -198,6 +198,17 @@ export const MOULD_BY_ID = new Map(MOULDS.map((m) => [m.id, m]));
 export const isMould = (id: string): boolean => MOULD_BY_ID.has(id);
 /** The mould a piece comes out of, by the piece: what a casting is of, read back to its mould. */
 export const MOULD_BY_MAKES = new Map(MOULDS.map((m) => [m.makes, m]));
+/**
+ * Whether a mould's piece comes out of it finished.
+ *
+ * A bell and a statue are castings in their own right and want no anvil;
+ * everything else comes out as a casting *of* the piece and is beaten true
+ * before it is the thing. One rule, here, because the smelter decides what to
+ * put in the mould by it and the crafting book tells you about it by it, and
+ * the two saying different things is the bug.
+ */
+export const castWhole = (m: MouldDef): boolean => m.makes.endsWith('_casting');
+
 /** A casting: what a poured mould cools into, carrying the piece it is of. */
 export const isCasting = (it: { id: string; piece?: string }): boolean => it.id === 'casting' && !!it.piece;
 
