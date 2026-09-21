@@ -245,7 +245,9 @@ const SILL_LIT = 1.02;
 /** And so is a threshold, which is walked on as well, so it is paler still. */
 const STEP_LIT = 1.06;
 /** Strap hinges and a door ring: the only iron on a wall made of stone and oak. */
-const IRON: readonly [number, number, number] = [0x6b, 0x65, 0x5b];
+const IRON: readonly [number, number, number] = [0x7e, 0x77, 0x6a];
+/** Its own shade, so a bar of it reads as round stock rather than as a painted line. */
+const IRON_DARK: readonly [number, number, number] = [0x4e, 0x49, 0x41];
 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
@@ -2701,6 +2703,20 @@ export class Renderer {
       if (kind?.low) {
         const lw = cob.low(kind.height ?? 1);
         const hung = wall.type === 'fence_gate' || wall.type === 'iron_gate';
+        /*
+         * What it throws on the ground it stands on. Entities cast a shadow
+         * and walls never have, which on three metres of house nobody misses
+         * -- the wall is most of what you are looking at. On a metre and a
+         * quarter of field wall the ground line is most of it, and without a
+         * shadow the thing is a sticker laid on the grass.
+         */
+        ctx.beginPath();
+        for (const [t, ss] of [[0, 2.1], [1, 2.1], [1, -2.1], [0, -2.1]] as Array<[number, number]>) {
+          ctx.lineTo(px(t, 0, ss), py(t, 0, ss));
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(70, 62, 46, 0.2)';
+        ctx.fill();
         blit(hung ? lw.gate[v] : lw.face[v], 0, 1);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
         quad(0, 1, 0, 1);
@@ -2716,12 +2732,32 @@ export class Renderer {
          * lit. It no longer reads as paint.
          */
         const capLit = topLit * 0.9;
-        cap(0, 1, 1);
-        ctx.fillStyle = rgb(mat.color, capLit);
-        ctx.fill();
-        blit(lw.cap[v], 1, 1, 1, true);
-        cap(0, 1, 1);
-        light(capLit);
+        /*
+         * In two pieces over a gate, because there is nothing over a gateway.
+         * The blit is cut to the opening but the flat colour under it is what
+         * shows through the joints, and laid across the whole section it came
+         * out as a grey bar hanging in the air above the gate.
+         */
+        const capRuns: Array<[number, number]> = hung
+          ? [[0, FENCE_GAP.t0], [FENCE_GAP.t1, 1]]
+          : [[0, 1]];
+        for (const [a, b] of capRuns) {
+          cap(a, b, 1);
+          ctx.fillStyle = rgb(mat.color, capLit);
+          ctx.fill();
+        }
+        blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true);
+        for (const [a, b] of capRuns) { cap(a, b, 1); light(capLit); }
+        /*
+         * And what grows on it, seen from above.
+         *
+         * Two of the eight rotations look along a fence, and in those two its
+         * face is edge-on: the crest, the moss, the hedge and the flowers all
+         * live in the face texture, so a quarter of the angles showed a bare
+         * ribbon of stone with nothing green on it at all. Drawn after the
+         * light, like the crest, because a leaf in the sun is in the sun.
+         */
+        blit(hung ? lw.gateCapCrest[v] : lw.capCrest[v], 1, 1, 1, true);
         for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
           if (on(i)) continue;
           endOf(t, 0, 1);
@@ -2742,7 +2778,7 @@ export class Renderer {
         }
         // And what has got a root into the coping, last and unlit, the way the
         // ivy over a tall wall is: a leaf in the sun is in the sun.
-        blit(lw.crest[v], 0, 1 + lw.crestPad / lw.h);
+        blit(hung ? lw.gateCrest[v] : lw.crest[v], 0, 1 + lw.crestPad / lw.h);
         ctx.globalAlpha = 1;
         return;
       }
@@ -3589,7 +3625,10 @@ export class Renderer {
       ctx.stroke();
     };
     const bar = (ta: number, ka: number, tb: number, kb: number, w: number): void => {
-      if (iron) { seg(ta, ka, tb, kb, IRON, w); return; }
+      // Iron gets the same two strokes the timber does. A bar drawn once in
+      // one flat near-black is the only thing in the asset with no value in
+      // it, and a gate made of thirteen of them is a drain grate.
+      if (iron) { seg(ta, ka, tb, kb, IRON_DARK, w + 0.9); seg(ta, ka, tb, kb, IRON, w); return; }
       seg(ta, ka, tb, kb, cob.beamLine, w + 1.4);
       seg(ta, ka, tb, kb, cob.beam, w);
     };
@@ -3604,11 +3643,24 @@ export class Renderer {
      * of: five heavy bars and a brace in oak, a grid in iron.
      */
     const heavy = iron ? 1 : 1.38;
+    /*
+     * Two of the eight rotations look along the wall, and a shut gate lies in
+     * the wall's plane: what you see of it then is its edge. Drawn as a gate
+     * anyway, its five bars land on top of each other inside four pixels and
+     * come out as one fat brown pill. So at that angle it is what it is --
+     * one member, the thickness of a stile.
+     */
+    const span = Math.hypot(px(b, k0, S) - px(a, k0, S), py(b, k0, S) - py(a, k0, S));
+    if (span < 14) {
+      const m = (a + b) / 2;
+      bar(m, k0, m, k1, 2.6 * heavy);
+      return;
+    }
     for (const k of iron ? [k0, 0.3, 0.54, 0.78, k1] : [k0, 0.28, 0.5, 0.71, k1]) bar(a, k, b, k, 2.1 * heavy);
     bar(a, k0, a, k1, 2.6 * heavy);
     bar(b, k0, b, k1, 2.6 * heavy);
     if (iron) {
-      if (zoom >= 0.5) for (let i = 1; i < 6; i++) bar(a + (b - a) * (i / 6), k0, a + (b - a) * (i / 6), k1, 1.8);
+      if (zoom >= 0.5) for (let i = 1; i < 4; i++) bar(a + (b - a) * (i / 4), k0, a + (b - a) * (i / 4), k1, 1.3);
       bar(a, k0 + 0.04, b, k1 - 0.04, 2.2);
       bar(b, k0 + 0.04, a, k1 - 0.04, 2.2);
     } else {
@@ -3616,8 +3668,21 @@ export class Renderer {
       // to go if it is to carry the gate's weight instead of hanging off it.
       bar(a, k1 - 0.03, b, k0 + 0.03, 2.3 * heavy);
     }
-    // And the straps it swings on, which are iron on either gate.
-    if (zoom >= 0.5) for (const k of [0.24, 0.76]) seg(a, k, a + (b - a) * 0.42, k, IRON, 3);
+    /*
+     * And the straps it swings on, which are iron on either gate.
+     *
+     * Tapered, because a strap is wide where it is bolted to the hinge and
+     * narrow where it runs out along the rail. A bar of one width with round
+     * ends, three times the weight of anything else on the gate, is a cable
+     * tie.
+     */
+    if (zoom >= 0.5) {
+      for (const k of [0.24, 0.76]) {
+        seg(a, k, a + (b - a) * 0.16, k, IRON_DARK, 2.4);
+        seg(a + (b - a) * 0.16, k, a + (b - a) * 0.34, k, IRON_DARK, 1.3);
+        seg(a, k, a, k, IRON, 2.6);
+      }
+    }
     ctx.lineWidth = 1;
   }
 
