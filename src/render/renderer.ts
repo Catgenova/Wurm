@@ -33,6 +33,7 @@ import { hash2 } from '../world/noise';
 import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
+import { cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -2488,6 +2489,14 @@ export class Renderer {
     const endLit = lit * 0.74;
     const done = isDone(wall);
     const zoom = cam.zoom;
+    /** Whether a wall of the same storey carries on past this one's end. */
+    const on = (i: number): boolean => {
+      const b: Border = border.dir === 'h'
+        ? { dir: 'h', x: border.x + i, y: border.y }
+        : { dir: 'v', x: border.x, y: border.y + i };
+      const w = this.game.buildings.wallOnBorder(wall.level, b);
+      return !!w && isDone(w);
+    };
     ctx.globalAlpha = alpha;
     if (!done) {
       /*
@@ -2572,6 +2581,107 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
+    /*
+     * Cobblestone is painted rather than ruled. It is the cheap masonry and the
+     * first a novice lays, so its picture is of a wall that shows it: blocks of
+     * no two sizes, joints of no two widths, courses that wander, and the
+     * chips, cracks and damp of a thing that has stood a while. What grows on
+     * it depends on where in the wall the face is, which is why it is three
+     * pictures and not one -- the hedge and the damp belong to the storey that
+     * meets the ground, the ivy to the one with nothing above it, and neither
+     * belongs to a face looking into somebody's room.
+     *
+     * A painted wall is left to the flat colours below: the picture has its own
+     * stone in it, and a coat of paint over that would be two walls at once.
+     */
+    const cob = wall.material === 'cobblestone' && !wall.dye ? cobble() : undefined;
+    if (cob) {
+      const bld = this.game.buildings;
+      /** Which of the five, by where the wall is: neighbours differ, and a wall keeps its own. */
+      const v = Math.abs(border.x * 31 + border.y * 17 + wall.level * 7) % cob.face.length;
+      const up = bld.wallOnBorder(wall.level + 1, border);
+      const roofed = !!up && isDone(up);
+      /*
+       * The tile the camera is on this side of. A border runs along the top of
+       * its own tile or down its left, so which tile that is depends on the
+       * side, and that is what `toward` already worked out.
+       */
+      const seenX = border.dir === 'h' ? border.x : (toward > 0 ? border.x - 1 : border.x);
+      const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
+      const indoors = !!bld.buildingAt(seenX, seenY);
+      /** A picture, between three of its corners: top left, top right, bottom left. */
+      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false): void => {
+        const [tlx, tly] = across ? [px(0, k1, -1), py(0, k1, -1)] : [px(0, k1, s), py(0, k1, s)];
+        const [trx, try_] = across
+          ? [px(1, k1, -1), py(1, k1, -1)]
+          : [px(1, k1, s), py(1, k1, s)];
+        const [blx, bly] = across ? [px(0, k1, 1), py(0, k1, 1)] : [px(0, k0, s), py(0, k0, s)];
+        ctx.save();
+        ctx.transform(
+          (trx - tlx) / img.width, (try_ - tly) / img.width,
+          (blx - tlx) / img.height, (bly - tly) / img.height,
+          tlx, tly,
+        );
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
+      };
+      /** And the hour's light over it, laid the way the flat colours take it. */
+      const light = (k: number): void => {
+        if (k >= 0.999) return;
+        ctx.fillStyle = `rgba(24, 20, 12, ${((1 - k) * 0.85).toFixed(3)})`;
+        ctx.fill();
+      };
+      blit(cob.face[v], 0, 1);
+      if (wall.level === 0 && !indoors) {
+        blit(cob.foot[v], 0, 1);
+        blit(cob.base[v], 0, 1);
+      }
+      /*
+       * The hour's light, and only that. A flat wall takes a wash down its
+       * face as well -- dark where the ground throws shade back up it, light
+       * where the sky catches the last of it -- and this one must not: the
+       * wash runs top to bottom of a storey, so at every floor line the lit
+       * top of one storey would meet the shaded foot of the next and draw a
+       * band across a wall that was built to stack without one. The shade at
+       * the ground is painted into `foot` instead, on the storey that has a
+       * ground to be shaded by.
+       */
+      quad(0, 1, 0, 1);
+      light(lit);
+      cap(0, 1, 1);
+      ctx.fillStyle = rgb(mat.color, topLit);
+      ctx.fill();
+      blit(cob.cap, 1, 1, 1, true);
+      cap(0, 1, 1);
+      light(topLit);
+      for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
+        if (on(i)) continue;
+        endOf(t, 0, 1);
+        ctx.fillStyle = rgb(mat.color, endLit);
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        const [ex, ey] = [px(t, 1, 1), py(t, 1, 1)];
+        ctx.transform(
+          (px(t, 1, -1) - ex) / cob.ends.width, (py(t, 1, -1) - ey) / cob.ends.width,
+          (px(t, 0, 1) - ex) / cob.ends.height, (py(t, 0, 1) - ey) / cob.ends.height,
+          ex, ey,
+        );
+        ctx.drawImage(cob.ends, 0, 0);
+        ctx.restore();
+        endOf(t, 0, 1);
+        light(endLit);
+      }
+      /*
+       * The ivy last, and unlit: it stands proud of the cap, so it has to go on
+       * over it, and a leaf in the sun is in the sun whichever way the wall
+       * behind it is turned.
+       */
+      if (!roofed && !indoors) blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
+      this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+      ctx.globalAlpha = 1;
+      return;
+    }
     /* The face, then what it is made of, then the top and the end. */
     quad(0, 1, 0, 1);
     ctx.fillStyle = rgb(mat.color, lit);
@@ -2602,14 +2712,6 @@ export class Renderer {
      * wall down a street is one wall to look at; it is only where a run stops
      * that the thickness of it should be on show.
      */
-    const bld = this.game.buildings;
-    const on = (i: number): boolean => {
-      const b: Border = border.dir === 'h'
-        ? { dir: 'h', x: border.x + i, y: border.y }
-        : { dir: 'v', x: border.x, y: border.y + i };
-      const w = bld.wallOnBorder(wall.level, b);
-      return !!w && isDone(w);
-    };
     for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
       if (on(i)) continue;
       endOf(t, 0, 1);
@@ -2618,26 +2720,31 @@ export class Renderer {
       ctx.strokeStyle = rgb(mat.trim, endLit);
       ctx.stroke();
     }
+    this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+    ctx.globalAlpha = 1;
+  }
+
+  /** The hole in a wall, whatever the wall is made of. */
+  private wallOpenings(wall: Wall, mat: MaterialDef, lit: number, g: WallGeom, zoom: number, border: Border): void {
     switch (wall.type) {
       case 'window':
-        this.wallOpening(mat, lit, { px, py, quad }, 0.3, 0.7, 0.38, 0.78, 'glass', zoom, this.lampBehind(wall, border));
+        this.wallOpening(mat, lit, g, 0.3, 0.7, 0.38, 0.78, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'bay':
-        this.wallOpening(mat, lit, { px, py, quad }, 0.18, 0.82, 0.33, 0.82, 'glass', zoom, this.lampBehind(wall, border));
+        this.wallOpening(mat, lit, g, 0.18, 0.82, 0.33, 0.82, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'door':
-        this.wallOpening(mat, lit, { px, py, quad }, 0.34, 0.66, 0, 0.74, 'door', zoom);
+        this.wallOpening(mat, lit, g, 0.34, 0.66, 0, 0.74, 'door', zoom);
         break;
       case 'double_door':
-        this.wallOpening(mat, lit, { px, py, quad }, 0.2, 0.8, 0, 0.76, 'double', zoom);
+        this.wallOpening(mat, lit, g, 0.2, 0.8, 0, 0.76, 'double', zoom);
         break;
       case 'arch':
-        this.wallArch(mat, lit, { px, py, quad }, zoom);
+        this.wallArch(mat, lit, g, zoom);
         break;
       default:
         break;
     }
-    ctx.globalAlpha = 1;
   }
 
   /**

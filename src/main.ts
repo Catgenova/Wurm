@@ -31,6 +31,7 @@ import { RECIPES } from './game/recipes';
 import { Game } from './game/game';
 import { Keybinds } from './game/keybinds';
 import { loadGame, saveGame, saveOnExit, warmSave } from './game/save';
+import { warmCobble } from './render/cobble';
 import { Renderer, skyWash, sunAt } from './render/renderer';
 import { Sound } from './audio/sound';
 import { SWAY_MAX, swayAt } from './render/sway';
@@ -457,6 +458,9 @@ if (!island) {
 // Have the store open before anything asks it to write, so that the save on
 // the way out of the page is a write rather than a request to open a database.
 if (!island) warmSave();
+// And the cobblestone painted, for the same reason: a wall of it coming into
+// view should not be the thing that pays for drawing it.
+warmCobble();
 // A new island is put away early: the land only reaches the store on a full
 // save, and until one has happened there is nothing for an exit patch to be
 // laid over.
