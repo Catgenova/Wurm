@@ -34,7 +34,7 @@ import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, T
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, WINDOW, type Cobble, cobble } from './cobble';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Cobble, cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -2573,10 +2573,14 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
-    if (kind?.railed) {
+    const cob = wall.material === 'cobblestone' && !wall.dye ? cobble() : undefined;
+    if (kind?.railed && !cob) {
       /*
        * Posts and rails, each of them a piece of timber with a top to it: a
        * fence drawn flat is a comb, and a comb is what this was.
+       *
+       * Timber only. A stone fence is not posts and rails -- it is a wall you
+       * can see over -- so cobblestone goes down to its own picture below.
        */
       const post = (t: number, w: number): void => {
         const t0 = Math.max(0, t - w);
@@ -2643,7 +2647,6 @@ export class Renderer {
      * A painted wall is left to the flat colours below: the picture has its own
      * stone in it, and a coat of paint over that would be two walls at once.
      */
-    const cob = wall.material === 'cobblestone' && !wall.dye ? cobble() : undefined;
     if (cob) {
       const bld = this.game.buildings;
       /** Which of the five, by where the wall is: neighbours differ, and a wall keeps its own. */
@@ -2680,6 +2683,58 @@ export class Renderer {
         ctx.fillStyle = `rgba(24, 20, 12, ${((1 - k) * 0.85).toFixed(3)})`;
         ctx.fill();
       };
+      /*
+       * A field wall is its own picture, not the house wall squashed.
+       *
+       * A fence section is a fraction of a storey tall, so blitting the
+       * wall's three metres into it flattened every stone by two and a half
+       * and put the band course -- which is the string course at a floor line
+       * -- along the top of something that has no floors. What it gets is a
+       * coping, painted at the height the wall type actually asks for, with
+       * everything it carries in the one picture: a fence has no openings to
+       * clip growth out of and no storey above it to belong to.
+       *
+       * Every low wall takes it, not only the fences -- a half wall was the
+       * same three metres squashed into one and a half, and a half wall in
+       * cobblestone is a garden wall, which is what this draws.
+       */
+      if (kind?.low) {
+        const lw = cob.low(kind.height ?? 1);
+        const hung = wall.type === 'fence_gate' || wall.type === 'iron_gate';
+        blit(hung ? lw.gate[v] : lw.face[v], 0, 1);
+        if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
+        quad(0, 1, 0, 1);
+        light(lit);
+        cap(0, 1, 1);
+        ctx.fillStyle = rgb(mat.color, topLit);
+        ctx.fill();
+        blit(lw.cap, 1, 1, 1, true);
+        cap(0, 1, 1);
+        light(topLit);
+        for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
+          if (on(i)) continue;
+          endOf(t, 0, 1);
+          ctx.fillStyle = rgb(mat.color, endLit);
+          ctx.fill();
+          ctx.save();
+          ctx.clip();
+          const [ex, ey] = [px(t, 1, 1), py(t, 1, 1)];
+          ctx.transform(
+            (px(t, 1, -1) - ex) / lw.ends.width, (py(t, 1, -1) - ey) / lw.ends.width,
+            (px(t, 0, 1) - ex) / lw.ends.height, (py(t, 0, 1) - ey) / lw.ends.height,
+            ex, ey,
+          );
+          ctx.drawImage(lw.ends, 0, 0);
+          ctx.restore();
+          endOf(t, 0, 1);
+          light(endLit);
+        }
+        // And what has got a root into the coping, last and unlit, the way the
+        // ivy over a tall wall is: a leaf in the sun is in the sun.
+        blit(lw.crest[v], 0, 1 + lw.crestPad / lw.h);
+        ctx.globalAlpha = 1;
+        return;
+      }
       /*
        * An archway is the same section with a hole in it, so it is the same
        * blit with a different picture -- not a shape drawn over the stone.
@@ -3488,6 +3543,59 @@ export class Renderer {
       gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
     }
     return gr;
+  }
+
+  /**
+   * The leaf hung between the piers of a field wall.
+   *
+   * Five bars and a brace across them, which is what a gate is when it has to
+   * be light enough to swing and stiff enough not to drop on its hinges. In
+   * oak it is the same timber as the beam over a doorway; in iron it is the
+   * same bars with two straps across them and no wood in it at all.
+   *
+   * It hangs behind the piers rather than between them, because a gate in a
+   * gap is a gate that jams the first time the wall settles.
+   */
+  private fenceGate(cob: Cobble, g: WallGeom, zoom: number, iron: boolean): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    const { t0, t1 } = FENCE_GAP;
+    const S = -0.55, k0 = 0.06, k1 = 0.9;
+    const a = t0 + 0.015, b = t1 - 0.015;
+    // The bars are drawn in the dark of the timber, not in the timber: a bar
+    // the colour of the leaf it crosses is a bar nobody can see.
+    const ink = iron ? IRON : cob.beamLine;
+    const bar = (ta: number, ka: number, tb: number, kb: number, w: number): void => {
+      ctx.strokeStyle = rgb(ink, 1);
+      ctx.lineWidth = Math.max(1.4, w * zoom);
+      ctx.beginPath();
+      ctx.moveTo(px(ta, ka, S), py(ta, ka, S));
+      ctx.lineTo(px(tb, kb, S), py(tb, kb, S));
+      ctx.stroke();
+    };
+    if (!iron) {
+      // Oak fills between its bars; iron does not, and you see the field
+      // through it, which is the whole difference at a distance.
+      quad(a, b, k0, k1, S);
+      ctx.fillStyle = rgb(cob.beam, 0.96, 0.96);
+      ctx.fill();
+      ctx.strokeStyle = rgb(cob.beamLine, 0.9);
+      ctx.lineWidth = Math.max(1, 1.4 * zoom);
+      ctx.stroke();
+    }
+    if (zoom < 0.55) return;
+    // The rails, the brace across them, and the two stiles that hold the ends.
+    for (const k of iron ? [k0, 0.3, 0.54, 0.78, k1] : [k0 + 0.02, 0.46, k1 - 0.02]) bar(a, k, b, k, 2.4);
+    bar(a, k0, a, k1, 2.6);
+    bar(b, k0, b, k1, 2.6);
+    if (iron) for (let i = 1; i < 6; i++) bar(a + (b - a) * (i / 6), k0, a + (b - a) * (i / 6), k1, 1.8);
+    else bar(a, k0 + 0.04, b, k1 - 0.04, 2.2);
+    if (iron) { bar(a, k0 + 0.04, b, k1 - 0.04, 2.2); bar(b, k0 + 0.04, a, k1 - 0.04, 2.2); }
+    // And the hinge straps, on the stile it swings from.
+    ctx.strokeStyle = rgb(IRON, 1);
+    ctx.lineWidth = Math.max(1.6, 3 * zoom);
+    for (const k of [0.24, 0.76]) bar(a, k, a + (b - a) * 0.42, k, 3);
+    ctx.lineWidth = 1;
   }
 
   /**
