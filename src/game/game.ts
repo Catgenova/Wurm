@@ -4064,8 +4064,8 @@ export class Game {
     }
   }
 
-  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false, material?: string): PlacedCrate {
-    const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed, material };
+  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false, material?: string, ql = 20): PlacedCrate {
+    const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed, material, ql };
     this.crates.set(crate.id, crate);
     this.placed.crates.add(crate);
     return crate;
@@ -5121,7 +5121,7 @@ export class Game {
         })),
         units: c.units,
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
-        rare: rarityStep(c.rare),
+        rare: rarityStep(c.rare), ql: c.ql ?? 20,
       });
     }
     /*
@@ -5230,6 +5230,7 @@ export class Game {
         })),
         units: c.units,
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
+        rare: rarityStep(c.rare), ql: c.ql ?? 20,
       });
     }
     this.placed.crates.reset(this.crates.values());
@@ -6220,6 +6221,8 @@ export interface IslandCrate {
   sx: number;
   sy: number;
   material: string | null;
+  /** What it was built at; absent from older islands, where every crate was a 20. */
+  ql?: number | null;
   /** 'rare', 'supreme' or 'fantastic'; absent from older islands, null for the rest. */
   rare?: string | null;
   name: string | null;

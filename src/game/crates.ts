@@ -26,6 +26,15 @@ export interface PlacedCrate {
   sx: number;
   sy: number;
   kind: CrateKind;
+  /**
+   * What it was built at.
+   *
+   * A crate had none at all, and picking one up handed back a QL 20 crate
+   * whatever the one you set down had been: `pick_up_crate` wrote the number
+   * 20 into the item because there was nothing on the row to read instead.
+   * A crate you had worked up to eighty was a crate you could only lose.
+   */
+  ql: number;
   items: Item[];
   /** The settlement's crate: deed workers deliver here. */
   deed?: boolean;
@@ -157,7 +166,7 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.itemUid);
       const kind = item && crateKindOfItem(item.id);
       if (!item || !kind || !g.inventory.remove(item.uid, 1)) return;
-      const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra);
+      const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra, item.ql);
       // A rare crate holds more, so it has to stay rare once it is standing.
       if (item.rare) crate.rare = item.rare;
       g.note('crate');
@@ -186,7 +195,7 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const c = crateOf(g, t);
       if (!c || c.items.length) return;
       g.removeCrate(c.id);
-      const back = g.inventory.add(CRATE_DEFS[c.kind].item, { ql: 20, extra: c.material });
+      const back = g.inventory.add(CRATE_DEFS[c.kind].item, { ql: c.ql, extra: c.material });
       if (c.rare) back.rare = c.rare;
       g.logMsg(`You pick up the ${CRATE_DEFS[c.kind].name.toLowerCase()}.${c.deed ? ' Deed workers will leave their finds by the token until a deed crate stands again.' : ''}`, 'event');
       g.events.emit('world', c.x, c.y);

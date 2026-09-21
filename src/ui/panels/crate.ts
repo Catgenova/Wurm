@@ -172,7 +172,7 @@ export class CratePanel {
     const crate = this.crateId !== null ? this.game.crates.get(this.crateId) : undefined;
     if (crate) {
       return {
-        title: crateName(crate),
+        title: `${crateName(crate)} (QL ${crate.ql.toFixed(0)})`,
         id: crate.id,
         items: crate.items,
         capacity: crateCapacity(crate),

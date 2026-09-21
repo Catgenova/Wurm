@@ -10612,13 +10612,13 @@ select '1022. room_for across the four steps: '
 -- is still fantastic when it is picked back up.
 delete from crate where world_id = :'world2' and x = 16 and y = 16 \g /dev/null
 delete from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'crate_plank' \g /dev/null
-select give(:'world2', :'ivar', 'crate_plank', 1, 20, 'Oak', 'fantastic') \g /dev/null
+select give(:'world2', :'ivar', 'crate_plank', 1, 83, 'Oak', 'fantastic') \g /dev/null
 select id from item where world_id = :'world2' and holder = 'player'
   and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1 \gset box_
 update player set x = 16.5, y = 16.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select act_perform(:'world2', :'ivar', 'place_crate',
   ('{"kind":"tile","x":16,"y":16,"sx":1,"sy":1,"uid":' || :'box_id' || '}')::jsonb) \g /dev/null
-select '1022b. ' || crate_name(c) || ' holds ' || crate_capacity(c)
+select '1022b. ' || crate_name(c) || ' built at QL ' || round(c.ql::numeric, 1) || ' holds ' || crate_capacity(c)
      || ', where a plain oak one holds ' || room_for((select capacity from crate_def where kind = 'plank')
           * coalesce((mat_of('Oak')).hold, 1), null)
   from crate c where c.world_id = :'world2' and c.x = 16 and c.y = 16;
@@ -10626,7 +10626,10 @@ select act_perform(:'world2', :'ivar', 'pick_up_crate',
   ('{"kind":"crate","id":' || (select id from crate where world_id = :'world2' and x = 16 and y = 16) || '}')::jsonb) \g /dev/null
 select '1022c. picked back up it is still "'
      || coalesce((select rare from item where world_id = :'world2' and holder = 'player'
-                  and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1), 'nothing') || '"';
+                  and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1), 'nothing')
+     || '" and still QL ' || coalesce((select round(ql::numeric, 1)::text from item where world_id = :'world2'
+          and holder = 'player' and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1), 'nothing')
+     || ' — it used to come back a 20 whatever it went down as';
 
 \echo ''
 \echo '--- a face comes down one swing in thirty, for a mola as well'
