@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, dustiness, FLAT, HARD_EDGED, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, dustiness, FLAT, HARD_EDGED, oreWash, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -63,6 +63,7 @@ import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { CROWD, ruffle, sward, swardLook } from './meadow';
+import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
@@ -676,9 +677,16 @@ export class Renderer {
     const len = Math.hypot(gx, gy, 1);
     const dot = (-gx * light[0] - gy * light[1] + light[2]) / len;
     let shade = 0.48 + 0.6 * Math.max(0, dot);
+    /*
+     * A tile of ore is stone with a wash of the metal through it, not the
+     * metal. The seam itself is drawn on top of this as a shape (`seam.ts`);
+     * what the wash is for is the other end of the telescope -- from far
+     * enough out that the shapes are two pixels, a prospector still has to be
+     * able to see that there is something in that hillside.
+     */
     const base =
       type === TileType.Rock
-        ? ROCK_VARIANTS[w.rockFace(x, y)].color
+        ? oreWash(ROCK_VARIANTS[w.rockFace(x, y)].color, this.oreBuf)
         : type === TileType.Slabs
           ? SLAB_VARIANTS[slabVariant(data)].color
           : def.color;
@@ -1054,6 +1062,14 @@ export class Renderer {
   }
 
 
+  /**
+   * The ore's colour washed into the stone, which is what a tile of it fills
+   * with. Into a buffer, because this is worked out for every rock tile on the
+   * screen every time its colour is: a new array apiece was three hundred of
+   * them a frame for a number that is the same three numbers each time.
+   */
+  private oreBuf: [number, number, number] = [0, 0, 0];
+
   private addGrain(x: number, y: number, pts: Float64Array, zoom: number): void {
     const size = Math.max(1, 2.6 * zoom);
     for (let i = 0; i < GRAIN_SPECKS; i++) {
@@ -1213,6 +1229,18 @@ export class Renderer {
       this.scaled.clear();
     }
     const paved = zoom >= 0.75;
+    /*
+     * A seam is shapes in the stone, and below this a band of it is a few
+     * pixels wide: the wash of the metal through the tile's own colour is what
+     * says there is ore in that hillside from further out than this.
+     *
+     * It is also where the ground pass is dearest. Every band is pixels filled
+     * two or three times over, and a hillside that is ore the whole way across
+     * -- which takes some doing, but a miner can make one -- costs twenty-odd
+     * milliseconds a frame at zoom one against one and a half for the rich
+     * hillside that actually occurs. Below here it costs nothing at all.
+     */
+    const seamed = zoom >= 0.9;
     // Grass is flat colour with things growing in it, and a clump of grass
     // painted at a quarter of a tile to the screen is three pixels of green
     // on green. Below this the field says what it has to say with its colour.
@@ -1344,6 +1372,20 @@ export class Renderer {
         // line and keeps to it, and the beach does its own thing at the water.
         if (grassy && !wet && RUFFLED.has(t0)) this.swardEdges(ctx, V, x, y, pts, zoom, lit);
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
+        // And the metal in the stone, where there is any. Plain rock is plain.
+        if (seamed && !wet && t0 === TileType.Rock) {
+          const kind = world.rockFace(x, y);
+          if (kind > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(pts[0], pts[1]);
+            for (let k = 1; k < 4; k++) ctx.lineTo(pts[k * 2], pts[k * 2 + 1]);
+            ctx.closePath();
+            ctx.clip();
+            seam(ctx, x, y, ROCK_VARIANTS[kind].color, pts, paveRot, zoom);
+            ctx.restore();
+          }
+        }
 
         const t = t0;
         if (!lit) {

@@ -376,6 +376,29 @@ export interface RockVariantDef {
 }
 
 /** Kinds of rock; stored in the data byte of a Rock tile. */
+/**
+ * How much of the metal shows in the colour of a tile of it.
+ *
+ * The seam itself is shapes drawn in the stone (`render/seam.ts`) and that is
+ * the picture. This is the long view, for the zoom the shapes are too small to
+ * draw at: a tile filled with the ore outright was a coloured rectangle, and a
+ * tile filled with plain stone would be a seam nobody could see from the top
+ * of the next hill.
+ *
+ * An eighth of the way over and no further. The thing that gives it away is
+ * that a tile is a square and a seam is not: at a third the boundary of a
+ * patch of ore read as a painted rectangle straight through the shapes lying
+ * over it, and the shapes are the half of this that is telling the truth.
+ */
+export const ORE_WASH = 0.13;
+
+/** That mix, into a buffer the caller owns: this is worked out per tile per frame. */
+export function oreWash(ore: readonly number[], into: [number, number, number]): [number, number, number] {
+  const stone = ROCK_VARIANTS[0].color;
+  for (let i = 0; i < 3; i++) into[i] = stone[i] + (ore[i] - stone[i]) * ORE_WASH;
+  return into;
+}
+
 export const ROCK_VARIANTS: RockVariantDef[] = [
   // Plain stone, dug out for shards.
   { name: 'Rock', color: [168, 166, 178], yields: 'rock_shards' },
