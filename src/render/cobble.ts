@@ -154,6 +154,8 @@ export interface Low {
   ends: HTMLCanvasElement;
   h: number;
   crestPad: number;
+  /** How far the face and the cap are painted past the wall, so a cope stone can stand over the run. */
+  proud: number;
 }
 
 /** The painted wall, in the pieces a renderer fills its faces with. */
@@ -1355,7 +1357,14 @@ export function cobble(): Cobble {
    * The outermost are drawn first and in the deeper green, so a clump has a
    * back and a front.
    */
-  function blades(g: Ctx, x: number, base: number, w: number, h: number, R: Rand): void {
+  function blades(g: Ctx, x: number, base: number, w: number, h: number, R: Rand, tone = 0): void {
+    // Paler, the wall's own green, or deeper, so no two clumps along a run
+    // are the same colour.
+    const ink = tone > 0
+      ? [PASTEL.leafDeep, VEG.lit, PASTEL.leafPale]
+      : tone < 0
+        ? [PASTEL.leafLine, PASTEL.leafDeep, VEG.shade]
+        : [VEG.shade, VEG.lit, VEG.top];
     const n = 5 + Math.floor(R() * 5);
     const fan: Array<[number, number, number, number]> = [];
     for (let i = 0; i < n; i++) {
@@ -1380,7 +1389,7 @@ export function cobble(): Cobble {
       g.quadraticCurveTo(midX + ca * bw * 0.55, midY + sa * bw * 0.55, rx + ca * bw, base + sa * bw);
       g.closePath();
       const t = i / Math.max(1, fan.length - 1);
-      g.fillStyle = t < 0.45 ? VEG.shade : t < 0.88 ? VEG.lit : VEG.top;
+      g.fillStyle = t < 0.45 ? ink[0] : t < 0.88 ? ink[1] : ink[2];
       g.fill();
       g.strokeStyle = VEG.line; g.lineWidth = 0.9; g.stroke();
     }
@@ -1397,7 +1406,7 @@ export function cobble(): Cobble {
    * their blades filled once in the deep green, and the blades drawn over
    * that -- a silhouette with grass on it rather than grass on nothing.
    */
-  function crown(g: Ctx, x: number, base: number, w: number, h: number, R: Rand): void {
+  function crown(g: Ctx, x: number, base: number, w: number, h: number, R: Rand, tone = 0): void {
     // Low and wide: a bed of grass with the blades standing out of it, not a
     // dome with grass stuck in the top. A tall mass is the hedge's silhouette
     // again, which is the one shape the crest must not have.
@@ -1409,8 +1418,8 @@ export function cobble(): Cobble {
     }
     shadowOf(g, cs, 4, 3);
     mass(g, cs, R, { r: 5, lobe: 0 });
-    blades(g, x, base, w * 0.85, h, R);
-    blades(g, x + (R() - 0.5) * w * 0.5, base - deep * 0.4, w * 0.5, h * 0.75, R);
+    blades(g, x, base, w * 0.85, h, R, tone);
+    blades(g, x + (R() - 0.5) * w * 0.5, base - deep * 0.4, w * 0.5, h * 0.75, R, tone);
   }
 
   /** A low mound of growth standing on `base`, `w` by `h`, wherever it is rooted. */
@@ -1478,11 +1487,18 @@ export function cobble(): Cobble {
    *
    * And the stones are on edge, which is the whole idea and was the last
    * thing to arrive. At 33 deep and 30 wide every comber came out a loaf
-   * lying down -- eleven of twelve wider than tall, mean 1.34 to 1 the wrong
-   * way -- which is a course of small brick, not a cope. A comber is a thin
-   * stone stood up: 36 cm tall against 15 wide, better than two to one.
+   * lying down -- eleven of twelve wider than tall -- which is a course of
+   * small brick, not a cope. A comber is a thin stone stood up, and these
+   * are: `COPE` deep against a mean width of `COPE_MEAN`.
+   *
+   * `PROUD` is the room above the wall the picture is given so that the ones
+   * standing over the run have somewhere to be drawn. Without it a stone can
+   * only ever sit lower than its neighbours -- twenty-two centimetres of
+   * hand-laid variation inside the band and not one pixel of it reaching the
+   * sky, so the wall's outline stayed a ruled line and the proud stones read
+   * as notches cut into a sawn edge.
    */
-  const COPE_MIN = 8, COPE_MEAN = 19, COPE_RISE = 16;
+  const COPE_MIN = 8, COPE_MEAN = 19, COPE_RISE = 16, PROUD = 10;
   /*
    * And the weight of line it is drawn with. At the body's 2.4 px the coping
    * carried twice the ink per unit area of the wall under it -- a quarter of
@@ -1554,7 +1570,7 @@ export function cobble(): Cobble {
      * here: a stone tilted hard at the top of the run would be drawn off the
      * top edge of the picture, and the picture is the wall.
      */
-    const rise = packer ? COPE_RISE * (0.55 + R() * 0.45) : R() < 0.17 ? 2 + R() * 2 : COPE_RISE * (0.2 + R() * 0.8);
+    const rise = packer ? COPE_RISE * (0.55 + R() * 0.45) : R() < 0.19 ? -(3 + R() * 6) : COPE_RISE * (0.2 + R() * 0.8);
     const lean = tip + (R() - 0.5) * (rise > 5 ? 0.3 : 0.1);
     const gap = packer ? 0.8 : MORTAR - 1.8;
     wearOne(g, stone(g, x + gap / 2, rise, Math.max(4, w - gap), COPE - MORTAR / 2 - rise, R, tone, false, lean, COPE_INK), R);
@@ -1602,7 +1618,7 @@ export function cobble(): Cobble {
    * wall, a line of packing you notice only because the cope sits on it.
    */
   function levelling(g: Ctx, R: Rand): void {
-    const J = 2, ink = 1.1, room = LEVEL - J;
+    const J = 2, ink = 0.8, room = LEVEL - J;
     /**
      * One of them. Its depth is what the stone happened to be and it sits
      * where it sits in the bed -- because nine stones all 5.5 px deep with
@@ -1628,7 +1644,7 @@ export function cobble(): Cobble {
       // Weathered and dark for the most part. A bed of packing lies in the
       // shade of the cope that oversails it, and rolling two in five of them
       // bleached turned the quietest course on the wall into a pale stripe.
-      pack(x, w, R, R() < 0.34 ? 'weather' : R() < 0.52 ? 'dark' : R() < 0.64 ? 'brown' : '');
+      pack(x, w, R, R() < 0.2 ? 'weather' : R() < 0.34 ? 'dark' : R() < 0.54 ? 'brown' : '');
       x += w;
     }
   }
@@ -2002,7 +2018,8 @@ export function cobble(): Cobble {
     // are the same masonry rather than the same masonry and some brickwork.
     const rows = Math.max(2, Math.round((fh - COPE - LEVEL) / (CH * 0.66)));
     const face = VARIANTS.map((v) => {
-      const c = cnv(TW, fh), g = ctxOf(c);
+      const c = cnv(TW, fh + PROUD), g = ctxOf(c);
+      g.translate(0, PROUD);
       const R = rand(v.seed * 83 + 5);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, fh);
       const own = lowCourses(g, R, fh, rows);
@@ -2082,7 +2099,7 @@ export function cobble(): Cobble {
     const CREST_MARGIN = 28;
     const clumps = VARIANTS.map((v) => {
       const R = rand(v.seed * 29 + 3);
-      const out: Array<{ x: number; base: number; w: number; h: number; big: boolean; seed: number }> = [];
+      const out: Array<{ x: number; base: number; w: number; h: number; big: boolean; tone: number; seed: number }> = [];
       const lo = CREST_MARGIN, span = TW - 2 * CREST_MARGIN;
       for (let c = 0; c < 3; c++) {
         const cx = lo + R() * span;
@@ -2094,6 +2111,11 @@ export function cobble(): Cobble {
             w: big ? 46 + R() * 30 : 14 + R() * 14,
             h: COPE * (R() < 0.65 ? 1.05 + R() * 0.35 : 0.45 + R() * 0.5),
             big,
+            // Its own green. Every mass on the wall came out the same colour
+            // to within one unit a channel, repeating every four metres,
+            // while the stone under it had been given five tones and a pair
+            // invented for the coping alone.
+            tone: R() < 0.33 ? 1 : R() < 0.55 ? -1 : 0,
             seed: Math.floor(R() * 1e6),
           });
         }
@@ -2105,8 +2127,23 @@ export function cobble(): Cobble {
       g.translate(0, CREST);
       const R = rand(v.seed * 29 + 11);
       for (const k of clumps[vi]) {
-        if (k.big) crown(g, k.x, k.base, k.w, k.h, rand(k.seed));
-        else blades(g, k.x, k.base, k.w, k.h, rand(k.seed));
+        if (k.big) crown(g, k.x, k.base, k.w, k.h, rand(k.seed), k.tone);
+        else blades(g, k.x, k.base, k.w, k.h, rand(k.seed), k.tone);
+      }
+      /*
+       * And one thing that hangs. Everything on the crest stands up out of a
+       * joint, which is one kind of growth used three times a section; what
+       * a wall this old actually carries as well is something woody rooted
+       * in the top and falling down the front of it. The tall wall has its
+       * drape curtains and the low one had no equivalent -- loudest of all
+       * on the half wall, which is a garden wall.
+       */
+      for (let i = 0, m = 1 + Math.floor(R() * 2); i < m; i++) {
+        const cx = CREST_MARGIN + R() * (TW - 2 * CREST_MARGIN);
+        const cs: Lobe[] = [];
+        tongueLobes(cs, cx, COPE * 0.5, 17 + R() * 13, (fh - COPE) * (0.22 + R() * 0.32), R);
+        shadowOf(g, cs, 5, 6);
+        mass(g, cs, R, { r: 8.5, lobe: R() < 0.4 ? 0 : 1 });
       }
       // One cushion with a root in the top, which is moss and not grass: the
       // two things that live up there do not have the same silhouette either.
@@ -2115,8 +2152,8 @@ export function cobble(): Cobble {
     });
     /** The coping from above: the same run of stones, laid across the thickness. */
     const cap = VARIANTS.map((v) => {
-      const c = cnv(TW, CAP_H), g = ctxOf(c);
-      g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, CAP_H);
+      const c = cnv(TW, CAP_H + PROUD), g = ctxOf(c);
+      g.translate(0, PROUD);
       const w0 = COPE_SEAM[1] - COPE_SEAM[0];
       /*
        * Not `flat`: a flat stone takes the flat tone and nothing else, and a
@@ -2136,7 +2173,16 @@ export function cobble(): Cobble {
         // One end jitters hard and the other a little, so the two arrises of
         // the run are ragged independently rather than both nearly straight.
         const far = RR() < 0.5;
-        const j0 = 1 + RR() * (far ? 20 : 5), j1 = 1 + RR() * (far ? 5 : 20);
+        const j0 = -5 + RR() * (far ? 25 : 10), j1 = 1 + RR() * (far ? 5 : 20);
+        /*
+         * The hearting between the combers, laid stone by stone rather than
+         * as one rectangle behind the lot. A cap that opens with a filled
+         * rectangle has a ruled far edge whatever the stones on it do, and at
+         * four of the eight rotations that edge is the wall's whole outline
+         * against the sky.
+         */
+        g.fillStyle = PASTEL.joint;
+        g.fillRect(x - 1, Math.min(j0, 0) + 2, w + 2, CAP_H - Math.min(j0, 0) - 2);
         const tilt = (RR() - 0.5) * 0.55;
         // Lighter again than the face of the coping. This strip is two or
         // three pixels deep at the zoom people play at, so an outline that
@@ -2179,8 +2225,8 @@ export function cobble(): Cobble {
         // Down the wall's thickness rather than up its face, and shorter,
         // because what you see from overhead is the spread and not the height.
         const y = CAP_H * (0.3 + R() * 0.45);
-        if (k.big) crown(g, k.x, y, k.w * 0.9, CAP_H * (0.5 + R() * 0.35), R);
-        else blades(g, k.x, y, k.w, CAP_H * (0.3 + R() * 0.3), R);
+        if (k.big) crown(g, k.x, y, k.w * 0.9, CAP_H * (0.5 + R() * 0.35), R, k.tone);
+        else blades(g, k.x, y, k.w, CAP_H * (0.3 + R() * 0.3), R, k.tone);
       }
       return c;
     });
@@ -2198,13 +2244,21 @@ export function cobble(): Cobble {
     const ends = (() => {
       const Wc = 64, c = cnv(Wc, fh), g = ctxOf(c), R = rand(11);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, Wc, fh);
-      let cx = 0;
+      let cx = 0, ex = 0;
       for (const [f, tone, up] of [[0.36, '', 5], [0.34, 'weather', 1], [0.3, 'bleach', 7]] as Array<[number, string, number]>) {
         const w = f * Wc;
         stone(g, cx + 1, up, w - 2, COPE - MORTAR / 2 - up, R, tone, false, (R() - 0.5) * 0.06, COPE_INK);
         cx += w;
       }
-      stone(g, MORTAR / 2, COPE + MORTAR / 2, Wc - MORTAR, LEVEL - MORTAR, R, 'dark', true);
+      // Not `flat`: a flat stone takes `TONES.flat` and nothing else, which is
+      // the lightest tone in the table, so the quietest course in the wall
+      // came out as the brightest thing on its head -- one pale pill where
+      // the run shows a course of packing.
+      for (const [f, tn] of [[0.38, 'weather'], [0.34, 'dark'], [0.28, 'brown']] as Array<[number, string]>) {
+        const w = f * Wc;
+        stone(g, ex + 1, COPE + 1 + R() * 2, w - 2, LEVEL - 3, R, tn, false, (R() - 0.5) * 0.08, 0.9);
+        ex += w;
+      }
       const ch = (fh - COPE - LEVEL) / rows;
       for (let i = 0; i < rows; i++) {
         const y = COPE + LEVEL + i * ch + MORTAR / 2, h = ch - MORTAR;
@@ -2224,8 +2278,9 @@ export function cobble(): Cobble {
      */
     const gx0 = TW * FENCE_GAP.t0, gx1 = TW * FENCE_GAP.t1;
     const gate = VARIANTS.map((v, i) => {
-      const c = cnv(TW, fh), g = ctxOf(c);
-      g.drawImage(face[i], 0, 0);
+      const c = cnv(TW, fh + PROUD), g = ctxOf(c);
+      g.translate(0, PROUD);
+      g.drawImage(face[i], 0, -PROUD);
       const R = rand(v.seed * 197 + 71);
       for (const side of [-1, 1]) {
         const line = side < 0 ? gx0 : gx1;
@@ -2236,11 +2291,17 @@ export function cobble(): Cobble {
           y -= h + MORTAR + R() * 2;
         }
         wearOne(g, stone(g, side < 0 ? line + OVER - 52 : line - OVER, MORTAR / 2, 52, COPE + LEVEL - MORTAR, R, 'dress', false, (R() - 0.5) * 0.015), R);
+        // A pier stands proud of the wall it interrupts, so it throws a line
+        // of shadow down the field side of itself. Without one it is a paler
+        // patch of the same wall in the same plane, and the step up at the
+        // gateway reads as the wall changing height for no reason.
+        g.fillStyle = 'rgba(96, 86, 66, 0.3)';
+        g.fillRect(side < 0 ? line + OVER - 56 : line - OVER + 52, 0, 4, fh);
       }
       g.globalAlpha = 1;
       g.fillStyle = '#000';
       g.globalCompositeOperation = 'destination-out';
-      g.fillRect(gx0, 0, gx1 - gx0, fh);
+      g.fillRect(gx0, -PROUD, gx1 - gx0, fh + PROUD);
       g.globalCompositeOperation = 'source-over';
       return c;
     });
@@ -2258,23 +2319,32 @@ export function cobble(): Cobble {
      * makes a step up at a gateway read as a gateway rather than as two
      * crews who did not measure.
      */
-    const cut = (src: HTMLCanvasElement): HTMLCanvasElement => {
-      const c = cnv(TW, src.height), g = ctxOf(c);
-      g.drawImage(src, 0, 0);
-      g.clearRect(gx0, 0, gx1 - gx0, src.height);
-      return c;
-    };
     const gateCap = VARIANTS.map((v, i) => {
-      const c = cut(cap[i]), g = ctxOf(c), R = rand(v.seed * 311 + 29);
+      const c = cnv(TW, cap[i].height), g = ctxOf(c), R = rand(v.seed * 311 + 29);
+      g.drawImage(cap[i], 0, 0);
+      g.translate(0, PROUD);
       for (const side of [-1, 1]) {
         const x = side < 0 ? gx0 + OVER - 52 : gx1 - OVER;
         wearOne(g, stone(g, x, 2, 52, CAP_H - 4, R, 'dress', false, (R() - 0.5) * 0.02, 1.2, false), R);
       }
+      // Last, not first. The pier stones overhang into the gap the way every
+      // other dressed stone in this file does, and cutting before drawing
+      // them left ten pixels of each one projecting over the opening with
+      // nothing under it -- a tongue of stone hanging in the gateway.
+      g.clearRect(gx0, -PROUD, gx1 - gx0, c.height);
       return c;
     });
-    const gateCrest = VARIANTS.map((_, i) => cut(crest[i]));
-    const gateCapCrest = VARIANTS.map((_, i) => cut(capCrest[i]));
-    const made: Low = { face, gate, crest, cap, capCrest, gateCap, gateCrest, gateCapCrest, ends, h: fh, crestPad: CREST };
+    // Wider than the gap for the growth, so nothing seeds on the one dressed,
+    // newly laid stone in the wall.
+    const off = (src: HTMLCanvasElement): HTMLCanvasElement => {
+      const c = cnv(TW, src.height), g = ctxOf(c);
+      g.drawImage(src, 0, 0);
+      g.clearRect(gx0 - 52 + OVER, 0, gx1 - gx0 + 2 * (52 - OVER), src.height);
+      return c;
+    };
+    const gateCrest = VARIANTS.map((_, i) => off(crest[i]));
+    const gateCapCrest = VARIANTS.map((_, i) => off(capCrest[i]));
+    const made: Low = { face, gate, crest, cap, capCrest, gateCap, gateCrest, gateCapCrest, ends, h: fh, crestPad: CREST, proud: PROUD };
     LOWS.set(k, made);
     return made;
   };

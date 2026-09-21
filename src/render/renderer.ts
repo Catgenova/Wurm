@@ -245,9 +245,9 @@ const SILL_LIT = 1.02;
 /** And so is a threshold, which is walked on as well, so it is paler still. */
 const STEP_LIT = 1.06;
 /** Strap hinges and a door ring: the only iron on a wall made of stone and oak. */
-const IRON: readonly [number, number, number] = [0x7e, 0x77, 0x6a];
+const IRON: readonly [number, number, number] = [0x7b, 0x81, 0x88];
 /** Its own shade, so a bar of it reads as round stock rather than as a painted line. */
-const IRON_DARK: readonly [number, number, number] = [0x4e, 0x49, 0x41];
+const IRON_DARK: readonly [number, number, number] = [0x44, 0x4a, 0x51];
 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
@@ -2664,10 +2664,13 @@ export class Renderer {
       const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
       const indoors = !!bld.buildingAt(seenX, seenY);
       /** A picture, between three of its corners: top left, top right, bottom left. */
-      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false): void => {
-        const [tlx, tly] = across ? [px(0, k1, -1), py(0, k1, -1)] : [px(0, k1, s), py(0, k1, s)];
+      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false, over = 0): void => {
+        // `over` hangs the far edge of an `across` picture past the back arris,
+        // which is where a cope stone standing proud of the run has to go.
+        const far = -(1 + 2 * over);
+        const [tlx, tly] = across ? [px(0, k1, far), py(0, k1, far)] : [px(0, k1, s), py(0, k1, s)];
         const [trx, try_] = across
-          ? [px(1, k1, -1), py(1, k1, -1)]
+          ? [px(1, k1, far), py(1, k1, far)]
           : [px(1, k1, s), py(1, k1, s)];
         const [blx, bly] = across ? [px(0, k1, 1), py(0, k1, 1)] : [px(0, k0, s), py(0, k0, s)];
         ctx.save();
@@ -2717,7 +2720,7 @@ export class Renderer {
         ctx.closePath();
         ctx.fillStyle = 'rgba(70, 62, 46, 0.2)';
         ctx.fill();
-        blit(hung ? lw.gate[v] : lw.face[v], 0, 1);
+        blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
         quad(0, 1, 0, 1);
         light(lit);
@@ -2746,7 +2749,7 @@ export class Renderer {
           ctx.fillStyle = rgb(mat.color, capLit);
           ctx.fill();
         }
-        blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true);
+        blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true, lw.proud / cob.capH);
         for (const [a, b] of capRuns) { cap(a, b, 1); light(capLit); }
         /*
          * And what grows on it, seen from above.
@@ -3642,6 +3645,16 @@ export class Renderer {
      * of them are open now, and what tells them apart is what they are made
      * of: five heavy bars and a brace in oak, a grid in iron.
      */
+    /*
+     * And they are not the same gate in two colours.
+     *
+     * The iron one was the oak one painted grey: the same five rails, the
+     * same lapped brace, the same weight of member. Iron is not laid up like
+     * timber -- a smith sets uprights in a top and a bottom rail, because
+     * that is what he can forge and weld -- so the iron gate is uprights and
+     * two rails, at a third of the oak's weight, and its tone is cold where
+     * the oak's is warm.
+     */
     const heavy = iron ? 1 : 1.38;
     /*
      * Two of the eight rotations look along the wall, and a shut gate lies in
@@ -3656,13 +3669,12 @@ export class Renderer {
       bar(m, k0, m, k1, 2.6 * heavy);
       return;
     }
-    for (const k of iron ? [k0, 0.3, 0.54, 0.78, k1] : [k0, 0.28, 0.5, 0.71, k1]) bar(a, k, b, k, 2.1 * heavy);
+    for (const k of iron ? [k0, k1] : [k0, 0.28, 0.5, 0.71, k1]) bar(a, k, b, k, 2.1 * heavy);
     bar(a, k0, a, k1, 2.6 * heavy);
     bar(b, k0, b, k1, 2.6 * heavy);
     if (iron) {
-      if (zoom >= 0.5) for (let i = 1; i < 4; i++) bar(a + (b - a) * (i / 4), k0, a + (b - a) * (i / 4), k1, 1.3);
-      bar(a, k0 + 0.04, b, k1 - 0.04, 2.2);
-      bar(b, k0 + 0.04, a, k1 - 0.04, 2.2);
+      if (zoom >= 0.5) for (let i = 1; i < 6; i++) bar(a + (b - a) * (i / 6), k0, a + (b - a) * (i / 6), k1, 1.1);
+      bar(a, k0 + 0.04, b, k1 - 0.04, 1.5);
     } else {
       // The brace, rising from the hinge stile, which is the way round it has
       // to go if it is to carry the gate's weight instead of hanging off it.
@@ -3678,9 +3690,9 @@ export class Renderer {
      */
     if (zoom >= 0.5) {
       for (const k of [0.24, 0.76]) {
-        seg(a, k, a + (b - a) * 0.16, k, IRON_DARK, 2.4);
-        seg(a + (b - a) * 0.16, k, a + (b - a) * 0.34, k, IRON_DARK, 1.3);
-        seg(a, k, a, k, IRON, 2.6);
+        seg(a, k, a + (b - a) * 0.14, k, IRON_DARK, 1.9);
+        seg(a + (b - a) * 0.14, k, a + (b - a) * 0.3, k, IRON_DARK, 1.1);
+        seg(a, k, a, k, IRON, 2.2);
       }
     }
     ctx.lineWidth = 1;
