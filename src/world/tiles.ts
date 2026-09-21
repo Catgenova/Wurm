@@ -49,6 +49,16 @@ export type RGB = readonly [number, number, number];
 export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone]);
 
 /**
+ * How far a tile of sand with the sea against it goes towards wet.
+ *
+ * Damp sand is darker and a shade cooler than dry, and the band of it is where
+ * the last wave reached. It is the strongest thing about a beach seen from
+ * above and it costs four tile reads: a beach without it is a flat cream
+ * ribbon, and a beach with it is a beach.
+ */
+export const DAMP_SAND: readonly [number, number, number] = [182, 162, 118];
+
+/**
  * The grounds drawn as one flat colour: no grain, and no nudge of brightness
  * from one tile of them to the next.
  *
@@ -61,7 +71,7 @@ export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, T
  * comes out as a chequerboard, which is the one thing a field or a cliff
  * never looks like.
  */
-export const FLAT: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe, TileType.Rock]);
+export const FLAT: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe, TileType.Rock, TileType.Sand]);
 
 /**
  * The flat grounds that grow things, which is not all of them. What each one
@@ -73,11 +83,11 @@ export const SWARDED: ReadonlySet<number> = new Set<number>([TileType.Grass, Til
 /**
  * The bare grounds that a field runs out over the edge of.
  *
- * Earth somebody walked or packed, and the stone a hillside wears through to:
- * a field does not stop dead at any of them, so the join is drawn as a ruffle
- * of lobes hanging over the bare side rather than as the soft band of one
- * colour into the other every other pair of grounds gets. Both at once is a
- * ruffle standing in a smear.
+ * Earth somebody walked or packed, the stone a hillside wears through to, and
+ * the sand above a tideline: a field does not stop dead at any of them, so the
+ * join is drawn as a ruffle of lobes hanging over the bare side rather than as
+ * the soft band of one colour into the other every other pair of grounds gets.
+ * Both at once is a ruffle standing in a smear.
  *
  * Rock is in here and in `HARD_EDGED` both, which is the point of it. Blending
  * washed a scallop of grass right round every cliff -- a band of the
@@ -86,7 +96,7 @@ export const SWARDED: ReadonlySet<number> = new Set<number>([TileType.Grass, Til
  * clipped to it, and it only goes on where the two are at much the same
  * height.
  */
-export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, TileType.PackedDirt, TileType.Rock]);
+export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, TileType.PackedDirt, TileType.Rock, TileType.Sand]);
 
 /** Whether these two grounds meet in a ruffle rather than a blended band. */
 export const ruffledJoin = (a: number, b: number): boolean =>
@@ -231,6 +241,14 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    */
   [TileType.Dirt]: { name: 'Dirt', color: [163, 133, 98], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
   [TileType.PackedDirt]: { name: 'Packed dirt', color: [181, 156, 120], speed: 1.05, pavable: true, roll: 0.9 },
+  /*
+   * The one ground that was already pastel, and the only one that has not had
+   * to move for the rest of them. It is flat like the others now -- no grain,
+   * no nudge from one tile to the next -- a field runs out over the top of it
+   * rather than stopping at a ruled line, and where the sea is against it it
+   * is damp. That last is most of what makes a beach read as a beach rather
+   * than as a cream stripe between a field and the water.
+   */
   [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
   [TileType.Rock]: { name: 'Rock', color: [168, 166, 178], speed: 0.9, mineable: true, roll: 0.85 },
   /*

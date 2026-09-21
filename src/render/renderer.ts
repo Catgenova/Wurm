@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, dustiness, FLAT, HARD_EDGED, oreWash, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, DAMP_SAND, dustiness, FLAT, HARD_EDGED, oreWash, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -693,6 +693,27 @@ export class Renderer {
     let r = base[0];
     let g = base[1];
     let b = base[2];
+    /*
+     * Sand with the sea against it is damp sand. Four reads, and only on the
+     * tiles that are actually sand, so the whole of the beach costs what one
+     * tile of it used to; and it is worked out here rather than drawn on top
+     * because it belongs to the tile's colour, and so it is cached with the
+     * colour and thrown away with it when the land moves.
+     */
+    if (type === TileType.Sand) {
+      let wet = false;
+      for (let e = 0; e < 4 && !wet; e++) {
+        const nx = x + (e === 1 ? 1 : e === 3 ? -1 : 0);
+        const ny = y + (e === 0 ? -1 : e === 2 ? 1 : 0);
+        if (nx < 0 || ny < 0 || nx >= w.w || ny >= w.h) continue;
+        if (w.heightAt(nx + 0.5, ny + 0.5) < 0) wet = true;
+      }
+      if (wet) {
+        r = DAMP_SAND[0];
+        g = DAMP_SAND[1];
+        b = DAMP_SAND[2];
+      }
+    }
     // Steep ground wears through to the rock under it. A cliff face used to be
     // whatever was growing on the top of it, stretched down the drop, which is
     // the one thing a cliff never looks like.

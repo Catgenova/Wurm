@@ -79,10 +79,19 @@ export const foamAlpha = (swell: number, force: number): number => 0.3 + 0.34 * 
  * by the first of those.
  */
 
-/** Bright green-teal at the water's edge. */
-export const WATER_SHALLOW: readonly [number, number, number] = [112, 228, 198];
-/** Deep teal at the bottom of it. */
-export const WATER_DEEP: readonly [number, number, number] = [5, 48, 62];
+/**
+ * Pale blue at the water's edge, and a deep one at the bottom.
+ *
+ * The shallows were 112, 228, 198 -- a bright green-teal, picked when the
+ * grass was a yellow-green and the two of them could not have been confused
+ * for one another. The field went teal and they could: a beach came out as a
+ * cream line between two greens of the same weight, and the shape of the
+ * coast, which is the one thing the eye reads a map by, went with it. The sea
+ * leans blue now and the land leans green, which is the arrangement everybody
+ * already has in their head.
+ */
+export const WATER_SHALLOW: readonly [number, number, number] = [140, 210, 232];
+export const WATER_DEEP: readonly [number, number, number] = [30, 76, 110];
 
 /** How many colours the ramp is cut into, and how deep each step reaches. */
 export const WATER_STEPS = 40;
