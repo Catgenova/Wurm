@@ -64,19 +64,41 @@ export const DAMP_SAND: readonly [number, number, number] = [182, 162, 118];
  *
  * Everything else gets both -- five specks a tile close up, and a tenth
  * either way per tile, so a wide sheet of one ground does not read as paper.
- * These three do not want either. The pictures they are drawn from are flat
- * colour with the detail sitting *on* it in pieces you can count, and a
- * speckle over the whole tile puts the ground into the same range of light
- * and dark as the things standing in it. The per-tile nudge is worse: it
- * comes out as a chequerboard, which is the one thing a field or a cliff
- * never looks like.
+ * These do not want either. The pictures they are drawn from are flat colour
+ * with the detail sitting *on* it in pieces you can count, and a speckle over
+ * the whole tile puts the ground into the same range of light and dark as the
+ * things standing in it. The per-tile nudge is worse: a tenth either way is a
+ * chequerboard, and on the bare grounds -- a road, a beach, a dug plot, all
+ * of them wide sheets of one colour -- it was the loudest thing in the
+ * picture, a tiled floor where a path should be.
  */
-export const FLAT: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe, TileType.Rock, TileType.Sand]);
+export const FLAT: ReadonlySet<number> = new Set<number>([
+  TileType.Grass, TileType.Steppe, TileType.Rock, TileType.Sand,
+  TileType.Dirt, TileType.PackedDirt, TileType.Field,
+]);
 
 /**
- * The flat grounds that grow things, which is not all of them. What each one
- * grows is in `meadow.ts`. Rock is flat and grows nothing: a stone shelf with
- * lumps of stone strewn on it is a stone shelf with a rash.
+ * The flat grounds with things lying about on them, and what each one has is
+ * in `meadow.ts`: clumps in a meadow, tussocks on a steppe, clods on a dug
+ * path, stones trodden into a packed one, pebbles on a beach.
+ *
+ * All of it is the same machinery. A thing lying on a ground is a few lobes
+ * with a line round them and a light on top, and it is painted in three tones
+ * worked out from the colour of the ground it lies on, so a ground joins this
+ * by saying what its colour is and what the stuff on it is called.
+ *
+ * Rock is flat and has nothing: a stone shelf with lumps of stone strewn on
+ * it is a stone shelf with a rash.
+ */
+export const STREWN: ReadonlySet<number> = new Set<number>([
+  TileType.Grass, TileType.Steppe, TileType.Dirt, TileType.PackedDirt, TileType.Sand,
+]);
+
+/**
+ * And the two that are a *field*, which is a narrower thing: the grounds that
+ * run out over the edge of a bare one rather than stopping at the line
+ * between them. Only these ruffle, so a dug path beside a packed one still
+ * meets it on the tile line, the way two bare grounds should.
  */
 export const SWARDED: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe]);
 
@@ -239,8 +261,14 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * two -- it is earth somebody walked flat and dusty -- and a ploughed field
    * the darker, because turned soil is wet soil.
    */
-  [TileType.Dirt]: { name: 'Dirt', color: [163, 133, 98], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
-  [TileType.PackedDirt]: { name: 'Packed dirt', color: [181, 156, 120], speed: 1.05, pavable: true, roll: 0.9 },
+  [TileType.Dirt]: { name: 'Dirt', color: [168, 131, 92], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
+  /*
+   * Greyer and dustier than the dirt it was made from, not just lighter.
+   * Both of them were the same brown at two brightnesses and a road beside a
+   * dug plot read as one ground somebody had shaded in: earth that has been
+   * walked flat for a season has the colour trodden out of it.
+   */
+  [TileType.PackedDirt]: { name: 'Packed dirt', color: [186, 172, 148], speed: 1.05, pavable: true, roll: 0.9 },
   /*
    * The one ground that was already pastel, and the only one that has not had
    * to move for the rest of them. It is flat like the others now -- no grain,

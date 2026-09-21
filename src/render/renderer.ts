@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, DAMP_SAND, dustiness, FLAT, HARD_EDGED, oreWash, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, DAMP_SAND, dustiness, FLAT, HARD_EDGED, oreWash, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, STREWN, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -62,7 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { CROWD, ruffle, sward, swardLook } from './meadow';
+import { CROWD, ruffle, strew, strewLook } from './meadow';
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
@@ -873,7 +873,7 @@ export class Renderer {
       const a = co[e], b = co[f];
       // In the field's own colour, not the meadow's: a steppe runs out onto a
       // track looking like steppe.
-      ruffle(ctx, sward(theirs).hem, pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1], cx, cy,
+      ruffle(ctx, strew(theirs).hem, pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1], cx, cy,
         a[0] * 2 + a[1] > b[0] * 2 + b[1],
         // Off the pair of tiles, so the same join is the same ruffle whatever
         // the camera is doing and whichever of the two is being drawn.
@@ -1048,9 +1048,9 @@ export class Renderer {
    * and its trees and nothing else, and a clump you are remembering is not a
    * clump you are looking at.
    */
-  private meadowTile(type: TileType, x: number, y: number, pts: Float64Array, rot: number, zoom: number, lit: boolean): void {
+  private strewTile(type: TileType, x: number, y: number, pts: Float64Array, rot: number, zoom: number, lit: boolean): void {
     const ctx = this.canvas.ctx;
-    const m = sward(type);
+    const m = strew(type);
     if (!lit) return;
     // The tile's own corners, so a daisy stays on the same square foot of
     // ground when the camera comes round rather than jumping a corner.
@@ -1059,7 +1059,7 @@ export class Renderer {
       (pts[A] * (1 - u) + pts[B] * u) * (1 - v) + (pts[D] * (1 - u) + pts[C] * u) * v;
     const atY = (u: number, v: number): number =>
       (pts[A + 1] * (1 - u) + pts[B + 1] * u) * (1 - v) + (pts[D + 1] * (1 - u) + pts[C + 1] * u) * v;
-    const look = m.looks[swardLook(x, y)];
+    const look = m.looks[strewLook(x, y)];
     const lo = look.blobN[0];
     const n = lo + Math.floor(hash2(x, y, 301) * (look.blobN[1] - lo + 1));
     // Where the first one stands. The rest are placed off it rather than off
@@ -1392,7 +1392,7 @@ export class Renderer {
         // growing in it, and the speckles are what it had instead of clumps:
         // both at once is mud.
         if (grain && !wet && !FLAT.has(t0)) this.addGrain(x, y, pts, zoom);
-        if (grassy && !wet && SWARDED.has(t0)) this.meadowTile(t0, x, y, pts, paveRot, zoom, lit);
+        if (grassy && !wet && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
         // And where bare earth has grass beside it, the grass comes over the
         // edge of it. Only bare earth: a flagstone or a cobble was laid to a
         // line and keeps to it, and the beach does its own thing at the water.

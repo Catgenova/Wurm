@@ -1,5 +1,5 @@
 import { hash2 } from '../world/noise';
-import { SWARDED, TILE_DEFS, TileType } from '../world/tiles';
+import { STREWN, TILE_DEFS, TileType } from '../world/tiles';
 
 /**
  * The meadow: what grass is made of.
@@ -79,8 +79,8 @@ export interface Look {
 /** Under this, a look's blobs are a crowd and stack up the screen. */
 export const CROWD = 0.16;
 
-/** What one ground grows: the pictures, the ten arrangements of them, and how thickly. */
-export interface Sward {
+/** What one ground carries: the pictures, the ten arrangements of them, and how thickly. */
+export interface Strew {
   blobs: Sprig[];
   looks: Look[];
   /** Clumps to a tile, averaged over the ten: what the field's density is. */
@@ -425,7 +425,7 @@ function drift(x: number, y: number): number {
 }
 
 /** Which of the ten this tile is. The drift is the place's, not the ground's. */
-export function swardLook(x: number, y: number): number {
+export function strewLook(x: number, y: number): number {
   const n = drift(x, y);
   let base = CUTS.length - 1;
   for (let i = 0; i < CUTS.length; i++) if (n < CUTS[i]) { base = i; break; }
@@ -436,7 +436,7 @@ export function swardLook(x: number, y: number): number {
 
 /* ---- the whole of it ----------------------------------------------------- */
 
-/** What one ground calls the things growing on it, for the tells. */
+/** What one ground calls the things lying on it, for the tells. */
 interface Ground {
   /** The one word for what grows on it: a clump in the lightest of it. */
   word: string;
@@ -460,9 +460,30 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     deepest: 'a hollow that held its water longer than the rest of it did',
     seed: 1000,
   },
+  // Turned earth: clods, and the stones that come up with them.
+  [TileType.Dirt]: {
+    word: 'earth',
+    palest: 'dried out on top, the way a clod does in a day of sun',
+    deepest: 'turned up wet from under the rest of it',
+    seed: 2000,
+  },
+  // Earth somebody has walked flat: what is left is what would not go down.
+  [TileType.PackedDirt]: {
+    word: 'stone',
+    palest: 'a pale one, trodden proud of the rest',
+    deepest: 'a dark one, half of it still under',
+    seed: 3000,
+  },
+  // A beach: shells and pebbles, and nothing else worth drawing on sand.
+  [TileType.Sand]: {
+    word: 'shell',
+    palest: 'bleached white by the sun, the way a shell goes',
+    deepest: 'a wet pebble, or one the tide has not turned for a while',
+    seed: 4000,
+  },
 };
 
-const painted = new Map<TileType, Sward>();
+const painted = new Map<TileType, Strew>();
 
 /**
  * What a ground grows, painted once the first time any of it comes into view.
@@ -474,7 +495,7 @@ const painted = new Map<TileType, Sward>();
  * from standing height is a clump the same way a clump of meadow is, and the
  * thing that makes a steppe a steppe is that it is the colour of straw.
  */
-export function sward(type: TileType): Sward {
+export function strew(type: TileType): Strew {
   const had = painted.get(type);
   if (had) return had;
   const ground = GROUNDS[type] ?? (GROUNDS[TileType.Grass] as Ground);
@@ -514,7 +535,7 @@ export function sward(type: TileType): Sward {
   const LONG = [grow(15, 5.8, MID, 163), grow(16.2, 6.2, DEEP, 167), grow(14.2, 5.4, PALE, 173)];
 
   /**
-   * The ten, in order of how much grows in them -- which `swardLook` leans
+   * The ten, in order of how much is on them -- which `strewLook` leans
    * on, since the tile next to a drift takes the look one along from it and
    * one along has to mean a little more or a little less of the same thing.
    *
@@ -548,7 +569,7 @@ export function sward(type: TileType): Sward {
   // and nothing written down: `looks` is in the same order as `WEIGHTS`.
   const clumps = looks.reduce(
     (a, l, i) => a + WEIGHTS[i] * (l.blobN[0] + l.blobN[1]) / 2, 0) / TOTAL;
-  const made: Sward = { blobs, looks, clumps, hem: MID };
+  const made: Strew = { blobs, looks, clumps, hem: MID };
   painted.set(type, made);
   return made;
 }
@@ -560,7 +581,7 @@ export function sward(type: TileType): Sward {
  * first time a blade of grass comes into view, which is the first frame.
  */
 export function warmMeadow(): void {
-  const paint = (): void => { for (const t of SWARDED) sward(t as TileType); };
+  const paint = (): void => { for (const t of STREWN) strew(t as TileType); };
   const idle = globalThis.requestIdleCallback;
   if (typeof idle === 'function') idle(paint);
   else setTimeout(paint, 1200);
