@@ -9665,8 +9665,8 @@ select x as was_x, y as was_y from player where world_id = :'world2' and uid = :
 update player set x = 12.5, y = 12.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
 delete from placed where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
 delete from crate where world_id = :'world2' and x = 12 and y = 12 \g /dev/null
-delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('furniture_bed', 'furniture_stool') \g /dev/null
-select give(:'world2', :'ivar', 'furniture_bed', 1, 50, 'Oak') as bed \gset
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('bed', 'stool') \g /dev/null
+select give(:'world2', :'ivar', 'bed', 1, 50, 'Oak') as bed \gset
 select act_perform(:'world2', :'ivar', 'place_furniture', ('{"kind":"tile","x":12,"y":12,"cx":12,"cy":12,"sx":3,"sy":0,"itemUid":' || :'bed' || ',"facing":"w"}')::jsonb) \g /dev/null
 select id as bedrow, facing as bed_facing, sx as bed_sx, sy as bed_sy from placed where world_id = :'world2' and x = 12 and y = 12 and sub = 'bed' \gset
 select '986. a bed set down at 12,12 facing west: the row says ' || :'bed_facing' || ', standing across the tile at spots ' || :bed_sx || ',' || :bed_sy
@@ -9679,7 +9679,7 @@ delete from event where uid = :'ivar' \g /dev/null
 select coalesce(act_refusal(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb), 'ALLOWED') as door1 \gset
 select act_perform(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb) \g /dev/null
 select facing as f1, sx as sx1, sy as sy1 from placed where id = :bedrow \gset
-select give(:'world2', :'ivar', 'furniture_stool', 1, 50, 'Oak') as stool \gset
+select give(:'world2', :'ivar', 'stool', 1, 50, 'Oak') as stool \gset
 select coalesce(act_refusal(:'world2', :'ivar', 'place_furniture', ('{"kind":"tile","x":12,"y":12,"cx":12,"cy":12,"sx":2,"sy":1,"itemUid":' || :'stool' || ',"facing":"s"}')::jsonb), 'ALLOWED') as onbed \gset
 select act_perform(:'world2', :'ivar', 'place_furniture', ('{"kind":"tile","x":12,"y":12,"cx":12,"cy":12,"sx":2,"sy":2,"itemUid":' || :'stool' || ',"facing":"s"}')::jsonb) \g /dev/null
 select coalesce(act_refusal(:'world2', :'ivar', 'turn_furniture', ('{"kind":"furniture","id":' || :bedrow || '}')::jsonb), 'ALLOWED') as door2 \gset
@@ -10532,10 +10532,10 @@ select '1019c. the same head on a QL 10 shaft: QL '
  */
 select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
 delete from placed where world_id = :'world2' and kind = 'furniture' and x = 14 and y = 14 \g /dev/null
-delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('furniture_chest', 'anvil') \g /dev/null
-select give(:'world2', :'ivar', 'furniture_chest', 1, 64, 'Oak', 'supreme') \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('chest', 'anvil') \g /dev/null
+select give(:'world2', :'ivar', 'chest', 1, 64, 'Oak', 'supreme') \g /dev/null
 select id from item where world_id = :'world2' and holder = 'player'
-  and holder_uid = :'ivar' and def = 'furniture_chest' order by id desc limit 1 \gset chest_
+  and holder_uid = :'ivar' and def = 'chest' order by id desc limit 1 \gset chest_
 update player set x = 14.5, y = 14.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
 select act_perform(:'world2', :'ivar', 'place_furniture',
   ('{"kind":"tile","x":14,"y":14,"cx":14,"cy":14,"sx":0,"sy":0,"itemUid":' || :'chest_id' || '}')::jsonb) \g /dev/null
@@ -10551,9 +10551,34 @@ select act_perform(:'world2', :'ivar', 'pick_up_furniture',
   ('{"kind":"furniture","id":' || :'stood_id' || '}')::jsonb) \g /dev/null
 select '1020c. picked back up it is still "'
      || coalesce((select rare from item where world_id = :'world2' and holder = 'player'
-                  and holder_uid = :'ivar' and def = 'furniture_chest' order by id desc limit 1), 'nothing')
+                  and holder_uid = :'ivar' and def = 'chest' order by id desc limit 1), 'nothing')
      || '" and still ' || coalesce((select extra from item where world_id = :'world2' and holder = 'player'
-                  and holder_uid = :'ivar' and def = 'furniture_chest' order by id desc limit 1), 'nothing');
+                  and holder_uid = :'ivar' and def = 'chest' order by id desc limit 1), 'nothing');
+/*
+ * And it comes back up under the name it went down under, which is the whole
+ * of what a pick-up owes you.
+ *
+ * Reported as a wagon that could not be set down again: the pick-up handed
+ * back 'furniture_' || sub, and there is no such item -- the catalogue calls a
+ * chest a chest. It stood up as a definition nothing had heard of, under OTHER
+ * in the pack, and the browser refused to place it because it asks whether the
+ * thing in your hand is a piece of furniture and the answer was no.
+ *
+ * It went unseen because the two halves agreed with each other and with
+ * nothing else: `place_furniture` read the piece out with replace(def,
+ * 'furniture_', ''), so the broken name went down as happily as a good one --
+ * and this suite handed it a 'furniture_chest' to begin with, so the test was
+ * asserting the bug. Both halves say the plain name now, and the count below
+ * is the thing that would have caught it.
+ */
+select '1020d. and under the name it went down under: '
+     || (select count(*) from item where world_id = :'world2' and holder = 'player'
+           and holder_uid = :'ivar' and def = 'chest')::text || ' chest, '
+     || (select count(*) from item where world_id = :'world2' and holder = 'player'
+           and holder_uid = :'ivar' and def like 'furniture\_%')::text || ' called anything else'
+     || '; and it is a piece of furniture the island knows: '
+     || (select count(*) > 0 from furniture_def f join item i on i.def = f.id
+           where i.world_id = :'world2' and i.holder_uid = :'ivar' and i.def = 'chest')::text;
 -- And the same for an anvil, which is placed by a different dispatcher.
 delete from placed where world_id = :'world2' and kind = 'anvil' and x = 14 and y = 15 \g /dev/null
 select give(:'world2', :'ivar', 'anvil', 1, 70, 'iron', 'fantastic') \g /dev/null
@@ -10561,7 +10586,7 @@ select id from item where world_id = :'world2' and holder = 'player'
   and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1 \gset rareanvil_
 select act_perform(:'world2', :'ivar', 'place_anvil',
   ('{"kind":"tile","x":14,"y":15,"sx":0,"sy":0,"uid":' || :'rareanvil_id' || '}')::jsonb) \g /dev/null
-select '1020d. a fantastic iron anvil set down stands as rare "'
+select '1020e. a fantastic iron anvil set down stands as rare "'
      || coalesce((select rare from placed where world_id = :'world2' and kind = 'anvil'
                   and x = 14 and y = 15 order by id desc limit 1), 'nothing') || '"';
 
