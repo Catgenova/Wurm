@@ -1346,58 +1346,130 @@ export function cobble(): Cobble {
    * number of courses under the coping comes out of the room left over, so
    * the stones are the same size in all of them.
    */
-  /** How deep the coping is, and how wide a stone of it runs. */
-  const COPE = 42, COPE_W = 15;
+  /**
+   * How deep the coping is, how deep the levelling course under it is, and
+   * the spread of a cope stone's width.
+   *
+   * The spread is the point. The first coping was twenty stones of one width
+   * with one joint between each pair, and twenty of anything at one width is
+   * a comb: it read as a picket fence laid on a wall, which is what got the
+   * whole asset called sloppy. A dry cope is what came to hand -- a lump, a
+   * lump, a packer wedged in sideways because the two lumps did not meet --
+   * and the widths have to say that.
+   */
+  /*
+   * A fifth of the wall, not a third. A coping is the course that finishes a
+   * wall, not a storey of its own: at 42 of 161 it was more than a third of
+   * the height and the fence read as two walls, a striped one on a plain one.
+   */
+  const COPE = 33, LEVEL = 12;
+  const COPE_MIN = 10, COPE_MEAN = 22;
   /** The one cope stone that straddles a seam, drawn the same in every variant. */
-  const COPE_SEAM: Pt = [-13, 16];
+  const COPE_SEAM: Pt = [-14, 17];
   /** And the courses of the body that straddle it, as `STRADDLE` does in the tall wall. */
-  const LOW_STRADDLE: Record<number, [number, number]> = { 0: [-46, 50], 2: [-60, 38] };
-  const LOW_TONE: Record<number, string> = { 0: '', 2: 'brown' };
+  const LOW_STRADDLE: Record<number, [number, number]> = { 0: [-52, 46], 1: [-38, 62] };
+  const LOW_TONE: Record<number, string> = { 0: '', 1: 'brown' };
+  /** The levelling course straddles too, on a span of its own so the joints stagger. */
+  const LEVEL_SEAM: Pt = [-30, 34];
 
-  /** One stone of a coping: upright, leaning a degree or two, worn like any other. */
-  function copeStone(g: Ctx, x: number, w: number, R: Rand, tone: string): void {
-    wearOne(g, stone(g, x + MORTAR / 2, MORTAR / 2, w - MORTAR, COPE - MORTAR, R, tone, false, (R() - 0.5) * 0.11), R);
+  /** A tone for a stone of the opening's own family, with the field's variety in it. */
+  function copeTone(R: Rand): string {
+    const t = R();
+    return t < 0.17 ? 'warm' : t < 0.28 ? 'brown' : t < 0.38 ? 'green' : t < 0.5 ? 'dark' : '';
   }
 
-  /**
-   * The coping. A stone straddles the seam from a fixed seed, so a section
-   * butts any other section of any variant, and the run between the two is
-   * the variant's own.
-   */
   /**
    * The widths of a coping, from a seed of their own.
    *
    * The same in every variant and at every height, because the face of the
    * coping and the top of it are two pictures of the same stones and they
-   * have to line up along the whole run. What a variant changes is the tone
-   * of each stone and what the weather has done to it.
+   * have to line up along the whole run. One in five is a packer less than
+   * half the mean, which is what breaks the comb.
    */
   function copeWidths(): number[] {
     const R = rand(911), L = TW + COPE_SEAM[0] - COPE_SEAM[1];
-    const n = Math.max(2, Math.round(L / (COPE_W * 1.4)));
+    const n = Math.max(2, Math.round(L / COPE_MEAN));
     const ws: number[] = []; let sum = 0;
-    for (let k = 0; k < n; k++) { const w = 0.7 + 0.7 * R(); ws.push(w); sum += w; }
+    for (let k = 0; k < n; k++) { const w = R() < 0.22 ? 0.42 + R() * 0.16 : 0.85 + R() * 0.8; ws.push(w); sum += w; }
     return ws.map((w) => (w / sum) * L);
   }
 
+  /**
+   * One stone of a coping: upright, leaning with its neighbours because a
+   * whole cope is laid one way up a wall, and not quite with them because
+   * nothing here is laid twice the same.
+   */
+  function copeStone(g: Ctx, x: number, w: number, R: Rand, tone: string, tip: number): void {
+    const lean = tip + (R() - 0.5) * 0.14;
+    const gap = w < COPE_MIN * 1.6 ? 1 : MORTAR;
+    wearOne(g, stone(g, x + gap / 2, MORTAR / 2, Math.max(4, w - gap), COPE - MORTAR, R, tone, false, lean), R);
+  }
+
   function coping(g: Ctx, R: Rand): void {
+    // Which way the whole run leans, settled once and kept, so a cope reads as
+    // one job rather than as a row of stones that fell that way.
+    const tip = (rand(431)() - 0.5) * 0.12;
     const w0 = COPE_SEAM[1] - COPE_SEAM[0];
-    copeStone(g, COPE_SEAM[0], w0, rand(313), '');
-    copeStone(g, TW + COPE_SEAM[0], w0, rand(313), '');
+    copeStone(g, COPE_SEAM[0], w0, rand(313), '', tip);
+    copeStone(g, TW + COPE_SEAM[0], w0, rand(313), '', tip);
     let x = COPE_SEAM[1];
-    for (const w of copeWidths()) {
-      const t = R();
-      copeStone(g, x, w, R, t < 0.16 ? 'warm' : t < 0.24 ? 'dark' : t < 0.3 ? 'green' : '');
+    for (const w of copeWidths()) { copeStone(g, x, w, R, copeTone(R), tip); x += w; }
+    // And the shadow it throws on the course under it, because a cope
+    // oversails: without it the cope is a pattern printed on the wall.
+    g.fillStyle = 'rgba(96, 86, 66, 0.26)';
+    g.fillRect(0, COPE, TW, 5);
+  }
+
+  /**
+   * The levelling course: a run of thin flat stones under the coping.
+   *
+   * It is the thing that makes a wall level enough to cope, and it is also
+   * what stops the eye reading the cope as tiles laid on blocks -- two
+   * scales with nothing between them is a join, three is a wall.
+   */
+  function levelling(g: Ctx, R: Rand): void {
+    const w0 = LEVEL_SEAM[1] - LEVEL_SEAM[0], h = LEVEL - MORTAR;
+    for (const x of [LEVEL_SEAM[0], TW + LEVEL_SEAM[0]]) {
+      stone(g, x + MORTAR / 2, COPE + MORTAR / 2, w0 - MORTAR, h, rand(229), 'dark', true);
+    }
+    const lo = LEVEL_SEAM[1], hi = TW + LEVEL_SEAM[0], L = hi - lo;
+    const n = Math.max(2, Math.round(L / 44));
+    const ws: number[] = []; let sum = 0;
+    for (let k = 0; k < n; k++) { const w = 0.6 + 0.9 * R(); ws.push(w); sum += w; }
+    let x = lo;
+    for (let k = 0; k < n; k++) {
+      const w = (ws[k] / sum) * L;
+      stone(g, x + MORTAR / 2, COPE + MORTAR / 2, w - MORTAR, h, R, R() < 0.3 ? 'dark' : '', true);
       x += w;
     }
   }
 
-  /** The body under it: as many courses as the room allows, at the size the tall wall's are. */
+  /**
+   * The body under them: stones the size the tall wall's are.
+   *
+   * They were half that, and eight or ten to a course, which read as
+   * brickwork -- the one thing a field wall is not. Two courses of five or
+   * six, at eighty pixels by fifty, is the same masonry as the house.
+   */
   function lowCourses(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
-    const ch = (fh - COPE) / rows;
+    const top = COPE + LEVEL;
+    /*
+     * Courses of unequal depth, the deepest at the bottom.
+     *
+     * Two bands of the same height read as two rows of bricks whatever is in
+     * them. They are unequal for the reason they are unequal in any wall
+     * built off the ground: the biggest stones go in first because that is
+     * where they are easiest to put, and what is left goes on top of them.
+     */
+    const wts: number[] = [];
+    for (let i = 0; i < rows; i++) wts.push(1 + i * 0.32);
+    const tot = wts.reduce((a, b) => a + b, 0);
     const own: Block[] = [];
+    let y0 = top;
     for (let i = 0; i < rows; i++) {
-      const y = COPE + i * ch + MORTAR / 2, h = ch - MORTAR;
+      const ch = ((fh - top) * wts[i]) / tot;
+      const y = y0 + MORTAR / 2, h = ch - MORTAR;
+      y0 += ch;
       let lo: number, hi: number;
       const st = LOW_STRADDLE[i];
       if (st) {
@@ -1410,16 +1482,32 @@ export function cobble(): Cobble {
       const ws: number[] = []; let sum = 0;
       for (let k = 0; k < n; k++) { const w = 0.5 + 1.2 * R(); ws.push(w); sum += w; }
       let x = lo; const run = { tone: '', left: 0 };
+      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.06 * (R() < 0.5 ? -1 : 1);
       for (let k = 0; k < n; k++) {
-        const w = (ws[k] / sum) * L;
+        const w = (ws[k] / sum) * L, mid = x + w / 2;
         const priv = x + MORTAR / 2 > EDGE && x + w - MORTAR / 2 < TW - EDGE;
-        const drift = (R() - 0.5) * ch * 0.13, shrink = h * 0.14 * R(), jw = MORTAR + (priv ? R() * 3 : 0);
+        const wave = priv ? Math.sin(Math.PI * kw * (mid - EDGE) / (TW - 2 * EDGE)) * aw : 0;
+        const drift = (R() - 0.5) * ch * 0.13 + wave, shrink = h * 0.14 * R(), jw = MORTAR + (priv ? R() * 3 : 0);
+        // A field wall is built of whatever the field gave up, so it carries
+        // more colour than a house wall the mason picked stone for.
+        const tone = R() < 0.3 ? copeTone(R) : pickTone(R, i + COURSES - rows, run, false);
         let sy = y + drift + shrink / 2, sh = h - shrink;
-        if (i === 0) { const top = COPE + MORTAR / 2; if (sy < top) { sh -= top - sy; sy = top; } }
+        if (i === 0) { const t0 = top + MORTAR / 2; if (sy < t0) { sh -= t0 - sy; sy = t0; } }
         if (i === rows - 1) { const bot = fh - MORTAR / 2; if (sy + sh > bot) sh = bot - sy; }
-        const b: Block = { x: x + jw / 2, y: sy, w: w - jw, h: sh, course: i, pts: [] };
-        b.pts = stone(g, b.x, b.y, b.w, b.h, R, pickTone(R, i, run, false), false, priv && R() < 0.4 ? (R() - 0.5) * 0.08 : 0);
-        if (priv && b.w > 34) own.push(b);
+        // The slot he had to pack: two thin stones one over the other, which
+        // is the most dry-stone thing a wall does and the tall one already did.
+        if (priv && sh > 34 && R() < 0.16) {
+          const hh = (sh - MORTAR) / 2;
+          for (const [yy, tn] of [[sy, tone], [sy + hh + MORTAR, pickTone(R, i, run, false)]] as Array<[number, string]>) {
+            const b: Block = { x: x + jw / 2, y: yy, w: w - jw, h: hh, course: i, pts: [] };
+            b.pts = stone(g, b.x, b.y, b.w, b.h, R, tn, false, 0);
+            if (b.w > 40) own.push(b);
+          }
+        } else {
+          const b: Block = { x: x + jw / 2, y: sy, w: w - jw, h: sh, course: i, pts: [] };
+          b.pts = stone(g, b.x, b.y, b.w, b.h, R, tone, false, priv && R() < 0.4 ? (R() - 0.5) * 0.08 : 0);
+          if (priv && b.w > 40) own.push(b);
+        }
         x += w;
       }
     }
@@ -1696,15 +1784,17 @@ export function cobble(): Cobble {
   const low = (k: number): Low => {
     const had = LOWS.get(k);
     if (had) return had;
-    const fh = Math.max(COPE + 60, Math.round(TH * k));
-    // As many courses as the room under the coping allows, at the size the
-    // tall wall's stones are, so a fence and a house are the same masonry.
-    const rows = Math.max(2, Math.round((fh - COPE) / (CH * 0.52)));
+    const fh = Math.max(COPE + LEVEL + 70, Math.round(TH * k));
+    // As many courses as the room under the coping and its levelling course
+    // allows, at the size the tall wall's stones are, so a fence and a house
+    // are the same masonry rather than the same masonry and some brickwork.
+    const rows = Math.max(2, Math.round((fh - COPE - LEVEL) / (CH * 0.66)));
     const face = VARIANTS.map((v) => {
       const c = cnv(TW, fh), g = ctxOf(c);
       const R = rand(v.seed * 83 + 5);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, fh);
       const own = lowCourses(g, R, fh, rows);
+      levelling(g, R);
       coping(g, R);
       for (const s of own) {
         const t = R();
@@ -1727,9 +1817,18 @@ export function cobble(): Cobble {
       // And a cushion or two on the coping, which is the wettest stone in it.
       for (let i = 0; i < 2 + Math.floor(R() * 3); i++) {
         const x = MARGIN + R() * (TW - 2 * MARGIN), w = 26 + R() * 34;
-        mossLens(g, { x: x - w / 2, y: MORTAR, w, h: COPE - MORTAR * 2, course: 0, pts: [] }, COPE - 3, R);
+        mossLens(g, { x: x - w / 2, y: MORTAR, w, h: COPE - MORTAR * 2, course: 0, pts: [] }, COPE - 4, R);
       }
-      for (const b of v.foot.hedges) hedge(g, { ...b, h: Math.min(b.h, fh - COPE - 8) }, rand(b.seed), fh);
+      /*
+       * The hedge, cut to the wall it is at the foot of. The variants' hedges
+       * were sized against three metres of wall; dropped whole onto one and a
+       * quarter they came up over the coping and the fence was a hedge with
+       * some stone showing through it.
+       */
+      const body = fh - COPE - LEVEL;
+      for (const b of v.foot.hedges) {
+        hedge(g, { ...b, w: b.w * 0.78, h: Math.min(b.h * 0.72, body * 0.62) }, rand(b.seed), fh);
+      }
       return c;
     });
     /**
@@ -1765,13 +1864,17 @@ export function cobble(): Cobble {
       const c = cnv(TW, CAP_H), g = ctxOf(c);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, CAP_H);
       const S = rand(313), w0 = COPE_SEAM[1] - COPE_SEAM[0];
+      // Not `flat`: a flat stone takes the flat tone and nothing else, and a
+      // coping seen from above that is all one colour is the comb again.
       const top = (x: number, w: number, RR: Rand, tone: string): void =>
-        void stone(g, x + MORTAR / 2, MORTAR / 2, w - MORTAR, CAP_H - MORTAR, RR, tone, true);
+        void stone(g, x + MORTAR / 2, MORTAR / 2, w - MORTAR, CAP_H - MORTAR, RR, tone, false, (RR() - 0.5) * 0.05);
       top(COPE_SEAM[0], w0, S, '');
       top(TW + COPE_SEAM[0], w0, rand(313), '');
       const R = rand(577);
       let x = COPE_SEAM[1];
-      for (const w of copeWidths()) { top(x, w, R, ''); x += w; }
+      // The same widths and the same spread of tone as the face of it, because
+      // these are the tops of those stones and not a second row of them.
+      for (const w of copeWidths()) { top(x, w, R, copeTone(R)); x += w; }
       return c;
     })();
     /** And the end of a run, where the thickness shows. */
@@ -1779,8 +1882,9 @@ export function cobble(): Cobble {
       const Wc = 64, c = cnv(Wc, fh), g = ctxOf(c), R = rand(11);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, Wc, fh);
       stone(g, MORTAR / 2, MORTAR / 2, Wc - MORTAR, COPE - MORTAR, R, '', true);
-      const ch = (fh - COPE) / rows;
-      for (let i = 0; i < rows; i++) stone(g, MORTAR / 2, COPE + i * ch + MORTAR / 2, Wc - MORTAR, ch - MORTAR, R, ['', 'brown', 'green', ''][i % 4]);
+      stone(g, MORTAR / 2, COPE + MORTAR / 2, Wc - MORTAR, LEVEL - MORTAR, R, 'dark', true);
+      const ch = (fh - COPE - LEVEL) / rows;
+      for (let i = 0; i < rows; i++) stone(g, MORTAR / 2, COPE + LEVEL + i * ch + MORTAR / 2, Wc - MORTAR, ch - MORTAR, R, ['', 'brown', 'green', ''][i % 4]);
       return c;
     })();
     /*
@@ -1799,12 +1903,12 @@ export function cobble(): Cobble {
       for (const side of [-1, 1]) {
         const line = side < 0 ? gx0 : gx1;
         let y = fh - 2;
-        while (y > COPE - 4) {
+        while (y > COPE + LEVEL - 4) {
           const h = 28 + R() * 16, w = 34 + R() * 14;
           wearOne(g, stone(g, side < 0 ? line + OVER - w : line - OVER, y - h, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.02), R);
           y -= h + MORTAR + R() * 2;
         }
-        wearOne(g, stone(g, side < 0 ? line + OVER - 52 : line - OVER, MORTAR / 2, 52, COPE - MORTAR, R, 'dress', false, (R() - 0.5) * 0.015), R);
+        wearOne(g, stone(g, side < 0 ? line + OVER - 52 : line - OVER, MORTAR / 2, 52, COPE + LEVEL - MORTAR, R, 'dress', false, (R() - 0.5) * 0.015), R);
       }
       g.globalAlpha = 1;
       g.fillStyle = '#000';
