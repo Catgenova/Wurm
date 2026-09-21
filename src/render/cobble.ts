@@ -98,6 +98,17 @@ export const WINDOW = { t0: 0.33, t1: 0.67, k0: 0.3, k1: 0.7 } as const;
  */
 export const DOOR = { t0: 0.34, t1: 0.66, k1: 0.74 } as const;
 
+/**
+ * And a cart gate, which is the same doorway twice as wide.
+ *
+ * Its head is a little lower than the single one's, and for a reason worth
+ * saying: two and a half metres is further than the oak over it will go
+ * unaided, so there is a corbel under each end of the beam and a corbel wants
+ * a course to sit in. A gate is wide, not tall -- you drive a cart through it,
+ * and a cart is not two and a quarter metres high.
+ */
+export const DOUBLE = { t0: 0.2, t1: 0.8, k1: 0.7 } as const;
+
 /** The painted wall, in the pieces a renderer fills its faces with. */
 export interface Cobble {
   /** One per variant: the stone of a storey, which butts any other left or right and stacks on any. */
@@ -115,6 +126,10 @@ export interface Cobble {
   door: HTMLCanvasElement[];
   doorIvy: HTMLCanvasElement[];
   doorWeed: HTMLCanvasElement[];
+  /** And a cart gate: the same at twice the span, with a corbel under each end of the beam. */
+  gate: HTMLCanvasElement[];
+  gateIvy: HTMLCanvasElement[];
+  gateWeed: HTMLCanvasElement[];
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -1104,13 +1119,17 @@ export function cobble(): Cobble {
    */
   const D_X0 = TW * DOOR.t0, D_X1 = TW * DOOR.t1;
   const D_HEAD = TH * (1 - DOOR.k1);
-  /** How deep the beam over it is, and where its top sits. */
-  const BEAM = 25, B_TOP = D_HEAD - BEAM + 3;
+  const V_X0 = TW * DOUBLE.t0, V_X1 = TW * DOUBLE.t1;
+  const V_HEAD = TH * (1 - DOUBLE.k1);
+  /** How deep the beam over a doorway is, and how deep the one over a gate. */
+  const BEAM = 25, GATE_BEAM = 30;
+  /** How far a corbel reaches in under the end of a gate's beam. */
+  const CORBEL = 42, CORBEL_H = 22;
 
   /** The jamb: long and short about, from under the beam to the ground. */
-  function doorJamb(g: Ctx, R: Rand, side: number): void {
-    const line = side < 0 ? D_X0 : D_X1;
-    let y = D_HEAD + 1, tall = true;
+  function doorJamb(g: Ctx, R: Rand, side: number, x0: number, x1: number, head: number): void {
+    const line = side < 0 ? x0 : x1;
+    let y = head + 1, tall = true;
     while (y < TH + 20) {
       const h = tall ? 70 + R() * 24 : 26 + R() * 12;
       const w = (tall ? 44 : 62) + R() * 14;
@@ -1126,12 +1145,12 @@ export function cobble(): Cobble {
    * wall at each end and sagging the width of a finger in the middle, because
    * it has been carrying a storey of rubble for some years.
    */
-  function baulk(g: Ctx, R: Rand): void {
-    const x0 = D_X0 - 22, x1 = D_X1 + 22, sag = 2.5 + R() * 2.5;
-    const top = (t: number): number => B_TOP + Math.sin(Math.PI * t) * sag;
+  function baulk(g: Ctx, R: Rand, x0: number, x1: number, bTop: number, deep: number): void {
+    const sag = 2.5 + R() * 2.5;
+    const top = (t: number): number => bTop + Math.sin(Math.PI * t) * sag;
     const pts: Pt[] = [];
     for (let i = 0; i <= 8; i++) pts.push([x0 + (x1 - x0) * (i / 8), top(i / 8) + (R() - 0.5) * 1.2]);
-    for (let i = 8; i >= 0; i--) pts.push([x0 + (x1 - x0) * (i / 8), top(i / 8) + BEAM + (R() - 0.5) * 1.2]);
+    for (let i = 8; i >= 0; i--) pts.push([x0 + (x1 - x0) * (i / 8), top(i / 8) + deep + (R() - 0.5) * 1.2]);
     g.beginPath();
     g.moveTo(pts[0][0], pts[0][1]);
     for (const q of pts) g.lineTo(q[0], q[1]);
@@ -1150,7 +1169,7 @@ export function cobble(): Cobble {
     g.strokeStyle = hexA(PASTEL.beamLine, 0.35);
     g.lineWidth = 1.2;
     for (let k = 0; k < 2 + Math.floor(R() * 2); k++) {
-      const off = BEAM * (0.25 + 0.5 * R());
+      const off = deep * (0.25 + 0.5 * R());
       g.beginPath();
       for (let i = 0; i <= 8; i++) {
         const t = i / 8, x = x0 + (x1 - x0) * t, y = top(t) + off + Math.sin(t * 7 + k) * 1.6;
@@ -1175,15 +1194,33 @@ export function cobble(): Cobble {
     g.stroke();
   }
 
-  /** Pocket, jambs, beam: the order a doorway goes up in. */
-  function doorway(g: Ctx, R: Rand): void {
-    const box: Pt[] = [[D_X0 - 26, B_TOP - 10], [D_X1 + 26, B_TOP - 10], [D_X1 + 26, TH + 8], [D_X0 - 26, TH + 8]];
+  /**
+   * Pocket, jambs, corbels, beam: the order a doorway goes up in.
+   *
+   * `reach` is how far a corbel comes in under the end of the beam, and it is
+   * nought for a doorway and a hand's breadth for a gate. That is the whole
+   * difference between the two, and it is the right one: the beam over a
+   * doorway spans the doorway, and the beam over a gate would not, so the
+   * last course either side steps out to meet it and shortens what the timber
+   * has to carry. It sits above the head of the opening, which is why the cut
+   * leaves it and takes everything under it.
+   */
+  function doorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number, reach: number): void {
+    const bTop = head - (reach ? CORBEL_H : 0) - deep + 3;
+    const box: Pt[] = [[x0 - 26, bTop - 10], [x1 + 26, bTop - 10], [x1 + 26, TH + 8], [x0 - 26, TH + 8]];
     shape(g, roughen(box, R, 6, 4.5));
     g.fillStyle = PASTEL.ringJoint;
     g.fill();
-    doorJamb(g, R, -1);
-    doorJamb(g, R, 1);
-    baulk(g, R);
+    doorJamb(g, R, -1, x0, x1, head);
+    doorJamb(g, R, 1, x0, x1, head);
+    if (reach) {
+      for (const side of [-1, 1]) {
+        const line = side < 0 ? x0 : x1;
+        const a = side < 0 ? line - 20 : line - reach;
+        wearOne(g, stone(g, a, head - CORBEL_H, reach + 20, CORBEL_H + 3, R, 'dress', false, (R() - 0.5) * 0.01), R);
+      }
+    }
+    baulk(g, R, x0 - 22 + reach * 0.8, x1 + 22 - reach * 0.8, bTop, deep);
   }
 
   /* ---- what grows in a way through --------------------------------------- */
@@ -1351,12 +1388,26 @@ export function cobble(): Cobble {
   const DOORED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
-    doorway(g, rand(v.seed * 311 + 29));
+    doorway(g, rand(v.seed * 311 + 29), D_X0, D_X1, D_HEAD, BEAM, 0);
     g.globalAlpha = 1;
     g.fillStyle = '#000';
     g.globalCompositeOperation = 'destination-out';
     g.beginPath();
     g.rect(D_X0, D_HEAD, D_X1 - D_X0, TH - D_HEAD);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+    return c;
+  });
+  /** And the gate: the same drawing at twice the span, on corbels. */
+  const GATED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    doorway(g, rand(v.seed * 373 + 41), V_X0, V_X1, V_HEAD, GATE_BEAM, CORBEL);
+    g.globalAlpha = 1;
+    g.fillStyle = '#000';
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath();
+    g.rect(V_X0, V_HEAD, V_X1 - V_X0, TH - V_HEAD);
     g.fill();
     g.globalCompositeOperation = 'source-over';
     return c;
@@ -1388,6 +1439,35 @@ export function cobble(): Cobble {
     for (const side of [-1, 1]) {
       if (R() < 0.5) continue;
       tussock(g, (side < 0 ? D_X0 : D_X1) + side * (R() * 12 - 4), TH + 2, 26 + R() * 18, 18 + R() * 14, R);
+    }
+    return c;
+  });
+  /**
+   * And the gate's, which is thinner again: a cart wheel goes closer to a
+   * jamb than a boot does, so only the ivy over the head is sure of itself
+   * and there is nothing in the corners but a wisp.
+   */
+  const GATE_IVY = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 541 + 71);
+    for (const d of v.drapes) {
+      if (!d.fall) continue;
+      const half = d.w / 2, dcx = clamp(d.cx, MARGIN + half, TW - MARGIN - half);
+      if (dcx - half > V_X1 - 10 || dcx + half < V_X0 + 10) continue;
+      const x = clamp(dcx, V_X0 + 20, V_X1 - 20);
+      const cs: Lobe[] = [];
+      tongueLobes(cs, x, V_HEAD - 7, 12 + 10 * R(), CH * (0.4 + 0.7 * R()), R);
+      shadowOf(g, cs, 5, 6);
+      mass(g, cs, R, { r: 8.5, lobe: R() < 0.4 ? 1 : 0 });
+    }
+    return c;
+  });
+  const GATE_WEED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 467 + 97);
+    for (const side of [-1, 1]) {
+      if (R() < 0.62) continue;
+      tussock(g, (side < 0 ? V_X0 : V_X1) + side * (R() * 10 - 3), TH + 2, 20 + R() * 14, 14 + R() * 10, R);
     }
     return c;
   });
@@ -1439,6 +1519,9 @@ export function cobble(): Cobble {
     door: DOORED,
     doorIvy: DOOR_IVY,
     doorWeed: DOOR_WEED,
+    gate: GATED,
+    gateIvy: GATE_IVY,
+    gateWeed: GATE_WEED,
     spill: SPILL,
     base: BASE,
     foot: FOOT,
