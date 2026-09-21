@@ -2751,16 +2751,6 @@ export class Renderer {
         }
         blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true, lw.proud / cob.capH);
         for (const [a, b] of capRuns) { cap(a, b, 1); light(capLit); }
-        /*
-         * And what grows on it, seen from above.
-         *
-         * Two of the eight rotations look along a fence, and in those two its
-         * face is edge-on: the crest, the moss, the hedge and the flowers all
-         * live in the face texture, so a quarter of the angles showed a bare
-         * ribbon of stone with nothing green on it at all. Drawn after the
-         * light, like the crest, because a leaf in the sun is in the sun.
-         */
-        blit(hung ? lw.gateCapCrest[v] : lw.capCrest[v], 1, 1, 1, true);
         for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
           if (on(i)) continue;
           endOf(t, 0, 1);
@@ -2779,9 +2769,6 @@ export class Renderer {
           endOf(t, 0, 1);
           light(endLit);
         }
-        // And what has got a root into the coping, last and unlit, the way the
-        // ivy over a tall wall is: a leaf in the sun is in the sun.
-        blit(hung ? lw.gateCrest[v] : lw.crest[v], 0, 1 + lw.crestPad / lw.h);
         ctx.globalAlpha = 1;
         return;
       }

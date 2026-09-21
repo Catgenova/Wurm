@@ -141,19 +141,12 @@ export interface Low {
   face: HTMLCanvasElement[];
   /** The same with a gap for a gate, and a pier dressed against each side of it. */
   gate: HTMLCanvasElement[];
-  /** What has got a root into the coping, painted `crestPad` px taller, the extra above the top. */
-  crest: HTMLCanvasElement[];
   /** The run of cope stones seen from above, one per variant, the same stones as that variant's face. */
   cap: HTMLCanvasElement[];
-  /** The same growth seen from above, which is all a camera looking along the run can see of it. */
-  capCrest: HTMLCanvasElement[];
-  /** The top and the growth with the gate's opening taken out, and a flat stone on each pier. */
+  /** The same with the gate's opening taken out of it, and a flat stone on each pier. */
   gateCap: HTMLCanvasElement[];
-  gateCrest: HTMLCanvasElement[];
-  gateCapCrest: HTMLCanvasElement[];
   ends: HTMLCanvasElement;
   h: number;
-  crestPad: number;
   /** How far the face and the cap are painted past the wall, so a cope stone can stand over the run. */
   proud: number;
 }
@@ -1345,12 +1338,11 @@ export function cobble(): Cobble {
   /**
    * Grass out of a joint: a fan of blades from one root.
    *
-   * The crest of the fence was tussocks, and a tussock is built of the same
-   * round lobes as the hedge at the wall's foot -- so the top of the fence was
-   * a smaller copy of the bottom of it, which reads as a clipped hedge on a
-   * shelf rather than as anything growing. One plant language used twice is
-   * what gives that away; the tall wall works because its hanging ivy and its
-   * foot hedge do not look alike.
+   * The turf at the foot of a wall was tussocks, and a tussock is built of the
+   * same round lobes as the hedge standing next to it -- one plant language
+   * used twice, which reads as two sizes of the same bush rather than as grass
+   * against a shrub. The tall wall works because its hanging ivy and its foot
+   * hedge do not look alike.
    *
    * Grass has no lobes. It has blades: wide at the root, bending further over
    * the further out they are fanned, and thinner every pixel until they stop.
@@ -1394,32 +1386,6 @@ export function cobble(): Cobble {
       g.strokeStyle = VEG.line; g.lineWidth = 0.9; g.stroke();
     }
     g.restore();
-  }
-
-  /**
-   * The same fan, with a body behind it.
-   *
-   * A clump of outlined blades and nothing between them is transparent, and
-   * transparent growth is noise at the zoom people play at: what makes the
-   * tall wall's ivy read across a field is that it is an opaque shape first
-   * and leaves second. So two or three clumps to a section get the union of
-   * their blades filled once in the deep green, and the blades drawn over
-   * that -- a silhouette with grass on it rather than grass on nothing.
-   */
-  function crown(g: Ctx, x: number, base: number, w: number, h: number, R: Rand, tone = 0): void {
-    // Low and wide: a bed of grass with the blades standing out of it, not a
-    // dome with grass stuck in the top. A tall mass is the hedge's silhouette
-    // again, which is the one shape the crest must not have.
-    const deep = h * 0.38, cs: Lobe[] = [];
-    for (let y = base; y > base - deep; y -= 4.5) {
-      const t = (base - y) / deep;
-      const hw = (w / 2) * (0.5 + 0.5 * (1 - t * t)) * (0.88 + 0.24 * R());
-      row(cs, x - hw, x + hw, y, 5 * (1 - 0.25 * t), R, 1.25, 0.3, (q) => q);
-    }
-    shadowOf(g, cs, 4, 3);
-    mass(g, cs, R, { r: 5, lobe: 0 });
-    blades(g, x, base, w * 0.85, h, R, tone);
-    blades(g, x + (R() - 0.5) * w * 0.5, base - deep * 0.4, w * 0.5, h * 0.75, R, tone);
   }
 
   /** A low mound of growth standing on `base`, `w` by `h`, wherever it is rooted. */
@@ -1998,17 +1964,15 @@ export function cobble(): Cobble {
    *
    * Everything a fence carries is in the one picture, because a fence has no
    * openings to clip growth out of and no storey above it to belong to: the
-   * courses, the coping, the weather, the moss, the hedge at its foot and the
-   * damp along its ground line. `crest` is what stands above the coping, and
-   * that alone is separate, because it reaches over the top edge.
+   * courses, the coping, the weather, the moss in its low joints, the hedge
+   * and the turf at its foot and the damp along its ground line.
+   *
+   * Nothing grows on the top of it. A dry coping holds whatever blows into
+   * its joints and it had four metres of grass and moss and a hanging drape
+   * to show for it; the wall is barer without them and it is the coping you
+   * look at now, which is the point of a coping.
    */
   const LOWS = new Map<number, Low>();
-  /*
-   * How far the crest may stand over the top of the wall. It was thirty and
-   * nothing in it ever got near that; now two or three clumps to a section
-   * are half again the depth of the coping, and they need the room.
-   */
-  const CREST = 48;
   const low = (k: number): Low => {
     const had = LOWS.get(k);
     if (had) return had;
@@ -2044,16 +2008,6 @@ export function cobble(): Cobble {
       }
       for (let i = 0; i < 3 + Math.floor(R() * 4) && lowest.length; i++) mossFleck(g, lowest[Math.floor(R() * lowest.length)], R);
       /*
-       * And a cushion on the coping, which is the wettest stone in it -- one
-       * or two, and small. At two to four of them sixty pixels wide they met
-       * each other and half the run of the cope was under green, which hid
-       * the one part of the asset the whole asset is about.
-       */
-      for (let i = 0; i < 1 + Math.floor(R() * 2); i++) {
-        const x = MARGIN + R() * (TW - 2 * MARGIN), w = 16 + R() * 14;
-        mossLens(g, { x: x - w / 2, y: MORTAR, w, h: COPE - MORTAR * 2, course: 0, pts: [] }, COPE - 4, R);
-      }
-      /*
        * The hedge, cut to the wall it is at the foot of. The variants' hedges
        * were sized against three metres of wall; dropped whole onto one and a
        * quarter they came up over the coping and the fence was a hedge with
@@ -2072,82 +2026,6 @@ export function cobble(): Cobble {
       for (let i = 0; i < 5 + Math.floor(R() * 4); i++) {
         blades(g, 6 + R() * (TW - 12), fh - 1 - R() * 3, 20 + R() * 20, 14 + R() * 16, R);
       }
-      return c;
-    });
-    /**
-     * What has got a root into the coping.
-     *
-     * More of it than anywhere else on the wall, and that is not decoration:
-     * a dry coping is a run of open joints lying face up at the sky, holding
-     * whatever blows into them, and nobody weeds the top of a field wall.
-     *
-     * They are grass, not small hedges; they are rooted in the joints, part
-     * way down the face of the cope, rather than along a line at the top of
-     * it; and two or three of them clear the cap, where every clump used to
-     * stop short of the top edge so that four metres of overgrown wall never
-     * broke its own skyline once.
-     *
-     * They grow in colonies. Laying one clump per equal slice of the section
-     * locked the gap between them to a narrow band -- a row of fence posts,
-     * which is the one thing a fence must not look like -- and the growth
-     * margin, sized for a three-metre wall, kept a metre and a quarter of
-     * every four metres bare by construction, repeating at the section pitch.
-     * So: three roots to a section, two to four clumps around each, and a
-     * margin of its own, wide enough to keep a clump off the seam and no
-     * wider.
-     */
-    const CREST_MARGIN = 28;
-    const clumps = VARIANTS.map((v) => {
-      const R = rand(v.seed * 29 + 3);
-      const out: Array<{ x: number; base: number; w: number; h: number; big: boolean; tone: number; seed: number }> = [];
-      const lo = CREST_MARGIN, span = TW - 2 * CREST_MARGIN;
-      for (let c = 0; c < 3; c++) {
-        const cx = lo + R() * span;
-        for (let i = 0, m = 2 + Math.floor(R() * 3); i < m; i++) {
-          const big = R() < 0.3;
-          out.push({
-            x: Math.max(lo, Math.min(lo + span, cx + (R() - 0.5) * 46)),
-            base: COPE * (0.3 + R() * 0.55),
-            w: big ? 46 + R() * 30 : 14 + R() * 14,
-            h: COPE * (R() < 0.65 ? 1.05 + R() * 0.35 : 0.45 + R() * 0.5),
-            big,
-            // Its own green. Every mass on the wall came out the same colour
-            // to within one unit a channel, repeating every four metres,
-            // while the stone under it had been given five tones and a pair
-            // invented for the coping alone.
-            tone: R() < 0.33 ? 1 : R() < 0.55 ? -1 : 0,
-            seed: Math.floor(R() * 1e6),
-          });
-        }
-      }
-      return out;
-    });
-    const crest = VARIANTS.map((v, vi) => {
-      const c = cnv(TW, fh + CREST), g = ctxOf(c);
-      g.translate(0, CREST);
-      const R = rand(v.seed * 29 + 11);
-      for (const k of clumps[vi]) {
-        if (k.big) crown(g, k.x, k.base, k.w, k.h, rand(k.seed), k.tone);
-        else blades(g, k.x, k.base, k.w, k.h, rand(k.seed), k.tone);
-      }
-      /*
-       * And one thing that hangs. Everything on the crest stands up out of a
-       * joint, which is one kind of growth used three times a section; what
-       * a wall this old actually carries as well is something woody rooted
-       * in the top and falling down the front of it. The tall wall has its
-       * drape curtains and the low one had no equivalent -- loudest of all
-       * on the half wall, which is a garden wall.
-       */
-      for (let i = 0, m = 1 + Math.floor(R() * 2); i < m; i++) {
-        const cx = CREST_MARGIN + R() * (TW - 2 * CREST_MARGIN);
-        const cs: Lobe[] = [];
-        tongueLobes(cs, cx, COPE * 0.5, 17 + R() * 13, (fh - COPE) * (0.22 + R() * 0.32), R);
-        shadowOf(g, cs, 5, 6);
-        mass(g, cs, R, { r: 8.5, lobe: R() < 0.4 ? 0 : 1 });
-      }
-      // One cushion with a root in the top, which is moss and not grass: the
-      // two things that live up there do not have the same silhouette either.
-      if (R() < 0.7) tussock(g, CREST_MARGIN + R() * (TW - 2 * CREST_MARGIN), COPE * 0.5, 16 + R() * 12, 9 + R() * 7, R);
       return c;
     });
     /** The coping from above: the same run of stones, laid across the thickness. */
@@ -2205,29 +2083,6 @@ export function cobble(): Cobble {
       const seed = copeSeed(v.seed), ws = copeWidths(seed), tones = copeTones(seed, ws.length), R = rand(seed + 577);
       let x = COPE_SEAM[1];
       for (let k = 0; k < ws.length; k++) { top(x, ws[k], R, tones[k]); x += ws[k]; }
-      return c;
-    });
-    /**
-     * The same growth, seen from above.
-     *
-     * Two of the eight camera rotations look along the run of a fence, and in
-     * those two the face of it is edge-on and invisible: everything the wall
-     * carries -- the crest, the moss, the hedge, the flowers -- lives in the
-     * face texture, so a quarter of the angles showed a bare ribbon of stone
-     * with not one green pixel on it. A clump growing out of a joint is
-     * visible from above as well, and it is the same clump in the same place,
-     * flattened across the thickness of the wall.
-     */
-    const capCrest = VARIANTS.map((v, vi) => {
-      const c = cnv(TW, CAP_H), g = ctxOf(c);
-      for (const k of clumps[vi]) {
-        const R = rand(k.seed + 7);
-        // Down the wall's thickness rather than up its face, and shorter,
-        // because what you see from overhead is the spread and not the height.
-        const y = CAP_H * (0.3 + R() * 0.45);
-        if (k.big) crown(g, k.x, y, k.w * 0.9, CAP_H * (0.5 + R() * 0.35), R, k.tone);
-        else blades(g, k.x, y, k.w, CAP_H * (0.3 + R() * 0.3), R, k.tone);
-      }
       return c;
     });
     /**
@@ -2306,13 +2161,12 @@ export function cobble(): Cobble {
       return c;
     });
     /**
-     * And the top of that wall, and what grows on it, with the gap taken out.
+     * And the top of that wall, with the gap taken out.
      *
-     * The cap and the crest were laid across the whole section whether or not
-     * there was a section under them, so a gate had the top of the wall
-     * painted straight over its opening and seven tufts of grass growing out
-     * of its head rail, in mid-air. Both are cut to the gap here rather than
-     * clipped at the draw, because a texture that is wrong is wrong once.
+     * The cap was laid across the whole section whether or not there was a
+     * section under it, so a gate had the top of the wall painted straight
+     * over its opening. It is cut to the gap here rather than clipped at the
+     * draw, because a texture that is wrong is wrong once.
      *
      * What is left over the piers is not coping. A cope on edge is laid along
      * a wall; a pier is finished with one flat stone, and that stone is what
@@ -2334,17 +2188,7 @@ export function cobble(): Cobble {
       g.clearRect(gx0, -PROUD, gx1 - gx0, c.height);
       return c;
     });
-    // Wider than the gap for the growth, so nothing seeds on the one dressed,
-    // newly laid stone in the wall.
-    const off = (src: HTMLCanvasElement): HTMLCanvasElement => {
-      const c = cnv(TW, src.height), g = ctxOf(c);
-      g.drawImage(src, 0, 0);
-      g.clearRect(gx0 - 52 + OVER, 0, gx1 - gx0 + 2 * (52 - OVER), src.height);
-      return c;
-    };
-    const gateCrest = VARIANTS.map((_, i) => off(crest[i]));
-    const gateCapCrest = VARIANTS.map((_, i) => off(capCrest[i]));
-    const made: Low = { face, gate, crest, cap, capCrest, gateCap, gateCrest, gateCapCrest, ends, h: fh, crestPad: CREST, proud: PROUD };
+    const made: Low = { face, gate, cap, gateCap, ends, h: fh, proud: PROUD };
     LOWS.set(k, made);
     return made;
   };
