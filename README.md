@@ -394,7 +394,12 @@ in world time.
   more likely. A rare thing is better at whatever it was for by a tenth, a
   quarter or a half, wears and rots more slowly in the same proportion, and
   can be improved 5, 12 or 25 past the ceiling of your own skill. They carry
-  the word in their name and their own colour in the pack.
+  the word in their name and their own colour in the pack, and on the ground
+  they shine in that colour: a rare thing throws four slow blue motes, a
+  supreme one six violet ones over a bloom, a fantastic one eight gold ones
+  under a turning star you can pick out across a field. A heap shines for the
+  best thing in it, and a chest, a cupboard or an anvil set down keeps its
+  rarity and shines where it stands.
 - **Improving.** Anything finished can be bettered — except the kit you washed
   ashore with, which is issued gear: it mends but it does not improve, so the
   first real job on the island is making your own tools. Each pass spends stock

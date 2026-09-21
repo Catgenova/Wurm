@@ -2,7 +2,7 @@ import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, rollRarity, RARITY_WORD, type Item } from './items';
+import { itemDef, rarityOf, rollRarity, RARITY_WORD, type Item } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
 import { metalOfItem } from './melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_MAKES, type MouldDef } from './metal';
@@ -14,6 +14,8 @@ import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, META
  */
 export interface PlacedAnvil {
   id: number;
+  /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
+  rare?: number;
   /**
    * Whose this is, on an island. Absent in the game you play by yourself,
    * where everything on the ground is yours because there is only you.
@@ -43,7 +45,12 @@ export const anvilAnchor = (sx: number, sy: number): [number, number] => [
   Math.max(0, Math.min(SUBTILES - ANVIL_SUBTILES, sx)),
   Math.max(0, Math.min(SUBTILES - ANVIL_SUBTILES, sy)),
 ];
-export const anvilName = (a: PlacedAnvil): string => `${METAL_BY_ID.get(a.metal)?.name ?? 'Iron'} anvil`;
+/** What to call it: the metal it was cast from, and the rarity it was cast with. */
+export const anvilName = (a: PlacedAnvil): string => {
+  const plain = `${METAL_BY_ID.get(a.metal)?.name ?? 'Iron'} anvil`;
+  const rare = rarityOf(a).name;
+  return rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} ${plain.toLowerCase()}` : plain;
+};
 
 type AnvilTarget = Extract<Target, { kind: 'anvil' }>;
 const anvilOf = (g: Game, t: Target): PlacedAnvil | undefined => (t.kind === 'anvil' ? g.anvils.get((t as AnvilTarget).id) : undefined);
@@ -102,6 +109,8 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('anvil');
       if (!item || item.id !== 'anvil' || !g.inventory.remove(item.uid, 1)) return;
       const a = g.addAnvil(t.x, t.y, t.sx, t.sy, item.extra ?? 'copper', item.ql);
+      // An anvil that was rare on your shoulder is rare on the ground.
+      if (item.rare) a.rare = item.rare;
       g.logMsg(`You set the ${anvilName(a).toLowerCase()} down. Bring a casting to it.`, 'event');
       g.events.emit('world', a.x, a.y);
     },
@@ -117,7 +126,8 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const a = anvilOf(g, t);
       if (!a) return;
       g.removeAnvil(a.id);
-      g.inventory.add('anvil', { ql: a.ql, extra: a.metal });
+      const back = g.inventory.add('anvil', { ql: a.ql, extra: a.metal });
+      if (a.rare) back.rare = a.rare;
       g.logMsg(`You heave the ${anvilName(a).toLowerCase()} up onto your shoulder.`, 'event');
       g.events.emit('world', a.x, a.y);
     },

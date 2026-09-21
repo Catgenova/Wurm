@@ -10520,3 +10520,47 @@ select '1019c. the same head on a QL 10 shaft: QL '
      || to_char((select ql from item where world_id = :'world2' and holder = 'player'
                  and holder_uid = :'ivar' and def = 'pickaxe' order by id desc limit 1), 'FM990.0')
      || ' — the handle is 45% of a pickaxe by weight, so a bad one shows';
+
+\echo ''
+\echo '--- a rare thing set down is still a rare thing'
+/*
+ * Asked for: *"rare items placeable items should have a shine to them when on
+ * the ground."* There was nothing to shine at: `place_furniture` copied the
+ * quality off the item it consumed and left the rarity and the wood behind, so
+ * a rare oak chest reached the ground a plain chest of nothing in particular
+ * and came back up as one.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from placed where world_id = :'world2' and kind = 'furniture' and x = 14 and y = 14 \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def in ('furniture_chest', 'anvil') \g /dev/null
+select give(:'world2', :'ivar', 'furniture_chest', 1, 64, 'Oak', 'supreme') \g /dev/null
+select id from item where world_id = :'world2' and holder = 'player'
+  and holder_uid = :'ivar' and def = 'furniture_chest' order by id desc limit 1 \gset chest_
+update player set x = 14.5, y = 14.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_furniture',
+  ('{"kind":"tile","x":14,"y":14,"cx":14,"cy":14,"sx":0,"sy":0,"itemUid":' || :'chest_id' || '}')::jsonb) \g /dev/null
+select id from placed where world_id = :'world2' and kind = 'furniture' and x = 14 and y = 14 order by id desc limit 1 \gset stood_
+select '1020. a supreme oak chest set down stands as rare "'
+     || coalesce((select rare from placed where id = :'stood_id'), 'nothing')
+     || '", material ' || coalesce((select material from placed where id = :'stood_id'), 'nothing');
+select '1020b. and the ground read hands a browser rare "'
+     || coalesce((select p.value->>'rare' from jsonb_array_elements(rpc_ground(:'world2', 40, true)->'placed') p
+                  where (p.value->>'id')::bigint = :'stood_id'), 'nothing')
+     || '" — no change to the payload, because it sends the whole row';
+select act_perform(:'world2', :'ivar', 'pick_up_furniture',
+  ('{"kind":"furniture","id":' || :'stood_id' || '}')::jsonb) \g /dev/null
+select '1020c. picked back up it is still "'
+     || coalesce((select rare from item where world_id = :'world2' and holder = 'player'
+                  and holder_uid = :'ivar' and def = 'furniture_chest' order by id desc limit 1), 'nothing')
+     || '" and still ' || coalesce((select extra from item where world_id = :'world2' and holder = 'player'
+                  and holder_uid = :'ivar' and def = 'furniture_chest' order by id desc limit 1), 'nothing');
+-- And the same for an anvil, which is placed by a different dispatcher.
+delete from placed where world_id = :'world2' and kind = 'anvil' and x = 14 and y = 15 \g /dev/null
+select give(:'world2', :'ivar', 'anvil', 1, 70, 'iron', 'fantastic') \g /dev/null
+select id from item where world_id = :'world2' and holder = 'player'
+  and holder_uid = :'ivar' and def = 'anvil' order by id desc limit 1 \gset rareanvil_
+select act_perform(:'world2', :'ivar', 'place_anvil',
+  ('{"kind":"tile","x":14,"y":15,"sx":0,"sy":0,"uid":' || :'rareanvil_id' || '}')::jsonb) \g /dev/null
+select '1020d. a fantastic iron anvil set down stands as rare "'
+     || coalesce((select rare from placed where world_id = :'world2' and kind = 'anvil'
+                  and x = 14 and y = 15 order by id desc limit 1), 'nothing') || '"';

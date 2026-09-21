@@ -600,6 +600,19 @@ export const RARITY_LIFT = [
 export const rarityOf = (item: { rare?: number }): RarityDef => RARITIES[Math.max(0, Math.min(3, item.rare ?? 0))];
 
 /**
+ * Which step a rarity's word is, for reading the island back.
+ *
+ * The island keeps rarity as the word -- 'rare', 'supreme', 'fantastic' --
+ * and this side counts it 1, 2, 3, so every place that reads a row off the
+ * wire has to turn one into the other. It was written out at each of them.
+ */
+export const rarityStep = (word: string | null | undefined): number | undefined => {
+  if (!word) return undefined;
+  const i = RARITIES.findIndex((r) => r.name === word);
+  return i > 0 ? i : undefined;
+};
+
+/**
  * The chance a thing is this rare *at all*, rather than the chance of the step
  * on its own.
  *

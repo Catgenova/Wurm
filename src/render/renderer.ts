@@ -33,6 +33,7 @@ import { hash2 } from '../world/noise';
 import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
+import { drawShine, shines } from './shine';
 import { cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
@@ -131,6 +132,8 @@ interface Entity {
   post?: PlacedPost;
   trap?: PlacedTrap;
   deck?: { kind: string; done: boolean; drop: number; id: number };
+  /** 1 rare, 2 supreme, 3 fantastic, for the shine over it; absent for the ordinary run of things. */
+  rare?: number;
   /**
    * Pixels to draw above where it sorts. A driver sits on the cart, so the
    * figure belongs above it on screen while still sorting as though it stood
@@ -400,6 +403,7 @@ export class Renderer {
     e.trap = undefined;
     e.deck = undefined;
     e.lift = undefined;
+    e.rare = undefined;
     this.ents.push(e);
     return e;
   }
@@ -1117,7 +1121,12 @@ export class Renderer {
         }
         if (this.game.ground.size && this.game.groundAt(x, y).length) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-          this.take('pile', x, y, baseX, baseY + hh - avg * hs, pileSprite());
+          const pile = this.take('pile', x, y, baseX, baseY + hh - avg * hs, pileSprite());
+          // A heap shines for the best thing in it: one fantastic hatchet under
+          // a hundred rocks is still a fantastic hatchet lying in the grass.
+          let best = 0;
+          for (const it of this.game.groundAt(x, y)) if ((it.rare ?? 0) > best) best = it.rare ?? 0;
+          if (best) pile.rare = best;
         }
         if (this.game.isToken(x, y)) {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
@@ -1168,11 +1177,15 @@ export class Renderer {
           }
           for (const fu of this.game.furnitureOnTile(x, y)) {
             const [wx, wy] = furnitureCentre(fu);
-            this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).piece = fu;
+            const fe = this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            fe.piece = fu;
+            if (fu.rare) fe.rare = fu.rare;
           }
           for (const an of this.game.anvilsOnTile(x, y)) {
             const [wx, wy] = anvilCentre(an);
-            this.take('anvil', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).anvil = an;
+            const ae = this.take('anvil', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            ae.anvil = an;
+            if (an.rare) ae.rare = an.rare;
           }
           for (const po of this.game.postsOnTile(x, y)) {
             const [wx, wy] = postCentre(po);
@@ -1530,6 +1543,7 @@ export class Renderer {
           ctx.textAlign = 'left';
         }
         this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: piece.id });
+        if (shines(ent.rare)) drawShine(ctx, ent.sx, ent.sy, zoom, ent.rare as number, piece.id, this.time, W * 2 * zoom, h * zoom);
       }
       if (ent.kind === 'kiln' && ent.kiln) {
         const kiln = ent.kiln;
@@ -1551,6 +1565,7 @@ export class Renderer {
         const shade = `rgb(${Math.round(c[0] * 0.68)},${Math.round(c[1] * 0.68)},${Math.round(c[2] * 0.68)})`;
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawAnvil(g, px, py, zoom, face, shade));
         this.anvilHits.push({ x: ent.x, y: ent.y, left: ent.sx - 20 * zoom, top: ent.sy - 27 * zoom, w: 40 * zoom, h: 30 * zoom, anvil: ent.anvil.id });
+        if (shines(ent.rare)) drawShine(ctx, ent.sx, ent.sy, zoom, ent.rare as number, ent.anvil.id, this.time, 40 * zoom, 22 * zoom);
         continue;
       }
       if (ent.kind === 'post' && ent.post) {
@@ -1606,6 +1621,13 @@ export class Renderer {
       }
       const ready = this.atSize(spr.canvas, dw, dh);
       this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(ready, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh));
+      /*
+       * And the shine, over the top of whatever it is, because the light comes
+       * off the thing rather than out from behind it. The seed is the tile, so
+       * a heap keeps the same motes in the same places from one frame to the
+       * next and two heaps side by side do not shine in step.
+       */
+      if (shines(ent.rare)) drawShine(ctx, ent.sx, ent.sy, zoom, ent.rare as number, ent.x * 4099 + ent.y, this.time, dw, spr.ay * zoom);
       if (ent.kind === 'crate' && ent.crateId !== undefined) {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }

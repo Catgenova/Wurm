@@ -26,7 +26,7 @@ import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, itemDef } from './items';
+import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef } from './items';
 import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -5053,7 +5053,7 @@ export class Game {
         // `anvil_ql` read it back from there; `material` is never written for
         // one. Reported as "made a copper anvil and placed down an iron anvil":
         // this read `material`, found nothing, and called every anvil iron.
-        this.anvils.set(r.id, { ...at, ql: r.ql ?? 20, metal: r.sub ?? 'copper' });
+        this.anvils.set(r.id, { ...at, ql: r.ql ?? 20, metal: r.sub ?? 'copper', rare: rarityStep(r.rare) });
       } else if (r.kind === 'post') {
         const p: PlacedPost = { ...at, ql: r.ql ?? 20, dmg: r.dmg ?? 0, worker: null, name: r.name ?? undefined, material: r.material ?? undefined };
         this.posts.set(r.id, p);
@@ -5077,6 +5077,11 @@ export class Game {
             extra: it.extra ?? undefined,
           })),
           name: r.name ?? undefined,
+          // The wood it was built of and the rarity it was made with, both of
+          // which the island used to drop on the floor at the moment a piece
+          // was set down. A chest of oak is a chest of oak standing up.
+          material: r.material ?? undefined,
+          rare: rarityStep(r.rare),
           fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
           ferment: r.ferment ?? undefined,
@@ -6175,6 +6180,11 @@ export interface IslandPlaced {
   material: string | null;
   /** Which way a piece faces, for furniture; absent from older islands. */
   facing?: string | null;
+  /**
+   * 'rare', 'supreme' or 'fantastic', for a piece that was one before it was
+   * set down; absent from older islands, and null for the rest.
+   */
+  rare?: string | null;
   litres: number | null;
   liquid: string | null;
   ferment: number | null;

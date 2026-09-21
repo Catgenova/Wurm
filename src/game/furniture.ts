@@ -3,7 +3,7 @@ import { SIDE_NAMES, type Side } from './building';
 import { SUBTILES } from './crates';
 import { CROP_BY_SEED } from './farming';
 import type { Game } from './game';
-import { isWorked, itemDef, itemName, storedLine, type Item } from './items';
+import { isWorked, itemDef, itemName, rarityOf, storedLine, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -330,6 +330,19 @@ export interface PlacedFurniture {
   /** Which of the twenty it is. */
   kind: string;
   ql: number;
+  /**
+   * 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things.
+   *
+   * A piece set down used to lose it. `place_furniture` copied the quality,
+   * the wood and the dye off the item and left the rarity behind, and picking
+   * it up again made a plain new one -- so a rare chest was a rare chest until
+   * the first time anybody put it in a room, and then it was a chest. It also
+   * meant a rare thing could never shine on the ground, because by the time it
+   * was on the ground it was not rare any more.
+   */
+  rare?: number;
+  /** Who made it, which rare work and better carries. */
+  maker?: string;
   /** What you have called it, when you have called it anything. */
   name?: string;
   /** What is stored in it, for the pieces that store anything. */
@@ -391,8 +404,20 @@ export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
 export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket', juice: 'juice_bucket' };
 
-export const furnitureName = (f: PlacedFurniture): string =>
-  f.name ? f.name : f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name;
+/**
+ * What to call a piece standing on the ground.
+ *
+ * A name you gave it wins outright, and otherwise it is said the way the pack
+ * says it: the word for what it is, the wood it was built of, and -- since a
+ * piece keeps its rarity when it is set down -- rare, supreme or fantastic in
+ * front of the lot.
+ */
+export const furnitureName = (f: PlacedFurniture): string => {
+  if (f.name) return f.name;
+  const plain = f.material ? `${furnitureDef(f.kind).name} (${f.material.toLowerCase()})` : furnitureDef(f.kind).name;
+  const rare = rarityOf(f).name;
+  return rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} ${plain.toLowerCase()}` : plain;
+};
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
 /** How much more a counting piece will take. `furnitureRoom` is the general one. */
 export const furnitureSpare = (f: PlacedFurniture): number => Math.max(0, furnitureCapacity(f) - furnitureUnits(f));
@@ -632,6 +657,9 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (!item || !isFurniture(item.id) || !g.inventory.remove(item.uid, 1)) return;
       const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra, t.facing ?? 's');
       if (item.dye) f.dye = item.dye;
+      // Everything the thing was keeps standing when the thing is standing.
+      if (item.rare) f.rare = item.rare;
+      if (item.maker) f.maker = item.maker;
       g.logMsg(`You set the ${furnitureName(f).toLowerCase()} down.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
@@ -704,6 +732,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       g.removeFurniture(f.id);
       const back = g.inventory.add(f.kind, { ql: f.ql, extra: f.material });
       if (f.dye) back.dye = f.dye;
+      if (f.rare) back.rare = f.rare;
+      if (f.maker) back.maker = f.maker;
       g.logMsg(`You pick the ${furnitureName(f).toLowerCase()} up.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
