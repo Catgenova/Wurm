@@ -34,7 +34,7 @@ import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, T
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, WINDOW, type Cobble, cobble } from './cobble';
+import { ARCH, DOOR, WINDOW, type Cobble, cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -242,6 +242,10 @@ const JAMB_LIT = 0.86;
 const SOFFIT_LIT = 0.7;
 /** The inside of a sill is the one surface in a wall turned up at the sky. */
 const SILL_LIT = 1.02;
+/** And so is a threshold, which is walked on as well, so it is paler still. */
+const STEP_LIT = 1.06;
+/** Strap hinges and a door ring: the only iron on a wall made of stone and oak. */
+const IRON: readonly [number, number, number] = [0x6b, 0x65, 0x5b];
 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
@@ -2684,11 +2688,14 @@ export class Renderer {
        */
       const arched = wall.type === 'arch';
       const windowed = wall.type === 'window';
-      const cut = arched || windowed;
+      const doored = wall.type === 'door';
+      const cut = arched || windowed || doored;
       /** Whichever hole this section has, added to the path that is open. */
       const hole = (s: number): void => {
         if (arched) { this.archGeom({ px, py, quad }, zoom).hole(s); return; }
-        const { t0, t1, k0, k1 } = WINDOW;
+        const [t0, t1, k0, k1] = doored
+          ? [DOOR.t0, DOOR.t1, 0, DOOR.k1]
+          : [WINDOW.t0, WINDOW.t1, WINDOW.k0, WINDOW.k1];
         ctx.moveTo(px(t0, k0, s), py(t0, k0, s));
         ctx.lineTo(px(t1, k0, s), py(t1, k0, s));
         ctx.lineTo(px(t1, k1, s), py(t1, k1, s));
@@ -2719,7 +2726,7 @@ export class Renderer {
         ctx.clip('evenodd');
       };
       const offStone = (): void => { if (cut) ctx.restore(); };
-      blit(arched ? cob.arch[v] : windowed ? cob.window[v] : cob.face[v], 0, 1);
+      blit(arched ? cob.arch[v] : windowed ? cob.window[v] : doored ? cob.door[v] : cob.face[v], 0, 1);
       /*
        * The way through goes in before anything that grows, and unlit,
        * because the wash below takes the whole face at once: a bush that has
@@ -2744,6 +2751,7 @@ export class Renderer {
          * turned, and the reveal drawn over it is the jamb standing in front
          * of it.
          */
+        this.threshold(cob, { px, py, quad }, ARCH.t0, ARCH.t1, zoom);
         if (wall.level === 0 && !indoors) blit(cob.base[v], 0, 1, -1);
         this.archShade({ px, py, quad }, zoom);
         this.archDepth(cob.reveal, 1, { px, py, quad }, zoom);
@@ -2765,12 +2773,13 @@ export class Renderer {
        * with a smaller hole and the same reveal round it. There is no wrapping
        * the hedge through this one: a bush does not grow through a pane.
        */
-      if (windowed) {
+      if (windowed || doored) {
         ctx.save();
         ctx.beginPath();
         hole(1);
         ctx.clip();
-        this.cobGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+        if (doored) this.cobDoor(cob, { px, py, quad }, zoom);
+        else this.cobGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
         ctx.restore();
         ctx.beginPath();
         hole(1);
@@ -2792,6 +2801,7 @@ export class Renderer {
         if (arched) blit(cob.archWeed[v], 0, 1);
       }
       if (windowed) blit(cob.winWeed[v], 0, 1);
+      if (doored) blit(cob.doorWeed[v], 0, 1);
       /*
        * The hour's light, and only that. A flat wall takes a wash down its
        * face as well -- dark where the ground throws shade back up it, light
@@ -2839,6 +2849,7 @@ export class Renderer {
         // whose curtain reaches that far along the wall.
         if (arched) blit(cob.archIvy[v], 0, 1);
         if (windowed) blit(cob.winIvy[v], 0, 1);
+        if (doored) blit(cob.doorIvy[v], 0, 1);
       }
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
@@ -2896,7 +2907,7 @@ export class Renderer {
         this.wallOpening(mat, lit, g, 0.18, 0.82, 0.33, 0.82, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'door':
-        this.wallOpening(mat, lit, g, 0.34, 0.66, 0, 0.74, 'door', zoom);
+        this.wallOpening(mat, lit, g, DOOR.t0, DOOR.t1, 0, DOOR.k1, 'door', zoom);
         break;
       case 'double_door':
         this.wallOpening(mat, lit, g, 0.2, 0.8, 0, 0.76, 'double', zoom);
@@ -3440,6 +3451,123 @@ export class Renderer {
       gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
     }
     return gr;
+  }
+
+  /**
+   * The threshold: the one stone in a wall that gets walked on.
+   *
+   * It is the floor of the opening, seen in plan, and it is the lightest
+   * surface in the whole of it because it is the only one lying face up at
+   * the sky. The hollow worn down its middle is the part that says a doorway
+   * is used rather than drawn: nothing else on the wall has anybody's boots
+   * in it.
+   */
+  private threshold(cob: Cobble, g: WallGeom, t0: number, t1: number, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    const slab = (a: number, b: number, s: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(a, 0, s), py(a, 0, s));
+      ctx.lineTo(px(b, 0, s), py(b, 0, s));
+      ctx.lineTo(px(b, 0, -s), py(b, 0, -s));
+      ctx.lineTo(px(a, 0, -s), py(a, 0, -s));
+      ctx.closePath();
+    };
+    slab(t0, t1, 1);
+    ctx.fillStyle = rgb(cob.reveal, STEP_LIT);
+    ctx.fill();
+    ctx.strokeStyle = rgb(cob.line, 0.9, 0.5);
+    ctx.lineWidth = Math.max(1, 1.2 * zoom);
+    ctx.stroke();
+    if (zoom < 0.7) return;
+    const w = (t1 - t0) * 0.16;
+    slab(t0 + w, t1 - w, 0.62);
+    ctx.fillStyle = rgb(cob.reveal, STEP_LIT * 0.88);
+    ctx.fill();
+    void quad;
+  }
+
+  /**
+   * A painted wall's doorway: the threshold, the reveal, and the leaf.
+   *
+   * The head of the reveal is the underside of the beam rather than stone,
+   * which is the whole of what makes this opening different from the window
+   * over it -- you are looking at the one piece of timber in the wall, from
+   * below, and it is holding up two and a quarter metres of rubble.
+   */
+  private cobDoor(cob: Cobble, g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    const { t0, t1, k1 } = DOOR;
+    this.threshold(cob, g, t0, t1, zoom);
+    const strip = (ax: number, ak: number, bx: number, bk: number, k: number, ink: readonly [number, number, number]): void => {
+      ctx.fillStyle = rgb(ink, k);
+      ctx.beginPath();
+      ctx.moveTo(px(ax, ak, 1), py(ax, ak, 1));
+      ctx.lineTo(px(bx, bk, 1), py(bx, bk, 1));
+      ctx.lineTo(px(bx, bk, -1), py(bx, bk, -1));
+      ctx.lineTo(px(ax, ak, -1), py(ax, ak, -1));
+      ctx.closePath();
+      ctx.fill();
+    };
+    strip(t0, 0, t0, k1, JAMB_LIT, cob.reveal);
+    strip(t1, 0, t1, k1, JAMB_LIT, cob.reveal);
+    strip(t0, k1, t1, k1, SOFFIT_LIT, cob.beam);
+    // And the leaf, hung on the back plane: boards up and down, two ledges
+    // across them, and the straps that hold it to the wall.
+    quad(t0, t1, 0, k1, -1);
+    ctx.fillStyle = rgb(cob.beam, 0.96);
+    ctx.fill();
+    if (zoom < 0.7) {
+      ctx.strokeStyle = rgb(cob.beamLine, 0.9);
+      ctx.stroke();
+      return;
+    }
+    const board = (t: number, a: number, b: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t, a, -1), py(t, a, -1));
+      ctx.lineTo(px(t, b, -1), py(t, b, -1));
+      ctx.stroke();
+    };
+    ctx.strokeStyle = rgb(cob.beamLine, 0.95, 0.6);
+    ctx.lineWidth = Math.max(1, 1.3 * zoom);
+    for (let i = 1; i < 5; i++) board(t0 + ((t1 - t0) * i) / 5, 0.03, k1 - 0.03);
+    /*
+     * Which stile of the leaf you can see.
+     *
+     * The leaf hangs on the back plane and the opening is cut in the front
+     * one, so the wall's own thickness hides about a third of it, off one
+     * edge or the other depending which way the section is turned. Both the
+     * straps and the ring go in the part that shows: the straps anchored on
+     * the stile you can see and running two fifths of the way over, the ring
+     * just inside where the jamb starts cutting the leaf off. A strap whose
+     * anchored end is behind the wall is a dash floating on a door.
+     */
+    const shown = px(0.5, 0.5, -1) - px(0.5, 0.5, 1) > 0 ? 0 : 1;
+    const at = (u: number): number => t0 + (t1 - t0) * u;
+    // The two ledges, and the iron straps that run out of them over the boards.
+    for (const k of [k1 * 0.24, k1 * 0.76]) {
+      quad(t0 + 0.006, t1 - 0.006, k - 0.045, k + 0.045, -1);
+      ctx.fillStyle = rgb(cob.beam, 1.12);
+      ctx.fill();
+      ctx.strokeStyle = rgb(cob.beamLine, 0.9, 0.55);
+      ctx.stroke();
+      // The strap runs out of the ledge over the boards and stops short of
+      // the far stile. Thin: a band of iron the depth of the ledge is a black
+      // bar across the door and reads as a gap, not as ironwork.
+      quad(at(shown ? 0.54 : 0.02), at(shown ? 0.98 : 0.46), k - 0.015, k + 0.015, -1);
+      ctx.fillStyle = rgb(IRON, 1);
+      ctx.fill();
+    }
+    // And a ring to pull it by.
+    const rx = at(shown ? 0.58 : 0.42), rk = k1 * 0.5;
+    const cx = px(rx, rk, -1), cy = py(rx, rk, -1);
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(2, 3.6 * zoom), 0, Math.PI * 2);
+    ctx.strokeStyle = rgb(IRON, 1);
+    ctx.lineWidth = Math.max(1, 1.1 * zoom);
+    ctx.stroke();
+    ctx.lineWidth = 1;
   }
 
   /**

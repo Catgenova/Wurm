@@ -111,6 +111,10 @@ export interface Cobble {
   window: HTMLCanvasElement[];
   winIvy: HTMLCanvasElement[];
   winWeed: HTMLCanvasElement[];
+  /** And with a doorway, whose head is a baulk of oak rather than anything cut. */
+  door: HTMLCanvasElement[];
+  doorIvy: HTMLCanvasElement[];
+  doorWeed: HTMLCanvasElement[];
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -129,6 +133,9 @@ export interface Cobble {
   reveal: [number, number, number];
   /** And the ink it outlines every block with, for the edge of a hole cut in it. */
   line: [number, number, number];
+  /** The oak over a doorway, for the leaf hung under it and the soffit it makes. */
+  beam: [number, number, number];
+  beamLine: [number, number, number];
   /** A section is `w` by `h`; the ivy reaches `pad` above it, and the cap is `capH` deep. */
   w: number;
   h: number;
@@ -1078,6 +1085,107 @@ export function cobble(): Cobble {
     }
   }
 
+  /* ---- the doorway -------------------------------------------------------- */
+  /*
+   * The one opening he did not solve with stone.
+   *
+   * A window gets a lintel and a course of wedges over it because a window is
+   * small. An archway gets a ring because a ring is the thing that stands up.
+   * A doorway is a metre and a third across with two and a quarter metres of
+   * wall over it, and a man who cannot cut a voussoir is not going to find and
+   * dress a stone four feet long either. So he lays a baulk of oak across it
+   * and builds on top of that, and the only piece of the wall that is not
+   * stone is the piece holding up the most of it.
+   *
+   * Under the ends of it, where the load comes down, the jamb goes long and
+   * short about -- an upright the height of two courses, then a flat one, then
+   * an upright -- which is what a rough mason does when he wants a corner to
+   * stay where he put it and cannot cut a quoin.
+   */
+  const D_X0 = TW * DOOR.t0, D_X1 = TW * DOOR.t1;
+  const D_HEAD = TH * (1 - DOOR.k1);
+  /** How deep the beam over it is, and where its top sits. */
+  const BEAM = 25, B_TOP = D_HEAD - BEAM + 3;
+
+  /** The jamb: long and short about, from under the beam to the ground. */
+  function doorJamb(g: Ctx, R: Rand, side: number): void {
+    const line = side < 0 ? D_X0 : D_X1;
+    let y = D_HEAD + 1, tall = true;
+    while (y < TH + 20) {
+      const h = tall ? 70 + R() * 24 : 26 + R() * 12;
+      const w = (tall ? 44 : 62) + R() * 14;
+      const x = side < 0 ? line + OVER - w : line - OVER;
+      wearOne(g, stone(g, x, y, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.022), R);
+      y += h + MORTAR + R() * 3;
+      tall = !tall;
+    }
+  }
+
+  /**
+   * The beam: a squared baulk with the saw still on it, bedded a hand into the
+   * wall at each end and sagging the width of a finger in the middle, because
+   * it has been carrying a storey of rubble for some years.
+   */
+  function baulk(g: Ctx, R: Rand): void {
+    const x0 = D_X0 - 22, x1 = D_X1 + 22, sag = 2.5 + R() * 2.5;
+    const top = (t: number): number => B_TOP + Math.sin(Math.PI * t) * sag;
+    const pts: Pt[] = [];
+    for (let i = 0; i <= 8; i++) pts.push([x0 + (x1 - x0) * (i / 8), top(i / 8) + (R() - 0.5) * 1.2]);
+    for (let i = 8; i >= 0; i--) pts.push([x0 + (x1 - x0) * (i / 8), top(i / 8) + BEAM + (R() - 0.5) * 1.2]);
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (const q of pts) g.lineTo(q[0], q[1]);
+    g.closePath();
+    g.fillStyle = PASTEL.beamShade;
+    g.fill();
+    g.save(); g.clip();
+    g.translate(-2, -3.5);
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (const q of pts) g.lineTo(q[0], q[1]);
+    g.closePath();
+    g.fillStyle = PASTEL.beam;
+    g.fill();
+    // The grain: two or three long lines that wander the way a sawn face does.
+    g.strokeStyle = hexA(PASTEL.beamLine, 0.35);
+    g.lineWidth = 1.2;
+    for (let k = 0; k < 2 + Math.floor(R() * 2); k++) {
+      const off = BEAM * (0.25 + 0.5 * R());
+      g.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 8, x = x0 + (x1 - x0) * t, y = top(t) + off + Math.sin(t * 7 + k) * 1.6;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    g.restore();
+    // The lit edge along the top, and the line round the whole of it.
+    g.strokeStyle = hexA(PASTEL.beamHi, 0.75);
+    g.lineWidth = 2;
+    g.beginPath();
+    for (let i = 0; i <= 8; i++) { const t = i / 8, x = x0 + (x1 - x0) * t; if (i === 0) g.moveTo(x, top(t) + 1.4); else g.lineTo(x, top(t) + 1.4); }
+    g.stroke();
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (const q of pts) g.lineTo(q[0], q[1]);
+    g.closePath();
+    g.strokeStyle = PASTEL.beamLine;
+    g.lineWidth = 2.4;
+    g.lineJoin = 'round';
+    g.stroke();
+  }
+
+  /** Pocket, jambs, beam: the order a doorway goes up in. */
+  function doorway(g: Ctx, R: Rand): void {
+    const box: Pt[] = [[D_X0 - 26, B_TOP - 10], [D_X1 + 26, B_TOP - 10], [D_X1 + 26, TH + 8], [D_X0 - 26, TH + 8]];
+    shape(g, roughen(box, R, 6, 4.5));
+    g.fillStyle = PASTEL.ringJoint;
+    g.fill();
+    doorJamb(g, R, -1);
+    doorJamb(g, R, 1);
+    baulk(g, R);
+  }
+
   /* ---- what grows in a way through --------------------------------------- */
   /**
    * Growth does not stop at a doorway.
@@ -1239,6 +1347,50 @@ export function cobble(): Cobble {
     }
     return c;
   });
+  /** And the same section with a doorway in it. */
+  const DOORED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    doorway(g, rand(v.seed * 311 + 29));
+    g.globalAlpha = 1;
+    g.fillStyle = '#000';
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath();
+    g.rect(D_X0, D_HEAD, D_X1 - D_X0, TH - D_HEAD);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+    return c;
+  });
+  /**
+   * What grows at a doorway, which is less than anywhere else on the wall,
+   * because a doorway is the one part of it somebody walks through every day.
+   * Ivy over the head where the curtain reaches that far, and a tuft in each
+   * bottom corner where a boot never goes.
+   */
+  const DOOR_IVY = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 733 + 37);
+    for (const d of v.drapes) {
+      if (!d.fall) continue;
+      const half = d.w / 2, dcx = clamp(d.cx, MARGIN + half, TW - MARGIN - half);
+      if (dcx - half > D_X1 - 10 || dcx + half < D_X0 + 10) continue;
+      const x = clamp(dcx, D_X0 + 16, D_X1 - 16);
+      const cs: Lobe[] = [];
+      tongueLobes(cs, x, D_HEAD - 7, 12 + 10 * R(), CH * (0.4 + 0.7 * R()), R);
+      shadowOf(g, cs, 5, 6);
+      mass(g, cs, R, { r: 8.5, lobe: R() < 0.4 ? 1 : 0 });
+    }
+    return c;
+  });
+  const DOOR_WEED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 617 + 53);
+    for (const side of [-1, 1]) {
+      if (R() < 0.5) continue;
+      tussock(g, (side < 0 ? D_X0 : D_X1) + side * (R() * 12 - 4), TH + 2, 26 + R() * 18, 18 + R() * 14, R);
+    }
+    return c;
+  });
   /** The growth over the top is painted PAD px taller than the face, the extra above the top edge: the
    *  crest of each drape, standing above the cap, is part of the same silhouette. */
   const PAD = 64;
@@ -1284,6 +1436,9 @@ export function cobble(): Cobble {
     window: WINDOWED,
     winIvy: WIN_IVY,
     winWeed: WIN_WEED,
+    door: DOORED,
+    doorIvy: DOOR_IVY,
+    doorWeed: DOOR_WEED,
     spill: SPILL,
     base: BASE,
     foot: FOOT,
@@ -1291,6 +1446,8 @@ export function cobble(): Cobble {
     ends: ENDS,
     reveal: channels(PASTEL.reveal),
     line: channels(PASTEL.line),
+    beam: channels(PASTEL.beam),
+    beamLine: channels(PASTEL.beamLine),
     w: TW,
     h: TH,
     pad: PAD,
