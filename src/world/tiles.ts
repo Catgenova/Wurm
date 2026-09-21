@@ -163,7 +163,17 @@ export interface TileDef {
 }
 
 export const TILE_DEFS: Record<TileType, TileDef> = {
-  [TileType.Grass]: { name: 'Grass', color: [92, 146, 62], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  /*
+   * Paler and warmer than it was, which is the whole map moving at once.
+   *
+   * 92, 146, 62 was picked when grass was one flat colour and had to carry a
+   * field on its own. A meadow with clover and daisies and tufts standing in
+   * it wants a quieter ground under them: the things growing are what the eye
+   * should find, and it cannot find them on a green as loud as they are. A
+   * mown lawn stays the greener of the two, because a lawn is tended and a
+   * meadow is what the summer left.
+   */
+  [TileType.Grass]: { name: 'Grass', color: [128, 174, 98], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   [TileType.Dirt]: { name: 'Dirt', color: [121, 92, 60], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
   [TileType.PackedDirt]: { name: 'Packed dirt', color: [140, 116, 86], speed: 1.05, pavable: true, roll: 0.9 },
   [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },

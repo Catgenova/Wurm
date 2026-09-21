@@ -62,6 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
+import { grassLook, meadow } from './meadow';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
@@ -245,6 +246,16 @@ const SILL_LIT = 1.02;
 /** And so is a threshold, which is walked on as well, so it is paler still. */
 const STEP_LIT = 1.06;
 /** Strap hinges and a door ring: the only iron on a wall made of stone and oak. */
+/**
+ * Where the meadow starts, which is the zoom the game opens at.
+ *
+ * Further out than this a tile is sixty pixels across, a tuft is eight and a
+ * daisy is two -- which is noise -- and there are three times as many tiles
+ * on the screen to draw all of it on. Paving has the same rule at three
+ * quarters and the ground speckles at a quarter more, for the same reason:
+ * looking at the country is not the same job as standing in it.
+ */
+const MEADOW_FROM = 1;
 const IRON: readonly [number, number, number] = [0x7b, 0x81, 0x88];
 /** Its own shade, so a bar of it reads as round stock rather than as a painted line. */
 const IRON_DARK: readonly [number, number, number] = [0x44, 0x4a, 0x51];
@@ -444,6 +455,10 @@ export class Renderer {
   private grainPale = new Float32Array(3 * 4096);
   private grainN = 0;
   private grainM = 0;
+  /** The grass quads of the row being drawn, four corners apiece, for one fill. */
+  private swardQuads = new Float32Array(8 * 1024);
+  private swardN = 0;
+  private swardPattern: CanvasPattern | null = null;
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
@@ -585,7 +600,8 @@ export class Renderer {
     const dpr = this.canvas.dpr;
     const cv = document.createElement('canvas');
     cv.width = Math.max(1, Math.round(w * dpr));
-    cv.height = Math.max(1, Math.round(h * dpr));
+    // A height of nought means square, which is what a ground picture is.
+    cv.height = h > 0 ? Math.max(1, Math.round(h * dpr)) : cv.width;
     const g = cv.getContext('2d');
     if (g) g.drawImage(src, 0, 0, cv.width, cv.height);
     this.scaled.set(src, cv);
@@ -687,7 +703,14 @@ export class Renderer {
       }
     }
     const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * 0.1;
+    /*
+     * A nudge of brightness per tile, so a field of one ground is not one
+     * flat sheet of colour. Grass gets a third of it: it has a sward laid
+     * over it now which says the same thing far better, and a tenth either
+     * way on top of that came out as a chequerboard -- every tile a slightly
+     * different green, which is the one thing a meadow never looks like.
+     */
+    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (type === TileType.Grass ? 0.032 : 0.1);
     else {
       const k = Math.max(0.3, 1 - -avg / 80);
       r *= 0.72 * k;
@@ -812,7 +835,6 @@ export class Renderer {
    */
   private laidOver(img: HTMLCanvasElement, pts: Float64Array, rot: number, mode: GlobalCompositeOperation): void {
     const ctx = this.canvas.ctx;
-    const s = img.width;
     const qx: number[] = [];
     const qy: number[] = [];
     for (let i = 0; i < 4; i++) {
@@ -820,8 +842,33 @@ export class Renderer {
       qx.push(pts[k * 2]);
       qy.push(pts[k * 2 + 1]);
     }
+    /*
+     * Squeezed to the size it is going to be drawn at, once per zoom, so the
+     * blit is one device pixel to one. A picture taken down by three as it
+     * goes on costs several times what the same picture costs at its own
+     * size, and over a field of open country that alone was a third of the
+     * frame.
+     */
+    const ready = this.atSize(img, Math.hypot(qx[1] - qx[0], qy[1] - qy[0]), 0);
+    const s = ready.width;
     ctx.save();
     ctx.globalCompositeOperation = mode;
+    /*
+     * A tile whose four corners lie in a plane comes out on screen as a
+     * parallelogram, and a parallelogram is one transform with no clipping at
+     * all -- the picture is square, so its own four corners land on the
+     * tile's. That is the ordinary case: ground is mostly smooth, and it is
+     * the difference between two clipped blits a tile and one bare one, which
+     * over a field is the difference between sixty frames a second and
+     * fifteen. Anything genuinely bowed falls through to the two halves.
+     */
+    const bow = Math.abs(qx[0] - qx[1] + qx[2] - qx[3]) + Math.abs(qy[0] - qy[1] + qy[2] - qy[3]);
+    if (bow < 0.7) {
+      ctx.transform((qx[1] - qx[0]) / s, (qy[1] - qy[0]) / s, (qx[3] - qx[0]) / s, (qy[3] - qy[0]) / s, qx[0], qy[0]);
+      ctx.drawImage(ready, 0, 0);
+      ctx.restore();
+      return;
+    }
     const half = (i0: number, i1: number, i2: number, a: number, b: number, c: number, d: number): void => {
       ctx.save();
       ctx.beginPath();
@@ -829,7 +876,7 @@ export class Renderer {
       ctx.closePath();
       ctx.clip();
       ctx.transform(a, b, c, d, qx[i0], qy[i0]);
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(ready, 0, 0);
       ctx.restore();
     };
     // (0,0) (s,0) (s,s), then (0,0) (s,s) (0,s).
@@ -892,6 +939,100 @@ export class Renderer {
           : `rgba(0, 0, 0, ${(0.5 - k) * (spread + 0.04)})`);
       }
     }
+  }
+
+  /**
+   * A tile of meadow: the sward under it, what lies in it, and what stands up.
+   *
+   * The sward goes on with `overlay`, so the tile keeps its own green, the
+   * hour's sun, the slope it lies on and the grey of land you only remember.
+   * The rest is in real colour and only on ground you can actually see --
+   * remembered ground keeps its shape and its trees and nothing else, and a
+   * daisy you are remembering is not a daisy you are looking at.
+   */
+  private meadowTile(x: number, y: number, pts: Float64Array, rot: number, zoom: number, lit: boolean): void {
+    const ctx = this.canvas.ctx;
+    const m = meadow();
+    // The sward is not laid here: it goes on the whole row at once, further
+    // down, because nine hundred sheared blits a frame is what it cost when
+    // it was and one fill a row is what it costs now.
+    if (this.swardN + 8 <= this.swardQuads.length) {
+      for (let i = 0; i < 8; i++) this.swardQuads[this.swardN++] = pts[i];
+    }
+    if (!lit) return;
+    // The tile's own corners, so a daisy stays on the same square foot of
+    // ground when the camera comes round rather than jumping a corner.
+    const A = (rot & 3) * 2, B = ((rot + 1) & 3) * 2, C = ((rot + 2) & 3) * 2, D = ((rot + 3) & 3) * 2;
+    const atX = (u: number, v: number): number =>
+      (pts[A] * (1 - u) + pts[B] * u) * (1 - v) + (pts[D] * (1 - u) + pts[C] * u) * v;
+    const atY = (u: number, v: number): number =>
+      (pts[A + 1] * (1 - u) + pts[B + 1] * u) * (1 - v) + (pts[D + 1] * (1 - u) + pts[C + 1] * u) * v;
+    const look = m.looks[grassLook(x, y)];
+    const count = (lo: number, hi: number, salt: number): number =>
+      lo + Math.floor(hash2(x, y, salt) * (hi - lo + 1));
+    for (let i = 0, k = count(look.strewN[0], look.strewN[1], 301); i < k; i++) {
+      const s = m.strew[look.strew[Math.floor(hash2(x, y, 310 + i * 3) * look.strew.length) % look.strew.length]];
+      const u = 0.1 + hash2(x, y, 311 + i * 3) * 0.8;
+      const v = 0.1 + hash2(x, y, 312 + i * 3) * 0.8;
+      const ready = this.atSize(s.canvas, s.w * zoom, s.h * zoom);
+      ctx.drawImage(ready, atX(u, v) - s.ax * zoom, atY(u, v) - s.ay * zoom, s.w * zoom, s.h * zoom);
+    }
+    for (let i = 0, k = count(look.standN[0], look.standN[1], 401); i < k; i++) {
+      const t = m.tufts[look.stand[Math.floor(hash2(x, y, 410 + i * 3) * look.stand.length) % look.stand.length]];
+      const u = 0.16 + hash2(x, y, 411 + i * 3) * 0.68;
+      const v = 0.16 + hash2(x, y, 412 + i * 3) * 0.68;
+      const ready = this.atSize(t.canvas, t.w * zoom, t.h * zoom);
+      ctx.drawImage(ready, atX(u, v) - t.ax * zoom, atY(u, v) - t.ay * zoom, t.w * zoom, t.h * zoom);
+    }
+  }
+
+  /**
+   * A row's worth of sward, in one fill.
+   *
+   * The picture is hung off the world's axes: a pattern whose transform takes
+   * its own pixels to tiles and tiles to the screen, so the texture holds
+   * still over the ground when the camera pans and turns, and runs across
+   * tile lines without a seam because it never knew where they were.
+   *
+   * It ignores height. A tile lifted twenty feet gets the texture the flat
+   * ground beside it would have had, slid a little; and since the texture is
+   * soft and has nothing in it to register against, there is nothing to see.
+   * The alternative was the nine hundred blits.
+   */
+  private flushSward(): void {
+    const n = this.swardN;
+    this.swardN = 0;
+    if (!n) return;
+    const ctx = this.canvas.ctx;
+    const pat = this.swardPattern;
+    if (!pat) return;
+    const q = this.swardQuads;
+    ctx.beginPath();
+    for (let i = 0; i < n; i += 8) {
+      /*
+       * Each tile swollen by a third of a pixel from its own middle. A row is
+       * filled on its own, so where one row meets the next both edges are
+       * half-covered by the antialiasing and the seam comes out lighter than
+       * the ground either side of it -- a hairline across the field every
+       * twenty-four pixels. A third of a pixel of overlap costs the same
+       * hairline twice as much of a texture that is a tenth of an alpha,
+       * which is to say nothing anybody can see.
+       */
+      const cx = (q[i] + q[i + 2] + q[i + 4] + q[i + 6]) / 4;
+      const cy = (q[i + 1] + q[i + 3] + q[i + 5] + q[i + 7]) / 4;
+      for (let k = 0; k < 4; k++) {
+        const dx = q[i + k * 2] - cx;
+        const dy = q[i + k * 2 + 1] - cy;
+        const out = 0.34 / (Math.hypot(dx, dy) || 1);
+        const px = q[i + k * 2] + dx * out;
+        const py = q[i + k * 2 + 1] + dy * out;
+        if (k === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    }
+    ctx.fillStyle = pat;
+    ctx.fill();
   }
 
   private addGrain(x: number, y: number, pts: Float64Array, zoom: number): void {
@@ -1043,7 +1184,42 @@ export class Renderer {
     // Paving is laid rather than poured, and from close enough you can see
     // every joint in it. Cheaper than grain and worth more, so it starts
     // sooner.
+    /*
+     * One squeeze per picture per zoom, rather than one per thing drawn --
+     * emptied here rather than where the entities are drawn, because the
+     * ground now uses it too and the ground goes first.
+     */
+    if (zoom !== this.scaledAt) {
+      this.scaledAt = zoom;
+      this.scaled.clear();
+    }
     const paved = zoom >= 0.75;
+    // A sward at a quarter of a tile to the screen is one grey wash over
+    // another; below that the tile's own colour says everything it can.
+    const grassy = zoom >= MEADOW_FROM;
+    /*
+     * And the sward's pattern, set once a frame: its own pixels to tiles, and
+     * tiles to the screen by the camera's own two axes. That is what lets one
+     * fill cover a whole row of grass and still lie down the world's grain --
+     * the texture holds still under a pan and turns with the camera, and it
+     * runs across tile lines without a seam because it never knew where they
+     * were.
+     */
+    if (grassy) {
+      const mead = meadow();
+      if (!this.swardPattern) this.swardPattern = ctx.createPattern(mead.sward, 'repeat');
+      const pat = this.swardPattern;
+      if (pat) {
+        const k = 1 / mead.swardTile;
+        const ox = cam.worldToScreenX(0, 0);
+        const oy = cam.worldToScreenY(0, 0, 0);
+        pat.setTransform(new DOMMatrix([
+          (cam.worldToScreenX(1, 0) - ox) * k, (cam.worldToScreenY(1, 0, 0) - oy) * k,
+          (cam.worldToScreenX(0, 1) - ox) * k, (cam.worldToScreenY(0, 1, 0) - oy) * k,
+          ox, oy,
+        ]));
+      }
+    }
     // Close enough to be picking things up rather than looking at the country.
     const player = this.game.player;
     const playerDepth = depthOf(V, player.tileX, player.tileY);
@@ -1161,7 +1337,11 @@ export class Renderer {
         ctx.stroke();
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
-        if (grain && !wet) this.addGrain(x, y, pts, zoom);
+        // Grass gets a sward laid over it instead of speckles: the two are
+        // the same idea at different qualities, and both at once is mud.
+        const meadowed = grassy && !wet && t0 === TileType.Grass;
+        if (grain && !wet && !meadowed) this.addGrain(x, y, pts, zoom);
+        if (meadowed) this.meadowTile(x, y, pts, paveRot, zoom, lit);
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
 
         const t = t0;
@@ -1326,6 +1506,9 @@ export class Renderer {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
         this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
       }
+      // The row's sward, before its trees and its creatures, because
+      // everything else on the tile is standing in it.
+      this.flushSward();
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }
     // The surface and then what crossed it, both clipped to the water, so
@@ -1459,11 +1642,6 @@ export class Renderer {
   }
 
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
-    // One squeeze per picture per zoom, rather than one per thing drawn.
-    if (zoom !== this.scaledAt) {
-      this.scaledAt = zoom;
-      this.scaled.clear();
-    }
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
     if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx || (a.lift ?? 0) - (b.lift ?? 0));

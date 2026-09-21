@@ -32,6 +32,7 @@ import { Game } from './game/game';
 import { Keybinds } from './game/keybinds';
 import { loadGame, saveGame, saveOnExit, warmSave } from './game/save';
 import { warmCobble } from './render/cobble';
+import { warmMeadow } from './render/meadow';
 import { Renderer, skyWash, sunAt } from './render/renderer';
 import { Sound } from './audio/sound';
 import { SWAY_MAX, swayAt } from './render/sway';
@@ -461,6 +462,7 @@ if (!island) warmSave();
 // And the cobblestone painted, for the same reason: a wall of it coming into
 // view should not be the thing that pays for drawing it.
 warmCobble();
+warmMeadow();
 // A new island is put away early: the land only reaches the store on a full
 // save, and until one has happened there is nothing for an exit patch to be
 // laid over.
