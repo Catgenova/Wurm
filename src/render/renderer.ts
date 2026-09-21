@@ -2705,12 +2705,23 @@ export class Renderer {
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
         quad(0, 1, 0, 1);
         light(lit);
+        /*
+         * The top of a fence, at nine tenths of the light a wall's top gets.
+         *
+         * It is the same stone turned at the sky, so it is lighter than the
+         * face -- but on three metres of wall that top is a surface and on a
+         * fence it is a line three pixels deep, and a line a quarter brighter
+         * than everything around it, running dead straight for as far as the
+         * wall runs, is the brightest thing in the picture. It still reads as
+         * lit. It no longer reads as paint.
+         */
+        const capLit = topLit * 0.9;
         cap(0, 1, 1);
-        ctx.fillStyle = rgb(mat.color, topLit);
+        ctx.fillStyle = rgb(mat.color, capLit);
         ctx.fill();
-        blit(lw.cap, 1, 1, 1, true);
+        blit(lw.cap[v], 1, 1, 1, true);
         cap(0, 1, 1);
-        light(topLit);
+        light(capLit);
         for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
           if (on(i)) continue;
           endOf(t, 0, 1);
@@ -3558,43 +3569,55 @@ export class Renderer {
    */
   private fenceGate(cob: Cobble, g: WallGeom, zoom: number, iron: boolean): void {
     const ctx = this.canvas.ctx;
-    const { px, py, quad } = g;
+    const { px, py } = g;
     const { t0, t1 } = FENCE_GAP;
     const S = -0.55, k0 = 0.06, k1 = 0.9;
     const a = t0 + 0.015, b = t1 - 0.015;
-    // The bars are drawn in the dark of the timber, not in the timber: a bar
-    // the colour of the leaf it crosses is a bar nobody can see.
-    const ink = iron ? IRON : cob.beamLine;
-    const bar = (ta: number, ka: number, tb: number, kb: number, w: number): void => {
+    /**
+     * One member of it, drawn as timber is drawn everywhere else in the game:
+     * the dark of the wood laid down wide and the wood itself laid on top of
+     * it, so a rail crossing a field has an outline and reads as a rail. Iron
+     * is one stroke, because a bar of iron is a line.
+     */
+    const seg = (ta: number, ka: number, tb: number, kb: number, ink: readonly [number, number, number], lw: number): void => {
       ctx.strokeStyle = rgb(ink, 1);
-      ctx.lineWidth = Math.max(1.4, w * zoom);
+      ctx.lineWidth = Math.max(1, lw * zoom);
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(px(ta, ka, S), py(ta, ka, S));
       ctx.lineTo(px(tb, kb, S), py(tb, kb, S));
       ctx.stroke();
     };
-    if (!iron) {
-      // Oak fills between its bars; iron does not, and you see the field
-      // through it, which is the whole difference at a distance.
-      quad(a, b, k0, k1, S);
-      ctx.fillStyle = rgb(cob.beam, 0.96, 0.96);
-      ctx.fill();
-      ctx.strokeStyle = rgb(cob.beamLine, 0.9);
-      ctx.lineWidth = Math.max(1, 1.4 * zoom);
-      ctx.stroke();
+    const bar = (ta: number, ka: number, tb: number, kb: number, w: number): void => {
+      if (iron) { seg(ta, ka, tb, kb, IRON, w); return; }
+      seg(ta, ka, tb, kb, cob.beamLine, w + 1.4);
+      seg(ta, ka, tb, kb, cob.beam, w);
+    };
+    /*
+     * A gate in a field wall is a frame with the field showing through it.
+     *
+     * The oak one was a filled leaf with its bars drawn on the face of it,
+     * which is a door -- and a door is the one thing that cannot be hung in a
+     * dry wall. A field gate is open because a man swings it one-handed and
+     * because a gale has to go through it rather than take it away. So both
+     * of them are open now, and what tells them apart is what they are made
+     * of: five heavy bars and a brace in oak, a grid in iron.
+     */
+    const heavy = iron ? 1 : 1.38;
+    for (const k of iron ? [k0, 0.3, 0.54, 0.78, k1] : [k0, 0.28, 0.5, 0.71, k1]) bar(a, k, b, k, 2.1 * heavy);
+    bar(a, k0, a, k1, 2.6 * heavy);
+    bar(b, k0, b, k1, 2.6 * heavy);
+    if (iron) {
+      if (zoom >= 0.5) for (let i = 1; i < 6; i++) bar(a + (b - a) * (i / 6), k0, a + (b - a) * (i / 6), k1, 1.8);
+      bar(a, k0 + 0.04, b, k1 - 0.04, 2.2);
+      bar(b, k0 + 0.04, a, k1 - 0.04, 2.2);
+    } else {
+      // The brace, rising from the hinge stile, which is the way round it has
+      // to go if it is to carry the gate's weight instead of hanging off it.
+      bar(a, k1 - 0.03, b, k0 + 0.03, 2.3 * heavy);
     }
-    if (zoom < 0.55) return;
-    // The rails, the brace across them, and the two stiles that hold the ends.
-    for (const k of iron ? [k0, 0.3, 0.54, 0.78, k1] : [k0 + 0.02, 0.46, k1 - 0.02]) bar(a, k, b, k, 2.4);
-    bar(a, k0, a, k1, 2.6);
-    bar(b, k0, b, k1, 2.6);
-    if (iron) for (let i = 1; i < 6; i++) bar(a + (b - a) * (i / 6), k0, a + (b - a) * (i / 6), k1, 1.8);
-    else bar(a, k0 + 0.04, b, k1 - 0.04, 2.2);
-    if (iron) { bar(a, k0 + 0.04, b, k1 - 0.04, 2.2); bar(b, k0 + 0.04, a, k1 - 0.04, 2.2); }
-    // And the hinge straps, on the stile it swings from.
-    ctx.strokeStyle = rgb(IRON, 1);
-    ctx.lineWidth = Math.max(1.6, 3 * zoom);
-    for (const k of [0.24, 0.76]) bar(a, k, a + (b - a) * 0.42, k, 3);
+    // And the straps it swings on, which are iron on either gate.
+    if (zoom >= 0.5) for (const k of [0.24, 0.76]) seg(a, k, a + (b - a) * 0.42, k, IRON, 3);
     ctx.lineWidth = 1;
   }
 
