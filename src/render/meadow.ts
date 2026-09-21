@@ -106,9 +106,9 @@ export interface Meadow {
  * same square foot, and it shades its own feet.
  */
 interface Green { line: string; shade: string; lit: string; top: string }
-const DEEP: Green = { line: '#2f5748', shade: '#4a8570', lit: '#57947e', top: '#77b399' };
-const MID: Green = { line: '#3d6b5a', shade: '#6aa78e', lit: '#79b59c', top: '#9bcbb4' };
-const PALE: Green = { line: '#517e6c', shade: '#93c6ad', lit: '#9fd0b8', top: '#b7ddc9' };
+const DEEP: Green = { line: '#2c513d', shade: '#457c5f', lit: '#518a6c', top: '#6aac84' };
+const MID: Green = { line: '#39644d', shade: '#5ea07a', lit: '#6bad87', top: '#8bc29e' };
+const PALE: Green = { line: '#4b755d', shade: '#83be97', lit: '#8ec8a2', top: '#a4d4b3' };
 
 /* ---- the machinery ------------------------------------------------------- */
 
