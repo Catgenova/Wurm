@@ -229,7 +229,8 @@ in world time.
   silver 40, gold 50, adamantine 60, glimmersteel 70, mithril 80, seryll 90,
   and each rarer than the last. Mining bare rock is for what is in it: it
   yields ore or shards and leaves the face where it stands, bringing a slab
-  down only one swing in a hundred, by luck. Cutting the face back is its own
+  down only one swing in thirty, by luck — and the same for a mola working a
+  seam for you. Cutting the face back is its own
   entry — **Chip corner** — which takes the corner down a step one attempt in
   four and gives you what broke away. Prospecting marks every ore-bearing tile within range, buried
   or bare, and where you stand it names the rock, the skill any metal takes,

@@ -372,10 +372,18 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
 /** The chance a swing cuts the rock face back, from skill and the pick. */
 /**
  * How often working a face for its metal happens to bring a slab of it down.
- * Hardly ever: mining a seam is for what is in it, and a shaft that sinks
- * itself every third swing is a shaft nobody planned.
+ *
+ * One swing in thirty. It was one in a hundred, which is hardly ever enough to
+ * be a thing that happens: a seam worked for an afternoon sank a step or two
+ * and the whole business read as a fixed wall you chipped at. A thirtieth is
+ * still nobody's plan for moving rock -- `chip_corner` is the job for that,
+ * and it comes off three swings in four -- but it is often enough that a face
+ * you have been at all day is visibly lower than it was.
+ *
+ * The island holds the same number in `mine_collapse()`, and the browser's
+ * miner, the browser's Mola and the island's all ask their own side for it.
  */
-export const MINE_COLLAPSE = 0.01;
+export const MINE_COLLAPSE = 1 / 30;
 
 /**
  * How deep the water over a face may be and still be worked, in height units.

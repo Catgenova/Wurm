@@ -10627,3 +10627,46 @@ select act_perform(:'world2', :'ivar', 'pick_up_crate',
 select '1022c. picked back up it is still "'
      || coalesce((select rare from item where world_id = :'world2' and holder = 'player'
                   and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1), 'nothing') || '"';
+
+\echo ''
+\echo '--- a face comes down one swing in thirty, for a mola as well'
+/*
+ * Asked for: *"chance to reduce a corner elevation when Mining is currently
+ * 1/100. change to 1/30 and ensure Mola have the chance to reduce as well."*
+ *
+ * `worker_do` took the metal out of a seam and left the rock exactly where it
+ * stood, for every swing a mola ever made, so the second half of that was the
+ * real fault: the browser's mola has been cutting the face back by luck since
+ * the day workers went in and this side's never had.
+ *
+ * The roll is random, so this counts three hundred swings against a fixed seed
+ * rather than asserting one. A thirtieth of three hundred is ten.
+ */
+select '1023. one swing in ' || round(1 / mine_collapse()) || ', and the browser says one in 30';
+select setseed(0.42) \g /dev/null
+select id as molarock from rock_def where yields = 'copper_ore' \gset
+-- Somewhere on this island a mola could stand and work: dry, standable, and
+-- high enough that a face has somewhere to come down to.
+select g.x as digx, g.y as digy from generate_series(12, 40) x, generate_series(12, 40) y,
+  lateral (select x, y) g
+where creature_tile_ok(:'world2', g.x, g.y) and rock_height(:'world2', g.x, g.y) > 30
+order by g.y, g.x limit 1 \gset
+select land_set_rock(:'world2', :'digx', :'digy', :'molarock'),
+       land_set_tile(:'world2', :'digx', :'digy', tile_id('Rock')),
+       land_set_dirt(:'world2', :'digx', :'digy', 0) \g /dev/null
+delete from creature where world_id = :'world2' and name = 'Digger' \g /dev/null
+insert into creature (world_id, id, species, name, from_x, from_y, to_x, to_y, health, sex, mode, job, work_x, work_y, keeper)
+  select :'world2', coalesce(max(id), 0) + 1, 'mola', 'Digger', :'digx' + 0.5, :'digy' + 0.5,
+         :'digx' + 0.5, :'digy' + 0.5, 22, 'female', 'deed', 'mine', :'digx', :'digy', :'ivar'
+  from creature where world_id = :'world2';
+select id as mola from creature where world_id = :'world2' and name = 'Digger' \gset
+select land_height(:'world2', :'digx', :'digy') as stood \gset
+select '1024. a mola set on a copper seam at ' || :'digx' || ',' || :'digy'
+     || ', where the corner stands at ' || :'stood';
+-- The `where` is not decoration: `count(*)` does not reference the column, so
+-- a planner is free never to call the function at all, and did.
+select count(*) as swung from generate_series(1, 300) i
+  where worker_do(:'world2', :'mola') is not null \gset
+select '1024b. ' || :'swung' || ' swings that brought something up, and it stands at ' || land_height(:'world2', :'digx', :'digy')
+     || ', so the face came down ' || (:'stood' - land_height(:'world2', :'digx', :'digy'))
+     || ' — it used to come down 0, however long a mola worked it';

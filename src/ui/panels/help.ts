@@ -1,3 +1,4 @@
+import { MINE_COLLAPSE } from '../../game/actions';
 import { RARITY_ROOM } from '../../game/items';
 import type { UIWindow } from '../windows';
 
@@ -1453,8 +1454,9 @@ function helpText(): string {
     is left, which is why iron is the metal you build with and the rest are the ones you hoard. Coal burns longer than a log, so a campfire
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
-    shards or metal and leaves the face standing where it was; about one swing in a hundred a slab
-    comes away of its own accord and the corner drops a step. If you want the rock <i>moved</i>, that
+    shards or metal and leaves the face standing where it was; about <b>one swing in
+    ${Math.round(1 / MINE_COLLAPSE)}</b> a slab comes away of its own accord and the corner drops a
+    step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
     than working it, and it gives way about one attempt in four. What breaks away is yours either
     way.</p>
