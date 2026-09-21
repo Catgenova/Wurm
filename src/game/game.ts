@@ -5037,13 +5037,13 @@ export class Game {
         this.campfires.set(r.id, { ...at, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0 });
       } else if (r.kind === 'smelter') {
         this.smelters.set(r.id, {
-          ...at, ql: r.ql ?? 20, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
+          ...at, ql: r.ql ?? 20, rare: rarityStep(r.rare), fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
           jobs: furnaceJobs(r.state?.jobs),
           output: furnaceOutput(r.id, r.state?.output),
         });
       } else if (r.kind === 'kiln') {
         this.kilns.set(r.id, {
-          ...at, ql: r.ql ?? 20, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
+          ...at, ql: r.ql ?? 20, rare: rarityStep(r.rare), fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0,
           jobs: furnaceJobs(r.state?.jobs),
           output: furnaceOutput(r.id, r.state?.output),
         });
@@ -5121,6 +5121,7 @@ export class Game {
         })),
         units: c.units,
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
+        rare: rarityStep(c.rare),
       });
     }
     /*
@@ -6219,6 +6220,8 @@ export interface IslandCrate {
   sx: number;
   sy: number;
   material: string | null;
+  /** 'rare', 'supreme' or 'fantastic'; absent from older islands, null for the rest. */
+  rare?: string | null;
   name: string | null;
   deed: boolean;
   /**

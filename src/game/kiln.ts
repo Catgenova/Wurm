@@ -2,7 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import { itemDef, itemName, rarityOf, roomFor, type Item } from './items';
 import { world } from './pace';
 
 /**
@@ -23,6 +23,8 @@ export interface KilnJob {
 }
 
 export interface PlacedKiln {
+  /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
+  rare?: number;
   id: number;
   x: number;
   y: number;
@@ -42,6 +44,13 @@ export interface PlacedKiln {
 /** A kiln covers two subtiles each way: four in all. */
 export const KILN_SUBTILES = 2;
 export const KILN_CAPACITY = 16;
+/** What to call it: a plain kiln, or the rarity it was built with. */
+export const kilnName = (k: { rare?: number }): string => {
+  const rare = rarityOf(k).name;
+  return rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} kiln` : 'Kiln';
+};
+/** How much green ware this one will hold: the plain sixteen, and more for a rare kiln. */
+export const kilnCapacity = (k: { rare?: number }): number => roomFor(KILN_CAPACITY, k);
 
 /** Green ware, and what it becomes once it has been fired. */
 export interface PotteryDef {
@@ -120,7 +129,9 @@ export const KILN_ACTIONS: ActionDef[] = [
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('kiln');
       if (!item || item.id !== 'kiln' || !g.inventory.remove(item.uid, 1)) return;
       const k = g.addKiln(t.x, t.y, t.sx, t.sy, item.ql);
-      g.logMsg(`You set the kiln down on level ground. (QL ${k.ql.toFixed(1)}) Fill it with green ware, feed it and light it.`, 'event');
+      // A rare kiln set down is a rare kiln: it takes a bigger load.
+      if (item.rare) k.rare = item.rare;
+      g.logMsg(`You set the ${kilnName(k).toLowerCase()} down on level ground. (QL ${k.ql.toFixed(1)}, holds ${kilnCapacity(k)}) Fill it with green ware, feed it and light it.`, 'event');
       g.events.emit('world', k.x, k.y);
     },
   },
@@ -143,7 +154,8 @@ export const KILN_ACTIONS: ActionDef[] = [
       const k = kilnOf(g, t);
       if (!k || k.lit || k.jobs.length || k.output.length) return;
       g.removeKiln(k.id);
-      g.inventory.add('kiln', { ql: k.ql });
+      const back = g.inventory.add('kiln', { ql: k.ql });
+      if (k.rare) back.rare = k.rare;
       g.logMsg('You lift the kiln off its base and carry it away whole.', 'event');
       g.events.emit('world', k.x, k.y);
     },
@@ -196,7 +208,7 @@ export const KILN_ACTIONS: ActionDef[] = [
       if (!nearKiln(g, k)) return 'Stand next to the kiln.';
       const item = t.kind === 'kiln' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isGreenware(it.id));
       if (!item || !isGreenware(item.id)) return 'A kiln takes unfired clay.';
-      if (k.jobs.length >= KILN_CAPACITY) return 'The kiln is packed as full as it will go.';
+      if (k.jobs.length >= kilnCapacity(k)) return 'The kiln is packed as full as it will go.';
       return null;
     },
     perform: (t, g) => {

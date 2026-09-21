@@ -393,7 +393,11 @@ in world time.
   brings it on — not skill, not tools, not the metal — and nothing makes it
   more likely. A rare thing is better at whatever it was for by a tenth, a
   quarter or a half, wears and rots more slowly in the same proportion, and
-  can be improved 5, 12 or 25 past the ceiling of your own skill. They carry
+  can be improved 5, 12 or 25 past the ceiling of your own skill. Anything
+  that holds things holds more of them — a bag, a crate, a cupboard, a weight
+  bin, the charge a smelter takes and the load a kiln fires — by 5, 10 or 15%,
+  and never by less than one unit a step, so that a small container's steps do
+  not round into each other. They carry
   the word in their name and their own colour in the pack, and on the ground
   they shine in that colour: a rare thing throws four slow blue motes, a
   supreme one six violet ones over a bloom, a fantastic one eight gold ones

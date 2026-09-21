@@ -1169,11 +1169,15 @@ export class Renderer {
         if (this.game.anythingPlaced(x, y)) {
           for (const sm of this.game.smeltersOnTile(x, y)) {
             const [wx, wy] = smelterCentre(sm);
-            this.take('smelter', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).smelter = sm;
+            const se = this.take('smelter', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            se.smelter = sm;
+            if (sm.rare) se.rare = sm.rare;
           }
           for (const kl of this.game.kilnsOnTile(x, y)) {
             const [wx, wy] = kilnCentre(kl);
-            this.take('kiln', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).kiln = kl;
+            const ke = this.take('kiln', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            ke.kiln = kl;
+            if (kl.rare) ke.rare = kl.rare;
           }
           for (const fu of this.game.furnitureOnTile(x, y)) {
             const [wx, wy] = furnitureCentre(fu);
@@ -1205,7 +1209,9 @@ export class Renderer {
             // crate on the floor underneath the first.
             if (this.game.rackAt(crate.x, crate.y, crate.sx, crate.sy)) continue;
             const [wx, wy] = crateCentre(crate);
-            this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), crateSprite(crate.kind)).crateId = crate.id;
+            const ce = this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), crateSprite(crate.kind));
+            ce.crateId = crate.id;
+            if (crate.rare) ce.rare = crate.rare;
           }
         }
         // Other people on the island stand on tiles like anything else does.
@@ -1549,11 +1555,13 @@ export class Renderer {
         const kiln = ent.kiln;
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawKiln(g, px, py, zoom, kiln.lit, kiln.jobs.length > 0, this.time));
         this.kilnHits.push({ x: ent.x, y: ent.y, left: ent.sx - 26 * zoom, top: ent.sy - 44 * zoom, w: 52 * zoom, h: 48 * zoom, kiln: kiln.id });
+        if (shines(ent.rare)) drawShine(ctx, ent.sx, ent.sy, zoom, ent.rare as number, kiln.id, this.time, 52 * zoom, 36 * zoom);
       }
       if (ent.kind === 'smelter' && ent.smelter) {
         const sm = ent.smelter;
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawSmelter(g, px, py, zoom, sm.lit, sm.jobs.length > 0, this.time));
         this.smelterHits.push({ x: ent.x, y: ent.y, left: ent.sx - 34 * zoom, top: ent.sy - 58 * zoom, w: 68 * zoom, h: 62 * zoom, smelter: sm.id });
+        if (shines(ent.rare)) drawShine(ctx, ent.sx, ent.sy, zoom, ent.rare as number, sm.id, this.time, 68 * zoom, 48 * zoom);
         continue;
       }
       if (ent.kind === 'anvil' && ent.anvil) {

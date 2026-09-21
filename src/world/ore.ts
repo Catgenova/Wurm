@@ -18,9 +18,30 @@ const bandNoise = (seed: number): Noise2D => {
   return n;
 };
 
-/** Deterministic 0..1 from a tile and a salt. */
+/**
+ * Deterministic 0..1 from a tile and a salt.
+ *
+ * The three multiplies are `Math.imul` and not `*`, which is the whole of why
+ * this comment is here. A seed is up to 0x7fffffff, and `salt * 2246822519`
+ * with a seed that size is about 4.8e18 -- two hundred times past the largest
+ * whole number a double can hold exactly. So the sum was already wrong before
+ * `>>> 0` took the bottom of it, and wrong by however much precision had been
+ * thrown away, which grows with the seed.
+ *
+ * The island computes the same hash in `hash_tile`, in bigint, where 4.8e18 is
+ * exact. The two agreed on a seed of seven and parted company on a real one --
+ * measured, at one tile: on seed 2,000,000,000 this said the rock topped out
+ * at QL 54 and the island held it to 98. Since the island is the one that
+ * holds the land and does the mining, its answer was the real cap and the
+ * browser's was the lie: a tile read "Rock · up to QL 29" and handed back
+ * QL 69 rock shards, which is the report this fixed.
+ *
+ * `Math.imul` is the low thirty-two bits of a product, worked out exactly, so
+ * the sum of the three is a few billion at most and the shift takes the same
+ * bits the island's modulo does.
+ */
 export function hashTile(x: number, y: number, salt: number): number {
-  let h = (x * 374761393 + y * 668265263 + salt * 2246822519) >>> 0;
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(salt, 2246822519)) >>> 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }

@@ -600,6 +600,29 @@ export const RARITY_LIFT = [
 export const rarityOf = (item: { rare?: number }): RarityDef => RARITIES[Math.max(0, Math.min(3, item.rare ?? 0))];
 
 /**
+ * What a container holds, given what a plain one of it holds.
+ *
+ * A rare chest is a chest somebody got right: the boards sit closer, the lid
+ * shuts true, and there is more room inside it than it has any business
+ * having. A twentieth more per step -- 5% for rare, 10% for supreme, 15% for
+ * fantastic -- and it applies to everything with a limit on what goes into
+ * it: bags, crates, cupboards, the weight bins, the charge a smelter takes
+ * and the load a kiln fires.
+ *
+ * Never less than one more unit per step, which is the whole reason this is a
+ * function and not a multiplier. A twentieth of a small container rounds to
+ * nothing: a kiln holds sixteen, and both a tenth and three twentieths of
+ * sixteen round to eighteen, so supreme and fantastic would have been the
+ * same kiln. Each step has to be a step.
+ */
+export const RARITY_ROOM = 0.05;
+export function roomFor(base: number, thing: { rare?: number }): number {
+  const plain = Math.round(base);
+  const step = Math.max(0, Math.min(RARITIES.length - 1, thing.rare ?? 0));
+  return step ? plain + Math.max(step, Math.round(plain * RARITY_ROOM * step)) : plain;
+}
+
+/**
  * Which step a rarity's word is, for reading the island back.
  *
  * The island keeps rarity as the word -- 'rare', 'supreme', 'fantastic' --
@@ -676,7 +699,7 @@ export const itemWeight = (item: { id: string; extra?: string; count: number; in
 // ---- Bags: the things that hold other things. ----
 
 /** How many a bag takes, or nothing at all for the things that are not bags. */
-export const bagRoom = (item: Item): number => itemDef(item.id).holds ?? 0;
+export const bagRoom = (item: Item): number => roomFor(itemDef(item.id).holds ?? 0, item);
 export const isBag = (item: Item): boolean => bagRoom(item) > 0;
 export const bagUnits = (item: Item): number => (item.inside ?? []).reduce((n, it) => n + it.count, 0);
 /** How much more a bag will take. */

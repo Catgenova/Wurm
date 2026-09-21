@@ -3,7 +3,7 @@ import { SIDE_NAMES, type Side } from './building';
 import { SUBTILES } from './crates';
 import { CROP_BY_SEED } from './farming';
 import type { Game } from './game';
-import { isWorked, itemDef, itemName, rarityOf, storedLine, type Item } from './items';
+import { isWorked, itemDef, itemName, rarityOf, roomFor, storedLine, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -422,9 +422,9 @@ export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n,
 /** How much more a counting piece will take. `furnitureRoom` is the general one. */
 export const furnitureSpare = (f: PlacedFurniture): number => Math.max(0, furnitureCapacity(f) - furnitureUnits(f));
 /** What it holds: its build, and how strong a wood it was built out of. */
-export const furnitureCapacity = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold);
+export const furnitureCapacity = (f: PlacedFurniture): number => roomFor((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold, f);
 /** Kilograms it holds, for a piece measured that way. Nought for the rest. */
-export const furnitureHeft = (f: PlacedFurniture): number => Math.round((furnitureDef(f.kind).heft ?? 0) * matOf(f.material).hold);
+export const furnitureHeft = (f: PlacedFurniture): number => roomFor((furnitureDef(f.kind).heft ?? 0) * matOf(f.material).hold, f);
 /** Kilograms standing in it, which is the only thing a heft bin counts. */
 export const furnitureKg = (f: PlacedFurniture): number =>
   f.items.reduce((kg, it) => kg + itemDef(it.id).weight * it.count, 0);

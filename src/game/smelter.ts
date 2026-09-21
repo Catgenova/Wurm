@@ -2,7 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import { itemDef, itemName, rarityOf, roomFor, type Item } from './items';
 import { MELT_HEAT, meltLumps, meltQl, meltRefusal, metalOfItem } from './melt';
 import { matOf } from './materials';
 import { METAL_BY_LUMP, METAL_BY_ORE, MOULD_BY_ID, ORE_PER_LUMP, castSeconds, isOreItem, mouldLumps, mouldUsesLeft, mouldWear, pourSeconds, smeltSeconds } from './metal';
@@ -30,6 +30,8 @@ export interface SmeltJob {
 }
 
 export interface PlacedSmelter {
+  /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
+  rare?: number;
   id: number;
   x: number;
   y: number;
@@ -52,6 +54,13 @@ export interface PlacedSmelter {
 export const SMELTER_W = 3;
 export const SMELTER_H = 2;
 export const SMELTER_CAPACITY = 20;
+/** What to call it: a plain smelter, or the rarity it was built with. */
+export const smelterName = (s: { rare?: number }): string => {
+  const rare = rarityOf(s).name;
+  return rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} smelter` : 'Smelter';
+};
+/** How many jobs this one will hold: the plain twenty, and more for a rare furnace. */
+export const smelterCapacity = (s: { rare?: number }): number => roomFor(SMELTER_CAPACITY, s);
 
 export const smelterCentre = (s: PlacedSmelter): [number, number] => [s.x + (s.sx + SMELTER_W / 2) / SUBTILES, s.y + (s.sy + SMELTER_H / 2) / SUBTILES];
 
@@ -115,7 +124,9 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.find('smelter');
       if (!item || item.id !== 'smelter' || !g.inventory.remove(item.uid, 1)) return;
       const s = g.addSmelter(t.x, t.y, t.sx, t.sy, item.ql);
-      g.logMsg(`You set the smelter down and bed it in. (QL ${s.ql.toFixed(1)}) Feed it fuel and light it.`, 'event');
+      // A rare furnace bedded in is a rare furnace: it holds a bigger charge.
+      if (item.rare) s.rare = item.rare;
+      g.logMsg(`You set the ${smelterName(s).toLowerCase()} down and bed it in. (QL ${s.ql.toFixed(1)}, holds ${smelterCapacity(s)}) Feed it fuel and light it.`, 'event');
       g.events.emit('world', s.x, s.y);
     },
   },
@@ -138,7 +149,8 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const s = smelterOf(g, t);
       if (!s || s.lit || s.jobs.length || s.output.length) return;
       g.removeSmelter(s.id);
-      g.inventory.add('smelter', { ql: s.ql });
+      const back = g.inventory.add('smelter', { ql: s.ql });
+      if (s.rare) back.rare = s.rare;
       g.logMsg('You take the smelter apart and carry it off in one piece.', 'event');
       g.events.emit('world', s.x, s.y);
     },
@@ -232,7 +244,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (!item || !isOreItem(item.id)) return 'Smelters take ore.';
       // A charge is one ore, which comes out as one lump.
       if (item.count < ORE_PER_LUMP) return `A charge is ${ORE_PER_LUMP} ore; you have ${item.count}.`;
-      if (s.jobs.length >= SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
+      if (s.jobs.length >= smelterCapacity(s)) return 'The furnace is charged as full as it will go.';
       return null;
     },
     perform: (t, g) => {
@@ -373,7 +385,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       // tenth of what an iron one does, so it takes ten times as many of them.
       const need = mouldLumps(def, metal.id);
       if (lump.count < need) return `That takes ${need} lumps.`;
-      if (s.jobs.length >= SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
+      if (s.jobs.length >= smelterCapacity(s)) return 'The furnace is charged as full as it will go.';
       return null;
     },
     perform: (t, g) => {
@@ -383,7 +395,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const def = mould && MOULD_BY_ID.get(mould.id);
       const lump = g.inventory.get(t.itemUid);
       const metal = lump && METAL_BY_LUMP.get(lump.id);
-      if (!mould || !def || def.makes === 'anvil' || !lump || !metal || s.jobs.length >= SMELTER_CAPACITY) return;
+      if (!mould || !def || def.makes === 'anvil' || !lump || !metal || s.jobs.length >= smelterCapacity(s)) return;
       const need = mouldLumps(def, metal.id);
       if (lump.count < need || !g.inventory.remove(lump.uid, need)) return;
       const mouldQl = Math.max(1, mould.ql - mould.dmg / 2);

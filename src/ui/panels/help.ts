@@ -1,3 +1,4 @@
+import { RARITY_ROOM } from '../../game/items';
 import type { UIWindow } from '../windows';
 
 function helpText(): string {
@@ -961,9 +962,19 @@ function helpText(): string {
     &mdash; and nothing you do can make it more likely; you make ten thousand ordinary things and find
     that you have one.</p>
     <p>A rare thing is <b>better at whatever it was for</b> by a tenth, a quarter or a half &mdash; an
-    edge that bites, armour that turns aside more, a tool that works truer, a box that holds more
-    &mdash; <b>wears and rots more slowly</b> in the same proportion, and can be <b>improved past the
-    ceiling of your own skill</b> by 5, 12 or 25. They are written in their own colour in your pack.</p>
+    edge that bites, armour that turns aside more, a tool that works truer &mdash; <b>wears and rots
+    more slowly</b> in the same proportion, and can be <b>improved past the ceiling of your own
+    skill</b> by 5, 12 or 25.</p>
+    <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
+    bin, the charge a smelter will take and the load a kiln will fire all go up by
+    ${(RARITY_ROOM * 100).toFixed(0)}% a step &mdash; ${[1, 2, 3].map((n) => `<b>${(RARITY_ROOM * n * 100).toFixed(0)}%</b>`).join(', ')}
+    for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
+    holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
+    kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
+    down, and keeps it again when you pick it back up.</p>
+    <p>They are written in their own colour in your pack, and on the ground they <b>shine</b> in it:
+    a few slow motes for a rare thing, more over a bloom for a supreme one, and a gold bloom under a
+    turning star for a fantastic one, which you can pick out across a field.</p>
     <h3>Improving</h3>
     <p>A finished thing can be made better than it was made. Right-click it and choose <b>Improve</b>:
     each pass eats a little stock, and a success raises the quality &mdash; a great deal at first and

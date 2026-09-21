@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemName, storedLine, type Item } from './items';
+import { itemName, rarityOf, roomFor, storedLine, type Item } from './items';
 import { matOf } from './materials';
 
 /**
@@ -31,6 +31,8 @@ export interface PlacedCrate {
   deed?: boolean;
   /** The wood it was built of. */
   material?: string;
+  /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
+  rare?: number;
   /**
    * The padlock fitted to it, by the number it shares with its key.
    *
@@ -69,13 +71,15 @@ export const crateKindOfItem = (itemId: string): CrateKind | null => (itemId ===
 export const crateUnits = (c: PlacedCrate): number =>
   c.items.length ? c.items.reduce((n, it) => n + it.count, 0) : c.units ?? 0;
 /** What it holds: its build, and how strong a wood it was built out of. */
-export const crateCapacity = (c: PlacedCrate): number => Math.round(CRATE_DEFS[c.kind].capacity * matOf(c.material).hold);
+export const crateCapacity = (c: PlacedCrate): number => roomFor(CRATE_DEFS[c.kind].capacity * matOf(c.material).hold, c);
 /** How much more it will take, which is what a put is allowed to be. */
 export const crateSpare = (c: PlacedCrate): number => Math.max(0, crateCapacity(c) - crateUnits(c));
 export const crateName = (c: PlacedCrate): string => {
   if (c.name) return c.name;
   const wood = c.material ? ` (${c.material.toLowerCase()})` : '';
-  return c.deed ? `Deed crate (${CRATE_DEFS[c.kind].name.toLowerCase()})${wood}` : `${CRATE_DEFS[c.kind].name}${wood}`;
+  const rare = rarityOf(c).name;
+  const said = c.deed ? `Deed crate (${CRATE_DEFS[c.kind].name.toLowerCase()})${wood}` : `${CRATE_DEFS[c.kind].name}${wood}`;
+  return rare ? `${rare.charAt(0).toUpperCase()}${rare.slice(1)} ${said.toLowerCase()}` : said;
 };
 /** World position of a crate's centre. */
 export const crateCentre = (c: PlacedCrate): [number, number] => [c.x + (c.sx + 0.5) / SUBTILES, c.y + (c.sy + 0.5) / SUBTILES];
@@ -154,6 +158,8 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const kind = item && crateKindOfItem(item.id);
       if (!item || !kind || !g.inventory.remove(item.uid, 1)) return;
       const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra);
+      // A rare crate holds more, so it has to stay rare once it is standing.
+      if (item.rare) crate.rare = item.rare;
       g.note('crate');
       g.logMsg(`You set the ${crateName(crate).toLowerCase()} down.`, 'event');
       g.events.emit('world', crate.x, crate.y);
@@ -180,7 +186,8 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const c = crateOf(g, t);
       if (!c || c.items.length) return;
       g.removeCrate(c.id);
-      g.inventory.add(CRATE_DEFS[c.kind].item, { ql: 20, extra: c.material });
+      const back = g.inventory.add(CRATE_DEFS[c.kind].item, { ql: 20, extra: c.material });
+      if (c.rare) back.rare = c.rare;
       g.logMsg(`You pick up the ${CRATE_DEFS[c.kind].name.toLowerCase()}.${c.deed ? ' Deed workers will leave their finds by the token until a deed crate stands again.' : ''}`, 'event');
       g.events.emit('world', c.x, c.y);
     },

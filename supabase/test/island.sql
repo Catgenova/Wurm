@@ -1338,7 +1338,7 @@ select '215. with a log crate in hand: ' || coalesce(act_refusal(:'world2', :'iv
 select act_perform(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb) \g /dev/null
 select '216. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
      || ' — an oak log crate holds ' || (select crate_capacity(c) from crate c where world_id = :'world2' and x = 4 and y = 7)
-     || ', where a plain one holds 30';
+     || ', where a plain one of it holds ' || room_for((select capacity from crate_def where kind = 'log')::double precision, null);
 select '217. and another on the same spot: ' || coalesce(act_refusal(:'world2', :'ivar', 'place_crate', ('{"kind":"tile","x":4,"y":7,"sx":1,"sy":1,"itemUid":' || :'boxes' || '}')::jsonb), 'allowed');
 select id as box from crate where world_id = :'world2' and x = 4 and y = 7 \gset
 
@@ -10564,3 +10564,66 @@ select act_perform(:'world2', :'ivar', 'place_anvil',
 select '1020d. a fantastic iron anvil set down stands as rare "'
      || coalesce((select rare from placed where world_id = :'world2' and kind = 'anvil'
                   and x = 14 and y = 15 order by id desc limit 1), 'nothing') || '"';
+
+\echo ''
+\echo '--- the browser and the island hash a tile the same way'
+/*
+ * Reported: a tile reading "Rock · up to QL 29" handing back QL 69 rock shards.
+ *
+ * Both sides cap a swing at what the seam holds -- `least(ore_max_ql(...),
+ * product_ql(...))` here and `Math.min(rock.maxQl, ...)` there -- so the cap
+ * was working. What was wrong was the number: the browser's `hashTile` did
+ * `salt * 2246822519` in floating point, and with a real seed that product is
+ * about 4.8e18, two hundred times past the largest whole number a double
+ * holds exactly. Below it lost nothing and the two agreed; above it the two
+ * parted, and the browser printed a cap the island had never heard of.
+ *
+ * `hash_tile` does the same arithmetic in bigint, where 4.8e18 is exact, so
+ * the island's answer was always the real one. The browser uses `Math.imul`
+ * now, which is the low thirty-two bits of a product worked out exactly.
+ *
+ * These are the numbers the browser gives for the same five seeds at one
+ * tile. They were 67, 78, 37, 61 and 54 before the fix; the last two moved.
+ */
+select '1021. ore_max_ql at 2589, 3002 across five seeds: '
+     || string_agg(ore_max_ql(s, 2589, 3002)::int::text, ', ' order by s)
+     || ' — the browser must say 67, 78, 37, 62, 98'
+  from (values (7::bigint), (12345), (1000003), (1234567890), (2000000000)) v(s);
+
+\echo ''
+\echo '--- a rare thing holds more'
+/*
+ * Asked for: *"all containers, smelters, kilns etc can roll rare. each level
+ * of rarity increases maximum capacity by an additional +5%."*
+ *
+ * A twentieth per step, and never less than one unit a step -- without that
+ * floor a kiln's sixteen rounds so that supreme and fantastic are both
+ * eighteen, and a step that is not a step is not a step. `room_for` is the
+ * browser's `roomFor` line for line, because the browser draws the number and
+ * this side enforces it.
+ */
+select '1022. room_for across the four steps: '
+     || string_agg(w.what || ' ' || (select string_agg(room_for(w.base, r)::text, '/' order by o)
+                                     from (values (null::text, 0), ('rare', 1), ('supreme', 2), ('fantastic', 3)) v(r, o)),
+                   ', ' order by w.ord)
+  from (values ('a backpack', 60.0, 1), ('an oak plank crate', 60.0 * 1.12, 2),
+               ('a smelter', 20.0, 3), ('a kiln', 16.0, 4)) w(what, base, ord);
+-- And end to end: a fantastic crate set down holds more than a plain one, and
+-- is still fantastic when it is picked back up.
+delete from crate where world_id = :'world2' and x = 16 and y = 16 \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar' and def = 'crate_plank' \g /dev/null
+select give(:'world2', :'ivar', 'crate_plank', 1, 20, 'Oak', 'fantastic') \g /dev/null
+select id from item where world_id = :'world2' and holder = 'player'
+  and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1 \gset box_
+update player set x = 16.5, y = 16.5 where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select act_perform(:'world2', :'ivar', 'place_crate',
+  ('{"kind":"tile","x":16,"y":16,"sx":1,"sy":1,"uid":' || :'box_id' || '}')::jsonb) \g /dev/null
+select '1022b. ' || crate_name(c) || ' holds ' || crate_capacity(c)
+     || ', where a plain oak one holds ' || room_for((select capacity from crate_def where kind = 'plank')
+          * coalesce((mat_of('Oak')).hold, 1), null)
+  from crate c where c.world_id = :'world2' and c.x = 16 and c.y = 16;
+select act_perform(:'world2', :'ivar', 'pick_up_crate',
+  ('{"kind":"crate","id":' || (select id from crate where world_id = :'world2' and x = 16 and y = 16) || '}')::jsonb) \g /dev/null
+select '1022c. picked back up it is still "'
+     || coalesce((select rare from item where world_id = :'world2' and holder = 'player'
+                  and holder_uid = :'ivar' and def = 'crate_plank' order by id desc limit 1), 'nothing') || '"';

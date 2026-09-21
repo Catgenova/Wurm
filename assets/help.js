@@ -1,4 +1,4 @@
-function e(){return`
+import{o as e}from"./items.js";function t(){return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -958,9 +958,19 @@ function e(){return`
     &mdash; and nothing you do can make it more likely; you make ten thousand ordinary things and find
     that you have one.</p>
     <p>A rare thing is <b>better at whatever it was for</b> by a tenth, a quarter or a half &mdash; an
-    edge that bites, armour that turns aside more, a tool that works truer, a box that holds more
-    &mdash; <b>wears and rots more slowly</b> in the same proportion, and can be <b>improved past the
-    ceiling of your own skill</b> by 5, 12 or 25. They are written in their own colour in your pack.</p>
+    edge that bites, armour that turns aside more, a tool that works truer &mdash; <b>wears and rots
+    more slowly</b> in the same proportion, and can be <b>improved past the ceiling of your own
+    skill</b> by 5, 12 or 25.</p>
+    <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
+    bin, the charge a smelter will take and the load a kiln will fire all go up by
+    ${(e*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(t=>`<b>${(e*t*100).toFixed(0)}%</b>`).join(`, `)}
+    for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
+    holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
+    kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
+    down, and keeps it again when you pick it back up.</p>
+    <p>They are written in their own colour in your pack, and on the ground they <b>shine</b> in it:
+    a few slow motes for a rare thing, more over a bloom for a supreme one, and a gold bloom under a
+    turning star for a fantastic one, which you can pick out across a field.</p>
     <h3>Improving</h3>
     <p>A finished thing can be made better than it was made. Right-click it and choose <b>Improve</b>:
     each pass eats a little stock, and a success raises the quality &mdash; a great deal at first and
@@ -1469,4 +1479,4 @@ function e(){return`
     goes for the first point of a skill, a hundred and forty for the ninetieth, and something like
     <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
     a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
-  `}function t(t){t.body.classList.add(`help-body`);let n=document.createElement(`div`);n.innerHTML=e();let r=[],i=null;for(let e of[...n.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){i=document.createElement(`section`),i.className=`help-sec`,i.id=`help-${r.length}`,i.append(e),r.push({title:e.textContent??``,el:i});continue}i?i.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&n.removeChild(e)}let a=document.createElement(`input`);a.type=`search`,a.className=`panel-search help-search`,a.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=r.map(({title:e,el:t},n)=>{let i=document.createElement(`button`);return i.type=`button`,i.className=`help-link`,i.textContent=e,i.addEventListener(`click`,()=>{a.value&&(a.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),i.title=`Jump to “${e}” (section ${n+1} of ${r.length})`,i});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),n=0;for(let e=0;e<r.length;e+=1){let{title:i,el:a}=r[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(n+=1)}c.hidden=!t,c.textContent=n?`${n} of ${r.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};a.addEventListener(`input`,()=>u(a.value)),a.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(a.value=``,u(``))}),s.append(...r.map(e=>e.el)),t.body.replaceChildren(a,o,c,s)}export{t as buildHelp};
+  `}function n(e){e.body.classList.add(`help-body`);let n=document.createElement(`div`);n.innerHTML=t();let r=[],i=null;for(let e of[...n.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){i=document.createElement(`section`),i.className=`help-sec`,i.id=`help-${r.length}`,i.append(e),r.push({title:e.textContent??``,el:i});continue}i?i.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&n.removeChild(e)}let a=document.createElement(`input`);a.type=`search`,a.className=`panel-search help-search`,a.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=r.map(({title:e,el:t},n)=>{let i=document.createElement(`button`);return i.type=`button`,i.className=`help-link`,i.textContent=e,i.addEventListener(`click`,()=>{a.value&&(a.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),i.title=`Jump to “${e}” (section ${n+1} of ${r.length})`,i});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),n=0;for(let e=0;e<r.length;e+=1){let{title:i,el:a}=r[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(n+=1)}c.hidden=!t,c.textContent=n?`${n} of ${r.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};a.addEventListener(`input`,()=>u(a.value)),a.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(a.value=``,u(``))}),s.append(...r.map(e=>e.el)),e.body.replaceChildren(a,o,c,s)}export{n as buildHelp};
