@@ -62,15 +62,20 @@ interface Variant {
  * that clips to it, because a hole in a picture and a hole in a wall that do
  * not agree is a wall with a seam of daylight round its doorway.
  *
- * The springing is low for the same reason it is low in anything built out of
- * stone: the head has to come down inside the wall. At half the storey the
- * crown of a 1.9 m opening stood 2.5 m up a 3 m wall, which leaves half a
- * metre for the ring that holds it and the course over that -- so the ring ran
- * off the top of the section. At 0.35 the opening is 1.9 m by 2.0 m, which is
- * a door a man walks through with a sack on his shoulder, and there is a
- * course of field stone over the ring before the band.
+ * Two numbers set by looking at it rather than by arithmetic.
+ *
+ * The head has to come down inside the wall: at half the storey the crown of
+ * a 1.9 m opening stood 2.5 m up a 3 m wall, which leaves half a metre for
+ * the ring that holds it and the course over that, so the ring ran off the
+ * top of the section.
+ *
+ * And the straight part has to be longer than the curve is wide, or the
+ * opening is a headstone. A semicircle on jambs its own radius long is the
+ * shape of a grave marker and the eye says so before it says doorway. These
+ * spans put the jamb at half again the radius: 1.7 m wide, 2.1 m to the
+ * crown, and a course of field stone over the ring before the band.
  */
-export const ARCH = { t0: 0.26, t1: 0.74, spring: 0.35 } as const;
+export const ARCH = { t0: 0.29, t1: 0.71, spring: 0.42 } as const;
 
 /** The painted wall, in the pieces a renderer fills its faces with. */
 export interface Cobble {
@@ -78,6 +83,9 @@ export interface Cobble {
   face: HTMLCanvasElement[];
   /** The same, with an archway cut through it and a ring of rough voussoirs round the hole. */
   arch: HTMLCanvasElement[];
+  /** What grows into that opening: ivy dangling from the head of it, and grass in the threshold. */
+  archIvy: HTMLCanvasElement[];
+  archWeed: HTMLCanvasElement[];
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -120,6 +128,19 @@ export function cobble(): Cobble {
     stone: '#cbc0b0', stoneShade: '#aba796', stoneDark: '#a19d8d', joint: '#aeaa9c',
     dark: '#b5b1a0',
     warm: '#ccbea3', warmShade: '#ae9f84',
+    /*
+     * The stone of an opening, which is stone that was picked over rather
+     * than picked up, and the mortar packed in behind it.
+     *
+     * It is a real step lighter than the field and the mortar a real step
+     * darker than the field's, because at the far zoom a ring drawn in the
+     * field's own tones is nine pixels of wall doing nothing: the arch goes
+     * and a grey slab with a hole in it is left. `reveal` is what the wall's
+     * own thickness shows in the way through -- warm, because a face turned
+     * from the light loses light and not colour.
+     */
+    dress: '#ded5c4', dressShade: '#bbb0a0', dressHi: '#efe8dc',
+    ringJoint: '#a09a8a', reveal: '#b3ab97',
     // the lit top bevel of each block: its own lit tone, a step lighter
     stoneHi: '#ddd4c6', warmHi: '#d9cdb3', darkHi: '#bdb9aa', bandHi: '#e3dbcc',
     blush: '#f2c4c0', blushShade: '#dfa39e', blushLine: '#b9797a',
@@ -194,6 +215,7 @@ export function cobble(): Cobble {
   const TONES: Record<string, { lit: string; shade: string; hi: string }> = {
     '':    { lit: PASTEL.stone, shade: PASTEL.stoneShade, hi: PASTEL.stoneHi },
     warm:  { lit: '#c6bdab', shade: '#a89d8b', hi: '#d3cabb' },
+    dress: { lit: PASTEL.dress, shade: PASTEL.dressShade, hi: PASTEL.dressHi },
     brown: { lit: '#c6bba8', shade: '#a89e8c', hi: '#d0c6b5' },
     green: { lit: '#bdc09b', shade: '#a0a37f', hi: '#cccfaa' },
     dark:  { lit: '#bdb9a9', shade: '#a5a192', hi: '#c8c4b5' },
@@ -757,9 +779,13 @@ export function cobble(): Cobble {
    */
   function jamb(g: Ctx, R: Rand, side: number): void {
     const line = A_CX + side * A_R;
-    let y = A_CY + IMPOST_H;
+    let y = A_CY + IMPOST_H, course = side < 0 ? 0 : 1;
     while (y < TH + 20) {
-      const h = 36 + R() * 22, w = 54 + R() * 20;
+      const h = 36 + R() * 22;
+      // Long and short about, so the outer end of the stack is toothed into
+      // the field. Even widths give a dead straight joint the length of the
+      // reveal, which reads as the seam between two wall tiles.
+      const w = (course++ % 2 ? 46 : 74) + R() * 16;
       const x = side < 0 ? line + OVER - w : line - OVER;
       const pts = stone(g, x, y, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.035);
       wearOne(g, pts, R);
@@ -784,9 +810,12 @@ export function cobble(): Cobble {
    */
   function impost(g: Ctx, R: Rand, side: number): void {
     const line = A_CX + side * A_R;
-    const deep = A_R * 0.40;
+    // Past where the deepest wedge can reach, so it is a ledge and not the
+    // last course of the jamb: this is the stone that says where the curve
+    // begins, and a mason who can lay nothing else lays this one square.
+    const deep = A_R * 0.48;
     const x = side < 0 ? line - deep : line - OVER;
-    const pts = stone(g, x, A_CY - 3, deep + OVER, IMPOST_H + 3, R, pickDressed(R), false, (R() - 0.5) * 0.02);
+    const pts = stone(g, x, A_CY - 3, deep + OVER, IMPOST_H + 3, R, 'dress', false, (R() - 0.5) * 0.015);
     wearOne(g, pts, R);
   }
 
@@ -797,7 +826,7 @@ export function cobble(): Cobble {
    * warmer than the field it is set in and the eye reads the whole doorway as
    * one piece of work instead of as a hole with a fringe.
    */
-  const pickDressed = (R: Rand): string => (R() < 0.52 ? 'warm' : R() < 0.5 ? 'brown' : '');
+  const pickDressed = (R: Rand): string => { const t = R(); return t < 0.18 ? 'green' : t < 0.28 ? 'dark' : 'dress'; };
 
   /** The ring: wedges of no two depths, on joints that are not quite radial. */
   function voussoirs(g: Ctx, R: Rand): void {
@@ -811,7 +840,19 @@ export function cobble(): Cobble {
      * never cross -- a ring with a crossed joint is not a rough ring, it is a
      * ring that has fallen down.
      */
-    for (let i = 0; i <= n; i++) cut.push(i / n + (i > 0 && i < n ? (R() - 0.5) * 0.5 / n : 0));
+    for (let i = 0; i <= n; i++) cut.push(i / n + (i > 0 && i < n ? (R() - 0.5) * 0.36 / n : 0));
+    const crown = (n - 1) / 2;
+    /*
+     * And the crown stone is the big one.
+     *
+     * It was the last wedge in, jammed against a ring that was already
+     * standing, so it is the one he chose a lump for: half again the width of
+     * its neighbours and reaching a good deal further out. It is also the
+     * stone the eye goes to on an arch, and when the widest stone in the ring
+     * was over at two o'clock the ring had no top.
+     */
+    cut[crown] -= 0.35 / n;
+    cut[crown + 1] += 0.35 / n;
     /*
      * How far past the curve each joint reaches, and how far off true it
      * leans. The depth is held under half the radius because the crown of the
@@ -819,13 +860,22 @@ export function cobble(): Cobble {
      * less the radius and its depth, and the band starts an eighth of the way
      * down the section.
      */
-    const out = cut.map(() => 0.24 + R() * 0.11);
+    const out = cut.map(() => 0.25 + R() * 0.11);
     const lean = cut.map(() => (R() - 0.5) * 0.10);
-    const crown = (n - 1) / 2;
-    const at = (j: number, r: number): Pt => {
-      const a = Math.PI * (1 + cut[j]) + lean[j] * r;
+    /** A point on the ring: `c` along the half circle, `r` out from the curve. */
+    const pt = (c: number, ln: number, r: number): Pt => {
+      const a = Math.PI * (1 + c) + ln * r;
       return [A_CX + Math.cos(a) * A_R * (1 + r), A_CY + Math.sin(a) * A_R * (1 + r)];
     };
+    const at = (j: number, r: number): Pt => pt(cut[j], lean[j], r);
+    /*
+     * The joint between one wedge and the next: shut at the face and open at
+     * the back, which is what a joint cut by eye does. Taking it off the outer
+     * corners only leaves the intrados solid stone the whole way round -- a
+     * gap there shows as mortar on the line the compass struck, and a ring of
+     * crescents round the opening is worse than no ring.
+     */
+    const GAP = 0.005;
     /*
      * First the pocket: the mortar behind the ring.
      *
@@ -840,7 +890,7 @@ export function cobble(): Cobble {
      * in past the curve, so the wedges bury all of it but the ragged edge and
      * the cut takes the rest.
      */
-    const lip = (j: number): number => out[j] + (j === crown || j === crown + 1 ? 0.06 : 0);
+    const lip = (j: number): number => out[j] + (j === crown || j === crown + 1 ? 0.09 : 0);
     const foot = A_CY - 1;
     const hem: Pt[] = [[A_CX - A_R * (1 + lip(0)), foot]];
     for (let j = 0; j < n; j++) {
@@ -861,17 +911,77 @@ export function cobble(): Cobble {
     g.moveTo(hem[0][0], hem[0][1]);
     for (const q of hem) g.lineTo(q[0], q[1]);
     g.closePath();
-    g.fillStyle = PASTEL.joint; g.fill();
+    g.fillStyle = PASTEL.ringJoint; g.fill();
     for (let i = 0; i < n; i++) {
-      // The crown stone reaches a little further, which is the only nod to a
-      // keystone a wall like this gets.
-      const deep = (j: number): number => out[j] + (i === crown ? 0.06 : 0);
-      // The inner pair sit inside the opening, so the cut is what shapes them.
-      const wedge: Pt[] = [at(i, -0.07), at(i + 1, -0.07), at(i + 1, deep(i + 1)), at(i, deep(i))];
+      const deep = (j: number): number => out[j] + (i === crown ? 0.09 : 0);
+      // The inner pair sit well inside the opening, so the cut is what shapes
+      // them; the outer pair come in by the joint.
+      const wedge: Pt[] = [
+        at(i, -0.12), at(i + 1, -0.12),
+        pt(cut[i + 1] - GAP, lean[i + 1], deep(i + 1)), pt(cut[i] + GAP, lean[i], deep(i)),
+      ];
       const pts = roughen(wedge, R, 3, 2.2);
-      dressed(g, pts, i === crown ? '' : pickDressed(R));
-      wearOne(g, pts, R);
+      dressed(g, pts, i === crown ? 'dress' : pickDressed(R));
+      // Not the crown: two or three pits at the top of an arch are two eyes
+      // and a nose, and the top of an arch is where the eye lands.
+      if (i !== crown) wearOne(g, pts, R);
+      else if (R() < 0.5) crack(g, bbox(pts), R);
     }
+    /*
+     * And the chips: what was jammed into the gaps when the broken field
+     * would not meet the ring. They are the evidence that the wall was opened
+     * rather than built with a hole in it, and they cost nothing.
+     */
+    for (let j = 0; j <= n; j++) {
+      // Not at the crown: anything standing over the keystone is a chimney.
+      if (R() > 0.45 || j === crown || j === crown + 1) continue;
+      const w = 7 + R() * 5, h = w * (0.6 + 0.3 * R());
+      const [cx, cy] = at(j, lip(j) + 0.012 + R() * 0.025);
+      wearOne(g, stone(g, cx - w / 2, cy - h / 2, w, h, R, R() < 0.35 ? 'dark' : 'dress', false, (R() - 0.5) * 0.6), R);
+    }
+  }
+
+  /* ---- what grows in a way through --------------------------------------- */
+  /**
+   * Growth does not stop at a doorway.
+   *
+   * The first arch clipped every green thing to the stone, so the ivy that had
+   * got over the top of the section was sliced off along the curve and the
+   * hedge at the foot stopped dead at the jamb, both on a line nothing in the
+   * picture explains. But a plant does not know there is an opening. It grows
+   * down the face and dangles in the gap; it grows round the jamb and into the
+   * reveal; and where a wall has been broken through, the seed gets in and
+   * there is grass standing in the way.
+   *
+   * These two layers are painted per variant off that variant's own drapes and
+   * hedges, so a tongue over an opening hangs from ivy that is really there
+   * and no two archways are overgrown the same. The variant with nothing over
+   * its top gets no tongue; the one with the widest hedge gets it across the
+   * threshold.
+   */
+
+  /** Lobes for a curtain hanging at `cx` from `y0`, `w` half-wide, fraying as it falls. */
+  function tongueLobes(cs: Lobe[], cx: number, y0: number, w: number, len: number, R: Rand): void {
+    const r0 = 8.5;
+    for (let y = y0; y < y0 + len; y += r0 * 1.1) {
+      const t = (y - y0) / len;
+      const hw = Math.max(r0 * 0.5, w * (1 - 0.62 * t) * (0.9 + 0.2 * R()));
+      row(cs, cx - hw + (R() - 0.5) * r0 * 0.4, cx + hw, y, r0 * (0.95 - 0.3 * t), R, 1.3, t > 0.2 ? 0.32 : 0, (x) => x);
+    }
+  }
+
+  /** A low mound of growth standing on `base`, `w` by `h`, wherever it is rooted. */
+  function tussock(g: Ctx, x: number, base: number, w: number, h: number, R: Rand): void {
+    const cs: Lobe[] = [], r = 5.5 + h * 0.08;
+    for (let y = base - h + r; y <= base + r; y += r * 1.2) {
+      const t = (base - y) / h;
+      const hw = (w / 2) * (t > 0.25 ? 1 - 0.55 * Math.pow((t - 0.25) / 0.75, 1.3) : 1) * (0.9 + 0.2 * R());
+      row(cs, x - hw, x + hw, y, r * (0.9 + 0.2 * R()), R, 1.3, t > 0.35 ? 0.35 : 0, (q) => q);
+    }
+    g.save(); g.beginPath(); g.rect(0, 0, TW, TH - 2); g.clip();
+    shadowOf(g, cs, 5, 4);
+    mass(g, cs, R, { r, lobe: R() < 0.4 ? 1 : 0 });
+    g.restore();
   }
 
   /* ---- the textures ------------------------------------------------------ */
@@ -910,6 +1020,42 @@ export function cobble(): Cobble {
     openingPath(g);
     g.fill();
     g.globalCompositeOperation = 'source-over';
+    return c;
+  });
+  /**
+   * The ivy that hangs into the opening, one tongue per curtain that reaches
+   * over it. It is rooted six pixels above the curve, so it comes out from
+   * under the ring rather than out of the air.
+   */
+  const ARCH_IVY = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 991 + 43);
+    for (const d of v.drapes) {
+      if (!d.fall) continue;
+      const half = d.w / 2, dcx = clamp(d.cx, MARGIN + half, TW - MARGIN - half);
+      if (dcx - half > A_CX + A_R * 0.85 || dcx + half < A_CX - A_R * 0.85) continue;
+      const x = clamp(dcx, A_CX - A_R * 0.76, A_CX + A_R * 0.76);
+      const y0 = A_CY - Math.sqrt(Math.max(0, A_R * A_R - (x - A_CX) ** 2)) - 6;
+      const cs: Lobe[] = [];
+      tongueLobes(cs, x, y0, 13 + 11 * R(), CH * (0.7 + 0.9 * R()), R);
+      shadowOf(g, cs, 5, 6);
+      mass(g, cs, R, { r: 8.5, lobe: R() < 0.4 ? 1 : 0 });
+    }
+    return c;
+  });
+  /** And what has seeded itself in the gap: grass in the threshold, a tuft on an impost. */
+  const ARCH_WEED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 557 + 29);
+    for (const side of [-1, 1]) {
+      if (R() < 0.4) continue;
+      tussock(g, A_CX + side * A_R * (0.42 + R() * 0.42), TH + 3, 34 + R() * 30, 26 + R() * 26, R);
+    }
+    // The impost is a ledge, and rain that runs off the ring stands on it.
+    for (const side of [-1, 1]) {
+      if (R() < 0.55) continue;
+      tussock(g, A_CX + side * (A_R - 6 + R() * 14), A_CY + 1, 22 + R() * 14, 14 + R() * 10, R);
+    }
     return c;
   });
   /** The growth over the top is painted PAD px taller than the face, the extra above the top edge: the
@@ -952,12 +1098,14 @@ export function cobble(): Cobble {
   painted = {
     face: FACE,
     arch: ARCHED,
+    archIvy: ARCH_IVY,
+    archWeed: ARCH_WEED,
     spill: SPILL,
     base: BASE,
     foot: FOOT,
     cap: CAP_STONE,
     ends: ENDS,
-    reveal: channels(PASTEL.stoneShade),
+    reveal: channels(PASTEL.reveal),
     line: channels(PASTEL.line),
     w: TW,
     h: TH,

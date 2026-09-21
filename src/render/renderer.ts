@@ -238,8 +238,8 @@ const hexRgb = (hex: string): [number, number, number] => {
  * still reaches down the sides of a way through; the soffit keeps half again
  * of that, because nothing reaches the underside of an arch.
  */
-const JAMB_LIT = 0.78;
-const SOFFIT_LIT = 0.6;
+const JAMB_LIT = 0.86;
+const SOFFIT_LIT = 0.7;
 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
@@ -2682,14 +2682,15 @@ export class Renderer {
        */
       const arched = wall.type === 'arch';
       /*
-       * Everything but the way through, for whatever is painted over the
-       * stone: a hedge in a doorway is a doorway nobody uses, and ivy across
-       * one is a green curtain hanging on nothing.
+       * Everything but the way through. Moss is the one green thing that has
+       * to be clipped to the stone, because moss grows on stone: a lens of it
+       * is drawn on a block of the field, and the blocks the doorway was
+       * broken out of are not there any more.
        *
-       * The outer boundary is not the face. The ivy stands `pad` above the
-       * cap and the hedge sits over the ground line, so the boundary is drawn
-       * wide enough to hold anything a section carries, and only the hole is
-       * taken out of it -- the two paths in one, clipped even-odd.
+       * The outer boundary is not the face. The overlay sits over the ground
+       * line, so the boundary is drawn wide enough to hold anything a section
+       * carries and only the hole is taken out of it -- the two paths in one,
+       * clipped even-odd.
        */
       const onStone = (): void => {
         if (!arched) return;
@@ -2705,11 +2706,41 @@ export class Renderer {
       };
       const offStone = (): void => { if (arched) ctx.restore(); };
       blit(arched ? cob.arch[v] : cob.face[v], 0, 1);
+      /*
+       * The way through goes in before anything that grows, and unlit,
+       * because the wash below takes the whole face at once: a bush that has
+       * got into a doorway stands in front of the reveal, not behind it, and
+       * the hour has to reach the stone and the bush in one pass or the bush
+       * is cut in half along the edge of the opening.
+       */
+      if (arched) {
+        const geom = this.archGeom({ px, py, quad }, zoom);
+        ctx.save();
+        geom.outline(1);
+        ctx.clip();
+        this.archShade({ px, py, quad }, zoom);
+        this.archDepth(cob.reveal, 1, { px, py, quad }, zoom);
+        ctx.restore();
+        /*
+         * And a line round the edge of it, in the same ink the picture draws
+         * every block with. Every stone in the wall is outlined and the one
+         * hole in it was not, so the opening read as a gap between stones
+         * rather than as an edge somebody cut.
+         */
+        geom.rim(1);
+        ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
+        ctx.lineWidth = Math.max(1, 1.5 * zoom);
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+      }
       if (wall.level === 0 && !indoors) {
         onStone();
         blit(cob.foot[v], 0, 1);
-        blit(cob.base[v], 0, 1);
         offStone();
+        // The hedge is not clipped: it grows round a jamb and into the reveal,
+        // and on the variant with the widest one it grows across the threshold.
+        blit(cob.base[v], 0, 1);
+        if (arched) blit(cob.archWeed[v], 0, 1);
       }
       /*
        * The hour's light, and only that. A flat wall takes a wash down its
@@ -2753,36 +2784,12 @@ export class Renderer {
        * behind it is turned.
        */
       if (!roofed && !indoors) {
-        onStone();
         blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
-        offStone();
+        // And the tongue of it that hangs into the opening, on the variants
+        // whose curtain reaches that far along the wall.
+        if (arched) blit(cob.archIvy[v], 0, 1);
       }
-      /*
-       * And what is on the other side of the hole, painted last and clipped to
-       * the hole, so the hour's light above went over the stone and not down
-       * the passage. What you see through a doorway is bounded by the doorway.
-       */
-      if (arched) {
-        const geom = this.archGeom({ px, py, quad }, zoom);
-        ctx.save();
-        geom.outline(1);
-        ctx.clip();
-        this.archDepth(cob.reveal, lit, { px, py, quad }, zoom);
-        ctx.restore();
-        /*
-         * And a line round the edge of it, in the same ink the picture draws
-         * every block with. Every stone in the wall is outlined and the one
-         * hole in it was not, so the opening read as a gap between stones
-         * rather than as an edge somebody cut.
-         */
-        geom.rim(1);
-        ctx.strokeStyle = rgb(cob.line, lit * 0.95, 0.6);
-        ctx.lineWidth = Math.max(1, 1.5 * zoom);
-        ctx.lineJoin = 'round';
-        ctx.stroke();
-      } else {
-        this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
-      }
+      if (!arched) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
       return;
     }
@@ -3160,6 +3167,37 @@ export class Renderer {
    * makes an arch look cut through something rather than painted on it. It is
    * bounded by the near hole because that is what you are looking through.
    */
+  /**
+   * The shade under an archway.
+   *
+   * What you see through one has already been drawn -- the grass, the floor
+   * of whatever it lets into, whoever is walking towards you -- and it was
+   * drawn in full daylight, because nothing that drew it knew there was three
+   * metres of wall standing over it. So the ground inside the opening came
+   * out brighter than the ground in front of the opening, and an arch with no
+   * shade in it is not a way through: it is a shape painted on a wall.
+   *
+   * Two washes. One flat over the whole opening, for standing under a wall;
+   * one along the head, for standing under the part of it that leans over
+   * you. Called clipped to the hole, so neither reaches the stone.
+   */
+  private archShade(g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    const { spring, headK } = this.archGeom(g, zoom);
+    quad(0, 1, 0, 1);
+    ctx.fillStyle = 'rgba(38, 34, 22, 0.18)';
+    ctx.fill();
+    // From the crown down to the springing, where the head stops overhanging.
+    const top = headK(0.5);
+    const wash = ctx.createLinearGradient(px(0.5, top), py(0.5, top), px(0.5, spring), py(0.5, spring));
+    wash.addColorStop(0, 'rgba(38, 34, 22, 0.20)');
+    wash.addColorStop(1, 'rgba(38, 34, 22, 0)');
+    quad(0, 1, 0, 1);
+    ctx.fillStyle = wash;
+    ctx.fill();
+  }
+
   private archDepth(ink: readonly [number, number, number], lit: number, g: WallGeom, zoom: number): void {
     const ctx = this.canvas.ctx;
     const { px, py } = g;
@@ -3178,7 +3216,17 @@ export class Renderer {
      * So only the wall's own thickness is drawn, which is the part that is
      * really there.
      */
-    const strip = (ta: number, ka: number, tb: number, kb: number, k: number): void => {
+    /*
+     * Each strip, and the joint at the leading edge of it.
+     *
+     * Without the joints the reveal is the one surface in the whole wall with
+     * no line on it anywhere, and a featureless band of grey in a doorway
+     * reads as a sheet of metal taped inside the opening rather than as the
+     * broken ends of the courses. Round the head they are the voussoirs seen
+     * edge on; down a jamb they are the jamb's own coursing.
+     */
+    const seam = rgb(ink, lit * 0.52, 0.55);
+    const strip = (ta: number, ka: number, tb: number, kb: number, k: number, joint: boolean): void => {
       ctx.fillStyle = rgb(ink, lit * k);
       ctx.beginPath();
       ctx.moveTo(px(ta, ka, 1), py(ta, ka, 1));
@@ -3187,6 +3235,13 @@ export class Renderer {
       ctx.lineTo(px(ta, ka, -1), py(ta, ka, -1));
       ctx.closePath();
       ctx.fill();
+      if (!joint || zoom < 0.55) return;
+      ctx.strokeStyle = seam;
+      ctx.lineWidth = Math.max(1, 1.2 * zoom);
+      ctx.beginPath();
+      ctx.moveTo(px(ta, ka, 1), py(ta, ka, 1));
+      ctx.lineTo(px(ta, ka, -1), py(ta, ka, -1));
+      ctx.stroke();
     };
     /*
      * The jambs stand on edge and the soffit hangs over you, so they do not
@@ -3195,14 +3250,20 @@ export class Renderer {
      * through a shape rather than a flat band of grey round a hole, and it
      * darkens the head of the arch, which is where the eye reads the curve.
      */
-    strip(t0, 0, t0, spring, JAMB_LIT);
-    strip(t1, 0, t1, spring, JAMB_LIT);
+    // Three courses up each jamb, drawn bottom up so each one lays its joint
+    // on the one below it.
+    const COURSES = 3;
+    for (const t of [t0, t1]) {
+      for (let i = 0; i < COURSES; i++) {
+        strip(t, (spring * i) / COURSES, t, (spring * (i + 1)) / COURSES, JAMB_LIT, i > 0);
+      }
+    }
     for (let i = 0; i < steps; i++) {
       // Down the two ends of the head, up to the crown: what is nearly
       // vertical there is still a jamb, what is nearly level is soffit.
       const u = (i + 0.5) / steps;
       const k = JAMB_LIT + (SOFFIT_LIT - JAMB_LIT) * Math.sin(Math.PI * u);
-      strip(headT(i / steps), headK(i / steps), headT((i + 1) / steps), headK((i + 1) / steps), k);
+      strip(headT(i / steps), headK(i / steps), headT((i + 1) / steps), headK((i + 1) / steps), k, i % 2 === 1);
     }
   }
 
@@ -3211,7 +3272,12 @@ export class Renderer {
     const { px, py } = g;
     const { t0, t1 } = ARCH;
     const mid = (t0 + t1) / 2;
-    const { spring, steps, headT, headK, rim } = this.archGeom(g, zoom);
+    const { spring, steps, headT, headK, rim, outline } = this.archGeom(g, zoom);
+    ctx.save();
+    outline(1);
+    ctx.clip();
+    this.archShade(g, zoom);
+    ctx.restore();
     this.archDepth(mat.color, lit, g, zoom);
     // And the edge of the hole, so the face reads as cut rather than shaded.
     rim(1);
