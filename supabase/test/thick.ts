@@ -63,10 +63,19 @@ say(WALL_THICK > 0 && WALL_THICK < 0.25,
 say(FENCE_THICK > 0 && FENCE_THICK < WALL_THICK,
   `and a fence is thinner than a wall: ${FENCE_THICK} against ${WALL_THICK}`);
 
-/* The two that are not an ordinary thickness, and why. */
-say(WALL_TYPE_BY_ID.get('bay')?.thick === 1.7, 'a bay window stands proud of the wall it is let into');
+/*
+ * The one that is not an ordinary thickness, and why.
+ *
+ * A bay used to be one of two. It stands proud of the wall it is let into,
+ * and saying so here moved the whole section out along its normal, which put
+ * the bay's own face where the wall's face should have been and left a sliver
+ * of ground showing at each end of it. It is drawn proud instead, in
+ * `cobBay`, which is where a thing that is only true of the picture belongs;
+ * the section it is cut into is a section like any other.
+ */
+say(WALL_TYPE_BY_ID.get('bay')?.thick === undefined, 'a bay is a section of ordinary thickness, and stands proud in the drawing rather than in the rulebook');
 say(WALL_TYPE_BY_ID.get('half_wall')?.thick === 1.25, 'and a half wall is built heavier than the storey it caps');
-say(WALL_TYPES.filter((t) => t.thick !== undefined).length === 2,
+say(WALL_TYPES.filter((t) => t.thick !== undefined).length === 1,
   `everything else is a wall's thickness and says nothing about it: ${WALL_TYPES.filter((t) => t.thick === undefined).length} of ${WALL_TYPES.length}`);
 
 /*
@@ -84,8 +93,8 @@ say(WALL_TYPES.filter((t) => t.thick !== undefined).length === 2,
 const paved = Object.entries(TILE_DEFS).filter(([, d]) => d.paved).map(([id]) => Number(id));
 say(PAVED.size === paved.length && paved.every((t) => PAVED.has(t)),
   `the paved grounds are laid rather than coloured in, all ${PAVED.size} of them`);
-say([TileType.Gravel, TileType.Cobblestone, TileType.Slabs].every((t) => PAVED.has(t)),
-  'gravel, cobbles and slabs among them, which are the three there are today');
+say([TileType.Cobblestone, TileType.Slabs].every((t) => PAVED.has(t)),
+  'cobbles and slabs among them, which are the two there are today');
 
 /*
  * A deck and an eave have a depth, and it is a board's worth rather than a

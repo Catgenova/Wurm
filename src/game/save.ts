@@ -541,6 +541,10 @@ function finish(world: World, m: SaveMeta): Game {
   if (m.trees !== TREE_DATA_LAYOUT) {
     for (let i = 0; i < world.tiles.length; i++) if (world.tiles[i] === TileType.Tree) world.data[i] &= 63;
   }
+  // And ground paved before gravel was retired. Thirteen was gravel and is
+  // nothing now; what it was for, cobblestone does properly and for the same
+  // handful of shards, so that is what it becomes.
+  for (let i = 0; i < world.tiles.length; i++) if (world.tiles[i] === 13) world.tiles[i] = TileType.Cobblestone;
   for (const [x, y, cuts] of m.notches ?? []) world.setNotch(x, y, cuts);
   const game = new Game({
     seed: m.seed,

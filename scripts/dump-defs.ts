@@ -114,7 +114,7 @@ out.push(`create table if not exists tile_def (
   botanize boolean not null default false, pavable boolean not null default false,
   turns_to_dirt boolean not null default false, collect boolean not null default false
 );`);
-/* Laid stone or gravel: a shod mount goes quicker on it. */
+/* Laid stone: a shod mount goes quicker on it. */
 out.push(`alter table tile_def add column if not exists paved boolean not null default false;`);
 out.push(`create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text

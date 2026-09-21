@@ -71,7 +71,6 @@ export const FOOTINGS: Partial<Record<number, Footing>> = {
   [TileType.Clay]: 'grit',
   [TileType.Peat]: 'grit',
   [TileType.Tar]: 'grit',
-  [TileType.Gravel]: 'grit',
   [TileType.Rock]: 'stone',
   [TileType.Cobblestone]: 'stone',
   [TileType.Slabs]: 'stone',
@@ -140,7 +139,7 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   drop_dirt: 'earth', drop_dirt_here: 'earth', dig_stump: 'earth',
   take_ashes_oven: 'earth', take_ashes_fire: 'earth', take_ashes_smelter: 'earth', take_ashes_kiln: 'earth',
   // Stone, whether it is being cut or merely shifted.
-  pave_gravel: 'stone', pave_cobble: 'stone', pave_slabs: 'stone', remove_paving: 'stone',
+  pave_cobble: 'stone', pave_slabs: 'stone', remove_paving: 'stone',
   raise_rock: 'stone', chip_corner: 'stone', strike_foundation: 'stone',
   place_smelter: 'stone', pick_up_smelter: 'stone', place_kiln: 'stone', pick_up_kiln: 'stone',
   place_anvil: 'stone', pick_up_anvil: 'stone',

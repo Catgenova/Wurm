@@ -423,14 +423,14 @@ select rpc_act(:'world2', 'pack', '{"kind":"tile","x":9,"y":9}', 1) \g /dev/null
 update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
 select settle(:'world2', :'ivar') \g /dev/null
 select '54. it is now ' || (select name from tile_def where id = land_tile(:'world2',9,9))
-     || '; paving it with gravel: ' || coalesce(act_refusal(:'world2', :'ivar', 'pave_gravel', '{"kind":"tile","x":9,"y":9}'), 'allowed');
-insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'rock_shards', 40, 2);
-select rpc_act(:'world2', 'pave_gravel', '{"kind":"tile","x":9,"y":9}', 1) \g /dev/null
+     || '; paving it with cobbles: ' || coalesce(act_refusal(:'world2', :'ivar', 'pave_cobble', '{"kind":"tile","x":9,"y":9}'), 'allowed');
+insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'stone_brick', 40, 2);
+select rpc_act(:'world2', 'pave_cobble', '{"kind":"tile","x":9,"y":9}', 1) \g /dev/null
 update player set act_started = act_started - interval '60 seconds', act_ends = act_ends - interval '60 seconds' where uid = :'ivar';
 select settle(:'world2', :'ivar') \g /dev/null
-select '55. with shards in hand it becomes ' || (select name from tile_def where id = land_tile(:'world2',9,9))
-     || ', shards left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'rock_shards')
-     || ' — and cultivating gravel: ' || coalesce(act_refusal(:'world2', :'ivar', 'cultivate', '{"kind":"tile","x":9,"y":9}'), 'ALLOWED');
+select '55. with a brick in hand it becomes ' || (select name from tile_def where id = land_tile(:'world2',9,9))
+     || ', bricks left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'stone_brick')
+     || ' — and cultivating a road: ' || coalesce(act_refusal(:'world2', :'ivar', 'cultivate', '{"kind":"tile","x":9,"y":9}'), 'ALLOWED');
 \echo ''
 -- A body rests between one subject and the next. This suite runs hundreds of
 -- goes with no wall-clock time between them, so nothing ever gets its wind
@@ -6826,7 +6826,7 @@ select '809. and asking again with the pack empty: ' || coalesce((:'gone'::jsonb
 select '811. what each job on the ground trains, off `action_def` and nowhere else: '
      || string_agg(a.id || ' → ' || a.skill, ', ' order by a.skill, a.id)
 from action_def a
-where a.id in ('mine', 'chip_corner', 'pack', 'cultivate', 'pave_gravel', 'pave_cobble', 'drop_dirt_here');
+where a.id in ('mine', 'chip_corner', 'pack', 'cultivate', 'pave_cobble', 'drop_dirt_here');
 
 do $$
 declare w uuid; me uuid := '77777777-7777-7777-7777-777777777777'; i int;

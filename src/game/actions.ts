@@ -1520,22 +1520,6 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
-    id: 'pave_gravel',
-    label: 'Pave (gravel)',
-    verb: 'paving',
-    skill: 'paving',
-    stamina: 0.03,
-    baseTime: 4,
-    applies: (t, g) => tile(t, g) === TileType.PackedDirt,
-    check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || unpacked(t, g) || (g.inventory.has('rock_shards') ? null : 'You need rock shards to pave with gravel.'),
-    perform: (t, g) => {
-      if (t.kind !== 'tile') return;
-      if (!g.inventory.consume('rock_shards')) return;
-      g.world.setTile(t.x, t.y, TileType.Gravel);
-      g.logMsg('You spread the crushed rock into a gravel surface.', 'event');
-    },
-  },
-  {
     id: 'pave_cobble',
     label: 'Pave (cobblestone)',
     verb: 'paving',
@@ -1595,11 +1579,11 @@ export const ACTIONS: ActionDef[] = [
     tool: 'pickaxe',
     stamina: 0.04,
     baseTime: 5,
-    applies: (t, g) => tile(t, g) === TileType.Gravel || tile(t, g) === TileType.Cobblestone || tile(t, g) === TileType.Slabs,
+    applies: (t, g) => tile(t, g) === TileType.Cobblestone || tile(t, g) === TileType.Slabs,
     check: (t, g) => (t.kind === 'tile' && underBuilding(g, t.x, t.y)) || (g.inventory.has('pickaxe') ? null : 'You need a pickaxe to break up paving.'),
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
-      // A slab comes up whole more often than not; gravel and cobbles do not.
+      // A slab comes up whole more often than not; a cobble does not.
       const wasSlab = g.world.getTile(t.x, t.y) === TileType.Slabs;
       const kind = wasSlab ? SLAB_VARIANTS[slabVariant(g.world.getData(t.x, t.y))] : null;
       g.world.setTile(t.x, t.y, TileType.Dirt);
@@ -2244,7 +2228,7 @@ export const ACTIONS: ActionDef[] = [
  * having asked it.
  */
 const SHAPES_GROUND = new Set(['dig', 'dredge', 'flatten', 'drop_dirt', 'drop_dirt_here', 'raise_rock',
-  'mine', 'chip_corner', 'pack', 'cultivate', 'pave_gravel', 'pave_cobble', 'pave_slabs', 'remove_paving']);
+  'mine', 'chip_corner', 'pack', 'cultivate', 'pave_cobble', 'pave_slabs', 'remove_paving']);
 for (const def of ACTIONS) {
   if (!SHAPES_GROUND.has(def.id)) continue;
   const was = def.check;

@@ -4475,7 +4475,7 @@ export class Game {
   /** How fast a mount carries a rider: its own pace, steadied by practice. */
   mountSpeed(c: Creature): number {
     const def = this.creatures.species(c);
-    // Shod, it goes quicker on laid stone and gravel.
+    // Shod, it goes quicker on laid stone.
     const shod = isShod(this.time, c) && !!TILE_DEFS[this.world.getTile(this.player.tileX, this.player.tileY)].paved ? SHOE_PACE : 1;
     return Math.min(MAX_MOUNT_SPEED, def.speed * ageDef(c, this.time).speed * this.creatures.speedMul(c) * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger) * shod);
   }

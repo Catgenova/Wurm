@@ -117,9 +117,9 @@ export function tileUses(g: Game, x: number, y: number): string[] {
 
   // What can be laid over it or built on it. Saying a road will not take a
   // road, or that bare rock will not take one, is not worth a line.
-  const paved = type === TileType.Gravel || type === TileType.Cobblestone || type === TileType.Slabs;
+  const paved = type === TileType.Cobblestone || type === TileType.Slabs;
   if (paved) lines.push('This is paving already. Break it up with a pickaxe and it goes back to dirt.');
-  else if (def.pavable) lines.push('Takes paving: gravel, cobblestone or slabs, once it is packed hard');
+  else if (def.pavable) lines.push('Takes paving: cobblestone or slabs, once it is packed hard');
   else if (!def.blocks && type !== TileType.Rock) lines.push('Will not take paving');
 
   // What it does underfoot, which is the one thing about ground you notice.

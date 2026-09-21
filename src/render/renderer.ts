@@ -855,22 +855,6 @@ export class Renderer {
       ctx.fillStyle = fill;
       ctx.fill();
     };
-    if (t === TileType.Gravel) {
-      /*
-       * Chips, and nothing laid about them: no rows, no joints, no two the
-       * same size. Small and many, because the moment a chip is big enough to
-       * read as a stone the path reads as badly laid cobbles instead of as a
-       * heap of gravel — which is the whole difference between the two.
-       */
-      for (let i = 0; i < 30; i++) {
-        const u = hash2(x, y, 90 + i * 2);
-        const v = hash2(x, y, 91 + i * 2);
-        const r = 0.022 + hash2(x, y, 140 + i) * 0.032;
-        patch(u - r, u + r, v - r * 0.8, v + r * 0.8,
-          hash2(x, y, 170 + i) > 0.45 ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.2)');
-      }
-      return;
-    }
     if (t === TileType.Cobblestone) {
       /*
        * A road is a picture, not a pattern. It was six by six rectangles with

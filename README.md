@@ -212,7 +212,7 @@ in world time.
   "dirt" units (one dig = one unit = 10 cm on a 4 m tile). Water sits at height
   zero and floods anything below it.
 - **Tile types.** Grass, dirt, packed dirt, sand, rock, steppe, tundra, marsh,
-  clay, peat, tar, moss, snow, gravel, cobblestone, trees (birch, pine, oak,
+  clay, peat, tar, moss, snow, cobblestone, trees (birch, pine, oak,
   maple, willow, cedar with young/mature/old sizes), bushes, kelp and reed.
 - **Bedrock everywhere.** Every tile sits on a particular rock of a particular
   quality, written down when the world is made and unchanged by anything done
@@ -237,8 +237,8 @@ in world time.
   the quality ceiling and how deep it lies; the range is 3 tiles plus one per
   10 levels of Prospecting. Coal outburns a log as campfire fuel.
 - **Terraforming.** Dig the corner nearest your click, drop dirt to raise it,
-  pack and cultivate, pave gravel with shards, bricks for
-  cobblestone or cut slabs for a stone floor, remove paving. Flatten levels a tile to the
+  pack and cultivate, pave with bricks for cobblestone or cut
+  slabs for a stone floor, remove paving. Flatten levels a tile to the
   height of the ground you stand on, scraping high ground down into dirt and
   packing dirt in to bring low ground up, so a terrace can be carried outwards
   tile by tile; flattening the tile under your feet takes it down to its own
@@ -513,7 +513,7 @@ in world time.
 - **Roads worth their stone.** Feet hardly care what is under them; a laden
   wheel cares about little else. An empty cart rolls over anything at its own
   pace, a full one is held to what the ground will take, and a half-loaded one
-  pays half. Slabs, cobble and gravel cost a full wagon nothing; packed dirt a
+  pays half. Slabs and cobble cost a full wagon nothing; packed dirt a
   tenth, grass three tenths, sand and a field half, a bog seven tenths. Forty
   tiles with a full wagon is 13 seconds on a paved road, 24 over grass and 92
   through marsh. Walking with a load is routed the way a carter would take it —
@@ -1002,8 +1002,8 @@ in world time.
   item rots away.
 - **Packing and paving.** A shovel treads grass, dirt, lawn, steppe, tundra
   and moss down into packed dirt, cutting the turf away on sod. Packed dirt is
-  what a building needs under it and the only ground paving will go on: gravel,
-  cobblestone and slabs all want a hard flat bed. Breaking paving up leaves
+  what a building needs under it and the only ground paving will go on: both
+  cobblestone and slabs want a hard flat bed. Breaking paving up leaves
   bare dirt, so laying it again means packing it again.
 - **Character.** Health, stamina, food and water; swimming drains stamina and
   drowning sends you back to the shore. Actions take time based on skill and

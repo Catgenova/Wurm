@@ -632,7 +632,7 @@ import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
     only a bog really tells. A <b>laden wheel</b> cares about very little else. An empty cart rolls over
     anything at its own pace; a full one is held to what the ground will take, and between the two it
     is a straight blend, so a half-loaded cart pays half.</p>
-    <p>Stone slabs, cobble and gravel cost a full wagon <b>nothing</b>. Packed dirt costs a tenth, bare
+    <p>Stone slabs and cobble cost a full wagon <b>nothing</b>. Packed dirt costs a tenth, bare
     grass three tenths, sand and a tilled field half, and a <b>bog seven tenths</b>. Forty tiles with a
     full wagon behind you is <b>thirteen seconds on a paved road, twenty-four over grass and a minute
     and a half through marsh</b> &mdash; which is the whole argument for paving, and why the stone is
@@ -827,7 +827,7 @@ import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
     <h3>What you can hear</h3>
     <p>The island makes a noise now, and what the noise is depends on what is being hit.
     <b>Footfalls</b> take their sound from the ground: grass is a brush with no edge on it, sand
-    and gravel are sharper, laid stone is a hard click, a plank deck answers under you with a note
+    is sharper, laid stone is a hard click, a plank deck answers under you with a note
     in it, and snow is a squeak. Water closes over a boot rather than being stepped on.</p>
     <p><b>Work</b> is the same idea: the trade decides, because a mason is hitting stone whatever
     he is making out of it. A spade going into clay, a point cracking into rock, an axe biting a
@@ -1291,7 +1291,7 @@ import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
     its cycle &mdash; click a tile, or press <b>T</b>, and the Tile window says whether there is
     <b>something to pick</b> or <b>something to gather</b> on it. Pick it over and the line goes;
     leave it a while and it comes back. Every ground that grows anything can hold something &mdash;
-    grass, steppe, tundra, moss, marsh and lawn &mdash; and sand, dirt and gravel never do, having
+    grass, steppe, tundra, moss, marsh and lawn &mdash; and sand, dirt and clay never do, having
     nothing to give.</p>
     <p><b>A practised eye goes over the same ground more than once.</b> Foraging and botanizing take
     <b>one more pass over the tile for every twenty points</b> of the skill: one pass below twenty, two
@@ -1439,8 +1439,8 @@ import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
     still does what it always did, for when you actually want the ground lower.</p>
     <p><b>Packing</b> is what makes a floor of the ground. A shovel treads <b>grass, dirt, lawn, steppe,
     tundra or moss</b> down into <b>packed dirt</b>: on sod it cuts the turf away first. Packed dirt is
-    what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; gravel,
-    cobblestone and slabs all want a hard, flat bed, and will not be laid on loose earth or on grass.
+    what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; both
+    cobblestone and slabs want a hard, flat bed, and will not be laid on loose earth or on grass.
     Breaking paving up with a pickaxe leaves bare dirt, so repaving means packing it again.</p>
     <p>Twelve metals lie in the rock, and each seam needs a certain <b>mining</b> skill before it can be
     worked at all: copper and coal from the very start, then <b>iron</b> at 5, tin at 10, zinc at 20,

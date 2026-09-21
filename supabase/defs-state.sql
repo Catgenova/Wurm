@@ -879,8 +879,6 @@ insert into tile_def values (9, 'Peat', 0.8, false, 'peat', false, false, false,
 insert into tile_def values (10, 'Tar', 0.5, false, 'tar', false, false, false, false, false, true);
 insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, true, true, false);
 insert into tile_def values (12, 'Snow', 0.8, false, null, true, false, false, false, false, false);
-insert into tile_def values (13, 'Gravel', 1.15, false, null, false, false, false, true, false, false);
-update tile_def set paved = true where id = 13;
 insert into tile_def values (14, 'Cobblestone', 1.25, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 14;
 insert into tile_def values (15, 'Field', 0.9, false, 'dirt', false, false, false, false, true, false);
@@ -1035,7 +1033,6 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drink', 'Drink', 'drinking', null, null, false, null, 0, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pack', 'Pack', 'packing', 'paving', 'shovel', false, null, 0.03, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cultivate', 'Cultivate', 'cultivating', 'digging', 'shovel', false, null, 0.03, 4, null, false, false);
-insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pave_gravel', 'Pave (gravel)', 'paving', 'paving', null, false, null, 0.03, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pave_cobble', 'Pave (cobblestone)', 'paving', 'paving', null, false, null, 0.03, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pave_slabs', 'Pave (slabs)', 'laying slabs', 'paving', 'trowel', false, null, 0.04, 7, 10, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('remove_paving', 'Remove paving', 'breaking up the paving', 'paving', 'pickaxe', false, null, 0.04, 5, null, false, false);
@@ -2093,7 +2090,7 @@ update item_def set description = 'Ash water, and it will take the hair off a hi
 update item_def set description = 'A pile of dirt. Drop it to raise the ground.' where id = 'dirt';
 update item_def set description = 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' where id = 'glass';
 update item_def set description = 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' where id = 'ash';
-update item_def set description = 'Chunks of rock. Paves gravel, builds cobblestone walls or becomes bricks.' where id = 'rock_shards';
+update item_def set description = 'Chunks of rock. Builds cobblestone walls or becomes bricks.' where id = 'rock_shards';
 update item_def set description = 'A flat slab cut from rock. Laid as paving, a tile at a time.' where id = 'stone_slab';
 update item_def set description = 'Shaped clay, still soft. Fire it in a kiln before it is any use.' where id = 'unfired_clay_brick';
 update item_def set description = 'Green ware. It will not hold a stew until it has been through a kiln.' where id = 'unfired_clay_bowl';
@@ -3931,7 +3928,6 @@ update tile_def set diggable = true where id = 3;
 update tile_def set diggable = true where id = 5;
 update tile_def set diggable = true where id = 6;
 update tile_def set diggable = true where id = 11;
-update tile_def set diggable = true where id = 13;
 update tile_def set diggable = true where id = 20;
 update tile_def set diggable = true where id = 8;
 update tile_def set diggable = true where id = 7;

@@ -13,7 +13,14 @@ export const TileType = {
   Tar: 10,
   Moss: 11,
   Snow: 12,
-  Gravel: 13,
+  /*
+   * 13 was gravel, which is retired: it was the cheap paving and it was the
+   * ugly one, a heap of chips with no work in it, and cobblestone now costs
+   * the same handful of rock shards and does the same job properly. The id
+   * is left out rather than reused, because land laid down before this is
+   * still full of thirteens and they are turned to cobblestone where they
+   * come in rather than silently becoming whatever took the number.
+   */
   Cobblestone: 14,
   Field: 15,
   Tree: 16,
@@ -39,7 +46,7 @@ export type RGB = readonly [number, number, number];
  * another, and soil runs into its neighbour rather than stopping dead on a
  * tile line.
  */
-export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone, TileType.Gravel]);
+export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone]);
 
 /**
  * Ground a spadeful of dirt covers over, leaving dirt.
@@ -72,12 +79,11 @@ export const BURYABLE: ReadonlySet<number> = new Set<number>([
 
 /**
  * How much a footfall raises off a given ground. Dry loose stuff — sand,
- * gravel, a ploughed field — goes up in a cloud; turf and moss hold together
- * and barely mark; a marsh swallows the whole question.
+ * bare dirt, a ploughed field — goes up in a cloud; turf and moss hold
+ * together and barely mark; a marsh swallows the whole question.
  */
 export const DUSTINESS: Readonly<Record<number, number>> = {
   [TileType.Sand]: 1,
-  [TileType.Gravel]: 0.95,
   [TileType.Dirt]: 0.9,
   [TileType.PackedDirt]: 0.8,
   [TileType.Field]: 0.85,
@@ -144,7 +150,7 @@ export interface TileDef {
   botanize?: boolean;
   /** Can be paved over. */
   pavable?: boolean;
-  /** Laid stone or gravel: a shod mount goes quicker on it. */
+  /** Laid stone: a shod mount goes quicker on it. */
   paved?: boolean;
   /** Digging turns the tile into dirt. */
   turnsToDirt?: boolean;
@@ -170,7 +176,6 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
   [TileType.Moss]: { name: 'Moss', color: [82, 126, 66], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
-  [TileType.Gravel]: { name: 'Gravel', paved: true, color: [156, 152, 144], speed: 1.15, pavable: true, roll: 1 },
   [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
   [TileType.Field]: { name: 'Field', color: [130, 102, 62], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
   [TileType.Tree]: { name: 'Tree', color: [76, 124, 56], speed: 1, blocks: true, roll: 0.6 },
@@ -190,9 +195,9 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
  *
  * A paved tile used to draw as a flat lozenge of one colour like any other
  * ground, which is fair for grass and wrong for work somebody did with a
- * trowel: slabs have joints, cobbles are separate stones, gravel is a heap of
- * chips. Derived, because a list of three written out by hand is a list that
- * will be four one day and still say three.
+ * trowel: slabs have joints and cobbles are separate stones. Derived, because
+ * a list of two written out by hand is a list that will be three one day and
+ * still say two.
  */
 export const PAVED: ReadonlySet<number> = new Set<number>(
   Object.entries(TILE_DEFS).filter(([, d]) => d.paved).map(([id]) => Number(id)));

@@ -181,7 +181,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   // furnace produces by the cartload had nowhere bulk to go.
   ash: { name: 'Ashes', category: 'material', weight: 0.3, stackable: true, decay: 4, description: 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' },
   tar: { name: 'Tar', category: 'material', weight: 2, stackable: true, raw: true },
-  rock_shards: { name: 'Rock shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5, description: 'Chunks of rock. Paves gravel, builds cobblestone walls or becomes bricks.' },
+  rock_shards: { name: 'Rock shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5, description: 'Chunks of rock. Builds cobblestone walls or becomes bricks.' },
   slate_shards: { name: 'Slate shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5 },
   marble_shards: { name: 'Marble shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5 },
   sandstone_shards: { name: 'Sandstone shards', category: 'material', weight: 20, stackable: true, raw: true, decay: 5 },

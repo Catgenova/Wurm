@@ -50,7 +50,6 @@ export const DIGGABLE: ReadonlySet<number> = new Set<number>([
   TileType.Steppe,
   TileType.Tundra,
   TileType.Moss,
-  TileType.Gravel,
   TileType.Lawn,
   TileType.Clay,
   TileType.Marsh,

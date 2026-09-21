@@ -1,4 +1,5 @@
 import { World } from '../world/world';
+import { TileType } from '../world/tiles';
 
 /**
  * The island, as rows of bytes going to and from the database.
@@ -56,6 +57,20 @@ export interface TileChange {
  * Says whether the tile is inside the island at all, so a caller can tell a
  * change it dropped from one it applied.
  */
+/**
+ * Ground laid before gravel was retired.
+ *
+ * Tile 13 was gravel and there is no such tile any more: every island that
+ * has run for a day has thirteens in its land rows and thirteens in its
+ * history, and both of those come back down this way long after the island
+ * itself has been mended. So they are turned into cobblestone where they
+ * arrive rather than on the island alone -- a tile with no definition draws
+ * as nothing and walks like nothing, and a road somebody laid should not go
+ * to holes because we changed our minds about what to call it.
+ */
+const GRAVEL = 13;
+const WAS_GRAVEL = (t: number): number => (t === GRAVEL ? TileType.Cobblestone : t);
+
 export function layChange(world: World, c: TileChange): boolean {
   if (!world.inBounds(c.x, c.y)) return false;
   const k = c.corners;
@@ -74,7 +89,7 @@ export function layChange(world: World, c: TileChange): boolean {
     world.setDirt(c.x + 1, c.y + 1, s[2]);
     world.setDirt(c.x, c.y + 1, s[3]);
   }
-  world.setTile(c.x, c.y, c.tile as Parameters<World['setTile']>[2], c.data);
+  world.setTile(c.x, c.y, WAS_GRAVEL(c.tile) as Parameters<World['setTile']>[2], c.data);
   return true;
 }
 
@@ -219,6 +234,7 @@ export function layRows(world: World, rows: LandRow[]): number {
       if (t.length !== dt.length || t.length !== r.length || !t.length || x0 + t.length > w) {
         throw new Error(`row ${y} is the wrong width`);
       }
+      for (let i = 0; i < t.length; i++) if (t[i] === GRAVEL) t[i] = TileType.Cobblestone;
       world.tiles.set(t, y * w + x0);
       world.data.set(dt, y * w + x0);
       world.rock.set(r, y * w + x0);

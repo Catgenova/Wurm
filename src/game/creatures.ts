@@ -1947,7 +1947,7 @@ export const GRAZE_FILL = 0.5;
 export const CALL_WINDOW = 12;
 /**
  * Horseshoes. Four to a mount, nailed on with a mallet; they hold a week,
- * quicker on stone and gravel by a share and up a steeper step by a fixed
+ * quicker on laid stone by a share and up a steeper step by a fixed
  * height. The island reads the same four.
  */
 export const SHOES_PER_MOUNT = 4;
