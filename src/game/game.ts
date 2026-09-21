@@ -30,7 +30,7 @@ import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, ra
 import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
-import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot } from './gear';
+import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot, SLOTS } from './gear';
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { cleanSaid } from './chat';
 import { ALL_GOALS } from './journal';
@@ -754,7 +754,10 @@ export class Game {
       if (m.id >= this.nextMarkId) this.nextMarkId = m.id + 1;
     }
     this.inventory = new Inventory(init.inventory, init.nextUid);
-    this.inventory.onChange = () => this.events.emit('inventory');
+    this.inventory.onChange = () => {
+      this.unwearWhatIsGone();
+      this.events.emit('inventory');
+    };
     if (init.ground) {
       for (const [key, items] of Object.entries(init.ground)) {
         const [kx, ky] = key.split(',');
@@ -1370,7 +1373,54 @@ export class Game {
   }
 
   isEquipped(uid: number): boolean {
-    return Object.values(this.player.equipped).some((v) => v === uid);
+    if (uid === undefined) return false;
+    for (const slot of SLOTS) if (this.player.equipped[slot] === uid) return !!this.inventory.get(uid);
+    return false;
+  }
+
+  /**
+   * Empty any slot whose thing has left your pack.
+   *
+   * A slot held a number and nothing ever took the number back out of it. So
+   * a helm you dropped, stowed in a crate, traded away or wore through stayed
+   * in the slot it was worn in, `isEquipped` answered off the number alone,
+   * and the helm went on reading as worn wherever it had got to -- "even
+   * dropping and picking it up indicates that i'm still wearing it". Worse
+   * than the mark: the slot was still the slot, so picking the thing up again
+   * put it back on your head without anybody asking, and `Take it off` was
+   * the one entry the menu would not offer, because as far as this was
+   * concerned the thing was already off.
+   *
+   * Run off the pack's own change hook rather than at each of the dozen
+   * places a thing can leave it, because there is no way out of a pack that
+   * does not go past that hook.
+   */
+  private unwearWhatIsGone(): void {
+    for (const slot of SLOTS) {
+      const uid = this.player.equipped[slot];
+      if (uid === null || uid === undefined) continue;
+      if (!this.inventory.get(uid)) this.player.equipped[slot] = null;
+    }
+  }
+
+  /**
+   * What the island says you have on.
+   *
+   * `equipped` is a column of the player row that the island has kept and
+   * written to since the day `equip` was dispatched there, and has never once
+   * sent back -- so a browser that reloaded held an empty record, nothing in
+   * the pack was marked worn, and `Take it off` never appeared on anything,
+   * whatever the island had you wearing. Replaced wholesale rather than
+   * merged: the island is the one that knows, and an empty slot has to be
+   * able to mean "nothing is on it".
+   */
+  sawEquipped(what: Record<string, number | null>): void {
+    for (const slot of SLOTS) {
+      const v = what[slot];
+      this.player.equipped[slot] = typeof v === 'number' ? v : null;
+    }
+    this.unwearWhatIsGone();
+    this.events.emit('inventory');
   }
 
   /** Whether the thing in hand takes both of them. */

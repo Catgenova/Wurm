@@ -376,6 +376,16 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
      * meal's favour showed for a browser that had granted it to itself.
      */
     if (typeof what.rested === 'number') game.player.rested = what.rested;
+    /*
+     * And what you have on, which is the same story one column over. The
+     * island has dispatched `equip` and `unequip` and kept the answer in
+     * `player.equipped` all along, and never sent it -- so a reload left the
+     * browser holding an empty record. Nothing read as worn, no armour of
+     * yours counted towards what you could carry, and the menu offered
+     * `Wear or wield` on the helm already on your head and never `Take it
+     * off` on anything: "there's no option to unequip gear."
+     */
+    if (what.equipped) game.sawEquipped(what.equipped as Record<string, number | null>);
     if (what.boons) game.player.boons = what.boons as typeof game.player.boons;
     if (what.knacks) game.player.knacks = what.knacks;
     if (what.titles) game.player.titles = what.titles;

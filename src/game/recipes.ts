@@ -118,13 +118,13 @@ export const RECIPES: Recipe[] = [
   { id: 'make_clay_pot', category: 'Clay & thatch', result: 'unfired_clay_pot', inputs: [{ item: 'clay', count: 2 }], skill: 'pottery', label: 'Shape a pot', verb: 'shaping a pot', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You raise the walls of a deep pot. Fire it in a kiln.', fail: 'The pot goes out of true as you draw it up and you press it back into a lump.' },
   { id: 'make_clay_jar', category: 'Clay & thatch', result: 'unfired_clay_jar', inputs: [{ item: 'clay' }], skill: 'pottery', label: 'Shape a jar', verb: 'shaping a jar', baseTime: 7, stamina: 0.02, difficulty: 10, done: 'You shape a jar and a lid to sit on it. Fire them in a kiln.', fail: 'The neck collapses. You fail to shape a jar.' },
   { id: 'make_adobe', category: 'Clay & thatch', result: 'adobe', inputs: [{ item: 'clay' }, { item: 'mixed_grass' }], skill: 'pottery', label: 'Make adobe', verb: 'making adobe', baseTime: 4, stamina: 0.02, done: 'You press clay and grass into an adobe block.' },
-  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
-  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
-  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
-  { id: 'fit_sickle_blade', category: 'Woodwork', result: 'sickle', inputs: [{ item: 'sickle_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a handle', verb: 'fitting a handle', baseTime: 5, stamina: 0.02, done: 'You fit a handle and the sickle is finished.' },
-  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
-  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
-  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
+  { id: 'fit_rake_head', category: 'Woodwork', result: 'rake', inputs: [{ item: 'rake_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the rake is finished.' },
+  { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
+  { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
+  { id: 'fit_sickle_blade', category: 'Woodwork', result: 'sickle', inputs: [{ item: 'sickle_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a handle', verb: 'fitting a handle', baseTime: 5, stamina: 0.02, done: 'You fit a handle and the sickle is finished.' },
+  { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
+  { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
+  { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
   // Fibre is spun on a spindle and woven on a loom; nothing shortcuts either.
   { id: 'make_toolbelt', category: 'Cloth', result: 'toolbelt', inputs: [{ item: 'leather', count: 4 }, { item: 'ribbon', count: 2 }], tool: 'awl', skill: 'leatherworking', label: 'Stitch a toolbelt', verb: 'stitching a toolbelt', baseTime: 16, stamina: 0.04, difficulty: 22, done: 'You cut the loops, set the pouches and buckle it. One loop for every ten points of the work.', fail: 'The loops tear out of the belt one after another.', consumeOnFail: true },
   { id: 'make_rug', category: 'Cloth', result: 'rug', inputs: [{ item: 'cloth', count: 4 }, { item: 'yarn', count: 6 }], tool: 'needle', station: 'loom', skill: 'tailoring', label: 'Weave a rug', verb: 'weaving a rug', baseTime: 20, stamina: 0.04, difficulty: 20, done: 'You weave a rug wide enough to sit on cross-legged and knot the fringe.', fail: 'The weave draws in at the middle and the whole thing sits crooked.', consumeOnFail: true },
@@ -176,21 +176,21 @@ export const RECIPES: Recipe[] = [
   { id: 'make_work_post', category: 'Woodwork', result: 'work_post', inputs: [{ item: 'plank', count: 2 }, { item: 'shaft', count: 2 }, { item: 'nail', count: 4 }, { item: 'ribbon', count: 1 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build a work post', verb: 'building a work post', baseTime: 9, stamina: 0.04, difficulty: 16, done: 'You nail a crossbar to the stake, point the foot of it and tack the ribbon on for a marker.', fail: 'The stake splits along the grain as you point it.' },
   { id: 'make_bucket', category: 'Woodwork', result: 'bucket', inputs: [{ item: 'plank', count: 3 }, { item: 'nail', count: 6 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build a bucket', verb: 'building a bucket', baseTime: 7, stamina: 0.03, difficulty: 12, done: 'You raise the staves and hoop a bucket.', fail: 'The staves will not pull together and the bucket leaks.' },
   // Weapons: a head from the anvil and a length of wood to put it on.
-  { id: 'fit_short_sword_blade', category: 'Woodwork', result: 'short_sword', inputs: [{ item: 'short_sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 6, stamina: 0.03, done: 'You bind a grip to the blade and the short sword is finished.' },
-  { id: 'fit_long_sword_blade', category: 'Woodwork', result: 'long_sword', inputs: [{ item: 'long_sword_blade' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 8, stamina: 0.04, done: 'You bind a two-handed grip to the blade and the long sword is finished.' },
-  { id: 'fit_axe_head', category: 'Woodwork', result: 'battle_axe', inputs: [{ item: 'axe_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', material: 'metal', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.04, done: 'You wedge the head onto a long haft and the battle axe is finished.' },
-  { id: 'fit_maul_head', category: 'Woodwork', result: 'maul', inputs: [{ item: 'maul_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 4 }], skill: 'carpentry', material: 'metal', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.05, done: 'You wedge the head onto a long haft and the maul is finished.' },
-  { id: 'fit_spear_head', category: 'Woodwork', result: 'spear', inputs: [{ item: 'spear_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 6, stamina: 0.03, done: 'You bind the head to a long shaft and the spear is finished.' },
-  { id: 'make_hunting_knife', category: 'Woodwork', result: 'hunting_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 5, stamina: 0.02, done: 'You fit a grip and the hunting knife is finished.' },
+  { id: 'fit_short_sword_blade', category: 'Woodwork', result: 'short_sword', inputs: [{ item: 'short_sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 6, stamina: 0.03, done: 'You bind a grip to the blade and the short sword is finished.' },
+  { id: 'fit_long_sword_blade', category: 'Woodwork', result: 'long_sword', inputs: [{ item: 'long_sword_blade' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 8, stamina: 0.04, done: 'You bind a two-handed grip to the blade and the long sword is finished.' },
+  { id: 'fit_axe_head', category: 'Woodwork', result: 'battle_axe', inputs: [{ item: 'axe_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 3 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.04, done: 'You wedge the head onto a long haft and the battle axe is finished.' },
+  { id: 'fit_maul_head', category: 'Woodwork', result: 'maul', inputs: [{ item: 'maul_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 4 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a haft', verb: 'fitting a haft', baseTime: 8, stamina: 0.05, done: 'You wedge the head onto a long haft and the maul is finished.' },
+  { id: 'fit_spear_head', category: 'Woodwork', result: 'spear', inputs: [{ item: 'spear_head' }, { item: 'shaft', count: 2 }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 6, stamina: 0.03, done: 'You bind the head to a long shaft and the spear is finished.' },
+  { id: 'make_hunting_knife', category: 'Woodwork', result: 'hunting_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a grip', verb: 'fitting a grip', baseTime: 5, stamina: 0.02, done: 'You fit a grip and the hunting knife is finished.' },
   /*
    * And the three handles that were never written down. A blade comes out of
    * a mould and a tool comes off the bench; these three had the first half and
    * not the second, so the saw, the trowel and the carving knife you came
    * ashore with were the only ones there would ever be.
    */
-  { id: 'make_carving_knife', category: 'Woodwork', result: 'carving_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', material: 'metal', label: 'Fit a carving grip', verb: 'fitting a grip', baseTime: 5, stamina: 0.02, done: 'You fit a narrow grip and the carving knife is finished.' },
-  { id: 'fit_saw_blade', category: 'Woodwork', result: 'saw', inputs: [{ item: 'saw_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', material: 'metal', label: 'Fit a saw handle', verb: 'fitting a handle', baseTime: 6, stamina: 0.02, done: 'You rivet the blade to a handle and the saw is finished.' },
-  { id: 'fit_trowel_blade', category: 'Woodwork', result: 'trowel', inputs: [{ item: 'trowel_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', material: 'metal', label: 'Fit a trowel handle', verb: 'fitting a handle', baseTime: 5, stamina: 0.02, done: 'You set the blade in a handle and the trowel is finished.' },
+  { id: 'make_carving_knife', category: 'Woodwork', result: 'carving_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a carving grip', verb: 'fitting a grip', baseTime: 5, stamina: 0.02, done: 'You fit a narrow grip and the carving knife is finished.' },
+  { id: 'fit_saw_blade', category: 'Woodwork', result: 'saw', inputs: [{ item: 'saw_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a saw handle', verb: 'fitting a handle', baseTime: 6, stamina: 0.02, done: 'You rivet the blade to a handle and the saw is finished.' },
+  { id: 'fit_trowel_blade', category: 'Woodwork', result: 'trowel', inputs: [{ item: 'trowel_blade' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a trowel handle', verb: 'fitting a handle', baseTime: 5, stamina: 0.02, done: 'You set the blade in a handle and the trowel is finished.' },
   { id: 'make_club', category: 'Woodwork', result: 'club', inputs: [{ item: 'log' }], tool: 'carving_knife', skill: 'carpentry', material: 'wood', label: 'Carve a club', verb: 'carving a club', baseTime: 7, stamina: 0.04, difficulty: 8, done: 'You carve a heavy club out of the log.', fail: 'The grain runs out of true and the club splits.' },
   { id: 'make_wooden_shield', category: 'Woodwork', result: 'wooden_shield', inputs: [{ item: 'plank', count: 4 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', material: 'wood', label: 'Build a wooden shield', verb: 'building a shield', baseTime: 11, stamina: 0.05, difficulty: 16, done: 'You nail up a wooden shield and fit its grip.', fail: 'The boards will not pull together and the shield is scrap.' },
   { id: 'make_metal_shield', category: 'Woodwork', result: 'metal_shield', inputs: [{ item: 'shield_boss' }, { item: 'plank', count: 3 }, { item: 'nail', count: 8 }], tool: 'mallet', skill: 'carpentry', material: 'metal', label: 'Build a metal shield', verb: 'building a shield', baseTime: 13, stamina: 0.06, difficulty: 20, done: 'You face the boards with the boss and the metal shield is finished.', fail: 'The rivets pull through the boards and the shield is scrap.' },
@@ -199,7 +199,7 @@ export const RECIPES: Recipe[] = [
   { id: 'make_medium_bow', category: 'Woodwork', result: 'medium_bow', inputs: [{ item: 'shaft', count: 3 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', material: 'wood', wood: 'Birch', label: 'Tiller a medium bow', verb: 'tillering a bow', baseTime: 15, stamina: 0.05, difficulty: 22, done: 'You tiller a medium bow and string it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
   { id: 'make_long_bow', category: 'Woodwork', result: 'long_bow', inputs: [{ item: 'shaft', count: 4 }, { item: 'bow_string' }], tool: 'carving_knife', skill: 'bowyery', material: 'wood', wood: 'Oak', label: 'Tiller a long bow', verb: 'tillering a bow', baseTime: 18, stamina: 0.06, difficulty: 30, done: 'You tiller a long bow and string it. It takes an age to draw and ends most things at the end of it.', fail: 'The limbs come out uneven and the stave is firewood.', consumeOnFail: true },
   { id: 'make_javelin', category: 'Woodwork', result: 'javelin', inputs: [{ item: 'shaft', count: 2 }, { item: 'arrow_head', count: 1 }], tool: 'carving_knife', skill: 'fletching', material: 'metal', label: 'Shave a javelin', verb: 'shaving a javelin', baseTime: 7, stamina: 0.03, difficulty: 10, done: 'You shave the shaft down, set the head and balance it on one finger.', fail: 'It comes out crooked and will fly like a crooked thing. You break it up.', consumeOnFail: true },
-  { id: 'fit_throwing_axe', category: 'Woodwork', result: 'throwing_axe', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', material: 'metal', label: 'Fit a short haft', verb: 'fitting a short haft', baseTime: 6, stamina: 0.03, done: 'You cut the haft short and wedge the head on. It wants to turn in the hand.' },
+  { id: 'fit_throwing_axe', category: 'Woodwork', result: 'throwing_axe', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a short haft', verb: 'fitting a short haft', baseTime: 6, stamina: 0.03, done: 'You cut the haft short and wedge the head on. It wants to turn in the hand.' },
   { id: 'make_arrows', category: 'Woodwork', result: 'arrow', count: 3, inputs: [{ item: 'shaft' }, { item: 'arrow_head', count: 3 }, { item: 'feather', count: 3 }], tool: 'carving_knife', skill: 'fletching', material: 'metal', label: 'Fletch arrows', verb: 'fletching', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You split the shaft, set the heads and fletch three arrows.', fail: 'The fletching will not sit straight and the arrows are spoiled.', consumeOnFail: true },
   // Alchemy: ashes leached in water, and what lye is for.
   { id: 'make_lye', category: 'Alchemy', result: 'lye_bucket', inputs: [{ item: 'water_bucket' }, { item: 'ash', count: 2 }], skill: 'alchemy', label: 'Leach into lye', verb: 'making lye', baseTime: 12, stamina: 0.03, difficulty: 14, done: 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', fail: 'The ashes settle out again and you are left with dirty water.', consumeOnFail: true, salvage: [['bucket', 1]] },
@@ -501,12 +501,42 @@ export interface Prospect {
   toolBound: boolean;
   /** Whether a tool is involved at all. */
   tooled: boolean;
+  /** Whether the parts decide it rather than the hands, and there is no roll. */
+  fromInputs: boolean;
+  /** The share of what the parts are worth that survives the work. */
+  keep: number;
+  /** Whether every part it is made of is in the pack, so there is a number to give. */
+  partsInHand: boolean;
 }
+
+/** How much of what goes into a recipe comes out the other side of it. */
+export const inputKeep = (g: Game, r: Recipe): number => 0.78 + g.skills.get(r.skill) / 460;
 
 export function prospect(r: Recipe, g: Game): Prospect {
   const ceiling = Math.min(100, Math.max(1, g.skills.get(r.skill)));
+  /*
+   * A thing made out of its own parts is not rolled for at all: what comes
+   * off the bench is what went into it, less whatever the hands lose of it.
+   * So the number to show is the parts, not the skill -- and until every part
+   * is in the pack there is no number to show, only the share.
+   */
+  if (r.qlFromInputs) {
+    const keep = inputKeep(g, r);
+    const partsInHand = r.inputs.every((i) => g.inventory.find(i.item));
+    return {
+      ceiling: partsInHand ? Math.max(1, Math.min(100, inputQl(g, r) * keep)) : 0,
+      reach: 1,
+      short: 0,
+      toolBound: false,
+      tooled: false,
+      fromInputs: true,
+      keep,
+      partsInHand,
+    };
+  }
   const toolQl = r.tool ? g.toolQl(r.tool) : 0;
-  if (!r.tool || toolQl <= 0) return { ceiling, reach: 1, short: ceiling, toolBound: false, tooled: false };
+  const rolled = { fromInputs: false, keep: 1, partsInHand: false };
+  if (!r.tool || toolQl <= 0) return { ceiling, reach: 1, short: ceiling, toolBound: false, tooled: false, ...rolled };
   return {
     ceiling,
     reach: Math.max(0, Math.min(1, toolQl / 100)),
@@ -515,6 +545,7 @@ export function prospect(r: Recipe, g: Game): Prospect {
     // having. A tool already better than your hands costs a miss nothing.
     toolBound: toolQl < ceiling * 0.9,
     tooled: true,
+    ...rolled,
   };
 }
 
@@ -627,18 +658,30 @@ export function recipeNeeds(r: Recipe): string {
   return (r.tool ? [lower(r.tool), ...parts] : parts).join(' · ');
 }
 
-/** The quality of what a recipe is about to consume, weighted by how much of each it takes. */
+/**
+ * The quality of what a recipe is about to consume, weighted by how much of
+ * each of it goes in -- by mass, not by the count.
+ *
+ * It used to weigh by the count, which is the same answer for every recipe
+ * that had ever asked: the five alloys take lumps, and the lumps of a given
+ * alloy all weigh the same, so three of one and one of another divides the
+ * same way whichever unit you use. It is a different answer the moment a
+ * recipe takes things of different sizes -- a pickaxe head, a shaft and two
+ * nails -- where counting makes a nail worth as much as the head, and the two
+ * nails between them worth more. Two hundredths of a kilogram of iron do not
+ * decide what a pickaxe is.
+ */
 function inputQl(g: Game, r: Recipe): number {
   let total = 0;
-  let weight = 0;
+  let mass = 0;
   for (const i of r.inputs) {
-    const need = i.count ?? 1;
     const stack = g.inventory.find(i.item);
     if (!stack) continue;
-    total += stack.ql * need;
-    weight += need;
+    const share = itemDef(i.item).weight * (i.count ?? 1);
+    total += stack.ql * share;
+    mass += share;
   }
-  return weight ? total / weight : 1;
+  return mass ? total / mass : 1;
 }
 
 /**
@@ -721,7 +764,25 @@ export function recipeAction(r: Recipe): ActionDef {
       }
       const fromInputs = r.qlFromInputs ? inputQl(g, r) : 0;
       for (const i of r.inputs) if (!consumeAcross(g, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item))) return;
-      const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * (0.78 + g.skills.get(r.skill) / 460))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
+      /*
+       * Two rules, and which one a recipe takes is whether the thing is made
+       * out of its parts or made by the hands out of raw stuff.
+       *
+       * A pickaxe is its head. It was taking the second rule -- a straight
+       * roll on carpentry, with the head thrown away -- so an eighty-four
+       * quality vein, mined at ninety-three, smelted, poured and forged into
+       * a head worth seventy-eight became whatever the roll said, and every
+       * step of the metal before it counted for nothing. Reported from the
+       * island as a wall: the best anybody could get out of an eighty-four
+       * ore was seventy-two, however good their mining.
+       *
+       * So the seventeen recipes that join a forged part to a handle take the
+       * first rule now, the one the alloys have always taken: the parts,
+       * weighed by how much of each goes in, and the hands deciding how much
+       * of that survives -- 78% of it at no skill and 99.7% at a hundred. The
+       * ceiling is the parts; nothing is finer than what it is made of.
+       */
+      const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * inputKeep(g, r))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
       const item = g.inventory.add(r.result, { count: r.count ?? 1, ql, extra: r.extra ?? mat });
       // Now and again a thing comes off the bench better than the hands that
       // made it had any right to produce. Nothing brings it on.

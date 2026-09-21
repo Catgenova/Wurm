@@ -10451,3 +10451,72 @@ select '1017b. one side opened up and one wall left half built: '
 update building set levels = 2 where world_id = :'world2' and id = 90 \g /dev/null
 select '1017c. and a second storey planned over it, with nothing on it at all: '
      || coalesce(level_gap(:'world2', 90, 1, 30.5, 30.5), 'CLOSED IN');
+
+\echo ''
+\echo '--- the island says what you have on'
+/*
+ * Reported: "there's no option to unequip gear, even dropping and picking it
+ * up indicates that i'm still wearing it."
+ *
+ * `rpc_do` has written `player.equipped` on every equip and unequip since the
+ * day those two were dispatched here, and `rpc_settle` never sent it back. So
+ * a browser that reloaded held an empty record, nothing in its pack was marked
+ * worn, and the item menu — which asks `equip` whether the thing is *not* on
+ * and `unequip` whether it is — offered `Wear or wield` on the helm already on
+ * your head and `Take it off` on nothing at all.
+ */
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+update player set equipped = '{}'::jsonb where world_id = :'world2' and uid = :'ivar' \g /dev/null
+select '1018. nothing on: ' || (rpc_settle(null, :'world2')->>'equipped');
+delete from item where world_id = :'world2' and def = 'leather_cap' \g /dev/null
+select give(:'world2', :'ivar', 'leather_cap', 1, 50) \g /dev/null
+select id from item where world_id = :'world2' and holder = 'player'
+  and holder_uid = :'ivar' and def = 'leather_cap' order by id desc limit 1 \gset cap_
+select perform_fight(:'world2', :'ivar', 'equip', jsonb_build_object('kind', 'item', 'uid', :'cap_id')) \g /dev/null
+select '1018b. the cap on, and the beat says so: ' || (rpc_settle(null, :'world2')->>'equipped')
+     || ' — which is the cap (' || :'cap_id' || ')';
+select perform_fight(:'world2', :'ivar', 'unequip', jsonb_build_object('kind', 'item', 'uid', :'cap_id')) \g /dev/null
+select '1018c. and off again: ' || (rpc_settle(null, :'world2')->>'equipped');
+
+\echo ''
+\echo '--- a pickaxe is its head'
+/*
+ * Reported: "Max ql anyone is getting from an 84ql ore is 72 even at 93
+ * mining." The wall was not in the mining. `fit_pickaxe_head` carried no
+ * `ql_from_inputs`, so the finished tool was a straight roll on carpentry with
+ * the head thrown away — and the same was true of every other tool in the game
+ * that is finished by pushing a shaft into it.
+ *
+ * Two of them are worth watching. A good head with a good shaft keeps almost
+ * all of it. A good head with a *poor* shaft comes out in between, because the
+ * inputs are weighed by mass: 1.2 kg of head against a 1 kg shaft and 20 grams
+ * of nails, so the nails decide nothing and the handle decides a lot.
+ */
+select '1019. the seventeen fittings take their quality from their parts: '
+     || (select count(*)::text from recipe where id like 'fit\_%' and ql_from_inputs)
+     || ' of ' || (select count(*)::text from recipe where id like 'fit\_%')
+     || ' fit_* recipes, plus ' || (select count(*)::text from recipe
+          where id in ('make_hunting_knife', 'make_carving_knife') and ql_from_inputs);
+update skill set value = 93 where uid = :'ivar' and id = 'carpentry' \g /dev/null
+insert into skill (world_id, uid, id, value) select :'world2', :'ivar', 'carpentry', 93
+  where not exists (select 1 from skill where uid = :'ivar' and id = 'carpentry') \g /dev/null
+delete from item where world_id = :'world2' and holder_uid = :'ivar'
+  and def in ('pickaxe_head', 'shaft', 'nail', 'pickaxe') \g /dev/null
+select give(:'world2', :'ivar', 'pickaxe_head', 1, 84, 'iron') \g /dev/null
+select give(:'world2', :'ivar', 'shaft', 1, 84, 'oak') \g /dev/null
+select give(:'world2', :'ivar', 'nail', 2, 84, 'iron') \g /dev/null
+select perform_craft(:'world2', :'ivar', 'fit_pickaxe_head', '{}'::jsonb) \g /dev/null
+select '1019b. an 84 head on an 84 shaft, fitted at carpentry 93: QL '
+     || to_char((select ql from item where world_id = :'world2' and holder = 'player'
+                 and holder_uid = :'ivar' and def = 'pickaxe' order by id desc limit 1), 'FM990.0')
+     || ' — it used to be a roll on carpentry alone, with the head counting for nothing';
+delete from item where world_id = :'world2' and holder_uid = :'ivar'
+  and def in ('pickaxe_head', 'shaft', 'nail', 'pickaxe') \g /dev/null
+select give(:'world2', :'ivar', 'pickaxe_head', 1, 84, 'iron') \g /dev/null
+select give(:'world2', :'ivar', 'shaft', 1, 10, 'pine') \g /dev/null
+select give(:'world2', :'ivar', 'nail', 2, 84, 'iron') \g /dev/null
+select perform_craft(:'world2', :'ivar', 'fit_pickaxe_head', '{}'::jsonb) \g /dev/null
+select '1019c. the same head on a QL 10 shaft: QL '
+     || to_char((select ql from item where world_id = :'world2' and holder = 'player'
+                 and holder_uid = :'ivar' and def = 'pickaxe' order by id desc limit 1), 'FM990.0')
+     || ' — the handle is 45% of a pickaxe by weight, so a bad one shows';

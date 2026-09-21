@@ -378,6 +378,16 @@ in world time.
   a beginner's hands makes beginner's work and simply stops wasting the
   material. Work with no tool at all — foraging, farming — has nothing to roll
   against and comes out around what the skill can do.
+- **Quality: a thing made of parts is worth what its parts are worth.** The
+  rule above is for work made out of raw stuff. A recipe that joins finished
+  parts together — the five alloys, and the seventeen that fit a forged head,
+  blade or haft to a handle — is not rolled for at all: it comes out at what
+  went into it, weighed by how much of each of it goes in, and the trade skill
+  decides how much of that survives, from 78% at no skill to 99.7% at a
+  hundred. So a pickaxe is its head (1.2 kg of it) and its shaft (1 kg), and
+  the two nails (10 g apiece) decide nothing. Mining a better vein, smelting
+  it well and forging a better head all reach the tool at the end of it, and a
+  poor handle on a good head shows.
 - **Rare things.** About one thing in a hundred comes off the bench **rare**,
   one in a thousand **supreme**, one in ten thousand **fantastic**. Nothing
   brings it on — not skill, not tools, not the metal — and nothing makes it

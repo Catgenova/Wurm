@@ -483,6 +483,8 @@ export interface IslandHooks {
     titles?: string[];
     title?: string | null;
     nutrition?: Record<string, number>;
+    /** And what you have on, which the island writes on every equip and never said. */
+    equipped?: Record<string, number | null>;
     /**
      * And the journal, which on an island could not tick a single one of its
      * eighty-five goals: forty-six of them count things done, the counting was
@@ -1320,6 +1322,7 @@ export class Island {
         marks?: { tiles?: number[]; secs?: number } | null;
         rested?: number; boons?: unknown[]; knacks?: Record<string, number>;
         titles?: string[]; title?: string | null; nutrition?: Record<string, number>;
+        equipped?: Record<string, number | null>;
         tally?: Record<string, number>; ledger?: Record<string, unknown>; ticked?: string[];
         goes?: number | null; time?: number | null; night?: boolean | null;
         said?: Array<{ n: number; text: string; kind: string; at?: string }> | null;
@@ -1362,6 +1365,7 @@ export class Island {
         marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
         rested: said.rested, boons: said.boons, knacks: said.knacks,
         titles: said.titles, title: said.title, nutrition: said.nutrition,
+        equipped: said.equipped,
         tally: said.tally, ledger: said.ledger, ticked: said.ticked,
       });
       this.doing = said.act ?? null;

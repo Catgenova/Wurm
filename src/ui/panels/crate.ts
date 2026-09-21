@@ -8,6 +8,7 @@ import type { MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 import { orderBy, sortSelect, type SortKey } from '../sorting';
+import { damageCell, nameCell, qualityCell } from '../itemcells';
 
 /** A crate or a piece of storage furniture, seen through the same window. */
 export interface Store {
@@ -404,13 +405,16 @@ export class CratePanel {
     for (const item of orderBy(store.items.filter((it) => this.matches(it)), this.sort)) {
       const row = document.createElement('div');
       row.className = 'inv-row';
-      const name = document.createElement('span');
-      name.className = 'inv-name';
-      name.textContent = item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item);
-      const ql = document.createElement('span');
-      ql.textContent = item.ql.toFixed(1);
-      const dmg = document.createElement('span');
-      dmg.textContent = item.dmg.toFixed(1);
+      /*
+       * The same three cells the pack window writes, off the same helpers.
+       * A rare thing in a crate was written in the ordinary colour and a
+       * blunt tool in a crate said only the number it was made at, so the
+       * one list you go to when you are looking for a particular thing was
+       * the one list that told you least about what was in it.
+       */
+      const name = nameCell(item, { worn: this.game.isEquipped(item.uid) });
+      const ql = qualityCell(this.game, item);
+      const dmg = damageCell(item);
       const take = document.createElement('button');
       take.type = 'button';
       take.className = 'tb-btn tb-small';

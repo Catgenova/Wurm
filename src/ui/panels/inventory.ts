@@ -1,5 +1,6 @@
 import { CARRY_STOP, type Game } from '../../game/game';
-import { itemDef, itemName, type Item, type ItemCategory, itemWeight, rarityOf, bagRoom, bagUnits, isBag } from '../../game/items';
+import { itemDef, itemName, type Item, type ItemCategory, itemWeight, bagRoom, bagUnits, isBag } from '../../game/items';
+import { damageCell, nameCell, qualityCell } from '../itemcells';
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
@@ -145,44 +146,9 @@ export class InventoryPanel {
   private row(item: Item): HTMLDivElement {
     const row = document.createElement('div');
     row.className = 'inv-row' + (item.uid === this.selected ? ' selected' : '');
-    const name = document.createElement('span');
-    name.className = 'inv-name';
-    const worn = this.game.isEquipped(item.uid);
-    const marks = [worn ? 'worn' : '', item.locked ? 'kept' : ''].filter(Boolean);
-    const full = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item)) + (marks.length ? ` · ${marks.join(' · ')}` : '');
-    name.textContent = full;
-    // The column is narrow and some of these names are long.
-    name.title = item.locked ? `${full}. Kept back: nothing will spend, drop or feed it away.` : full;
-    // A rare thing is written in its own colour, so it is not lost in a list.
-    const rare = rarityOf(item);
-    if (rare.colour) name.style.color = rare.colour;
-    if (worn) name.classList.add('inv-worn');
-    if (item.locked) name.classList.add('inv-kept');
-    const ql = document.createElement('span');
-    ql.textContent = item.ql.toFixed(1);
-    // What the thing is worth at the work now: its quality dragged down by the
-    // state it is in and lifted by its metal, its rarity and any blessing.
-    const worth = this.game.toolWorth(item);
-    if (itemDef(item.id).category === 'tool') {
-      ql.title = `Made at ${item.ql.toFixed(1)}; it works as a ${worth.toFixed(1)} today.`;
-      if (worth < item.ql - 0.05) {
-        ql.classList.add('inv-blunt');
-        ql.textContent = `${item.ql.toFixed(1)}→${worth.toFixed(0)}`;
-      } else if (worth > item.ql + 0.05) {
-        ql.classList.add('inv-keen');
-        ql.textContent = `${item.ql.toFixed(1)}→${worth.toFixed(0)}`;
-      }
-    }
-    const dmg = document.createElement('span');
-    dmg.textContent = item.dmg.toFixed(1);
-    // A tool close to going to pieces says so where you are looking at it.
-    if (item.dmg >= 90) {
-      dmg.classList.add('inv-breaking');
-      dmg.title = 'About to go to pieces. Repair it now.';
-    } else if (item.dmg >= 75) {
-      dmg.classList.add('inv-worn-out');
-      dmg.title = 'Getting badly worn. Repair it before it breaks.';
-    }
+    const name = nameCell(item, { worn: this.game.isEquipped(item.uid) });
+    const ql = qualityCell(this.game, item);
+    const dmg = damageCell(item);
     const wt = document.createElement('span');
     wt.textContent = itemWeight(item).toFixed(1);
     row.append(name, ql, dmg, wt);

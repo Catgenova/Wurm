@@ -144,14 +144,27 @@ export class CraftPanel {
     const pr = prospect(r, this.game);
     const worth = document.createElement('small');
     worth.className = 'craft-ql' + (pr.toolBound ? ' craft-ql-held' : '');
-    worth.textContent = !pr.tooled
-      ? `up to QL ${pr.ceiling.toFixed(0)}`
-      : pr.reach >= 0.9
-        ? `QL ${pr.ceiling.toFixed(0)}, near enough every time`
-        : `up to QL ${pr.ceiling.toFixed(0)}, about ${Math.round(pr.reach * 100)}% of goes; the rest near QL ${pr.short.toFixed(0)}`;
-    worth.title = pr.toolBound
-      ? `Your ${lower(r.tool as string)} is what is holding this back, not your hands. A better one reaches your skill more often.`
-      : 'Your skill is the ceiling; the tool decides how often a go reaches it.';
+    /*
+     * Two different sentences, because there are two different rules. A thing
+     * made out of its own parts is not rolled for: it is worth what its parts
+     * are worth, less the share the work loses, so the line names that number
+     * and not the skill. Everything else is a roll against the hands, with the
+     * tool deciding how often a go reaches them.
+     */
+    worth.textContent = pr.fromInputs
+      ? pr.partsInHand
+        ? `QL ${pr.ceiling.toFixed(0)}, out of the parts in your pack`
+        : `${Math.round(pr.keep * 100)}% of what the parts are worth`
+      : !pr.tooled
+        ? `up to QL ${pr.ceiling.toFixed(0)}`
+        : pr.reach >= 0.9
+          ? `QL ${pr.ceiling.toFixed(0)}, near enough every time`
+          : `up to QL ${pr.ceiling.toFixed(0)}, about ${Math.round(pr.reach * 100)}% of goes; the rest near QL ${pr.short.toFixed(0)}`;
+    worth.title = pr.fromInputs
+      ? `The parts decide this, not a roll: what goes in, weighed by how much of each of it goes in, and your ${r.skill.replace(/_/g, ' ')} keeps ${Math.round(pr.keep * 100)}% of it. A better part is the only way to a better one.`
+      : pr.toolBound
+        ? `Your ${lower(r.tool as string)} is what is holding this back, not your hands. A better one reaches your skill more often.`
+        : 'Your skill is the ceiling; the tool decides how often a go reaches it.';
     name.append(worth);
     const needs = document.createElement('div');
     needs.className = 'craft-needs';
