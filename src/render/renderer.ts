@@ -968,21 +968,14 @@ export class Renderer {
     const atY = (u: number, v: number): number =>
       (pts[A + 1] * (1 - u) + pts[B + 1] * u) * (1 - v) + (pts[D + 1] * (1 - u) + pts[C + 1] * u) * v;
     const look = m.looks[grassLook(x, y)];
-    const count = (lo: number, hi: number, salt: number): number =>
-      lo + Math.floor(hash2(x, y, salt) * (hi - lo + 1));
-    for (let i = 0, k = count(look.strewN[0], look.strewN[1], 301); i < k; i++) {
-      const s = m.strew[look.strew[Math.floor(hash2(x, y, 310 + i * 3) * look.strew.length) % look.strew.length]];
-      const u = 0.1 + hash2(x, y, 311 + i * 3) * 0.8;
-      const v = 0.1 + hash2(x, y, 312 + i * 3) * 0.8;
-      const ready = this.atSize(s.canvas, s.w * zoom, s.h * zoom);
-      ctx.drawImage(ready, atX(u, v) - s.ax * zoom, atY(u, v) - s.ay * zoom, s.w * zoom, s.h * zoom);
-    }
-    for (let i = 0, k = count(look.standN[0], look.standN[1], 401); i < k; i++) {
-      const t = m.tufts[look.stand[Math.floor(hash2(x, y, 410 + i * 3) * look.stand.length) % look.stand.length]];
-      const u = 0.16 + hash2(x, y, 411 + i * 3) * 0.68;
-      const v = 0.16 + hash2(x, y, 412 + i * 3) * 0.68;
-      const ready = this.atSize(t.canvas, t.w * zoom, t.h * zoom);
-      ctx.drawImage(ready, atX(u, v) - t.ax * zoom, atY(u, v) - t.ay * zoom, t.w * zoom, t.h * zoom);
+    const lo = look.blobN[0];
+    const n = lo + Math.floor(hash2(x, y, 301) * (look.blobN[1] - lo + 1));
+    for (let i = 0; i < n; i++) {
+      const b = m.blobs[look.blobs[Math.floor(hash2(x, y, 310 + i * 3) * look.blobs.length) % look.blobs.length]];
+      const u = 0.14 + hash2(x, y, 311 + i * 3) * 0.72;
+      const v = 0.14 + hash2(x, y, 312 + i * 3) * 0.72;
+      const ready = this.atSize(b.canvas, b.w * zoom, b.h * zoom);
+      ctx.drawImage(ready, atX(u, v) - b.ax * zoom, atY(u, v) - b.ay * zoom, b.w * zoom, b.h * zoom);
     }
   }
 
