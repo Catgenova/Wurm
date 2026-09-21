@@ -49,6 +49,18 @@ export type RGB = readonly [number, number, number];
 export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone]);
 
 /**
+ * The grounds drawn as flat colour with things growing on them.
+ *
+ * Everything else gets grain -- five specks a tile, close up, so a flat
+ * lozenge does not read as paper. A field does not want it: the ground these
+ * are drawn from is one colour with the detail sitting on it in pieces you
+ * can count, and a speckle over the whole tile puts the ground into the same
+ * range of light and dark as the clumps standing in it. What grows on each is
+ * in `meadow.ts`.
+ */
+export const SWARDED: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe]);
+
+/**
  * The bare grounds that grass runs out over the edge of.
  *
  * Earth somebody walked or packed is the one ground a field does not stop
@@ -60,7 +72,7 @@ export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, Tile
 
 /** Whether these two grounds meet in a ruffle rather than a blended band. */
 export const ruffledJoin = (a: number, b: number): boolean =>
-  (a === TileType.Grass && RUFFLED.has(b)) || (b === TileType.Grass && RUFFLED.has(a));
+  (SWARDED.has(a) && RUFFLED.has(b)) || (SWARDED.has(b) && RUFFLED.has(a));
 
 /**
  * Ground a spadeful of dirt covers over, leaving dirt.
@@ -203,7 +215,18 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.PackedDirt]: { name: 'Packed dirt', color: [181, 156, 120], speed: 1.05, pavable: true, roll: 0.9 },
   [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
   [TileType.Rock]: { name: 'Rock', color: [132, 130, 124], speed: 0.9, mineable: true, roll: 0.85 },
-  [TileType.Steppe]: { name: 'Steppe', color: [156, 150, 84], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  /*
+   * Dry grass, pale and clean, rather than the mustard it was. 156, 150, 84
+   * was a colour for a field of one flat green to sit beside and came out as
+   * mud against a teal one -- it was the loudest thing left on the island and
+   * covered more of it than anything else does.
+   *
+   * It stops here rather than going paler still. Two hundred and four, a
+   * hundred and ninety-eight, a hundred and fifty read better on its own and
+   * sat within ten of the sand, and a beach you cannot tell from a steppe is
+   * worse than a steppe that is a little green.
+   */
+  [TileType.Steppe]: { name: 'Steppe', color: [178, 190, 140], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   [TileType.Tundra]: { name: 'Tundra', color: [144, 154, 124], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Marsh]: { name: 'Marsh', color: [78, 112, 96], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
   [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },

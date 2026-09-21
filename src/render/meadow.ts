@@ -1,4 +1,5 @@
 import { hash2 } from '../world/noise';
+import { SWARDED, TILE_DEFS, TileType } from '../world/tiles';
 
 /**
  * The meadow: what grass is made of.
@@ -78,37 +79,88 @@ export interface Look {
 /** Under this, a look's blobs are a crowd and stack up the screen. */
 export const CROWD = 0.16;
 
-export interface Meadow {
+/** What one ground grows: the pictures, the ten arrangements of them, and how thickly. */
+export interface Sward {
   blobs: Sprig[];
   looks: Look[];
   /** Clumps to a tile, averaged over the ten: what the field's density is. */
   clumps: number;
+  /** The tone its ruffle is painted in where it runs out onto bare earth. */
+  hem: Green;
 }
 
 /* ---- the paints ---------------------------------------------------------- */
 
 /**
- * Three greens, each of them four tones: the line round the outside, the body,
+ * The four tones a clump is painted in: the line round the outside, the body,
  * the lighter side turned into the sun, and the pale crown on the top of it.
  * The same four the ivy on a wall is built from, because a clump of grass seen
  * from here and a clump of ivy seen from here are the same kind of thing.
- *
- * They are the same teal blue-green the field is, which is a hue off what
- * grass is meant to be and is the whole look of the place.
- *
- * Two of the three sit *below* the tile they grow out of, and only the crown
- * of any of them goes far above it. The first go at this was the other way
- * round -- three greens all lighter than the field, topped with something
- * very near cream -- and at the size these are actually drawn the crown is
- * most of the blob, so a hillside of them came out as a scatter of white
- * specks, which is a field of daisies and not a field of grass. A clump of
- * anything standing in grass is darker than the grass: it is more leaf in the
- * same square foot, and it shades its own feet.
  */
 interface Green { line: string; shade: string; lit: string; top: string }
-const DEEP: Green = { line: '#2c513d', shade: '#457c5f', lit: '#518a6c', top: '#6aac84' };
-const MID: Green = { line: '#39644d', shade: '#5ea07a', lit: '#6bad87', top: '#8bc29e' };
-const PALE: Green = { line: '#4b755d', shade: '#83be97', lit: '#8ec8a2', top: '#a4d4b3' };
+
+/**
+ * Those four, in three strengths, as offsets from the ground they grow out of:
+ * how much lighter or darker each is than the tile, and how much of the tile's
+ * own saturation it keeps. The hue is the tile's.
+ *
+ * Written this way round because a clump is a thing *of* its ground. The
+ * meadow's greens were settled by eye first and this is measured off them, so
+ * the meadow comes out of it unchanged to within a unit or two a channel --
+ * and any other ground that grows anything gets clumps its own colour would
+ * have grown, instead of a second palette to keep in step by hand.
+ *
+ * Two of the three sit below the ground and only the crown of any goes far
+ * above it. The first go at the meadow was the other way round -- three greens
+ * all lighter than the field, topped with something near cream -- and at the
+ * size a clump is drawn the crown is most of it, so a hillside came out as a
+ * scatter of white specks. A clump of anything standing in a field is darker
+ * than the field: it is more leaf in the same square foot, and it shades its
+ * own feet.
+ */
+type Tone = readonly [lighter: number, keepsSaturation: number];
+const TONES: Record<'deep' | 'mid' | 'pale', readonly [Tone, Tone, Tone, Tone]> = {
+  deep: [[-0.339, 0.81], [-0.206, 0.78], [-0.155, 0.71], [-0.039, 0.77]],
+  mid: [[-0.276, 0.74], [-0.086, 0.71], [-0.035, 0.78], [0.069, 0.85]],
+  pale: [[-0.208, 0.60], [0.045, 0.85], [0.086, 0.94], [0.153, 0.97]],
+};
+
+/** Hue, lightness and saturation of an r,g,b, each nought to one. */
+function hueOf(c: readonly number[]): [number, number, number] {
+  const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
+  const hi = Math.max(r, g, b), lo = Math.min(r, g, b), l = (hi + lo) / 2;
+  if (hi === lo) return [0, l, 0];
+  const d = hi - lo;
+  const sat = l > 0.5 ? d / (2 - hi - lo) : d / (hi + lo);
+  const h = hi === r ? ((g - b) / d + (g < b ? 6 : 0)) : hi === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, l, sat];
+}
+
+/** And back again, as a colour a canvas will take. */
+function hexOf(h: number, l: number, s: number): string {
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const at = (t: number): number => {
+    const u = (t + 1) % 1;
+    const v = u < 1 / 6 ? p + (q - p) * 6 * u
+      : u < 1 / 2 ? q
+        : u < 2 / 3 ? p + (q - p) * (2 / 3 - u) * 6
+          : p;
+    return Math.round(Math.max(0, Math.min(1, v)) * 255);
+  };
+  return `#${[at(h + 1 / 3), at(h), at(h - 1 / 3)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** The three strengths a given ground grows its clumps in. */
+function greensOf(color: readonly number[]): [deep: Green, mid: Green, pale: Green] {
+  const [h, l, s] = hueOf(color);
+  const one = (rows: readonly [Tone, Tone, Tone, Tone]): Green => {
+    const [line, shade, lit, top] = rows.map(([dl, ks]) =>
+      hexOf(h, Math.max(0.02, Math.min(0.97, l + dl)), s * ks));
+    return { line, shade, lit, top };
+  };
+  return [one(TONES.deep), one(TONES.mid), one(TONES.pale)];
+}
 
 /* ---- the machinery ------------------------------------------------------- */
 
@@ -270,6 +322,9 @@ const RUFFLE = 4.2;
  * there is nothing there to see, so it is cut off rather than left to be
  * painted over by whichever tile happens to be drawn next.
  *
+ * `pal` is the sward's own middle tone: a field ruffles in its own colour, or
+ * the steppe would run out onto a track in the meadow's green.
+ *
  * `a` and `b` are the two ends of the shared edge on screen and `cx, cy` is
  * the middle of the earth tile, which is the way in. `flip` says the two ends
  * came out in the other order this quarter turn -- without it the ruffle
@@ -277,7 +332,7 @@ const RUFFLE = 4.2;
  * and the ground crawls as the camera comes round.
  */
 export function ruffle(
-  g: Ctx, ax: number, ay: number, bx: number, by: number,
+  g: Ctx, pal: Green, ax: number, ay: number, bx: number, by: number,
   cx: number, cy: number, flip: boolean, seed: number, zoom: number,
 ): void {
   const ex = bx - ax, ey = by - ay;
@@ -307,16 +362,16 @@ export function ruffle(
   }
   const ink = Math.max(0.5, r * 0.11);
   union(g, cs, 0, 0, ink);
-  g.fillStyle = MID.line;
+  g.fillStyle = pal.line;
   g.fill();
   union(g, cs, 0, 0, 0);
-  g.fillStyle = MID.shade;
+  g.fillStyle = pal.shade;
   g.fill();
   g.save();
   union(g, cs, 0, 0, 0);
   g.clip();
   union(g, cs, -r * 0.12, -r * 0.26, -ink);
-  g.fillStyle = MID.lit;
+  g.fillStyle = pal.lit;
   g.fill();
   g.restore();
 }
@@ -369,8 +424,8 @@ function drift(x: number, y: number): number {
   return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
 }
 
-/** Which of the ten this tile is. */
-export function grassLook(x: number, y: number): number {
+/** Which of the ten this tile is. The drift is the place's, not the ground's. */
+export function swardLook(x: number, y: number): number {
   const n = drift(x, y);
   let base = CUTS.length - 1;
   for (let i = 0; i < CUTS.length; i++) if (n < CUTS[i]) { base = i; break; }
@@ -381,12 +436,49 @@ export function grassLook(x: number, y: number): number {
 
 /* ---- the whole of it ----------------------------------------------------- */
 
-let painted: Meadow | null = null;
+/** What one ground calls the things growing on it, for the tells. */
+interface Ground {
+  /** The one word for what grows on it: a clump in the lightest of it. */
+  word: string;
+  /** What its palest clumps mean, and what its deepest ones do. */
+  palest: string;
+  deepest: string;
+  /** So two grounds do not grow the same lumps in two colours. */
+  seed: number;
+}
 
-/** Painted once, the first time a field comes into view, and kept. */
-export function meadow(): Meadow {
-  const had = painted;
+const GROUNDS: Partial<Record<TileType, Ground>> = {
+  [TileType.Grass]: {
+    word: 'green',
+    palest: 'where the sun has been on it',
+    deepest: 'the wet corner of a field',
+    seed: 0,
+  },
+  [TileType.Steppe]: {
+    word: 'straw',
+    palest: 'bleached out: the crown of a rise, where the wind gets at it',
+    deepest: 'a hollow that held its water longer than the rest of it did',
+    seed: 1000,
+  },
+};
+
+const painted = new Map<TileType, Sward>();
+
+/**
+ * What a ground grows, painted once the first time any of it comes into view.
+ *
+ * Every colour in here is a share of the tile's own rather than a number of
+ * its own, so bringing a ground into this is a matter of saying what colour
+ * it is and what the stuff growing on it is called. The sizes and the ten
+ * arrangements are the same for all of them: a clump of dry steppe grass seen
+ * from standing height is a clump the same way a clump of meadow is, and the
+ * thing that makes a steppe a steppe is that it is the colour of straw.
+ */
+export function sward(type: TileType): Sward {
+  const had = painted.get(type);
   if (had) return had;
+  const ground = GROUNDS[type] ?? (GROUNDS[TileType.Grass] as Ground);
+  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color);
 
   /*
    * The blobs. Sizes are screen pixels at zoom one, where a tile is
@@ -405,11 +497,11 @@ export function meadow(): Meadow {
     const pad = Math.min(w, h) * 0.6 + 3;
     const cw = w + pad * 2, ch = h + pad * 2;
     blobs.push(sprig(cw, ch, cw / 2, ch / 2 + h * 0.34,
-      (g) => clump(g, cw / 2, ch / 2, w, h, rand(seed), pal)));
+      (g) => clump(g, cw / 2, ch / 2, w, h, rand(seed + ground.seed), pal)));
     return blobs.length - 1;
   };
   /*
-   * Four sizes in each of the three greens, and a long low one in each.
+   * Four sizes in each of the three strengths, and a long low one in each.
    *
    * The smallest is six pixels and not four. At four it is a speck: too small
    * to be a lobed thing with a top and a side, so all anybody sees is a dot,
@@ -422,7 +514,7 @@ export function meadow(): Meadow {
   const LONG = [grow(15, 5.8, MID, 163), grow(16.2, 6.2, DEEP, 167), grow(14.2, 5.4, PALE, 173)];
 
   /**
-   * The ten, in order of how much grows in them -- which `grassLook` leans
+   * The ten, in order of how much grows in them -- which `swardLook` leans
    * on, since the tile next to a drift takes the look one along from it and
    * one along has to mean a little more or a little less of the same thing.
    *
@@ -436,11 +528,11 @@ export function meadow(): Meadow {
       blobs: TINY, blobN: [1, 2], spread: 0.5 },
     { name: 'Cushions', tells: 'one or two middling round ones and nothing else',
       blobs: SMALL, blobN: [1, 2], spread: 0.28 },
-    { name: 'Pale', tells: 'one or two in the lightest green: where the sun has been on it',
+    { name: 'Pale', tells: `one or two in the lightest ${ground.word}: ${ground.palest}`,
       blobs: [TINY[2], SMALL[2], MEDIUM[2]], blobN: [1, 2], spread: 0.24 },
     { name: 'Strewn', tells: 'two or three small ones spread right across it',
       blobs: [...TINY, ...SMALL], blobN: [2, 3], spread: 0.5 },
-    { name: 'Deep', tells: 'one or two in the darkest green: the wet corner of a field',
+    { name: 'Deep', tells: `one or two in the darkest ${ground.word}: ${ground.deepest}`,
       blobs: [SMALL[1], MEDIUM[1], BIG[1]], blobN: [1, 2], spread: 0.24 },
     { name: 'Mound', tells: 'one big clump on its own, which is what a tile of it is for',
       blobs: BIG, blobN: [1, 1], spread: 0.4 },
@@ -456,19 +548,20 @@ export function meadow(): Meadow {
   // and nothing written down: `looks` is in the same order as `WEIGHTS`.
   const clumps = looks.reduce(
     (a, l, i) => a + WEIGHTS[i] * (l.blobN[0] + l.blobN[1]) / 2, 0) / TOTAL;
-  const made: Meadow = { blobs, looks, clumps };
-  painted = made;
+  const made: Sward = { blobs, looks, clumps, hem: MID };
+  painted.set(type, made);
   return made;
 }
 
 /**
- * Paint it while nobody is waiting on it, the way the walls are.
+ * Paint every sward while nobody is waiting on it, the way the walls are.
  *
- * It is a field's worth of drawing and it is all done the first time a blade
- * of grass comes into view, which is the first frame of the game.
+ * It is a field's worth of drawing per ground, and all of it is done the
+ * first time a blade of grass comes into view, which is the first frame.
  */
 export function warmMeadow(): void {
+  const paint = (): void => { for (const t of SWARDED) sward(t as TileType); };
   const idle = globalThis.requestIdleCallback;
-  if (typeof idle === 'function') idle(() => { meadow(); });
-  else setTimeout(() => { meadow(); }, 1200);
+  if (typeof idle === 'function') idle(paint);
+  else setTimeout(paint, 1200);
 }

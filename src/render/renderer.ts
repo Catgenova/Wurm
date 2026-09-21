@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -62,7 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { CROWD, grassLook, meadow, ruffle } from './meadow';
+import { CROWD, ruffle, sward, swardLook } from './meadow';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
@@ -702,12 +702,12 @@ export class Renderer {
     const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
     /*
      * A nudge of brightness per tile, so a field of one ground is not one
-     * flat sheet of colour. Grass gets none of it. A field is meant to read
-     * as one green with things standing in it, and a tenth either way per
+     * flat sheet of colour. A sward gets none of it. A field is meant to read
+     * as one colour with things standing in it, and a tenth either way per
      * tile came out as a chequerboard -- every tile a slightly different
      * green, which is the one thing a meadow never looks like.
      */
-    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (type === TileType.Grass ? 0 : 0.1);
+    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (SWARDED.has(type) ? 0 : 0.1);
     else {
       const k = Math.max(0.3, 1 - -avg / 80);
       r *= 0.72 * k;
@@ -790,12 +790,13 @@ export class Renderer {
   }
 
   /**
-   * Grass spilling over the edge of a track, on a tile of bare earth.
+   * A field spilling over the edge of a track, on a tile of bare earth.
    *
    * Every other ground meets its neighbour on the ruled line between them,
    * which is what a tile is. A field against a path somebody wore across it
    * does not: it thins out and gives up in lumps, and that ragged join is
-   * most of what makes a path look walked rather than painted on.
+   * most of what makes a path look walked rather than painted on. Meadow or
+   * steppe, whichever of them is beside the earth here, in its own colour.
    *
    * So the earth tile draws it, into itself, clipped to itself. Which ends of
    * the edge are which swaps at every other quarter turn, so the run is taken
@@ -803,7 +804,7 @@ export class Renderer {
    * the ruffle reads one way round at one rotation and the other at the next
    * and the whole path crawls as the camera comes about.
    */
-  private grassEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): void {
+  private swardEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): void {
     const world = this.game.world;
     const co = V.corners;
     const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
@@ -813,7 +814,8 @@ export class Renderer {
       const nx = x + V.edges[e][0];
       const ny = y + V.edges[e][1];
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
-      if (world.viewTile(nx, ny, lit) !== TileType.Grass) continue;
+      const theirs = world.viewTile(nx, ny, lit) as TileType;
+      if (!SWARDED.has(theirs)) continue;
       if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
       if (!clipped) {
         ctx.save();
@@ -826,7 +828,9 @@ export class Renderer {
       }
       const f = (e + 1) & 3;
       const a = co[e], b = co[f];
-      ruffle(ctx, pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1], cx, cy,
+      // In the field's own colour, not the meadow's: a steppe runs out onto a
+      // track looking like steppe.
+      ruffle(ctx, sward(theirs).hem, pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1], cx, cy,
         a[0] * 2 + a[1] > b[0] * 2 + b[1],
         // Off the pair of tiles, so the same join is the same ruffle whatever
         // the camera is doing and whichever of the two is being drawn.
@@ -1001,9 +1005,9 @@ export class Renderer {
    * and its trees and nothing else, and a clump you are remembering is not a
    * clump you are looking at.
    */
-  private meadowTile(x: number, y: number, pts: Float64Array, rot: number, zoom: number, lit: boolean): void {
+  private meadowTile(type: TileType, x: number, y: number, pts: Float64Array, rot: number, zoom: number, lit: boolean): void {
     const ctx = this.canvas.ctx;
-    const m = meadow();
+    const m = sward(type);
     if (!lit) return;
     // The tile's own corners, so a daisy stays on the same square foot of
     // ground when the camera comes round rather than jumping a corner.
@@ -1012,7 +1016,7 @@ export class Renderer {
       (pts[A] * (1 - u) + pts[B] * u) * (1 - v) + (pts[D] * (1 - u) + pts[C] * u) * v;
     const atY = (u: number, v: number): number =>
       (pts[A + 1] * (1 - u) + pts[B + 1] * u) * (1 - v) + (pts[D + 1] * (1 - u) + pts[C + 1] * u) * v;
-    const look = m.looks[grassLook(x, y)];
+    const look = m.looks[swardLook(x, y)];
     const lo = look.blobN[0];
     const n = lo + Math.floor(hash2(x, y, 301) * (look.blobN[1] - lo + 1));
     // Where the first one stands. The rest are placed off it rather than off
@@ -1321,15 +1325,15 @@ export class Renderer {
         ctx.stroke();
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
-        // Grass is flat colour with clumps growing in it, and no speckles:
+        // A sward is flat colour with clumps growing in it, and no speckles:
         // speckles are what it had instead of clumps, and both at once is mud.
-        const grassTile = !wet && t0 === TileType.Grass;
-        if (grain && !wet && !grassTile) this.addGrain(x, y, pts, zoom);
-        if (grassy && grassTile) this.meadowTile(x, y, pts, paveRot, zoom, lit);
+        const sward = !wet && SWARDED.has(t0);
+        if (grain && !wet && !sward) this.addGrain(x, y, pts, zoom);
+        if (grassy && sward) this.meadowTile(t0, x, y, pts, paveRot, zoom, lit);
         // And where bare earth has grass beside it, the grass comes over the
         // edge of it. Only bare earth: a flagstone or a cobble was laid to a
         // line and keeps to it, and the beach does its own thing at the water.
-        if (grassy && !wet && RUFFLED.has(t0)) this.grassEdges(ctx, V, x, y, pts, zoom, lit);
+        if (grassy && !wet && RUFFLED.has(t0)) this.swardEdges(ctx, V, x, y, pts, zoom, lit);
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
 
         const t = t0;
