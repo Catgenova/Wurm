@@ -89,6 +89,15 @@ export const ARCH = { t0: 0.29, t1: 0.71, spring: 0.42 } as const;
  */
 export const WINDOW = { t0: 0.33, t1: 0.67, k0: 0.3, k1: 0.7 } as const;
 
+/**
+ * And where a doorway is cut. It starts at the ground, so it has no `k0`.
+ *
+ * The numbers are the ones every other material's door has always used. A
+ * doorway is the one opening whose size is settled by the man walking through
+ * it rather than by what will stand up over it: 1.3 m by 2.2 m.
+ */
+export const DOOR = { t0: 0.34, t1: 0.66, k1: 0.74 } as const;
+
 /** The painted wall, in the pieces a renderer fills its faces with. */
 export interface Cobble {
   /** One per variant: the stone of a storey, which butts any other left or right and stacks on any. */
@@ -157,6 +166,16 @@ export function cobble(): Cobble {
      */
     dress: '#ded5c4', dressShade: '#bbb0a0', dressHi: '#efe8dc',
     ringJoint: '#a09a8a', reveal: '#b3ab97',
+    /*
+     * And the one piece of wood in the whole wall.
+     *
+     * A window gets a stone lintel and a course of wedges over it because a
+     * window is small. A doorway is not, and a man who cannot cut a voussoir
+     * is not going to find and dress a stone four feet long either: he lays a
+     * baulk of oak across it and builds on top of that. It is the only thing
+     * in the picture that is not stone, and that is the point of it.
+     */
+    beam: '#b0906a', beamShade: '#927757', beamHi: '#c3a681', beamLine: '#6d5840',
     // the lit top bevel of each block: its own lit tone, a step lighter
     stoneHi: '#ddd4c6', warmHi: '#d9cdb3', darkHi: '#bdb9aa', bandHi: '#e3dbcc',
     blush: '#f2c4c0', blushShade: '#dfa39e', blushLine: '#b9797a',
