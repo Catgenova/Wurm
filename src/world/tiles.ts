@@ -49,26 +49,44 @@ export type RGB = readonly [number, number, number];
 export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone]);
 
 /**
- * The grounds drawn as flat colour with things growing on them.
+ * The grounds drawn as one flat colour: no grain, and no nudge of brightness
+ * from one tile of them to the next.
  *
- * Everything else gets grain -- five specks a tile, close up, so a flat
- * lozenge does not read as paper. A field does not want it: the ground these
- * are drawn from is one colour with the detail sitting on it in pieces you
- * can count, and a speckle over the whole tile puts the ground into the same
- * range of light and dark as the clumps standing in it. What grows on each is
- * in `meadow.ts`.
+ * Everything else gets both -- five specks a tile close up, and a tenth
+ * either way per tile, so a wide sheet of one ground does not read as paper.
+ * These three do not want either. The pictures they are drawn from are flat
+ * colour with the detail sitting *on* it in pieces you can count, and a
+ * speckle over the whole tile puts the ground into the same range of light
+ * and dark as the things standing in it. The per-tile nudge is worse: it
+ * comes out as a chequerboard, which is the one thing a field or a cliff
+ * never looks like.
+ */
+export const FLAT: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe, TileType.Rock]);
+
+/**
+ * The flat grounds that grow things, which is not all of them. What each one
+ * grows is in `meadow.ts`. Rock is flat and grows nothing: a stone shelf with
+ * lumps of stone strewn on it is a stone shelf with a rash.
  */
 export const SWARDED: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe]);
 
 /**
- * The bare grounds that grass runs out over the edge of.
+ * The bare grounds that a field runs out over the edge of.
  *
- * Earth somebody walked or packed is the one ground a field does not stop
- * dead at, so the join is drawn as a ruffle of grass lobes hanging over the
- * earth rather than as the soft band of one colour into the other every other
- * pair of grounds gets. Both at once is a ruffle standing in a smear.
+ * Earth somebody walked or packed, and the stone a hillside wears through to:
+ * a field does not stop dead at any of them, so the join is drawn as a ruffle
+ * of lobes hanging over the bare side rather than as the soft band of one
+ * colour into the other every other pair of grounds gets. Both at once is a
+ * ruffle standing in a smear.
+ *
+ * Rock is in here and in `HARD_EDGED` both, which is the point of it. Blending
+ * washed a scallop of grass right round every cliff -- a band of the
+ * neighbour's colour reaching in, with nothing in it that knows the neighbour
+ * is twenty feet below. The ruffle is drawn from the stone's own tile and
+ * clipped to it, and it only goes on where the two are at much the same
+ * height.
  */
-export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, TileType.PackedDirt]);
+export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, TileType.PackedDirt, TileType.Rock]);
 
 /** Whether these two grounds meet in a ruffle rather than a blended band. */
 export const ruffledJoin = (a: number, b: number): boolean =>
@@ -214,7 +232,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Dirt]: { name: 'Dirt', color: [163, 133, 98], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
   [TileType.PackedDirt]: { name: 'Packed dirt', color: [181, 156, 120], speed: 1.05, pavable: true, roll: 0.9 },
   [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
-  [TileType.Rock]: { name: 'Rock', color: [132, 130, 124], speed: 0.9, mineable: true, roll: 0.85 },
+  [TileType.Rock]: { name: 'Rock', color: [168, 166, 178], speed: 0.9, mineable: true, roll: 0.85 },
   /*
    * Dry grass, pale and clean, rather than the mustard it was. 156, 150, 84
    * was a colour for a field of one flat green to sit beside and came out as
@@ -360,29 +378,29 @@ export interface RockVariantDef {
 /** Kinds of rock; stored in the data byte of a Rock tile. */
 export const ROCK_VARIANTS: RockVariantDef[] = [
   // Plain stone, dug out for shards.
-  { name: 'Rock', color: [132, 130, 124], yields: 'rock_shards' },
-  { name: 'Slate', color: [98, 106, 120], yields: 'slate_shards' },
-  { name: 'Marble', color: [216, 214, 208], yields: 'marble_shards' },
-  { name: 'Sandstone', color: [198, 172, 124], yields: 'sandstone_shards' },
+  { name: 'Rock', color: [168, 166, 178], yields: 'rock_shards' },
+  { name: 'Slate', color: [149, 154, 163], yields: 'slate_shards' },
+  { name: 'Marble', color: [220, 217, 211], yields: 'marble_shards' },
+  { name: 'Sandstone', color: [201, 190, 172], yields: 'sandstone_shards' },
   // Metal, in order of the skill it takes to work.
-  { name: 'Copper vein', color: [162, 116, 74], yields: 'copper_ore', level: 1 },
-  { name: 'Coal seam', color: [58, 56, 58], yields: 'coal', level: 1 },
-  { name: 'Tin vein', color: [178, 180, 174], yields: 'tin_ore', level: 10 },
-  { name: 'Zinc vein', color: [154, 166, 172], yields: 'zinc_ore', level: 20 },
-  { name: 'Lead vein', color: [108, 112, 124], yields: 'lead_ore', level: 30 },
-  { name: 'Silver vein', color: [186, 190, 198], yields: 'silver_ore', level: 40 },
-  { name: 'Gold vein', color: [198, 168, 86], yields: 'gold_ore', level: 50 },
-  { name: 'Adamantine vein', color: [96, 128, 152], yields: 'adamantine_ore', level: 60 },
-  { name: 'Glimmersteel vein', color: [206, 216, 230], yields: 'glimmersteel_ore', level: 70 },
-  { name: 'Mithril vein', color: [138, 166, 214], yields: 'mithril_ore', level: 80 },
-  { name: 'Seryll vein', color: [214, 196, 132], yields: 'seryll_ore', level: 90 },
+  { name: 'Copper vein', color: [180, 143, 110], yields: 'copper_ore', level: 1 },
+  { name: 'Coal seam', color: [88, 85, 90], yields: 'coal', level: 1 },
+  { name: 'Tin vein', color: [190, 191, 188], yields: 'tin_ore', level: 10 },
+  { name: 'Zinc vein', color: [172, 181, 186], yields: 'zinc_ore', level: 20 },
+  { name: 'Lead vein', color: [137, 140, 151], yields: 'lead_ore', level: 30 },
+  { name: 'Silver vein', color: [196, 199, 205], yields: 'silver_ore', level: 40 },
+  { name: 'Gold vein', color: [202, 181, 125], yields: 'gold_ore', level: 50 },
+  { name: 'Adamantine vein', color: [129, 152, 171], yields: 'adamantine_ore', level: 60 },
+  { name: 'Glimmersteel vein', color: [212, 219, 229], yields: 'glimmersteel_ore', level: 70 },
+  { name: 'Mithril vein', color: [162, 181, 216], yields: 'mithril_ore', level: 80 },
+  { name: 'Seryll vein', color: [215, 202, 159], yields: 'seryll_ore', level: 90 },
   // Iron belongs at mining 5, between copper and tin, and sits here at the end
   // of the list instead. Which rock lies under which tile is written down per
   // tile as an index into this array, so putting a metal in the middle would
   // quietly turn every saved coal seam into iron, every tin vein into coal, and
   // so on down the line. The order of this list is storage; `level` is the
   // ladder.
-  { name: 'Iron vein', color: [124, 82, 74], yields: 'iron_ore', level: 5 },
+  { name: 'Iron vein', color: [158, 112, 104], yields: 'iron_ore', level: 5 },
 ];
 /**
  * Four bits of the data byte, which is sixteen kinds of rock and no more —

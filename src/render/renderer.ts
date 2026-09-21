@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, dustiness, FLAT, HARD_EDGED, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -701,13 +701,14 @@ export class Renderer {
     }
     const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
     /*
-     * A nudge of brightness per tile, so a field of one ground is not one
-     * flat sheet of colour. A sward gets none of it. A field is meant to read
-     * as one colour with things standing in it, and a tenth either way per
-     * tile came out as a chequerboard -- every tile a slightly different
-     * green, which is the one thing a meadow never looks like.
+     * A nudge of brightness per tile, so a wide sheet of one ground is not
+     * one flat sheet of colour. The flat grounds get none of it: they are
+     * meant to read as one colour with things standing on them, and a tenth
+     * either way per tile came out as a chequerboard -- every tile a slightly
+     * different green, which is the one thing a meadow never looks like, and
+     * a cliff of it looked like a wall somebody had patched.
      */
-    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (SWARDED.has(type) ? 0 : 0.1);
+    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (FLAT.has(type) ? 0 : 0.1);
     else {
       const k = Math.max(0.3, 1 - -avg / 80);
       r *= 0.72 * k;
@@ -807,6 +808,7 @@ export class Renderer {
   private swardEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): void {
     const world = this.game.world;
     const co = V.corners;
+    const mine = world.heightAt(x + 0.5, y + 0.5);
     const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
     const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
     let clipped = false;
@@ -816,6 +818,13 @@ export class Renderer {
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
       const theirs = world.viewTile(nx, ny, lit) as TileType;
       if (!SWARDED.has(theirs)) continue;
+      /*
+       * And only where the two are at much the same height. A field spills
+       * over the lip of a path it is level with; it does not spill over the
+       * top of a cliff it is standing twenty feet above, and a ruffle drawn
+       * along that edge is a fringe of grass growing out of thin air.
+       */
+      if (Math.abs(world.heightAt(nx + 0.5, ny + 0.5) - mine) > UNITS_PER_TILE * 0.35) continue;
       if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
       if (!clipped) {
         ctx.save();
@@ -1325,11 +1334,11 @@ export class Renderer {
         ctx.stroke();
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
-        // A sward is flat colour with clumps growing in it, and no speckles:
-        // speckles are what it had instead of clumps, and both at once is mud.
-        const sward = !wet && SWARDED.has(t0);
-        if (grain && !wet && !sward) this.addGrain(x, y, pts, zoom);
-        if (grassy && sward) this.meadowTile(t0, x, y, pts, paveRot, zoom, lit);
+        // A flat ground gets no speckles. A sward is a flat ground with clumps
+        // growing in it, and the speckles are what it had instead of clumps:
+        // both at once is mud.
+        if (grain && !wet && !FLAT.has(t0)) this.addGrain(x, y, pts, zoom);
+        if (grassy && !wet && SWARDED.has(t0)) this.meadowTile(t0, x, y, pts, paveRot, zoom, lit);
         // And where bare earth has grass beside it, the grass comes over the
         // edge of it. Only bare earth: a flagstone or a cobble was laid to a
         // line and keeps to it, and the beach does its own thing at the water.
