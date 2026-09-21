@@ -34,7 +34,7 @@ import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, T
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, cobble } from './cobble';
+import { ARCH, WINDOW, type Cobble, cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -240,6 +240,8 @@ const hexRgb = (hex: string): [number, number, number] => {
  */
 const JAMB_LIT = 0.86;
 const SOFFIT_LIT = 0.7;
+/** The inside of a sill is the one surface in a wall turned up at the sky. */
+const SILL_LIT = 1.02;
 
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
@@ -2681,10 +2683,22 @@ export class Renderer {
        * there is one statement about where a doorway is.
        */
       const arched = wall.type === 'arch';
+      const windowed = wall.type === 'window';
+      const cut = arched || windowed;
+      /** Whichever hole this section has, added to the path that is open. */
+      const hole = (s: number): void => {
+        if (arched) { this.archGeom({ px, py, quad }, zoom).hole(s); return; }
+        const { t0, t1, k0, k1 } = WINDOW;
+        ctx.moveTo(px(t0, k0, s), py(t0, k0, s));
+        ctx.lineTo(px(t1, k0, s), py(t1, k0, s));
+        ctx.lineTo(px(t1, k1, s), py(t1, k1, s));
+        ctx.lineTo(px(t0, k1, s), py(t0, k1, s));
+        ctx.closePath();
+      };
       /*
-       * Everything but the way through. Moss is the one green thing that has
-       * to be clipped to the stone, because moss grows on stone: a lens of it
-       * is drawn on a block of the field, and the blocks the doorway was
+       * Everything but the opening. Moss is the one green thing that always
+       * has to be clipped to the stone, because moss grows on stone: a lens of
+       * it is drawn on a block of the field, and the blocks the hole was
        * broken out of are not there any more.
        *
        * The outer boundary is not the face. The overlay sits over the ground
@@ -2693,7 +2707,7 @@ export class Renderer {
        * clipped even-odd.
        */
       const onStone = (): void => {
-        if (!arched) return;
+        if (!cut) return;
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(px(-1, -1), py(-1, -1));
@@ -2701,11 +2715,11 @@ export class Renderer {
         ctx.lineTo(px(2, 3), py(2, 3));
         ctx.lineTo(px(-1, 3), py(-1, 3));
         ctx.closePath();
-        this.archGeom({ px, py, quad }, zoom).hole(1);
+        hole(1);
         ctx.clip('evenodd');
       };
-      const offStone = (): void => { if (arched) ctx.restore(); };
-      blit(arched ? cob.arch[v] : cob.face[v], 0, 1);
+      const offStone = (): void => { if (cut) ctx.restore(); };
+      blit(arched ? cob.arch[v] : windowed ? cob.window[v] : cob.face[v], 0, 1);
       /*
        * The way through goes in before anything that grows, and unlit,
        * because the wash below takes the whole face at once: a bush that has
@@ -2746,15 +2760,38 @@ export class Renderer {
         ctx.lineJoin = 'round';
         ctx.stroke();
       }
+      /*
+       * A window is the same idea with glass in it, so it is the same picture
+       * with a smaller hole and the same reveal round it. There is no wrapping
+       * the hedge through this one: a bush does not grow through a pane.
+       */
+      if (windowed) {
+        ctx.save();
+        ctx.beginPath();
+        hole(1);
+        ctx.clip();
+        this.cobGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+        ctx.restore();
+        ctx.beginPath();
+        hole(1);
+        ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
+        ctx.lineWidth = Math.max(1, 1.5 * zoom);
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+      }
       if (wall.level === 0 && !indoors) {
         onStone();
         blit(cob.foot[v], 0, 1);
-        // The face's half of the hedge. Its other half went in above, on the
-        // inside of the passage.
-        blit(cob.base[v], 0, 1);
+        // The face's half of the hedge, where a doorway took the other half
+        // round the corner with it.
+        if (arched) blit(cob.base[v], 0, 1);
         offStone();
+        // Anywhere else it is one picture and goes on whole: a bush that has
+        // grown up in front of a window stands in front of it, glass and all.
+        if (!arched) blit(cob.base[v], 0, 1);
         if (arched) blit(cob.archWeed[v], 0, 1);
       }
+      if (windowed) blit(cob.winWeed[v], 0, 1);
       /*
        * The hour's light, and only that. A flat wall takes a wash down its
        * face as well -- dark where the ground throws shade back up it, light
@@ -2801,8 +2838,9 @@ export class Renderer {
         // And the tongue of it that hangs into the opening, on the variants
         // whose curtain reaches that far along the wall.
         if (arched) blit(cob.archIvy[v], 0, 1);
+        if (windowed) blit(cob.winIvy[v], 0, 1);
       }
-      if (!arched) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+      if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
       return;
     }
@@ -2852,7 +2890,7 @@ export class Renderer {
   private wallOpenings(wall: Wall, mat: MaterialDef, lit: number, g: WallGeom, zoom: number, border: Border): void {
     switch (wall.type) {
       case 'window':
-        this.wallOpening(mat, lit, g, 0.3, 0.7, 0.38, 0.78, 'glass', zoom, this.lampBehind(wall, border));
+        this.wallOpening(mat, lit, g, WINDOW.t0, WINDOW.t1, WINDOW.k0, WINDOW.k1, 'glass', zoom, this.lampBehind(wall, border));
         break;
       case 'bay':
         this.wallOpening(mat, lit, g, 0.18, 0.82, 0.33, 0.82, 'glass', zoom, this.lampBehind(wall, border));
@@ -3378,6 +3416,77 @@ export class Renderer {
     return most * dark;
   }
 
+  /**
+   * A pane, and a window with something burning behind it.
+   *
+   * Glass was drawn in every window on the island from the first day and
+   * never made, never paid for and never once lit: a window at midnight was
+   * the same cold blue pane as a window at noon, in a room with a fire in it.
+   * `alight` is how much of a light is in the room behind this wall, and it
+   * warms the pane and takes the sky out of it.
+   */
+  private pane(g: WallGeom, t0: number, t1: number, k0: number, k1: number, alight: number): CanvasGradient {
+    const ctx = this.canvas.ctx;
+    const { px, py } = g;
+    const gr = ctx.createLinearGradient(px(t0, k1, -1), py(t0, k1, -1), px(t1, k0, -1), py(t1, k0, -1));
+    if (alight > 0) {
+      const k = Math.min(1, alight);
+      gr.addColorStop(0, `rgba(${(198 + 52 * k) | 0}, ${(226 - 26 * k) | 0}, ${(244 - 110 * k) | 0}, 0.9)`);
+      gr.addColorStop(0.55, `rgba(${(126 + 124 * k) | 0}, ${(170 + 20 * k) | 0}, ${(205 - 110 * k) | 0}, ${0.8 + 0.15 * k})`);
+      gr.addColorStop(1, `rgba(${(158 + 82 * k) | 0}, ${(198 - 10 * k) | 0}, ${(226 - 120 * k) | 0}, 0.9)`);
+    } else {
+      gr.addColorStop(0, 'rgba(198, 226, 244, 0.85)');
+      gr.addColorStop(0.55, 'rgba(126, 170, 205, 0.8)');
+      gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
+    }
+    return gr;
+  }
+
+  /**
+   * A painted wall's window: the reveal, the pane on the back plane, and the
+   * bars across it.
+   *
+   * The same three surfaces an archway has and the same reason for each of
+   * them -- the jambs keep most of the light because the sky reaches down the
+   * sides of a hole, the head keeps least because nothing reaches the
+   * underside of a lintel -- and one more, the inside of the sill, which is
+   * the only surface in a wall turned up at the sky and so the lightest thing
+   * in the opening. Drawn unlit: the wash over the whole face takes the hour.
+   */
+  private cobGlass(cob: Cobble, g: WallGeom, zoom: number, alight: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py, quad } = g;
+    const { t0, t1, k0, k1 } = WINDOW;
+    const strip = (ax: number, ak: number, bx: number, bk: number, k: number): void => {
+      ctx.fillStyle = rgb(cob.reveal, k);
+      ctx.beginPath();
+      ctx.moveTo(px(ax, ak, 1), py(ax, ak, 1));
+      ctx.lineTo(px(bx, bk, 1), py(bx, bk, 1));
+      ctx.lineTo(px(bx, bk, -1), py(bx, bk, -1));
+      ctx.lineTo(px(ax, ak, -1), py(ax, ak, -1));
+      ctx.closePath();
+      ctx.fill();
+    };
+    strip(t0, k0, t0, k1, JAMB_LIT);
+    strip(t1, k0, t1, k1, JAMB_LIT);
+    strip(t0, k1, t1, k1, SOFFIT_LIT);
+    strip(t0, k0, t1, k0, SILL_LIT);
+    quad(t0, t1, k0, k1, -1);
+    ctx.fillStyle = this.pane(g, t0, t1, k0, k1, alight);
+    ctx.fill();
+    if (zoom < 0.7) return;
+    ctx.strokeStyle = rgb(cob.line, 0.9, 0.75);
+    ctx.lineWidth = Math.max(1, 1.6 * zoom);
+    // One bar up and one across, which is what a small pane looks like.
+    ctx.beginPath();
+    ctx.moveTo(px((t0 + t1) / 2, k0, -1), py((t0 + t1) / 2, k0, -1));
+    ctx.lineTo(px((t0 + t1) / 2, k1, -1), py((t0 + t1) / 2, k1, -1));
+    ctx.moveTo(px(t0, (k0 + k1) / 2, -1), py(t0, (k0 + k1) / 2, -1));
+    ctx.lineTo(px(t1, (k0 + k1) / 2, -1), py(t1, (k0 + k1) / 2, -1));
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
   private wallOpening(mat: MaterialDef, lit: number, g: WallGeom,
                       t0: number, t1: number, k0: number, k1: number,
                       what: 'glass' | 'door' | 'double', zoom: number, alight = 0): void {
@@ -3406,27 +3515,7 @@ export class Renderer {
     // And what is hung in it, on the back plane.
     quad(t0, t1, k0, k1, -1);
     if (what === 'glass') {
-      const gr = ctx.createLinearGradient(px(t0, k1, -1), py(t0, k1, -1), px(t1, k0, -1), py(t1, k0, -1));
-      /*
-       * And a window with something burning behind it.
-       *
-       * Glass was drawn in every window on the island from the first day and
-       * never made, never paid for and never once lit: a window at midnight
-       * was the same cold blue pane as a window at noon, in a room with a
-       * fire in it. `alight` is how much of a light is in the room behind
-       * this wall, and it warms the pane and takes the sky out of it.
-       */
-      if (alight > 0) {
-        const k = Math.min(1, alight);
-        gr.addColorStop(0, `rgba(${(198 + 52 * k) | 0}, ${(226 - 26 * k) | 0}, ${(244 - 110 * k) | 0}, 0.9)`);
-        gr.addColorStop(0.55, `rgba(${(126 + 124 * k) | 0}, ${(170 + 20 * k) | 0}, ${(205 - 110 * k) | 0}, ${0.8 + 0.15 * k})`);
-        gr.addColorStop(1, `rgba(${(158 + 82 * k) | 0}, ${(198 - 10 * k) | 0}, ${(226 - 120 * k) | 0}, 0.9)`);
-      } else {
-        gr.addColorStop(0, 'rgba(198, 226, 244, 0.85)');
-        gr.addColorStop(0.55, 'rgba(126, 170, 205, 0.8)');
-        gr.addColorStop(1, 'rgba(158, 198, 226, 0.85)');
-      }
-      ctx.fillStyle = gr;
+      ctx.fillStyle = this.pane(g, t0, t1, k0, k1, alight);
     } else {
       ctx.fillStyle = rgb(mat.floor, lit * 0.5, 0.95);
     }

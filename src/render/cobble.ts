@@ -77,6 +77,18 @@ interface Variant {
  */
 export const ARCH = { t0: 0.29, t1: 0.71, spring: 0.42 } as const;
 
+/**
+ * And where a window is cut, in the same fractions.
+ *
+ * Taller than the old one and a little narrower, for the reason a window in
+ * rubble is always taller than it is wide: everything over it has to stand on
+ * what is either side of it. The head comes down to 2.1 m so there is room
+ * between it and the band for the lintel and the course of small wedges over
+ * that, which is how a wall like this gets a metre and a third of nothing to
+ * stay up.
+ */
+export const WINDOW = { t0: 0.33, t1: 0.67, k0: 0.3, k1: 0.7 } as const;
+
 /** The painted wall, in the pieces a renderer fills its faces with. */
 export interface Cobble {
   /** One per variant: the stone of a storey, which butts any other left or right and stacks on any. */
@@ -86,6 +98,10 @@ export interface Cobble {
   /** What grows into that opening: ivy dangling from the head of it, and grass in the threshold. */
   archIvy: HTMLCanvasElement[];
   archWeed: HTMLCanvasElement[];
+  /** The same with a window: the hole, the ivy over it, and what has seeded behind the sill. */
+  window: HTMLCanvasElement[];
+  winIvy: HTMLCanvasElement[];
+  winWeed: HTMLCanvasElement[];
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -941,6 +957,108 @@ export function cobble(): Cobble {
     }
   }
 
+  /* ---- the window --------------------------------------------------------- */
+  /*
+   * A hole with something over it.
+   *
+   * An archway carries itself: the ring is the thing that stands up. A window
+   * does not, and a novice's answer to that is always the same one -- a lintel
+   * big enough to bridge the gap, and over the lintel a course of small wedges
+   * on a flat curve to take the weight of the wall off it. That relieving arch
+   * is the whole character of the asset: it is the piece of the wall that
+   * exists only because he knew the lintel would crack if he did not put it
+   * there, and it is set with the same hammer and the same want of skill as
+   * everything else.
+   *
+   * Drawn in the order it was built and cut last, like the arch: sill, jambs,
+   * lintel, relieving arch, then the rectangle taken out of the lot of them.
+   * The opening is square to a hair and nothing round it is.
+   */
+  const W_X0 = TW * WINDOW.t0, W_X1 = TW * WINDOW.t1;
+  const W_HEAD = TH * (1 - WINDOW.k1), W_SILL = TH * (1 - WINDOW.k0);
+  /** How deep the lintel is, and where its top sits. */
+  const LINTEL = 22, L_TOP = W_HEAD - LINTEL + 3;
+
+  /** The mortar the field was broken out for, ragged all round and buried by what goes over it. */
+  function winPocket(g: Ctx, R: Rand, top: number): void {
+    const box: Pt[] = [[W_X0 - 24, top], [W_X1 + 24, top], [W_X1 + 24, W_SILL + 26], [W_X0 - 24, W_SILL + 26]];
+    shape(g, roughen(box, R, 6, 4.5));
+    g.fillStyle = PASTEL.ringJoint;
+    g.fill();
+  }
+
+  /** A column of stone up one side of the opening, built from the sill and overhanging into it. */
+  function winJamb(g: Ctx, R: Rand, side: number): void {
+    const line = side < 0 ? W_X0 : W_X1;
+    let y = W_SILL - 2, course = side < 0 ? 0 : 1;
+    while (y > W_HEAD - 4) {
+      const h = 34 + R() * 20;
+      const w = (course++ % 2 ? 44 : 66) + R() * 14;
+      const x = side < 0 ? line + OVER - w : line - OVER;
+      wearOne(g, stone(g, x, y - h, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.03), R);
+      y -= h + MORTAR + R() * 3;
+    }
+  }
+
+  /**
+   * The relieving arch: a flat curve of small wedges over the lintel.
+   *
+   * Its rise is a tenth of its span, which is what makes it look like work
+   * rather than ornament -- it is there to throw the load out to the jambs,
+   * and a mason who wanted it to look like an arch would have given it more.
+   */
+  function relieving(g: Ctx, R: Rand): void {
+    const half = (W_X1 - W_X0) / 2 + 20, cx = (W_X0 + W_X1) / 2;
+    const rise = 15 + R() * 7;
+    const rad = (half * half + rise * rise) / (2 * rise);
+    const cy = L_TOP + rad - rise;
+    const a0 = Math.asin(Math.min(1, half / rad));
+    // Five or seven, so the stones are lumps rather than tally marks, and odd
+    // so one of them caps the middle.
+    const n = 5 + 2 * Math.floor(R() * 2);
+    const cut: number[] = [];
+    for (let i = 0; i <= n; i++) cut.push(-a0 + (2 * a0 * i) / n + (i > 0 && i < n ? (R() - 0.5) * 0.36 * (2 * a0) / n : 0));
+    const crown = (n - 1) / 2;
+    cut[crown] -= 0.35 * (2 * a0) / n;
+    cut[crown + 1] += 0.35 * (2 * a0) / n;
+    // In pixels rather than in radii: the flatter the curve the longer the
+    // radius, and a depth taken as a fraction of it would put the crown of a
+    // shallow one through the band.
+    const out = cut.map(() => (17 + R() * 7) / rad);
+    const pt = (a: number, r: number): Pt => [cx + Math.sin(a) * rad * (1 + r), cy - Math.cos(a) * rad * (1 + r)];
+    // The joint is shut at the face and open at the back, as on the ring.
+    const gap = 0.16 * (2 * a0) / n;
+    for (let i = 0; i < n; i++) {
+      const deep = (j: number): number => out[j] + (i === crown ? 0.02 : 0);
+      const wedge: Pt[] = [
+        pt(cut[i], -0.03), pt(cut[i + 1], -0.03),
+        pt(cut[i + 1] - gap, deep(i + 1)), pt(cut[i] + gap, deep(i)),
+      ];
+      const pts = roughen(wedge, R, 3, 1.8);
+      dressed(g, pts, i === crown ? 'dress' : pickDressed(R));
+      if (i !== crown) wearOne(g, pts, R);
+    }
+  }
+
+  /** Sill, jambs, lintel and the wedges over it, in the order they went up. */
+  function surround(g: Ctx, R: Rand): void {
+    winPocket(g, R, L_TOP - 46);
+    // The sill first, because everything either side of the hole stands on it.
+    wearOne(g, stone(g, W_X0 - 16, W_SILL - 4, W_X1 - W_X0 + 32, 24, R, 'dress', false, (R() - 0.5) * 0.012), R);
+    winJamb(g, R, -1);
+    winJamb(g, R, 1);
+    relieving(g, R);
+    // And the lintel over the jambs, under the wedges: one lump if he was
+    // lucky with the quarry, two meeting over the middle if he was not.
+    if (R() < 0.42) {
+      wearOne(g, stone(g, W_X0 - 18, L_TOP, W_X1 - W_X0 + 36, LINTEL, R, 'dress', false, (R() - 0.5) * 0.008), R);
+    } else {
+      const mid = (W_X0 + W_X1) / 2 + (R() - 0.5) * 30;
+      wearOne(g, stone(g, W_X0 - 18, L_TOP, mid - W_X0 + 18, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
+      wearOne(g, stone(g, mid, L_TOP, W_X1 + 18 - mid, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
+    }
+  }
+
   /* ---- what grows in a way through --------------------------------------- */
   /**
    * Growth does not stop at a doorway.
@@ -1058,6 +1176,50 @@ export function cobble(): Cobble {
     }
     return c;
   });
+  /** And the same section with a window in it, drawn and cut the same way. */
+  const WINDOWED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    surround(g, rand(v.seed * 197 + 61));
+    g.globalAlpha = 1;
+    g.fillStyle = '#000';
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath();
+    g.rect(W_X0, W_HEAD, W_X1 - W_X0, W_SILL - W_HEAD);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+    return c;
+  });
+  /**
+   * What grows at a window: ivy over the head of it, and whatever has seeded
+   * in the joint behind the sill, which is where the rain that runs off the
+   * glass ends up.
+   */
+  const WIN_IVY = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 883 + 19);
+    for (const d of v.drapes) {
+      if (!d.fall) continue;
+      const half = d.w / 2, dcx = clamp(d.cx, MARGIN + half, TW - MARGIN - half);
+      if (dcx - half > W_X1 - 10 || dcx + half < W_X0 + 10) continue;
+      const x = clamp(dcx, W_X0 + 18, W_X1 - 18);
+      const cs: Lobe[] = [];
+      tongueLobes(cs, x, W_HEAD - 8, 11 + 9 * R(), (W_SILL - W_HEAD) * (0.35 + 0.5 * R()), R);
+      shadowOf(g, cs, 5, 6);
+      mass(g, cs, R, { r: 8.5, lobe: R() < 0.4 ? 1 : 0 });
+    }
+    return c;
+  });
+  const WIN_WEED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    const R = rand(v.seed * 419 + 83);
+    for (const side of [-1, 1]) {
+      if (R() < 0.45) continue;
+      const x = (W_X0 + W_X1) / 2 + side * (W_X1 - W_X0) * (0.18 + R() * 0.28);
+      tussock(g, x, W_SILL - 2, 22 + R() * 18, 14 + R() * 12, R);
+    }
+    return c;
+  });
   /** The growth over the top is painted PAD px taller than the face, the extra above the top edge: the
    *  crest of each drape, standing above the cap, is part of the same silhouette. */
   const PAD = 64;
@@ -1100,6 +1262,9 @@ export function cobble(): Cobble {
     arch: ARCHED,
     archIvy: ARCH_IVY,
     archWeed: ARCH_WEED,
+    window: WINDOWED,
+    winIvy: WIN_IVY,
+    winWeed: WIN_WEED,
     spill: SPILL,
     base: BASE,
     foot: FOOT,
