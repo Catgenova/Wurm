@@ -2800,15 +2800,27 @@ export class Renderer {
         ctx.stroke();
       }
       /*
-       * A bay is not in the wall, so it is not clipped to the hole: what fills
-       * the hole is the inside of the box, and the box itself stands out in
-       * front of the stone and over the shelf it was built on.
+       * A bay sticks out of one side of a wall, and from the other side of
+       * that wall it is a hole with glass across the back of it. So from
+       * inside a room it is drawn as the window it is from in there, and only
+       * from out of doors is the box drawn -- which is also why a bay is not
+       * clipped to the hole out there: what fills the hole is the inside of
+       * the box, and the box stands in front of the stone.
        */
       if (bayed) {
+        ctx.save();
         ctx.beginPath();
         hole(1);
-        ctx.fillStyle = rgb(cob.reveal, 0.42);
-        ctx.fill();
+        ctx.clip();
+        if (indoors) this.cobGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border), BAY);
+        else { ctx.fillStyle = rgb(cob.reveal, 0.42); ctx.fill(); }
+        ctx.restore();
+        ctx.beginPath();
+        hole(1);
+        ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
+        ctx.lineWidth = Math.max(1, 1.5 * zoom);
+        ctx.lineJoin = 'round';
+        ctx.stroke();
       }
       if (wall.level === 0 && !indoors) {
         onStone();
@@ -2875,7 +2887,7 @@ export class Renderer {
         if (doored) blit(cob.doorIvy[v], 0, 1);
         if (gated) blit(cob.gateIvy[v], 0, 1);
       }
-      if (bayed) this.cobBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+      if (bayed && !indoors) this.cobBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
       return;
@@ -3569,8 +3581,33 @@ export class Renderer {
      * just inside where the jamb starts cutting the leaf off. A strap whose
      * anchored end is behind the wall is a dash floating on a door.
      */
-    const shown = px(0.5, 0.5, -1) - px(0.5, 0.5, 1) > 0 ? 0 : 1;
     const at = (u: number): number => t0 + (t1 - t0) * u;
+    /*
+     * How much of the leaf you can actually see, as a fraction of it.
+     *
+     * The leaf hangs on the back plane and the opening is cut in the front
+     * one, so the wall's thickness hides a third of it off one edge -- which
+     * edge, and how much, depends on which way the section is turned. This was
+     * a guess at first: a sign test on which way the back plane moves, and a
+     * ring placed a fixed distance in from the end it decided was showing.
+     * Turn the view a quarter and the guess was wrong and the ring came out
+     * half over the jamb.
+     *
+     * So it is measured instead. The near opening runs between two screen
+     * points and so does the leaf; where they overlap is what you can see, and
+     * everything hung on the leaf is placed inside that.
+     */
+    const a = px(t0, 0, 1), b = px(t1, 0, 1);
+    const a2 = px(t0, 0, -1), b2 = px(t1, 0, -1);
+    const uOf = (x: number): number => (x - a2) / (b2 - a2 || 1);
+    const ends = [uOf(Math.max(Math.min(a, b), Math.min(a2, b2))), uOf(Math.min(Math.max(a, b), Math.max(a2, b2)))];
+    const u0 = Math.max(0, Math.min(ends[0], ends[1]));
+    const u1 = Math.min(1, Math.max(ends[0], ends[1]));
+    const span = Math.max(0.2, u1 - u0);
+    // The straps are anchored on the stile that shows, because a strap whose
+    // anchored end is behind the wall is a dash floating on a door; the ring
+    // goes as far the other way as the opening lets it.
+    const hinge = u0 <= 0.02 ? 0 : 1;
     /*
      * A gate is two leaves and the line where they meet, and they hang the
      * way a pair of gates hangs: each on the stile at its own outer edge,
@@ -3596,7 +3633,7 @@ export class Renderer {
       // bar across the door and reads as a gap, not as ironwork.
       const bands: Array<[number, number]> = leaves === 2
         ? [[0.02, 0.30], [0.70, 0.98]]
-        : [shown ? [0.54, 0.98] : [0.02, 0.46]];
+        : [hinge ? [u1 - span * 0.72, u1] : [u0, u0 + span * 0.72]];
       for (const [a, b] of bands) {
         quad(at(a), at(b), k - 0.015, k + 0.015, -1);
         ctx.fillStyle = rgb(IRON, 1);
@@ -3604,7 +3641,7 @@ export class Renderer {
       }
     }
     // And a ring to pull it by -- one on a door, one to each leaf on a gate.
-    const rings = leaves === 2 ? [0.5 - 0.125, 0.5 + 0.125] : [shown ? 0.58 : 0.42];
+    const rings = leaves === 2 ? [0.5 - 0.125, 0.5 + 0.125] : [hinge ? u0 + span * 0.26 : u1 - span * 0.26];
     ctx.strokeStyle = rgb(IRON, 1);
     ctx.lineWidth = Math.max(1, 1.1 * zoom);
     for (const u of rings) {
@@ -3731,10 +3768,11 @@ export class Renderer {
    * the only surface in a wall turned up at the sky and so the lightest thing
    * in the opening. Drawn unlit: the wash over the whole face takes the hour.
    */
-  private cobGlass(cob: Cobble, g: WallGeom, zoom: number, alight: number): void {
+  private cobGlass(cob: Cobble, g: WallGeom, zoom: number, alight: number,
+                   rect: { t0: number; t1: number; k0: number; k1: number } = WINDOW): void {
     const ctx = this.canvas.ctx;
     const { px, py, quad } = g;
-    const { t0, t1, k0, k1 } = WINDOW;
+    const { t0, t1, k0, k1 } = rect;
     const strip = (ax: number, ak: number, bx: number, bk: number, k: number): void => {
       ctx.fillStyle = rgb(cob.reveal, k);
       ctx.beginPath();
