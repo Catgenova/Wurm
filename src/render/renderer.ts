@@ -52,7 +52,7 @@ import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
-import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_PALETTE, waterLevel } from './water';
+import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
 import { Gaits } from './gait';
@@ -739,10 +739,15 @@ export class Renderer {
      */
     if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (FLAT.has(type) ? 0 : 0.1);
     else {
-      const k = Math.max(0.3, 1 - -avg / 80);
+      const deep = -avg;
+      const k = Math.max(0.3, 1 - deep / 80);
       r *= 0.72 * k;
       g *= 0.86 * k;
       b *= 0.95 * k;
+      // And the slope lighting fades out with depth: see `WATER_LIT`. What
+      // looked like the depth ramp banding was the sea floor being faceted
+      // like a hillside and showing through water that is not opaque.
+      shade = 1 + (shade - 1) * Math.max(0, 1 - deep / WATER_LIT);
     }
     /*
      * Ground you are only remembering keeps almost none of its own colour.

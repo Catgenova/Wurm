@@ -93,9 +93,53 @@ export const foamAlpha = (swell: number, force: number): number => 0.3 + 0.34 * 
 export const WATER_SHALLOW: readonly [number, number, number] = [140, 210, 232];
 export const WATER_DEEP: readonly [number, number, number] = [30, 76, 110];
 
-/** How many colours the ramp is cut into, and how deep each step reaches. */
-export const WATER_STEPS = 40;
-export const WATER_STEP_UNITS = 3;
+/**
+ * How far down the ramp reaches, how deep one step of it is, and so how many
+ * colours it is cut into.
+ *
+ * The cutting is not for the look of it. The colour of a tile of sea is one
+ * of these strings, picked out of a table by depth, because a tile works out
+ * its colour every frame and building an `rgba(...)` for each of them is a
+ * string made and parsed a few hundred times a frame for one of a few dozen
+ * answers.
+ *
+ * It was forty steps of three units, and three units is several tiles of a
+ * gently shelving floor, so a band of them came out one colour and the next
+ * band jumped. Half a unit a step is finer than any sea floor is flat, and
+ * the table is two hundred and forty strings built once, which is nothing.
+ *
+ * Worth saying plainly: this was *not* what made the bay look terraced. That
+ * was the floor itself -- the beds of kelp on it, and its own tile shading
+ * seen through water that is only three metres deep out there. The steps were
+ * coarser than they needed to be and are not any more, and that is the whole
+ * of what this bought.
+ *
+ * The count comes off the other two rather than being written down beside
+ * them, so it cannot come to mean something they do not.
+ */
+export const WATER_FLOOR = 120;
+export const WATER_STEP_UNITS = 0.5;
+export const WATER_STEPS = Math.round(WATER_FLOOR / WATER_STEP_UNITS);
+/**
+ * How far down the sun still lights the bottom the way it lights a hillside.
+ *
+ * Above the water a tile is shaded by the angle it lies at, which runs from
+ * about a half to about one and a tenth: a slope facing the sun against one
+ * turned away is more than twice as bright. Under it that was still being
+ * done, so a sea floor with any lump in it was faceted like a mountainside,
+ * and the water -- which is nowhere near opaque at the depths anybody sails
+ * over -- let a quarter of that through. It read as bands and blocks of
+ * different blue, and looked for all the world like the depth ramp being cut
+ * too coarsely, which it was not.
+ *
+ * Light that has been through a few feet of water has been scattered by it
+ * and does not arrive from one direction any more. So the shading fades out
+ * with depth, and by here it is gone and the floor is lit flatly: a bar a
+ * foot under still catches the sun on its slopes, and a sea bed twenty feet
+ * down does not.
+ */
+export const WATER_LIT = 18;
+
 /** More of the ramp spent on the shallows, where the eye reads the shape of a coast. */
 const WATER_CURVE = 0.7;
 
@@ -104,6 +148,18 @@ export const waterT = (depth: number): number => {
   const step = Math.min(WATER_STEPS - 1, Math.max(0, Math.floor(depth / WATER_STEP_UNITS)));
   return (step / (WATER_STEPS - 1)) ** WATER_CURVE;
 };
+
+/**
+ * How much of the bottom the water keeps to itself, at a depth.
+ *
+ * It was a straight line off `t`, which left the open sea at about seven
+ * tenths: a floor three metres down was still three parts visible, tile
+ * shading and all, and the far water read as a faceted floor rather than as
+ * water. The curve here bends it up early, so the shallows stay clear enough
+ * to see the shelf and the weed beds on it -- which is the half of this
+ * anybody needs to see -- and the deep goes over.
+ */
+export const waterVeil = (depth: number): number => 0.58 + 0.41 * waterT(depth) ** 0.62;
 
 /** The colour at a depth, before any alpha. */
 export function waterRgb(depth: number): [number, number, number] {
@@ -125,7 +181,7 @@ export function waterRgb(depth: number): [number, number, number] {
 export const WATER_PALETTE: readonly string[] = Array.from({ length: WATER_STEPS }, (_, i) => {
   const depth = i * WATER_STEP_UNITS;
   const [r, g, b] = waterRgb(depth);
-  return `rgba(${r},${g},${b},${(0.58 + 0.4 * waterT(depth)).toFixed(3)})`;
+  return `rgba(${r},${g},${b},${waterVeil(depth).toFixed(3)})`;
 });
 
 /** The step a depth lands on, for anybody indexing the palette directly. */
