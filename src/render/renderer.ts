@@ -2718,6 +2718,19 @@ export class Renderer {
         ctx.save();
         geom.outline(1);
         ctx.clip();
+        /*
+         * The hedge again, and this time round the corner.
+         *
+         * A bush at the foot of a wall that meets a doorway does not stop and
+         * it does not stand across the gap like a hoarding: it turns the
+         * arris and goes on growing down the inside of the passage. So the
+         * same picture is laid twice -- on the face of the wall, clipped to
+         * the stone, and on the far side of the wall's thickness, clipped to
+         * the opening. The step between the two at the jamb is the corner it
+         * turned, and the reveal drawn over it is the jamb standing in front
+         * of it.
+         */
+        if (wall.level === 0 && !indoors) blit(cob.base[v], 0, 1, -1);
         this.archShade({ px, py, quad }, zoom);
         this.archDepth(cob.reveal, 1, { px, py, quad }, zoom);
         ctx.restore();
@@ -2736,10 +2749,10 @@ export class Renderer {
       if (wall.level === 0 && !indoors) {
         onStone();
         blit(cob.foot[v], 0, 1);
-        offStone();
-        // The hedge is not clipped: it grows round a jamb and into the reveal,
-        // and on the variant with the widest one it grows across the threshold.
+        // The face's half of the hedge. Its other half went in above, on the
+        // inside of the passage.
         blit(cob.base[v], 0, 1);
+        offStone();
         if (arched) blit(cob.archWeed[v], 0, 1);
       }
       /*
