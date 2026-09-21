@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -62,7 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { grassLook, meadow } from './meadow';
+import { CROWD, grassLook, meadow, ruffle } from './meadow';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
@@ -456,9 +456,6 @@ export class Renderer {
   private grainN = 0;
   private grainM = 0;
   /** The grass quads of the row being drawn, four corners apiece, for one fill. */
-  private swardQuads = new Float32Array(8 * 1024);
-  private swardN = 0;
-  private swardPattern: CanvasPattern | null = null;
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
@@ -705,12 +702,12 @@ export class Renderer {
     const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
     /*
      * A nudge of brightness per tile, so a field of one ground is not one
-     * flat sheet of colour. Grass gets a third of it: it has a sward laid
-     * over it now which says the same thing far better, and a tenth either
-     * way on top of that came out as a chequerboard -- every tile a slightly
-     * different green, which is the one thing a meadow never looks like.
+     * flat sheet of colour. Grass gets none of it. A field is meant to read
+     * as one green with things standing in it, and a tenth either way per
+     * tile came out as a chequerboard -- every tile a slightly different
+     * green, which is the one thing a meadow never looks like.
      */
-    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (type === TileType.Grass ? 0.032 : 0.1);
+    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (type === TileType.Grass ? 0 : 0.1);
     else {
       const k = Math.max(0.3, 1 - -avg / 80);
       r *= 0.72 * k;
@@ -768,7 +765,10 @@ export class Renderer {
       const ny = y + V.edges[e][1];
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
       const theirs = world.viewTile(nx, ny, lit) as TileType;
-      if (theirs === mine || HARD_EDGED.has(theirs)) continue;
+      // A grass/earth join is a ruffle, drawn from the earth side; a band of
+      // one colour washed into the other underneath it is a ruffle standing
+      // in a smear, so that pair skips this.
+      if (theirs === mine || HARD_EDGED.has(theirs) || ruffledJoin(mine, theirs)) continue;
       if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
       const ax = pts[e * 2];
       const ay = pts[e * 2 + 1];
@@ -787,6 +787,52 @@ export class Renderer {
       drew = true;
     }
     return drew;
+  }
+
+  /**
+   * Grass spilling over the edge of a track, on a tile of bare earth.
+   *
+   * Every other ground meets its neighbour on the ruled line between them,
+   * which is what a tile is. A field against a path somebody wore across it
+   * does not: it thins out and gives up in lumps, and that ragged join is
+   * most of what makes a path look walked rather than painted on.
+   *
+   * So the earth tile draws it, into itself, clipped to itself. Which ends of
+   * the edge are which swaps at every other quarter turn, so the run is taken
+   * in the order the *world's* corners come in rather than the screen's, or
+   * the ruffle reads one way round at one rotation and the other at the next
+   * and the whole path crawls as the camera comes about.
+   */
+  private grassEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): void {
+    const world = this.game.world;
+    const co = V.corners;
+    const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
+    const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
+    let clipped = false;
+    for (let e = 0; e < 4; e++) {
+      const nx = x + V.edges[e][0];
+      const ny = y + V.edges[e][1];
+      if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
+      if (world.viewTile(nx, ny, lit) !== TileType.Grass) continue;
+      if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
+      if (!clipped) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pts[0], pts[1]);
+        for (let k = 1; k < 4; k++) ctx.lineTo(pts[k * 2], pts[k * 2 + 1]);
+        ctx.closePath();
+        ctx.clip();
+        clipped = true;
+      }
+      const f = (e + 1) & 3;
+      const a = co[e], b = co[f];
+      ruffle(ctx, pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1], cx, cy,
+        a[0] * 2 + a[1] > b[0] * 2 + b[1],
+        // Off the pair of tiles, so the same join is the same ruffle whatever
+        // the camera is doing and whichever of the two is being drawn.
+        Math.floor(hash2(x + nx, y + ny, 907) * 0x7fffffff), zoom);
+    }
+    if (clipped) ctx.restore();
   }
 
   /**
@@ -942,23 +988,22 @@ export class Renderer {
   }
 
   /**
-   * A tile of meadow: the sward under it, what lies in it, and what stands up.
+   * What grows on a tile of grass, which is the whole of what grass has on it.
    *
-   * The sward goes on with `overlay`, so the tile keeps its own green, the
-   * hour's sun, the slope it lies on and the grey of land you only remember.
-   * The rest is in real colour and only on ground you can actually see --
-   * remembered ground keeps its shape and its trees and nothing else, and a
-   * daisy you are remembering is not a daisy you are looking at.
+   * The field itself is flat colour and stays that way. It carried a texture
+   * for a while -- a sward of soft light and shade laid over the lot of it --
+   * and flat is better: the ground the references are drawn on is one green
+   * with the detail sitting on it in pieces you can count, and a wash over
+   * the whole field puts the ground into the same range of light and dark as
+   * the things standing in it.
+   *
+   * Only on ground you can actually see: remembered ground keeps its shape
+   * and its trees and nothing else, and a clump you are remembering is not a
+   * clump you are looking at.
    */
   private meadowTile(x: number, y: number, pts: Float64Array, rot: number, zoom: number, lit: boolean): void {
     const ctx = this.canvas.ctx;
     const m = meadow();
-    // The sward is not laid here: it goes on the whole row at once, further
-    // down, because nine hundred sheared blits a frame is what it cost when
-    // it was and one fill a row is what it costs now.
-    if (this.swardN + 8 <= this.swardQuads.length) {
-      for (let i = 0; i < 8; i++) this.swardQuads[this.swardN++] = pts[i];
-    }
     if (!lit) return;
     // The tile's own corners, so a daisy stays on the same square foot of
     // ground when the camera comes round rather than jumping a corner.
@@ -970,63 +1015,31 @@ export class Renderer {
     const look = m.looks[grassLook(x, y)];
     const lo = look.blobN[0];
     const n = lo + Math.floor(hash2(x, y, 301) * (look.blobN[1] - lo + 1));
+    // Where the first one stands. The rest are placed off it rather than off
+    // the tile, so a look that says its clumps are crowded together grows
+    // them crowded together instead of one in each far corner.
+    const u0 = 0.16 + hash2(x, y, 311) * 0.68;
+    const v0 = 0.16 + hash2(x, y, 312) * 0.68;
+    const crowd = look.spread < CROWD;
     for (let i = 0; i < n; i++) {
-      const b = m.blobs[look.blobs[Math.floor(hash2(x, y, 310 + i * 3) * look.blobs.length) % look.blobs.length]];
-      const u = 0.14 + hash2(x, y, 311 + i * 3) * 0.72;
-      const v = 0.14 + hash2(x, y, 312 + i * 3) * 0.72;
+      const pick = look.slots ? look.slots[Math.min(i, look.slots.length - 1)] : look.blobs;
+      const b = m.blobs[pick[Math.floor(hash2(x, y, 310 + i * 3) * pick.length) % pick.length]];
+      let u = u0, v = v0;
+      if (i) {
+        u = u0 + (hash2(x, y, 311 + i * 3) - 0.5) * 2 * look.spread;
+        // In a crowd the later ones come down the screen as well as across,
+        // so the one drawn over the top of another is the one in front of it.
+        v = crowd
+          ? v0 + hash2(x, y, 312 + i * 3) * look.spread
+          : v0 + (hash2(x, y, 312 + i * 3) - 0.5) * 2 * look.spread;
+        u = Math.min(0.9, Math.max(0.1, u));
+        v = Math.min(0.9, Math.max(0.1, v));
+      }
       const ready = this.atSize(b.canvas, b.w * zoom, b.h * zoom);
       ctx.drawImage(ready, atX(u, v) - b.ax * zoom, atY(u, v) - b.ay * zoom, b.w * zoom, b.h * zoom);
     }
   }
 
-  /**
-   * A row's worth of sward, in one fill.
-   *
-   * The picture is hung off the world's axes: a pattern whose transform takes
-   * its own pixels to tiles and tiles to the screen, so the texture holds
-   * still over the ground when the camera pans and turns, and runs across
-   * tile lines without a seam because it never knew where they were.
-   *
-   * It ignores height. A tile lifted twenty feet gets the texture the flat
-   * ground beside it would have had, slid a little; and since the texture is
-   * soft and has nothing in it to register against, there is nothing to see.
-   * The alternative was the nine hundred blits.
-   */
-  private flushSward(): void {
-    const n = this.swardN;
-    this.swardN = 0;
-    if (!n) return;
-    const ctx = this.canvas.ctx;
-    const pat = this.swardPattern;
-    if (!pat) return;
-    const q = this.swardQuads;
-    ctx.beginPath();
-    for (let i = 0; i < n; i += 8) {
-      /*
-       * Each tile swollen by a third of a pixel from its own middle. A row is
-       * filled on its own, so where one row meets the next both edges are
-       * half-covered by the antialiasing and the seam comes out lighter than
-       * the ground either side of it -- a hairline across the field every
-       * twenty-four pixels. A third of a pixel of overlap costs the same
-       * hairline twice as much of a texture that is a tenth of an alpha,
-       * which is to say nothing anybody can see.
-       */
-      const cx = (q[i] + q[i + 2] + q[i + 4] + q[i + 6]) / 4;
-      const cy = (q[i + 1] + q[i + 3] + q[i + 5] + q[i + 7]) / 4;
-      for (let k = 0; k < 4; k++) {
-        const dx = q[i + k * 2] - cx;
-        const dy = q[i + k * 2 + 1] - cy;
-        const out = 0.75 / (Math.hypot(dx, dy) || 1);
-        const px = q[i + k * 2] + dx * out;
-        const py = q[i + k * 2 + 1] + dy * out;
-        if (k === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-    }
-    ctx.fillStyle = pat;
-    ctx.fill();
-  }
 
   private addGrain(x: number, y: number, pts: Float64Array, zoom: number): void {
     const size = Math.max(1, 2.6 * zoom);
@@ -1187,32 +1200,10 @@ export class Renderer {
       this.scaled.clear();
     }
     const paved = zoom >= 0.75;
-    // A sward at a quarter of a tile to the screen is one grey wash over
-    // another; below that the tile's own colour says everything it can.
+    // Grass is flat colour with things growing in it, and a clump of grass
+    // painted at a quarter of a tile to the screen is three pixels of green
+    // on green. Below this the field says what it has to say with its colour.
     const grassy = zoom >= MEADOW_FROM;
-    /*
-     * And the sward's pattern, set once a frame: its own pixels to tiles, and
-     * tiles to the screen by the camera's own two axes. That is what lets one
-     * fill cover a whole row of grass and still lie down the world's grain --
-     * the texture holds still under a pan and turns with the camera, and it
-     * runs across tile lines without a seam because it never knew where they
-     * were.
-     */
-    if (grassy) {
-      const mead = meadow();
-      if (!this.swardPattern) this.swardPattern = ctx.createPattern(mead.sward, 'repeat');
-      const pat = this.swardPattern;
-      if (pat) {
-        const k = 1 / mead.swardTile;
-        const ox = cam.worldToScreenX(0, 0);
-        const oy = cam.worldToScreenY(0, 0, 0);
-        pat.setTransform(new DOMMatrix([
-          (cam.worldToScreenX(1, 0) - ox) * k, (cam.worldToScreenY(1, 0, 0) - oy) * k,
-          (cam.worldToScreenX(0, 1) - ox) * k, (cam.worldToScreenY(0, 1, 0) - oy) * k,
-          ox, oy,
-        ]));
-      }
-    }
     // Close enough to be picking things up rather than looking at the country.
     const player = this.game.player;
     const playerDepth = depthOf(V, player.tileX, player.tileY);
@@ -1330,11 +1321,15 @@ export class Renderer {
         ctx.stroke();
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
-        // Grass gets a sward laid over it instead of speckles: the two are
-        // the same idea at different qualities, and both at once is mud.
-        const meadowed = grassy && !wet && t0 === TileType.Grass;
-        if (grain && !wet && !meadowed) this.addGrain(x, y, pts, zoom);
-        if (meadowed) this.meadowTile(x, y, pts, paveRot, zoom, lit);
+        // Grass is flat colour with clumps growing in it, and no speckles:
+        // speckles are what it had instead of clumps, and both at once is mud.
+        const grassTile = !wet && t0 === TileType.Grass;
+        if (grain && !wet && !grassTile) this.addGrain(x, y, pts, zoom);
+        if (grassy && grassTile) this.meadowTile(x, y, pts, paveRot, zoom, lit);
+        // And where bare earth has grass beside it, the grass comes over the
+        // edge of it. Only bare earth: a flagstone or a cobble was laid to a
+        // line and keeps to it, and the beach does its own thing at the water.
+        if (grassy && !wet && RUFFLED.has(t0)) this.grassEdges(ctx, V, x, y, pts, zoom, lit);
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
 
         const t = t0;
@@ -1499,9 +1494,6 @@ export class Renderer {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
         this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
       }
-      // The row's sward, before its trees and its creatures, because
-      // everything else on the tile is standing in it.
-      this.flushSward();
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }
     // The surface and then what crossed it, both clipped to the water, so

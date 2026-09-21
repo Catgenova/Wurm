@@ -49,6 +49,20 @@ export type RGB = readonly [number, number, number];
 export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone]);
 
 /**
+ * The bare grounds that grass runs out over the edge of.
+ *
+ * Earth somebody walked or packed is the one ground a field does not stop
+ * dead at, so the join is drawn as a ruffle of grass lobes hanging over the
+ * earth rather than as the soft band of one colour into the other every other
+ * pair of grounds gets. Both at once is a ruffle standing in a smear.
+ */
+export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, TileType.PackedDirt]);
+
+/** Whether these two grounds meet in a ruffle rather than a blended band. */
+export const ruffledJoin = (a: number, b: number): boolean =>
+  (a === TileType.Grass && RUFFLED.has(b)) || (b === TileType.Grass && RUFFLED.has(a));
+
+/**
  * Ground a spadeful of dirt covers over, leaving dirt.
  *
  * Reported from the island: *"dropping dirt on a clay/sand tile corner isn't
@@ -164,16 +178,18 @@ export interface TileDef {
 
 export const TILE_DEFS: Record<TileType, TileDef> = {
   /*
-   * Paler and warmer than it was, which is the whole map moving at once.
+   * A teal blue-green rather than the yellow-green of a hayfield: pale, cool
+   * and a shade off what a field is supposed to be, which is the whole map
+   * moving at once and is the point of it.
    *
    * 92, 146, 62 was picked when grass was one flat colour and had to carry a
-   * field on its own. A meadow with clover and daisies and tufts standing in
-   * it wants a quieter ground under them: the things growing are what the eye
-   * should find, and it cannot find them on a green as loud as they are. A
-   * mown lawn stays the greener of the two, because a lawn is tended and a
-   * meadow is what the summer left.
+   * field on its own. It is flat colour again now -- the clumps growing in it
+   * are the only thing on it -- but a loud warm green under them is a green
+   * as loud as they are, and the eye cannot find a thing on a ground that is
+   * shouting. A mown lawn stays the deeper and stronger of the two, because a
+   * lawn is tended and a meadow is what the summer left.
    */
-  [TileType.Grass]: { name: 'Grass', color: [128, 174, 98], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  [TileType.Grass]: { name: 'Grass', color: [125, 195, 166], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   [TileType.Dirt]: { name: 'Dirt', color: [121, 92, 60], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
   [TileType.PackedDirt]: { name: 'Packed dirt', color: [140, 116, 86], speed: 1.05, pavable: true, roll: 0.9 },
   [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
@@ -195,7 +211,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Stump]: { name: 'Stump', color: [98, 130, 58], speed: 0.7, roll: 0.35 },
   [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1, roll: 0.5 },
   [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8, roll: 0.4 },
-  [TileType.Lawn]: { name: 'Lawn', color: [104, 164, 74], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
+  [TileType.Lawn]: { name: 'Lawn', color: [98, 176, 146], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
 
