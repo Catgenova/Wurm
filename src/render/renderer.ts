@@ -34,7 +34,7 @@ import { bareRock, dustiness, HARD_EDGED, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, T
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { cobble } from './cobble';
+import { ARCH, cobble } from './cobble';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -228,6 +228,19 @@ const hexRgb = (hex: string): [number, number, number] => {
   const n = parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
+
+/*
+ * How much of the hour's light the inside of an archway keeps.
+ *
+ * A reveal is a face turned away from the light, not a hole in the daylight.
+ * At a little over half it came out near black against a pale wall and read as
+ * a slot rather than a passage. The jambs keep three quarters, because the sky
+ * still reaches down the sides of a way through; the soffit keeps half again
+ * of that, because nothing reaches the underside of an arch.
+ */
+const JAMB_LIT = 0.78;
+const SOFFIT_LIT = 0.6;
+
 
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
@@ -2661,10 +2674,42 @@ export class Renderer {
         ctx.fillStyle = `rgba(24, 20, 12, ${((1 - k) * 0.85).toFixed(3)})`;
         ctx.fill();
       };
-      blit(cob.face[v], 0, 1);
+      /*
+       * An archway is the same section with a hole in it, so it is the same
+       * blit with a different picture -- not a shape drawn over the stone.
+       * The picture's hole and the clip below both come out of `ARCH`, so
+       * there is one statement about where a doorway is.
+       */
+      const arched = wall.type === 'arch';
+      /*
+       * Everything but the way through, for whatever is painted over the
+       * stone: a hedge in a doorway is a doorway nobody uses, and ivy across
+       * one is a green curtain hanging on nothing.
+       *
+       * The outer boundary is not the face. The ivy stands `pad` above the
+       * cap and the hedge sits over the ground line, so the boundary is drawn
+       * wide enough to hold anything a section carries, and only the hole is
+       * taken out of it -- the two paths in one, clipped even-odd.
+       */
+      const onStone = (): void => {
+        if (!arched) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(px(-1, -1), py(-1, -1));
+        ctx.lineTo(px(2, -1), py(2, -1));
+        ctx.lineTo(px(2, 3), py(2, 3));
+        ctx.lineTo(px(-1, 3), py(-1, 3));
+        ctx.closePath();
+        this.archGeom({ px, py, quad }, zoom).hole(1);
+        ctx.clip('evenodd');
+      };
+      const offStone = (): void => { if (arched) ctx.restore(); };
+      blit(arched ? cob.arch[v] : cob.face[v], 0, 1);
       if (wall.level === 0 && !indoors) {
+        onStone();
         blit(cob.foot[v], 0, 1);
         blit(cob.base[v], 0, 1);
+        offStone();
       }
       /*
        * The hour's light, and only that. A flat wall takes a wash down its
@@ -2707,8 +2752,37 @@ export class Renderer {
        * over it, and a leaf in the sun is in the sun whichever way the wall
        * behind it is turned.
        */
-      if (!roofed && !indoors) blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
-      this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+      if (!roofed && !indoors) {
+        onStone();
+        blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
+        offStone();
+      }
+      /*
+       * And what is on the other side of the hole, painted last and clipped to
+       * the hole, so the hour's light above went over the stone and not down
+       * the passage. What you see through a doorway is bounded by the doorway.
+       */
+      if (arched) {
+        const geom = this.archGeom({ px, py, quad }, zoom);
+        ctx.save();
+        geom.outline(1);
+        ctx.clip();
+        this.archDepth(cob.reveal, lit, { px, py, quad }, zoom);
+        ctx.restore();
+        /*
+         * And a line round the edge of it, in the same ink the picture draws
+         * every block with. Every stone in the wall is outlined and the one
+         * hole in it was not, so the opening read as a gap between stones
+         * rather than as an edge somebody cut.
+         */
+        geom.rim(1);
+        ctx.strokeStyle = rgb(cob.line, lit * 0.95, 0.6);
+        ctx.lineWidth = Math.max(1, 1.5 * zoom);
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+      } else {
+        this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+      }
       ctx.globalAlpha = 1;
       return;
     }
@@ -3026,48 +3100,86 @@ export class Renderer {
    * terrain units across and a storey is thirty up, so a rise of four thirds
    * of the half-width in `k` is a rise equal to it on the ground.
    */
-  private wallArch(mat: MaterialDef, lit: number, g: WallGeom, zoom: number): void {
+  /**
+   * The way through an archway, and the outline of it.
+   *
+   * Split out of `wallArch` because a cobblestone one is a painted picture
+   * with a hole in it rather than a shape drawn over a flat colour, and the
+   * two want the same geometry and nothing else in common. The numbers come
+   * from `ARCH`, which the texture that cuts the hole reads as well, so the
+   * clip and the hole are one statement.
+   */
+  private archGeom(g: WallGeom, zoom: number): {
+    t0: number; t1: number; spring: number; steps: number;
+    headT: (u: number) => number; headK: (u: number) => number;
+    hole: (s: number) => void; outline: (s: number) => void; rim: (s: number) => void;
+  } {
     const ctx = this.canvas.ctx;
     const { px, py } = g;
-    const t0 = 0.26;
-    const t1 = 0.74;
+    const { t0, t1, spring } = ARCH;
     const mid = (t0 + t1) / 2;
     const halfW = (t1 - t0) / 2;
+    // A true semicircle: the rise above the springing is the half span, said
+    // in the units the wall is measured in rather than in fractions of two
+    // different things.
     const rise = (halfW * UNITS_PER_TILE) / WALL_HEIGHT;
-    const spring = 0.5;
     const steps = zoom >= 0.9 ? 12 : 6;
-    /** A point on the head, `u` from the left springing round to the right. */
     const headT = (u: number): number => mid - halfW * Math.cos(Math.PI * u);
     const headK = (u: number): number => spring + rise * Math.sin(Math.PI * u);
-    /** The whole opening, jambs and head, on one face of the wall. */
-    const outline = (s: number): void => {
-      ctx.beginPath();
+    /** The way through, added to whatever path is open: one shape, several uses. */
+    const hole = (s: number): void => {
       ctx.moveTo(px(t0, 0, s), py(t0, 0, s));
       ctx.lineTo(px(t0, spring, s), py(t0, spring, s));
       for (let i = 1; i <= steps; i++) ctx.lineTo(px(headT(i / steps), headK(i / steps), s), py(headT(i / steps), headK(i / steps), s));
       ctx.lineTo(px(t1, 0, s), py(t1, 0, s));
       ctx.closePath();
     };
-    /*
-     * What you see through it: the far side of the opening, dark at the head
-     * where the soffit shades it and lighter at the floor. An arch is not a
-     * window with a leaf behind it — it is a way through, and it should read
-     * as one from across the deed.
+    const outline = (s: number): void => { ctx.beginPath(); hole(s); };
+    /**
+     * The same edge, left open at the threshold, for stroking.
+     *
+     * The closed shape ends by running back along the ground from one jamb to
+     * the other, and a line drawn there is a doorstep across a doorway that
+     * has not got one.
      */
-    outline(-1);
-    const deep = ctx.createLinearGradient(px(mid, spring + rise, -1), py(mid, spring + rise, -1), px(mid, 0, -1), py(mid, 0, -1));
-    deep.addColorStop(0, rgb(mat.trim, lit * 0.16));
-    deep.addColorStop(1, rgb(mat.trim, lit * 0.42));
-    ctx.fillStyle = deep;
-    ctx.fill();
+    const rim = (s: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(px(t0, 0, s), py(t0, 0, s));
+      ctx.lineTo(px(t0, spring, s), py(t0, spring, s));
+      for (let i = 1; i <= steps; i++) ctx.lineTo(px(headT(i / steps), headK(i / steps), s), py(headT(i / steps), headK(i / steps), s));
+      ctx.lineTo(px(t1, 0, s), py(t1, 0, s));
+    };
+    return { t0, t1, spring, steps, headT, headK, hole, outline, rim };
+  }
+
+  /**
+   * What you see through an archway: the far side of the opening, and the
+   * wall's own thickness seen edge on all the way round it.
+   *
+   * Drawn as one strip from the near outline to the far one, which is what
+   * makes an arch look cut through something rather than painted on it. It is
+   * bounded by the near hole because that is what you are looking through.
+   */
+  private archDepth(ink: readonly [number, number, number], lit: number, g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py } = g;
+    const { t0, t1, spring, steps, headT, headK } = this.archGeom(g, zoom);
     /*
-     * The soffit and the jambs: the wall's own thickness, seen edge on all the
-     * way round the opening. Drawn as one strip from the near outline to the
-     * far one, which is what makes an arch look cut through something rather
-     * than painted on it.
+     * Nothing is painted on the far side of it.
+     *
+     * It used to be: a dark gradient over the whole opening, standing in for a
+     * room beyond. But an arch is a way through, and what is on the other side
+     * of it has already been drawn -- the ground, the floor of whatever it
+     * lets into, whoever is walking towards you through it -- because
+     * everything further off is drawn first. Painting over that put a black
+     * slab in a doorway you can walk through, which on a free-standing wall
+     * with nothing behind it but grass is a hole in the world.
+     *
+     * So only the wall's own thickness is drawn, which is the part that is
+     * really there.
      */
-    ctx.fillStyle = rgb(mat.color, lit * 0.58);
-    const strip = (ta: number, ka: number, tb: number, kb: number): void => {
+    const strip = (ta: number, ka: number, tb: number, kb: number, k: number): void => {
+      ctx.fillStyle = rgb(ink, lit * k);
       ctx.beginPath();
       ctx.moveTo(px(ta, ka, 1), py(ta, ka, 1));
       ctx.lineTo(px(tb, kb, 1), py(tb, kb, 1));
@@ -3076,13 +3188,33 @@ export class Renderer {
       ctx.closePath();
       ctx.fill();
     };
-    strip(t0, 0, t0, spring);
-    strip(t1, 0, t1, spring);
+    /*
+     * The jambs stand on edge and the soffit hangs over you, so they do not
+     * take the same light: the sky reaches down the sides of a passage and
+     * not into the top of it. One step between them is what gives the way
+     * through a shape rather than a flat band of grey round a hole, and it
+     * darkens the head of the arch, which is where the eye reads the curve.
+     */
+    strip(t0, 0, t0, spring, JAMB_LIT);
+    strip(t1, 0, t1, spring, JAMB_LIT);
     for (let i = 0; i < steps; i++) {
-      strip(headT(i / steps), headK(i / steps), headT((i + 1) / steps), headK((i + 1) / steps));
+      // Down the two ends of the head, up to the crown: what is nearly
+      // vertical there is still a jamb, what is nearly level is soffit.
+      const u = (i + 0.5) / steps;
+      const k = JAMB_LIT + (SOFFIT_LIT - JAMB_LIT) * Math.sin(Math.PI * u);
+      strip(headT(i / steps), headK(i / steps), headT((i + 1) / steps), headK((i + 1) / steps), k);
     }
+  }
+
+  private wallArch(mat: MaterialDef, lit: number, g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const { px, py } = g;
+    const { t0, t1 } = ARCH;
+    const mid = (t0 + t1) / 2;
+    const { spring, steps, headT, headK, rim } = this.archGeom(g, zoom);
+    this.archDepth(mat.color, lit, g, zoom);
     // And the edge of the hole, so the face reads as cut rather than shaded.
-    outline(1);
+    rim(1);
     ctx.strokeStyle = rgb(mat.trim, lit * 0.85);
     ctx.stroke();
     if (zoom < 0.7) return;

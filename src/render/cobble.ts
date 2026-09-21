@@ -50,10 +50,34 @@ interface Variant {
   foot: { hedges: Hedge[] };
 }
 
+/**
+ * Where an archway is cut, as fractions of a wall section.
+ *
+ * `t0` and `t1` are how far along the wall the jambs stand and `spring` how
+ * far up it the curve starts. The rise is not here because it is not a free
+ * number: a true semicircle rises by exactly the half span, and the renderer
+ * works that out from these two in the units it already has.
+ *
+ * One statement, read by the texture that cuts the hole and by the renderer
+ * that clips to it, because a hole in a picture and a hole in a wall that do
+ * not agree is a wall with a seam of daylight round its doorway.
+ *
+ * The springing is low for the same reason it is low in anything built out of
+ * stone: the head has to come down inside the wall. At half the storey the
+ * crown of a 1.9 m opening stood 2.5 m up a 3 m wall, which leaves half a
+ * metre for the ring that holds it and the course over that -- so the ring ran
+ * off the top of the section. At 0.35 the opening is 1.9 m by 2.0 m, which is
+ * a door a man walks through with a sack on his shoulder, and there is a
+ * course of field stone over the ring before the band.
+ */
+export const ARCH = { t0: 0.26, t1: 0.74, spring: 0.35 } as const;
+
 /** The painted wall, in the pieces a renderer fills its faces with. */
 export interface Cobble {
   /** One per variant: the stone of a storey, which butts any other left or right and stacks on any. */
   face: HTMLCanvasElement[];
+  /** The same, with an archway cut through it and a ring of rough voussoirs round the hole. */
+  arch: HTMLCanvasElement[];
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -62,6 +86,16 @@ export interface Cobble {
   /** The cap along the top of a wall, and the end grain where a run stops. */
   cap: HTMLCanvasElement;
   ends: HTMLCanvasElement;
+  /**
+   * The stone the wall's own thickness shows in the reveal of an archway.
+   *
+   * A painted wall's face is a picture, not the material's flat colour, so
+   * the colour the material carries is no guide to what the side of a hole
+   * cut through it should be. This is the picture's own shaded stone.
+   */
+  reveal: [number, number, number];
+  /** And the ink it outlines every block with, for the edge of a hole cut in it. */
+  line: [number, number, number];
   /** A section is `w` by `h`; the ivy reaches `pad` above it, and the cap is `capH` deep. */
   w: number;
   h: number;
@@ -145,7 +179,10 @@ export function cobble(): Cobble {
     for (const [x, y, r] of cs) { const rr = Math.max(1, r + grow); g.moveTo(x + ox + rr, y + oy); g.arc(x + ox, y + oy, rr, 0, 7); }
   }
   /** A hex colour with an alpha, for the soft edge under a line. */
-  const hexA = (hex: string, a: number): string => 'rgba(' + [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(',') + ',' + a + ')';
+  const hexA = (hex: string, a: number): string => 'rgba(' + channels(hex).join(',') + ',' + a + ')';
+  /** A hex colour as three numbers, for anything outside that wants to light it itself. */
+  const channels = (hex: string): [number, number, number] =>
+    [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
   /** What a mass casts on the stones behind it: one flat darkening, down and right. */
   function shadowOf(g: Ctx, cs: Lobe[], ox: number, oy: number): void {
     unionPath(g, cs, ox, oy, 2); g.fillStyle = 'rgba(110,100,80,0.22)'; g.fill();
@@ -626,6 +663,217 @@ export function cobble(): Cobble {
       foot: { hedges: [{ cx: 320, w: 110, h: 64, flowers: 3, seed: 512 }] } },
   ];
 
+  /* ---- the archway ------------------------------------------------------- */
+  /*
+   * A rough cobbled archway whose shape is not rough at all.
+   *
+   * That is the whole of the idea. A novice can lay a true arch without being
+   * able to cut a stone: he strikes the curve off a centre, props a former
+   * under it, and jams whatever he has against it until it stands. The line of
+   * the opening is therefore exact and everything touching it is not -- wedges
+   * of no two depths, joints that are not quite radial, and a ragged pocket of
+   * mortar where the field stones were broken away to make room.
+   *
+   * It is drawn in that order and cut last. Every stone of the ring is laid
+   * generously, overhanging into the opening, and then the hole is taken out
+   * of the lot of them in one pass -- so the intrados is a circle struck by a
+   * compass, and the stone either side of it was shaped by somebody with a
+   * hammer and no great hurry.
+   */
+  const A_CX = TW * (ARCH.t0 + ARCH.t1) / 2;
+  /*
+   * The half span, and the rise, which are the same number.
+   *
+   * A section is four metres across and three high at 128 px to the metre both
+   * ways, so a circle in the world is a circle in the picture and one radius
+   * does for both. The renderer works the rise out from the same two spans and
+   * arrives at the same place, which is what lets its clip and this hole agree.
+   */
+  const A_R = TW * (ARCH.t1 - ARCH.t0) / 2;
+  const A_CY = TH * (1 - ARCH.spring);
+
+  /** The opening: two jambs and a true semicircular head. */
+  function openingPath(g: Ctx): void {
+    g.beginPath();
+    g.moveTo(A_CX - A_R, TH);
+    g.lineTo(A_CX - A_R, A_CY);
+    g.arc(A_CX, A_CY, A_R, Math.PI, Math.PI * 2);
+    g.lineTo(A_CX + A_R, TH);
+    g.closePath();
+  }
+
+  /** A polygon with more corners than it needs, each shoved about: a stone cut by eye. */
+  function roughen(poly: Pt[], R: Rand, per: number, jitter: number): Pt[] {
+    const out: Pt[] = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      for (let k = 0; k < per; k++) {
+        const u = k / per;
+        out.push([a[0] + (b[0] - a[0]) * u + (R() - 0.5) * jitter * 2,
+                  a[1] + (b[1] - a[1]) * u + (R() - 0.5) * jitter * 2]);
+      }
+    }
+    return out;
+  }
+
+  const bbox = (pts: Pt[]): Block => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, course: 0, pts };
+  };
+
+  /** One stone of the ring or a jamb: the same two tones, line and bevel every block has. */
+  function dressed(g: Ctx, pts: Pt[], tone: string): void {
+    const T = TONES[tone] || TONES[''];
+    solid(g, pts, T.lit, T.shade, PASTEL.line, 2.4, -3.5, -4.5);
+    g.save(); shape(g, pts); g.clip();
+    g.globalAlpha = 0.45; g.translate(1.5, 2);
+    shape(g, pts); g.strokeStyle = T.hi; g.lineWidth = 1.6; g.lineJoin = 'round'; g.stroke();
+    g.restore();
+  }
+
+  /** What a hammer and the weather have had off one stone of an arch. Never `missing`: a ring is
+   *  only standing while every wedge in it is. */
+  function wearOne(g: Ctx, pts: Pt[], R: Rand): void {
+    const s = bbox(pts);
+    const t = R();
+    if (t < 0.20) chipCorner(g, s, R);
+    else if (t < 0.34) crack(g, s, R);
+    else if (t < 0.40) spall(g, s, R);
+    if (R() < 0.28) abrade(g, s, R);
+    if (R() < 0.24) pits(g, s, R);
+    if (R() < 0.18) slop(g, s, R);
+  }
+
+  /**
+   * The reveal: a column of stone up each side of the opening, from the
+   * springing down to the ground.
+   *
+   * These are the stones a novice takes trouble over, because they are the
+   * ones a cart scrapes and a hand rests on, so they run squarer and a shade
+   * warmer than the field they sit in. Their inner edge overhangs into the
+   * opening and is taken off by the cut, which is what leaves the jamb dead
+   * straight while every other edge of every one of them wanders.
+   */
+  function jamb(g: Ctx, R: Rand, side: number): void {
+    const line = A_CX + side * A_R;
+    let y = A_CY + IMPOST_H;
+    while (y < TH + 20) {
+      const h = 36 + R() * 22, w = 54 + R() * 20;
+      const x = side < 0 ? line + OVER - w : line - OVER;
+      const pts = stone(g, x, y, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.035);
+      wearOne(g, pts, R);
+      y += h + MORTAR + R() * 3;
+    }
+  }
+
+  /** How far every stone of the opening is laid into it, to be cut off again. */
+  const OVER = 10;
+  /** How deep the impost is, which is also where the jamb starts. */
+  const IMPOST_H = 20;
+
+  /**
+   * The impost: the one flat stone at the springing that the ring comes down
+   * on and the jamb carries.
+   *
+   * Without it the lowest wedge sits straight on whatever course of the jamb
+   * happened to end there, and the ring and the reveal run into each other in
+   * a muddle. It is the one piece of an arch that even a bad mason gets
+   * right, because it is the piece that tells him where to start the curve.
+   * It reaches a little further out than the ring does, the way a ledge does.
+   */
+  function impost(g: Ctx, R: Rand, side: number): void {
+    const line = A_CX + side * A_R;
+    const deep = A_R * 0.40;
+    const x = side < 0 ? line - deep : line - OVER;
+    const pts = stone(g, x, A_CY - 3, deep + OVER, IMPOST_H + 3, R, pickDressed(R), false, (R() - 0.5) * 0.02);
+    wearOne(g, pts, R);
+  }
+
+  /**
+   * The stone of the opening, jamb, impost and ring alike.
+   *
+   * All of it is stone that was picked over rather than picked up, so it runs
+   * warmer than the field it is set in and the eye reads the whole doorway as
+   * one piece of work instead of as a hole with a fringe.
+   */
+  const pickDressed = (R: Rand): string => (R() < 0.52 ? 'warm' : R() < 0.5 ? 'brown' : '');
+
+  /** The ring: wedges of no two depths, on joints that are not quite radial. */
+  function voussoirs(g: Ctx, R: Rand): void {
+    // Odd, so one stone caps the crown rather than a joint splitting it.
+    const n = 9 + 2 * Math.floor(R() * 2);
+    const cut: number[] = [];
+    /*
+     * A joint wanders by up to a quarter of a wedge either way, and no
+     * further. Loose enough that no two wedges are the same width; tight
+     * enough that none of them comes out a splinter, and that two joints
+     * never cross -- a ring with a crossed joint is not a rough ring, it is a
+     * ring that has fallen down.
+     */
+    for (let i = 0; i <= n; i++) cut.push(i / n + (i > 0 && i < n ? (R() - 0.5) * 0.5 / n : 0));
+    /*
+     * How far past the curve each joint reaches, and how far off true it
+     * leans. The depth is held under half the radius because the crown of the
+     * ring has to stay below the band: the extrados there is the springing
+     * less the radius and its depth, and the band starts an eighth of the way
+     * down the section.
+     */
+    const out = cut.map(() => 0.24 + R() * 0.11);
+    const lean = cut.map(() => (R() - 0.5) * 0.10);
+    const crown = (n - 1) / 2;
+    const at = (j: number, r: number): Pt => {
+      const a = Math.PI * (1 + cut[j]) + lean[j] * r;
+      return [A_CX + Math.cos(a) * A_R * (1 + r), A_CY + Math.sin(a) * A_R * (1 + r)];
+    };
+    /*
+     * First the pocket: the mortar behind the ring.
+     *
+     * The field was laid before anybody thought about a doorway, and the way
+     * through was made by breaking stone out of it. What is left round the
+     * ring is a ragged line of mortar and chips, a few pixels of it here and
+     * a finger's width there, and it is the one thing that tells the eye at a
+     * distance that there is a ring at all: without it the wedges are pale
+     * stone butting pale stone, and at a hundred yards the arch is a hole.
+     *
+     * It is drawn out to a little past where the deepest wedge will reach and
+     * in past the curve, so the wedges bury all of it but the ragged edge and
+     * the cut takes the rest.
+     */
+    const lip = (j: number): number => out[j] + (j === crown || j === crown + 1 ? 0.06 : 0);
+    const foot = A_CY - 1;
+    const hem: Pt[] = [[A_CX - A_R * (1 + lip(0)), foot]];
+    for (let j = 0; j < n; j++) {
+      for (let k = 0; k < 3; k++) {
+        const u = k / 3;
+        const a = Math.PI * (1 + cut[j] + (cut[j + 1] - cut[j]) * u);
+        // Flush with the wedges two thirds of the way round and a bite of
+        // mortar the rest, so what shows is a broken line and not a rim.
+        const r = lip(j) + (lip(j + 1) - lip(j)) * u + (R() < 0.38 ? 0.02 + R() * 0.05 : -0.004);
+        hem.push([A_CX + Math.cos(a) * A_R * (1 + r), A_CY + Math.sin(a) * A_R * (1 + r)]);
+      }
+    }
+    hem.push([A_CX + A_R * (1 + lip(n)), foot]);
+    hem.push([A_CX + A_R * 0.93, foot]);
+    for (let j = n; j >= 0; j--) hem.push(at(j, -0.06));
+    hem.push([A_CX - A_R * 0.93, foot]);
+    g.beginPath();
+    g.moveTo(hem[0][0], hem[0][1]);
+    for (const q of hem) g.lineTo(q[0], q[1]);
+    g.closePath();
+    g.fillStyle = PASTEL.joint; g.fill();
+    for (let i = 0; i < n; i++) {
+      // The crown stone reaches a little further, which is the only nod to a
+      // keystone a wall like this gets.
+      const deep = (j: number): number => out[j] + (i === crown ? 0.06 : 0);
+      // The inner pair sit inside the opening, so the cut is what shapes them.
+      const wedge: Pt[] = [at(i, -0.07), at(i + 1, -0.07), at(i + 1, deep(i + 1)), at(i, deep(i))];
+      const pts = roughen(wedge, R, 3, 2.2);
+      dressed(g, pts, i === crown ? '' : pickDressed(R));
+      wearOne(g, pts, R);
+    }
+  }
+
   /* ---- the textures ------------------------------------------------------ */
   const cnv = (w: number, h: number): HTMLCanvasElement => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   const ctxOf = (c: HTMLCanvasElement): Ctx => c.getContext('2d') as Ctx;
@@ -633,6 +881,35 @@ export function cobble(): Cobble {
   const FACE = VARIANTS.map((v, i) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     STONES[i] = paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, c = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [c - h2, c + h2]; }));
+    return c;
+  });
+  /**
+   * And the same section with a way through it.
+   *
+   * The field is painted first, off the variant's own seed, so an arch butts
+   * its neighbours on the same straddling stones every other section does --
+   * the opening is a long way inside the margin and never touches a seam. Then
+   * the pocket, the jambs and the ring, and then the hole out of the lot in
+   * one pass: the curve belongs to the compass and the stones to the hammer.
+   */
+  const ARCHED = VARIANTS.map((v) => {
+    const c = cnv(TW, TH), g = ctxOf(c);
+    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    const R = rand(v.seed * 131 + 17);
+    jamb(g, R, -1);
+    jamb(g, R, 1);
+    impost(g, R, -1);
+    impost(g, R, 1);
+    voussoirs(g, R);
+    // Opaque, deliberately: `destination-out` takes away as much as the source
+    // puts down, so a fill left over at 0.55 from the last pitted stone would
+    // leave the field ghosting through the opening at 0.45.
+    g.globalAlpha = 1;
+    g.fillStyle = '#000';
+    g.globalCompositeOperation = 'destination-out';
+    openingPath(g);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
     return c;
   });
   /** The growth over the top is painted PAD px taller than the face, the extra above the top edge: the
@@ -674,11 +951,14 @@ export function cobble(): Cobble {
   })();
   painted = {
     face: FACE,
+    arch: ARCHED,
     spill: SPILL,
     base: BASE,
     foot: FOOT,
     cap: CAP_STONE,
     ends: ENDS,
+    reveal: channels(PASTEL.stoneShade),
+    line: channels(PASTEL.line),
     w: TW,
     h: TH,
     pad: PAD,
