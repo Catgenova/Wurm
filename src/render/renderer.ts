@@ -794,7 +794,51 @@ export class Renderer {
    * worked out twice. Every figure comes off the tile's own coordinates, so a
    * road holds still while you walk down it.
    */
-  private paving(t: TileType, x: number, y: number, data: number, pts: Float64Array): void {
+  /**
+   * A square picture laid over a tile, in two triangles.
+   *
+   * A tile whose four corners stand at four heights is not a parallelogram, so
+   * the one transform a wall's face is blitted with will not do: it is cut on
+   * the diagonal and each half taken across on its own, which is what every
+   * renderer does with a bent quad. The two halves are clipped to exactly the
+   * same diagonal and not a pixel over it: a blend laid on twice is not the
+   * same as a blend laid on once, so a sliver of overlap where they meet
+   * comes out as a bright line straight across every tile in the road.
+   *
+   * `rot` says which of the four screen corners holds the tile's own (0, 0).
+   * The picture is hung off the world's axes rather than off the screen's, so
+   * a road holds still when the camera turns and a tile butts its neighbour
+   * whichever way round the two of them have come out.
+   */
+  private laidOver(img: HTMLCanvasElement, pts: Float64Array, rot: number, mode: GlobalCompositeOperation): void {
+    const ctx = this.canvas.ctx;
+    const s = img.width;
+    const qx: number[] = [];
+    const qy: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const k = (rot + i) & 3;
+      qx.push(pts[k * 2]);
+      qy.push(pts[k * 2 + 1]);
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = mode;
+    const half = (i0: number, i1: number, i2: number, a: number, b: number, c: number, d: number): void => {
+      ctx.save();
+      ctx.beginPath();
+      for (const i of [i0, i1, i2]) ctx.lineTo(qx[i], qy[i]);
+      ctx.closePath();
+      ctx.clip();
+      ctx.transform(a, b, c, d, qx[i0], qy[i0]);
+      ctx.drawImage(img, 0, 0);
+      ctx.restore();
+    };
+    // (0,0) (s,0) (s,s), then (0,0) (s,s) (0,s).
+    half(0, 1, 2, (qx[1] - qx[0]) / s, (qy[1] - qy[0]) / s, (qx[2] - qx[1]) / s, (qy[2] - qy[1]) / s);
+    half(0, 2, 3, (qx[2] - qx[3]) / s, (qy[2] - qy[3]) / s, (qx[3] - qx[0]) / s, (qy[3] - qy[0]) / s);
+    ctx.restore();
+  }
+
+  private paving(t: TileType, x: number, y: number, data: number, pts: Float64Array, rot: number): void {
     const ctx = this.canvas.ctx;
     /** A point inside the tile, by its two shares across it. */
     const qx = (u: number, v: number): number =>
@@ -827,12 +871,25 @@ export class Renderer {
       }
       return;
     }
-    // Slabs are cut square and laid square, in the size their stone is cut in;
-    // cobbles are picked off the field and laid in rows with every other row
-    // shoved half a stone over.
+    if (t === TileType.Cobblestone) {
+      /*
+       * A road is a picture, not a pattern. It was six by six rectangles with
+       * every other row shoved half a stone over, tinted light and dark --
+       * which says the right thing about how setts are laid and nothing about
+       * what a sett is. The picture is painted in light and shade and laid on
+       * with `overlay`, so the tile keeps its own colour, its sun and its fog
+       * and the road is a shape cut in them.
+       */
+      const cob = cobble();
+      const q = cob.paveN;
+      const road = cob.pave();
+      this.laidOver(road[(((y % q) + q) % q) * q + (((x % q) + q) % q)], pts, rot, 'overlay');
+      return;
+    }
+    // Slabs are cut square and laid square, in the size their stone is cut in.
     const slabs = t === TileType.Slabs;
     const n = slabs ? SLAB_VARIANTS[slabVariant(data)].courses : 6;
-    const stagger = t === TileType.Cobblestone;
+    const stagger = false;
     const joint = slabs ? 0.06 : 0.11;
     for (let r = 0; r < n; r++) {
       const v0 = r / n + joint / n;
@@ -1018,6 +1075,13 @@ export class Renderer {
       off[i * 2 + 1] = V.shape[i][1] * hh;
     }
     const co = V.corners;
+    /*
+     * Which of the four screen corners holds the tile's own (0, 0). The view
+     * lists them clockwise from whichever is topmost on screen, and that is a
+     * different one of the four at each quarter turn; anything hung off the
+     * world's axes rather than the screen's needs to know which.
+     */
+    const paveRot = co.findIndex((cc) => cc[0] === 0 && cc[1] === 0);
     const bottomMargin = 220 * zoom;
     const pts = this.pts;
     const c = this.cornerBuf;
@@ -1114,7 +1178,7 @@ export class Renderer {
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
         if (grain && !wet) this.addGrain(x, y, pts, zoom);
-        if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts);
+        if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
 
         const t = t0;
         if (!lit) {
@@ -2280,7 +2344,8 @@ export class Renderer {
     ctx.fill();
     ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.9);
     ctx.stroke();
-    if (paved && cam.zoom >= 0.75) this.paving(t, x, y, data, quad);
+    // A floor's corners are already in the tile's own order, so nothing turns.
+    if (paved && cam.zoom >= 0.75) this.paving(t, x, y, data, quad, 0);
     ctx.globalAlpha = 1;
   }
 
