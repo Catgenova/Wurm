@@ -225,7 +225,7 @@ let painted: Cobble | undefined;
 export function cobble(): Cobble {
   if (painted) return painted;
   const PASTEL = {
-    grass: '#91d693', shade: '#7ec391', sand: '#f3d192', cream: '#f4ecd5',
+    grass: '#90cfb1', shade: '#7fbca6', sand: '#f3d192', cream: '#f4ecd5',
     // stone, sampled off the castle: light, mid, and the joints between
     stone: '#cbc0b0', stoneShade: '#aba796', stoneDark: '#a19d8d', joint: '#aeaa9c',
     dark: '#b5b1a0',
@@ -257,10 +257,17 @@ export function cobble(): Cobble {
     stoneHi: '#ddd4c6', warmHi: '#d9cdb3', darkHi: '#bdb9aa', bandHi: '#e3dbcc',
     blush: '#f2c4c0', blushShade: '#dfa39e', blushLine: '#b9797a',
     // moss as a stain: the stone's tones pulled half way to the leaf's
-    stain: '#9eae8d', stainShade: '#81957c',
+    stain: '#8ca995', stainShade: '#7c9286',
     band: '#d3c9b8', bandShade: '#b5ae9e', line: '#94896c',
-    // greens, off the castle; their line is a deeper version of themselves
-    leaf: '#8fb268', leafShade: '#729d6b', leafDeep: '#588463', leafPale: '#adca7b', leafLine: '#5e7d4b',
+    /*
+     * Greens. They were sampled off the castle the stone is sampled off, and
+     * they have since been turned the same two turns the whole island took:
+     * round into the teal, then ten degrees back towards green and darker
+     * with it. Sampled off a picture is where they came from and not what
+     * they are any more -- a wall stands in this field, not in that one.
+     * Their line is still a deeper version of themselves.
+     */
+    leaf: '#6bac7e', leafShade: '#6d9981', leafDeep: '#5c8273', leafPale: '#7cc38e', leafLine: '#507b5f',
     creamShade: '#dacdb3', creamLine: '#9a8e70',
   };
   const TW = 512, TH = 384, MORTAR = 3;                 // a section: 4 m by 3 m, at 128 px to the metre
@@ -559,12 +566,12 @@ export function cobble(): Cobble {
   }
 
   /* ---- growth: blob painting ------------------------------------------------- */
-  /* Growth, in the reference's own tones: a yellow-olive body, a deeper green in the shade, cream-lime
-   * where the light catches an edge, and a dark olive line with a tight halo round every mass. */
-  /* Growth, sampled off the castle reference: its light, mid and shade greens by k-means, the outline a
-   * step darker than its darkest, the cream of its highlights. */
-  const VEG = { top: '#b3d47f', lit: '#93b868', shade: '#6f9a62', pale: '#e0eab0', line: '#566c47' };
-  const MOSS = { fill: '#a8c07a', under: '#86a262', fleck: '#6f8a55' };
+  /* Growth: a body, a deeper green in the shade, a pale one where the light catches an edge, and a dark
+   * line with a tight halo round every mass. Begun as the castle reference's own tones, picked off it by
+   * k-means, and carried into the island's teal with everything else that grows -- what a thing was
+   * sampled from stops mattering the moment the field it stands in moves. */
+  const VEG = { top: '#80cc94', lit: '#6bb180', shade: '#65957a', pale: '#abe3b5', line: '#4b6c57' };
+  const MOSS = { fill: '#7bb98b', under: '#669d75', fleck: '#598768' };
   const MARGIN = 77;                                     // no growth over the top nearer a section edge than this
   const keepX = (x: number, r: number): number => clamp(x, EDGE + r + 5, TW - EDGE - r - 5);
   const keepD = (x: number, r: number): number => clamp(x, MARGIN + r, TW - MARGIN - r);
