@@ -81,6 +81,8 @@ export const CROWD = 0.16;
 export interface Meadow {
   blobs: Sprig[];
   looks: Look[];
+  /** Clumps to a tile, averaged over the ten: what the field's density is. */
+  clumps: number;
 }
 
 /* ---- the paints ---------------------------------------------------------- */
@@ -335,18 +337,24 @@ export function ruffle(
  * of the open ground grew a clump the size of a bush, the drift never read as
  * a drift, and the whole field came out as evenly spotted as a dice face.
  *
- * Five sixths of it is weighted onto the empty one, which comes out at about
- * one clump to every three tiles. A field that is all clumps is a bog, and
- * grass is what this is: flat colour with an occasional feature in it. The
- * clumps are the thing you notice, and you cannot notice something that is
- * everywhere.
+ * Nearly all of the weight is on the first look, which is the empty one, so
+ * nearly all of a field has nothing growing in it at all. A field that is all
+ * clumps is a bog, and grass is what this is: flat colour with an occasional
+ * feature in it. The clumps are the thing you notice, and you cannot notice
+ * something that is everywhere.
  */
-const WEIGHTS = [82, 25, 18, 12, 10, 10, 8, 7, 5, 3];
+const WEIGHTS = [560, 32, 22, 15, 12, 10, 8, 6, 4, 3];
+const TOTAL = WEIGHTS.reduce((a, b) => a + b, 0);
+/**
+ * What share of the field is bare, and how many clumps a tile grows on
+ * average -- both read off the weights rather than written down beside them,
+ * so neither can drift from the thing it describes when the weights move.
+ */
+export const BARE_SHARE = WEIGHTS[0] / TOTAL;
 const CUTS = ((): number[] => {
   const out: number[] = [];
   let sum = 0;
-  const total = WEIGHTS.reduce((a, b) => a + b, 0);
-  for (const w of WEIGHTS) { sum += w; out.push(sum / total); }
+  for (const w of WEIGHTS) { sum += w; out.push(sum / TOTAL); }
   return out;
 })();
 
@@ -444,7 +452,11 @@ export function meadow(): Meadow {
       blobs: [...BIG, ...SMALL], blobN: [2, 2], spread: 0.11, slots: [BIG, SMALL] },
   ];
 
-  const made: Meadow = { blobs, looks };
+  // The average number of clumps a tile grows, off the weights and the counts
+  // and nothing written down: `looks` is in the same order as `WEIGHTS`.
+  const clumps = looks.reduce(
+    (a, l, i) => a + WEIGHTS[i] * (l.blobN[0] + l.blobN[1]) / 2, 0) / TOTAL;
+  const made: Meadow = { blobs, looks, clumps };
   painted = made;
   return made;
 }

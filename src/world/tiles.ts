@@ -190,27 +190,34 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * lawn is tended and a meadow is what the summer left.
    */
   [TileType.Grass]: { name: 'Grass', color: [125, 195, 166], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
-  [TileType.Dirt]: { name: 'Dirt', color: [121, 92, 60], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
-  [TileType.PackedDirt]: { name: 'Packed dirt', color: [140, 116, 86], speed: 1.05, pavable: true, roll: 0.9 },
+  /*
+   * A pale sandy tan, not the dark chocolate it was. Bare earth against a
+   * teal field is the loudest join on the island: at 121, 92, 60 a footpath
+   * read as a trench cut through it. Packed dirt stays the lighter of the
+   * two -- it is earth somebody walked flat and dusty -- and a ploughed field
+   * the darker, because turned soil is wet soil.
+   */
+  [TileType.Dirt]: { name: 'Dirt', color: [163, 133, 98], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
+  [TileType.PackedDirt]: { name: 'Packed dirt', color: [181, 156, 120], speed: 1.05, pavable: true, roll: 0.9 },
   [TileType.Sand]: { name: 'Sand', color: [214, 198, 146], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
   [TileType.Rock]: { name: 'Rock', color: [132, 130, 124], speed: 0.9, mineable: true, roll: 0.85 },
   [TileType.Steppe]: { name: 'Steppe', color: [156, 150, 84], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   [TileType.Tundra]: { name: 'Tundra', color: [144, 154, 124], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
-  [TileType.Marsh]: { name: 'Marsh', color: [74, 112, 74], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
+  [TileType.Marsh]: { name: 'Marsh', color: [84, 120, 109], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
   [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
   [TileType.Peat]: { name: 'Peat', color: [74, 60, 46], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
   [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
-  [TileType.Moss]: { name: 'Moss', color: [82, 126, 66], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
+  [TileType.Moss]: { name: 'Moss', color: [77, 133, 109], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
   [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
-  [TileType.Field]: { name: 'Field', color: [130, 102, 62], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
-  [TileType.Tree]: { name: 'Tree', color: [76, 124, 56], speed: 1, blocks: true, roll: 0.6 },
-  [TileType.Bush]: { name: 'Bush', color: [86, 138, 60], speed: 0.5, roll: 0.4 },
+  [TileType.Field]: { name: 'Field', color: [150, 121, 82], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },
+  [TileType.Tree]: { name: 'Tree', color: [67, 131, 103], speed: 1, blocks: true, roll: 0.6 },
+  [TileType.Bush]: { name: 'Bush', color: [71, 144, 111], speed: 0.5, roll: 0.4 },
   // Walked over, and in the way of everything else until it is dug out or
   // rots: no digging its corners, no planting, no paving, no building.
-  [TileType.Stump]: { name: 'Stump', color: [98, 130, 58], speed: 0.7, roll: 0.35 },
-  [TileType.Kelp]: { name: 'Kelp', color: [66, 106, 88], speed: 1, roll: 0.5 },
-  [TileType.Reed]: { name: 'Reed', color: [96, 132, 80], speed: 0.8, roll: 0.4 },
+  [TileType.Stump]: { name: 'Stump', color: [69, 137, 100], speed: 0.7, roll: 0.35 },
+  [TileType.Kelp]: { name: 'Kelp', color: [76, 114, 111], speed: 1, roll: 0.5 },
+  [TileType.Reed]: { name: 'Reed', color: [91, 139, 118], speed: 0.8, roll: 0.4 },
   [TileType.Lawn]: { name: 'Lawn', color: [98, 176, 146], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
@@ -259,30 +266,41 @@ export interface TreeDef {
 /**
  * Tree species; stored in a tree tile's data byte, the low nibble and the top
  * bit (`packTreeData`). The order is storage: never reorder these.
+ *
+ * Every canopy is a teal blue-green, which is the field they stand in and the
+ * whole look of the place. They were yellow-greens, picked against a grass
+ * that was a yellow-green too; the field moved and they had to move with it,
+ * or a wood is a warm thing sitting on a cool one and both of them look like
+ * a mistake. Each one's hue came off its old one in order, so the birch is
+ * still the palest of them and the pine still the deepest and bluest.
+ *
+ * The maple is the exception and keeps its orange. It is the autumn tree and
+ * the one warm thing in the wood, and it is worth more against this than it
+ * ever was against a yellow-green.
  */
 export const TREE_DEFS: TreeDef[] = [
-  { name: 'Birch', shape: 'round', trunk: '#e8e4d8', canopy: ['#b6dc78', '#88b852', '#5f8c3a'], size: 0.85 },
-  { name: 'Pine', shape: 'conifer', trunk: '#6d4b32', canopy: ['#6fa06a', '#3f7048', '#2b4f34'], size: 1 },
-  { name: 'Oak', shape: 'round', trunk: '#5c4330', canopy: ['#9ac560', '#5f9438', '#3f6a27'], size: 1.1 },
+  { name: 'Birch', shape: 'round', trunk: '#e8e4d8', canopy: ['#8cd9ad', '#65b78b', '#45926c'], size: 0.85 },
+  { name: 'Pine', shape: 'conifer', trunk: '#6d4b32', canopy: ['#78a394', '#49786d', '#345850'], size: 1 },
+  { name: 'Oak', shape: 'round', trunk: '#5c4330', canopy: ['#74c397', '#449a70', '#317254'], size: 1.1 },
   { name: 'Maple', shape: 'round', trunk: '#6b4a34', canopy: ['#f0b053', '#d6782e', '#9c4a1c'], size: 0.95 },
-  { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#c4dc8c', '#93b864', '#6a8c48'], size: 1 },
-  { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#8fb87c', '#5a8a5c', '#3c6440'], size: 1.05 },
+  { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#9fdbb6', '#76b894', '#539371'], size: 1 },
+  { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#8bbaa5', '#659184', '#466c62'], size: 1.05 },
   // The three that bear. They grow wild only here and there; an orchard is
   // something you plant.
-  { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#8fc060', '#5f9440', '#41682c'], size: 0.8, fruit: 'apple' },
-  { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#a8cc70', '#74a047', '#4d7030'], size: 0.78, fruit: 'cherry' },
-  { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#9aae84', '#6f8a64', '#4f6448'], size: 0.75, fruit: 'olive' },
+  { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#73bf98', '#4c9a75', '#367055'], size: 0.8, fruit: 'apple' },
+  { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#83cba2', '#53a67a', '#3a7859'], size: 0.78, fruit: 'cherry' },
+  { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#91b2a1', '#6e9182', '#526c61'], size: 0.75, fruit: 'olive' },
   // Eight more that bear, asked for, each held to one island of the chart
   // (regions.ts) the way the cherry is, and sprinkled anywhere on an island
   // of your own. Past the ninth the species needs a fifth bit: see below.
-  { name: 'Pear', shape: 'round', trunk: '#6b4f38', canopy: ['#a9d070', '#79a84c', '#527a34'], size: 0.82, fruit: 'pear' },
-  { name: 'Plum', shape: 'round', trunk: '#4e3a36', canopy: ['#8fb46a', '#5f8848', '#3f6034'], size: 0.76, fruit: 'plum' },
-  { name: 'Peach', shape: 'round', trunk: '#7a5a44', canopy: ['#b7d47a', '#86ad55', '#5a7c3a'], size: 0.74, fruit: 'peach' },
-  { name: 'Fig', shape: 'round', trunk: '#8c8270', canopy: ['#96b878', '#6a9058', '#476840'], size: 0.7, fruit: 'fig' },
-  { name: 'Lemon', shape: 'round', trunk: '#7c6a4e', canopy: ['#b8d67e', '#8db457', '#5f8a3b'], size: 0.68, fruit: 'lemon' },
-  { name: 'Pomegranate', shape: 'round', trunk: '#6e4a3c', canopy: ['#9cc06c', '#6d9a48', '#4b6e32'], size: 0.66, fruit: 'pomegranate' },
-  { name: 'Apricot', shape: 'round', trunk: '#6f5040', canopy: ['#b4cf72', '#84a84e', '#587834'], size: 0.74, fruit: 'apricot' },
-  { name: 'Quince', shape: 'round', trunk: '#6a5646', canopy: ['#a6c47e', '#78985a', '#526e42'], size: 0.72, fruit: 'quince' },
+  { name: 'Pear', shape: 'round', trunk: '#6b4f38', canopy: ['#84cea4', '#5bab81', '#3f8160'], size: 0.82, fruit: 'pear' },
+  { name: 'Plum', shape: 'round', trunk: '#4e3a36', canopy: ['#7bb597', '#538f73', '#3e6856'], size: 0.76, fruit: 'plum' },
+  { name: 'Peach', shape: 'round', trunk: '#7a5a44', canopy: ['#8dd3a9', '#67ad87', '#458363'], size: 0.74, fruit: 'peach' },
+  { name: 'Fig', shape: 'round', trunk: '#8c8270', canopy: ['#88baa0', '#639780', '#4a7061'], size: 0.7, fruit: 'fig' },
+  { name: 'Lemon', shape: 'round', trunk: '#7c6a4e', canopy: ['#91d5ad', '#69b38a', '#46906b'], size: 0.68, fruit: 'lemon' },
+  { name: 'Pomegranate', shape: 'round', trunk: '#6e4a3c', canopy: ['#7ec09b', '#54a07a', '#3c765a'], size: 0.66, fruit: 'pomegranate' },
+  { name: 'Apricot', shape: 'round', trunk: '#6f5040', canopy: ['#85cea1', '#5dab7f', '#3f7f5d'], size: 0.74, fruit: 'apricot' },
+  { name: 'Quince', shape: 'round', trunk: '#6a5646', canopy: ['#8fc5a7', '#669d81', '#4c7662'], size: 0.72, fruit: 'quince' },
 ];
 
 /** The trees that bear, by index. */
@@ -298,10 +316,11 @@ export interface BushDef {
   yields?: string;
 }
 
+/** The three bushes, in the same teal as the canopies. Flowers stay theirs. */
 export const BUSH_DEFS: BushDef[] = [
-  { name: 'Rose bush', foliage: ['#6ea24a', '#3e6a2c'], flowers: '#e0455f', yields: 'rose_petals' },
-  { name: 'Thorn bush', foliage: ['#7e9a4e', '#4c6430'] },
-  { name: 'Lavender bush', foliage: ['#8faa7a', '#5f7a52'], flowers: '#9a6fd0', yields: 'lavender' },
+  { name: 'Rose bush', foliage: ['#56a880', '#367258'], flowers: '#e0455f', yields: 'rose_petals' },
+  { name: 'Thorn bush', foliage: ['#5aa077', '#3a6c51'] },
+  { name: 'Lavender bush', foliage: ['#88ae9b', '#5c8271'], flowers: '#9a6fd0', yields: 'lavender' },
 ];
 
 export interface RockVariantDef {
