@@ -2482,15 +2482,22 @@ function paint(S: Stock): Masonry {
     const Wc = 64, c = cnv(Wc, TH), g = ctxOf(c), R = rand(7);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, Wc, TH);
     stone(g, MORTAR / 2, MORTAR / 2, Wc - MORTAR, BAND - MORTAR, R, 'flat', 'sawn');
-    // A bond seen end on is one header to the thickness of the wall, so the
-    // end of it has as many courses as the face does and no bond to show.
-    const rows = S.lay === 'bond' ? S.rows : COURSES;
-    const ch = (TH - BAND) / rows;
-    const run = { tone: '', left: 0 };
-    for (let i = 0; i < rows; i++) {
-      const tone = S.lay === 'bond' ? pickTone(R, Math.floor((i / rows) * COURSES), run, false) : ['', 'brown', 'green', ''][i];
-      stone(g, MORTAR / 2, BAND + i * ch + MORTAR / 2, Wc - MORTAR, ch - MORTAR, R, tone,
-        S.lay === 'bond' ? 'unit' : 'laid', 0, S.lay === 'bond' ? 1.35 : 2.4);
+    if (S.lay === 'bond') {
+      /*
+       * Quoins. Where a brick wall stops -- a corner of a house, the end of a
+       * run -- it is finished in cut stone, because an arris of brick is the
+       * first thing a cart takes off and the corner is what carries the two
+       * walls into each other. Five stones to the storey, each two courses
+       * of brick deep, in the dressings' two tones turn about.
+       */
+      const n = 5, ch = (TH - BAND) / n;
+      for (let i = 0; i < n; i++) {
+        stone(g, MORTAR / 2, BAND + i * ch + MORTAR / 2, Wc - MORTAR, ch - MORTAR, R, i % 2 ? 'plinth' : 'dress', 'unit', 0, 1.8);
+      }
+      return c;
+    }
+    for (let i = 0; i < COURSES; i++) {
+      stone(g, MORTAR / 2, BAND + i * CH + MORTAR / 2, Wc - MORTAR, CH - MORTAR, R, ['', 'brown', 'green', ''][i]);
     }
     return c;
   })();
