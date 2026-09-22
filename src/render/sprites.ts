@@ -94,58 +94,267 @@ function makeSprite(w: number, h: number, ax: number, ay: number, draw: (ctx: Ca
   return { canvas, w: w * k, h: h * k, ax: ax * k, ay: ay * k };
 }
 
-function circle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
-  ctx.moveTo(x + r, y);
-  ctx.arc(x, y, r, 0, TAU);
-}
-
-/** A cloud-like cluster of circles. */
-function blob(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string): void {
-  ctx.fillStyle = color;
+/**
+ * What a thing standing up puts on the ground right under itself.
+ *
+ * Not black at any alpha. Black over a colour is that colour with the life
+ * taken out of it, and the ground is what this whole look rests on; a cool
+ * blue-green laid on thin reads as shade instead of as dirt. Two ellipses
+ * rather than one, so it falls off at its edge without costing a blur.
+ */
+function contact(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry = rx * 0.34): void {
+  // One flat shape at one alpha. Two of them stacked made a soft middle and
+  // a soft edge, which is an airbrush, and an airbrush is the one thing a
+  // picture made entirely of flat fields cannot have in it.
+  ctx.fillStyle = 'rgba(44,74,78,0.17)';
   ctx.beginPath();
-  circle(ctx, x, y, r);
-  circle(ctx, x - r * 0.62, y + r * 0.18, r * 0.72);
-  circle(ctx, x + r * 0.62, y + r * 0.18, r * 0.72);
-  circle(ctx, x - r * 0.3, y - r * 0.5, r * 0.64);
-  circle(ctx, x + r * 0.36, y - r * 0.46, r * 0.64);
+  ctx.ellipse(x - LIT.x * rx * 0.3, y - LIT.y * ry * 0.34, rx, ry, 0, 0, TAU);
   ctx.fill();
 }
 
+/** The same, for everything that is not a tree. */
 function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
-  ctx.beginPath();
-  ctx.ellipse(x, y, rx, ry, 0, 0, TAU);
-  ctx.fill();
+  contact(ctx, x, y, rx, ry);
 }
-
-function trunk(ctx: CanvasRenderingContext2D, x: number, baseY: number, w: number, h: number, color: string): void {
-  ctx.fillStyle = color;
-  ctx.fillRect(x - w / 2, baseY - h, w, h);
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.fillRect(x, baseY - h, w / 2, h);
-}
-
-const SPRITE_W = 88;
-const SPRITE_H = 120;
-const AX = SPRITE_W / 2;
-const AY = SPRITE_H - 8;
-/** What hangs in each of the bearing trees. */
-const FRUIT_COLOUR: Record<string, string> = { apple: '#d8443c', cherry: '#b41f3e', olive: '#4a5a2c' };
 
 /**
- * A colour gone some of the way to dead leaf: `t` of the way, 0 to 1. Below
- * nought it goes the other way, towards pale cut wood, which is what the face
- * of a stump is.
+ * Where the light on a baked sprite comes from, in screen space.
+ *
+ * Over the viewer's left shoulder, and a fixed direction rather than the sun's:
+ * a tree is drawn once into its own little canvas and then blitted, so it
+ * cannot turn with the day the way the shadow it throws on the ground does.
+ * What matters is that everything baked agrees, because a wood lit from two
+ * directions is the sort of thing nobody can name and nobody can unsee.
  */
-function dulled(hex: string, t: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const to: [number, number, number] = t < 0 ? [226, 206, 168] : [142, 124, 92];
-  const k = Math.abs(t);
-  const mix = (c: number, target: number): number => Math.round(c + (target - c) * k);
-  return `rgb(${mix((n >> 16) & 255, to[0])},${mix((n >> 8) & 255, to[1])},${mix(n & 255, to[2])})`;
+const LIT = { x: -1, y: -0.78 };
+
+/** Deterministic 0..1 from a seed and an index; for a shape's own wobble. */
+function wob(seed: number, i: number): number {
+  const s = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
+  return s - Math.floor(s);
 }
 
-/** Bare wood: a few branches off the top of the trunk, in the trunk's colour. */
+/**
+ * A closed loop of lobes, curved through the midpoints of a seeded profile.
+ *
+ * Nothing that grows has a true arc anywhere on it, and a canopy built out of
+ * `ctx.arc` says so from across the room -- it was five overlapping circles,
+ * and five overlapping circles is a cartoon cloud whatever colour you paint
+ * it. This is the same idea as a cloud, drawn as one outline that bulges
+ * instead: `lobes` is how many bulges go round it, `rough` how far they carry.
+ *
+ * The step count is not a taste: it has to clear twice the highest frequency
+ * in the profile or the lobes alias, and an aliased lobe is a corner. Drawn
+ * at twenty steps the six-lobe crowns came out as flat-topped slabs with
+ * square notches cut in them, which read as torn cardboard.
+ */
+const CROWN_STEPS = 48;
+function lobed(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number,
+  seed: number, lobes = 5, rough = 0.17, cut = 0, notch = 0): void {
+  const px: number[] = [];
+  const py: number[] = [];
+  for (let i = 0; i < CROWN_STEPS; i++) {
+    const a = (i / CROWN_STEPS) * TAU;
+    let k = 1
+      + rough * Math.sin(lobes * a + seed * 1.7)
+      + rough * 0.52 * Math.sin((lobes + 3) * a - seed * 2.9)
+      + rough * 0.33 * Math.sin(2 * a + seed * 0.7);
+    // `cut` pulls the underside up into the crown, hardest straight down and
+    // not at all at the sides, so the lowest thing on the tree is the rim and
+    // there is a hollow under the middle of it. That is the difference
+    // between an umbrella and a bun, and it is most of what makes a crown
+    // read as held up rather than as sat on top.
+    if (cut > 0) k *= 1 - cut * Math.pow(Math.max(0, Math.sin(a)), 2.4);
+    // A bite out of one side, taken out of the radius over a narrow run of
+    // angle. Punched instead with a second loop it left a crumb of itself
+    // floating beside the tree wherever it reached past the edge.
+    if (notch > 0) {
+      const off = Math.abs(((a - notch * TAU + Math.PI) % TAU + TAU) % TAU - Math.PI);
+      if (off < 0.9) k *= 1 - 0.42 * Math.cos((off / 0.9) * Math.PI * 0.5) ** 2;
+    }
+    px.push(cx + Math.cos(a) * rx * k);
+    py.push(cy + Math.sin(a) * ry * k);
+  }
+  const n = CROWN_STEPS;
+  ctx.moveTo((px[n - 1] + px[0]) / 2, (py[n - 1] + py[0]) / 2);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    ctx.quadraticCurveTo(px[i], py[i], (px[i] + px[j]) / 2, (py[i] + py[j]) / 2);
+  }
+  ctx.closePath();
+}
+
+/** A shape that can be laid down again shifted; what `lightOn` works on. */
+type Mass = (dx: number, dy: number) => void;
+
+/**
+ * Three flat tones laid on a mass as shapes that follow the one light.
+ *
+ * The lit edge is what the mass has that the same mass slid away from the
+ * light has not; the shaded edge is the same the other way about. Both come
+ * out as crescents hugging an edge, which is what light on a solid thing
+ * does. A smaller copy of the shape stamped in the middle is what a sticker
+ * does, and that is what was there before: every broadleaf on the island wore
+ * the same pale badge in the same place.
+ */
+function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
+  pal: readonly [string, string, string], cx: number, cy: number,
+  rx: number, ry: number, seed: number): void {
+  ctx.save();
+  ctx.beginPath();
+  mass(0, 0);
+  ctx.clip();
+  ctx.fillStyle = pal[1];
+  ctx.beginPath();
+  mass(0, 0);
+  ctx.fill();
+  /*
+   * Both tones are cut from the crown's own outline, offset along each axis
+   * by a share of that axis rather than by a number of pixels -- shifted the
+   * same distance both ways, a crown three times wider than it is tall got a
+   * band that was thin at the sides and fat at the top, and on a lobed edge
+   * it would come away from the rim altogether and wander about inside.
+   *
+   * The shade is that crescent taken deep: its outer edge is the crown's own
+   * silhouette on the away side, and its inner edge is the same silhouette
+   * again, sunward, which arrives as one concave sweep across the mass. So
+   * the dark is a real underside, bounded by the shape it belongs to. Laid
+   * instead as a separate loop set down-sun it was a lozenge floating in the
+   * middle of the crown -- and, printed on every tree, the same lozenge.
+   */
+  const deep = 0.26 + 0.09 * wob(seed, 34);
+  ctx.fillStyle = pal[2];
+  ctx.beginPath();
+  mass(0, 0);
+  mass(LIT.x * rx * deep, LIT.y * ry * deep);
+  ctx.fill('evenodd');
+  /*
+   * The lit tone is a rim riding the edge, but only round the arc that faces
+   * the light: a crescent, cut by a loop set up-sun, so the band is widest
+   * where the crown is square-on to the light and runs out to nothing at
+   * either end of it.
+   *
+   * Both halves of that are load-bearing, and each on its own was tried and
+   * thrown out. The crescent alone is a band of one width the whole way
+   * round, which is a keyline. The loop alone is a pale shape floating in
+   * the middle of the crown, which is a decal -- and stamped on a hundred
+   * crowns in a wood, it is the same decal a hundred times.
+   *
+   * No outline anywhere. One went on when crowns at the same value would not
+   * come apart from each other, and it worked, which was the trouble: it did
+   * all the separating, so the value range behind it went for nothing and a
+   * wood read as vector stickers. Tone does that job now.
+   */
+  const reach = 1.1 + 0.18 * wob(seed, 31);
+  const band = 0.2 + 0.08 * wob(seed, 33);
+  ctx.save();
+  ctx.beginPath();
+  lobed(ctx, cx + LIT.x * rx * reach, cy + LIT.y * ry * (reach + 0.06), rx * 1.1, ry * 1.1, seed + 3.1, 4, 0.14);
+  ctx.clip();
+  ctx.fillStyle = pal[0];
+  ctx.beginPath();
+  mass(0, 0);
+  mass(-LIT.x * rx * band, -LIT.y * ry * band);
+  ctx.fill('evenodd');
+  ctx.restore();
+  ctx.restore();
+}
+
+/**
+ * A stem: tapered, leaning a little, flared where it goes into the ground.
+ *
+ * The shaded side is the wood's own colour taken down, not black laid over
+ * the top of it. Black over a colour is grey, and grey is the one thing this
+ * palette has none of.
+ */
+function stem(ctx: CanvasRenderingContext2D, x: number, baseY: number, w: number, h: number,
+  lean: number, color: string): void {
+  const tx = x + lean;
+  // Barely tapered, and bent. Taken from a wide foot to a point it read as an
+  // isoceles triangle, which is the same tell as the conifer that used to be
+  // three of them: a straight-sided thing that narrows evenly is a drawn
+  // shape, not a grown one.
+  const tw = w * 0.74;
+  const flare = w * 0.9;
+  const bowX = lean * 0.35 - w * 0.3;
+  const wall = (): void => {
+    ctx.moveTo(x - flare, baseY);
+    ctx.bezierCurveTo(x - w * 0.5, baseY - h * 0.3, tx + bowX - tw * 0.5, baseY - h * 0.7, tx - tw / 2, baseY - h);
+    ctx.lineTo(tx + tw / 2, baseY - h);
+    ctx.bezierCurveTo(tx + bowX + tw * 0.5, baseY - h * 0.7, x + w * 0.5, baseY - h * 0.3, x + flare, baseY);
+    ctx.closePath();
+  };
+  ctx.beginPath();
+  wall();
+  ctx.fillStyle = color;
+  ctx.fill();
+  // The shaded side is the stem's own outline slid toward the light and cut
+  // away, so the shade narrows as the stem narrows and there is no seam that
+  // does not belong to the wood. Drawn as a wedge instead it came out as a
+  // hard black stripe up every trunk on the island -- a stem is a small thing
+  // and a straight edge across a small thing is all you see.
+  ctx.save();
+  ctx.beginPath();
+  wall();
+  ctx.clip();
+  // Squeezed toward the away side rather than slid, so the shade is the same
+  // share of the stem at the top as at the foot. Slid, it took three fifths
+  // of a narrow crown-end and a quarter of a wide flared one, which drew a
+  // dark wedge up the middle of every trunk.
+  ctx.fillStyle = shade(color, -0.15);
+  ctx.translate(x + flare, 0);
+  ctx.scale(0.42, 1);
+  ctx.translate(-(x + flare), 0);
+  ctx.beginPath();
+  wall();
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * What the crown drops on the stem underneath it. A tree with a lit trunk all
+ * the way up to a canopy is a tree with a hole in its light.
+ */
+function underCrown(ctx: CanvasRenderingContext2D, x: number, baseY: number, w: number, h: number,
+  lean: number, color: string, drop: number): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - w * 1.2, baseY - h, w * 2.4, drop);
+  ctx.clip();
+  ctx.globalAlpha = 0.5;
+  stem(ctx, x, baseY, w, h, lean, shade(color, -0.26));
+  ctx.restore();
+}
+
+/**
+ * The fork a broadleaf crown is carried on: bare limbs splaying off the top
+ * of the stem, drawn before the crown and reaching wider than it.
+ *
+ * This is the thing that was missing from every broadleaf here for six goes
+ * at it. A mass of foliage sitting straight on the end of a pole is a
+ * lollipop however the mass is shaped -- the crown has to be held up off
+ * something, with daylight under it and wood showing through, before it
+ * reads as a tree rather than as a shape on a stick. Everything else about
+ * the outline is downstream of that.
+ */
+function fork(ctx: CanvasRenderingContext2D, x: number, top: number, spread: number, rise: number,
+  seed: number, color: string, n: number): void {
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const dir = (t - 0.5) * 2 + (wob(seed, i + 50) - 0.5) * 0.5;
+    const len = spread * (0.5 + 0.5 * wob(seed, i + 60));
+    const up = rise * (0.72 + 0.5 * wob(seed, i + 70));
+    ctx.lineWidth = Math.max(1, spread * 0.16 * (1 - 0.25 * t));
+    ctx.beginPath();
+    ctx.moveTo(x, top + rise * 0.3);
+    ctx.quadraticCurveTo(x + dir * len * 0.4, top - up * 0.5, x + dir * len, top - up);
+    ctx.stroke();
+  }
+}
+
+/** Bare wood: a few branches off the top of the stem, in the stem's colour. */
 function branches(ctx: CanvasRenderingContext2D, bx: number, top: number, size: number, color: string, n: number): void {
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
@@ -166,6 +375,78 @@ function branches(ctx: CanvasRenderingContext2D, bx: number, top: number, size: 
   }
 }
 
+const SPRITE_W = 88;
+const SPRITE_H = 120;
+const AX = SPRITE_W / 2;
+const AY = SPRITE_H - 8;
+
+/**
+ * What hangs in each of the bearing trees, chalked to sit in this palette.
+ *
+ * They used to be three colours for eleven trees and drawn as nine pinpricks
+ * scattered over the crown, which at the size a tree is actually looked at
+ * came to a faint rash. They hang in bunches at the rim now, where fruit
+ * hangs, and each tree's is its own.
+ */
+const FRUIT_COLOUR: Record<string, string> = {
+  apple: '#a8665f', cherry: '#8e5160', olive: '#6b7357', pear: '#ab9a70', plum: '#756a86',
+  peach: '#bb8c74', fig: '#705f78', lemon: '#b7a874', pomegranate: '#9d6067',
+  apricot: '#b78f72', quince: '#ad9c79',
+};
+
+/**
+ * A colour gone some of the way to dead leaf: `t` of the way, 0 to 1. Below
+ * nought it goes the other way, towards pale cut wood, which is what the face
+ * of a stump is.
+ */
+function dulled(hex: string, t: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const to: [number, number, number] = t < 0 ? [226, 214, 190] : [146, 134, 108];
+  const k = Math.abs(t);
+  const mix = (c: number, target: number): number => Math.round(c + (target - c) * k);
+  const pair = (v: number): string => v.toString(16).padStart(2, '0');
+  return `#${pair(mix((n >> 16) & 255, to[0]))}${pair(mix((n >> 8) & 255, to[1]))}${pair(mix(n & 255, to[2]))}`;
+}
+
+/**
+ * Fruit, in bunches hung off the lower rim of a crown.
+ *
+ * Three clusters rather than nine specks, each of two or three, sitting where
+ * the crown's underside is -- which is both where fruit hangs and the one
+ * part of a canopy that is in shadow, so a warm cluster has something to be
+ * warm against.
+ */
+function fruiting(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number,
+  seed: number, colour: string): void {
+  const r = Math.max(1, Math.min(rx, ry) * 0.2);
+  // Two bunches, not three at even spacing, each one somewhere of its own and
+  // each fruit its own size and not a circle. Evenly spaced clusters of equal
+  // round dots came out as a string of beads hung on the crown, which is a
+  // decoration rather than a crop.
+  // Both bunches on the same side, and that side the crown's own: fruit
+  // hangs where the wood carries it, not spaced evenly round a rim.
+  const swing = wob(seed, 41) > 0.5 ? 1 : -1;
+  for (let c = 0; c < 2; c++) {
+    const a = Math.PI * 0.5 - swing * (0.18 + 0.34 * c + wob(seed, c) * 0.24);
+    const hx = cx + Math.cos(a) * rx * (0.6 + 0.28 * wob(seed, c + 4));
+    const hy = cy + Math.sin(a) * ry * (0.64 + 0.26 * wob(seed, c + 6));
+    const n = 2 + Math.floor(wob(seed, c + 9) * 2);
+    for (let i = 0; i < n; i++) {
+      const dx = (wob(seed, c * 5 + i) - 0.5) * r * 2.4;
+      const dy = (wob(seed, c * 5 + i + 3) - 0.3) * r * 2;
+      const rr = r * (0.76 + 0.4 * wob(seed, c * 7 + i));
+      ctx.fillStyle = shade(colour, -0.2);
+      ctx.beginPath();
+      lobed(ctx, hx + dx, hy + dy + rr * 0.2, rr, rr, seed + c * 3 + i, 3, 0.16);
+      ctx.fill();
+      ctx.fillStyle = colour;
+      ctx.beginPath();
+      lobed(ctx, hx + dx - rr * 0.14, hy + dy - rr * 0.12, rr * 0.76, rr * 0.76, seed + c * 3 + i + 1, 3, 0.16);
+      ctx.fill();
+    }
+  }
+}
+
 export function treeSprite(species: number, variant: number): Sprite {
   const key = `${SPRITE_SCALE}|tree:${species}:${variant}`;
   let spr = cache.get(key);
@@ -176,115 +457,311 @@ export function treeSprite(species: number, variant: number): Sprite {
   const age = TREE_AGES[variant] ?? TREE_AGES[0];
   const size = def.size * age.size;
   // A worn crown has gone a third of the way to dead leaf.
-  const canopy = age.look === 'worn' ? def.canopy.map((c) => dulled(c, 0.38)) as [string, string, string] : def.canopy;
+  const canopy = (age.look === 'worn' ? def.canopy.map((c) => dulled(c, 0.34)) : def.canopy) as [string, string, string];
+  // One seed per species, so every oak on the island is the same oak and no
+  // two species wear the same wobble.
+  const seed = species * 7.13 + 1.7;
+  // Which way this species grows out of true. Small, but it is the difference
+  // between a wood and a wallpaper of one motif repeated.
+  const tilt = (wob(seed, 2) - 0.5) * 2;
+  // How thick this species runs in the trunk. One bark at one width across
+  // seventeen species was a fair part of what made them look like one tree.
+  const girth = 0.78 + 0.5 * wob(seed, 100);
   spr = makeSprite(SPRITE_W, SPRITE_H, AX, AY, (ctx) => {
     const bx = AX;
     const by = AY;
-    shadow(ctx, bx, by, 15 * size, 6 * size);
     if (age.look === 'bare') {
-      // Dead wood standing up: the trunk, a few branches, no crown at all.
-      const th = 34 * size;
-      trunk(ctx, bx, by, 6.5 * size, th, dulled(def.trunk, 0.35));
+      // Dead wood standing up: the stem, a few branches, no crown at all.
+      const th = 38 * size;
+      contact(ctx, bx, by, 11 * size);
+      stem(ctx, bx, by, 6 * size, th, tilt * 2 * size, dulled(def.trunk, 0.35));
       branches(ctx, bx, by - th, size, dulled(def.trunk, 0.45), 4);
       return;
     }
     if (age.look === 'clipped') {
-      // A sapling kept as a shrub: low, wide, and flat across the top.
-      const r = 24 * size;
-      trunk(ctx, bx, by, 4 * size, 8 * size, def.trunk);
-      ctx.fillStyle = canopy[2];
-      ctx.beginPath();
-      ctx.ellipse(bx, by - 8 * size - r * 0.42, r * 1.25, r * 0.55, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = canopy[1];
-      ctx.fillRect(bx - r * 1.15, by - 8 * size - r * 0.95, r * 2.3, r * 0.55);
-      ctx.fillStyle = canopy[0];
-      ctx.fillRect(bx - r * 0.95, by - 8 * size - r * 0.95, r * 1.2, r * 0.18);
+      // A sapling pruned back: low, wide and flat across the top for good.
+      const rx = 26 * size;
+      const ry = 10 * size;
+      const cy = by - 10 * size - ry;
+      contact(ctx, bx, by, rx * 0.8);
+      stem(ctx, bx, by, 4.4 * size, 12 * size, 0, def.trunk);
+      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, 5, 0.12), canopy, bx, cy, rx, ry, seed);
       return;
     }
-    if (def.shape === 'round') {
-      const th = 30 * size;
-      const tw = 7 * size;
-      const r = 22 * size;
-      trunk(ctx, bx, by, tw, th, def.trunk);
-      const cy = by - th - r * 0.5;
-      if (age.look === 'worn') branches(ctx, bx, cy - r * 0.2, size * 0.9, dulled(def.trunk, 0.3), 3);
-      blob(ctx, bx, cy, r, canopy[2]);
-      blob(ctx, bx - r * 0.14, cy - r * 0.16, r * 0.8, canopy[1]);
-      if (age.look !== 'worn') blob(ctx, bx - r * 0.3, cy - r * 0.34, r * 0.46, canopy[0]);
-      // The three that bear are told apart across a field by what is hanging
-      // in them, once they are old enough to hang anything — which is the
-      // table's to say, not the variant number's: a sapling is 3.
-      if (def.fruit && age.bears) {
-        ctx.fillStyle = FRUIT_COLOUR[def.fruit] ?? '#d05040';
-        for (let i = 0; i < 9; i++) {
-          const a = (i / 9) * Math.PI * 2 + species;
-          const d = r * (0.42 + ((i * 7) % 5) / 9);
-          ctx.beginPath();
-          ctx.arc(bx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.8, Math.max(1, r * 0.075), 0, Math.PI * 2);
-          ctx.fill();
+    const grown = age.look !== 'worn';
+    const fruit = def.fruit && age.bears ? FRUIT_COLOUR[def.fruit] ?? '#c8675c' : null;
+
+    if (def.shape === 'spire') {
+      /*
+       * A conifer as tiers that sag, hung off a leader that is not straight.
+       *
+       * It was three isoceles triangles stacked up, which is the shape a
+       * child draws and the second-clearest tell in the set after the cloud.
+       * Every number below is off the seed, so the tiers are uneven, they
+       * lean, and one of them somewhere up the tree is stunted.
+       */
+      const th = 15 * size;
+      // Two species share this outline, so the two have to be told apart by
+      // it: a tight tall one with many short tiers, or an open one with three
+      // long drooping ones and sky between them.
+      const open = wob(seed, 21) > 0.5;
+      const tiers = open ? 3 : 5;
+      const step = open ? 19 * size : 12.5 * size;
+      const top = by - th - step * tiers;
+      contact(ctx, bx, by, 15 * size);
+      stem(ctx, bx, by, 5.2 * size, th + step * 0.7, tilt * 1.5 * size, def.trunk);
+      for (let i = tiers - 1; i >= 0; i--) {
+        const t = i / (tiers - 1);
+        // The leader wanders; the tiers hang off wherever it has got to.
+        const ax = bx + tilt * 5 * size * t * t;
+        const ly = top + (tiers - 1 - i) * step + step;
+        // One tier somewhere up the tree is stunted, and which one is the seed's.
+        const runt = i === 1 + Math.floor(wob(seed, 11) * (tiers - 2)) ? 0.62 : 1;
+        for (const side of [-1, 1]) {
+          // Left and right offset down the leader, so the tiers alternate
+          // instead of pairing off into chevrons.
+          const stagger = side > 0 ? step * 0.42 : 0;
+          // The two sides of a tier are never the same length. Up to half as
+          // long again one way as the other, which is what stops a conifer
+          // reading as a folded paper chevron.
+          const swing = 0.68 + 0.64 * wob(seed, i * 2 + (side > 0 ? 1 : 0));
+          const lw = (open ? 12 + 18 * t : 9 + 13 * t) * size * runt * swing;
+          // The open one drops its tiers below the horizontal and takes them
+          // out to a thread; the tight one holds them out stiff and flat. Two
+          // species share this outline and that is the whole of what tells
+          // them apart.
+          const sag = (open ? 11 + 15 * t : 1.5 + 2 * t) * size * (0.8 + 0.5 * swing);
+          const mass: Mass = (dx, dy) => {
+            const tip = open ? 0.99 : 0.94;
+            ctx.moveTo(ax + dx, ly + stagger - step * (open ? 0.62 : 0.5) + dy);
+            ctx.quadraticCurveTo(ax + side * lw * 0.5 + dx, ly + stagger - step * (open ? 0.42 : 0.34) + dy,
+              ax + side * lw * tip + dx, ly + stagger + sag * 0.9 + dy);
+            ctx.quadraticCurveTo(ax + side * lw * (open ? 0.86 : 0.9) + dx, ly + stagger + sag * 1.15 + (open ? 0 : step * 0.3) + dy,
+              ax + side * lw * 0.5 + dx, ly + stagger + sag * 0.5 + (open ? 0 : step * 0.26) + dy);
+            ctx.quadraticCurveTo(ax + side * lw * 0.3 + dx, ly + stagger + sag * 0.2 + dy, ax + side * lw * 0.08 + dx, ly + stagger + dy);
+            ctx.closePath();
+          };
+          lightOn(ctx, mass, canopy,
+            ax + side * lw * 0.52, ly + stagger + sag * 0.2 - step * 0.12,
+            lw * 0.55, (step + sag) * 0.42, seed + i * 3.7 + (side > 0 ? 1.9 : 0));
         }
       }
-    } else if (def.shape === 'conifer') {
-      const th = 18 * size;
-      const r = 19 * size;
-      trunk(ctx, bx, by, 6 * size, th, def.trunk);
-      if (age.look === 'worn') branches(ctx, bx, by - th - r * 2.2, size * 0.7, dulled(def.trunk, 0.3), 2);
-      for (let i = 0; i < 3; i++) {
-        const ly = by - th * 0.7 - i * r * 0.95;
-        const lw = r * (1.15 - i * 0.3);
-        const lh = r * 1.35 * (1 - i * 0.1);
-        ctx.fillStyle = canopy[1];
-        ctx.beginPath();
-        ctx.moveTo(bx, ly - lh);
-        ctx.lineTo(bx + lw, ly);
-        ctx.lineTo(bx - lw, ly);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = canopy[2];
-        ctx.beginPath();
-        ctx.moveTo(bx, ly - lh);
-        ctx.lineTo(bx + lw, ly);
-        ctx.lineTo(bx + lw * 0.1, ly);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = canopy[0];
-        ctx.beginPath();
-        ctx.moveTo(bx - lw * 0.1, ly - lh * 0.85);
-        ctx.lineTo(bx - lw * 0.55, ly - lh * 0.2);
-        ctx.lineTo(bx - lw * 0.8, ly - lh * 0.05);
-        ctx.closePath();
-        ctx.fill();
-      }
-    } else {
-      const th = 28 * size;
-      const r = 20 * size;
-      trunk(ctx, bx, by, 7 * size, th, def.trunk);
-      const cy = by - th - r * 0.35;
-      if (age.look === 'worn') branches(ctx, bx, cy - r * 0.3, size * 0.8, dulled(def.trunk, 0.3), 3);
-      ctx.fillStyle = canopy[2];
-      ctx.beginPath();
-      ctx.ellipse(bx, cy, r * 1.35, r * 0.85, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = canopy[1];
-      ctx.beginPath();
-      ctx.ellipse(bx - r * 0.15, cy - r * 0.2, r * 1.05, r * 0.6, 0, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = canopy[0];
-      ctx.lineWidth = 2 * size;
-      ctx.lineCap = 'round';
-      for (let k = 0; k <= 9; k++) {
-        const t = k / 9;
-        const x = bx - r * 1.2 + t * r * 2.4;
-        const sway = Math.sin(k * 1.7) * 4 * size;
-        const drop = r * (0.9 + 0.5 * Math.sin(t * Math.PI));
-        ctx.beginPath();
-        ctx.moveTo(x, cy + r * 0.1);
-        ctx.quadraticCurveTo(x + sway, cy + drop * 0.6, x + sway * 0.4, cy + drop);
-        ctx.stroke();
-      }
-      if (age.look !== 'worn') blob(ctx, bx - r * 0.35, cy - r * 0.4, r * 0.4, canopy[0]);
+      if (!grown) branches(ctx, bx, top, size * 0.7, dulled(def.trunk, 0.3), 2);
+      return;
     }
+
+    if (def.shape === 'weeping') {
+      /* A willow: a high crown with the whole of it falling off the rim. */
+      const th = 36 * size;
+      const rx = 22 * size;
+      const ry = 13 * size;
+      const cy = by - th - ry * 0.5;
+      contact(ctx, bx, by, rx * 0.8);
+      stem(ctx, bx, by, 6.5 * size * girth, th, tilt * 2.5 * size, def.trunk);
+      underCrown(ctx, bx, by, 6.5 * size, th, tilt * 2.5 * size, def.trunk, ry * 1.5);
+      // The fronds first, so the crown sits on top of where they leave it.
+      ctx.lineCap = 'round';
+      for (let k = 0; k <= 15; k++) {
+        const t = k / 15;
+        const x = bx - rx * 1.02 + t * rx * 2.04;
+        const edge = Math.sin(t * Math.PI);
+        // Longest at the sides, and measured off the stem so no frond ever
+        // reaches past the foot of the tree it is hanging from.
+        const fall = (ry + th * (0.42 + 0.36 * (1 - edge))) * (0.78 + 0.34 * wob(seed, k));
+        const sway = (wob(seed, k + 20) - 0.5) * 6 * size + tilt * 3 * size;
+        // Drawn as a closed sliver rather than a stroke, so a strand can be
+        // thick where it leaves the crown and come to nothing at its end. A
+        // line of even width all the way down is a stick, and a willow of
+        // sticks is a mop.
+        ctx.fillStyle = t < 0.42 ? canopy[0] : canopy[2];
+        const wTop = Math.max(0.8, 2.2 * size);
+        ctx.beginPath();
+        ctx.moveTo(x - wTop / 2, cy + ry * 0.2);
+        ctx.quadraticCurveTo(x + sway - wTop * 0.3, cy + fall * 0.55, x + sway * 1.5, cy + fall);
+        ctx.quadraticCurveTo(x + sway + wTop * 0.5, cy + fall * 0.5, x + wTop / 2, cy + ry * 0.2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, 6, 0.15, 0.3), canopy, bx, cy, rx, ry, seed);
+      if (!grown) branches(ctx, bx, cy - ry, size * 0.8, dulled(def.trunk, 0.3), 3);
+      if (fruit) fruiting(ctx, bx, cy, rx, ry, seed, fruit);
+      return;
+    }
+
+    if (def.shape === 'shelf') {
+      /*
+       * Three plates on one stem, with air between them.
+       *
+       * The one shape in the set that could not be a tree on this planet, and
+       * the one that does the most work: a stand of them reads as a stand
+       * rather than as a texture, because the gaps let the ground through.
+       */
+      const th = 30 * size;
+      const plates = wob(seed, 81) > 0.5 ? 3 : 4;
+      contact(ctx, bx, by, 18 * size);
+      stem(ctx, bx, by, 5.4 * size * girth, th + plates * 10 * size, tilt * 5 * size, def.trunk);
+      for (let i = 0; i < plates; i++) {
+        const t = i / (plates - 1);
+        // Each plate its own reach, rather than a clean taper down the stem.
+        const rx = (20 - 6 * t) * size * (0.78 + 0.42 * wob(seed, i + 90));
+        const ry = (5.4 - 1 * t) * size;
+        // Thrown alternately either side of the stem rather than threaded on
+        // it, so the stem shows through between the plates and each one
+        // reaches out over nothing. Stacked concentric they were a totem.
+        const cx = bx + (i % 2 ? 1 : -1) * rx * 0.36 + tilt * 5 * size * t;
+        const cy = by - th - i * 10 * size;
+        lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed + i, 5, 0.14), canopy, cx, cy, rx, ry, seed + i);
+      }
+      if (!grown) branches(ctx, bx, by - th - plates * 10 * size, size * 0.7, dulled(def.trunk, 0.3), 2);
+      if (fruit) fruiting(ctx, bx, by - th, 21 * size, 5 * size, seed, fruit);
+      return;
+    }
+
+    if (def.shape === 'bulb') {
+      /* A heavy head low on a long bare stem, overhanging the way fruit wood does. */
+      /*
+       * A small dense head sitting down inside an open fork of bare wood, on
+       * a long clean stem. The arms have to reach out past the head or the
+       * whole thing is a ball on a pole again -- the wood in the outline is
+       * the entire point of this one.
+       */
+      const th = 44 * size;
+      const rx = 12 * size;
+      const ry = 10 * size;
+      const lean = tilt * 4 * size;
+      const hx = bx + lean + tilt * rx * 0.3;
+      const cy = by - th - ry * 0.55;
+      contact(ctx, bx, by, rx * 0.95);
+      stem(ctx, bx, by, 4.6 * size * girth, th, lean, def.trunk);
+      fork(ctx, bx + lean, by - th, rx * 1.05, 11 * size, seed, def.trunk, 4);
+      lightOn(ctx, (dx, dy) => lobed(ctx, hx + dx, cy + dy, rx, ry, seed, 4, 0.22, 0.1), canopy, hx, cy, rx, ry, seed);
+      if (fruit) fruiting(ctx, hx, cy, rx, ry, seed, fruit);
+      return;
+    }
+
+    if (def.shape === 'column') {
+      /*
+       * A tall narrow spindle, twice as high as it is wide, with almost no
+       * stem showing. The one thing in the set whose bounding box is upright
+       * -- a wood needs a vertical in it or every outline in it is a disc on
+       * a stick at a different scale.
+       */
+      const waisted = wob(seed, 82);
+      const th = 12 * size;
+      const rx = 9 * size;
+      const ry = (waisted > 0.66 ? 13 : 23) * size;
+      const lean = tilt * 4 * size;
+      const cx = bx + lean * 0.6;
+      const cy = by - th - ry * 0.86 - (waisted > 0.66 ? 18 : 0) * size;
+      contact(ctx, bx, by, rx * 1.2);
+      stem(ctx, bx, by, 5 * size * (0.8 + 0.5 * wob(seed, 100)),
+        th + ry * (waisted > 0.66 ? 2.1 : 0.7), lean, def.trunk);
+      if (waisted > 0.66) {
+        // Two masses with a waist of bare stem between them.
+        const ly = cy + ry * 1.5;
+        lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, ly + dy, rx * 0.86, ry * 0.8, seed + 5.5, 6, 0.17),
+          canopy, cx, ly, rx * 0.86, ry * 0.8, seed + 5.5);
+      }
+      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, 6, 0.17,
+        waisted < 0.33 ? 0.45 : 0), canopy, cx, cy, rx, ry, seed);
+      if (!grown) branches(ctx, cx, cy + ry * 0.5, size * 0.6, dulled(def.trunk, 0.3), 2);
+      if (fruit) fruiting(ctx, cx, cy + ry * 0.3, rx, ry * 0.5, seed, fruit);
+      return;
+    }
+
+    if (def.shape === 'plate') {
+      /*
+       * One wide shallow plate with a bite taken out of one side, carried
+       * high. No second layer, no dome: the whole tree is a single flat
+       * lamina, and the notch is what keeps it from being a lozenge.
+       */
+      const th = 42 * size;
+      const rx = 22 * size;
+      const ry = 6.5 * size;
+      const lean = tilt * 4 * size;
+      const cx = bx + lean + tilt * rx * 0.2;
+      const cy = by - th - 15 * size;
+      const bite = tilt >= 0 ? 1 : -1;
+      contact(ctx, bx, by, rx * 0.72);
+      stem(ctx, bx, by, 6 * size * girth, th, lean, def.trunk);
+      fork(ctx, bx + lean, by - th, rx * 0.46, 15 * size, seed, def.trunk, 3);
+      const nick = bite > 0 ? 0.02 : 0.48;
+      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, 4, 0.2, 0, nick),
+        canopy, cx, cy, rx, ry, seed);
+      if (!grown) branches(ctx, cx, cy, size * 0.8, dulled(def.trunk, 0.3), 3);
+      if (fruit) fruiting(ctx, cx, cy, rx, ry, seed, fruit);
+      return;
+    }
+
+    if (def.shape === 'fan') {
+      /* A crown shouldered over to one side, the way a tree on a windward slope goes. */
+      /*
+       * The crown hung off to one side of the stem rather than balanced on
+       * top of it: the stem comes up into its lower corner and better than
+       * half the mass reaches out over open ground. A tree grown against a
+       * prevailing wind, and the one outline here that is not symmetrical
+       * about anything.
+       */
+      const th = 34 * size;
+      const rx = 13 * size;
+      const ry = 20 * size;
+      const out = tilt >= 0 ? 1 : -1;
+      const lean = out * 8 * size;
+      const cx = bx + lean + out * rx * 0.86;
+      const cy = by - th - ry * 0.32;
+      const skew = out * 0.42;
+      contact(ctx, bx + lean * 0.5, by, rx * 0.88);
+      stem(ctx, bx, by, 6 * size * girth, th, lean, def.trunk);
+      fork(ctx, bx + lean, by - th, rx * 0.74, 12 * size, seed, def.trunk, 3);
+      const mass: Mass = (dx, dy) => {
+        ctx.save();
+        ctx.translate(cx + dx, cy + dy);
+        ctx.transform(1, 0, skew, 1, 0, 0);
+        lobed(ctx, 0, 0, rx, ry, seed, 3, 0.24, 0.2);
+        ctx.restore();
+      };
+      lightOn(ctx, mass, canopy, cx, cy, rx, ry, seed);
+      // A small counterweight low on the other side, so the tree is off
+      // balance rather than simply pointing.
+      const kx = bx + lean - out * rx * 0.55;
+      const ky = cy + ry * 0.52;
+      lightOn(ctx, (dx, dy) => lobed(ctx, kx + dx, ky + dy, rx * 0.5, ry * 0.3, seed + 9.2, 3, 0.24),
+        canopy, kx, ky, rx * 0.5, ry * 0.3, seed + 9.2);
+      if (!grown) branches(ctx, bx + lean, cy + ry * 0.3, size * 0.8, dulled(def.trunk, 0.3), 3);
+      if (fruit) fruiting(ctx, cx, cy, rx, ry, seed, fruit);
+      return;
+    }
+
+    /*
+     * Parasol: two wide flat layers of foliage rather than one mass.
+     *
+     * In silhouette-only black the one-mass version was a mushroom cap, and a
+     * mushroom cap is a lollipop -- it read as the same tree as the bulb and
+     * as every fruit tree on the island. Two layers with a gap of sky between
+     * them is a different animal: it is wide, it is flat, it is stacked, and
+     * you can tell it from anything else here with the colour taken out.
+     */
+    const th = 40 * size;
+    const rx = 18 * size;
+    const lean = tilt * 3 * size;
+    const cx = bx + lean;
+    const cy = by - th - 17 * size;
+    contact(ctx, bx, by, rx * 0.8);
+    stem(ctx, bx, by, 7 * size * girth, th, lean, def.trunk);
+    fork(ctx, bx + lean, by - th, rx * 0.56, 14 * size, seed, def.trunk, 4);
+    // How many plates, and how high they ride over the fork, both off the
+    // seed: three species wear this outline and this is what parts them.
+    const decks = wob(seed, 80) > 0.6 ? 3 : 2;
+    for (let i = 0; i < decks; i++) {
+      const lx = cx + (i ? tilt * 7 * size - 2 * size : 1.5 * size);
+      const ly = cy - i * 10 * size;
+      const lrx = rx * (i ? 0.66 : 1);
+      const lry = (7.5 - i * 1.3) * size;
+      lightOn(ctx, (dx, dy) => lobed(ctx, lx + dx, ly + dy, lrx, lry, seed + i * 2.4, 4, 0.2, 0.34),
+        canopy, lx, ly, lrx, lry, seed + i * 2.4);
+    }
+    if (!grown) branches(ctx, cx, cy - 4 * size, size * 0.85, dulled(def.trunk, 0.3), 3);
+    if (fruit) fruiting(ctx, cx, cy, rx, 7 * size, seed, fruit);
   });
   cache.set(key, spr);
   return spr;
@@ -299,29 +776,27 @@ export function stumpSprite(species: number): Sprite {
   spr = makeSprite(48, 40, 24, 36, (ctx) => {
     const bx = 24;
     const by = 36;
-    shadow(ctx, bx, by, 10, 3.6);
     const w = 11;
     const h = 7;
-    // The stub, with its shaded side, and a root or two showing at the foot.
-    ctx.fillStyle = def.trunk;
-    ctx.fillRect(bx - w / 2, by - h, w, h);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(bx, by - h, w / 2, h);
+    contact(ctx, bx, by, 10);
+    // The stub, flared and shaded the same way the standing stem was, so what
+    // is left of a tree is recognisably what the tree was standing on.
+    stem(ctx, bx, by, w, h, 0, def.trunk);
     ctx.fillStyle = def.trunk;
     ctx.beginPath();
-    ctx.ellipse(bx - w * 0.55, by - 1, 3.2, 1.6, 0, 0, TAU);
-    ctx.ellipse(bx + w * 0.5, by - 0.5, 2.8, 1.4, 0, 0, TAU);
+    ctx.ellipse(bx - w * 0.62, by - 1, 3.4, 1.6, 0, 0, TAU);
+    ctx.ellipse(bx + w * 0.58, by - 0.5, 2.9, 1.4, 0, 0, TAU);
     ctx.fill();
     // The cut face, pale, with the rings in it.
     ctx.fillStyle = dulled(def.trunk, -0.55);
     ctx.beginPath();
-    ctx.ellipse(bx, by - h, w / 2, w / 4, 0, 0, TAU);
+    ctx.ellipse(bx, by - h, w * 0.29, w * 0.15, 0, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = dulled(def.trunk, -0.15);
+    ctx.strokeStyle = dulled(def.trunk, -0.12);
     ctx.lineWidth = 0.7;
-    for (const r of [0.28, 0.55, 0.8]) {
+    for (const r of [0.34, 0.66, 0.92]) {
       ctx.beginPath();
-      ctx.ellipse(bx + 0.4, by - h, (w / 2) * r, (w / 4) * r, 0, 0, TAU);
+      ctx.ellipse(bx + 0.3, by - h, w * 0.29 * r, w * 0.15 * r, 0, 0, TAU);
       ctx.stroke();
     }
   });
@@ -337,21 +812,20 @@ export function bushSprite(species: number): Sprite {
   spr = makeSprite(48, 40, 24, 36, (ctx) => {
     const bx = 24;
     const by = 36;
-    shadow(ctx, bx, by, 12, 4.5);
-    blob(ctx, bx, by - 9, 9, def.foliage[1]);
-    blob(ctx, bx - 2, by - 12, 6.5, def.foliage[0]);
+    // The same lobes and the same light as the trees above them, at a
+    // hand's height: a bush that is drawn by different rules reads as a
+    // different game's art sitting in this one.
+    const seed = species * 5.9 + 3.3;
+    const pal: [string, string, string] = [shade(def.foliage[0], 0.2), def.foliage[0], def.foliage[1]];
+    contact(ctx, bx, by, 12);
+    lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, by - 9 + dy, 11, 8.5, seed, 5, 0.2), pal, bx, by - 9, 11, 8.5, seed);
     if (def.flowers) {
-      ctx.fillStyle = def.flowers;
-      const spots = [
-        [-8, -12],
-        [3, -16],
-        [8, -9],
-        [-3, -6],
-        [1, -11],
-      ];
-      for (const [dx, dy] of spots) {
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + seed;
+        const d = 5 + wob(seed, i) * 4.5;
+        ctx.fillStyle = i % 3 === 0 ? shade(def.flowers, -0.22) : def.flowers;
         ctx.beginPath();
-        ctx.arc(bx + dx, by + dy, 1.6, 0, TAU);
+        ctx.arc(bx + Math.cos(a) * d, by - 9.5 + Math.sin(a) * d * 0.72, 1.5, 0, TAU);
         ctx.fill();
       }
     }

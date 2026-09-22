@@ -281,7 +281,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * shouting. A mown lawn stays the deeper and stronger of the two, because a
    * lawn is tended and a meadow is what the summer left.
    */
-  [TileType.Grass]: { name: 'Grass', color: [110, 188, 142], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  [TileType.Grass]: { name: 'Grass', color: [158, 188, 166], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   /*
    * A dusty clay leaning a little rose: not the dark chocolate it started as
    * and not the sandy tan it went to next. Bare earth against a teal field is
@@ -428,7 +428,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * them: the tended ground is the smooth one. It costs nothing to draw and
    * it is the cheapest piece of story on the map.
    */
-  [TileType.Lawn]: { name: 'Lawn', color: [85, 170, 123], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
+  [TileType.Lawn]: { name: 'Lawn', color: [140, 174, 150], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
 
@@ -464,7 +464,15 @@ export const SLAB_BY_ITEM = new Map(SLAB_VARIANTS.map((v, i) => [v.item, i]));
 
 export interface TreeDef {
   name: string;
-  shape: 'round' | 'conifer' | 'weeping';
+  /**
+   * Which outline it grows into. Six of them, spread across the seventeen
+   * species so that a mixed wood is a mixed wood rather than one motif
+   * repeated: a `parasol` held flat and clear of the ground, a `fan`
+   * shouldered over to one side, a `shelf` of separate plates with air
+   * between them, a `bulb` low and heavy on a long bare stem, a `spire` of
+   * sagging tiers, and the willow's `weeping`.
+   */
+  shape: 'parasol' | 'fan' | 'shelf' | 'bulb' | 'column' | 'plate' | 'spire' | 'weeping';
   trunk: string;
   canopy: [light: string, mid: string, dark: string];
   /** Relative size of the full grown tree. */
@@ -481,36 +489,47 @@ export interface TreeDef {
  * whole look of the place. They were yellow-greens, picked against a grass
  * that was a yellow-green too; the field moved and they had to move with it,
  * or a wood is a warm thing sitting on a cool one and both of them look like
- * a mistake. Each one's hue came off its old one in order, so the birch is
- * still the palest of them and the pine still the deepest and bluest.
+ * a mistake. The birch is the palest of them and the pine the deepest and
+ * bluest, which has been true through every move they have made.
+ *
+ * They are chalk now rather than paint. Seventeen species were carrying four
+ * or five near-identical mid-greens at asset-pack saturation, so a wood came
+ * out as one colour with a texture in it; the chroma is down by about a third
+ * and the hues are spread from a warm olive at 88 degrees round to the pine's
+ * blue-teal at 178, which gives a wood a range to be quiet across. Each one's
+ * three tones are derived rather than picked: the lit one is the mid tone
+ * lifted and very slightly greyed, and the deep one is dropped and pulled
+ * thirteen degrees toward blue, which is the direction a real shadow goes.
  *
  * The maple is the exception and keeps its orange. It is the autumn tree and
- * the one warm thing in the wood, and it is worth more against this than it
- * ever was against a yellow-green.
+ * the one warm thing in the wood -- but it was eighteen trees in a hundred,
+ * which is not an accent, it is a second colour. It is chalked back to a
+ * dusty apricot and `pickSpecies` now plants a third as many, so the wood it
+ * stands in is a cool one and it is the thing your eye goes to.
  */
 export const TREE_DEFS: TreeDef[] = [
-  { name: 'Birch', shape: 'round', trunk: '#e8e4d8', canopy: ['#79d391', '#57b172', '#408859'], size: 0.85 },
-  { name: 'Pine', shape: 'conifer', trunk: '#6d4b32', canopy: ['#6c9b83', '#44705e', '#305245'], size: 1 },
-  { name: 'Oak', shape: 'round', trunk: '#5c4330', canopy: ['#65bc7d', '#3f8f5b', '#2e6a44'], size: 1.1 },
-  { name: 'Maple', shape: 'round', trunk: '#6b4a34', canopy: ['#f0b053', '#d6782e', '#9c4a1c'], size: 0.95 },
-  { name: 'Willow', shape: 'weeping', trunk: '#7a6248', canopy: ['#8cd49b', '#68b17d', '#4d895f'], size: 1 },
-  { name: 'Cedar', shape: 'conifer', trunk: '#7c5236', canopy: ['#7db291', '#5e8774', '#416455'], size: 1.05 },
+  { name: 'Birch',       shape: 'fan',     trunk: '#cfc6b0', canopy: ['#85b7a2', '#529674', '#39655b'], size: 0.85 },
+  { name: 'Pine',        shape: 'spire',   trunk: '#886f60', canopy: ['#5f9fa3', '#3d716f', '#233940'], size: 1 },
+  { name: 'Oak',         shape: 'parasol', trunk: '#81685d', canopy: ['#69ad83', '#418154', '#294f3e'], size: 1.1 },
+  { name: 'Maple',       shape: 'plate', trunk: '#8a6d5e', canopy: ['#d1ac85', '#c07842', '#886d30'], size: 0.95 },
+  { name: 'Willow',      shape: 'weeping', trunk: '#968671', canopy: ['#7bb2a2', '#4d8c75', '#345b57'], size: 1 },
+  { name: 'Cedar',       shape: 'spire',   trunk: '#917461', canopy: ['#6fa7a1', '#477b71', '#2c494b'], size: 1.05 },
   // The three that bear. They grow wild only here and there; an orchard is
   // something you plant.
-  { name: 'Apple', shape: 'round', trunk: '#6a4a33', canopy: ['#64b87f', '#478f61', '#326846'], size: 0.8, fruit: 'apple' },
-  { name: 'Cherry', shape: 'round', trunk: '#5a3c30', canopy: ['#73c488', '#4d9a65', '#367049'], size: 0.78, fruit: 'cherry' },
-  { name: 'Olive', shape: 'round', trunk: '#8a7a62', canopy: ['#84a98f', '#668773', '#4c6456'], size: 0.75, fruit: 'olive' },
+  { name: 'Apple',       shape: 'parasol', trunk: '#886d60', canopy: ['#70b07e', '#45874e', '#2d553d'], size: 0.8, fruit: 'apple' },
+  { name: 'Cherry',      shape: 'bulb',    trunk: '#7d635c', canopy: ['#69af8c', '#41845d', '#295145'], size: 0.78, fruit: 'cherry' },
+  { name: 'Olive',       shape: 'shelf',   trunk: '#a09581', canopy: ['#8daa7e', '#668251', '#3a5436'], size: 0.75, fruit: 'olive' },
   // Eight more that bear, asked for, each held to one island of the chart
   // (regions.ts) the way the cherry is, and sprinkled anywhere on an island
   // of your own. Past the ninth the species needs a fifth bit: see below.
-  { name: 'Pear', shape: 'round', trunk: '#6b4f38', canopy: ['#73c789', '#53a16b', '#3b784f'], size: 0.82, fruit: 'pear' },
-  { name: 'Plum', shape: 'round', trunk: '#4e3a36', canopy: ['#6dad82', '#4d8562', '#3a6149'], size: 0.76, fruit: 'plum' },
-  { name: 'Peach', shape: 'round', trunk: '#7a5a44', canopy: ['#7bcc8e', '#5aa670', '#407a52'], size: 0.74, fruit: 'peach' },
-  { name: 'Fig', shape: 'round', trunk: '#8c8270', canopy: ['#7ab28b', '#5c8c6f', '#456854'], size: 0.7, fruit: 'fig' },
-  { name: 'Lemon', shape: 'round', trunk: '#7c6a4e', canopy: ['#7fce92', '#5cac72', '#418658'], size: 0.68, fruit: 'lemon' },
-  { name: 'Pomegranate', shape: 'round', trunk: '#6e4a3c', canopy: ['#6fb983', '#4e9566', '#386e4b'], size: 0.66, fruit: 'pomegranate' },
-  { name: 'Apricot', shape: 'round', trunk: '#6f5040', canopy: ['#74c786', '#54a269', '#3b764d'], size: 0.74, fruit: 'apricot' },
-  { name: 'Quince', shape: 'round', trunk: '#6a5646', canopy: ['#7fbd90', '#5e936f', '#476e55'], size: 0.72, fruit: 'quince' },
+  { name: 'Pear',        shape: 'column',     trunk: '#8c7161', canopy: ['#78b38a', '#4a8c59', '#315b46'], size: 0.82, fruit: 'pear' },
+  { name: 'Plum',        shape: 'bulb',    trunk: '#755d5a', canopy: ['#69a5a2', '#437770', '#294347'], size: 0.76, fruit: 'plum' },
+  { name: 'Peach',       shape: 'fan', trunk: '#967966', canopy: ['#7cb881', '#4b954b', '#336340'], size: 0.74, fruit: 'peach' },
+  { name: 'Fig',         shape: 'shelf',   trunk: '#a49b8b', canopy: ['#88a571', '#637949', '#354a2e'], size: 0.7, fruit: 'fig' },
+  { name: 'Lemon',       shape: 'column',     trunk: '#97856a', canopy: ['#7ebc9a', '#4b9b68', '#346855'], size: 0.68, fruit: 'lemon' },
+  { name: 'Pomegranate', shape: 'column',    trunk: '#87675c', canopy: ['#69aa9c', '#427d6b', '#294c4b'], size: 0.66, fruit: 'pomegranate' },
+  { name: 'Apricot',     shape: 'parasol', trunk: '#8a6f64', canopy: ['#79af76', '#52874a', '#315636'], size: 0.74, fruit: 'apricot' },
+  { name: 'Quince',      shape: 'plate',   trunk: '#8e7a69', canopy: ['#81a874', '#5b7e4a', '#314f2f'], size: 0.72, fruit: 'quince' },
 ];
 
 /** The trees that bear, by index. */
@@ -528,9 +547,9 @@ export interface BushDef {
 
 /** The three bushes, in the same teal as the canopies. Flowers stay theirs. */
 export const BUSH_DEFS: BushDef[] = [
-  { name: 'Rose bush', foliage: ['#509c6a', '#326a49'], flowers: '#e0455f', yields: 'rose_petals' },
+  { name: 'Rose bush', foliage: ['#509c6a', '#326a49'], flowers: '#ab7b83', yields: 'rose_petals' },
   { name: 'Thorn bush', foliage: ['#549564', '#366444'] },
-  { name: 'Lavender bush', foliage: ['#7ba589', '#567963'], flowers: '#9a6fd0', yields: 'lavender' },
+  { name: 'Lavender bush', foliage: ['#7ba589', '#567963'], flowers: '#8e88a6', yields: 'lavender' },
 ];
 
 export interface RockVariantDef {

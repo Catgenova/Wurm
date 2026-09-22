@@ -2019,25 +2019,77 @@ export class Renderer {
       }
       const spr = ent.spr;
       if (!spr) continue;
-      const dw = spr.w * zoom;
-      const dh = spr.h * zoom;
-      const left = ent.sx - spr.ax * zoom;
-      const top = ent.sy - spr.ay * zoom;
+      /*
+       * How big this particular one is.
+       *
+       * Every tree of a species and an age shares one baked sprite, so
+       * without this a wood is one tree printed a hundred times and every
+       * crown in it tops out on the same line -- which the eye reads as
+       * horizontal banding long before it notices it is looking at trees.
+       * It costs nothing: no second sprite, no second draw, just a different
+       * size to blit the one sprite at, taken about the foot so a tree that
+       * grew bigger does not also climb out of the ground.
+       *
+       * A fifth either way was not enough. A real wood is not one height
+       * with a wobble on it, it is layers: a few emergents standing a head
+       * and shoulders over everything, a thick middle rank, and an
+       * understorey of small wide ones down in the shade of them. So the
+       * roll is shaped rather than flat -- one tree in nine is half again
+       * as big or better, one in four is half size or less, and the rest
+       * fill the middle. That is what puts a top and a floor on a canopy.
+       */
+      let grew = 1;
+      if (ent.kind === 'tree' || ent.kind === 'bush') {
+        const r = hash2(Math.round(ent.x), Math.round(ent.y), 7717);
+        grew = r > 0.89 ? 1.42 + 0.5 * (r - 0.89) / 0.11
+          : r < 0.26 ? 0.46 + 0.28 * (r / 0.26)
+            : 0.8 + 0.5 * ((r - 0.26) / 0.63);
+      }
+      const dw = spr.w * zoom * grew;
+      const dh = spr.h * zoom * grew;
+      const left = ent.sx - spr.ax * zoom * grew;
+      const top = ent.sy - spr.ay * zoom * grew;
       // Anything standing up throws a shadow away from the sun, long at the
       // ends of the day and gone at noon. The sprite's own contact shadow does
       // the rest, which is why this can be thrown away entirely at midday.
       if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
       if (ent.kind === 'tree' || ent.kind === 'bush') {
         const ready = this.atSize(spr.canvas, dw, dh);
+        /*
+         * Air between here and the back of the wood.
+         *
+         * Everything standing up was drawn at one strength whatever its
+         * distance, so the far rank of a wood came forward as hard as the
+         * near one and the whole thing flattened into a pattern. The screen
+         * is the depth here -- in this projection a thing further away is a
+         * thing higher up the picture -- so the top of the view is washed
+         * toward the sky and the bottom is left alone. It is the same trick
+         * the ground haze uses, and unlike the ground haze it has to keep
+         * working when somebody zooms in, which is exactly where a wood
+         * needed it most.
+         */
+        const far = Math.max(0, Math.min(1, 1 - (ent.sy + dh * 0.5) / (this.canvas.height * 0.82)));
         // Rooted at the foot, leaning at the head: the shear is taken about
         // the trunk, so the tree bends rather than slides. A lean that moves
         // the crown less than half a pixel is not worth a transform to draw.
         const bend = (swayAt(ent.x, ent.y, this.time, this.lean.force) * SWAY_MAX * (ent.kind === 'bush' ? 0.6 : 1)) / 2;
+        /*
+         * Laid on thinner the further back it stands, so it takes up some of
+         * whatever is behind it -- the meadow low down, the wood's own far
+         * rank higher up, the sky over the top of all of it. In a picture
+         * made of flat colour that is the whole of atmosphere: contrast and
+         * chroma both come off with distance because the thing is literally
+         * part ground now, and it costs one number.
+         */
+        const solid = 1 - far * 0.34;
         if (Math.abs(this.lean.x * bend) * dh < 0.5) {
+          if (solid < 1) ctx.globalAlpha = solid;
           ctx.drawImage(ready, left, top, dw, dh);
+          if (solid < 1) ctx.globalAlpha = 1;
           continue;
         }
         ctx.save();
+        ctx.globalAlpha = solid;
         ctx.translate(ent.sx, ent.sy);
         ctx.transform(1, 0, -this.lean.x * bend, 1, 0, 0);
         ctx.drawImage(ready, left - ent.sx, top - ent.sy, dw, dh);

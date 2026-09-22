@@ -24,9 +24,13 @@ function pickSpecies(avgHeight: number, moisture: number, r: number): number {
     return moisture > 0.2 ? 6 : r > 0.992 ? 8 : 7;
   }
   if (r < 0.32) return 0; // birch
-  if (r < 0.6) return 2; // oak
-  if (r < 0.78) return 3; // maple
-  if (r < 0.9) return 1; // pine
+  if (r < 0.64) return 2; // oak
+  // The maple is the wood's one warm thing, so there has to be a wood around
+  // it for it to be warm against. At eighteen in a hundred it was not an
+  // accent, it was a second colour, and a mixed wood read as green-and-orange
+  // rather than as green with something in it. Six.
+  if (r < 0.655) return 3; // maple
+  if (r < 0.88) return 1; // pine
   return 5; // cedar
 }
 
