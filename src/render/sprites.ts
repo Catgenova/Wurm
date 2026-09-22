@@ -563,7 +563,9 @@ export function treeSprite(species: number, variant: number): Sprite {
       ctx.lineCap = 'round';
       for (let k = 0; k <= 15; k++) {
         const t = k / 15;
-        const x = bx - rx * 1.02 + t * rx * 2.04;
+        // Not on a comb: a fall starts where it starts, and two of them
+        // crossing is what a willow looks like.
+        const x = bx - rx * 1.02 + t * rx * 2.04 + (wob(seed, k + 40) - 0.5) * rx * 0.26;
         const edge = Math.sin(t * Math.PI);
         // Longest at the sides, and measured off the stem so no frond ever
         // reaches past the foot of the tree it is hanging from.
@@ -576,9 +578,10 @@ export function treeSprite(species: number, variant: number): Sprite {
         ctx.fillStyle = t < 0.42 ? canopy[0] : canopy[2];
         const wTop = Math.max(0.8, 2.2 * size);
         ctx.beginPath();
-        ctx.moveTo(x - wTop / 2, cy + ry * 0.2);
+        const from = cy + ry * (0.05 + 0.3 * wob(seed, k + 55));
+        ctx.moveTo(x - wTop / 2, from);
         ctx.quadraticCurveTo(x + sway - wTop * 0.3, cy + fall * 0.55, x + sway * 1.5, cy + fall);
-        ctx.quadraticCurveTo(x + sway + wTop * 0.5, cy + fall * 0.5, x + wTop / 2, cy + ry * 0.2);
+        ctx.quadraticCurveTo(x + sway + wTop * 0.5, cy + fall * 0.5, x + wTop / 2, from);
         ctx.closePath();
         ctx.fill();
       }

@@ -2081,7 +2081,7 @@ export class Renderer {
          * chroma both come off with distance because the thing is literally
          * part ground now, and it costs one number.
          */
-        const solid = 1 - far * 0.34;
+        const solid = 1 - far * 0.46;
         if (Math.abs(this.lean.x * bend) * dh < 0.5) {
           if (solid < 1) ctx.globalAlpha = solid;
           ctx.drawImage(ready, left, top, dw, dh);

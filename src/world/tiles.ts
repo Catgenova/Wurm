@@ -492,14 +492,26 @@ export interface TreeDef {
  * a mistake. The birch is the palest of them and the pine the deepest and
  * bluest, which has been true through every move they have made.
  *
- * They are chalk now rather than paint. Seventeen species were carrying four
- * or five near-identical mid-greens at asset-pack saturation, so a wood came
- * out as one colour with a texture in it; the chroma is down by about a third
- * and the hues are spread from a warm olive at 88 degrees round to the pine's
- * blue-teal at 178, which gives a wood a range to be quiet across. Each one's
- * three tones are derived rather than picked: the lit one is the mid tone
- * lifted and very slightly greyed, and the deep one is dropped and pulled
- * thirteen degrees toward blue, which is the direction a real shadow goes.
+ * They are chalk now rather than paint, and no two of them are the same
+ * chalk. Seventeen species were carrying four or five near-identical
+ * mid-greens at asset-pack saturation, which is a wood that comes out as one
+ * colour with a texture in it -- and worse, whose crowns melt into each other
+ * wherever two of them overlap, so a stand reads as a pattern rather than as
+ * a number of trees. The chroma is down by about a third and the hues now run
+ * the long way round the cool half of the wheel: brass at 44, olive at 88,
+ * the greens through the middle, and the pine's blue-teal at 182, with the
+ * cherry and the fig sitting almost grey on the rose side of neutral.
+ *
+ * That is a widening of the rule below rather than a break with it. Nothing
+ * here is both warm and saturated except the maple; a wood is still a cool
+ * thing standing on a cool field. What has gone is the idea that cool had to
+ * mean one green.
+ *
+ * Each species' three tones are derived rather than picked: the lit one is
+ * the mid tone lifted and very slightly greyed, and the deep one is dropped
+ * and pulled sixteen degrees toward blue, which is the way a real shadow
+ * goes. Canopies sit below the meadow in value, not above it -- a crown is a
+ * roof, and the ground under it is the thing that is open to the sky.
  *
  * The maple is the exception and keeps its orange. It is the autumn tree and
  * the one warm thing in the wood -- but it was eighteen trees in a hundred,
@@ -508,28 +520,28 @@ export interface TreeDef {
  * stands in is a cool one and it is the thing your eye goes to.
  */
 export const TREE_DEFS: TreeDef[] = [
-  { name: 'Birch',       shape: 'fan',     trunk: '#cfc6b0', canopy: ['#85b7a2', '#529674', '#39655b'], size: 0.85 },
-  { name: 'Pine',        shape: 'spire',   trunk: '#886f60', canopy: ['#5f9fa3', '#3d716f', '#233940'], size: 1 },
-  { name: 'Oak',         shape: 'parasol', trunk: '#81685d', canopy: ['#69ad83', '#418154', '#294f3e'], size: 1.1 },
+  { name: 'Birch',       shape: 'fan',     trunk: '#cfc6b0', canopy: ['#abb693', '#89955f', '#556743'], size: 0.85 },
+  { name: 'Pine',        shape: 'spire',   trunk: '#886f60', canopy: ['#5d9aa2', '#3c6d6f', '#22363e'], size: 1 },
+  { name: 'Oak',         shape: 'parasol', trunk: '#81685d', canopy: ['#6cac87', '#448158', '#2b4f41'], size: 1.1 },
   { name: 'Maple',       shape: 'plate', trunk: '#8a6d5e', canopy: ['#d1ac85', '#c07842', '#886d30'], size: 0.95 },
-  { name: 'Willow',      shape: 'weeping', trunk: '#968671', canopy: ['#7bb2a2', '#4d8c75', '#345b57'], size: 1 },
-  { name: 'Cedar',       shape: 'spire',   trunk: '#917461', canopy: ['#6fa7a1', '#477b71', '#2c494b'], size: 1.05 },
+  { name: 'Willow',      shape: 'weeping', trunk: '#968671', canopy: ['#7db3a7', '#4e8d7a', '#345d5c'], size: 1 },
+  { name: 'Cedar',       shape: 'spire',   trunk: '#917461', canopy: ['#75a9a1', '#4b7f73', '#304f50'], size: 1.05 },
   // The three that bear. They grow wild only here and there; an orchard is
   // something you plant.
-  { name: 'Apple',       shape: 'parasol', trunk: '#886d60', canopy: ['#70b07e', '#45874e', '#2d553d'], size: 0.8, fruit: 'apple' },
-  { name: 'Cherry',      shape: 'bulb',    trunk: '#7d635c', canopy: ['#69af8c', '#41845d', '#295145'], size: 0.78, fruit: 'cherry' },
-  { name: 'Olive',       shape: 'shelf',   trunk: '#a09581', canopy: ['#8daa7e', '#668251', '#3a5436'], size: 0.75, fruit: 'olive' },
+  { name: 'Apple',       shape: 'parasol', trunk: '#886d60', canopy: ['#85ae7c', '#5e874f', '#355835'], size: 0.8, fruit: 'apple' },
+  { name: 'Cherry',      shape: 'bulb',    trunk: '#7d635c', canopy: ['#a1868a', '#795b61', '#4e3d3c'], size: 0.78, fruit: 'cherry' },
+  { name: 'Olive',       shape: 'shelf',   trunk: '#a09581', canopy: ['#94ad80', '#6e8652', '#405837'], size: 0.75, fruit: 'olive' },
   // Eight more that bear, asked for, each held to one island of the chart
   // (regions.ts) the way the cherry is, and sprinkled anywhere on an island
   // of your own. Past the ninth the species needs a fifth bit: see below.
-  { name: 'Pear',        shape: 'column',     trunk: '#8c7161', canopy: ['#78b38a', '#4a8c59', '#315b46'], size: 0.82, fruit: 'pear' },
-  { name: 'Plum',        shape: 'bulb',    trunk: '#755d5a', canopy: ['#69a5a2', '#437770', '#294347'], size: 0.76, fruit: 'plum' },
-  { name: 'Peach',       shape: 'fan', trunk: '#967966', canopy: ['#7cb881', '#4b954b', '#336340'], size: 0.74, fruit: 'peach' },
-  { name: 'Fig',         shape: 'shelf',   trunk: '#a49b8b', canopy: ['#88a571', '#637949', '#354a2e'], size: 0.7, fruit: 'fig' },
-  { name: 'Lemon',       shape: 'column',     trunk: '#97856a', canopy: ['#7ebc9a', '#4b9b68', '#346855'], size: 0.68, fruit: 'lemon' },
-  { name: 'Pomegranate', shape: 'column',    trunk: '#87675c', canopy: ['#69aa9c', '#427d6b', '#294c4b'], size: 0.66, fruit: 'pomegranate' },
-  { name: 'Apricot',     shape: 'parasol', trunk: '#8a6f64', canopy: ['#79af76', '#52874a', '#315636'], size: 0.74, fruit: 'apricot' },
-  { name: 'Quince',      shape: 'plate',   trunk: '#8e7a69', canopy: ['#81a874', '#5b7e4a', '#314f2f'], size: 0.72, fruit: 'quince' },
+  { name: 'Pear',        shape: 'column',     trunk: '#8c7161', canopy: ['#aeb085', '#8b8955', '#545d3a'], size: 0.82, fruit: 'pear' },
+  { name: 'Plum',        shape: 'bulb',    trunk: '#755d5a', canopy: ['#977f9a', '#6a556f', '#453644'], size: 0.76, fruit: 'plum' },
+  { name: 'Peach',       shape: 'fan', trunk: '#967966', canopy: ['#84b88a', '#519754', '#386646'], size: 0.74, fruit: 'peach' },
+  { name: 'Fig',         shape: 'shelf',   trunk: '#a49b8b', canopy: ['#9c8493', '#725a6b', '#493a40'], size: 0.7, fruit: 'fig' },
+  { name: 'Lemon',       shape: 'column',     trunk: '#97856a', canopy: ['#afb88a', '#909757', '#57673c'], size: 0.68, fruit: 'lemon' },
+  { name: 'Pomegranate', shape: 'column',    trunk: '#87675c', canopy: ['#7495a7', '#4b6f7c', '#2f3d4d'], size: 0.66, fruit: 'pomegranate' },
+  { name: 'Apricot',     shape: 'parasol', trunk: '#8a6f64', canopy: ['#aea684', '#887b55', '#5a5a3a'], size: 0.74, fruit: 'apricot' },
+  { name: 'Quince',      shape: 'plate',   trunk: '#8e7a69', canopy: ['#88aa79', '#62814d', '#375232'], size: 0.72, fruit: 'quince' },
 ];
 
 /** The trees that bear, by index. */
