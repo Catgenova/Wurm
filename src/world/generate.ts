@@ -28,8 +28,9 @@ function pickSpecies(avgHeight: number, moisture: number, r: number): number {
   // The maple is the wood's one warm thing, so there has to be a wood around
   // it for it to be warm against. At eighteen in a hundred it was not an
   // accent, it was a second colour, and a mixed wood read as green-and-orange
-  // rather than as green with something in it. One tree in forty now.
-  if (r < 0.785) return 3; // maple
+  // rather than as green with something in it. One tree in eighty now -- at
+  // forty there were still four of them shouting at each other in a view.
+  if (r < 0.7725) return 3; // maple
   // The two conifers share an outline, and at three trees in ten between them
   // that one motif was the texture of the whole wood rather than a part of
   // it. Down to a fifth, and the broadleaves have the ground they left.

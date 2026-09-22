@@ -108,7 +108,11 @@ function contact(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number
   // picture made entirely of flat fields cannot have in it.
   ctx.fillStyle = 'rgba(44,74,78,0.17)';
   ctx.beginPath();
-  ctx.ellipse(x - LIT.x * rx * 0.3, y - LIT.y * ry * 0.34, rx, ry, 0, 0, TAU);
+  // Thrown away from the light and stretched along the throw, so the ground
+  // agrees with the crown about where the sun is. A ring sitting square under
+  // the trunk says the light is straight overhead, which is the one thing
+  // everything else on the tree denies.
+  ctx.ellipse(x - LIT.x * rx * 0.44, y - LIT.y * ry * 0.5, rx * 1.12, ry * 0.86, -0.5, 0, TAU);
   ctx.fill();
 }
 
@@ -339,7 +343,7 @@ function underCrown(ctx: CanvasRenderingContext2D, x: number, baseY: number, w: 
  */
 function fork(ctx: CanvasRenderingContext2D, x: number, top: number, spread: number, rise: number,
   seed: number, color: string, n: number): void {
-  ctx.strokeStyle = color;
+  ctx.strokeStyle = shade(color, -0.22);
   ctx.lineCap = 'round';
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0.5 : i / (n - 1);
@@ -525,11 +529,21 @@ export function treeSprite(species: number, variant: number): Sprite {
           // long again one way as the other, which is what stops a conifer
           // reading as a folded paper chevron.
           const swing = 0.68 + 0.64 * wob(seed, i * 2 + (side > 0 ? 1 : 0));
-          // The open one takes its blades in toward the top; the tight one
-          // keeps them even the whole way down. One of the two structural
-          // differences that stop the pair being one tree.
-          const taper = open ? 1.25 - 0.55 * t : 1;
-          const lw = (open ? 12 + 18 * t : 9 + 13 * t) * size * runt * swing * taper;
+          /*
+           * `t` is one at the top of the tree, so a blade length that rose
+           * with it put the widest whorl at the crown and the narrowest at
+           * the foot: the tree was upside down. Widest at the base now, and
+           * a third shorter all round -- they were reaching further than an
+           * oak's whole crown, crossing two or three unrelated trees, and
+           * coming away from their own trunk into a drift of lozenges that
+           * nobody owned.
+           *
+           * The open one closes up faster toward its top than the tight one,
+           * which is one of the two structural differences that stop the two
+           * species being one tree.
+           */
+          const taper = open ? 1 - 0.62 * t : 1 - 0.4 * t;
+          const lw = (open ? 21 : 17) * size * runt * swing * taper;
           // The open one drops its tiers below the horizontal and takes them
           // out to a thread; the tight one holds them out stiff and flat. Two
           // species share this outline and that is the whole of what tells
@@ -541,9 +555,16 @@ export function treeSprite(species: number, variant: number): Sprite {
             // screen with a true vector outline, and it repeated unchanged at
             // every scale.
             const kink = (wob(seed, i * 5 + side) - 0.5) * lw * 0.18;
-            ctx.moveTo(ax + dx, ly + stagger - step * (open ? 0.62 : 0.5) + dy);
+            // A hand-cut edge on the blade: it was a mathematically exact
+            // capsule, the last true vector outline left in the set, and it
+            // repeated unchanged at every scale the camera could reach.
+            const nub = (j: number): number => (wob(seed, i * 9 + side * 3 + j) - 0.5) * lw * 0.13;
+            ctx.moveTo(ax + nub(1) + dx, ly + stagger - step * (open ? 0.62 : 0.5) + dy);
             ctx.quadraticCurveTo(ax + side * lw * 0.5 + dx, ly + stagger - step * (open ? 0.42 : 0.34) + dy,
               ax + side * lw * tip + dx, ly + stagger + sag * 0.9 + kink + dy);
+            ctx.quadraticCurveTo(ax + side * lw * (tip + 0.07) + nub(2) + dx,
+              ly + stagger + sag * 1.04 + kink + nub(3) + dy,
+              ax + side * lw * (tip - 0.16) + dx, ly + stagger + sag * 1.16 + kink + dy);
             ctx.quadraticCurveTo(ax + side * lw * (open ? 0.86 : 0.9) + dx, ly + stagger + sag * 1.15 + (open ? 0 : step * 0.3) + dy,
               ax + side * lw * 0.5 + dx, ly + stagger + sag * 0.5 + (open ? 0 : step * 0.26) - kink * 0.6 + dy);
             ctx.quadraticCurveTo(ax + side * lw * 0.3 + dx, ly + stagger + sag * 0.2 + dy, ax + side * lw * 0.08 + dx, ly + stagger + dy);
@@ -562,7 +583,10 @@ export function treeSprite(species: number, variant: number): Sprite {
            */
           const flip = wob(seed, i * 4 + (side > 0 ? 2 : 1)) > 0.83;
           const sunward = (side * LIT.x > 0) !== flip;
-          ctx.fillStyle = sunward ? (t > 0.72 ? canopy[0] : canopy[1]) : canopy[2];
+          // The palest tone goes low, where a whorl is broad and square-on to
+          // the light. Put on the top blades it made them read as pale debris
+          // floating clear of the tree rather than as the tip of it.
+          ctx.fillStyle = sunward ? (t < 0.4 ? canopy[0] : canopy[1]) : canopy[2];
           ctx.beginPath();
           mass(0, 0);
           ctx.fill();
@@ -758,9 +782,9 @@ export function treeSprite(species: number, variant: number): Sprite {
         for (let k = 0; k < ribs; k++) {
           const u = (k + 0.5) / ribs;
           const spin = (u - 0.5) * 1.5;
-          lobed(ctx, Math.sin(spin) * rx * 0.62, -Math.cos(spin) * ry * 0.34,
-            rx * (0.46 + 0.16 * wob(seed, k + 30)), ry * (0.5 + 0.2 * wob(seed, k + 35)),
-            seed + k * 2.3, 3, 0.2, 0.35);
+          lobed(ctx, Math.sin(spin) * rx * 0.46, -Math.cos(spin) * ry * 0.26,
+            rx * (0.6 + 0.16 * wob(seed, k + 30)), ry * (0.58 + 0.2 * wob(seed, k + 35)),
+            seed + k * 2.3, 3, 0.2, 0.3);
         }
         ctx.restore();
       };
@@ -827,23 +851,29 @@ export function stumpSprite(species: number): Sprite {
     const h = 7;
     contact(ctx, bx, by, 10);
     // The stub, flared and shaded the same way the standing stem was, so what
-    // is left of a tree is recognisably what the tree was standing on.
-    stem(ctx, bx, by, w, h, 0, def.trunk);
+    // is left of a tree is recognisably what the tree was standing on. Wide
+    // and low: at a narrow waist under a pale cap it read as a mushroom.
+    stem(ctx, bx, by, w * 1.25, h, 0, def.trunk);
     ctx.fillStyle = def.trunk;
     ctx.beginPath();
     ctx.ellipse(bx - w * 0.62, by - 1, 3.4, 1.6, 0, 0, TAU);
     ctx.ellipse(bx + w * 0.58, by - 0.5, 2.9, 1.4, 0, 0, TAU);
     ctx.fill();
     // The cut face, pale, with the rings in it.
-    ctx.fillStyle = dulled(def.trunk, -0.55);
+    // A ring of bark round a bone cut face, rather than a cap sat on top.
+    ctx.fillStyle = shade(def.trunk, -0.2);
     ctx.beginPath();
-    ctx.ellipse(bx, by - h, w * 0.29, w * 0.15, 0, 0, TAU);
+    ctx.ellipse(bx, by - h, w * 0.46, w * 0.23, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = dulled(def.trunk, -0.62);
+    ctx.beginPath();
+    ctx.ellipse(bx, by - h - 0.3, w * 0.37, w * 0.18, 0, 0, TAU);
     ctx.fill();
     ctx.strokeStyle = dulled(def.trunk, -0.12);
     ctx.lineWidth = 0.7;
     for (const r of [0.34, 0.66, 0.92]) {
       ctx.beginPath();
-      ctx.ellipse(bx + 0.3, by - h, w * 0.29 * r, w * 0.15 * r, 0, 0, TAU);
+      ctx.ellipse(bx + 0.3, by - h - 0.3, w * 0.37 * r, w * 0.18 * r, 0, 0, TAU);
       ctx.stroke();
     }
   });
