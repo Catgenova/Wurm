@@ -67,6 +67,7 @@ export const DAMP_SAND: readonly [number, number, number] = [204, 190, 160];
 export const FLAT: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Rock,
   TileType.Sand, TileType.Dirt, TileType.PackedDirt, TileType.Field,
+  TileType.Marsh, TileType.Reed, TileType.Clay, TileType.Peat, TileType.Tar,
 ]);
 
 /**
@@ -83,7 +84,7 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
  * it is a stone shelf with a rash.
  */
 export const STREWN: ReadonlySet<number> = new Set<number>([
-  TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss,
+  TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Marsh,
   TileType.Dirt, TileType.PackedDirt, TileType.Sand,
 ]);
 
@@ -332,10 +333,38 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * lightness -- the same green, colder and washed out.
    */
   [TileType.Tundra]: { name: 'Tundra', color: [172, 195, 179], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
-  [TileType.Marsh]: { name: 'Marsh', color: [78, 112, 96], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
-  [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
-  [TileType.Peat]: { name: 'Peat', color: [74, 60, 46], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
-  [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
+  /* ---- the bog ----------------------------------------------------------
+   *
+   * These four and the reeds further down are one place and have to be
+   * picked together, because none of them ever turns up on its own. The
+   * generator lays a marsh and then dices it: a twelfth of it comes out
+   * peat, a tenth clay, an eighth reed and one fortieth tar. Counted on the
+   * finished island, half of every edge a marsh has is one of the other
+   * four, a quarter is the sand of the shore, and most of what is left is
+   * grass.
+   *
+   * So a bog is a fine mosaic, and it was the worst-looking thing left on
+   * the map: a dark muddy green carrying the per-tile brightness nudge --
+   * which on a mosaic is at its very worst, every tile a different drab --
+   * with near-black holes of peat and tar cut through it and bright tan
+   * pans of clay. All five are flat now and all five have moved.
+   *
+   * Marsh is the mat they sit in: a grey-green, duller than the moss of a
+   * wood and a good deal duller than the field, because standing water over
+   * mud is the one ground on the island with no colour of its own.
+   */
+  [TileType.Marsh]: { name: 'Marsh', color: [108, 147, 128], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
+  /* A pan of wet clay in the middle of it: buff, and greyer than any dirt. */
+  [TileType.Clay]: { name: 'Clay', color: [176, 162, 152], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
+  /* Cut peat. The darkest earth there is, which is not the same as black. */
+  [TileType.Peat]: { name: 'Peat', color: [112, 92, 76], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
+  /*
+   * And a tar seep, which is the one thing on the island that really is
+   * black. It keeps that -- a bog wants something in it you would not tread
+   * in -- but not the flat 36, 32, 32 it was: a hole with no light in it at
+   * all reads as a gap in the picture rather than as a thing lying in a bog.
+   */
+  [TileType.Tar]: { name: 'Tar', color: [58, 54, 58], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
   /*
    * The damp shaded floor of a wood: the field's own green gone deeper and
    * cooler, which is what ground that never dries out looks like.
@@ -363,7 +392,14 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   // rots: no digging its corners, no planting, no paving, no building.
   [TileType.Stump]: { name: 'Stump', color: [64, 127, 82], speed: 0.7, roll: 0.35 },
   [TileType.Kelp]: { name: 'Kelp', color: [71, 106, 97], speed: 1, roll: 0.5 },
-  [TileType.Reed]: { name: 'Reed', color: [85, 129, 102], speed: 0.8, roll: 0.4 },
+  /*
+   * Reeds standing in the bog: the one light thing in it, and the greenest,
+   * because a reed bed is alive where the rest of a marsh is water. See the
+   * bog above. It grows nothing of its own yet -- a reed is a tall thing and
+   * the machinery in `meadow.ts` draws lumps -- so for now it is flat colour
+   * with the marsh's sedge ruffling over its edges.
+   */
+  [TileType.Reed]: { name: 'Reed', color: [129, 170, 128], speed: 0.8, roll: 0.4 },
   [TileType.Lawn]: { name: 'Lawn', color: [85, 170, 123], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };

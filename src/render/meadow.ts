@@ -647,6 +647,19 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     seed: 1000, scale: 1, flat: 1, rarity: 1,
   },
   /*
+   * A marsh grows in tussocks -- sedge and rush standing in the wet, with
+   * black water between them -- so it is clumps, and thick ones: it is the
+   * second-lushest ground there is. The dark ones are the water and the pale
+   * ones are the tops of the tussocks, which is what a bog looks like from
+   * standing height whichever way round you read it.
+   */
+  [TileType.Marsh]: {
+    word: 'sedge',
+    palest: 'the crown of a tussock, standing clear of the water',
+    deepest: 'the black water in between, which is most of a bog',
+    seed: 7000, scale: 1.05, flat: 1, rarity: 0.9,
+  },
+  /*
    * Moss heaps itself over whatever it is growing on -- a stone, a root, a
    * fallen branch -- so a moss bed is hummocky, and it is the thickest
    * growing ground on the island, so it is hummocky more often than a meadow
