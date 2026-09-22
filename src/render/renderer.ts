@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, DAMP_SAND, dustiness, FLAT, HARD_EDGED, oreWash, PAVED, ROCK_VARIANTS, RUFFLED, SLAB_VARIANTS, STREWN, SWARDED, TileType, TILE_DEFS, bushSpecies, ruffledJoin, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, WOODED, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -62,7 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { CROWD, ruffle, strew, strewLook } from './meadow';
+import { CROWD, hemOf, ruffle, strew, strewLook } from './meadow';
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
@@ -257,6 +257,21 @@ const STEP_LIT = 1.06;
  * looking at the country is not the same job as standing in it.
  */
 const MEADOW_FROM = 1;
+
+/**
+ * And where the ruffled join starts, which is further out than that.
+ *
+ * A clump is a thing in a field and from far enough away it is three pixels
+ * of green on green, which is why the meadow waits. A join is the *shape* of
+ * the country -- where the field stops and the track begins -- and the eye
+ * reads that from a good deal further off than it reads anything standing in
+ * it. It is also cheap: a run of lobes along one edge, against a picture
+ * blitted per clump per tile.
+ *
+ * This is the zoom the blended seam it replaces used to start at, so the join
+ * between two grounds is drawn over exactly the range it always was.
+ */
+const RUFFLE_FROM = 0.5;
 const IRON: readonly [number, number, number] = [0x7b, 0x81, 0x88];
 /** Its own shade, so a bar of it reads as round stock rather than as a painted line. */
 const IRON_DARK: readonly [number, number, number] = [0x44, 0x4a, 0x51];
@@ -276,10 +291,6 @@ interface WallGeom {
   quad: (t0: number, t1: number, k0: number, k1: number, s?: number) => void;
 }
 
-/** How much of a neighbour's colour washes over the edge of a tile. */
-const BLEND_ALPHA = 0.46;
-/** How far in from the edge the neighbour's colour reaches, as a share of the way to the middle. */
-const BLEND_REACH = 0.55;
 /** Specks of grain laid on each tile once you are close enough to see them. */
 const GRAIN_SPECKS = 14;
 /*
@@ -670,7 +681,11 @@ export class Renderer {
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
   private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number], lit = true): string {
     const w = this.game.world;
-    const def = TILE_DEFS[type];
+    // A wood is a field with trees in it, not a soil of its own: see
+    // `groundAt`. Worked out here, so it is cached and thrown away with the
+    // colour it decides rather than being asked again every frame.
+    const ground = WOODED.has(type) ? this.groundAt(x, y, lit) : type;
+    const def = TILE_DEFS[ground];
     const c = w.corners(x, y, this.colorBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
     const gy = (c[2] + c[3] - (c[0] + c[1])) / 2 / UNITS_PER_TILE;
@@ -685,9 +700,9 @@ export class Renderer {
      * able to see that there is something in that hillside.
      */
     const base =
-      type === TileType.Rock
+      ground === TileType.Rock
         ? oreWash(ROCK_VARIANTS[w.rockFace(x, y)].color, this.oreBuf)
-        : type === TileType.Slabs
+        : ground === TileType.Slabs
           ? SLAB_VARIANTS[slabVariant(data)].color
           : def.color;
     let r = base[0];
@@ -700,7 +715,7 @@ export class Renderer {
      * because it belongs to the tile's colour, and so it is cached with the
      * colour and thrown away with it when the land moves.
      */
-    if (type === TileType.Sand) {
+    if (ground === TileType.Sand) {
       let wet = false;
       for (let e = 0; e < 4 && !wet; e++) {
         const nx = x + (e === 1 ? 1 : e === 3 ? -1 : 0);
@@ -717,7 +732,7 @@ export class Renderer {
     // Steep ground wears through to the rock under it. A cliff face used to be
     // whatever was growing on the top of it, stretched down the drop, which is
     // the one thing a cliff never looks like.
-    if (type !== TileType.Rock) {
+    if (ground !== TileType.Rock) {
       const bare = bareRock(Math.hypot(gx, gy));
       if (bare > 0) {
         const k = bare * 0.88;
@@ -737,7 +752,7 @@ export class Renderer {
      * different green, which is the one thing a meadow never looks like, and
      * a cliff of it looked like a wall somebody had patched.
      */
-    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (FLAT.has(type) ? 0 : 0.1);
+    if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (FLAT.has(ground) ? 0 : 0.1);
     else {
       const deep = -avg;
       /*
@@ -803,109 +818,140 @@ export class Renderer {
     return color;
   }
 
+  /** Scratch for `groundAt`: four neighbours, and no array made per tile. */
+  private nearBuf: TileType[] = [];
+
   /**
-   * Where one kind of ground meets another. Soil does not stop dead on a tile
-   * line: sand runs into grass, grass into dirt. Each edge with a different
-   * tile across it gets a wedge of that neighbour's colour laid over the half
-   * of the tile nearest it, and since the neighbour does the same back, the
-   * pair of them read as one blended seam. Paving and rock are left alone —
-   * a road stops where it was laid.
+   * What ground a tile is, with a wooded one resolved to what it stands in.
    *
-   * It costs nothing over open country: a field of grass has no edges to
-   * blend, so the work is proportional to how broken up the ground is.
+   * A tile of Tree, Bush or Stump is a soil somebody's wood is growing out
+   * of rather than a soil of its own, so it takes the commonest ground among
+   * its four neighbours -- and grass where the wood is thick enough that all
+   * four of them are trees too, which is a place nobody can see the ground
+   * anyway.
+   *
+   * It is a function of the two coordinates and nothing else, so the tile on
+   * either side of a join works out the same pair of answers and the two of
+   * them agree about which way the join runs.
    */
-  private blendEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, mine: TileType, lit: boolean, sun: [number, number, number], pts: Float64Array): boolean {
+  private groundAt(x: number, y: number, lit: boolean): TileType {
     const world = this.game.world;
-    let drew = false;
-    const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
-    const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
+    const t = world.viewTile(x, y, lit) as TileType;
+    if (!WOODED.has(t)) return t;
+    const near = this.nearBuf;
+    near.length = 0;
     for (let e = 0; e < 4; e++) {
-      // Screen edge `e` runs between corners `e` and `e + 1`; the view knows
-      // which of the tile's four neighbours lies across it.
-      const nx = x + V.edges[e][0];
-      const ny = y + V.edges[e][1];
+      const nx = x + (e === 1 ? 1 : e === 3 ? -1 : 0);
+      const ny = y + (e === 0 ? -1 : e === 2 ? 1 : 0);
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
-      const theirs = world.viewTile(nx, ny, lit) as TileType;
-      // A grass/earth join is a ruffle, drawn from the earth side; a band of
-      // one colour washed into the other underneath it is a ruffle standing
-      // in a smear, so that pair skips this.
-      if (theirs === mine || HARD_EDGED.has(theirs) || ruffledJoin(mine, theirs)) continue;
+      const n = world.viewTile(nx, ny, lit) as TileType;
+      // Not another tree, not a road, and not the bottom of the sea.
+      if (WOODED.has(n) || PAVED.has(n)) continue;
       if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
-      const ax = pts[e * 2];
-      const ay = pts[e * 2 + 1];
-      const bx = pts[((e + 1) & 3) * 2];
-      const by = pts[((e + 1) & 3) * 2 + 1];
-      ctx.fillStyle = this.groundColor(nx, ny, lit, sun);
-      ctx.globalAlpha = BLEND_ALPHA;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.lineTo(bx + (cx - bx) * BLEND_REACH, by + (cy - by) * BLEND_REACH);
-      ctx.lineTo(ax + (cx - ax) * BLEND_REACH, ay + (cy - ay) * BLEND_REACH);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      drew = true;
+      near.push(n);
     }
-    return drew;
+    let best: TileType = TileType.Grass;
+    let most = 0;
+    for (const u of near) {
+      let n = 0;
+      for (const v of near) if (v === u) n++;
+      if (n > most || (n === most && u < best)) { best = u; most = n; }
+    }
+    return best;
   }
 
   /**
-   * A field spilling over the edge of a track, on a tile of bare earth.
+   * The greener ground spilling over the edge of the barer one beside it.
    *
-   * Every other ground meets its neighbour on the ruled line between them,
-   * which is what a tile is. A field against a path somebody wore across it
-   * does not: it thins out and gives up in lumps, and that ragged join is
-   * most of what makes a path look walked rather than painted on. Meadow or
-   * steppe, whichever of them is beside the earth here, in its own colour.
+   * This is the only join there is now. Every pair of unlike grounds used to
+   * get a wedge of each other's colour washed over the half of the tile
+   * nearest the line between them -- which read as a smear where two fields
+   * met, and, round any tile that was a different ground only because
+   * something was growing on it, as a box of shadow four wedges wide sitting
+   * on the meadow. A field against a path somebody wore across it does not
+   * fade into it: it thins out and gives up in lumps, and that ragged edge is
+   * most of what makes the path read as walked rather than as painted on. So
+   * every join is that now, and `growth` says which of the two runs over.
    *
-   * So the earth tile draws it, into itself, clipped to itself. Which ends of
+   * The barer tile draws it, into itself, clipped to itself. Which ends of
    * the edge are which swaps at every other quarter turn, so the run is taken
    * in the order the *world's* corners come in rather than the screen's, or
    * the ruffle reads one way round at one rotation and the other at the next
    * and the whole path crawls as the camera comes about.
    */
-  private swardEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): void {
+  /** One tile's ruffled edges, and one colour's worth of them: reused, never remade. */
+  private hemBuf: number[] = [];
+  private hemRun: number[] = [];
+
+  private swardEdges(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): boolean {
     const world = this.game.world;
     const co = V.corners;
     const mine = world.heightAt(x + 0.5, y + 0.5);
-    const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
-    const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
-    let clipped = false;
+    const grew = growth(this.groundAt(x, y, lit));
+    const buf = this.hemBuf;
+    buf.length = 0;
     for (let e = 0; e < 4; e++) {
       const nx = x + V.edges[e][0];
       const ny = y + V.edges[e][1];
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
-      const theirs = world.viewTile(nx, ny, lit) as TileType;
-      if (!SWARDED.has(theirs)) continue;
+      const theirs = this.groundAt(nx, ny, lit);
+      if (growth(theirs) <= grew) continue;
+      const over = world.heightAt(nx + 0.5, ny + 0.5);
       /*
        * And only where the two are at much the same height. A field spills
        * over the lip of a path it is level with; it does not spill over the
        * top of a cliff it is standing twenty feet above, and a ruffle drawn
        * along that edge is a fringe of grass growing out of thin air.
        */
-      if (Math.abs(world.heightAt(nx + 0.5, ny + 0.5) - mine) > UNITS_PER_TILE * 0.35) continue;
-      if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
-      if (!clipped) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(pts[0], pts[1]);
-        for (let k = 1; k < 4; k++) ctx.lineTo(pts[k * 2], pts[k * 2 + 1]);
-        ctx.closePath();
-        ctx.clip();
-        clipped = true;
-      }
+      if (Math.abs(over - mine) > UNITS_PER_TILE * 0.35) continue;
+      if (over < 0) continue;
       const f = (e + 1) & 3;
       const a = co[e], b = co[f];
-      // In the field's own colour, not the meadow's: a steppe runs out onto a
-      // track looking like steppe.
-      ruffle(ctx, strew(theirs).hem, pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1], cx, cy,
-        a[0] * 2 + a[1] > b[0] * 2 + b[1],
+      buf.push(
+        pts[e * 2], pts[e * 2 + 1], pts[f * 2], pts[f * 2 + 1],
+        // Which ends of the edge are which swaps at every other quarter turn,
+        // so the run is taken in the order the *world's* corners come in
+        // rather than the screen's, or the ruffle reads one way round at one
+        // rotation and the other at the next and the whole path crawls as the
+        // camera comes about.
+        a[0] * 2 + a[1] > b[0] * 2 + b[1] ? 1 : 0,
         // Off the pair of tiles, so the same join is the same ruffle whatever
         // the camera is doing and whichever of the two is being drawn.
-        Math.floor(hash2(x + nx, y + ny, 907) * 0x7fffffff), zoom);
+        Math.floor(hash2(x + nx, y + ny, 907) * 0x7fffffff),
+        theirs,
+      );
     }
-    if (clipped) ctx.restore();
+    if (!buf.length) return false;
+    const cx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4;
+    const cy = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0], pts[1]);
+    for (let k = 1; k < 4; k++) ctx.lineTo(pts[k * 2], pts[k * 2 + 1]);
+    ctx.closePath();
+    ctx.clip();
+    /*
+     * A colour at a time. Two sides of a tile with the same field over them
+     * go into one path and one set of fills, which is most of what a corner
+     * of country where three grounds meet used to cost.
+     */
+    const run = this.hemRun;
+    for (let i = 0; i < buf.length; i += 7) {
+      const kind = buf[i + 6];
+      let first = true;
+      for (let j = 0; j < i; j += 7) if (buf[j + 6] === kind) { first = false; break; }
+      if (!first) continue;
+      run.length = 0;
+      for (let j = i; j < buf.length; j += 7) {
+        if (buf[j + 6] !== kind) continue;
+        run.push(buf[j], buf[j + 1], buf[j + 2], buf[j + 3], buf[j + 4], buf[j + 5]);
+      }
+      // In the field's own colour, not the meadow's: a steppe runs out onto a
+      // track looking like steppe.
+      ruffle(ctx, hemOf(kind as TileType), run, cx, cy, zoom);
+    }
+    ctx.restore();
+    return true;
   }
 
   /**
@@ -1263,8 +1309,6 @@ export class Renderer {
       dy: (du + dv) * HALF_H * zoom,
       alpha: 0.45 * (1 - sunUp) * (1 - this.game.darkness()),
     };
-    // Blended seams are a close-up nicety; from high up the tiles are too small to tell.
-    const blend = zoom >= 0.5;
     // Grain is only worth drawing once a tile is big enough to hold it, and
     // once few enough tiles are on screen for it to be cheap.
     const grain = zoom >= 1.25;
@@ -1297,6 +1341,9 @@ export class Renderer {
     // painted at a quarter of a tile to the screen is three pixels of green
     // on green. Below this the field says what it has to say with its colour.
     const grassy = zoom >= MEADOW_FROM;
+    // The join between two grounds carries further than the things growing in
+    // either of them: see `RUFFLE_FROM`.
+    const hemmed = zoom >= RUFFLE_FROM;
     // Close enough to be picking things up rather than looking at the country.
     const player = this.game.player;
     const playerDepth = depthOf(V, player.tileX, player.tileY);
@@ -1394,22 +1441,18 @@ export class Renderer {
         ctx.fillStyle = color;
         ctx.fill();
         const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
-        const t0 = world.viewTile(x, y, lit) as TileType;
-        if (blend && !wet && !HARD_EDGED.has(t0)) {
-          /*
-           * Most ground has the same ground all round it, and finding that out
-           * costs four tile reads and four bounds checks per tile per frame.
-           * The answer goes stale exactly when the colour does, so it is kept
-           * beside the colour: one means there was nothing to blend here and
-           * this tile can be passed over, two means there was.
-           */
-          const seams = lit ? this.colors : this.memColors;
-          const known = seams.flag(x, y);
-          if (known !== 1) {
-            const drew = this.blendEdges(ctx, V, x, y, t0, lit, sun, pts);
-            if (known === 0) seams.setFlag(x, y, drew ? 2 : 1);
-          }
-        }
+        /*
+         * What is on this tile, and what ground it counts as. For a tile of
+         * forest those are two different answers: the first is a tree, the
+         * second is the field it stands in (see `groundAt`). Everything about
+         * the ground asks the second -- whether it is flat, whether it strews,
+         * whether it is paved -- because a wood painted as meadow and then
+         * given a wood's grain and a wood's tufts is a meadow with a rash on
+         * it in the shape of the trees. The sprite is the only thing that
+         * wants the first, and it is the whole of what a wooded tile is.
+         */
+        const here = world.viewTile(x, y, lit) as TileType;
+        const t0 = this.groundAt(x, y, lit);
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
@@ -1419,10 +1462,25 @@ export class Renderer {
         // both at once is mud.
         if (grain && !wet && !FLAT.has(t0)) this.addGrain(x, y, pts, zoom);
         if (grassy && !wet && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
-        // And where bare earth has grass beside it, the grass comes over the
-        // edge of it. Only bare earth: a flagstone or a cobble was laid to a
-        // line and keeps to it, and the beach does its own thing at the water.
-        if (grassy && !wet && RUFFLED.has(t0)) this.swardEdges(ctx, V, x, y, pts, zoom, lit);
+        /*
+         * And where something greener grows beside this, it comes over the
+         * edge of it. Paving is left out: a flagstone or a cobble was laid to
+         * a line and keeps to it.
+         *
+         * Most ground has the same ground all round it, and finding that out
+         * costs four tile reads and four bounds checks per tile per frame.
+         * The answer goes stale exactly when the colour does, so it is kept
+         * beside the colour: one means there was nothing growing over this
+         * tile and it can be passed over, two means there was.
+         */
+        if (hemmed && !wet && !PAVED.has(t0)) {
+          const seams = lit ? this.colors : this.memColors;
+          const known = seams.flag(x, y);
+          if (known !== 1) {
+            const drew = this.swardEdges(ctx, V, x, y, pts, zoom, lit);
+            if (known === 0) seams.setFlag(x, y, drew ? 2 : 1);
+          }
+        }
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
         // And the metal in the stone, where there is any. Plain rock is plain.
         if (seamed && !wet && t0 === TileType.Rock) {
@@ -1439,7 +1497,7 @@ export class Renderer {
           }
         }
 
-        const t = t0;
+        const t = here;
         if (!lit) {
           // Remembered ground keeps its shape and its trees and nothing else:
           // no creatures, no piles, no detail, and a cold wash over the lot.

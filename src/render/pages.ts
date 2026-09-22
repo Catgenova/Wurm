@@ -81,9 +81,9 @@ export class ColourPages {
 
   /**
    * A yes-or-no about a tile that costs as much to work out as the colour and
-   * goes stale at the same moments — whether the ground here has a different
-   * sort of ground beside it, and so wants a blended seam drawn over it. Nought
-   * means nobody has asked, one no, two yes.
+   * goes stale at the same moments — whether anything beside the ground here
+   * grows more than it does, and so comes ruffling over the edge of it.
+   * Nought means nobody has asked, one no, two yes.
    */
   flag(x: number, y: number): number {
     const key = (y >> BITS) * this.across + (x >> BITS);

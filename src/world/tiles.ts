@@ -41,14 +41,6 @@ export type TileType = (typeof TileType)[keyof typeof TileType];
 export type RGB = readonly [number, number, number];
 
 /**
- * Ground that keeps a hard edge. A paved road stops where it was laid and a
- * rock face is rock; everything else on the island is soil of one sort or
- * another, and soil runs into its neighbour rather than stopping dead on a
- * tile line.
- */
-export const HARD_EDGED: ReadonlySet<number> = new Set<number>([TileType.Rock, TileType.Slabs, TileType.Cobblestone]);
-
-/**
  * How far a tile of sand with the sea against it goes towards wet.
  *
  * Damp sand is darker and a shade cooler than dry, and the band of it is where
@@ -95,34 +87,57 @@ export const STREWN: ReadonlySet<number> = new Set<number>([
 ]);
 
 /**
- * And the two that are a *field*, which is a narrower thing: the grounds that
- * run out over the edge of a bare one rather than stopping at the line
- * between them. Only these ruffle, so a dug path beside a packed one still
- * meets it on the tile line, the way two bare grounds should.
+ * Ground that is not a ground of its own.
+ *
+ * A tile of forest is not a different soil from the field beside it. It is
+ * the field, with a tree standing in it. It carried a dark green of its own
+ * for a long while, and that one fact was most of what was wrong with the
+ * ground: a dark diamond under every bush on the island, which the blended
+ * seam that used to be drawn over every join then washed out into the four
+ * tiles round it and turned into a box of shadow sitting on the meadow.
+ *
+ * What a wooded tile is painted in is whatever is growing round it, and what
+ * it counts as when the join beside it is worked out is that same ground, so
+ * a wood in a meadow has no join in it at all.
  */
-export const SWARDED: ReadonlySet<number> = new Set<number>([TileType.Grass, TileType.Steppe]);
+export const WOODED: ReadonlySet<number> = new Set<number>([TileType.Tree, TileType.Bush, TileType.Stump]);
 
 /**
- * The bare grounds that a field runs out over the edge of.
+ * How far a ground runs out over the ground beside it.
  *
- * Earth somebody walked or packed, the stone a hillside wears through to, and
- * the sand above a tideline: a field does not stop dead at any of them, so the
- * join is drawn as a ruffle of lobes hanging over the bare side rather than as
- * the soft band of one colour into the other every other pair of grounds gets.
- * Both at once is a ruffle standing in a smear.
+ * Soil does not stop dead on a tile line. A field beside a track somebody
+ * wore across it does not end, it thins out and gives up in lumps, and that
+ * ragged join is most of what makes the track read as walked rather than as
+ * painted on. It is just as true of a meadow running into a steppe, or of a
+ * marsh taking the wet corner of a field: the one with more growing on it is
+ * the one that runs over.
  *
- * Rock is in here and in `HARD_EDGED` both, which is the point of it. Blending
- * washed a scallop of grass right round every cliff -- a band of the
- * neighbour's colour reaching in, with nothing in it that knows the neighbour
- * is twenty feet below. The ruffle is drawn from the stone's own tile and
- * clipped to it, and it only goes on where the two are at much the same
- * height.
+ * So every join between two grounds that do not grow the same amount is a
+ * ruffle of lobes, drawn from the barer of the two in the greener one's
+ * colour. Two grounds that grow nothing -- a dug path beside a packed one,
+ * sand beside clay -- meet on the line, which is what two bare grounds
+ * should do; and paving of any sort is left out of it both ways, because a
+ * road stops exactly where it was laid.
+ *
+ * Every number in here is its own. Two grounds that tied would be a join
+ * with nobody to draw it, and the whole point of this is that there are no
+ * joins left over.
  */
-export const RUFFLED: ReadonlySet<number> = new Set<number>([TileType.Dirt, TileType.PackedDirt, TileType.Rock, TileType.Sand]);
+const GROWTH: Partial<Record<number, number>> = {
+  [TileType.Reed]: 7,
+  [TileType.Marsh]: 6,
+  [TileType.Moss]: 5,
+  [TileType.Lawn]: 4,
+  [TileType.Grass]: 3,
+  [TileType.Steppe]: 2,
+  [TileType.Tundra]: 1,
+};
 
-/** Whether these two grounds meet in a ruffle rather than a blended band. */
-export const ruffledJoin = (a: number, b: number): boolean =>
-  (SWARDED.has(a) && RUFFLED.has(b)) || (SWARDED.has(b) && RUFFLED.has(a));
+/**
+ * How much grows on a ground, and so which way a join between two of them
+ * runs. Nought on anything bare, which is most of them.
+ */
+export const growth = (t: number): number => GROWTH[t] ?? 0;
 
 /**
  * Ground a spadeful of dirt covers over, leaving dirt.

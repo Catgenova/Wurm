@@ -89,8 +89,6 @@ export interface Strew {
   looks: Look[];
   /** Clumps to a tile, averaged over the ten: what the field's density is. */
   clumps: number;
-  /** The tone its ruffle is painted in where it runs out onto bare earth. */
-  hem: Green;
   /** Where its ten fall, as running shares: how bare this ground is. */
   cuts: readonly number[];
 }
@@ -262,10 +260,16 @@ function lobesOf(cx: number, cy: number, w: number, h: number, R: Rand): Lobe[] 
   return cs;
 }
 
-/** The union of a set of lobes as one path, grown or shrunk by `grow`. */
-function union(g: Ctx, cs: Lobe[], dx: number, dy: number, grow: number): void {
+/**
+ * The union of a set of lobes as one path, grown or shrunk by `grow`.
+ *
+ * `count` is how many of `cs` to take, for callers that keep one array and
+ * fill the front of it rather than making a new one every frame.
+ */
+function union(g: Ctx, cs: Lobe[], dx: number, dy: number, grow: number, count = cs.length): void {
   g.beginPath();
-  for (const [x, y, r] of cs) {
+  for (let i = 0; i < count; i++) {
+    const [x, y, r] = cs[i];
     const rr = Math.max(0.25, r + grow);
     g.moveTo(x + dx + rr, y + dy);
     g.arc(x + dx, y + dy, rr, 0, 7);
@@ -319,6 +323,25 @@ function clump(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pa
     g.fill();
   }
   g.restore();
+}
+
+/**
+ * The tone a ground ruffles in where it runs out over a barer one: its own
+ * middle green, the same one its clumps are painted in.
+ *
+ * Kept apart from `strew` because half the grounds that ruffle grow nothing
+ * anybody can see from here -- a marsh, a moss, a tundra, a lawn -- and
+ * painting fifteen pictures of clumps to read one colour off them is fifteen
+ * pictures nobody ever looks at.
+ */
+const hems = new Map<TileType, Green>();
+export function hemOf(type: TileType): Green {
+  let had = hems.get(type);
+  if (!had) {
+    had = greensOf(TILE_DEFS[type].color)[1];
+    hems.set(type, had);
+  }
+  return had;
 }
 
 /* ---- and what the ground does on its own ---------------------------------- */
@@ -388,72 +411,134 @@ function swell(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pa
 const RUFFLE = 4.2;
 
 /**
- * Grass running out onto a path, along one edge of one tile.
+ * And the size below which it is drawn in one pass instead of three.
+ *
+ * A ruffle is a line round a row of lobes, the lobes, and the light along the
+ * top of them -- which wants lobes you can see the shape of. At three pixels
+ * a lobe the line is half a pixel and the lit side is shifted a third of one,
+ * so two of the three passes are spent on nothing.
+ *
+ * It is the dearest thing on the ground pass and this is most of what it
+ * costs: every join on the screen is three fills of a twenty-arc path, and
+ * every join on the screen is a great many of them when the camera is far
+ * enough out for a lobe to be three pixels in the first place.
+ */
+const RUFFLE_LIT = 3.2;
+
+/**
+ * Somewhere to build a tile's worth of ruffle lobes, written over rather than
+ * made afresh: a tile with three ruffled edges is sixty little arrays a
+ * frame, times every tile on the screen with a join in it, and every one of
+ * them dead again by the next frame.
+ */
+const LOBES: Lobe[] = [];
+
+/**
+ * The greener ground running out over the barer one, along the edges of one
+ * tile where it does.
  *
  * The rest of the ground meets the ground beside it on a ruled line, which is
  * right for a flagstone against a flagstone and wrong for a field against a
  * track somebody wore across it: the field does not stop, it thins out and
- * gives up in lumps. So where grass touches bare earth the earth gets a row
- * of grass lobes bulging over its edge -- the same lobes the clumps are built
- * from, which is the only shape anything growing has in this game.
+ * gives up in lumps. So the join gets a row of the greener one's lobes
+ * bulging over the edge -- the same lobes the clumps are built from, which is
+ * the only shape anything growing has in this game.
  *
- * It is drawn from the *earth* tile, into the earth tile, and clipped to it:
- * everything that would fall on the grass side is grass green on grass and
+ * It is drawn from the *barer* tile, into it, and clipped to it: everything
+ * that would fall on the field's side is its own green on its own green and
  * there is nothing there to see, so it is cut off rather than left to be
  * painted over by whichever tile happens to be drawn next.
  *
- * `pal` is the sward's own middle tone: a field ruffles in its own colour, or
- * the steppe would run out onto a track in the meadow's green.
+ * `pal` is the greener ground's own middle tone: a field ruffles in its own
+ * colour, or the steppe would run out onto a track in the meadow's green.
+ * Which is why a tile's edges come in a batch rather than one at a time --
+ * all the edges that have the same field over them share one call and one
+ * path, and the three fills are three a tile rather than three an edge. A
+ * tile with different ground on all four sides was twelve fills of a
+ * twenty-arc path, and a stretch of country where that is the rule cost more
+ * than everything else on the screen put together.
  *
- * `a` and `b` are the two ends of the shared edge on screen and `cx, cy` is
- * the middle of the earth tile, which is the way in. `flip` says the two ends
- * came out in the other order this quarter turn -- without it the ruffle
- * reads along the edge one way at one rotation and the other way at the next,
- * and the ground crawls as the camera comes round.
+ * `hems` is six numbers an edge: the two ends on screen, whether the ends
+ * came out in the other order this quarter turn, and the edge's own seed.
+ * Without that flip the ruffle reads along the edge one way at one rotation
+ * and the other way at the next, and the ground crawls as the camera comes
+ * round. `cx, cy` is the middle of the tile being drawn into, which is the
+ * way in.
  */
-export function ruffle(
-  g: Ctx, pal: Green, ax: number, ay: number, bx: number, by: number,
-  cx: number, cy: number, flip: boolean, seed: number, zoom: number,
-): void {
-  const ex = bx - ax, ey = by - ay;
-  const len = Math.hypot(ex, ey);
-  if (len < 4) return;
-  // The way in: square off the edge towards the middle of the tile, not at
-  // the middle of the tile, or a lobe at one end leans across to meet it.
-  let ix = cx - (ax + bx) / 2, iy = cy - (ay + by) / 2;
-  const il = Math.hypot(ix, iy) || 1;
-  ix /= il; iy /= il;
+export function ruffle(g: Ctx, pal: Green, hems: readonly number[], cx: number, cy: number, zoom: number): void {
   const r = RUFFLE * zoom;
-  const n = Math.max(2, Math.round(len / (r * 1.15)));
-  const R = rand(seed);
-  const cs: Lobe[] = [];
-  for (let i = 0; i < n; i++) {
-    const u = (i + 0.5) / n + (R() - 0.5) * (0.7 / n);
-    const t = flip ? 1 - u : u;
-    const lr = r * (0.62 + R() * 0.7);
-    /*
-     * Barely set back from the line at all. A lobe sitting on it reaches its
-     * own radius onto the earth, and that is the whole depth of the ruffle:
-     * set back half a radius as well and it reaches half as far again, which
-     * came out as a hedge growing along the side of the track.
-     */
-    const into = lr * (0.05 + R() * 0.3);
-    cs.push([ax + ex * t + ix * into, ay + ey * t + iy * into, lr]);
+  const small = r < RUFFLE_LIT;
+  /*
+   * How closely the lobes are set along the edge. A shade over a radius apart
+   * at the size they are drawn when you are standing in it, so they run into
+   * one another and the band comes out continuous with a lumpy edge rather
+   * than as a row of beads.
+   *
+   * Further out than `RUFFLE_LIT` a lobe is under three pixels, no eye can
+   * count them, and there are four times as many tiles on the screen to draw
+   * them all on. So they go half as thick again out there: the band reads the
+   * same and a third of the arcs are not drawn at all.
+   */
+  const step = r * (small ? 1.7 : 1.15);
+  let n = 0;
+  for (let h = 0; h + 5 < hems.length; h += 6) {
+    const ax = hems[h], ay = hems[h + 1], bx = hems[h + 2], by = hems[h + 3];
+    const ex = bx - ax, ey = by - ay;
+    const len = Math.hypot(ex, ey);
+    if (len < 4) continue;
+    // The way in: square off the edge towards the middle of the tile, not at
+    // the middle of the tile, or a lobe at one end leans across to meet it.
+    let ix = cx - (ax + bx) / 2, iy = cy - (ay + by) / 2;
+    const il = Math.hypot(ix, iy) || 1;
+    ix /= il; iy /= il;
+    const flip = hems[h + 4] !== 0;
+    const count = Math.max(2, Math.round(len / step));
+    const R = rand(hems[h + 5]);
+    for (let i = 0; i < count; i++) {
+      const u = (i + 0.5) / count + (R() - 0.5) * (0.7 / count);
+      const t = flip ? 1 - u : u;
+      const lr = r * (0.62 + R() * 0.7);
+      /*
+       * Barely set back from the line at all. A lobe sitting on it reaches
+       * its own radius onto the earth, and that is the whole depth of the
+       * ruffle: set back half a radius as well and it reaches half as far
+       * again, which came out as a hedge growing along the side of the track.
+       */
+      const into = lr * (0.05 + R() * 0.3);
+      const x = ax + ex * t + ix * into, y = ay + ey * t + iy * into;
+      const had = LOBES[n];
+      if (had) { had[0] = x; had[1] = y; had[2] = lr; } else LOBES[n] = [x, y, lr];
+      n++;
+    }
+  }
+  if (!n) return;
+  if (small) {
+    union(g, LOBES, 0, 0, 0, n);
+    g.fillStyle = pal.shade;
+    g.fill();
+    return;
   }
   const ink = Math.max(0.5, r * 0.11);
-  union(g, cs, 0, 0, ink);
+  union(g, LOBES, 0, 0, ink, n);
   g.fillStyle = pal.line;
   g.fill();
-  union(g, cs, 0, 0, 0);
+  union(g, LOBES, 0, 0, 0, n);
   g.fillStyle = pal.shade;
   g.fill();
-  g.save();
-  union(g, cs, 0, 0, 0);
-  g.clip();
-  union(g, cs, -r * 0.12, -r * 0.26, -ink);
+  /*
+   * And the light along the top of it: shrunk by more than it is shifted, so
+   * that it cannot reach past the body it sits on.
+   *
+   * It used to be the same lobes shifted and then clipped to the body, which
+   * is the same picture to within a pixel and costs a clip on every colour on
+   * every tile with a join in it. Worth saying what that was and was not
+   * worth, since the obvious guess is wrong: it took about a fifth off. The
+   * rest of what a join costs is the three fills themselves -- sixty arcs a
+   * tile, filled by winding -- and nothing here has got that down.
+   */
+  union(g, LOBES, -r * 0.12, -r * 0.26, -r * 0.3, n);
   g.fillStyle = pal.lit;
   g.fill();
-  g.restore();
 }
 
 /* ---- the ten ------------------------------------------------------------- */
@@ -706,7 +791,7 @@ export function strew(type: TileType): Strew {
   // counts and nothing written down: `looks` is in the order they are.
   const clumps = looks.reduce(
     (a, l, i) => a + weights[i] * (l.blobN[0] + l.blobN[1]) / 2, 0) / total;
-  const made: Strew = { blobs, looks, clumps, hem: MID, cuts: cutsOf(weights) };
+  const made: Strew = { blobs, looks, clumps, cuts: cutsOf(weights) };
   painted.set(type, made);
   return made;
 }
