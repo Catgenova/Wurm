@@ -2081,7 +2081,16 @@ export class Renderer {
          * chroma both come off with distance because the thing is literally
          * part ground now, and it costs one number.
          */
-        const solid = 1 - far * 0.46;
+        /*
+         * And a little off each tree on its own account, so no two of a
+         * species are quite the same weight of green. A canopy is one sprite
+         * per species per age however many hues the table carries, and sixty
+         * tiles of one hue in a frame reads as one flat colour -- this is a
+         * value jitter rather than a hue one, but against a ground it is the
+         * same thing: every tree takes a different amount of the floor up
+         * into itself.
+         */
+        const solid = (1 - far * 0.46) * (0.9 + 0.1 * hash2(Math.round(ent.x), Math.round(ent.y), 4231));
         if (Math.abs(this.lean.x * bend) * dh < 0.5) {
           if (solid < 1) ctx.globalAlpha = solid;
           ctx.drawImage(ready, left, top, dw, dh);

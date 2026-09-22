@@ -281,7 +281,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * shouting. A mown lawn stays the deeper and stronger of the two, because a
    * lawn is tended and a meadow is what the summer left.
    */
-  [TileType.Grass]: { name: 'Grass', color: [158, 188, 166], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
+  [TileType.Grass]: { name: 'Grass', color: [162, 186, 168], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
   /*
    * A dusty clay leaning a little rose: not the dark chocolate it started as
    * and not the sandy tan it went to next. Bare earth against a teal field is
@@ -428,7 +428,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * them: the tended ground is the smooth one. It costs nothing to draw and
    * it is the cheapest piece of story on the map.
    */
-  [TileType.Lawn]: { name: 'Lawn', color: [140, 174, 150], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
+  [TileType.Lawn]: { name: 'Lawn', color: [146, 172, 153], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
 
@@ -520,28 +520,28 @@ export interface TreeDef {
  * stands in is a cool one and it is the thing your eye goes to.
  */
 export const TREE_DEFS: TreeDef[] = [
-  { name: 'Birch',       shape: 'fan',     trunk: '#d8d4cb', canopy: ['#c3cbae', '#a2ad79', '#728a56'], size: 0.95 },
-  { name: 'Pine',        shape: 'spire',   trunk: '#7b6359', canopy: ['#74a6ac', '#498183', '#35505c'], size: 1.15 },
-  { name: 'Oak',         shape: 'parasol', trunk: '#796353', canopy: ['#6cac87', '#448158', '#2b4f41'], size: 1.35 },
-  { name: 'Maple',       shape: 'plate', trunk: '#886860', canopy: ['#d1ac85', '#c07842', '#886d30'], size: 1.18 },
-  { name: 'Willow',      shape: 'weeping', trunk: '#9a907c', canopy: ['#7db3a7', '#4e8d7a', '#345d5c'], size: 1.05 },
-  { name: 'Cedar',       shape: 'spire',   trunk: '#675651', canopy: ['#87b3ac', '#568f82', '#41696a'], size: 1.2 },
+  { name: 'Birch',       shape: 'fan',     trunk: '#d8d4cb', canopy: ['#c2c8b1', '#9fa77f', '#72845c'], size: 0.95 },
+  { name: 'Pine',        shape: 'spire',   trunk: '#7b6359', canopy: ['#7aa1a6', '#4f7b7d', '#394e58'], size: 1.15 },
+  { name: 'Oak',         shape: 'parasol', trunk: '#796353', canopy: ['#73a588', '#4b7a5a', '#2f4b40'], size: 1.35 },
+  { name: 'Maple',       shape: 'plate', trunk: '#886860', canopy: ['#c9ac8d', '#b27a50', '#7e693a'], size: 1.18 },
+  { name: 'Willow',      shape: 'weeping', trunk: '#9a907c', canopy: ['#83ada4', '#558677', '#395858'], size: 1.05 },
+  { name: 'Cedar',       shape: 'spire',   trunk: '#675651', canopy: ['#8caea9', '#5c897f', '#466565'], size: 1.2 },
   // The three that bear. They grow wild only here and there; an orchard is
   // something you plant.
-  { name: 'Apple',       shape: 'parasol', trunk: '#91785f', canopy: ['#85ae7c', '#5e874f', '#355835'], size: 0.62, fruit: 'apple' },
-  { name: 'Cherry',      shape: 'bulb',    trunk: '#735759', canopy: ['#a1868a', '#795b61', '#4e3d3c'], size: 0.58, fruit: 'cherry' },
-  { name: 'Olive',       shape: 'shelf',   trunk: '#aba796', canopy: ['#7b9c61', '#566a3e', '#2c3e25'], size: 0.6, fruit: 'olive' },
+  { name: 'Apple',       shape: 'parasol', trunk: '#91785f', canopy: ['#89a882', '#618155', '#395439'], size: 0.62, fruit: 'apple' },
+  { name: 'Cherry',      shape: 'bulb',    trunk: '#735759', canopy: ['#9e898c', '#765e63', '#4c3f3e'], size: 0.58, fruit: 'cherry' },
+  { name: 'Olive',       shape: 'shelf',   trunk: '#aba796', canopy: ['#7c9667', '#566543', '#2d3b28'], size: 0.6, fruit: 'olive' },
   // Eight more that bear, asked for, each held to one island of the chart
   // (regions.ts) the way the cherry is, and sprinkled anywhere on an island
   // of your own. Past the ninth the species needs a fifth bit: see below.
-  { name: 'Pear',        shape: 'column',     trunk: '#96866e', canopy: ['#9c9d62', '#6c693f', '#3b4026'], size: 0.62, fruit: 'pear' },
-  { name: 'Plum',        shape: 'bulb',    trunk: '#665466', canopy: ['#977f9a', '#6a556f', '#453644'], size: 0.56, fruit: 'plum' },
-  { name: 'Peach',       shape: 'fan', trunk: '#9d7e6c', canopy: ['#5fa567', '#3d733f', '#26452f'], size: 0.58, fruit: 'peach' },
-  { name: 'Fig',         shape: 'shelf',   trunk: '#8e959d', canopy: ['#b8a5b1', '#95758b', '#6e5661'], size: 0.55, fruit: 'fig' },
-  { name: 'Lemon',       shape: 'column',     trunk: '#a19b75', canopy: ['#c6cba7', '#abaf6e', '#768b4e'], size: 0.54, fruit: 'lemon' },
-  { name: 'Pomegranate', shape: 'column',    trunk: '#815f5a', canopy: ['#5d9560', '#3c643a', '#213827'], size: 0.52, fruit: 'pomegranate' },
-  { name: 'Apricot',     shape: 'parasol', trunk: '#8e7e69', canopy: ['#9b8e62', '#695d3f', '#3e3d26'], size: 0.58, fruit: 'apricot' },
-  { name: 'Quince',      shape: 'plate',   trunk: '#9c9c81', canopy: ['#a8c29b', '#7ea664', '#507c49'], size: 0.56, fruit: 'quince' },
+  { name: 'Pear',        shape: 'column',     trunk: '#96866e', canopy: ['#969768', '#676544', '#393d29'], size: 0.62, fruit: 'pear' },
+  { name: 'Plum',        shape: 'bulb',    trunk: '#665466', canopy: ['#958297', '#68586c', '#433843'], size: 0.56, fruit: 'plum' },
+  { name: 'Peach',       shape: 'fan', trunk: '#9d7e6c', canopy: ['#679d6d', '#436d45', '#294230'], size: 0.58, fruit: 'peach' },
+  { name: 'Fig',         shape: 'shelf',   trunk: '#8e959d', canopy: ['#b6a7b0', '#91798a', '#6b5961'], size: 0.55, fruit: 'fig' },
+  { name: 'Lemon',       shape: 'column',     trunk: '#a19b75', canopy: ['#c3c7ab', '#a5a875', '#748455'], size: 0.54, fruit: 'lemon' },
+  { name: 'Pomegranate', shape: 'column',    trunk: '#815f5a', canopy: ['#638f66', '#405f3f', '#243528'], size: 0.52, fruit: 'pomegranate' },
+  { name: 'Apricot',     shape: 'parasol', trunk: '#8e7e69', canopy: ['#958b68', '#645b44', '#3b3b29'], size: 0.58, fruit: 'apricot' },
+  { name: 'Quince',      shape: 'plate',   trunk: '#9c9c81', canopy: ['#a9be9f', '#809f6b', '#54764f'], size: 0.56, fruit: 'quince' },
 ];
 
 /** The trees that bear, by index. */
