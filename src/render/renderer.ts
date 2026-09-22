@@ -740,14 +740,40 @@ export class Renderer {
     if (avg >= 0) shade *= 1 + (hash2(x, y, 9) - 0.5) * (FLAT.has(type) ? 0 : 0.1);
     else {
       const deep = -avg;
-      const k = Math.max(0.3, 1 - deep / 80);
-      r *= 0.72 * k;
-      g *= 0.86 * k;
-      b *= 0.95 * k;
-      // And the slope lighting fades out with depth: see `WATER_LIT`. What
-      // looked like the depth ramp banding was the sea floor being faceted
-      // like a hillside and showing through water that is not opaque.
-      shade = 1 + (shade - 1) * Math.max(0, 1 - deep / WATER_LIT);
+      /*
+       * How far under this is, as a share of the depth by which the water
+       * has finished taking the ground over: nought at the line and one at
+       * `WATER_LIT`.
+       */
+      const under = Math.min(1, deep / WATER_LIT);
+      const keep = 1 - under;
+      /*
+       * Water takes the red out of what is under it first and the blue out
+       * of it last, which is a good half of what makes a sea floor read as
+       * being under a sea rather than as a differently coloured field.
+       *
+       * It used to go on whole the moment a tile's four corners averaged
+       * below zero -- twenty-eight per cent of the red gone in one step, at
+       * no depth at all. A tile the waterline runs through is one tile with
+       * one colour, and the water polygon covers only the part of it that is
+       * actually below the line: so the part above the line came out as dry
+       * sand painted as though it were drowned, and every beach on the
+       * island had a band of grey-green a tile wide along the top of the
+       * water. It comes in with depth now, from nothing. The water drawn
+       * over the top is already more than half opaque at the line itself
+       * (`waterVeil`), so the shallows have never needed this to look wet,
+       * and by the time it is fully on there is not much of the floor left
+       * showing through to cast.
+       */
+      const fade = Math.max(0.3, 1 - deep / 80);
+      r *= (keep + under * 0.72) * fade;
+      g *= (keep + under * 0.86) * fade;
+      b *= (keep + under * 0.95) * fade;
+      // And the slope lighting fades out over the same depth: see
+      // `WATER_LIT`. What looked like the depth ramp banding was the sea
+      // floor being faceted like a hillside and showing through water that
+      // is not opaque.
+      shade = 1 + (shade - 1) * keep;
     }
     /*
      * Ground you are only remembering keeps almost none of its own colour.
