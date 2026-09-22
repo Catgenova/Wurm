@@ -647,6 +647,25 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     seed: 1000, scale: 1, flat: 1, rarity: 1,
   },
   /*
+   * A tundra grows cushions rather than clumps: lichen and the creeping
+   * stuff that hugs the ground, because nothing standing up in that wind
+   * lasts a winter. So a meadow's lumps, a little wider and a good deal
+   * squatter, and about half as often.
+   *
+   * They were smaller than a meadow's to begin with, on the reasoning that
+   * lichen is small, and that was wrong: at the size and the washed-out
+   * colour a tundra gives them they came out as a scatter of grey specks,
+   * which is grit, and grit is the one thing the whole of this ground pass
+   * has been about getting rid of. A cushion has to be big enough to read
+   * as a cushion or it should not be there at all.
+   */
+  [TileType.Tundra]: {
+    word: 'lichen',
+    palest: 'crusted dry and bleached, the way it goes where the wind is always over it',
+    deepest: 'the lee of a stone, where the melt stands longest',
+    seed: 5000, scale: 1.15, flat: 0.8, rarity: 2.2,
+  },
+  /*
    * Turned earth: mounds of it, broad and low and a good deal wider than a
    * clump of grass. What was here first was stones -- a dozen little
    * hard-edged things a tile -- and a road of those reads as grit, which is

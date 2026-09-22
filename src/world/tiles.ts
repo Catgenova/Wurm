@@ -65,7 +65,7 @@ export const DAMP_SAND: readonly [number, number, number] = [204, 190, 160];
  * picture, a tiled floor where a path should be.
  */
 export const FLAT: ReadonlySet<number> = new Set<number>([
-  TileType.Grass, TileType.Steppe, TileType.Rock, TileType.Sand,
+  TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Rock, TileType.Sand,
   TileType.Dirt, TileType.PackedDirt, TileType.Field,
 ]);
 
@@ -83,7 +83,8 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
  * it is a stone shelf with a rash.
  */
 export const STREWN: ReadonlySet<number> = new Set<number>([
-  TileType.Grass, TileType.Steppe, TileType.Dirt, TileType.PackedDirt, TileType.Sand,
+  TileType.Grass, TileType.Steppe, TileType.Tundra,
+  TileType.Dirt, TileType.PackedDirt, TileType.Sand,
 ]);
 
 /**
@@ -313,7 +314,24 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * worse than a steppe that is a little green.
    */
   [TileType.Steppe]: { name: 'Steppe', color: [178, 190, 140], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.7 },
-  [TileType.Tundra]: { name: 'Tundra', color: [144, 154, 124], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
+  /*
+   * Cold ground: the meadow's own green drained and gone pale, which is what
+   * high country looks like from below it.
+   *
+   * It was 144, 154, 124 -- a muddy olive drab, picked before anything on
+   * this island was pastel -- and it is flat now as well, which matters more
+   * here than anywhere. A tundra is a wide unbroken sheet of one ground, and
+   * the tenth-either-way nudge of brightness per tile turned every one of
+   * them into a tiled floor in eight shades of drab. It was the worst thing
+   * the ground did anywhere on the map.
+   *
+   * What it is read against is mostly the field below it: counted over the
+   * island, tundra meets grass in four edges out of five, wood in one in
+   * six, and snow in about one in sixty. So it is the meadow it has to be
+   * told from, and it is told from it by temperature rather than by
+   * lightness -- the same green, colder and washed out.
+   */
+  [TileType.Tundra]: { name: 'Tundra', color: [172, 195, 179], speed: 0.95, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Marsh]: { name: 'Marsh', color: [78, 112, 96], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
   [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
   [TileType.Peat]: { name: 'Peat', color: [74, 60, 46], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
