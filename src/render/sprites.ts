@@ -242,8 +242,17 @@ function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
    */
   ctx.save();
   ctx.beginPath();
-  lobed(ctx, cx + LIT.x * rx * (0.62 + under), cy + LIT.y * ry * (0.62 + under),
-    rx * 1.3, ry * 1.3, seed + 9.7, 4, 0.17);
+  /*
+   * Set across the light as well as along it, so the edge it leaves falls on
+   * a slant rather than square. Turning the loop instead does not work: it is
+   * an ellipse taking the crown's own aspect, so rotating a wide flat one
+   * swings it out of the crown altogether and the whole thing goes dark.
+   */
+  const cant = (wob(seed, 36) - 0.5) * 0.9;
+  lobed(ctx,
+    cx + (LIT.x * (0.5 + under) - LIT.y * cant) * rx,
+    cy + (LIT.y * (0.5 + under) + LIT.x * cant) * ry,
+    rx * 1.32, ry * 1.32, seed + 9.7, 3, 0.2);
   ctx.clip();
   ctx.fillStyle = pal[1];
   ctx.fillRect(lx, ly, lw, lh);
@@ -672,7 +681,8 @@ export function treeSprite(species: number, variant: number): Sprite {
         ctx.closePath();
         ctx.fill();
       }
-      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, 6, 0.15, 0.3), canopy, bx, cy, rx, ry, seed);
+      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, lobes, rough * 1.25, 0.3, bitten),
+        canopy, bx, cy, rx, ry, seed);
       if (!grown) branches(ctx, bx, cy - ry, size * 0.8, dulled(def.trunk, 0.3), 3);
       if (fruit) fruiting(ctx, bx, cy, rx, ry, seed, fruit);
       return;

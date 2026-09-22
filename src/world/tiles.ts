@@ -559,9 +559,9 @@ export interface BushDef {
 
 /** The three bushes, in the same teal as the canopies. Flowers stay theirs. */
 export const BUSH_DEFS: BushDef[] = [
-  { name: 'Rose bush', foliage: ['#509c6a', '#326a49'], flowers: '#ab7b83', yields: 'rose_petals' },
+  { name: 'Rose bush', foliage: ['#509c6a', '#326a49'], flowers: '#9c8288', yields: 'rose_petals' },
   { name: 'Thorn bush', foliage: ['#549564', '#366444'] },
-  { name: 'Lavender bush', foliage: ['#7ba589', '#567963'], flowers: '#8e88a6', yields: 'lavender' },
+  { name: 'Lavender bush', foliage: ['#7ba589', '#567963'], flowers: '#8d8a99', yields: 'lavender' },
 ];
 
 export interface RockVariantDef {
