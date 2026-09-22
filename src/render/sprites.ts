@@ -543,7 +543,10 @@ export function treeSprite(species: number, variant: number): Sprite {
            * species being one tree.
            */
           const taper = open ? 1 - 0.62 * t : 1 - 0.4 * t;
-          const lw = (open ? 21 : 17) * size * runt * swing * taper;
+          // The widest whorl is the base one, and the base one is the one
+          // that reaches into the next tree along, so it is pulled in rather
+          // than let run: a conifer is tall, not broad.
+          const lw = (open ? 18 : 15) * size * runt * swing * taper * (0.82 + 0.3 * t);
           // The open one drops its tiers below the horizontal and takes them
           // out to a thread; the tight one holds them out stiff and flat. Two
           // species share this outline and that is the whole of what tells
@@ -586,7 +589,16 @@ export function treeSprite(species: number, variant: number): Sprite {
           // The palest tone goes low, where a whorl is broad and square-on to
           // the light. Put on the top blades it made them read as pale debris
           // floating clear of the tree rather than as the tip of it.
-          ctx.fillStyle = sunward ? (t < 0.4 ? canopy[0] : canopy[1]) : canopy[2];
+          /*
+           * The shaded blades are the far side of the tree, not a shadow the
+           * tree is casting -- but taken all the way down to the deep tone
+           * they were reading as one, and a long low blade in that tone laid
+           * across the crown behind it looked like a hard dark diagonal
+           * thrown onto somebody else's tree. Lifted off the bottom of the
+           * range, so a spire is three close tones of its own colour rather
+           * than two of them and a stripe of night.
+           */
+          ctx.fillStyle = sunward ? (t < 0.4 ? canopy[0] : canopy[1]) : shade(canopy[2], 0.17);
           ctx.beginPath();
           mass(0, 0);
           ctx.fill();
