@@ -197,6 +197,15 @@ export interface Masonry {
   /** The oak over a doorway, for the leaf hung under it and the soffit it makes. */
   beam: [number, number, number];
   beamLine: [number, number, number];
+  /**
+   * How much of the ground storey is plinth, in the section's own pixels, or
+   * 0 where the masonry has none.
+   *
+   * A plinth is the one course of a wall that stands out past its face, so it
+   * is the one that throws anything on the ground it stands on -- and the
+   * renderer draws the ground, not this.
+   */
+  plinth: number;
   /** A section is `w` by `h`; the ivy reaches `pad` above it, and the cap is `capH` deep. */
   w: number;
   h: number;
@@ -360,10 +369,10 @@ const RUBBLE: Stock = ((P) => ({
 const BRICK_PASTEL: Record<string, string> = {
   ...RUBBLE_PASTEL,
   // the brick itself: the field tone, its shade, and the bevel along its top
-  stone: '#c57063', stoneShade: '#a9554c', stoneHi: '#d18575', stoneDark: '#854b47',
+  stone: '#c47c6e', stoneShade: '#ad5e52', stoneHi: '#d09080', stoneDark: '#8b514b',
   // a sandier one off the same kiln, and one over-fired grey and gone to mauve
-  warm: '#cd9584', warmShade: '#b67768', warmHi: '#d8a897',
-  dark: '#7e585d', darkHi: '#936267',
+  warm: '#c89e89', warmShade: '#b0816d', warmHi: '#d4b09b',
+  dark: '#886364', darkHi: '#9b6f6f',
   // the mortar it is bedded in, a step under the brick, and the ink round every unit
   joint: '#8e6f67', line: '#7e4a44',
   // the cut stone: the dressings of an opening, and the band at a floor line
@@ -380,13 +389,13 @@ const BRICK: Stock = ((P) => ({
     '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
     warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
     dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
-    brown:   { lit: '#a66159', shade: '#83524e', hi: '#b57369' },
-    green:   { lit: '#988e71', shade: '#7d755e', hi: '#a79f81' },
-    dark:    { lit: P.dark, shade: '#65494d', hi: P.darkHi },
+    brown:   { lit: '#ab6f69', shade: '#8d5c58', hi: '#ba8178' },
+    green:   { lit: '#a0937e', shade: '#877c68', hi: '#afa48e' },
+    dark:    { lit: P.dark, shade: '#6e5355', hi: P.darkHi },
     // and the stone a plinth is cut from: the dressings, a step further down
     plinth:  { lit: '#6a6377', shade: '#57516a', hi: '#7b748a' },
-    weather: { lit: '#7c5350', shade: '#614342', hi: '#935e58' },
-    bleach:  { lit: '#c6a99f', shade: '#af8d83', hi: '#d4baaf' },
+    weather: { lit: '#875d5a', shade: '#6b4d4c', hi: '#9d6862' },
+    bleach:  { lit: '#c5afa5', shade: '#ad938a', hi: '#d4bfb5' },
     flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
   },
   lay: 'bond',
@@ -720,85 +729,133 @@ function paint(S: Stock): Masonry {
     g.fillRect(0, 0, TW, TH);
     slabs(g, 0, BAND, R);
     const own: Block[] = [];
-    const ch = (TH - BAND) / S.rows;
+    const zone = firing(R);
     /*
-     * A coarse field over the section, for what comes in patches rather than
-     * one unit at a time.
+     * Where each bed joint falls.
      *
-     * A kiln fires unevenly and a load gets laid where it was set down, so
-     * the colour of a brick wall arrives in drifts a yard or two across.
-     * Rolling every unit on its own gives a tweed; this gives a wall.
-     *
-     * Its left-hand column is drawn from a seed every variant shares and it
-     * wraps in x, so the drift has the same value at both edges of every
-     * section and carries across a seam like everything else here.
+     * Evenly divided courses are the tell of a wall nobody laid: ten beds at
+     * exactly a tenth is graph paper whatever is drawn between them. These
+     * come off a seed every variant shares, because a course has to arrive at
+     * a section's seam at the height it left the last one.
      */
-    const NX = 4, NY = 3;
-    const edge = rand(1601);
-    const grid: number[] = [];
-    for (let j = 0; j <= NY; j++) for (let i = 0; i < NX; i++) grid.push(i === 0 ? edge() : R());
-    const smooth = (t: number): number => t * t * (3 - 2 * t);
-    const at = (i: number, j: number): number => grid[Math.min(NY, j) * NX + (i % NX)];
-    const drift = (x: number, y: number): number => {
-      const u = (x / TW) * NX, v = (y / TH) * NY;
-      const i = Math.floor(u), j = Math.floor(v);
-      const fu = smooth(u - i), fv = smooth(v - j);
-      const top = at(i, j) + (at(i + 1, j) - at(i, j)) * fu;
-      const bot = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * fu;
-      return top + (bot - top) * fv;
-    };
-    /** A unit, laid at `x` on course `i`; returns it if it is this variant's to mark. */
-    const unit = (x: number, uw: number, i: number, ch2: number, RR: Rand, tone: string, sag: number): Block | undefined => {
-      const y = BAND + i * ch;
-      const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
-      const jw = MORTAR + (priv ? RR() * 1.6 : 0);
-      const drift = (RR() - 0.5) * 2.2 + (priv ? sag : 0);
-      const shrink = RR() * 1.8;
-      const b: Block = {
-        x: x + jw / 2,
-        y: y + MORTAR / 2 + drift + shrink / 2,
-        w: uw - jw,
-        h: ch2 - MORTAR - shrink,
-        course: Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES)),
-        pts: [],
-      };
-      // A degree would be a brick somebody dropped in. A bond is laid to a
-      // line and what it has instead is a hand's worth of it, which is a
-      // fortieth of a degree and shows as an edge rather than as a slope.
-      const tilt = priv && RR() < 0.25 ? (RR() - 0.5) * 0.012 : 0;
-      b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', tilt, 1.35);
-      return priv && b.w > 24 ? b : undefined;
-    };
+    const HR = rand(2027);
+    const hs: number[] = [];
+    let tot = 0;
+    for (let i = 0; i < S.rows; i++) { const w = 0.92 + 0.16 * HR(); hs.push(w); tot += w; }
+    const tops: number[] = [BAND];
+    for (let i = 0; i < S.rows; i++) tops.push(tops[i] + ((TH - BAND) * hs[i]) / tot);
     for (let i = 0; i < S.rows; i++) {
-      // Headers every fourth course, and the load they came out of was nearer
-      // the fire than the rest of it: a header course is the dark one.
+      const y0 = tops[i], ch = tops[i + 1] - y0;
+      // Headers every fourth course, which is what a wall thick enough to
+      // stand three storeys is actually bonded with, and the thing that stops
+      // ten courses of stretchers reading as ruled paper.
       const head = i % 4 === 3;
       const n = head ? S.across * 2 : S.across;
       const uw = TW / n;
       const lap = head ? 0 : (i % 2) * 0.5;
-      // The course's own sag, dying out at the section's edges so that the
-      // seam stays level however far the middle of a course has dropped.
-      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.09 * (R() < 0.5 ? -1 : 1);
+      // The course's own sag. It is a sine on a span that is zero at both
+      // ends, so a bed arrives at the seam level however far its middle has
+      // dropped, and the drop is what says the wall has stood a while.
+      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
       const q = Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES));
-      const run = { tone: '', left: 0 };
       for (let k = lap ? -1 : 0; k < n; k++) {
         const x = (k + lap) * uw;
-        const mid = x + uw / 2;
+        const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
         const seam = x < 0 || x + uw > TW;
-        const sag = Math.sin(Math.PI * kw * (mid - EDGE) / (TW - 2 * EDGE)) * aw;
+        const sag = Math.sin((Math.PI * kw * (mid - EDGE)) / (TW - 2 * EDGE)) * aw;
         // The unit across the seam is the same unit in every variant, so it is
         // laid from a seed of the course's own rather than from the variant's.
         const RR = seam ? rand(811 + i * 7) : R;
-        const under = !seam && (crests || []).some(([a, b]) => mid > a && mid < b);
-        const tone = head && RR() < 0.3 ? 'dark' : pickTone(RR, q, seam ? { tone: '', left: 0 } : run, under, drift(seam ? 0 : mid, BAND + i * ch));
-        const b = unit(x, uw, i, ch, RR, tone, sag);
-        if (b) own.push(b);
+        const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
+        const tone = zone(RR, seam ? 0 : x + uw / 2, y0, head, q, crests);
+        const jw = MORTAR + (priv ? RR() * 2.2 : 0);
+        const drift = (RR() - 0.5) * 2.4 + sag;
+        const shrink = RR() * 2;
+        const b: Block = {
+          x: x + jw / 2,
+          y: y0 + MORTAR / 2 + drift + shrink / 2,
+          w: uw - jw,
+          h: ch - MORTAR - shrink,
+          course: q,
+          pts: [],
+        };
+        // A degree would be a brick somebody dropped in. A bond is laid to a
+        // line and what it has instead is a hand's worth of it, which is a
+        // fortieth of a degree and shows as an edge rather than as a slope.
+        const tilt = priv && RR() < 0.3 ? (RR() - 0.5) * 0.014 : 0;
+        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', tilt, 1.35);
+        if (priv && b.w > 24) own.push(b);
       }
     }
     weather(g, own, R);
-    g.fillStyle = 'rgba(110,100,80,0.16)';
-    g.fillRect(0, BAND, TW, 9);
+    /*
+     * And the band course standing proud of the brick under it. A dressing
+     * that is flush with the wall is a painted stripe; what says it is a
+     * course of stone laid on and projecting is the line of shade it throws
+     * down the brick, and the arris of it catching the light above that.
+     */
+    oversail(g, BAND, 9);
     return own;
+  }
+
+  /**
+   * How a load of brick came out of the kiln, over one section.
+   *
+   * A kiln fires unevenly and a load gets laid where it was set down, so the
+   * colour of a brick wall arrives in zones a yard or two across: one that
+   * stood near the fire and came out scorched, one further off that came out
+   * soft. Rolling every unit on its own gives a tweed -- the eye lands on
+   * bricks instead of on the wall -- and it was the first thing an art
+   * director said about this.
+   *
+   * The zones come off a coarse field over the section whose left-hand column
+   * is drawn from a seed every variant shares and which wraps in x, so the
+   * field has the same value at both edges of every section and carries
+   * across a seam like everything else here. The roll inside a zone is what
+   * stops the zone having an edge.
+   */
+  function firing(R: Rand): (RR: Rand, x: number, y: number, head: boolean, course: number, crests: Pt[]) => string {
+    const NX = 4, NY = 3;
+    const edge = rand(1601);
+    const grid: number[] = [];
+    for (let j = 0; j <= NY; j++) for (let i = 0; i < NX; i++) grid.push(i === 0 ? edge() : R());
+    const ease = (t: number): number => t * t * (3 - 2 * t);
+    const at = (i: number, j: number): number => grid[Math.min(NY, j) * NX + (i % NX)];
+    return (RR, x, y, head, course, crests) => {
+      const u = (x / TW) * NX, v = (y / TH) * NY;
+      const i = Math.floor(u), j = Math.floor(v);
+      const fu = ease(u - i), fv = ease(v - j);
+      const top = at(i, j) + (at(i + 1, j) - at(i, j)) * fu;
+      const bot = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * fu;
+      // Stretched, because the average of four uniforms sits near a half and
+      // a field that never reaches its ends has no zones in it, only a haze.
+      const d = clamp(0.5 + (top + (bot - top) * fv - 0.5) * 1.9, 0, 1);
+      const t = RR();
+      // Moss, which is not a firing at all: it grows low down where the wall
+      // is damp and under a crest of ivy, where it drips.
+      const damp = (course >= COURSES - 2 ? 0.05 : 0.018)
+        * (crests.some(([a, b]) => x > a && x < b) ? 2.5 : 1);
+      if (t < damp) return 'green';
+      // A header laid in a scorched zone is the darkest thing on the wall: it
+      // is the end of the brick, and the end went into the fire first.
+      if (d < 0.28) return t < (head ? 0.44 : 0.26) ? 'dark' : t < 0.52 ? 'brown' : '';
+      if (d > 0.76) return t < 0.28 ? 'warm' : t < 0.34 ? 'bleach' : '';
+      return t < 0.07 ? 'brown' : t < 0.11 ? 'warm' : '';
+    };
+  }
+
+  /**
+   * A course of dressed stone standing proud of what is under it: the shade
+   * it throws down the wall, and the arris of it taking the light above.
+   */
+  function oversail(g: Ctx, y: number, deep: number): void {
+    const sh = g.createLinearGradient(0, y, 0, y + deep);
+    sh.addColorStop(0, 'rgba(42, 34, 40, 0.42)');
+    sh.addColorStop(1, 'rgba(42, 34, 40, 0)');
+    g.fillStyle = sh;
+    g.fillRect(0, y, TW, deep);
+    g.fillStyle = hexA(PASTEL.dressHi, 0.4);
+    g.fillRect(0, y - 3, TW, 2);
   }
 
   /** The band and the courses, the same contract in every variant, then `extras` marks each on a stone
@@ -1856,6 +1913,12 @@ function paint(S: Stock): Masonry {
   const COPE_INK = 1.1;
   /** The one cope stone that straddles a seam, drawn the same in every variant. */
   const COPE_SEAM: Pt = [-14, 17];
+  /*
+   * And the same on a bond, where the cope is dressed stone in lengths. A
+   * straddler the width of a comber between two metre-long copes is a stone
+   * somebody dropped in the gap; this one is a length like the rest.
+   */
+  const CSEAM: Pt = S.lay === 'bond' ? [-46, 52] : COPE_SEAM;
   /** And the courses of the body that straddle it, as `STRADDLE` does in the tall wall. */
   const LOW_STRADDLE: Record<number, [number, number]> = { 0: [-52, 46], 1: [-38, 62] };
   const LOW_TONE: Record<number, string> = { 0: '', 1: 'brown' };
@@ -1888,7 +1951,14 @@ function paint(S: Stock): Masonry {
    * One in five is a packer less than half the mean, which is what breaks it.
    */
   function copeWidths(seed: number): number[] {
-    const R = rand(seed), L = TW + COPE_SEAM[0] - COPE_SEAM[1];
+    const R = rand(seed), L = TW + CSEAM[0] - CSEAM[1];
+    if (S.lay === 'bond') {
+      // Four lengths across what the straddler leaves, cut to what the quarry
+      // gave rather than to a rule: a metre, give or take a hand.
+      const ws: number[] = []; let sum = 0;
+      for (let k = 0; k < 4; k++) { const w = 0.82 + R() * 0.36; ws.push(w); sum += w; }
+      return ws.map((w) => (w / sum) * L);
+    }
     const n = Math.max(2, Math.round(L / COPE_MEAN));
     const ws: number[] = []; let sum = 0;
     for (let k = 0; k < n; k++) { const w = R() < 0.22 ? 0.42 + R() * 0.16 : 0.85 + R() * 0.8; ws.push(w); sum += w; }
@@ -1910,6 +1980,17 @@ function paint(S: Stock): Masonry {
    * nothing here is laid twice the same.
    */
   function copeStone(g: Ctx, x: number, w: number, R: Rand, tone: string, tip: number): void {
+    if (S.lay === 'bond') {
+      /*
+       * Dressed, and bedded level. A length of cut cope is laid to a line
+       * like the brick under it; what it has of the hand is a pixel or two of
+       * settling and the arris knocked here and there, not a stone stood on
+       * end in the run.
+       */
+      const rise = 1 + R() * 3;
+      stone(g, x + MORTAR / 2, rise, w - MORTAR, COPE - MORTAR / 2 - rise, R, tone, 'unit', (R() - 0.5) * 0.01, 1.6);
+      return;
+    }
     const packer = w < COPE_MIN * 1.6;
     /*
      * How proud this one stands, and it is the point of the whole function.
@@ -1932,11 +2013,14 @@ function paint(S: Stock): Masonry {
     // Which way the whole run leans, settled once and kept, so a cope reads as
     // one job rather than as a row of stones that fell that way.
     const tip = (rand(431)() - 0.5) * 0.12;
-    const w0 = COPE_SEAM[1] - COPE_SEAM[0];
-    copeStone(g, COPE_SEAM[0], w0, rand(313), '', tip);
-    copeStone(g, TW + COPE_SEAM[0], w0, rand(313), '', tip);
+    const w0 = CSEAM[1] - CSEAM[0];
+    // The one across the seam is cope like the rest: on a bond that is cut
+    // stone, and the field's own tone there is a brick laid on top of it.
+    const t0 = S.lay === 'bond' ? 'dress' : '';
+    copeStone(g, CSEAM[0], w0, rand(313), t0, tip);
+    copeStone(g, TW + CSEAM[0], w0, rand(313), t0, tip);
     const ws = copeWidths(seed), tones = copeTones(seed, ws.length), R = rand(seed + 137);
-    let x = COPE_SEAM[1];
+    let x = CSEAM[1];
     for (let k = 0; k < ws.length; k++) { copeStone(g, x, ws[k], R, tones[k], tip); x += ws[k]; }
     /*
      * And the shadow it throws on the course under it, because a cope
@@ -1948,11 +2032,11 @@ function paint(S: Stock): Masonry {
      * third of the wall -- which is what made the top of it read flatter than
      * the bottom at the zoom people play at.
      */
-    const S = rand(seed + 271);
+    const SH = rand(seed + 271);
     g.fillStyle = 'rgba(96, 86, 66, 0.26)';
-    let sx = COPE_SEAM[0];
-    for (const w of [COPE_SEAM[1] - COPE_SEAM[0], ...ws, COPE_SEAM[1] - COPE_SEAM[0]]) {
-      g.fillRect(sx, COPE, w + 1, 1.5 + S() * 5);
+    let sx = CSEAM[0];
+    for (const w of [CSEAM[1] - CSEAM[0], ...ws, CSEAM[1] - CSEAM[0]]) {
+      g.fillRect(sx, COPE, w + 1, 1.5 + SH() * 5);
       sx += w;
     }
   }
@@ -2101,29 +2185,40 @@ function paint(S: Stock): Masonry {
   function lowBond(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
     const top = COPE + LEVEL;
     const own: Block[] = [];
-    const n = S.across, uw = TW / n, ch = (fh - top) / rows;
+    const zone = firing(R);
+    const n = S.across, uw = TW / n;
+    const HR = rand(3121);
+    const hs: number[] = [];
+    let tot = 0;
+    for (let i = 0; i < rows; i++) { const w = 0.92 + 0.16 * HR(); hs.push(w); tot += w; }
+    const tops: number[] = [top];
+    for (let i = 0; i < rows; i++) tops.push(tops[i] + ((fh - top) * hs[i]) / tot);
     for (let i = 0; i < rows; i++) {
-      const y = top + i * ch;
+      const y0 = tops[i], ch = tops[i + 1] - y0;
       const lap = (i % 2) * 0.5;
-      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.09 * (R() < 0.5 ? -1 : 1);
-      const run = { tone: '', left: 0 };
+      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
       for (let k = lap ? -1 : 0; k < n; k++) {
-        const x = (k + lap) * uw, mid = x + uw / 2;
+        const x = (k + lap) * uw;
+        const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
         const seam = x < 0 || x + uw > TW;
         const RR = seam ? rand(647 + i * 11) : R;
         const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
+        const sag = Math.sin((Math.PI * kw * (mid - EDGE)) / (TW - 2 * EDGE)) * aw;
         // A garden wall was laid out of what was left over, so it carries the
         // weathered and the bleached units a house wall was picked clear of.
-        const tone = !seam && RR() < 0.3 ? fieldTone(RR) : pickTone(RR, i + COURSES - rows, seam ? { tone: '', left: 0 } : run, false);
-        const jw = MORTAR + (priv ? RR() * 1.6 : 0);
-        const drift = (RR() - 0.5) * 2.2 + (priv ? Math.sin(Math.PI * kw * (mid - EDGE) / (TW - 2 * EDGE)) * aw : 0);
-        const shrink = RR() * 1.8;
-        // The bottom course runs past the picture and the canvas edge cuts it,
-        // the way the hedge at its foot already does: a wall a metre and a
-        // quarter high is mostly its ground line, and a ruled one shows.
+        const tone = !seam && RR() < 0.18 ? fieldTone(RR)
+          : zone(RR, seam ? 0 : x + uw / 2, y0, false, i + COURSES - rows, []);
+        const jw = MORTAR + (priv ? RR() * 2.2 : 0);
+        const drift = (RR() - 0.5) * 2.4 + sag;
+        const shrink = RR() * 2;
+        /*
+         * The bottom course runs past the picture and the canvas edge cuts
+         * it, the way the hedge at its foot already does: a wall a metre and
+         * a quarter high is mostly its ground line, and a ruled one shows.
+         */
         const bh = ch - MORTAR - shrink + (i === rows - 1 ? 4 + RR() * 4 : 0);
-        const b: Block = { x: x + jw / 2, y: y + MORTAR / 2 + drift + shrink / 2, w: uw - jw, h: bh, course: i, pts: [] };
-        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', priv && RR() < 0.25 ? (RR() - 0.5) * 0.012 : 0, 1.35);
+        const b: Block = { x: x + jw / 2, y: y0 + MORTAR / 2 + drift + shrink / 2, w: uw - jw, h: bh, course: i, pts: [] };
+        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', priv && RR() < 0.3 ? (RR() - 0.5) * 0.014 : 0, 1.35);
         if (priv && b.w > 24) own.push(b);
       }
     }
@@ -2473,7 +2568,7 @@ function paint(S: Stock): Masonry {
     const cap = VARIANTS.map((v) => {
       const c = cnv(TW, CAP_H + PROUD), g = ctxOf(c);
       g.translate(0, PROUD);
-      const w0 = COPE_SEAM[1] - COPE_SEAM[0];
+      const w0 = CSEAM[1] - CSEAM[0];
       /*
        * Not `flat`: a flat stone takes the flat tone and nothing else, and a
        * coping seen from above that is all one colour is the comb again. In
@@ -2489,6 +2584,16 @@ function paint(S: Stock): Masonry {
        * two pixels deep on screen has a highlight on its own edge.
        */
       const top = (x: number, w: number, RR: Rand, tone: string): void => {
+        if (S.lay === 'bond') {
+          // A length of dressed cope seen from above is a slab across the
+          // wall's whole thickness, set square to it. The hand shows in a
+          // pixel of overhang at one end and not in a stone skewed across it.
+          g.fillStyle = PASTEL.joint;
+          g.fillRect(x - 1, 0, w + 2, CAP_H);
+          const j0 = RR() * 3, j1 = RR() * 3;
+          void stone(g, x + MORTAR / 2, j0, w - MORTAR, CAP_H - j0 - j1, RR, tone, 'unit', (RR() - 0.5) * 0.01, 1.2, false);
+          return;
+        }
         // One end jitters hard and the other a little, so the two arrises of
         // the run are ragged independently rather than both nearly straight.
         const far = RR() < 0.5;
@@ -2516,13 +2621,13 @@ function paint(S: Stock): Masonry {
         }
         void stone(g, x + MORTAR / 2, j0, w - MORTAR, run, RR, tone, 'laid', tilt, 1.05, false);
       };
-      top(COPE_SEAM[0], w0, rand(313), '');
-      top(TW + COPE_SEAM[0], w0, rand(313), '');
+      top(CSEAM[0], w0, rand(313), S.lay === 'bond' ? 'dress' : '');
+      top(TW + CSEAM[0], w0, rand(313), S.lay === 'bond' ? 'dress' : '');
       // The same widths and the same tones as the face of it, taken from the
       // same two lists rather than from a roll of its own, because these are
       // the tops of those stones and not a second row of them.
       const seed = copeSeed(v.seed), ws = copeWidths(seed), tones = copeTones(seed, ws.length), R = rand(seed + 577);
-      let x = COPE_SEAM[1];
+      let x = CSEAM[1];
       for (let k = 0; k < ws.length; k++) { top(x, ws[k], R, tones[k]); x += ws[k]; }
       return c;
     });
@@ -2541,7 +2646,11 @@ function paint(S: Stock): Masonry {
       const Wc = 64, c = cnv(Wc, fh), g = ctxOf(c), R = rand(11);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, Wc, fh);
       let cx = 0, ex = 0;
-      for (const [f, tone, up] of [[0.36, '', 5], [0.34, 'weather', 1], [0.3, 'bleach', 7]] as Array<[number, string, number]>) {
+      // A bond's cope is cut stone, so its end is too.
+      const heads: Array<[number, string, number]> = S.lay === 'bond'
+        ? [[0.52, 'dress', 2], [0.48, 'plinth', 3]]
+        : [[0.36, '', 5], [0.34, 'weather', 1], [0.3, 'bleach', 7]];
+      for (const [f, tone, up] of heads) {
         const w = f * Wc;
         stone(g, cx + 1, up, w - 2, COPE - MORTAR / 2 - up, R, tone, 'laid', (R() - 0.5) * 0.06, COPE_INK);
         cx += w;
@@ -2912,6 +3021,7 @@ function paint(S: Stock): Masonry {
     beamLine: channels(PASTEL.beamLine),
     w: TW,
     h: TH,
+    plinth: S.plinth,
     pad: PAD,
     capH: CAP_H,
     pave,

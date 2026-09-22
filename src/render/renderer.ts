@@ -3374,6 +3374,25 @@ export class Renderer {
         ctx.clip('evenodd');
       };
       const offStone = (): void => { if (cut) ctx.restore(); };
+      /*
+       * What a plinth throws on the ground it stands on, laid before the face
+       * so that the half of it behind the wall stays behind the wall.
+       *
+       * A wall flush from cap to grass needs nothing here -- the wall is most
+       * of what you are looking at, which is why a house has never had one. A
+       * plinth is the one course that stands out past the face, and without
+       * the band of shade it puts on the grass the building goes back to
+       * being a sticker laid on the field.
+       */
+      if (cob.plinth && wall.level === 0 && !indoors) {
+        ctx.beginPath();
+        for (const [t, ss] of [[0, 2.4], [1, 2.4], [1, -2.4], [0, -2.4]] as Array<[number, number]>) {
+          ctx.lineTo(px(t, 0, ss), py(t, 0, ss));
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(64, 54, 52, 0.22)';
+        ctx.fill();
+      }
       blit(arched ? cob.arch[v]
         : windowed ? cob.window[v]
         : doored ? cob.door[v]
