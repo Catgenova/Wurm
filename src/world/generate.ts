@@ -38,6 +38,53 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
   const moist = new Noise2D(rng);
   const detail = new Noise2D(rng);
   const patch = new Noise2D(rng);
+  /*
+   * Beds and stands, which come in patches rather than specks.
+   *
+   * Everything that sits in the ground was picked out of `hash2`: white
+   * noise, a fresh roll per tile with no regard for the tile beside it. On
+   * seed 7's island that left 2234 tiles of clay in 1774 separate pieces,
+   * 98% of that clay in pieces of four tiles or fewer, and the peat and the
+   * tar in pieces of four or fewer to the last tile. In a bog, where the
+   * join rule puts a ruffle wherever two grounds grow unlike amounts, it
+   * came to two of every four tile sides carrying one, and the bog read as
+   * confetti.
+   *
+   * It is also just wrong. A peat bank is a bank you cut into, a clay pit is
+   * a pit, tar seeps up in one place and reeds grow in stands. None of them
+   * is one square metre of ground surrounded by marsh.
+   *
+   * So they come off a smooth sheet instead, read at three places far enough
+   * apart to be uncorrelated. The same island after: the clay in pieces of
+   * four or fewer down from 98% to 22% and the peat from 100% to 55%, and
+   * 1.34 ruffled sides a tile rather than 2.00, which is also 16% off the
+   * frame time looking across a bog at full zoom.
+   *
+   * Kelp stays on white noise on purpose. Weed does scatter, and a kelp tile
+   * is painted as the sand it grows out of, so a lone one costs neither a
+   * join nor a break in the colour.
+   */
+  const bed = new Noise2D(rng);
+  /**
+   * Peat, and the tar that seeps up through it.
+   *
+   * The scale was measured rather than guessed, because it is the whole
+   * point. A bed is about the tenth of the sheet standing highest, and how
+   * big a piece that tenth comes out in is set by how coarse the sheet is.
+   * On the open sheet this one gives a middle piece of 12 tiles, one piece
+   * in twenty a single tile, 3% of the area in pieces of four or fewer.
+   * Twice the frequency with the usual half-weight second octave gives a
+   * middle piece of 2 and half the area back in pieces of four or fewer,
+   * which is the confetti this replaces -- hence a third of the weight on
+   * the second octave rather than half, because a rougher sheet crumbles its
+   * own peaks at the cut. Laying the sheet in a bog clips it, so the pieces
+   * that reach the ground are smaller than those open-sheet figures.
+   */
+  const bedded = (x: number, y: number): number => bed.fbm(x * 0.07 + 31, y * 0.07 - 17, 2, 2, 0.3);
+  /** Clay at the surface, in a bog or along a shore. */
+  const clayey = (x: number, y: number): number => bed.fbm(x * 0.07 - 213, y * 0.07 + 97, 2, 2, 0.3);
+  /** A stand of reeds, in a bog or standing out of the shallows. Tighter than a bed. */
+  const reedy = (x: number, y: number): number => bed.fbm(x * 0.09 + 101, y * 0.09 + 57, 2, 2, 0.3);
 
   const world = new World(size, size);
   const cw = size + 1;
@@ -102,10 +149,10 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
       if (max < 0) {
         t = avg < -28 ? TileType.Dirt : TileType.Sand;
         if (avg > -22 && avg < -4 && r < 0.09) t = TileType.Kelp;
-        else if (avg >= -4 && r < 0.22) t = TileType.Reed;
+        else if (avg >= -4 && reedy(x, y) > 0.319) t = TileType.Reed;
       } else if (min < 0) {
         t = TileType.Sand;
-        if (m > 0.15 && r < 0.3 && slope < 12) t = TileType.Reed;
+        if (m > 0.15 && reedy(x, y) > 0.226 && slope < 12) t = TileType.Reed;
       } else if (slope > 52) {
         t = TileType.Rock;
       } else if (avg > 232 + p * 12) {
@@ -123,15 +170,30 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
           data = packTreeData(r2 < 0.65 ? 1 : 5, variant);
         } else t = r < 0.5 ? TileType.Tundra : TileType.Grass;
       } else if (avg < 5 && m > 0.12) {
+        /*
+         * How far into the wet this is: -0.5 out at the bog's rim, +0.5 in
+         * the middle of it. What is in the ground follows it. Peat is laid
+         * down where the water has stood longest, so a bank of it thickens
+         * toward the middle; the mineral floor the bog sits on shows through
+         * as clay round the rim, where the peat over it is thinnest; and the
+         * reeds stand in the wettest of it. The island bears it out -- mean
+         * wetness over three seeds runs clay 0.24, marsh 0.29, peat 0.33,
+         * reed 0.34, tar 0.36.
+         */
+        const deep = clamp((m - 0.12) / 0.3, 0, 1) - 0.5;
+        const bd = bedded(x, y);
         t = TileType.Marsh;
-        if (r < 0.08) t = TileType.Peat;
-        else if (r > 0.975) t = TileType.Tar;
-        else if (r > 0.86) t = TileType.Reed;
+        if (reedy(x, y) > 0.451 - deep * 0.24) t = TileType.Reed;
+        // Tar is the top of the same band peat is the rest of, so it comes up
+        // through a peat bank rather than lying in the marsh as a bed of its
+        // own: 40-47% of a tar tile's sides are peat and 2-5% marsh, the rest
+        // being the bog's own outer edge, where a seep can reach the shore.
+        else if (bd > 0.44 - deep * 0.24) t = bd > 0.62 - deep * 0.24 ? TileType.Tar : TileType.Peat;
         // Clay sits in the wet ground of a marsh as readily as it does on a shore.
-        else if (r > 0.76) t = TileType.Clay;
+        else if (clayey(x, y) < -0.44 - deep * 0.24) t = TileType.Clay;
       } else if (avg < 6 && nearWater(x, y)) {
         t = TileType.Sand;
-        if (r < 0.18) t = TileType.Clay;
+        if (clayey(x, y) < -0.364) t = TileType.Clay;
       } else if (m < -0.3) {
         t = TileType.Steppe;
         if (r < 0.015) {
@@ -158,7 +220,7 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
           data = Math.floor(r2 * 3);
         } else if (p > 0.58 && r < 0.6) t = TileType.Dirt;
         else if (p < -0.6) t = TileType.Moss;
-        else if (avg < 9 && nearWater(x, y) && r < 0.08) t = TileType.Clay;
+        else if (avg < 9 && nearWater(x, y) && clayey(x, y) < -0.505) t = TileType.Clay;
       }
 
       world.setTile(x, y, t, data);
