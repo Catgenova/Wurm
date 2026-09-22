@@ -62,7 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { CROWD, hemOf, ruffle, strew, strewLook } from './meadow';
+import { CROWD, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH } from './meadow';
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
@@ -1461,7 +1461,13 @@ export class Renderer {
         // growing in it, and the speckles are what it had instead of clumps:
         // both at once is mud.
         if (grain && !wet && !FLAT.has(t0)) this.addGrain(x, y, pts, zoom);
-        if (grassy && !wet && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
+        /*
+         * And what grows on it. Everything on the ground stops at the
+         * waterline except the reeds, which wade: see `WADES`. They are laid
+         * after the water is, so they stand up out of it.
+         */
+        const wades = wet && WADES.has(t0) && (c[0] + c[1] + c[2] + c[3]) / 4 > -WADE_DEPTH;
+        if (grassy && (!wet || wades) && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
         /*
          * And where something greener grows beside this, it comes over the
          * edge of it. Paving is left out: a flagstone or a cobble was laid to

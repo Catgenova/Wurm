@@ -1,5 +1,6 @@
 import { hash2 } from '../world/noise';
 import { STREWN, TILE_DEFS, TileType } from '../world/tiles';
+import { UNITS_PER_TILE } from './iso';
 
 /**
  * The meadow: what grass is made of.
@@ -82,6 +83,25 @@ export interface Look {
 
 /** Under this, a look's blobs are a crowd and stack up the screen. */
 export const CROWD = 0.16;
+
+/**
+ * Ground whose growth stands up out of the water rather than drowning in it,
+ * and how deep it will do that.
+ *
+ * Everything else stops at the waterline: the strew is skipped on any tile
+ * the water reaches, because a clump of grass under two feet of sea is not a
+ * thing anybody wants to see. Reeds are the exception, and the exception is
+ * most of what a reed is -- counted on the island, five reed edges in eight
+ * are the sand of the shore, and a shoreline tile nearly always has a corner
+ * under water. Held to the same rule as everything else they came out
+ * invisible in the one place they matter.
+ *
+ * They are laid after the water is, so they stand out of it rather than
+ * under it. A metre of water is as far as they will wade, and a metre is a
+ * quarter of a tile: `UNITS_PER_TILE` units to four of them.
+ */
+export const WADES: ReadonlySet<number> = new Set<number>([TileType.Reed]);
+export const WADE_DEPTH = UNITS_PER_TILE / 4;
 
 /** What one ground carries: the pictures, the ten arrangements of them, and how thickly. */
 export interface Strew {
@@ -401,6 +421,76 @@ function swell(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pa
   lay(-w * 0.18, -h * 0.22, 0.85, pal.top);
 }
 
+/**
+ * A tuft of reeds: the one thing on any of these grounds that is taller than
+ * it is wide.
+ *
+ * Neither of the other two painters can be a reed. A clump is a mass with a
+ * line round it and a lit top, which is a bush seen small. A swell is the
+ * ground itself heaped up. A reed bed is neither: it is a few dozen thin
+ * stems standing out of shallow water, and what the eye reads it by is the
+ * verticals and the daylight between them rather than any silhouette. Drawn
+ * as clumps, a marsh full of reeds came out as a marsh full of shrubs.
+ *
+ * So: stems out of one root, splayed and leaning, each its own height. The
+ * roots are gathered into the middle third and the heads thrown right across
+ * the width, which is what makes a fan -- reeds come up through each other
+ * out of one patch of mud and lean apart as they climb.
+ *
+ * The passes are the clump's, done with a stroke instead of a fill: the dark
+ * line first and a shade wider, the body over it, the light down the sunward
+ * side of each stem, and the head on the end. Every stem of a pass goes into
+ * one path and is stroked once, so where they cross each other they do not
+ * come out darker than where they do not.
+ */
+function stems(g: Ctx, cx: number, cy: number, w: number, h: number, R: Rand, pal: Green): void {
+  const base = cy + h / 2;
+  // A stem to every couple of pixels of width, and never fewer than three:
+  // two stems is a pair of blades of grass and not a bed of reeds.
+  const n = Math.max(3, Math.round(w / 2.1));
+  const lw = Math.max(0.42, w / 22);
+  /** Each one as root, control point and head. */
+  const st: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const x0 = cx + (t - 0.5) * w * 0.3 + (R() - 0.5) * w * 0.06;
+    const lean = (t - 0.5) * w * 1.05 + (R() - 0.5) * w * 0.16;
+    const tall = h * (0.5 + R() * 0.5);
+    st.push([x0, x0 + lean * 0.35, base - tall * 0.62, x0 + lean, base - tall]);
+  }
+  // Tallest laid down first, so a short stem in front of a long one reads as
+  // being in front of it rather than as a long one with a bite out of it.
+  st.sort((a, b) => a[4] - b[4]);
+  const lay = (dx: number): void => {
+    g.beginPath();
+    for (const [x0, xm, ym, x1, y1] of st) {
+      g.moveTo(x0 + dx, base);
+      g.quadraticCurveTo(xm + dx, ym, x1 + dx, y1);
+    }
+  };
+  g.lineCap = 'round';
+  g.strokeStyle = pal.line;
+  g.lineWidth = lw * 2.5;
+  lay(0); g.stroke();
+  g.strokeStyle = pal.shade;
+  g.lineWidth = lw * 1.4;
+  lay(0); g.stroke();
+  // The sun is over the top left here as it is everywhere else, so it is the
+  // left of a stem that catches it.
+  g.strokeStyle = pal.lit;
+  g.lineWidth = lw * 0.6;
+  lay(-lw * 0.45); g.stroke();
+  // And the heads, which are the whole of what tells a reed bed from long
+  // grass at the size any of this is actually drawn.
+  g.fillStyle = pal.top;
+  g.beginPath();
+  for (const st1 of st) {
+    g.moveTo(st1[3] + lw * 1.7, st1[4]);
+    g.arc(st1[3], st1[4], lw * 1.7, 0, 7);
+  }
+  g.fill();
+}
+
 /* ---- the ruffled edge ---------------------------------------------------- */
 
 /**
@@ -606,6 +696,13 @@ export function strewLook(cuts: readonly number[], x: number, y: number): number
 
 /* ---- the whole of it ----------------------------------------------------- */
 
+/**
+ * Which of the three painters a ground's growth is drawn by: `clump` for
+ * what stands on the ground, `swell` for the ground heaped up, `stems` for
+ * what stands up out of water.
+ */
+type Shape = 'clump' | 'swell' | 'stems';
+
 /** What one ground calls the things lying on it, for the tells. */
 interface Ground {
   /** The one word for the stuff it is made of: a lump in the lightest of it. */
@@ -616,21 +713,25 @@ interface Ground {
   /** So two grounds do not grow the same lumps in two colours. */
   seed: number;
   /**
-   * How big the things on it are against a meadow's clumps, how far they are
-   * squashed down, and how much rarer they are.
+   * How big the things on it are against a meadow's clumps, how far they
+   * stand up against how wide they are -- under one squashes them down, over
+   * one stands them on end -- and how much rarer they are.
    */
   scale: number;
   flat: number;
   rarity: number;
   /**
-   * And whether what sits on it is a thing *on* the ground or a swell *of*
-   * it. A clump of grass is an object: lobes of leaf, a line round it, a good
-   * deal darker or lighter than the field it stands in. A dune is the beach
-   * at another angle to the sun: no line, no edge worth the name, and barely
-   * a shade off the sand it is made of. Nothing is both, so this is not a
-   * dial -- it picks which of the two painters above does the work.
+   * And which of the three painters above draws them, which is a question
+   * about what the thing *is* rather than a dial.
+   *
+   * A clump of grass is an object standing on a field: lobes of leaf, a line
+   * round it, a good deal darker or lighter than the field. A dune is the
+   * beach at another angle to the sun -- no line, no edge worth the name,
+   * barely a shade off the sand it is made of. A reed is neither: it is
+   * verticals, and what you read it by is the daylight between them. Nothing
+   * is two of those at once.
    */
-  swells?: true;
+  shape: Shape;
 }
 
 const GROUNDS: Partial<Record<TileType, Ground>> = {
@@ -638,13 +739,30 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'green',
     palest: 'where the sun has been on it',
     deepest: 'the wet corner of a field',
-    seed: 0, scale: 1, flat: 1, rarity: 1,
+    seed: 0, scale: 1, flat: 1, rarity: 1, shape: 'clump',
   },
   [TileType.Steppe]: {
     word: 'straw',
     palest: 'bleached out: the crown of a rise, where the wind gets at it',
     deepest: 'a hollow that held its water longer than the rest of it did',
-    seed: 1000, scale: 1, flat: 1, rarity: 1,
+    seed: 1000, scale: 1, flat: 1, rarity: 1, shape: 'clump',
+  },
+  /*
+   * A reed bed, which is the one ground here that *is* what grows on it: a
+   * marsh with the reeds taken out is still a marsh, and a reed bed with the
+   * reeds taken out is a green puddle. So it is thick -- better than two
+   * tiles of it in three carry a tuft, where a meadow is five parts bare in
+   * six -- and the tufts stand about twice as tall as they are wide.
+   *
+   * Counted on the island, five reed edges in eight are the sand of the
+   * shore and a quarter are marsh: reeds are mostly a fringe along the water
+   * and only secondly a part of the bog.
+   */
+  [TileType.Reed]: {
+    word: 'reed',
+    palest: 'the heads, where the sun gets at them',
+    deepest: 'down in the stems, where it never does',
+    seed: 8000, scale: 1.3, flat: 3, rarity: 0.09, shape: 'stems',
   },
   /*
    * A marsh grows in tussocks -- sedge and rush standing in the wet, with
@@ -657,7 +775,7 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'sedge',
     palest: 'the crown of a tussock, standing clear of the water',
     deepest: 'the black water in between, which is most of a bog',
-    seed: 7000, scale: 1.05, flat: 1, rarity: 0.9,
+    seed: 7000, scale: 1.05, flat: 1, rarity: 0.9, shape: 'clump',
   },
   /*
    * Moss heaps itself over whatever it is growing on -- a stone, a root, a
@@ -676,7 +794,7 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'moss',
     palest: 'the crown of a hummock, dried out on top',
     deepest: 'the hollow between two, which never sees the sun at all',
-    seed: 6000, scale: 1.1, flat: 0.95, rarity: 0.75,
+    seed: 6000, scale: 1.1, flat: 0.95, rarity: 0.75, shape: 'clump',
   },
   /*
    * A tundra grows cushions rather than clumps: lichen and the creeping
@@ -695,7 +813,7 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'lichen',
     palest: 'crusted dry and bleached, the way it goes where the wind is always over it',
     deepest: 'the lee of a stone, where the melt stands longest',
-    seed: 5000, scale: 1.15, flat: 0.8, rarity: 2.2,
+    seed: 5000, scale: 1.15, flat: 0.8, rarity: 2.2, shape: 'clump',
   },
   /*
    * Turned earth: mounds of it, broad and low and a good deal wider than a
@@ -708,14 +826,14 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'earth',
     palest: 'dried out on top, the way a heap does in a day of sun',
     deepest: 'turned up wet from under the rest of it',
-    seed: 2000, scale: 2.6, flat: 0.6, rarity: 1.5, swells: true,
+    seed: 2000, scale: 2.6, flat: 0.6, rarity: 1.5, shape: 'swell',
   },
   // Earth walked flat: the same, lower and rarer, because a road is a road.
   [TileType.PackedDirt]: {
     word: 'earth',
     palest: 'a rise of it, trodden pale on top',
     deepest: 'a hollow where the wheels go',
-    seed: 3000, scale: 2.8, flat: 0.5, rarity: 2.2, swells: true,
+    seed: 3000, scale: 2.8, flat: 0.5, rarity: 2.2, shape: 'swell',
   },
   /*
    * And a beach is dunes: the widest of the lot and the rarest, so a stretch
@@ -728,7 +846,7 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     word: 'sand',
     palest: 'the top of one, where the sun has dried it',
     deepest: 'the lee of one, out of the wind',
-    seed: 4000, scale: 4.2, flat: 0.5, rarity: 3, swells: true,
+    seed: 4000, scale: 4.2, flat: 0.5, rarity: 3, shape: 'swell',
   },
 };
 
@@ -749,7 +867,7 @@ export function strew(type: TileType): Strew {
   const had = painted.get(type);
   if (had) return had;
   const ground = GROUNDS[type] ?? (GROUNDS[TileType.Grass] as Ground);
-  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color, ground.swells ? SWELL_STAND : 1);
+  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color, ground.shape === 'swell' ? SWELL_STAND : 1);
 
   /*
    * The blobs. Sizes are screen pixels at zoom one, where a tile is
@@ -775,14 +893,21 @@ export function strew(type: TileType): Strew {
      * good way past the size it is nominally drawn at, and a fade that runs
      * into the edge of its own picture is a straight line across a dune.
      */
-    const pad = 3 + (ground.swells ? Math.max(w, h) * 0.22 : Math.min(w, h) * 0.6);
+    const pad = 3 + (ground.shape === 'swell' ? Math.max(w, h) * 0.22
+      : ground.shape === 'stems' ? w * 0.34 : Math.min(w, h) * 0.6);
     const cw = w + pad * 2, ch = h + pad * 2;
-    // A clump stands on the ground and is rooted at its foot; a swell lies
-    // flat in it and is rooted in the middle of itself.
-    const ay = ch / 2 + (ground.swells ? 0 : h * 0.34);
+    /*
+     * Where it meets the ground. A clump stands on it and is rooted a little
+     * below its middle; a swell lies flat in it and is rooted in the middle
+     * of itself; a tuft of reeds comes up out of it and is rooted at its
+     * foot, which is the whole bottom of the picture.
+     */
+    const ay = ch / 2 + (ground.shape === 'swell' ? 0
+      : ground.shape === 'stems' ? h / 2 : h * 0.34);
     blobs.push(sprig(cw, ch, cw / 2, ay, (g) => {
       const R = rand(seed + ground.seed);
-      if (ground.swells) swell(g, cw / 2, ch / 2, w, h, R, pal);
+      if (ground.shape === 'swell') swell(g, cw / 2, ch / 2, w, h, R, pal);
+      else if (ground.shape === 'stems') stems(g, cw / 2, ch / 2, w, h, R, pal);
       else clump(g, cw / 2, ch / 2, w, h, R, pal);
     }));
     return blobs.length - 1;

@@ -85,7 +85,7 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
  */
 export const STREWN: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Marsh,
-  TileType.Dirt, TileType.PackedDirt, TileType.Sand,
+  TileType.Reed, TileType.Dirt, TileType.PackedDirt, TileType.Sand,
 ]);
 
 /**
