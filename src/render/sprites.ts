@@ -209,8 +209,8 @@ function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
   const lw = rx * 8;
   const lh = ry * 8;
   const under = 0.26 + 0.09 * wob(seed, 34);
-  const band = 0.2 + 0.08 * wob(seed, 33);
-  const reach = 1.1 + 0.18 * wob(seed, 31);
+  const band = 0.3 + 0.12 * wob(seed, 33);
+  const reach = 0.95 + 0.2 * wob(seed, 31);
   ctx.save();
   ctx.beginPath();
   mass(0, 0);
@@ -252,7 +252,7 @@ function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
   lobed(ctx,
     cx + (LIT.x * (0.5 + under) - LIT.y * cant) * rx,
     cy + (LIT.y * (0.5 + under) + LIT.x * cant) * ry,
-    rx * 1.32, ry * 1.32, seed + 9.7, 3, 0.2);
+    rx * 1.32, ry * 1.32, seed + 9.7, 5 + Math.round(wob(seed, 37) * 4), 0.3);
   ctx.clip();
   ctx.fillStyle = pal[1];
   ctx.fillRect(lx, ly, lw, lh);
@@ -270,7 +270,8 @@ function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
    */
   ctx.save();
   ctx.beginPath();
-  lobed(ctx, cx + LIT.x * rx * reach, cy + LIT.y * ry * (reach + 0.06), rx * 1.1, ry * 1.1, seed + 3.1, 4, 0.14);
+  lobed(ctx, cx + LIT.x * rx * reach, cy + LIT.y * ry * (reach + 0.06), rx * 1.2, ry * 1.2,
+    seed + 3.1, 5 + Math.round(wob(seed, 38) * 3), 0.22);
   ctx.clip();
   ctx.fillStyle = pal[0];
   ctx.fillRect(lx, ly, lw, lh);
