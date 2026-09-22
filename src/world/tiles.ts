@@ -65,8 +65,8 @@ export const DAMP_SAND: readonly [number, number, number] = [204, 190, 160];
  * picture, a tiled floor where a path should be.
  */
 export const FLAT: ReadonlySet<number> = new Set<number>([
-  TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Rock, TileType.Sand,
-  TileType.Dirt, TileType.PackedDirt, TileType.Field,
+  TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Rock,
+  TileType.Sand, TileType.Dirt, TileType.PackedDirt, TileType.Field,
 ]);
 
 /**
@@ -83,7 +83,7 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
  * it is a stone shelf with a rash.
  */
 export const STREWN: ReadonlySet<number> = new Set<number>([
-  TileType.Grass, TileType.Steppe, TileType.Tundra,
+  TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss,
   TileType.Dirt, TileType.PackedDirt, TileType.Sand,
 ]);
 
@@ -336,7 +336,24 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   [TileType.Clay]: { name: 'Clay', color: [166, 138, 108], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
   [TileType.Peat]: { name: 'Peat', color: [74, 60, 46], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
   [TileType.Tar]: { name: 'Tar', color: [36, 32, 32], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
-  [TileType.Moss]: { name: 'Moss', color: [72, 124, 93], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
+  /*
+   * The damp shaded floor of a wood: the field's own green gone deeper and
+   * cooler, which is what ground that never dries out looks like.
+   *
+   * It was 72, 124, 93, sixty-odd units of green below the meadow's 188, and
+   * at that distance it stopped reading as a ground at all. A patch of
+   * moss in a field came out as a hole cut in it, or as a shadow with
+   * nothing overhead to cast one, and since moss arrives as single tiles and
+   * handfuls of tiles scattered through wet woodland rather than as a region,
+   * the map was full of them.
+   *
+   * Deep enough to be plainly another ground and no deeper. Counted over the
+   * island: moss is one tile in ninety, it meets grass in half its edges and
+   * wood in most of the rest -- and a wood is painted as whatever it stands
+   * in, so nearly all of that is grass too. Grass is the only thing it ever
+   * has to be told from.
+   */
+  [TileType.Moss]: { name: 'Moss', color: [84, 162, 130], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
   [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
   [TileType.Field]: { name: 'Field', color: [158, 122, 104], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },

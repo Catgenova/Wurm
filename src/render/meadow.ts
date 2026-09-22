@@ -647,6 +647,25 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     seed: 1000, scale: 1, flat: 1, rarity: 1,
   },
   /*
+   * Moss heaps itself over whatever it is growing on -- a stone, a root, a
+   * fallen branch -- so a moss bed is hummocky, and it is the thickest
+   * growing ground on the island, so it is hummocky more often than a meadow
+   * is lumpy. A shade bigger than a clump of grass and a good deal commoner.
+   *
+   * Drawn as swells first, on the reasoning that a hummock of moss is the
+   * bed at another angle to the sun the way a dune is the beach. Wrong twice
+   * over: a swell's tones are held close to the ground's on purpose, and on
+   * a ground this dark that left nothing to see at all. The rule that came
+   * out of it is the simpler one -- what grows, clumps; the ground itself
+   * swells -- and moss grows.
+   */
+  [TileType.Moss]: {
+    word: 'moss',
+    palest: 'the crown of a hummock, dried out on top',
+    deepest: 'the hollow between two, which never sees the sun at all',
+    seed: 6000, scale: 1.1, flat: 0.95, rarity: 0.75,
+  },
+  /*
    * A tundra grows cushions rather than clumps: lichen and the creeping
    * stuff that hugs the ground, because nothing standing up in that wind
    * lasts a winter. So a meadow's lumps, a little wider and a good deal
