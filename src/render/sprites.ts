@@ -390,7 +390,7 @@ const AY = SPRITE_H - 8;
  */
 const FRUIT_COLOUR: Record<string, string> = {
   apple: '#a8665f', cherry: '#8e5160', olive: '#6b7357', pear: '#ab9a70', plum: '#756a86',
-  peach: '#bb8c74', fig: '#705f78', lemon: '#b7a874', pomegranate: '#9d6067',
+  peach: '#bb8c74', fig: '#705f78', lemon: '#b7a874', pomegranate: '#8d5a52',
   apricot: '#b78f72', quince: '#ad9c79',
 };
 
@@ -525,25 +525,47 @@ export function treeSprite(species: number, variant: number): Sprite {
           // long again one way as the other, which is what stops a conifer
           // reading as a folded paper chevron.
           const swing = 0.68 + 0.64 * wob(seed, i * 2 + (side > 0 ? 1 : 0));
-          const lw = (open ? 12 + 18 * t : 9 + 13 * t) * size * runt * swing;
+          // The open one takes its blades in toward the top; the tight one
+          // keeps them even the whole way down. One of the two structural
+          // differences that stop the pair being one tree.
+          const taper = open ? 1.25 - 0.55 * t : 1;
+          const lw = (open ? 12 + 18 * t : 9 + 13 * t) * size * runt * swing * taper;
           // The open one drops its tiers below the horizontal and takes them
           // out to a thread; the tight one holds them out stiff and flat. Two
           // species share this outline and that is the whole of what tells
           // them apart.
           const sag = (open ? 11 + 15 * t : 1.5 + 2 * t) * size * (0.8 + 0.5 * swing);
           const mass: Mass = (dx, dy) => {
-            const tip = open ? 0.99 : 0.94;
+            const tip = (open ? 0.99 : 0.94) * (0.9 + 0.2 * wob(seed, i * 6 + side + 2));
+            // A hand-cut edge on the blade too: it was the one shape left on
+            // screen with a true vector outline, and it repeated unchanged at
+            // every scale.
+            const kink = (wob(seed, i * 5 + side) - 0.5) * lw * 0.18;
             ctx.moveTo(ax + dx, ly + stagger - step * (open ? 0.62 : 0.5) + dy);
             ctx.quadraticCurveTo(ax + side * lw * 0.5 + dx, ly + stagger - step * (open ? 0.42 : 0.34) + dy,
-              ax + side * lw * tip + dx, ly + stagger + sag * 0.9 + dy);
+              ax + side * lw * tip + dx, ly + stagger + sag * 0.9 + kink + dy);
             ctx.quadraticCurveTo(ax + side * lw * (open ? 0.86 : 0.9) + dx, ly + stagger + sag * 1.15 + (open ? 0 : step * 0.3) + dy,
-              ax + side * lw * 0.5 + dx, ly + stagger + sag * 0.5 + (open ? 0 : step * 0.26) + dy);
+              ax + side * lw * 0.5 + dx, ly + stagger + sag * 0.5 + (open ? 0 : step * 0.26) - kink * 0.6 + dy);
             ctx.quadraticCurveTo(ax + side * lw * 0.3 + dx, ly + stagger + sag * 0.2 + dy, ax + side * lw * 0.08 + dx, ly + stagger + dy);
             ctx.closePath();
           };
-          lightOn(ctx, mass, canopy,
-            ax + side * lw * 0.52, ly + stagger + sag * 0.2 - step * 0.12,
-            lw * 0.55, (step + sag) * 0.42, seed + i * 3.7 + (side > 0 ? 1.9 : 0));
+          // Sunward blades take the light tone whole and shaded ones the deep
+          // tone whole -- a blade is small enough to be one plane. Only the
+          // top of the tree gets the palest of the three, so the crown still
+          // falls away into its own shade going down.
+          /*
+           * Which side of the leader a blade is on decides its tone, but not
+           * on its own: about one blade in six goes the other way. Hinged
+           * strictly down the middle the crown came out as two flat halves
+           * with a seam between them, rather than as a thing turning through
+           * the light.
+           */
+          const flip = wob(seed, i * 4 + (side > 0 ? 2 : 1)) > 0.83;
+          const sunward = (side * LIT.x > 0) !== flip;
+          ctx.fillStyle = sunward ? (t > 0.72 ? canopy[0] : canopy[1]) : canopy[2];
+          ctx.beginPath();
+          mass(0, 0);
+          ctx.fill();
         }
       }
       if (!grown) branches(ctx, bx, top, size * 0.7, dulled(def.trunk, 0.3), 2);
@@ -612,7 +634,7 @@ export function treeSprite(species: number, variant: number): Sprite {
         // it, so the stem shows through between the plates and each one
         // reaches out over nothing. Stacked concentric they were a totem.
         const cx = bx + (i % 2 ? 1 : -1) * rx * 0.36 + tilt * 5 * size * t;
-        const cy = by - th - i * 10 * size;
+        const cy = by - th - i * (plates > 3 ? 8 : 13) * size;
         lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed + i, 5, 0.14), canopy, cx, cy, rx, ry, seed + i);
       }
       if (!grown) branches(ctx, bx, by - th - plates * 10 * size, size * 0.7, dulled(def.trunk, 0.3), 2);
@@ -637,7 +659,12 @@ export function treeSprite(species: number, variant: number): Sprite {
       contact(ctx, bx, by, rx * 0.95);
       stem(ctx, bx, by, 4.6 * size * girth, th, lean, def.trunk);
       fork(ctx, bx + lean, by - th, rx * 1.05, 11 * size, seed, def.trunk, 4);
-      lightOn(ctx, (dx, dy) => lobed(ctx, hx + dx, cy + dy, rx, ry, seed, 4, 0.22, 0.1), canopy, hx, cy, rx, ry, seed);
+      const split = wob(seed, 84) > 0.5;
+      lightOn(ctx, (dx, dy) => {
+        lobed(ctx, hx + dx, cy + dy, rx * (split ? 0.78 : 1), ry * (split ? 0.86 : 1), seed, 4, 0.22, 0.1);
+        // Half of them carry the head in two pieces with sky between.
+        if (split) lobed(ctx, hx - tilt * rx * 0.95 + dx, cy + ry * 0.5 + dy, rx * 0.5, ry * 0.42, seed + 7.7, 3, 0.2);
+      }, canopy, hx, cy, rx, ry, seed);
       if (fruit) fruiting(ctx, hx, cy, rx, ry, seed, fruit);
       return;
     }
@@ -716,11 +743,25 @@ export function treeSprite(species: number, variant: number): Sprite {
       contact(ctx, bx + lean * 0.5, by, rx * 0.88);
       stem(ctx, bx, by, 6 * size * girth, th, lean, def.trunk);
       fork(ctx, bx + lean, by - th, rx * 0.74, 12 * size, seed, def.trunk, 3);
+      /*
+       * Ribs, splayed from where the stem lets go of them and cut off square
+       * underneath. The single skewed lobe this replaces had no edge rule at
+       * all -- it was an unarticulated lump billed as a fan, and pitched
+       * close enough to the meadow's own green that a stand of them turned
+       * the wood to mottle.
+       */
+      const ribs = 4;
       const mass: Mass = (dx, dy) => {
         ctx.save();
         ctx.translate(cx + dx, cy + dy);
         ctx.transform(1, 0, skew, 1, 0, 0);
-        lobed(ctx, 0, 0, rx, ry, seed, 3, 0.24, 0.2);
+        for (let k = 0; k < ribs; k++) {
+          const u = (k + 0.5) / ribs;
+          const spin = (u - 0.5) * 1.5;
+          lobed(ctx, Math.sin(spin) * rx * 0.62, -Math.cos(spin) * ry * 0.34,
+            rx * (0.46 + 0.16 * wob(seed, k + 30)), ry * (0.5 + 0.2 * wob(seed, k + 35)),
+            seed + k * 2.3, 3, 0.2, 0.35);
+        }
         ctx.restore();
       };
       lightOn(ctx, mass, canopy, cx, cy, rx, ry, seed);
@@ -755,8 +796,11 @@ export function treeSprite(species: number, variant: number): Sprite {
     // How many plates, and how high they ride over the fork, both off the
     // seed: three species wear this outline and this is what parts them.
     const decks = wob(seed, 80) > 0.6 ? 3 : 2;
+    // And which way the whole stack is thrown, so two species with the same
+    // number of plates still do not draw the same tree.
+    const throwOff = (wob(seed, 85) - 0.5) * rx * 0.5;
     for (let i = 0; i < decks; i++) {
-      const lx = cx + (i ? tilt * 7 * size - 2 * size : 1.5 * size);
+      const lx = cx + throwOff * (i ? 1 : -0.6) + (i ? tilt * 7 * size - 2 * size : 1.5 * size);
       const ly = cy - i * 10 * size;
       const lrx = rx * (i ? 0.66 : 1);
       const lry = (7.5 - i * 1.3) * size;
@@ -821,7 +865,10 @@ export function bushSprite(species: number): Sprite {
     const seed = species * 5.9 + 3.3;
     const pal: [string, string, string] = [shade(def.foliage[0], 0.2), def.foliage[0], def.foliage[1]];
     contact(ctx, bx, by, 12);
-    lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, by - 9 + dy, 11, 8.5, seed, 5, 0.2), pal, bx, by - 9, 11, 8.5, seed);
+    lightOn(ctx, (dx, dy) => {
+      lobed(ctx, bx + dx, by - 9 + dy, 11, 8, seed, 3, 0.15);
+      lobed(ctx, bx - 4 + dx, by - 13 + dy, 6.5, 5.5, seed + 2.2, 3, 0.18);
+    }, pal, bx, by - 9.5, 11, 8, seed);
     if (def.flowers) {
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * TAU + seed;
