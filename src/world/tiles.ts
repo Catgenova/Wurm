@@ -68,6 +68,7 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Rock,
   TileType.Sand, TileType.Dirt, TileType.PackedDirt, TileType.Field,
   TileType.Marsh, TileType.Reed, TileType.Clay, TileType.Peat, TileType.Tar,
+  TileType.Kelp,
 ]);
 
 /**
@@ -85,24 +86,33 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
  */
 export const STREWN: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Marsh,
-  TileType.Reed, TileType.Dirt, TileType.PackedDirt, TileType.Sand,
+  TileType.Reed, TileType.Kelp, TileType.Dirt, TileType.PackedDirt, TileType.Sand,
 ]);
 
 /**
- * Ground that is not a ground of its own.
+ * Ground named for what is growing on it rather than for what it is.
  *
- * A tile of forest is not a different soil from the field beside it. It is
+ * A tile of forest is not a different soil from the field beside it: it is
  * the field, with a tree standing in it. It carried a dark green of its own
  * for a long while, and that one fact was most of what was wrong with the
- * ground: a dark diamond under every bush on the island, which the blended
+ * ground -- a dark diamond under every bush on the island, which the blended
  * seam that used to be drawn over every join then washed out into the four
  * tiles round it and turned into a box of shadow sitting on the meadow.
  *
- * What a wooded tile is painted in is whatever is growing round it, and what
- * it counts as when the join beside it is worked out is that same ground, so
- * a wood in a meadow has no join in it at all.
+ * Kelp is the same thing under water. A kelp tile is not a different sea
+ * floor, it is the sand with weed growing out of it, and painted as a floor
+ * of its own it was a hard-edged rectangle of darker blue -- scattered in
+ * single tiles across a pale shelf, which is what made the bay look
+ * terraced from any distance.
+ *
+ * So what one of these is painted in is whatever is round it, and what it
+ * counts as when the join beside it is worked out is that same ground. A
+ * wood in a meadow has no join in it at all, and a kelp bed has no edges.
+ * What grows is drawn on top: a tree as its own picture, weed as a strew.
  */
-export const WOODED: ReadonlySet<number> = new Set<number>([TileType.Tree, TileType.Bush, TileType.Stump]);
+export const COVERED: ReadonlySet<number> = new Set<number>([
+  TileType.Tree, TileType.Bush, TileType.Stump, TileType.Kelp,
+]);
 
 /**
  * How far a ground runs out over the ground beside it.
@@ -391,7 +401,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
   // Walked over, and in the way of everything else until it is dug out or
   // rots: no digging its corners, no planting, no paving, no building.
   [TileType.Stump]: { name: 'Stump', color: [64, 127, 82], speed: 0.7, roll: 0.35 },
-  [TileType.Kelp]: { name: 'Kelp', color: [71, 106, 97], speed: 1, roll: 0.5 },
+  [TileType.Kelp]: { name: 'Kelp', color: [58, 102, 88], speed: 1, roll: 0.5 },
   /*
    * Reeds standing in the bog: the one light thing in it, and the greenest,
    * because a reed bed is alive where the rest of a marsh is water. See the

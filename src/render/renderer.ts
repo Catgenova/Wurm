@@ -30,7 +30,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, WOODED, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
@@ -62,7 +62,7 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { CROWD, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH } from './meadow';
+import { CROWD, DROWNS, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH } from './meadow';
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
@@ -681,10 +681,11 @@ export class Renderer {
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
   private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number], lit = true): string {
     const w = this.game.world;
-    // A wood is a field with trees in it, not a soil of its own: see
-    // `groundAt`. Worked out here, so it is cached and thrown away with the
-    // colour it decides rather than being asked again every frame.
-    const ground = WOODED.has(type) ? this.groundAt(x, y, lit) : type;
+    // A wood is a field with trees in it and a kelp bed is sand with weed
+    // in it, not soils of their own: see `groundAt`. Worked out here, so it
+    // is cached and thrown away with the colour it decides rather than being
+    // asked again every frame.
+    const ground = COVERED.has(type) ? this.groundAt(x, y, lit) : type;
     const def = TILE_DEFS[ground];
     const c = w.corners(x, y, this.colorBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
@@ -837,7 +838,10 @@ export class Renderer {
   private groundAt(x: number, y: number, lit: boolean): TileType {
     const world = this.game.world;
     const t = world.viewTile(x, y, lit) as TileType;
-    if (!WOODED.has(t)) return t;
+    if (!COVERED.has(t)) return t;
+    // A tree takes the ground it stands on and weed takes the floor it grows
+    // out of, so neither of them is allowed to take the other's.
+    const under = world.heightAt(x + 0.5, y + 0.5) < 0;
     const near = this.nearBuf;
     near.length = 0;
     for (let e = 0; e < 4; e++) {
@@ -845,12 +849,14 @@ export class Renderer {
       const ny = y + (e === 0 ? -1 : e === 2 ? 1 : 0);
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
       const n = world.viewTile(nx, ny, lit) as TileType;
-      // Not another tree, not a road, and not the bottom of the sea.
-      if (WOODED.has(n) || PAVED.has(n)) continue;
-      if (world.heightAt(nx + 0.5, ny + 0.5) < 0) continue;
+      // Not another one of these, and not a road.
+      if (COVERED.has(n) || PAVED.has(n)) continue;
+      if ((world.heightAt(nx + 0.5, ny + 0.5) < 0) !== under) continue;
       near.push(n);
     }
-    let best: TileType = TileType.Grass;
+    // Thick enough wood, or thick enough weed, that all four neighbours were
+    // the same as this one: the field it would be, or the shelf it grows on.
+    let best: TileType = under ? TileType.Sand : TileType.Grass;
     let most = 0;
     for (const u of near) {
       let n = 0;
@@ -1455,6 +1461,8 @@ export class Renderer {
         const t0 = this.groundAt(x, y, lit);
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
+        // Weed on the bottom goes under the water rather than over it.
+        if (grassy && wet && DROWNS.has(here)) this.strewTile(here, x, y, pts, paveRot, zoom, lit);
         if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
         // A flat ground gets no speckles. A sward is a flat ground with clumps
@@ -1465,6 +1473,12 @@ export class Renderer {
          * And what grows on it. Everything on the ground stops at the
          * waterline except the reeds, which wade: see `WADES`. They are laid
          * after the water is, so they stand up out of it.
+         *
+         * Weed is the other way about -- it is laid before the water, up with
+         * `drawWater` above, because it grows on the bottom. And it is asked
+         * for by what the tile *is* rather than by what it counts as: a kelp
+         * tile counts as the sand it grows out of, and sand-coloured weed is
+         * no weed at all.
          */
         const wades = wet && WADES.has(t0) && (c[0] + c[1] + c[2] + c[3]) / 4 > -WADE_DEPTH;
         if (grassy && (!wet || wades) && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);

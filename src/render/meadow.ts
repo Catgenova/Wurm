@@ -103,6 +103,14 @@ export const CROWD = 0.16;
 export const WADES: ReadonlySet<number> = new Set<number>([TileType.Reed]);
 export const WADE_DEPTH = UNITS_PER_TILE / 4;
 
+/**
+ * And ground whose growth is on the bottom, which goes the other way about:
+ * laid before the water rather than after it, so the sea is over the top of
+ * it. Weed in a bay, seen from a boat, is under some feet of water and looks
+ * it -- drawn after, it would be floating on the surface.
+ */
+export const DROWNS: ReadonlySet<number> = new Set<number>([TileType.Kelp]);
+
 /** What one ground carries: the pictures, the ten arrangements of them, and how thickly. */
 export interface Strew {
   blobs: Sprig[];
@@ -746,6 +754,33 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     palest: 'bleached out: the crown of a rise, where the wind gets at it',
     deepest: 'a hollow that held its water longer than the rest of it did',
     seed: 1000, scale: 1, flat: 1, rarity: 1, shape: 'clump',
+  },
+  /*
+   * Weed on the sea floor.
+   *
+   * A kelp tile is painted as the sand it grows out of -- see `COVERED` in
+   * tiles.ts -- so all of the kelp there is, is this. The square went with
+   * the tile's own colour; what these have to do is only be weed.
+   *
+   * They are kept under a tile's width on purpose. A strew is not clipped,
+   * and anything of one that hangs over the edge is painted out again by the
+   * next tile's own ground, which is drawn after it -- so a mass big enough
+   * to spill comes back with a straight bite out of its lower side. Grass
+   * has always done this and nobody can see it, green on green; dark weed on
+   * a pale shelf is another matter.
+   *
+   * Drawn as swells first, which was the third time that guess has been
+   * wrong: a swell's tones are held close to the ground's, and under a metre
+   * of water there was nothing left of them at all.
+   *
+   * Counted on the island it lies a metre and a third down on average, on a
+   * shelf that is sand in ninety-nine edges out of a hundred.
+   */
+  [TileType.Kelp]: {
+    word: 'weed',
+    palest: 'the top of a frond, where what light gets down there gets to it',
+    deepest: 'the heart of a bed, where none of it does',
+    seed: 9000, scale: 1.9, flat: 1, rarity: 0.05, shape: 'clump',
   },
   /*
    * A reed bed, which is the one ground here that *is* what grows on it: a
