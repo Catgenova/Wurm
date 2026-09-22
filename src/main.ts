@@ -31,7 +31,7 @@ import { RECIPES } from './game/recipes';
 import { Game } from './game/game';
 import { Keybinds } from './game/keybinds';
 import { loadGame, saveGame, saveOnExit, warmSave } from './game/save';
-import { warmCobble } from './render/cobble';
+import { warmMasonry } from './render/masonry';
 import { warmMeadow } from './render/meadow';
 import { Renderer, skyWash, sunAt } from './render/renderer';
 import { Sound } from './audio/sound';
@@ -461,7 +461,7 @@ if (!island) {
 if (!island) warmSave();
 // And the cobblestone painted, for the same reason: a wall of it coming into
 // view should not be the thing that pays for drawing it.
-warmCobble();
+warmMasonry();
 warmMeadow();
 // A new island is put away early: the land only reaches the store on a full
 // save, and until one has happened there is nothing for an exit patch to be

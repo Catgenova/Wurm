@@ -34,7 +34,7 @@ import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARI
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Cobble, cobble } from './cobble';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, brickwork, cobble } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -3117,7 +3117,15 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
-    const cob = wall.material === 'cobblestone' && !wall.dye ? cobble() : undefined;
+    /*
+     * The two masonries that are painted rather than ruled. A coat of paint
+     * over either of them would be two walls at once, so a dyed one goes down
+     * to the flat colours below with everything else.
+     */
+    const cob = wall.dye ? undefined
+      : wall.material === 'cobblestone' ? cobble()
+        : wall.material === 'clay_bricks' ? brickwork()
+          : undefined;
     if (kind?.railed && !cob) {
       /*
        * Posts and rails, each of them a piece of timber with a top to it: a
@@ -3423,8 +3431,8 @@ export class Renderer {
         ctx.beginPath();
         hole(1);
         ctx.clip();
-        if (doored || gated) this.cobDoor(cob, { px, py, quad }, zoom, gated ? 2 : 1);
-        else this.cobGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+        if (doored || gated) this.paintedDoor(cob, { px, py, quad }, zoom, gated ? 2 : 1);
+        else this.paintedGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
         ctx.restore();
         ctx.beginPath();
         hole(1);
@@ -3446,7 +3454,7 @@ export class Renderer {
         ctx.beginPath();
         hole(1);
         ctx.clip();
-        if (indoors) this.cobGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border), BAY);
+        if (indoors) this.paintedGlass(cob, { px, py, quad }, zoom, this.lampBehind(wall, border), BAY);
         else { ctx.fillStyle = rgb(cob.reveal, 0.42); ctx.fill(); }
         ctx.restore();
         ctx.beginPath();
@@ -3521,7 +3529,7 @@ export class Renderer {
         if (doored) blit(cob.doorIvy[v], 0, 1);
         if (gated) blit(cob.gateIvy[v], 0, 1);
       }
-      if (bayed && !indoors) this.cobBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+      if (bayed && !indoors) this.paintedBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
       return;
@@ -4135,7 +4143,7 @@ export class Renderer {
    * It hangs behind the piers rather than between them, because a gate in a
    * gap is a gate that jams the first time the wall settles.
    */
-  private fenceGate(cob: Cobble, g: WallGeom, zoom: number, iron: boolean): void {
+  private fenceGate(cob: Masonry, g: WallGeom, zoom: number, iron: boolean): void {
     const ctx = this.canvas.ctx;
     const { px, py } = g;
     const { t0, t1 } = FENCE_GAP;
@@ -4236,7 +4244,7 @@ export class Renderer {
    * is used rather than drawn: nothing else on the wall has anybody's boots
    * in it.
    */
-  private threshold(cob: Cobble, g: WallGeom, t0: number, t1: number, zoom: number): void {
+  private threshold(cob: Masonry, g: WallGeom, t0: number, t1: number, zoom: number): void {
     const ctx = this.canvas.ctx;
     const { px, py, quad } = g;
     const slab = (a: number, b: number, s: number): void => {
@@ -4269,7 +4277,7 @@ export class Renderer {
    * over it -- you are looking at the one piece of timber in the wall, from
    * below, and it is holding up two and a quarter metres of rubble.
    */
-  private cobDoor(cob: Cobble, g: WallGeom, zoom: number, leaves: 1 | 2): void {
+  private paintedDoor(cob: Masonry, g: WallGeom, zoom: number, leaves: 1 | 2): void {
     const ctx = this.canvas.ctx;
     const { px, py, quad } = g;
     const { t0, t1, k1 } = leaves === 2 ? DOUBLE : DOOR;
@@ -4405,7 +4413,7 @@ export class Renderer {
    * is facing away and is not drawn. That is the whole of it: a bay is four
    * quads and a rule about which of them are yours to look at.
    */
-  private cobBay(cob: Cobble, g: WallGeom, zoom: number, alight: number): void {
+  private paintedBay(cob: Masonry, g: WallGeom, zoom: number, alight: number): void {
     const ctx = this.canvas.ctx;
     const { px, py } = g;
     const { t0, t1, k0, k1 } = BAY;
@@ -4505,7 +4513,7 @@ export class Renderer {
    * the only surface in a wall turned up at the sky and so the lightest thing
    * in the opening. Drawn unlit: the wash over the whole face takes the hour.
    */
-  private cobGlass(cob: Cobble, g: WallGeom, zoom: number, alight: number,
+  private paintedGlass(cob: Masonry, g: WallGeom, zoom: number, alight: number,
                    rect: { t0: number; t1: number; k0: number; k1: number } = WINDOW): void {
     const ctx = this.canvas.ctx;
     const { px, py, quad } = g;

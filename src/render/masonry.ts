@@ -152,7 +152,7 @@ export interface Low {
 }
 
 /** The painted wall, in the pieces a renderer fills its faces with. */
-export interface Cobble {
+export interface Masonry {
   /** One per variant: the stone of a storey, which butts any other left or right and stacks on any. */
   face: HTMLCanvasElement[];
   /** The same, with an archway cut through it and a ring of rough voussoirs round the hole. */
@@ -215,62 +215,258 @@ export interface Cobble {
   tells: string[];
 }
 
-let painted: Cobble | undefined;
+/**
+ * What a masonry is, as far as the painter is concerned.
+ *
+ * Everything below paints one wall: the courses, the openings cut in them,
+ * the coping, the cap, the end grain, and every green thing that has got into
+ * any of it. What tells cobblestone from brickwork is the colour it is laid
+ * in, the size of the unit and whether it was laid by eye or to a line -- and
+ * that is all that is in here.
+ */
+interface Tone { lit: string; shade: string; hi: string }
+interface Stock {
+  pastel: Record<string, string>;
+  /** The tones a unit can take. `flat` is the band course, `dress` the stone an opening is cut in. */
+  tones: Record<string, Tone>;
+  /**
+   * How the field is laid.
+   *
+   * `rubble` is stone off the field, courses of it roughly level and no two
+   * pieces alike: the size of every block is drawn, so there is no bond and
+   * the seam has to be kept by hand. `bond` is a moulded unit laid to a line
+   * in a half lap, which keeps the seam by itself -- every other course has a
+   * unit across it, and that unit is drawn at both edges from one seed.
+   */
+  lay: 'rubble' | 'bond';
+  /** For a bond: courses to a storey, and units across a course. */
+  rows: number;
+  across: number;
+  /** How wide the joint is, in pixels. Brick shows more mortar than rubble does. */
+  mortar: number;
+  /** Blocks across the band course at the head of a storey. */
+  bandN: number;
+  /** A plinth of dressed stone at the ground, this many pixels of the storey tall; 0 for none. */
+  plinth: number;
+  /** What share of a novice's wear this masonry takes: kiln-fired units chip, they do not spall. */
+  wear: number;
+  /** The share of units that take each tone, in order; whatever is left takes the field's own. */
+  mix: Array<[string, number]>;
+  /** The tones that come in pairs rather than singly, because a load of them came in together. */
+  pairs: string[];
+  /** The tones a field wall carries that a house wall does not, and how often. */
+  field: Array<[string, number]>;
+}
+
+/* ---- the two masonries -------------------------------------------------- */
+/**
+ * Cobblestone, sampled off the castle art the island is meant to sit beside.
+ */
+const RUBBLE_PASTEL: Record<string, string> = {
+  grass: '#90cfb1', shade: '#7fbca6', sand: '#f3d192', cream: '#f4ecd5',
+  // stone, sampled off the castle: light, mid, and the joints between
+  stone: '#cbc0b0', stoneShade: '#aba796', stoneDark: '#a19d8d', joint: '#aeaa9c',
+  dark: '#b5b1a0',
+  warm: '#ccbea3', warmShade: '#ae9f84',
+  /*
+   * The stone of an opening, which is stone that was picked over rather
+   * than picked up, and the mortar packed in behind it.
+   *
+   * It is a real step lighter than the field and the mortar a real step
+   * darker than the field's, because at the far zoom a ring drawn in the
+   * field's own tones is nine pixels of wall doing nothing: the arch goes
+   * and a grey slab with a hole in it is left. `reveal` is what the wall's
+   * own thickness shows in the way through -- warm, because a face turned
+   * from the light loses light and not colour.
+   */
+  dress: '#ded5c4', dressShade: '#bbb0a0', dressHi: '#efe8dc',
+  ringJoint: '#a09a8a', reveal: '#b3ab97',
+  /*
+   * And the one piece of wood in the whole wall.
+   *
+   * A window gets a stone lintel and a course of wedges over it because a
+   * window is small. A doorway is not, and a man who cannot cut a voussoir
+   * is not going to find and dress a stone four feet long either: he lays a
+   * baulk of oak across it and builds on top of that. It is the only thing
+   * in the picture that is not stone, and that is the point of it.
+   */
+  beam: '#b0906a', beamShade: '#927757', beamHi: '#c3a681', beamLine: '#6d5840',
+  // the lit top bevel of each block: its own lit tone, a step lighter
+  stoneHi: '#ddd4c6', warmHi: '#d9cdb3', darkHi: '#bdb9aa', bandHi: '#e3dbcc',
+  blush: '#f2c4c0', blushShade: '#dfa39e', blushLine: '#b9797a',
+  // moss as a stain: the stone's tones pulled half way to the leaf's
+  stain: '#8ca995', stainShade: '#7c9286',
+  band: '#d3c9b8', bandShade: '#b5ae9e', line: '#94896c',
+  /*
+   * Greens. They were sampled off the castle the stone is sampled off, and
+   * they have since been turned the same two turns the whole island took:
+   * round into the teal, then ten degrees back towards green and darker
+   * with it. Sampled off a picture is where they came from and not what
+   * they are any more -- a wall stands in this field, not in that one.
+   * Their line is still a deeper version of themselves.
+   */
+  leaf: '#6bac7e', leafShade: '#6d9981', leafDeep: '#5c8273', leafPale: '#7cc38e', leafLine: '#507b5f',
+  creamShade: '#dacdb3', creamLine: '#9a8e70',
+};
+
+const RUBBLE: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':    { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    warm:  { lit: '#c6bdab', shade: '#a89d8b', hi: '#d3cabb' },
+    dress: { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    brown: { lit: '#c6bba8', shade: '#a89e8c', hi: '#d0c6b5' },
+    green: { lit: '#bdc09b', shade: '#a0a37f', hi: '#cccfaa' },
+    dark:  { lit: '#bdb9a9', shade: '#a5a192', hi: '#c8c4b5' },
+    /*
+     * The two the coping needs and the field does not.
+     *
+     * The wall's four tones sit inside seven steps of luminance of each
+     * other, which on a body course is right -- a wall is one heap of stone
+     * -- and on a coping is a flat stripe, because there are three times as
+     * many stones to the metre and nowhere for the eye to land. `weather` is
+     * a stone the rain has had thirty years of, a real thirty-five steps
+     * down; `bleach` is one that has been face up at the sun as long.
+     */
+    weather: { lit: '#a89e8a', shade: '#8e8674', hi: '#bdb29e' },
+    bleach:  { lit: '#dcd3c2', shade: '#bdb5a4', hi: '#ece5d7' },
+    flat:  { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+  },
+  lay: 'rubble',
+  rows: 4,
+  across: 6,
+  mortar: 3,
+  bandN: 4,
+  plinth: 0,
+  wear: 1,
+  mix: [['warm', 0.07], ['brown', 0.09], ['green', 0.04], ['dark', 0.1]],
+  pairs: ['warm', 'brown'],
+  field: [['weather', 0.2], ['bleach', 0.12], ['warm', 0.12], ['brown', 0.1], ['green', 0.1], ['dark', 0.1]],
+}))(RUBBLE_PASTEL);
 
 /**
- * The five, painted. It takes a moment, and it is done once: every cobblestone
- * wall on the island shares the result, so the cost of it does not go up with
- * the size of a deed.
+ * And brickwork.
+ *
+ * The red is the brick itself and everything else on the wall is one cut
+ * stone, cool and a step down in value from it: the band at each floor line,
+ * the plinth at the ground, the coping of a garden wall, and every jamb,
+ * lintel and voussoir of every opening. Two materials, one warm and one cool,
+ * and the dressings read at any distance because of it -- which is what a
+ * mason is doing when he dresses a brick wall in stone.
+ *
+ * The greens, the oak of a door head and the road are the cobblestone set's,
+ * because ivy is ivy and oak is oak whatever they are growing on.
  */
-export function cobble(): Cobble {
-  if (painted) return painted;
-  const PASTEL = {
-    grass: '#90cfb1', shade: '#7fbca6', sand: '#f3d192', cream: '#f4ecd5',
-    // stone, sampled off the castle: light, mid, and the joints between
-    stone: '#cbc0b0', stoneShade: '#aba796', stoneDark: '#a19d8d', joint: '#aeaa9c',
-    dark: '#b5b1a0',
-    warm: '#ccbea3', warmShade: '#ae9f84',
-    /*
-     * The stone of an opening, which is stone that was picked over rather
-     * than picked up, and the mortar packed in behind it.
-     *
-     * It is a real step lighter than the field and the mortar a real step
-     * darker than the field's, because at the far zoom a ring drawn in the
-     * field's own tones is nine pixels of wall doing nothing: the arch goes
-     * and a grey slab with a hole in it is left. `reveal` is what the wall's
-     * own thickness shows in the way through -- warm, because a face turned
-     * from the light loses light and not colour.
-     */
-    dress: '#ded5c4', dressShade: '#bbb0a0', dressHi: '#efe8dc',
-    ringJoint: '#a09a8a', reveal: '#b3ab97',
-    /*
-     * And the one piece of wood in the whole wall.
-     *
-     * A window gets a stone lintel and a course of wedges over it because a
-     * window is small. A doorway is not, and a man who cannot cut a voussoir
-     * is not going to find and dress a stone four feet long either: he lays a
-     * baulk of oak across it and builds on top of that. It is the only thing
-     * in the picture that is not stone, and that is the point of it.
-     */
-    beam: '#b0906a', beamShade: '#927757', beamHi: '#c3a681', beamLine: '#6d5840',
-    // the lit top bevel of each block: its own lit tone, a step lighter
-    stoneHi: '#ddd4c6', warmHi: '#d9cdb3', darkHi: '#bdb9aa', bandHi: '#e3dbcc',
-    blush: '#f2c4c0', blushShade: '#dfa39e', blushLine: '#b9797a',
-    // moss as a stain: the stone's tones pulled half way to the leaf's
-    stain: '#8ca995', stainShade: '#7c9286',
-    band: '#d3c9b8', bandShade: '#b5ae9e', line: '#94896c',
-    /*
-     * Greens. They were sampled off the castle the stone is sampled off, and
-     * they have since been turned the same two turns the whole island took:
-     * round into the teal, then ten degrees back towards green and darker
-     * with it. Sampled off a picture is where they came from and not what
-     * they are any more -- a wall stands in this field, not in that one.
-     * Their line is still a deeper version of themselves.
-     */
-    leaf: '#6bac7e', leafShade: '#6d9981', leafDeep: '#5c8273', leafPale: '#7cc38e', leafLine: '#507b5f',
-    creamShade: '#dacdb3', creamLine: '#9a8e70',
-  };
-  const TW = 512, TH = 384, MORTAR = 3;                 // a section: 4 m by 3 m, at 128 px to the metre
+const BRICK_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the brick itself: the field tone, its shade, and the bevel along its top
+  stone: '#c57063', stoneShade: '#a9554c', stoneHi: '#d18575', stoneDark: '#854b47',
+  // a sandier one off the same kiln, and one over-fired grey and gone to mauve
+  warm: '#cd9584', warmShade: '#b67768', warmHi: '#d8a897',
+  dark: '#7e585d', darkHi: '#936267',
+  // the mortar it is bedded in, a step under the brick, and the ink round every unit
+  joint: '#8e6f67', line: '#7e4a44',
+  // the cut stone: the dressings of an opening, and the band at a floor line
+  dress: '#7b718e', dressShade: '#655e73', dressHi: '#8d83a0',
+  band: '#716882', bandShade: '#5e576b', bandHi: '#827897',
+  ringJoint: '#7b5d56', reveal: '#5e576b',
+  // and brick with moss in it: the field pulled half way to the leaf
+  stain: '#a99b7e', stainShade: '#928768',
+};
+
+const BRICK: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    brown:   { lit: '#a66159', shade: '#83524e', hi: '#b57369' },
+    green:   { lit: '#988e71', shade: '#7d755e', hi: '#a79f81' },
+    dark:    { lit: P.dark, shade: '#65494d', hi: P.darkHi },
+    // and the stone a plinth is cut from: the dressings, a step further down
+    plinth:  { lit: '#6a6377', shade: '#57516a', hi: '#7b748a' },
+    weather: { lit: '#7c5350', shade: '#614342', hi: '#935e58' },
+    bleach:  { lit: '#c6a99f', shade: '#af8d83', hi: '#d4baaf' },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+  },
+  lay: 'bond',
+  /*
+   * Ten courses of six, which is a brick of 85 by 30 px -- 66 cm by 23, or
+   * about three and a half times life size.
+   *
+   * Real brick at 128 px to the metre is thirty-one courses of nothing
+   * anybody can see, and twelve courses of seven -- the first try at it --
+   * was eighty-four outlined units to a section, which at the zoom the game
+   * is played at is not a wall but a texture. This is the scale the
+   * cobblestone beside it is already drawn at: about three times life, and
+   * long and thin enough against those near-square blocks that the two
+   * masonries tell apart from across a deed.
+   */
+  rows: 10,
+  across: 6,
+  // A brick wall shows more mortar than a rubble one: the joint is most of what
+  // says brick, because every unit is the same size and the joints are the drawing.
+  mortar: 3,
+  bandN: 6,
+  /*
+   * And a plinth at the ground, six courses of the body tall.
+   *
+   * It is the one thing the reference has that a wall of one material cannot:
+   * a heavy cut-stone base the brick is stood on, which is where the weight
+   * of the picture is. It is painted with the ground storey's damp, so it
+   * only ever shows out of doors and stops at a doorway, which is where a
+   * plinth actually stops.
+   */
+  plinth: 106,
+  /*
+   * A third of the wear. Rubble is what the field gave up and a frost gets
+   * into it; a brick was fired to take that. What it does get is a chipped
+   * arris, a crack, and the odd one gone -- not a spalled face.
+   */
+  wear: 0.34,
+  /*
+   * Three units in ten off the field's own tone, not four and a half.
+   *
+   * At the wider mix the wall came out a mosaic: a pale unit, a sandy one, an
+   * olive one and a burnt one all inside two courses, which is a crazy
+   * pavement stood on end. What a brick wall actually is is one hue in a
+   * dozen values, and the values have to sit close enough that the field
+   * reads as a field before any one unit reads as itself.
+   */
+  mix: [['warm', 0.1], ['brown', 0.12], ['green', 0.02], ['dark', 0.07]],
+  pairs: ['warm', 'brown', 'dark'],
+  field: [['weather', 0.08], ['bleach', 0.06], ['warm', 0.1], ['brown', 0.1], ['green', 0.03], ['dark', 0.07]],
+}))(BRICK_PASTEL);
+
+let painted: Masonry | undefined;
+let bricked: Masonry | undefined;
+
+/**
+ * Cobblestone: what a novice lays, out of what the field gave up.
+ *
+ * It takes a moment, and it is done once: every cobblestone wall on the
+ * island shares the result, so the cost of it does not go up with the size of
+ * a deed.
+ */
+export function cobble(): Masonry {
+  return painted ??= paint(RUBBLE);
+}
+
+/**
+ * And brickwork: a kiln-fired unit laid to a line, dressed in cut stone.
+ *
+ * The same picture in every other respect -- the same ivy over it, the same
+ * hedge at its foot, the same arch cut through it -- because those do not
+ * care what the wall is made of.
+ */
+export function brickwork(): Masonry {
+  return bricked ??= paint(BRICK);
+}
+
+function paint(S: Stock): Masonry {
+  const PASTEL = S.pastel;
+  const TONES = S.tones;
+  const TW = 512, TH = 384, MORTAR = S.mortar;           // a section: 4 m by 3 m, at 128 px to the metre
   const EDGE = 16;                                       // nothing private nearer the seam than this
   const BAND = 48;                                       // the flat course at the top of every storey
   const COURSES = 4, CH = (TH - BAND) / COURSES;         // and four courses of blocks under it
@@ -331,39 +527,22 @@ export function cobble(): Cobble {
   /* ---- stone -------------------------------------------------------------- */
   /* The tones a block can take. Most are the pale stone; the rest are sand, a warm brown, a grey-green
    * and the dark grey, all at the reference's low saturation, each with its own lit, shade and bevel. */
-  const TONES: Record<string, { lit: string; shade: string; hi: string }> = {
-    '':    { lit: PASTEL.stone, shade: PASTEL.stoneShade, hi: PASTEL.stoneHi },
-    warm:  { lit: '#c6bdab', shade: '#a89d8b', hi: '#d3cabb' },
-    dress: { lit: PASTEL.dress, shade: PASTEL.dressShade, hi: PASTEL.dressHi },
-    brown: { lit: '#c6bba8', shade: '#a89e8c', hi: '#d0c6b5' },
-    green: { lit: '#bdc09b', shade: '#a0a37f', hi: '#cccfaa' },
-    dark:  { lit: '#bdb9a9', shade: '#a5a192', hi: '#c8c4b5' },
-    /*
-     * The two the coping needs and the field does not.
-     *
-     * The wall's four tones sit inside seven steps of luminance of each
-     * other, which on a body course is right -- a wall is one heap of stone
-     * -- and on a coping is a flat stripe, because there are three times as
-     * many stones to the metre and nowhere for the eye to land. `weather` is
-     * a stone the rain has had thirty years of, a real thirty-five steps
-     * down; `bleach` is one that has been face up at the sun as long.
-     */
-    weather: { lit: '#a89e8a', shade: '#8e8674', hi: '#bdb29e' },
-    bleach:  { lit: '#dcd3c2', shade: '#bdb5a4', hi: '#ece5d7' },
-    flat:  { lit: PASTEL.band, shade: PASTEL.bandShade, hi: PASTEL.bandHi },
-  };
-  /** Which tone the next block takes. Sand and brown come singly or in pairs; the mossy greens are
-   *  rare, twice as common on the two lowest courses, where the wall is damp, and under a crest,
-   *  where it drips. `run` carries a pair over. */
-  function pickTone(R: Rand, course: number, run: Run, underCrest: boolean): string {
+  /** Which tone the next block takes, off the stock's own mix. The mossy greens are rare, twice as
+   *  common on the two lowest courses, where the wall is damp, and again under a crest, where it
+   *  drips; the tones that came in by the load come singly or in pairs, and `run` carries a pair over. */
+  function pickTone(R: Rand, course: number, run: Run, underCrest: boolean, drift?: number): string {
     if (run.left > 0) { run.left--; return run.tone; }
-    const t = R(), low = course >= COURSES - 2, pg = (low ? 0.09 : 0.04) * (underCrest ? 2.5 : 1);
+    // Half the draw, where a drift is given, so the off tones arrive in the
+    // patches a kiln load is laid in rather than one unit at a time.
+    let t = drift === undefined ? R() : R() * 0.5 + drift * 0.5;
+    const low = course >= COURSES - 2;
     let tone = '';
-    if (t < 0.07) tone = 'warm';
-    else if (t < 0.16) tone = 'brown';
-    else if (t < 0.16 + pg) tone = 'green';
-    else if (t < 0.26 + pg) tone = 'dark';
-    if ((tone === 'warm' || tone === 'brown') && R() < 0.4) { run.tone = tone; run.left = 1; }
+    for (const [name, share] of S.mix) {
+      const p = name === 'green' ? share * (low ? 2.25 : 1) * (underCrest ? 2.5 : 1) : share;
+      if (t < p) { tone = name; break; }
+      t -= p;
+    }
+    if (S.pairs.includes(tone) && R() < 0.4) { run.tone = tone; run.left = 1; }
     return tone;
   }
   /** One block: a squarish oval with a wobbly edge, two tones, a line, and a hairline bevel; one in
@@ -374,12 +553,24 @@ export function cobble(): Cobble {
    * few pixels deep, and a lit rim on every one of them turns the top of the
    * wall into a row of keycaps.
    */
-  function stone(g: Ctx, x: number, y: number, w: number, h: number, R: Rand, tone: string, flat?: boolean, tilt?: number, ink = 2.4, bevel = true): Pt[] {
+  function stone(g: Ctx, x: number, y: number, w: number, h: number, R: Rand, tone: string, cut: 'laid' | 'sawn' | 'unit' = 'laid', tilt?: number, ink = 2.4, bevel = true): Pt[] {
     const cx = x + w / 2, cy = y + h / 2;
-    const pts = blob(cx, cy, w / 2, h / 2, 14, R, flat ? 0.26 : 0.28, flat ? 0.16 : 0.28, flat ? 0.025 : 0.05);
-    if (!flat && R() < 0.3) { const k = Math.floor(R() * pts.length); pts[k] = [pts[k][0] * 0.85 + cx * 0.15, pts[k][1] * 0.85 + cy * 0.15]; }
+    const laid = cut === 'laid';
+    /*
+     * A unit off a mould has corners, and at twenty-five pixels deep the
+     * fourteen points a block is drawn with put the nearest one twenty-five
+     * degrees off each corner -- so the curve through their midpoints cut a
+     * quarter of the depth off it and every brick came out a sweet. Twenty
+     * points at a squarer profile puts one within nine degrees of the corner,
+     * which is a brick with the arris still on it and a hand's wobble along
+     * the edges.
+     */
+    const pn = cut === 'unit' ? 20 : 14;
+    const pts = cut === 'unit' ? blob(cx, cy, w / 2, h / 2, pn, R, 0.15, 0.1, 0.018)
+      : blob(cx, cy, w / 2, h / 2, pn, R, laid ? 0.28 : 0.26, laid ? 0.28 : 0.16, laid ? 0.05 : 0.025);
+    if (laid && R() < 0.3) { const k = Math.floor(R() * pts.length); pts[k] = [pts[k][0] * 0.85 + cx * 0.15, pts[k][1] * 0.85 + cy * 0.15]; }
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt); for (const p of pts) { const px = p[0] - cx, py = p[1] - cy; p[0] = cx + px * c - py * s; p[1] = cy + px * s + py * c; } }
-    const T = TONES[flat ? 'flat' : tone] || TONES[''];
+    const T = TONES[tone] || TONES[''];
     solid(g, pts, T.lit, T.shade, PASTEL.line, ink, -w * 0.1, -h * 0.14);
     // the bevel: the block's own outline, shifted a little down and right and clipped to the block,
     // shows as a light band along the top and the upper left, where the light lands
@@ -476,35 +667,144 @@ export function cobble(): Cobble {
     }
     g.restore();
   }
-  /** Wear, on the private stones only, so the seams and the storey line keep their contract. Cobble is
+  /** Wear, on the private stones only, so the seams and the storey line keep their contract. Masonry is
    *  a novice's masonry, and it shows: a chipped corner on one block in five, a crack on one in six, a
    *  flaked edge on one in fourteen, a block sunk deeper on one in twenty and gone on one in fifty;
    *  and over those, an abraded patch on one in five, pits on one in four, mortar squeezed out of one
    *  joint in seven, a water stain under one in seven. */
   function weather(g: Ctx, own: Block[], R: Rand): void {
+    const k = S.wear;
     for (const s of own) {
       const t = R();
-      if (t < 0.18) chipCorner(g, s, R);
-      else if (t < 0.34) crack(g, s, R);
-      else if (t < 0.41) spall(g, s, R);
-      else if (t < 0.46) recessed(g, s, R);
-      else if (t < 0.48) missing(g, s, R);
-      if (R() < 0.22) abrade(g, s, R);
-      if (R() < 0.25) pits(g, s, R);
-      if (R() < 0.15) slop(g, s, R);
-      if (R() < 0.14 && s.course < COURSES - 1) stain(g, s, R);
+      if (t < 0.18 * k) chipCorner(g, s, R);
+      else if (t < 0.34 * k) crack(g, s, R);
+      else if (t < 0.41 * k) spall(g, s, R);
+      else if (t < 0.46 * k) recessed(g, s, R);
+      else if (t < 0.48 * k) missing(g, s, R);
+      if (R() < 0.22 * k) abrade(g, s, R);
+      if (R() < 0.25 * k) pits(g, s, R);
+      if (R() < 0.15 * k) slop(g, s, R);
+      if (R() < 0.14 * k && s.course < COURSES - 1) stain(g, s, R);
     }
   }
   /** Four flat slabs across a row, set half a slab over so the seam falls in the middle of one; that
    *  slab is drawn twice, half either side, from its own seed, so it is the same in every variant. */
   function slabs(g: Ctx, y: number, h: number, R: Rand): void {
-    const n = 4, w = TW / n;
-    for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, '', true);
-    for (const x of [TW - w / 2, -w / 2]) stone(g, x + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, rand(98), '', true);
+    const n = S.bandN, w = TW / n;
+    // A slab of a rubble wall was picked over; a band course on brickwork was
+    // cut to a line, and at this size a rounded corner on it reads as a sweet.
+    const cut: 'sawn' | 'unit' = S.lay === 'bond' ? 'unit' : 'sawn';
+    for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, 'flat', cut);
+    for (const x of [TW - w / 2, -w / 2]) stone(g, x + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, rand(98), 'flat', cut);
   }
+
+  /**
+   * The field of a bond: units of one size, laid to a line in a half lap.
+   *
+   * What the rubble field keeps by hand the bond keeps by the lay. Every
+   * other course is set over by half a unit, so the joints stagger by
+   * themselves and on those courses a unit lies across the section's seam --
+   * drawn at both edges from one seed, so any section butts any other -- while
+   * the courses between leave a joint there no wider than any other joint.
+   * Every fourth course is headers, which is what a wall thick enough to
+   * stand three storeys is actually bonded with, and it is the thing that
+   * stops twelve courses of stretchers reading as ruled paper.
+   *
+   * What is drawn rather than laid is the colour. A kiln fires unevenly and
+   * the load comes out in batches, so a brick wall is one hue in a dozen
+   * values -- and on a wall where every unit is the same size, that is the
+   * whole of what there is to look at.
+   */
+  function paintBond(g: Ctx, R: Rand, crests: Pt[]): Block[] {
+    g.fillStyle = PASTEL.joint;
+    g.fillRect(0, 0, TW, TH);
+    slabs(g, 0, BAND, R);
+    const own: Block[] = [];
+    const ch = (TH - BAND) / S.rows;
+    /*
+     * A coarse field over the section, for what comes in patches rather than
+     * one unit at a time.
+     *
+     * A kiln fires unevenly and a load gets laid where it was set down, so
+     * the colour of a brick wall arrives in drifts a yard or two across.
+     * Rolling every unit on its own gives a tweed; this gives a wall.
+     *
+     * Its left-hand column is drawn from a seed every variant shares and it
+     * wraps in x, so the drift has the same value at both edges of every
+     * section and carries across a seam like everything else here.
+     */
+    const NX = 4, NY = 3;
+    const edge = rand(1601);
+    const grid: number[] = [];
+    for (let j = 0; j <= NY; j++) for (let i = 0; i < NX; i++) grid.push(i === 0 ? edge() : R());
+    const smooth = (t: number): number => t * t * (3 - 2 * t);
+    const at = (i: number, j: number): number => grid[Math.min(NY, j) * NX + (i % NX)];
+    const drift = (x: number, y: number): number => {
+      const u = (x / TW) * NX, v = (y / TH) * NY;
+      const i = Math.floor(u), j = Math.floor(v);
+      const fu = smooth(u - i), fv = smooth(v - j);
+      const top = at(i, j) + (at(i + 1, j) - at(i, j)) * fu;
+      const bot = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * fu;
+      return top + (bot - top) * fv;
+    };
+    /** A unit, laid at `x` on course `i`; returns it if it is this variant's to mark. */
+    const unit = (x: number, uw: number, i: number, ch2: number, RR: Rand, tone: string, sag: number): Block | undefined => {
+      const y = BAND + i * ch;
+      const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
+      const jw = MORTAR + (priv ? RR() * 1.6 : 0);
+      const drift = (RR() - 0.5) * 2.2 + (priv ? sag : 0);
+      const shrink = RR() * 1.8;
+      const b: Block = {
+        x: x + jw / 2,
+        y: y + MORTAR / 2 + drift + shrink / 2,
+        w: uw - jw,
+        h: ch2 - MORTAR - shrink,
+        course: Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES)),
+        pts: [],
+      };
+      // A degree would be a brick somebody dropped in. A bond is laid to a
+      // line and what it has instead is a hand's worth of it, which is a
+      // fortieth of a degree and shows as an edge rather than as a slope.
+      const tilt = priv && RR() < 0.25 ? (RR() - 0.5) * 0.012 : 0;
+      b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', tilt, 1.35);
+      return priv && b.w > 24 ? b : undefined;
+    };
+    for (let i = 0; i < S.rows; i++) {
+      // Headers every fourth course, and the load they came out of was nearer
+      // the fire than the rest of it: a header course is the dark one.
+      const head = i % 4 === 3;
+      const n = head ? S.across * 2 : S.across;
+      const uw = TW / n;
+      const lap = head ? 0 : (i % 2) * 0.5;
+      // The course's own sag, dying out at the section's edges so that the
+      // seam stays level however far the middle of a course has dropped.
+      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.09 * (R() < 0.5 ? -1 : 1);
+      const q = Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES));
+      const run = { tone: '', left: 0 };
+      for (let k = lap ? -1 : 0; k < n; k++) {
+        const x = (k + lap) * uw;
+        const mid = x + uw / 2;
+        const seam = x < 0 || x + uw > TW;
+        const sag = Math.sin(Math.PI * kw * (mid - EDGE) / (TW - 2 * EDGE)) * aw;
+        // The unit across the seam is the same unit in every variant, so it is
+        // laid from a seed of the course's own rather than from the variant's.
+        const RR = seam ? rand(811 + i * 7) : R;
+        const under = !seam && (crests || []).some(([a, b]) => mid > a && mid < b);
+        const tone = head && RR() < 0.3 ? 'dark' : pickTone(RR, q, seam ? { tone: '', left: 0 } : run, under, drift(seam ? 0 : mid, BAND + i * ch));
+        const b = unit(x, uw, i, ch, RR, tone, sag);
+        if (b) own.push(b);
+      }
+    }
+    weather(g, own, R);
+    g.fillStyle = 'rgba(110,100,80,0.16)';
+    g.fillRect(0, BAND, TW, 9);
+    return own;
+  }
+
   /** The band and the courses, the same contract in every variant, then `extras` marks each on a stone
    *  of its own. Returns the stones that are this variant's to mark, with the course each is on. */
   function paintCourses(g: Ctx, R: Rand, crests: Pt[]): Block[] {
+    if (S.lay === 'bond') return paintBond(g, R, crests);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, TH);
     slabs(g, 0, BAND, R);
     const own: Block[] = [];   // not the seam stones, not near the seam
@@ -546,12 +846,12 @@ export function cobble(): Cobble {
           const hh = (sh - MORTAR) / 2;
           for (const [yy, tn] of [[sy, tone], [sy + hh + MORTAR, pickTone(R, i, run, under)]] as Array<[number, string]>) {
             const s: Block = { x: x + jw / 2, y: yy, w: w - jw, h: hh, course: i, pts: [] };
-            s.pts = stone(g, s.x, s.y, s.w, s.h, R, tn, false, 0);
+            s.pts = stone(g, s.x, s.y, s.w, s.h, R, tn, 'laid', 0);
             if (s.w > 40) own.push(s);
           }
         } else {
           const s: Block = { x: x + jw / 2, y: sy, w: w - jw, h: sh, course: i, pts: [] };
-          s.pts = stone(g, s.x, s.y, s.w, s.h, R, tone, false, tilt);
+          s.pts = stone(g, s.x, s.y, s.w, s.h, R, tone, 'laid', tilt);
           if (s.x > EDGE && s.x + s.w < TW - EDGE && s.w > 40) own.push(s);
         }
         x += w;
@@ -782,6 +1082,72 @@ export function cobble(): Cobble {
     const x = s.x + s.w * (0.15 + 0.7 * R()), y = s.y + s.h * (0.3 + 0.5 * R()), rr = 1.5 + 1.5 * R();
     g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = hexA(MOSS.fill, 0.55); g.fill();
   }
+  /**
+   * The plinth: the cut stone a brick wall is stood on at the ground.
+   *
+   * It is the one thing a wall of one material cannot have, and it is where
+   * the weight of the picture is -- twelve courses of brick sitting on
+   * nothing read as wallpaper hung to the grass. Two courses of big blocks
+   * and a chamfered course over them, which is the course that throws the
+   * rain off the brick above and out past the face; without it a plinth is
+   * just the bottom of the wall painted a different colour.
+   *
+   * It goes on with the damp, which means it is only ever seen out of doors
+   * and stops at a doorway, and both of those are where a plinth stops.
+   */
+  function plinthOf(g: Ctx, R: Rand): void {
+    const h = S.plinth, cap = 21, y0 = TH - h;
+    g.fillStyle = PASTEL.ringJoint;
+    g.fillRect(0, y0, TW, h);
+    /** One course of it, `lap` of a block over so the joints stagger at the seam. */
+    const course = (y: number, bh: number, bn: number, lap: number, seed: number, ink: number): void => {
+      const bw = TW / bn;
+      for (let k = lap ? -1 : 0; k < bn; k++) {
+        const x = (k + lap) * bw;
+        const seam = x < 0 || x + bw > TW;
+        const RR = seam ? rand(seed) : R;
+        // No two out of the same bed: a plinth is four stones to the section
+        // and four of one tone is a painted skirting rather than masonry.
+        const t = RR();
+        stone(g, x + MORTAR / 2, y, bw - MORTAR, bh, RR, t < 0.3 ? 'plinth' : t < 0.42 ? 'weather' : 'dress', 'unit', 0, ink);
+      }
+    };
+    /*
+     * One course, not two. Two courses of the band's own depth read as the
+     * band again, at the bottom of the wall instead of the top; a plinth is a
+     * bigger stone than anything above it, and one metre by two thirds is the
+     * size it has to be before the brick reads as standing on something.
+     */
+    course(y0 + cap + MORTAR / 2, h - cap - MORTAR, 4, 0, 331, 2.2);
+    course(y0 + MORTAR / 2, cap - MORTAR, 5, 0.5, 457, 1.7);
+    /*
+     * And the chamfer read as a slope rather than as a stripe: it is a face
+     * turned up at the sky, so it goes from near its own lit tone at the top
+     * to the shade at the bottom, over the stones rather than instead of
+     * them. The brick above it stands back, and the line of shade under that
+     * setback is the whole of what says the plinth stands proud.
+     */
+    const sl = g.createLinearGradient(0, y0, 0, y0 + cap);
+    sl.addColorStop(0, hexA(PASTEL.dressHi, 0.78));
+    sl.addColorStop(0.55, hexA(PASTEL.dressHi, 0.24));
+    sl.addColorStop(1, 'rgba(44, 36, 42, 0.3)');
+    g.fillStyle = sl;
+    g.fillRect(0, y0, TW, cap);
+    g.fillStyle = 'rgba(42, 34, 40, 0.42)';
+    g.fillRect(0, y0 - 5, TW, 5);
+    /*
+     * And the damp up the foot of it. A plinth is the part of a wall the rain
+     * lands on twice -- once falling and once off the ground -- and it is the
+     * one place on a building where that is worth drawing, because it is the
+     * line where the wall stops and the grass starts.
+     */
+    const wet = g.createLinearGradient(0, TH, 0, TH - h * 0.55);
+    wet.addColorStop(0, 'rgba(40, 34, 40, 0.34)');
+    wet.addColorStop(1, 'rgba(40, 34, 40, 0)');
+    g.fillStyle = wet;
+    g.fillRect(0, TH - h * 0.55, TW, h * 0.55);
+  }
+
   /** The foot of the ground storey: a band of shade along the ground line; one to three lenses of moss
    *  on as many different courses of the lowest three, one of them now and then rising from the ground
    *  line itself; three to six flecks in the corners of joints low down; a dab or two on the bricks. */
@@ -925,7 +1291,7 @@ export function cobble(): Cobble {
       // reveal, which reads as the seam between two wall tiles.
       const w = (course++ % 2 ? 46 : 74) + R() * 16;
       const x = side < 0 ? line + OVER - w : line - OVER;
-      const pts = stone(g, x, y, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.035);
+      const pts = stone(g, x, y, w, h, R, pickDressed(R), 'laid', (R() - 0.5) * 0.035);
       wearOne(g, pts, R);
       y += h + MORTAR + R() * 3;
     }
@@ -953,7 +1319,7 @@ export function cobble(): Cobble {
     // begins, and a mason who can lay nothing else lays this one square.
     const deep = A_R * 0.48;
     const x = side < 0 ? line - deep : line - OVER;
-    const pts = stone(g, x, A_CY - 3, deep + OVER, IMPOST_H + 3, R, 'dress', false, (R() - 0.5) * 0.015);
+    const pts = stone(g, x, A_CY - 3, deep + OVER, IMPOST_H + 3, R, 'dress', 'laid', (R() - 0.5) * 0.015);
     wearOne(g, pts, R);
   }
 
@@ -1075,7 +1441,7 @@ export function cobble(): Cobble {
       if (R() > 0.45 || j === crown || j === crown + 1) continue;
       const w = 7 + R() * 5, h = w * (0.6 + 0.3 * R());
       const [cx, cy] = at(j, lip(j) + 0.012 + R() * 0.025);
-      wearOne(g, stone(g, cx - w / 2, cy - h / 2, w, h, R, R() < 0.35 ? 'dark' : 'dress', false, (R() - 0.5) * 0.6), R);
+      wearOne(g, stone(g, cx - w / 2, cy - h / 2, w, h, R, R() < 0.35 ? 'dark' : 'dress', 'laid', (R() - 0.5) * 0.6), R);
     }
   }
 
@@ -1127,7 +1493,7 @@ export function cobble(): Cobble {
       const h = 34 + R() * 20;
       const w = (course++ % 2 ? wide * 0.68 : wide) + R() * 14;
       const x = side < 0 ? line + OVER - w : line - OVER;
-      wearOne(g, stone(g, x, y - h, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.03), R);
+      wearOne(g, stone(g, x, y - h, w, h, R, pickDressed(R), 'laid', (R() - 0.5) * 0.03), R);
       y -= h + MORTAR + R() * 3;
     }
   }
@@ -1184,18 +1550,18 @@ export function cobble(): Cobble {
     const top = lintelTop(head);
     winPocket(g, R, x0, x1, top - 46, sill);
     // The sill first, because everything either side of the hole stands on it.
-    wearOne(g, stone(g, x0 - 16 - shelf, sill - 4, x1 - x0 + 32 + shelf * 2, 24 + shelf, R, 'dress', false, (R() - 0.5) * 0.012), R);
+    wearOne(g, stone(g, x0 - 16 - shelf, sill - 4, x1 - x0 + 32 + shelf * 2, 24 + shelf, R, 'dress', 'laid', (R() - 0.5) * 0.012), R);
     winJamb(g, R, -1, x0, x1, head, sill, wide);
     winJamb(g, R, 1, x0, x1, head, sill, wide);
     relieving(g, R, x0, x1, head);
     // And the lintel over the jambs, under the wedges: one lump if he was
     // lucky with the quarry, two meeting over the middle if he was not.
     if (R() < 0.42 && x1 - x0 < 250) {
-      wearOne(g, stone(g, x0 - 18, top, x1 - x0 + 36, LINTEL, R, 'dress', false, (R() - 0.5) * 0.008), R);
+      wearOne(g, stone(g, x0 - 18, top, x1 - x0 + 36, LINTEL, R, 'dress', 'laid', (R() - 0.5) * 0.008), R);
     } else {
       const mid = (x0 + x1) / 2 + (R() - 0.5) * 30;
-      wearOne(g, stone(g, x0 - 18, top, mid - x0 + 18, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
-      wearOne(g, stone(g, mid, top, x1 + 18 - mid, LINTEL, R, 'dress', false, (R() - 0.5) * 0.01), R);
+      wearOne(g, stone(g, x0 - 18, top, mid - x0 + 18, LINTEL, R, 'dress', 'laid', (R() - 0.5) * 0.01), R);
+      wearOne(g, stone(g, mid, top, x1 + 18 - mid, LINTEL, R, 'dress', 'laid', (R() - 0.5) * 0.01), R);
     }
   }
 
@@ -1233,7 +1599,7 @@ export function cobble(): Cobble {
       const h = tall ? 70 + R() * 24 : 26 + R() * 12;
       const w = (tall ? 44 : 62) + R() * 14;
       const x = side < 0 ? line + OVER - w : line - OVER;
-      wearOne(g, stone(g, x, y, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.022), R);
+      wearOne(g, stone(g, x, y, w, h, R, pickDressed(R), 'laid', (R() - 0.5) * 0.022), R);
       y += h + MORTAR + R() * 3;
       tall = !tall;
     }
@@ -1316,7 +1682,7 @@ export function cobble(): Cobble {
       for (const side of [-1, 1]) {
         const line = side < 0 ? x0 : x1;
         const a = side < 0 ? line - 20 : line - reach;
-        wearOne(g, stone(g, a, head - CORBEL_H, reach + 20, CORBEL_H + 3, R, 'dress', false, (R() - 0.5) * 0.01), R);
+        wearOne(g, stone(g, a, head - CORBEL_H, reach + 20, CORBEL_H + 3, R, 'dress', 'laid', (R() - 0.5) * 0.01), R);
       }
     }
     baulk(g, R, x0 - 22 + reach * 0.8, x1 + 22 - reach * 0.8, bTop, deep);
@@ -1502,8 +1868,9 @@ export function cobble(): Cobble {
    * one in eight bleached, and the rest off the wall's own four.
    */
   function fieldTone(R: Rand): string {
-    const t = R();
-    return t < 0.2 ? 'weather' : t < 0.32 ? 'bleach' : t < 0.44 ? 'warm' : t < 0.54 ? 'brown' : t < 0.64 ? 'green' : t < 0.74 ? 'dark' : '';
+    let t = R();
+    for (const [name, share] of S.field) { if (t < share) return name; t -= share; }
+    return '';
   }
   /** The seed a variant's coping is laid from: its widths and its tones, face and top alike. */
   const copeSeed = (v: number): number => v * 911 + 7;
@@ -1531,6 +1898,9 @@ export function cobble(): Cobble {
   /** Their tones, drawn up front so the face and the top take them in step. */
   function copeTones(seed: number, n: number): string[] {
     const R = rand(seed + 41);
+    // A brick wall's coping is cut stone, like every other dressing on it. A
+    // dry field wall's is whatever came off the same heap as the rest of it.
+    if (S.lay === 'bond') return Array.from({ length: n }, () => (R() < 0.32 ? 'plinth' : 'dress'));
     return Array.from({ length: n }, () => fieldTone(R));
   }
 
@@ -1555,7 +1925,7 @@ export function cobble(): Cobble {
     const rise = packer ? COPE_RISE * (0.55 + R() * 0.45) : R() < 0.19 ? -(3 + R() * 6) : COPE_RISE * (0.2 + R() * 0.8);
     const lean = tip + (R() - 0.5) * (rise > 5 ? 0.3 : 0.1);
     const gap = packer ? 0.8 : MORTAR - 1.8;
-    wearOne(g, stone(g, x + gap / 2, rise, Math.max(4, w - gap), COPE - MORTAR / 2 - rise, R, tone, false, lean, COPE_INK), R);
+    wearOne(g, stone(g, x + gap / 2, rise, Math.max(4, w - gap), COPE - MORTAR / 2 - rise, R, tone, 'laid', lean, COPE_INK), R);
   }
 
   function coping(g: Ctx, seed: number): void {
@@ -1611,7 +1981,7 @@ export function cobble(): Cobble {
     const pack = (x: number, w: number, RR: Rand, tone: string): void => {
       const sh = room * (0.52 + 0.48 * RR());
       const sy = COPE + J / 2 + (room - sh) * RR();
-      stone(g, x + J / 2, sy, w - J, sh, RR, tone, false, (RR() - 0.5) * 0.12, ink);
+      stone(g, x + J / 2, sy, w - J, sh, RR, tone, 'laid', (RR() - 0.5) * 0.12, ink);
     };
     const w0 = LEVEL_SEAM[1] - LEVEL_SEAM[0];
     for (const x of [LEVEL_SEAM[0], TW + LEVEL_SEAM[0]]) pack(x, w0, rand(229), '');
@@ -1639,6 +2009,7 @@ export function cobble(): Cobble {
    * six, at eighty pixels by fifty, is the same masonry as the house.
    */
   function lowCourses(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
+    if (S.lay === 'bond') return lowBond(g, R, fh, rows);
     const top = COPE + LEVEL;
     /*
      * Courses of unequal depth, the deepest at the bottom.
@@ -1705,15 +2076,55 @@ export function cobble(): Cobble {
           const hh = (sh - MORTAR) / 2;
           for (const [yy, tn] of [[sy, tone], [sy + hh + MORTAR, pickTone(R, i, run, false)]] as Array<[number, string]>) {
             const b: Block = { x: x + jw / 2, y: yy, w: w - jw, h: hh, course: i, pts: [] };
-            b.pts = stone(g, b.x, b.y, b.w, b.h, R, tn, false, 0);
+            b.pts = stone(g, b.x, b.y, b.w, b.h, R, tn, 'laid', 0);
             if (b.w > 40) own.push(b);
           }
         } else {
           const b: Block = { x: x + jw / 2, y: sy, w: w - jw, h: sh, course: i, pts: [] };
-          b.pts = stone(g, b.x, b.y, b.w, b.h, R, tone, false, priv && R() < 0.4 ? (R() - 0.5) * 0.08 : 0);
+          b.pts = stone(g, b.x, b.y, b.w, b.h, R, tone, 'laid', priv && R() < 0.4 ? (R() - 0.5) * 0.08 : 0);
           if (priv && b.w > 40) own.push(b);
         }
         x += w;
+      }
+    }
+    return own;
+  }
+
+
+  /**
+   * And a garden wall in a bond, which is the same lay at the same unit size
+   * as the house: the courses are counted off the room under the coping
+   * rather than divided into it, so a brick is a brick however high the wall
+   * is. There is no header course in it -- a wall you can see over is one
+   * unit thick, and there is nothing for a header to bond to.
+   */
+  function lowBond(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
+    const top = COPE + LEVEL;
+    const own: Block[] = [];
+    const n = S.across, uw = TW / n, ch = (fh - top) / rows;
+    for (let i = 0; i < rows; i++) {
+      const y = top + i * ch;
+      const lap = (i % 2) * 0.5;
+      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.09 * (R() < 0.5 ? -1 : 1);
+      const run = { tone: '', left: 0 };
+      for (let k = lap ? -1 : 0; k < n; k++) {
+        const x = (k + lap) * uw, mid = x + uw / 2;
+        const seam = x < 0 || x + uw > TW;
+        const RR = seam ? rand(647 + i * 11) : R;
+        const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
+        // A garden wall was laid out of what was left over, so it carries the
+        // weathered and the bleached units a house wall was picked clear of.
+        const tone = !seam && RR() < 0.3 ? fieldTone(RR) : pickTone(RR, i + COURSES - rows, seam ? { tone: '', left: 0 } : run, false);
+        const jw = MORTAR + (priv ? RR() * 1.6 : 0);
+        const drift = (RR() - 0.5) * 2.2 + (priv ? Math.sin(Math.PI * kw * (mid - EDGE) / (TW - 2 * EDGE)) * aw : 0);
+        const shrink = RR() * 1.8;
+        // The bottom course runs past the picture and the canvas edge cuts it,
+        // the way the hedge at its foot already does: a wall a metre and a
+        // quarter high is mostly its ground line, and a ruled one shows.
+        const bh = ch - MORTAR - shrink + (i === rows - 1 ? 4 + RR() * 4 : 0);
+        const b: Block = { x: x + jw / 2, y: y + MORTAR / 2 + drift + shrink / 2, w: uw - jw, h: bh, course: i, pts: [] };
+        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', priv && RR() < 0.25 ? (RR() - 0.5) * 0.012 : 0, 1.35);
+        if (priv && b.w > 24) own.push(b);
       }
     }
     return own;
@@ -1958,7 +2369,11 @@ export function cobble(): Cobble {
   });
   const FOOT = VARIANTS.map((v, i) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    footMoss(g, STONES[i].slice(), v.extras.moss, rand(v.seed * 19 + 7));
+    if (S.plinth) plinthOf(g, rand(v.seed * 23 + 11));
+    // Moss grows on what is there to grow on: a unit the plinth now covers is
+    // not, so it does not get a lens of it hanging in front of cut stone.
+    const on = S.plinth ? STONES[i].filter((b) => b.y + b.h < TH - S.plinth) : STONES[i].slice();
+    footMoss(g, on, v.extras.moss, rand(v.seed * 19 + 7));
     return c;
   });
   /** The cap's stone, the same for every variant, drawn under the island's light. */
@@ -1971,8 +2386,17 @@ export function cobble(): Cobble {
   const ENDS = (() => {
     const Wc = 64, c = cnv(Wc, TH), g = ctxOf(c), R = rand(7);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, Wc, TH);
-    stone(g, MORTAR / 2, MORTAR / 2, Wc - MORTAR, BAND - MORTAR, R, '', true);
-    for (let i = 0; i < COURSES; i++) stone(g, MORTAR / 2, BAND + i * CH + MORTAR / 2, Wc - MORTAR, CH - MORTAR, R, ['', 'brown', 'green', ''][i]);
+    stone(g, MORTAR / 2, MORTAR / 2, Wc - MORTAR, BAND - MORTAR, R, 'flat', 'sawn');
+    // A bond seen end on is one header to the thickness of the wall, so the
+    // end of it has as many courses as the face does and no bond to show.
+    const rows = S.lay === 'bond' ? S.rows : COURSES;
+    const ch = (TH - BAND) / rows;
+    const run = { tone: '', left: 0 };
+    for (let i = 0; i < rows; i++) {
+      const tone = S.lay === 'bond' ? pickTone(R, Math.floor((i / rows) * COURSES), run, false) : ['', 'brown', 'green', ''][i];
+      stone(g, MORTAR / 2, BAND + i * ch + MORTAR / 2, Wc - MORTAR, ch - MORTAR, R, tone,
+        S.lay === 'bond' ? 'unit' : 'laid', 0, S.lay === 'bond' ? 1.35 : 2.4);
+    }
     return c;
   })();
   /**
@@ -1996,7 +2420,8 @@ export function cobble(): Cobble {
     // As many courses as the room under the coping and its levelling course
     // allows, at the size the tall wall's stones are, so a fence and a house
     // are the same masonry rather than the same masonry and some brickwork.
-    const rows = Math.max(2, Math.round((fh - COPE - LEVEL) / (CH * 0.66)));
+    const unitH = S.lay === 'bond' ? (TH - BAND) / S.rows : CH * 0.66;
+    const rows = Math.max(S.lay === 'bond' ? 3 : 2, Math.round((fh - COPE - LEVEL) / unitH));
     const face = VARIANTS.map((v) => {
       const c = cnv(TW, fh + PROUD), g = ctxOf(c);
       g.translate(0, PROUD);
@@ -2085,11 +2510,11 @@ export function cobble(): Cobble {
         const run = CAP_H - j0 - j1;
         if (RR() < 0.26) {
           const a = run * (0.4 + RR() * 0.2);
-          void stone(g, x + MORTAR / 2, j0, w - MORTAR, a, RR, tone, false, tilt, 1.05, false);
-          void stone(g, x + MORTAR / 2, j0 + a + 2, w - MORTAR, run - a - 2, RR, RR() < 0.5 ? 'weather' : '', false, -tilt, 1.05, false);
+          void stone(g, x + MORTAR / 2, j0, w - MORTAR, a, RR, tone, 'laid', tilt, 1.05, false);
+          void stone(g, x + MORTAR / 2, j0 + a + 2, w - MORTAR, run - a - 2, RR, RR() < 0.5 ? 'weather' : '', 'laid', -tilt, 1.05, false);
           return;
         }
-        void stone(g, x + MORTAR / 2, j0, w - MORTAR, run, RR, tone, false, tilt, 1.05, false);
+        void stone(g, x + MORTAR / 2, j0, w - MORTAR, run, RR, tone, 'laid', tilt, 1.05, false);
       };
       top(COPE_SEAM[0], w0, rand(313), '');
       top(TW + COPE_SEAM[0], w0, rand(313), '');
@@ -2118,7 +2543,7 @@ export function cobble(): Cobble {
       let cx = 0, ex = 0;
       for (const [f, tone, up] of [[0.36, '', 5], [0.34, 'weather', 1], [0.3, 'bleach', 7]] as Array<[number, string, number]>) {
         const w = f * Wc;
-        stone(g, cx + 1, up, w - 2, COPE - MORTAR / 2 - up, R, tone, false, (R() - 0.5) * 0.06, COPE_INK);
+        stone(g, cx + 1, up, w - 2, COPE - MORTAR / 2 - up, R, tone, 'laid', (R() - 0.5) * 0.06, COPE_INK);
         cx += w;
       }
       // Not `flat`: a flat stone takes `TONES.flat` and nothing else, which is
@@ -2127,7 +2552,7 @@ export function cobble(): Cobble {
       // the run shows a course of packing.
       for (const [f, tn] of [[0.38, 'weather'], [0.34, 'dark'], [0.28, 'brown']] as Array<[number, string]>) {
         const w = f * Wc;
-        stone(g, ex + 1, COPE + 1 + R() * 2, w - 2, LEVEL - 3, R, tn, false, (R() - 0.5) * 0.08, 0.9);
+        stone(g, ex + 1, COPE + 1 + R() * 2, w - 2, LEVEL - 3, R, tn, 'laid', (R() - 0.5) * 0.08, 0.9);
         ex += w;
       }
       const ch = (fh - COPE - LEVEL) / rows;
@@ -2158,10 +2583,10 @@ export function cobble(): Cobble {
         let y = fh - 2;
         while (y > COPE + LEVEL - 4) {
           const h = 28 + R() * 16, w = 34 + R() * 14;
-          wearOne(g, stone(g, side < 0 ? line + OVER - w : line - OVER, y - h, w, h, R, pickDressed(R), false, (R() - 0.5) * 0.02), R);
+          wearOne(g, stone(g, side < 0 ? line + OVER - w : line - OVER, y - h, w, h, R, pickDressed(R), 'laid', (R() - 0.5) * 0.02), R);
           y -= h + MORTAR + R() * 2;
         }
-        wearOne(g, stone(g, side < 0 ? line + OVER - 52 : line - OVER, MORTAR / 2, 52, COPE + LEVEL - MORTAR, R, 'dress', false, (R() - 0.5) * 0.015), R);
+        wearOne(g, stone(g, side < 0 ? line + OVER - 52 : line - OVER, MORTAR / 2, 52, COPE + LEVEL - MORTAR, R, 'dress', 'laid', (R() - 0.5) * 0.015), R);
         // A pier stands proud of the wall it interrupts, so it throws a line
         // of shadow down the field side of itself. Without one it is a paler
         // patch of the same wall in the same plane, and the step up at the
@@ -2195,7 +2620,7 @@ export function cobble(): Cobble {
       g.translate(0, PROUD);
       for (const side of [-1, 1]) {
         const x = side < 0 ? gx0 + OVER - 52 : gx1 - OVER;
-        wearOne(g, stone(g, x, 2, 52, CAP_H - 4, R, 'dress', false, (R() - 0.5) * 0.02, 1.2, false), R);
+        wearOne(g, stone(g, x, 2, 52, CAP_H - 4, R, 'dress', 'laid', (R() - 0.5) * 0.02, 1.2, false), R);
       }
       // Last, not first. The pier stones overhang into the gap the way every
       // other dressed stone in this file does, and cutting before drawing
@@ -2460,7 +2885,7 @@ export function cobble(): Cobble {
     return out;
   };
 
-  painted = {
+  return {
     face: FACE,
     arch: ARCHED,
     archIvy: ARCH_IVY,
@@ -2494,7 +2919,6 @@ export function cobble(): Cobble {
     neutral: NEUTRAL,
     tells: VARIANTS.map((v) => v.tells),
   };
-  return painted;
 }
 
 /**
@@ -2507,8 +2931,10 @@ export function cobble(): Cobble {
  * up; whoever gets to a wall before the idle does pays for it as before, and
  * the answer is the same one either way.
  */
-export function warmCobble(): void {
+export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
-  if (typeof idle === 'function') idle(() => { cobble(); });
-  else setTimeout(() => { cobble(); }, 1500);
+  // Two sets, on two idles: painting both back to back is twice the pause,
+  // and the second one is only wanted by whoever has built in brick.
+  if (typeof idle === 'function') idle(() => { cobble(); idle(() => { brickwork(); }); });
+  else setTimeout(() => { cobble(); setTimeout(() => { brickwork(); }, 800); }, 1500);
 }
