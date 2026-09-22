@@ -740,6 +740,20 @@ interface Ground {
    * is two of those at once.
    */
   shape: Shape;
+  /**
+   * And, rarely, how far its tones are let stand off it, overriding the one
+   * the shape would pick.
+   *
+   * `TONES` was measured on the meadow, which sits in the middle of the
+   * range with room above and below. A ground at the end of the range has
+   * neither. Snow is the case: at a lightness of 0.94 the pale tones clip
+   * against white and vanish, and the dark ones come down a long way into a
+   * blue that is nothing like a shadow on snow -- a drift came out as a
+   * short dark streak with no crest at all. Held close, the same offsets
+   * give what a drift on a white field actually is, which is a soft blue
+   * shade and no highlight worth the name.
+   */
+  stand?: number;
 }
 
 const GROUNDS: Partial<Record<TileType, Ground>> = {
@@ -871,6 +885,25 @@ const GROUNDS: Partial<Record<TileType, Ground>> = {
     seed: 3000, scale: 2.8, flat: 0.5, rarity: 2.2, shape: 'swell',
   },
   /*
+   * A snowfield is dunes by another name. Wind does the same thing to dry
+   * snow that it does to dry sand -- broad low drifts, and long ridges of
+   * them lying across the way it blew -- so it is the same painter at very
+   * nearly the same size, and for the same reason: a drift is not a thing
+   * lying on the snow, it is the snow.
+   *
+   * Two things differ. It is a good deal commoner, because a beach is
+   * mostly flat with a swell in it here and there while a snowfield above
+   * the treeline has been worked over end to end and little of it is level.
+   * And it is held much closer to the ground than a dune is -- see `stand`,
+   * which exists for this one case.
+   */
+  [TileType.Snow]: {
+    word: 'snow',
+    palest: 'the crest of a drift, with the sun straight down on it',
+    deepest: 'the trough behind one, out of the wind and out of the light',
+    seed: 10000, scale: 5, flat: 0.4, rarity: 1.1, shape: 'swell', stand: 0.5,
+  },
+  /*
    * And a beach is dunes: the widest of the lot and the rarest, so a stretch
    * of sand is clean colour with one swell in it here and there. A dune is
    * not a thing lying on the beach, it is the beach -- the sun along the top
@@ -902,7 +935,8 @@ export function strew(type: TileType): Strew {
   const had = painted.get(type);
   if (had) return had;
   const ground = GROUNDS[type] ?? (GROUNDS[TileType.Grass] as Ground);
-  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color, ground.shape === 'swell' ? SWELL_STAND : 1);
+  const stand = ground.stand ?? (ground.shape === 'swell' ? SWELL_STAND : 1);
+  const [DEEP, MID, PALE] = greensOf(TILE_DEFS[type].color, stand);
 
   /*
    * The blobs. Sizes are screen pixels at zoom one, where a tile is
