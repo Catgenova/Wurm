@@ -483,6 +483,20 @@ export function treeSprite(species: number, variant: number): Sprite {
   // How thick this species runs in the trunk. One bark at one width across
   // seventeen species was a fair part of what made them look like one tree.
   const girth = 0.78 + 0.5 * wob(seed, 100);
+  /*
+   * The species' own edge rule: how many bulges go round a crown of it, how
+   * far they carry, and whether it is bitten into anywhere.
+   *
+   * Five species wore the parasol and the only things telling them apart were
+   * how big they were and what colour they were, so the middle of a wood came
+   * out as a mat of one mushroom at five sizes. Lobe count and lobe depth
+   * change an outline far more than scale does -- three big bulges is a
+   * different tree from nine small ones at the same width -- and they cost
+   * nothing, because the crown painter already takes both.
+   */
+  const lobes = 3 + Math.floor(wob(seed, 101) * 6);
+  const rough = 0.14 + 0.13 * wob(seed, 102);
+  const bitten = wob(seed, 103) > 0.45 ? 0.1 + 0.8 * wob(seed, 104) : 0;
   spr = makeSprite(SPRITE_W, SPRITE_H, AX, AY, (ctx) => {
     const bx = AX;
     const by = AY;
@@ -691,7 +705,7 @@ export function treeSprite(species: number, variant: number): Sprite {
       const stack: Mass = (dx, dy) => {
         for (let i = 0; i < plates; i++) {
           const [px, py, prx, pry] = shelfAt(i);
-          lobed(ctx, px + dx, py + dy, prx, pry, seed + i, 5, 0.14);
+          lobed(ctx, px + dx, py + dy, prx, pry, seed + i, lobes, rough * 0.8);
         }
       };
       lightOn(ctx, stack, canopy, bx, by - th - (plates - 1) * step * 0.5, 20 * size,
@@ -720,7 +734,7 @@ export function treeSprite(species: number, variant: number): Sprite {
       fork(ctx, bx + lean, by - th, rx * 1.05, 11 * size, seed, def.trunk, 4);
       const split = wob(seed, 84) > 0.5;
       lightOn(ctx, (dx, dy) => {
-        lobed(ctx, hx + dx, cy + dy, rx * (split ? 0.78 : 1), ry * (split ? 0.86 : 1), seed, 4, 0.22, 0.1);
+        lobed(ctx, hx + dx, cy + dy, rx * (split ? 0.78 : 1), ry * (split ? 0.86 : 1), seed, lobes, rough, 0.1, bitten);
         // Half of them carry the head in two pieces with sky between.
         if (split) lobed(ctx, hx - tilt * rx * 0.95 + dx, cy + ry * 0.5 + dy, rx * 0.5, ry * 0.42, seed + 7.7, 3, 0.2);
       }, canopy, hx, cy, rx, ry, seed);
@@ -751,8 +765,8 @@ export function treeSprite(species: number, variant: number): Sprite {
         lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, ly + dy, rx * 0.86, ry * 0.8, seed + 5.5, 6, 0.17),
           canopy, cx, ly, rx * 0.86, ry * 0.8, seed + 5.5);
       }
-      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, 6, 0.17,
-        waisted < 0.33 ? 0.45 : 0), canopy, cx, cy, rx, ry, seed);
+      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, lobes, rough,
+        waisted < 0.33 ? 0.45 : 0, bitten), canopy, cx, cy, rx, ry, seed);
       if (!grown) branches(ctx, cx, cy + ry * 0.5, size * 0.6, dulled(def.trunk, 0.3), 2);
       if (fruit) fruiting(ctx, cx, cy + ry * 0.3, rx, ry * 0.5, seed, fruit);
       return;
@@ -775,7 +789,7 @@ export function treeSprite(species: number, variant: number): Sprite {
       stem(ctx, bx, by, 6 * size * girth, th, lean, def.trunk);
       fork(ctx, bx + lean, by - th, rx * 0.46, 15 * size, seed, def.trunk, 3);
       const nick = bite > 0 ? 0.02 : 0.48;
-      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, 4, 0.2, 0, nick),
+      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, lobes, rough, 0, nick),
         canopy, cx, cy, rx, ry, seed);
       if (!grown) branches(ctx, cx, cy, size * 0.8, dulled(def.trunk, 0.3), 3);
       if (fruit) fruiting(ctx, cx, cy, rx, ry, seed, fruit);
@@ -819,7 +833,7 @@ export function treeSprite(species: number, variant: number): Sprite {
           const spin = (u - 0.5) * 1.5;
           lobed(ctx, Math.sin(spin) * rx * 0.46, -Math.cos(spin) * ry * 0.26,
             rx * (0.6 + 0.16 * wob(seed, k + 30)), ry * (0.58 + 0.2 * wob(seed, k + 35)),
-            seed + k * 2.3, 3, 0.2, 0.3);
+            seed + k * 2.3, Math.max(3, lobes - 2), rough, 0.3);
         }
         ctx.restore();
       };
@@ -876,7 +890,7 @@ export function treeSprite(species: number, variant: number): Sprite {
     const crown: Mass = (dx, dy) => {
       for (let i = 0; i < decks; i++) {
         const [px, py, prx, pry] = plateAt(i);
-        lobed(ctx, px + dx, py + dy, prx, pry, seed + i * 2.4, 4, 0.2, 0.34);
+        lobed(ctx, px + dx, py + dy, prx, pry, seed + i * 2.4, lobes, rough, 0.34, i === 0 ? bitten : 0);
       }
     };
     lightOn(ctx, crown, canopy, cx, cy - (decks - 1) * 5 * size, rx, (decks * 5 + 6) * size, seed);

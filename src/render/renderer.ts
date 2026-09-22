@@ -58,6 +58,13 @@ import { Dust } from './dust';
 import { Gaits } from './gait';
 import type { Peer } from '../game/roster';
 import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
+
+/**
+ * How many steps the distance is mixed in. Enough that the banding is under
+ * the eye, few enough that a wood builds a handful of copies per sprite
+ * rather than one per tree per frame.
+ */
+const HAZE_STEPS = 6;
 import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
@@ -600,9 +607,53 @@ export class Renderer {
    * on the way out and come out softer than it does now.
    */
   private scaled = new Map<HTMLCanvasElement, HTMLCanvasElement>();
+  /** The distance-mixed copies of each rescaled sprite, one per haze step. */
+  private hazes = new WeakMap<HTMLCanvasElement, HTMLCanvasElement[]>();
   private scaledAt = -1;
 
   /** The same sprite, already down to `w` by `h` CSS pixels. */
+  /**
+   * The same picture with the distance mixed into it, at full opacity.
+   *
+   * Distance used to be done by laying the tree on thinner, which is the
+   * obvious thing and the wrong one: a half-transparent tree is a tree you
+   * can see through, so the bushes and the conifer fronds standing behind a
+   * far crown read straight out through the front of it. Shapes reading as
+   * flat cutouts is the first thing this whole look rests on, and a faded
+   * tree is not a cutout, it is a stain.
+   *
+   * So the colours are mixed toward the distance instead and the thing stays
+   * solid. `source-atop` does it inside the sprite's own alpha, which is why
+   * it has to happen on a canvas of its own -- done straight onto the
+   * picture it would wash the ground round the tree as well as the tree.
+   *
+   * Six steps rather than a continuous amount, and each step kept against
+   * the already-scaled canvas, so a wood of a hundred trees builds at most
+   * six of these per sprite per zoom instead of one per tree per frame.
+   */
+  private hazed(ready: HTMLCanvasElement, step: number): HTMLCanvasElement {
+    let steps = this.hazes.get(ready);
+    if (!steps) {
+      steps = [];
+      this.hazes.set(ready, steps);
+    }
+    const had = steps[step];
+    if (had) return had;
+    const cv = document.createElement('canvas');
+    cv.width = ready.width;
+    cv.height = ready.height;
+    const g = cv.getContext('2d');
+    if (g) {
+      g.drawImage(ready, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      g.globalAlpha = (step / HAZE_STEPS) * 0.62;
+      g.fillStyle = css(this.sky.far);
+      g.fillRect(0, 0, cv.width, cv.height);
+    }
+    steps[step] = cv;
+    return cv;
+  }
+
   private atSize(src: HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
     const had = this.scaled.get(src);
     if (had) return had;
@@ -2102,19 +2153,20 @@ export class Renderer {
          * same thing: every tree takes a different amount of the floor up
          * into itself.
          */
-        const solid = (1 - far * 0.62) * (0.9 + 0.1 * hash2(Math.round(ent.x), Math.round(ent.y), 4231));
+        // How far off it is, in steps, plus a little of its own so no two
+        // trees of a species carry quite the same weight of colour.
+        const own = 0.06 * hash2(Math.round(ent.x), Math.round(ent.y), 4231);
+        const step = Math.min(HAZE_STEPS, Math.round((far * 0.94 + own) * HAZE_STEPS));
+        const shown = step > 0 ? this.hazed(ready, step) : ready;
         const shear = stand - this.lean.x * bend;
         if (Math.abs(shear) * dh < 0.5) {
-          if (solid < 1) ctx.globalAlpha = solid;
-          ctx.drawImage(ready, left, top, dw, dh);
-          if (solid < 1) ctx.globalAlpha = 1;
+          ctx.drawImage(shown, left, top, dw, dh);
           continue;
         }
         ctx.save();
-        ctx.globalAlpha = solid;
         ctx.translate(ent.sx, ent.sy);
         ctx.transform(1, 0, shear, 1, 0, 0);
-        ctx.drawImage(ready, left - ent.sx, top - ent.sy, dw, dh);
+        ctx.drawImage(shown, left - ent.sx, top - ent.sy, dw, dh);
         ctx.restore();
         continue;
       }
