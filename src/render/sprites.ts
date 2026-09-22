@@ -204,62 +204,65 @@ type Mass = (dx: number, dy: number) => void;
 function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
   pal: readonly [string, string, string], cx: number, cy: number,
   rx: number, ry: number, seed: number): void {
+  const lx = cx - rx * 4;
+  const ly = cy - ry * 4;
+  const lw = rx * 8;
+  const lh = ry * 8;
+  const under = 0.26 + 0.09 * wob(seed, 34);
+  const band = 0.2 + 0.08 * wob(seed, 33);
+  const reach = 1.1 + 0.18 * wob(seed, 31);
   ctx.save();
   ctx.beginPath();
   mass(0, 0);
   ctx.clip();
-  ctx.fillStyle = pal[1];
-  ctx.beginPath();
-  mass(0, 0);
-  ctx.fill();
   /*
-   * Both tones are cut from the crown's own outline, offset along each axis
-   * by a share of that axis rather than by a number of pixels -- shifted the
-   * same distance both ways, a crown three times wider than it is tall got a
-   * band that was thin at the sides and fat at the top, and on a lobed edge
-   * it would come away from the rim altogether and wander about inside.
+   * Laid as four flat fields through nested clips, never as an even-odd fill.
    *
-   * The shade is that crescent taken deep: its outer edge is the crown's own
-   * silhouette on the away side, and its inner edge is the same silhouette
-   * again, sunward, which arrives as one concave sweep across the mass. So
-   * the dark is a real underside, bounded by the shape it belongs to. Laid
-   * instead as a separate loop set down-sun it was a lozenge floating in the
-   * middle of the crown -- and, printed on every tree, the same lozenge.
+   * Even-odd was how this worked, and it is wrong the moment a crown is more
+   * than one lobe: two lobes overlapping are inside two subpaths at once, so
+   * even-odd counts them out again and punches the overlap into a hole. On
+   * the four-ribbed fan that came out as a loop of pale veining scribbled
+   * through the middle of the crown -- the one thing in any shot that was
+   * texture rather than a shape somebody drew, so the eye went straight to
+   * it. Clips intersect instead of cancelling, so a mass can have as many
+   * lobes in it as it likes.
    */
-  const deep = 0.26 + 0.09 * wob(seed, 34);
   ctx.fillStyle = pal[2];
+  ctx.fillRect(lx, ly, lw, lh);
+  // The body, put back inside the same shape slid up-sun: what is left of the
+  // deep tone is the underside, bounded by the crown's own outline on the
+  // away side and by that same outline again across the middle.
+  ctx.save();
   ctx.beginPath();
-  mass(0, 0);
-  mass(LIT.x * rx * deep, LIT.y * ry * deep);
-  ctx.fill('evenodd');
+  mass(LIT.x * rx * under, LIT.y * ry * under);
+  ctx.clip();
+  ctx.fillStyle = pal[1];
+  ctx.fillRect(lx, ly, lw, lh);
+  ctx.restore();
   /*
    * The lit tone is a rim riding the edge, but only round the arc that faces
-   * the light: a crescent, cut by a loop set up-sun, so the band is widest
-   * where the crown is square-on to the light and runs out to nothing at
-   * either end of it.
+   * the light: the band is cut by a loop set up-sun, so it is widest where
+   * the crown is square-on and runs out to nothing at either end of it.
    *
-   * Both halves of that are load-bearing, and each on its own was tried and
-   * thrown out. The crescent alone is a band of one width the whole way
-   * round, which is a keyline. The loop alone is a pale shape floating in
-   * the middle of the crown, which is a decal -- and stamped on a hundred
-   * crowns in a wood, it is the same decal a hundred times.
-   *
-   * No outline anywhere. One went on when crowns at the same value would not
-   * come apart from each other, and it worked, which was the trouble: it did
-   * all the separating, so the value range behind it went for nothing and a
-   * wood read as vector stickers. Tone does that job now.
+   * Both halves of that are load-bearing and each on its own was tried and
+   * thrown out. A rim on its own is one width the whole way round, which is a
+   * keyline. A loop on its own is a pale shape floating in the middle of the
+   * crown, which is a decal -- and stamped on a hundred crowns in a wood, the
+   * same decal a hundred times.
    */
-  const reach = 1.1 + 0.18 * wob(seed, 31);
-  const band = 0.2 + 0.08 * wob(seed, 33);
   ctx.save();
   ctx.beginPath();
   lobed(ctx, cx + LIT.x * rx * reach, cy + LIT.y * ry * (reach + 0.06), rx * 1.1, ry * 1.1, seed + 3.1, 4, 0.14);
   ctx.clip();
   ctx.fillStyle = pal[0];
+  ctx.fillRect(lx, ly, lw, lh);
+  ctx.save();
   ctx.beginPath();
-  mass(0, 0);
   mass(-LIT.x * rx * band, -LIT.y * ry * band);
-  ctx.fill('evenodd');
+  ctx.clip();
+  ctx.fillStyle = pal[1];
+  ctx.fillRect(lx, ly, lw, lh);
+  ctx.restore();
   ctx.restore();
   ctx.restore();
 }
@@ -664,18 +667,25 @@ export function treeSprite(species: number, variant: number): Sprite {
       const plates = wob(seed, 81) > 0.5 ? 3 : 4;
       contact(ctx, bx, by, 18 * size);
       stem(ctx, bx, by, 5.4 * size * girth, th + plates * 10 * size, tilt * 5 * size, def.trunk);
-      for (let i = 0; i < plates; i++) {
+      // Thrown alternately either side of the stem rather than threaded on
+      // it, so the stem shows through between the plates and each one reaches
+      // out over nothing. Stacked concentric they were a totem. Each plate
+      // has its own reach too, rather than a clean taper down the stem.
+      const step = (plates > 3 ? 8 : 13) * size;
+      const shelfAt = (i: number): [number, number, number, number] => {
         const t = i / (plates - 1);
-        // Each plate its own reach, rather than a clean taper down the stem.
-        const rx = (20 - 6 * t) * size * (0.78 + 0.42 * wob(seed, i + 90));
-        const ry = (5.4 - 1 * t) * size;
-        // Thrown alternately either side of the stem rather than threaded on
-        // it, so the stem shows through between the plates and each one
-        // reaches out over nothing. Stacked concentric they were a totem.
-        const cx = bx + (i % 2 ? 1 : -1) * rx * 0.36 + tilt * 5 * size * t;
-        const cy = by - th - i * (plates > 3 ? 8 : 13) * size;
-        lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed + i, 5, 0.14), canopy, cx, cy, rx, ry, seed + i);
-      }
+        const prx = (20 - 6 * t) * size * (0.78 + 0.42 * wob(seed, i + 90));
+        return [bx + (i % 2 ? 1 : -1) * prx * 0.36 + tilt * 5 * size * t,
+          by - th - i * step, prx, (5.4 - 1 * t) * size];
+      };
+      const stack: Mass = (dx, dy) => {
+        for (let i = 0; i < plates; i++) {
+          const [px, py, prx, pry] = shelfAt(i);
+          lobed(ctx, px + dx, py + dy, prx, pry, seed + i, 5, 0.14);
+        }
+      };
+      lightOn(ctx, stack, canopy, bx, by - th - (plates - 1) * step * 0.5, 20 * size,
+        (plates * step * 0.5 + 5 * size), seed);
       if (!grown) branches(ctx, bx, by - th - plates * 10 * size, size * 0.7, dulled(def.trunk, 0.3), 2);
       if (fruit) fruiting(ctx, bx, by - th, 21 * size, 5 * size, seed, fruit);
       return;
@@ -838,14 +848,28 @@ export function treeSprite(species: number, variant: number): Sprite {
     // And which way the whole stack is thrown, so two species with the same
     // number of plates still do not draw the same tree.
     const throwOff = (wob(seed, 85) - 0.5) * rx * 0.5;
-    for (let i = 0; i < decks; i++) {
-      const lx = cx + throwOff * (i ? 1 : -0.6) + (i ? tilt * 7 * size - 2 * size : 1.5 * size);
-      const ly = cy - i * 10 * size;
-      const lrx = rx * (i ? 0.66 : 1);
-      const lry = (7.5 - i * 1.3) * size;
-      lightOn(ctx, (dx, dy) => lobed(ctx, lx + dx, ly + dy, lrx, lry, seed + i * 2.4, 4, 0.2, 0.34),
-        canopy, lx, ly, lrx, lry, seed + i * 2.4);
-    }
+    /*
+     * One light over the whole crown rather than one per plate.
+     *
+     * Lit plate by plate, each got its own rim and its own underside and the
+     * crown's form came out of what order they happened to be drawn in --
+     * stack order, not a sun. Which way the light is coming from is a fact
+     * about the tree, so it is worked out over the union of the plates and
+     * the plates are only shapes inside it.
+     */
+    const plateAt = (i: number): [number, number, number, number] => [
+      cx + throwOff * (i ? 1 : -0.6) + (i ? tilt * 7 * size - 2 * size : 1.5 * size),
+      cy - i * 10 * size,
+      rx * (i ? 0.66 : 1),
+      (7.5 - i * 1.3) * size,
+    ];
+    const crown: Mass = (dx, dy) => {
+      for (let i = 0; i < decks; i++) {
+        const [px, py, prx, pry] = plateAt(i);
+        lobed(ctx, px + dx, py + dy, prx, pry, seed + i * 2.4, 4, 0.2, 0.34);
+      }
+    };
+    lightOn(ctx, crown, canopy, cx, cy - (decks - 1) * 5 * size, rx, (decks * 5 + 6) * size, seed);
     if (!grown) branches(ctx, cx, cy - 4 * size, size * 0.85, dulled(def.trunk, 0.3), 3);
     if (fruit) fruiting(ctx, cx, cy, rx, 7 * size, seed, fruit);
   });
