@@ -68,7 +68,7 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Rock,
   TileType.Sand, TileType.Dirt, TileType.PackedDirt, TileType.Field,
   TileType.Marsh, TileType.Reed, TileType.Clay, TileType.Peat, TileType.Tar,
-  TileType.Kelp, TileType.Snow,
+  TileType.Kelp, TileType.Snow, TileType.Lawn,
 ]);
 
 /**
@@ -411,6 +411,23 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * with the marsh's sedge ruffling over its edges.
    */
   [TileType.Reed]: { name: 'Reed', color: [129, 170, 128], speed: 0.8, roll: 0.4 },
+  /*
+   * Grass somebody has been mowing: the only ground on the island that is
+   * made rather than found, and the last one this pass reached.
+   *
+   * It was also the one it mattered most on. A lawn is what a player builds
+   * a deed around and then stands in, and it is laid in wide even blocks --
+   * which is the worst case for the tenth-either-way nudge of brightness per
+   * tile. A kept lawn came out as a tiled floor in eight greens, with the
+   * wild meadow beside it already flat and even. Exactly backwards.
+   *
+   * And it grows nothing, which is the point of it and the only ground here
+   * that can say so. A meadow is flat colour with lumps of green in it; a
+   * lawn is flat colour, because somebody cut the lumps off. The two sit
+   * side by side on every deed and that is the whole difference between
+   * them: the tended ground is the smooth one. It costs nothing to draw and
+   * it is the cheapest piece of story on the map.
+   */
   [TileType.Lawn]: { name: 'Lawn', color: [85, 170, 123], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
 };
