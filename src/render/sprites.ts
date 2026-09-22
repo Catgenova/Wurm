@@ -604,7 +604,10 @@ export function treeSprite(species: number, variant: number): Sprite {
           ctx.fill();
         }
       }
-      if (!grown) branches(ctx, bx, top, size * 0.7, dulled(def.trunk, 0.3), 2);
+      // Anchored partway down the leader rather than at `top`, which after
+      // the tiers were shortened is a good way above the tree: a worn pine
+      // was carrying a detached fork of dead wood floating over its own tip.
+      if (!grown) branches(ctx, bx, by - th - step * tiers * 0.55, size * 0.7, dulled(def.trunk, 0.3), 2);
       return;
     }
 
