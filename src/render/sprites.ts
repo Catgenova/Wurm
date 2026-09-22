@@ -229,12 +229,21 @@ function lightOn(ctx: CanvasRenderingContext2D, mass: Mass,
    */
   ctx.fillStyle = pal[2];
   ctx.fillRect(lx, ly, lw, lh);
-  // The body, put back inside the same shape slid up-sun: what is left of the
-  // deep tone is the underside, bounded by the crown's own outline on the
-  // away side and by that same outline again across the middle.
+  /*
+   * The body, put back inside a loop of its own set up-sun. What is left of
+   * the deep tone is the underside: bounded by the crown's outline on the
+   * away flank and by that loop's lobed edge where it cuts across the middle.
+   *
+   * Put back inside the crown's own outline merely shifted, the dark came out
+   * as a copy of the silhouette nudged down-right -- which gives a canopy a
+   * direction but no interior, because every lobe on it is shaded the same
+   * amount in the same place. A separate edge crossing the mass catches some
+   * lobes and misses others, which is what a crown in the sun does.
+   */
   ctx.save();
   ctx.beginPath();
-  mass(LIT.x * rx * under, LIT.y * ry * under);
+  lobed(ctx, cx + LIT.x * rx * (0.62 + under), cy + LIT.y * ry * (0.62 + under),
+    rx * 1.3, ry * 1.3, seed + 9.7, 4, 0.17);
   ctx.clip();
   ctx.fillStyle = pal[1];
   ctx.fillRect(lx, ly, lw, lh);
@@ -408,7 +417,7 @@ const FRUIT_COLOUR: Record<string, string> = {
  */
 function dulled(hex: string, t: number): string {
   const n = parseInt(hex.slice(1), 16);
-  const to: [number, number, number] = t < 0 ? [226, 214, 190] : [146, 134, 108];
+  const to: [number, number, number] = t < 0 ? [226, 214, 190] : [140, 138, 126];
   const k = Math.abs(t);
   const mix = (c: number, target: number): number => Math.round(c + (target - c) * k);
   const pair = (v: number): string => v.toString(16).padStart(2, '0');
@@ -666,12 +675,13 @@ export function treeSprite(species: number, variant: number): Sprite {
       const th = 30 * size;
       const plates = wob(seed, 81) > 0.5 ? 3 : 4;
       contact(ctx, bx, by, 18 * size);
-      stem(ctx, bx, by, 5.4 * size * girth, th + plates * 10 * size, tilt * 5 * size, def.trunk);
+      const rise = (plates > 3 ? 8 : 13) * size;
+      stem(ctx, bx, by, 5.4 * size * girth, th + (plates - 1) * rise + 2 * size, tilt * 5 * size, def.trunk);
       // Thrown alternately either side of the stem rather than threaded on
       // it, so the stem shows through between the plates and each one reaches
       // out over nothing. Stacked concentric they were a totem. Each plate
       // has its own reach too, rather than a clean taper down the stem.
-      const step = (plates > 3 ? 8 : 13) * size;
+      const step = rise;
       const shelfAt = (i: number): [number, number, number, number] => {
         const t = i / (plates - 1);
         const prx = (20 - 6 * t) * size * (0.78 + 0.42 * wob(seed, i + 90));
@@ -836,8 +846,8 @@ export function treeSprite(species: number, variant: number): Sprite {
      */
     const th = 40 * size;
     const rx = 18 * size;
-    const lean = tilt * 3 * size;
-    const cx = bx + lean;
+    const lean = tilt * 5 * size;
+    const cx = bx + lean + tilt * rx * 0.34;
     const cy = by - th - 17 * size;
     contact(ctx, bx, by, rx * 0.8);
     stem(ctx, bx, by, 7 * size * girth, th, lean, def.trunk);
@@ -847,7 +857,7 @@ export function treeSprite(species: number, variant: number): Sprite {
     const decks = wob(seed, 80) > 0.6 ? 3 : 2;
     // And which way the whole stack is thrown, so two species with the same
     // number of plates still do not draw the same tree.
-    const throwOff = (wob(seed, 85) - 0.5) * rx * 0.5;
+    const throwOff = (wob(seed, 85) - 0.5) * rx * 1.15;
     /*
      * One light over the whole crown rather than one per plate.
      *

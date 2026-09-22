@@ -2074,6 +2074,18 @@ export class Renderer {
         // the crown less than half a pixel is not worth a transform to draw.
         const bend = (swayAt(ent.x, ent.y, this.time, this.lean.force) * SWAY_MAX * (ent.kind === 'bush' ? 0.6 : 1)) / 2;
         /*
+         * The lean this one grew with, as against the one the wind is putting
+         * on it this instant. Both are the same shear about the foot, so they
+         * add, and neither costs a second sprite.
+         *
+         * Nothing had one. Every tree on the island stood dead upright, which
+         * is the single thing that made a wood read as one stamp printed a
+         * hundred times however different the crowns were -- an array of
+         * uprights is an array whatever is on top of the posts. Up to about
+         * six degrees, its own for every tile, and either way.
+         */
+        const stand = (hash2(Math.round(ent.x), Math.round(ent.y), 9931) - 0.5) * 0.22;
+        /*
          * Laid on thinner the further back it stands, so it takes up some of
          * whatever is behind it -- the meadow low down, the wood's own far
          * rank higher up, the sky over the top of all of it. In a picture
@@ -2090,8 +2102,9 @@ export class Renderer {
          * same thing: every tree takes a different amount of the floor up
          * into itself.
          */
-        const solid = (1 - far * 0.46) * (0.9 + 0.1 * hash2(Math.round(ent.x), Math.round(ent.y), 4231));
-        if (Math.abs(this.lean.x * bend) * dh < 0.5) {
+        const solid = (1 - far * 0.62) * (0.9 + 0.1 * hash2(Math.round(ent.x), Math.round(ent.y), 4231));
+        const shear = stand - this.lean.x * bend;
+        if (Math.abs(shear) * dh < 0.5) {
           if (solid < 1) ctx.globalAlpha = solid;
           ctx.drawImage(ready, left, top, dw, dh);
           if (solid < 1) ctx.globalAlpha = 1;
@@ -2100,7 +2113,7 @@ export class Renderer {
         ctx.save();
         ctx.globalAlpha = solid;
         ctx.translate(ent.sx, ent.sy);
-        ctx.transform(1, 0, -this.lean.x * bend, 1, 0, 0);
+        ctx.transform(1, 0, shear, 1, 0, 0);
         ctx.drawImage(ready, left - ent.sx, top - ent.sy, dw, dh);
         ctx.restore();
         continue;
