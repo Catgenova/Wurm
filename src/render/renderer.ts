@@ -607,6 +607,8 @@ export class Renderer {
    * on the way out and come out softer than it does now.
    */
   private scaled = new Map<HTMLCanvasElement, HTMLCanvasElement>();
+  /** Rescaled copies of each sprite, kept per eighth of a size. */
+  private scaledSizes = new Map<HTMLCanvasElement, Map<number, HTMLCanvasElement>>();
   /** The distance-mixed copies of each rescaled sprite, one per haze step. */
   private hazes = new WeakMap<HTMLCanvasElement, HTMLCanvasElement[]>();
   private scaledAt = -1;
@@ -654,8 +656,24 @@ export class Renderer {
     return cv;
   }
 
+  /*
+   * `w` and `h` used to be taken on trust: the first caller for a sprite got
+   * a canvas at its size and every later one got that same canvas back
+   * whatever it had asked for. That was true while every tree of a species
+   * was drawn at one size, and stopped being true the moment they each grew
+   * their own -- an emergent oak was being blown up from a canvas cut for an
+   * understorey sapling of the same species, and went soft for it. Kept per
+   * eighth of a size now, which is under what the eye picks up and still
+   * only a handful of canvases per sprite.
+   */
   private atSize(src: HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
-    const had = this.scaled.get(src);
+    const step = Math.max(1, Math.round(w / 8));
+    let sizes = this.scaledSizes.get(src);
+    if (!sizes) {
+      sizes = new Map();
+      this.scaledSizes.set(src, sizes);
+    }
+    const had = sizes.get(step);
     if (had) return had;
     const dpr = this.canvas.dpr;
     const cv = document.createElement('canvas');
@@ -664,7 +682,7 @@ export class Renderer {
     cv.height = h > 0 ? Math.max(1, Math.round(h * dpr)) : cv.width;
     const g = cv.getContext('2d');
     if (g) g.drawImage(src, 0, 0, cv.width, cv.height);
-    this.scaled.set(src, cv);
+    sizes.set(step, cv);
     return cv;
   }
 
@@ -1380,6 +1398,7 @@ export class Renderer {
     if (zoom !== this.scaledAt) {
       this.scaledAt = zoom;
       this.scaled.clear();
+      this.scaledSizes.clear();
     }
     const paved = zoom >= 0.75;
     /*
@@ -2159,7 +2178,7 @@ export class Renderer {
         const step = Math.min(HAZE_STEPS, Math.round((far * 0.94 + own) * HAZE_STEPS));
         const shown = step > 0 ? this.hazed(ready, step) : ready;
         const shear = stand - this.lean.x * bend;
-        if (Math.abs(shear) * dh < 0.5) {
+        if (Math.abs(shear) * dh < 1.5) {
           ctx.drawImage(shown, left, top, dw, dh);
           continue;
         }
