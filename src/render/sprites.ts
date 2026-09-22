@@ -401,10 +401,26 @@ function branches(ctx: CanvasRenderingContext2D, bx: number, top: number, size: 
   }
 }
 
-const SPRITE_W = 88;
-const SPRITE_H = 120;
-const AX = SPRITE_W / 2;
-const AY = SPRITE_H - 8;
+/*
+ * How big a box a tree of this size needs.
+ *
+ * It was a fixed 88 by 120 for everything, which was true for as long as
+ * every tree was within a whisker of the same height. Once the species were
+ * given storeys -- emergents well over the median, fruit trees well under --
+ * a grown oak stopped fitting: its crown was being cut off square by the
+ * edge of its own canvas, and a very old oak and a very old maple lost the
+ * top of their heads. Nothing showed it because nothing had ever drawn those
+ * two sprites; the matrix of all seventeen species against all seven ages
+ * did, the first time it was run.
+ *
+ * Sized off the tree now, which also gives the small fruit species a much
+ * smaller canvas than the oak instead of the same one.
+ */
+const boxOf = (size: number): [number, number, number, number] => {
+  const w = Math.round(46 + 54 * size);
+  const h = Math.round(52 + 74 * size);
+  return [w, h, w / 2, h - 8];
+};
 
 /**
  * What hangs in each of the bearing trees, chalked to sit in this palette.
@@ -507,15 +523,44 @@ export function treeSprite(species: number, variant: number): Sprite {
   const lobes = 3 + Math.floor(wob(seed, 101) * 6);
   const rough = 0.14 + 0.13 * wob(seed, 102);
   const bitten = wob(seed, 103) > 0.45 ? 0.1 + 0.8 * wob(seed, 104) : 0;
-  spr = makeSprite(SPRITE_W, SPRITE_H, AX, AY, (ctx) => {
-    const bx = AX;
-    const by = AY;
+  const [BW, BH, BAX, BAY] = boxOf(size);
+  spr = makeSprite(BW, BH, BAX, BAY, (ctx) => {
+    const bx = BAX;
+    const by = BAY;
     if (age.look === 'bare') {
-      // Dead wood standing up: the stem, a few branches, no crown at all.
-      const th = 38 * size;
+      /*
+       * Dead wood standing up -- and, until every species was drawn at every
+       * age in one sheet, the same dead wood on all seventeen of them: one
+       * bare fork, whatever it was that died.
+       *
+       * A conifer does not die into a broadleaf. It keeps its leader and
+       * loses its whorls, so what is left standing is a pole with stubs down
+       * it; a broadleaf keeps the fork it grew and loses everything past it.
+       */
+      const spire = def.shape === 'spire';
+      const th = (spire ? 62 : 38) * size;
+      const wood = dulled(def.trunk, 0.35);
       contact(ctx, bx, by, 11 * size);
-      stem(ctx, bx, by, 6 * size, th, tilt * 2 * size, dulled(def.trunk, 0.35));
-      branches(ctx, bx, by - th, size, dulled(def.trunk, 0.45), 4);
+      stem(ctx, bx, by, (spire ? 5 : 6) * size * girth, th, tilt * (spire ? 1 : 3) * size, wood);
+      if (spire) {
+        ctx.strokeStyle = dulled(def.trunk, 0.5);
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 6; i++) {
+          const t = i / 5;
+          const ly = by - th * (0.3 + 0.62 * t);
+          const arm = (10 - 6 * t) * size * (0.7 + 0.6 * wob(seed, i + 110));
+          ctx.lineWidth = Math.max(0.8, 1.7 * size);
+          for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(bx, ly);
+            ctx.quadraticCurveTo(bx + side * arm * 0.6, ly - arm * 0.1, bx + side * arm, ly + arm * 0.45);
+            ctx.stroke();
+          }
+        }
+      } else {
+        branches(ctx, bx, by - th, size * (0.8 + 0.5 * wob(seed, 111)),
+          dulled(def.trunk, 0.45), 3 + Math.round(wob(seed, 112) * 2));
+      }
       return;
     }
     if (age.look === 'clipped') {
@@ -525,7 +570,8 @@ export function treeSprite(species: number, variant: number): Sprite {
       const cy = by - 10 * size - ry;
       contact(ctx, bx, by, rx * 0.8);
       stem(ctx, bx, by, 4.4 * size, 12 * size, 0, def.trunk);
-      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, 5, 0.12), canopy, bx, cy, rx, ry, seed);
+      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, lobes, rough * 0.7, 0, bitten),
+        canopy, bx, cy, rx, ry, seed);
       return;
     }
     const grown = age.look !== 'worn';
@@ -734,9 +780,9 @@ export function treeSprite(species: number, variant: number): Sprite {
        * whole thing is a ball on a pole again -- the wood in the outline is
        * the entire point of this one.
        */
-      const th = 44 * size;
-      const rx = 12 * size;
-      const ry = 10 * size;
+      const th = 33 * size;
+      const rx = 17 * size;
+      const ry = 14 * size;
       const lean = tilt * 4 * size;
       const hx = bx + lean + tilt * rx * 0.3;
       const cy = by - th - ry * 0.55;
@@ -762,8 +808,8 @@ export function treeSprite(species: number, variant: number): Sprite {
        */
       const waisted = wob(seed, 82);
       const th = 12 * size;
-      const rx = 9 * size;
-      const ry = (waisted > 0.66 ? 13 : 23) * size;
+      const rx = 12 * size;
+      const ry = (waisted > 0.66 ? 13 : 21) * size;
       const lean = tilt * 4 * size;
       const cx = bx + lean * 0.6;
       const cy = by - th - ry * 0.86 - (waisted > 0.66 ? 18 : 0) * size;
