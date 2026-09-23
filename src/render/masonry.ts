@@ -354,6 +354,10 @@ interface Stock {
   /** For a bond: courses to a storey, and units across a course. */
   rows: number;
   across: number;
+  /** For a bond: a course of headers every this many, or 0 for stretchers only. */
+  headers: number;
+  /** The two tones the plinth's stones are cut from, the first in a little over a third of them. */
+  base: [string, string];
   /** How wide the joint is, in pixels. Brick shows more mortar than rubble does. */
   mortar: number;
   /** Blocks across the band course at the head of a storey. */
@@ -457,6 +461,8 @@ const RUBBLE: Stock = ((P) => ({
   lay: 'rubble',
   rows: 4,
   across: 6,
+  headers: 0,
+  base: ['plinth', 'dress'],
   mortar: 3,
   bandN: 4,
   plinth: 0,
@@ -590,6 +596,8 @@ const BRICK: Stock = ((P) => ({
    */
   rows: 10,
   across: 6,
+  headers: 4,
+  base: ['plinth', 'dress'],
   // A brick wall shows more mortar than a rubble one: the joint is most of what
   // says brick, because every unit is the same size and the joints are the drawing.
   mortar: 3,
@@ -629,6 +637,87 @@ const BRICK: Stock = ((P) => ({
   pairs: ['warm', 'brown', 'burnt'],
   field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['brown', 0.2]],
 }))(BRICK_PASTEL);
+
+/**
+ * And stone brick: cut stone, dressed square and laid to a line.
+ *
+ * The heaviest masonry on the island and the tallest it will stand, so the
+ * unit is big -- a block a metre long and not quite half a metre high, seven
+ * courses to a storey and four blocks to a section, half again the size of a
+ * brick at the scale the island is painted at -- and the joint is thin,
+ * because a block cut true needs little bedding. It is laid in stretchers
+ * only: headers are what a brick wall is bonded with, and a block of stone
+ * is bonded through its own depth.
+ *
+ * The field is a cool, chalky blue-grey, the quarry's own, a dozen values of
+ * it with a bed here and there warmer or bluer and the odd block with iron
+ * in it. The dressings -- the band at each floor, the quoins, every jamb,
+ * lintel, sill and voussoir -- are a pale warm limestone, so a house of it
+ * reads as cool stone trimmed in warm, the brick's scheme turned round; and
+ * it stands on a plinth of the same blue stone a step darker, where the wet
+ * off the ground keeps it.
+ */
+const STONE_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the block: its field tone, its shade, the bevel along its top, and its darkest
+  stone: '#aeb2c0', stoneShade: '#999dac', stoneHi: '#c2c6d2', stoneDark: '#7c8092',
+  // a buff bed out of the same quarry, and a darker blue one
+  warm: '#bbb5ad', warmShade: '#a6a098', warmHi: '#cbc6bf',
+  dark: '#8e92a2', darkHi: '#9ea2b2',
+  // the joint, a step under the block, and the ink round every one
+  joint: '#8c8e9c', line: '#6b6d7d',
+  // the limestone it is dressed in, and the band of it at a floor line
+  dress: '#d8cfbc', dressShade: '#c0b5a1', dressHi: '#e7e0d2',
+  band: '#d3c9b5', bandShade: '#b9ae99', bandHi: '#e2dac9',
+  ringJoint: '#8c8e9c', reveal: '#7b7e8e',
+  // and a block the rain off a band has stained, pulled toward the lichen
+  stain: '#b3b5a6', stainShade: '#9ea090',
+};
+
+const STONE: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone),
+    /*
+     * The beds a quarry gives up besides its own, every one inside eight
+     * points of the field. The bond asks for them by the kiln's names, and
+     * on stone they are the quarry's: `warm` a buff bed, `burnt` a bluer,
+     * darker one, and `brown` the odd block with iron in it.
+     */
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    burnt:   { lit: '#9da4b7', shade: lighten('#9da4b7', -5), hi: lighten('#9da4b7', 6) },
+    brown:   { lit: '#bdb0a0', shade: lighten('#bdb0a0', -5), hi: lighten('#bdb0a0', 6) },
+    weather: { lit: lighten(P.stone, -7), shade: lighten(P.stone, -11), hi: lighten(P.stone, -2) },
+    bleach:  { lit: lighten(P.stone, 7), shade: lighten(P.stone, 3), hi: lighten(P.stone, 11) },
+    // The limestone, in the two tones its dressings turn about in.
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: '#cdc2ad', shade: '#b4a894', hi: '#ddd4c3' },
+    dark:    { lit: '#cdc2ad', shade: '#b4a894', hi: '#ddd4c3' },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 8) },
+    // And the footing: the blue stone a step darker, in two beds.
+    foot:    { lit: '#8f93a3', shade: '#7b7f8f', hi: '#a1a5b4' },
+    footB:   { lit: '#999aa6', shade: '#84858f', hi: '#aaabb6' },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.band, 6), shade: lighten(P.band, 1), hi: lighten(P.band, 10) },
+  },
+  lay: 'bond',
+  rows: 7,
+  across: 4,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 2,
+  bandN: 4,
+  plinth: 96,
+  // Cut stone chips at an arris and cracks along a bed; it does not crumble.
+  wear: 0.3,
+  shade: [30, 28, 74],
+  shadow: (k) => (1 - k) * 0.85,
+  growth: false,
+  mix: [['warm', 0.07], ['burnt', 0.06], ['brown', 0.03]],
+  pairs: ['warm', 'burnt'],
+  field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
+}))(STONE_PASTEL);
 
 /**
  * And adobe: mud brick, laid in mud, under a coat of mud.
@@ -707,6 +796,8 @@ const ADOBE: Stock = ((P) => ({
    */
   rows: 12,
   across: 7,
+  headers: 0,
+  base: ['plinth', 'dress'],
   mortar: 3,
   bandN: 6,
   // The foot the splash has eaten back, in the ground storey's own pixels.
@@ -730,6 +821,7 @@ const ADOBE: Stock = ((P) => ({
 
 let painted: Masonry | undefined;
 let bricked: Masonry | undefined;
+let dressed: Masonry | undefined;
 let rendered: Masonry | undefined;
 
 /**
@@ -752,6 +844,13 @@ export function cobble(): Masonry {
  */
 export function brickwork(): Masonry {
   return bricked ??= paint(BRICK);
+}
+
+/**
+ * And stone brick: cut stone laid to a line, dressed in a paler limestone.
+ */
+export function stonework(): Masonry {
+  return dressed ??= paint(STONE);
 }
 
 /**
@@ -1368,10 +1467,11 @@ function paint(S: Stock): Masonry {
     const tops = bedTops();
     for (let i = 0; i < S.rows; i++) {
       const y0 = tops[i], ch = tops[i + 1] - y0;
-      // Headers every fourth course, which is what a wall thick enough to
-      // stand three storeys is actually bonded with, and the thing that stops
-      // ten courses of stretchers reading as ruled paper.
-      const head = i % 4 === 3;
+      // Headers every fourth course, on brick, which is what a wall thick
+      // enough to stand three storeys is actually bonded with, and the thing
+      // that stops ten courses of stretchers reading as ruled paper. Cut stone
+      // is bonded through its own depth and shows stretchers only.
+      const head = S.headers > 0 && i % S.headers === S.headers - 1;
       const n = head ? S.across * 2 : S.across;
       const uw = TW / n;
       const lap = head ? 0 : (i % 2) * 0.5;
@@ -1963,7 +2063,7 @@ function paint(S: Stock): Masonry {
         // No two out of the same bed: a plinth is four stones to the section
         // and four of one tone is a painted skirting rather than masonry.
         const t = RR();
-        stone(g, x + MORTAR / 2, y, bw - MORTAR, bh, RR, t < 0.38 ? 'plinth' : 'dress', 'unit', 0, ink);
+        stone(g, x + MORTAR / 2, y, bw - MORTAR, bh, RR, t < 0.38 ? S.base[0] : S.base[1], 'unit', 0, ink);
       }
     };
     /*
@@ -2004,8 +2104,10 @@ function paint(S: Stock): Masonry {
      * And moss on the chamfer, which is the one ledge of the wall the rain
      * sits on before it runs off: a lens or two along it, and a fleck in the
      * joints of the course under it, so the wall grows out of the grass
-     * rather than being stood on it.
+     * rather than being stood on it. On a masonry that carries the island's
+     * planting; the rest stand bare.
      */
+    if (!S.growth) return;
     const n = 1 + (R() < 0.55 ? 1 : 0);
     for (let i = 0; i < n; i++) {
       const w = 90 + R() * 110;
@@ -2516,7 +2618,7 @@ function paint(S: Stock): Masonry {
       g.fillStyle = sh;
       g.fillRect(sx + 3, sy, sw - 6, 9);
       // Rain stands on a sill as it does on a plinth, and moss comes after it.
-      if (R() < 0.6) {
+      if (S.growth && R() < 0.6) {
         const w = sw * (0.3 + 0.3 * R());
         mossLens(g, { x: sx + (sw - w) * R(), y: sill - 4, w, h: 20, course: 0, pts: [] }, sill - 2, R);
       }
@@ -4305,7 +4407,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, adobe];
+  const sets = [cobble, brickwork, stonework, adobe];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });
