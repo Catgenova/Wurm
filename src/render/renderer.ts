@@ -34,7 +34,7 @@ import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARI
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, stonework } from './masonry';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -3028,7 +3028,8 @@ export class Renderer {
         : wall.material === 'clay_bricks' ? brickwork()
           : wall.material === 'stone_brick' ? stonework()
             : wall.material === 'clay_adobe' ? adobe()
-              : undefined;
+              : wall.material === 'timbercraft' ? timbercraft()
+                : undefined;
   }
 
   /**
@@ -3221,7 +3222,7 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
-    if (kind?.railed && !cob) {
+    if (kind?.railed && (!cob || cob.railed)) {
       /*
        * Posts and rails, each of them a piece of timber with a top to it: a
        * fence drawn flat is a comb, and a comb is what this was.
