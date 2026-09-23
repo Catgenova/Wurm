@@ -221,6 +221,8 @@ export interface Masonry {
    * does, toward the colour of the stone the brick is dressed in.
    */
   shade: [number, number, number];
+  /** Whether the ivy, hedge and weed pictures below have anything in them to draw. */
+  growth: boolean;
   /**
    * The flat colour to lay under a section before its picture, or none.
    *
@@ -287,6 +289,12 @@ interface Stock {
   wear: number;
   /** What the hour's light darkens a face toward; see `Masonry.shade`. */
   shade: [number, number, number];
+  /**
+   * Whether anything grows on it: ivy over the top, a hedge at the foot,
+   * moss in the joints, weeds in a threshold. Cobblestone and brick carry
+   * the island's planting and nothing else does -- a coat of mud is bare.
+   */
+  growth: boolean;
   /** The share of units that take each tone, in order; whatever is left takes the field's own. */
   mix: Array<[string, number]>;
   /** The tones that come in pairs rather than singly, because a load of them came in together. */
@@ -377,6 +385,7 @@ const RUBBLE: Stock = ((P) => ({
   plinth: 0,
   wear: 1,
   shade: [24, 20, 12],
+  growth: true,
   mix: [['warm', 0.07], ['brown', 0.09], ['green', 0.04], ['dark', 0.1]],
   pairs: ['warm', 'brown'],
   field: [['weather', 0.2], ['bleach', 0.12], ['warm', 0.12], ['brown', 0.1], ['green', 0.1], ['dark', 0.1]],
@@ -526,6 +535,7 @@ const BRICK: Stock = ((P) => ({
    */
   wear: 0.17,
   shade: [18, 12, 84],
+  growth: true,
   /*
    * Three units in ten off the field's own tone, not four and a half.
    *
@@ -621,6 +631,7 @@ const ADOBE: Stock = ((P) => ({
   // A coat of mud is not a heap of blocks: nothing on it chips like a stone.
   wear: 0,
   shade: [44, 32, 66],
+  growth: false,
   mix: [['mudpale', 0.2], ['muddark', 0.2]],
   pairs: [],
   field: [['weather', 0.3], ['bleach', 0.3], ['brown', 0.2]],
@@ -2983,11 +2994,13 @@ function paint(S: Stock): Masonry {
 
   /* ---- the textures ------------------------------------------------------ */
   const cnv = (w: number, h: number): HTMLCanvasElement => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  /** A picture of nothing, one per variant, for what does not grow on a bare masonry. */
+  const bare = (): HTMLCanvasElement[] => VARIANTS.map(() => cnv(1, 1));
   const ctxOf = (c: HTMLCanvasElement): Ctx => c.getContext('2d') as Ctx;
   const STONES: Block[][] = [];
   const FACE = VARIANTS.map((v, i) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    STONES[i] = paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, c = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [c - h2, c + h2]; }));
+    STONES[i] = paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, c = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [c - h2, c + h2]; }));
     return c;
   });
   /**
@@ -3001,7 +3014,7 @@ function paint(S: Stock): Masonry {
    */
   const ARCHED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
     const R = rand(v.seed * 131 + 17);
     if (S.lay === 'render') renderArch(g, R);
     else {
@@ -3027,7 +3040,7 @@ function paint(S: Stock): Masonry {
    * over it. It is rooted six pixels above the curve, so it comes out from
    * under the ring rather than out of the air.
    */
-  const ARCH_IVY = VARIANTS.map((v) => {
+  const ARCH_IVY = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 991 + 43);
     for (const d of v.drapes) {
@@ -3044,7 +3057,7 @@ function paint(S: Stock): Masonry {
     return c;
   });
   /** And what has seeded itself in the gap: grass in the threshold, a tuft on an impost. */
-  const ARCH_WEED = VARIANTS.map((v) => {
+  const ARCH_WEED = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 557 + 29);
     for (const side of [-1, 1]) {
@@ -3061,7 +3074,7 @@ function paint(S: Stock): Masonry {
   /** And the same section with a window in it, drawn and cut the same way. */
   const WINDOWED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
     surround(g, rand(v.seed * 197 + 61), W_X0, W_X1, W_HEAD, W_SILL, 66, 0);
     g.globalAlpha = 1;
     g.fillStyle = '#000';
@@ -3077,7 +3090,7 @@ function paint(S: Stock): Masonry {
    * in the joint behind the sill, which is where the rain that runs off the
    * glass ends up.
    */
-  const WIN_IVY = VARIANTS.map((v) => {
+  const WIN_IVY = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 883 + 19);
     for (const d of v.drapes) {
@@ -3092,7 +3105,7 @@ function paint(S: Stock): Masonry {
     }
     return c;
   });
-  const WIN_WEED = VARIANTS.map((v) => {
+  const WIN_WEED = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 419 + 83);
     for (const side of [-1, 1]) {
@@ -3105,7 +3118,7 @@ function paint(S: Stock): Masonry {
   /** And with a bay: the same hole and surround, on a shelf rather than a sill. */
   const BAYED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
     surround(g, rand(v.seed * 251 + 13), Y_X0, Y_X1, Y_HEAD, Y_SILL, 46, 10);
     g.globalAlpha = 1;
     g.fillStyle = '#000';
@@ -3119,7 +3132,7 @@ function paint(S: Stock): Masonry {
   /** And the same section with a doorway in it. */
   const DOORED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
     doorway(g, rand(v.seed * 311 + 29), D_X0, D_X1, D_HEAD, BEAM, 0);
     g.globalAlpha = 1;
     g.fillStyle = '#000';
@@ -3133,7 +3146,7 @@ function paint(S: Stock): Masonry {
   /** And the gate: the same drawing at twice the span, on corbels. */
   const GATED = VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    paintCourses(g, rand(v.seed), v.drapes.map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
+    paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, m = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [m - h2, m + h2]; }));
     doorway(g, rand(v.seed * 373 + 41), V_X0, V_X1, V_HEAD, GATE_BEAM, CORBEL);
     g.globalAlpha = 1;
     g.fillStyle = '#000';
@@ -3150,7 +3163,7 @@ function paint(S: Stock): Masonry {
    * Ivy over the head where the curtain reaches that far, and a tuft in each
    * bottom corner where a boot never goes.
    */
-  const DOOR_IVY = VARIANTS.map((v) => {
+  const DOOR_IVY = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 733 + 37);
     for (const d of v.drapes) {
@@ -3165,7 +3178,7 @@ function paint(S: Stock): Masonry {
     }
     return c;
   });
-  const DOOR_WEED = VARIANTS.map((v) => {
+  const DOOR_WEED = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 617 + 53);
     for (const side of [-1, 1]) {
@@ -3179,7 +3192,7 @@ function paint(S: Stock): Masonry {
    * jamb than a boot does, so only the ivy over the head is sure of itself
    * and there is nothing in the corners but a wisp.
    */
-  const GATE_IVY = VARIANTS.map((v) => {
+  const GATE_IVY = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 541 + 71);
     for (const d of v.drapes) {
@@ -3194,7 +3207,7 @@ function paint(S: Stock): Masonry {
     }
     return c;
   });
-  const GATE_WEED = VARIANTS.map((v) => {
+  const GATE_WEED = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     const R = rand(v.seed * 467 + 97);
     for (const side of [-1, 1]) {
@@ -3206,7 +3219,7 @@ function paint(S: Stock): Masonry {
   /** The growth over the top is painted PAD px taller than the face, the extra above the top edge: the
    *  crest of each drape, standing above the cap, is part of the same silhouette. */
   const PAD = 64;
-  const SPILL = VARIANTS.map((v) => {
+  const SPILL = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH + PAD), g = ctxOf(c);
     g.translate(0, PAD);
     for (const m of v.drapes) {
@@ -3216,7 +3229,7 @@ function paint(S: Stock): Masonry {
     }
     return c;
   });
-  const BASE = VARIANTS.map((v) => {
+  const BASE = !S.growth ? bare() : VARIANTS.map((v) => {
     const c = cnv(TW, TH), g = ctxOf(c);
     for (const b of v.foot.hedges) hedge(g, b, rand(b.seed));
     return c;
@@ -3228,7 +3241,7 @@ function paint(S: Stock): Masonry {
     // Moss grows on what is there to grow on: a unit the plinth now covers is
     // not, so it does not get a lens of it hanging in front of cut stone.
     const on = S.plinth ? STONES[i].filter((b) => b.y + b.h < TH - S.plinth) : STONES[i].slice();
-    footMoss(g, on, v.extras.moss, rand(v.seed * 19 + 7));
+    if (S.growth) footMoss(g, on, v.extras.moss, rand(v.seed * 19 + 7));
     return c;
   });
   /** The cap's stone, the same for every variant, drawn under the island's light. */
@@ -3323,6 +3336,7 @@ function paint(S: Stock): Masonry {
       }
       // The damp along the ground, then moss in the low joints, then the hedge.
       g.fillStyle = 'rgba(110,100,80,0.16)'; g.fillRect(0, fh - 9, TW, 9);
+      if (!S.growth) return c;
       const lowest = own.filter((s) => s.course >= rows - 2);
       for (let i = 0; i < v.extras.moss && lowest.length; i++) {
         const s = lowest[Math.floor(R() * lowest.length)];
@@ -3863,6 +3877,7 @@ function paint(S: Stock): Masonry {
     h: TH,
     plinth: S.plinth,
     shade: S.shade,
+    growth: S.growth,
     under: S.lay === 'render' ? channels(PASTEL.stone) : undefined,
     pad: PAD,
     capH: CAP_H,

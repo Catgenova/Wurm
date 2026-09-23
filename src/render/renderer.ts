@@ -3493,7 +3493,7 @@ export class Renderer {
          * of it.
          */
         this.threshold(cob, { px, py, quad }, ARCH.t0, ARCH.t1, zoom);
-        if (wall.level === 0 && !indoors) blit(cob.base[v], 0, 1, -1);
+        if (cob.growth && wall.level === 0 && !indoors) blit(cob.base[v], 0, 1, -1);
         this.archShade({ px, py, quad }, zoom);
         this.archDepth(cob.reveal, 1, { px, py, quad }, zoom);
         ctx.restore();
@@ -3557,16 +3557,20 @@ export class Renderer {
         blit(cob.foot[v], 0, 1, 1, false, 0, cob.under ? 0.004 : 0);
         // The face's half of the hedge, where a doorway took the other half
         // round the corner with it.
-        if (arched) blit(cob.base[v], 0, 1);
+        if (cob.growth && arched) blit(cob.base[v], 0, 1);
         offStone();
         // Anywhere else it is one picture and goes on whole: a bush that has
         // grown up in front of a window stands in front of it, glass and all.
-        if (!arched) blit(cob.base[v], 0, 1);
-        if (arched) blit(cob.archWeed[v], 0, 1);
+        if (cob.growth && !arched) blit(cob.base[v], 0, 1);
+        if (cob.growth && arched) blit(cob.archWeed[v], 0, 1);
       }
-      if (windowed) blit(cob.winWeed[v], 0, 1);
-      if (doored) blit(cob.doorWeed[v], 0, 1);
-      if (gated) blit(cob.gateWeed[v], 0, 1);
+      // Nothing grows on a masonry that is bare: those pictures are empty, and
+      // there is no call to lay an empty picture across a whole wall.
+      if (cob.growth) {
+        if (windowed) blit(cob.winWeed[v], 0, 1);
+        if (doored) blit(cob.doorWeed[v], 0, 1);
+        if (gated) blit(cob.gateWeed[v], 0, 1);
+      }
       /*
        * The hour's light, and only that. A flat wall takes a wash down its
        * face as well -- dark where the ground throws shade back up it, light
@@ -3608,7 +3612,7 @@ export class Renderer {
        * over it, and a leaf in the sun is in the sun whichever way the wall
        * behind it is turned.
        */
-      if (!roofed && !indoors) {
+      if (cob.growth && !roofed && !indoors) {
         blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
         // And the tongue of it that hangs into the opening, on the variants
         // whose curtain reaches that far along the wall.
