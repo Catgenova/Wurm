@@ -642,10 +642,11 @@ jobs:
           # how much of the length you are looking along, with the far end
           # riding up the screen because it is further away.
           #
-          # Furniture had the same fault in a different shape: a piece is an
+          # Furniture had the same fault in a different shape: a piece was an
           # iso box and every drawing put its front on the two faces nearest
           # you, so a wardrobe showed its doors from everywhere and had no
-          # back. Which faces you have is taken from the relative turn now.
+          # back. A piece is a model now, put on the screen through the
+          # camera's own turn, which is checked against the camera itself.
           #
           # Both failures are silent — a sign backwards and every beast on the
           # island walks backwards — so the eight are counted rather than

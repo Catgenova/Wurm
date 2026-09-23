@@ -50,7 +50,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT, pieceTurn } from './furniture';
+import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT, headingView, pieceView } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -602,6 +602,13 @@ export class Renderer {
   private roofShapes = new Map<number, { sig: string; model: RoofModel }>();
   /** A covering with the hour's light for one face laid into it, as a pattern: see `drawPitchedRoof`. */
   private roofPatterns = new Map<string, CanvasPattern>();
+  /**
+   * Which way a cart, a wagon or a hull was last going, by piece, so it keeps
+   * pointing there when it stops. Kept to the nearest sixty-fourth of a turn,
+   * finer than a cart can be seen to turn, so one being driven is drawn from
+   * a handful of pictures of itself rather than a new one every frame.
+   */
+  private pieceHeadings = new Map<number, number>();
   /** A floor's picture as a pattern, by material, paint and size. */
   private floorPatterns = new Map<string, CanvasPattern>();
 
@@ -1706,7 +1713,7 @@ export class Renderer {
           }
           for (const fu of this.game.furnitureOnTile(x, y)) {
             const [wx, wy] = furnitureCentre(fu);
-            const fe = this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            const fe = this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.pieceBase(fu, wx, wy)), null);
             fe.piece = fu;
             if (fu.rare) fe.rare = fu.rare;
           }
@@ -1775,7 +1782,7 @@ export class Renderer {
         // their own feet are, and sorts a hair behind it so it is drawn first.
         const [vx, vy] = drivenBy ? furnitureCentre(drivenBy) : [player.x, player.y];
         // A rider sits where their mount stands, which is where they stand.
-        const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
+        const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, drivenBy ? this.pieceBase(drivenBy, vx, vy) : world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
         this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null).lift = this.driverSeat() * zoom;
       }
       if (grain) {
@@ -1803,6 +1810,16 @@ export class Renderer {
     }
 
     this.drawOverlays(ctx, zoom);
+  }
+
+  /**
+   * The height a piece stands at: the ground under it, or for a hull the
+   * water she floats on. A boat is drawn from her waterline up, so she sits
+   * on the surface however deep it is under her rather than on the bottom.
+   */
+  private pieceBase(f: { kind: string }, wx: number, wy: number): number {
+    const h = this.game.world.heightAt(wx, wy);
+    return furnitureDef(f.kind).boat ? Math.max(h, 0) : h;
   }
 
   /**
@@ -2054,7 +2071,15 @@ export class Renderer {
       }
       if (ent.kind === 'furniture' && ent.piece) {
         const piece = ent.piece;
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), pieceTurn(pieceFacing(piece), cam.rotation)));
+        // What is being driven or pulled points the way it is going, and stays pointing the way it went when it
+        // stops; anything else stands the way it was set.
+        if ((piece.driven || piece.hitched) && this.game.player.moving) {
+          const step = (Math.PI * 2) / 64;
+          this.pieceHeadings.set(piece.id, Math.round(this.game.heading() / step) * step);
+        }
+        const heading = this.pieceHeadings.get(piece.id);
+        const view = heading !== undefined ? headingView(heading, cam.rotation) : pieceView(pieceFacing(piece), cam.rotation);
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material));
         const [W, D] = furnitureSpan(piece.kind);
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
         // A sign is a board made to be read, so what is written on it stands
@@ -2253,8 +2278,8 @@ export class Renderer {
       const wx = ghost.x + (ghost.sx + w / 2) / SUBTILES;
       const wy = ghost.y + (ghost.sy + h / 2) / SUBTILES;
       const px = cam.worldToScreenX(wx, wy);
-      const py = cam.worldToScreenY(wx, wy, world.heightAt(wx, wy));
-      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, pieceTurn(ghost.facing, cam.rotation));
+      const py = cam.worldToScreenY(wx, wy, this.pieceBase({ kind: ghost.piece }, wx, wy));
+      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, pieceView(ghost.facing, cam.rotation));
       if (!ghost.ok) {
         const [W, D] = furnitureSpan(ghost.piece);
         ctx.fillStyle = 'rgba(214, 58, 42, 0.5)';
