@@ -305,7 +305,7 @@ let look: Look = randomLook();
 const thumbs: Array<{ canvas: HTMLCanvasElement; of: (l: Look) => Look; facing: number }> = [];
 /** Hair that is tied back is chosen by what it is tied into, so its thumbnail shows the back of the head. */
 const FROM_BEHIND = new Set(['ponytail', 'bun', 'braid', 'locs']);
-/** What the pointer is resting on, shown in the mirror until it moves off. */
+/** What the pointer is resting on or the keyboard is on, shown in the mirror until it moves off. */
 let preview: Look | null = null;
 /** Every row's buttons, so the selected one can be marked without rebuilding. */
 const marks: Array<{ kind: keyof Look; id: string; button: HTMLButtonElement; label: HTMLElement }> = [];
@@ -364,9 +364,13 @@ function buildChoices(): void {
         preview = null;
         redraw();
       });
-      // Resting the pointer on a choice tries it on in the mirror; moving off puts back what was chosen.
-      button.addEventListener('pointerenter', () => { preview = cleanLook({ ...look, [key]: option.id }); });
-      button.addEventListener('pointerleave', () => { preview = null; });
+      // Resting the pointer on a choice, or tabbing to it, tries it on in the mirror; moving off puts back what was chosen.
+      const tryOn = (): void => { preview = cleanLook({ ...look, [key]: option.id }); };
+      const takeOff = (): void => { preview = null; };
+      button.addEventListener('pointerenter', tryOn);
+      button.addEventListener('focus', tryOn);
+      button.addEventListener('pointerleave', takeOff);
+      button.addEventListener('blur', takeOff);
       marks.push({ kind: key, id: option.id, button, label: chosen });
       row.append(button);
     }
