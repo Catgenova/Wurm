@@ -4181,6 +4181,44 @@ export class Renderer {
     const { t0, t1 } = FENCE_GAP;
     const S = -0.55, k0 = 0.06, k1 = 0.9;
     const a = t0 + 0.015, b = t1 - 0.015;
+    /*
+     * The side of the pier the gap was cut from, whichever one faces us.
+     *
+     * The leaf hangs back in the wall's thickness, behind the face, so from
+     * any angle there is a strip between the pier's edge on the face and the
+     * leaf's stile where what shows is the pier's own side. Nothing drew it,
+     * and the grass showed through a slit down the whole height of the gate.
+     *
+     * Which of the two jambs is towards us is the question a face's winding
+     * answers: the face of the wall is drawn on the side the camera is on, so
+     * a jamb whose outline turns the same way round on screen is facing us
+     * and the other is facing away, behind the pier it belongs to.
+     */
+    const at = (t: number, k: number, s: number): [number, number] => [px(t, k, s), py(t, k, s)];
+    const turn = (pts: Array<[number, number]>): number => {
+      let sum = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const [xa, ya] = pts[i], [xb, yb] = pts[(i + 1) % pts.length];
+        sum += xa * yb - xb * ya;
+      }
+      return Math.sign(sum);
+    };
+    const face = turn([at(0, 0, 1), at(1, 0, 1), at(1, 1, 1), at(0, 1, 1)]);
+    for (const [t, out] of [[t0, 1], [t1, -1]] as Array<[number, number]>) {
+      // Round the jamb the way that makes its outward side +t or -t, as the
+      // face is laid round so that its outward side is the camera's.
+      const ring = [at(t, 0, -1), at(t, 1, -1), at(t, 1, 1), at(t, 0, 1)];
+      if (out < 0) ring.reverse();
+      if (turn(ring) !== face) continue;
+      ctx.beginPath();
+      for (const [x, y] of ring) ctx.lineTo(x, y);
+      ctx.closePath();
+      ctx.fillStyle = rgb(cob.reveal, 0.86);
+      ctx.fill();
+      ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
+      ctx.lineWidth = Math.max(1, 1.2 * zoom);
+      ctx.stroke();
+    }
     /**
      * One member of it, drawn as timber is drawn everywhere else in the game:
      * the dark of the wood laid down wide and the wood itself laid on top of
