@@ -807,13 +807,15 @@ const FRAME: Stock = ((P) => ({
   plinth: 44,
   // Oak checks along its grain as it dries; it does not chip like stone.
   wear: 0,
-  shade: [30, 22, 52],
   /*
-   * The coat's curve, not the stone's line. On the line the oak on the two
-   * sides of a corner post came out eighteen points apart and read as one
-   * face, and the limewash of two faces turned from the sun fourteen.
+   * A chalky lilac, and laid by the coat's curve rather than the stone's
+   * line. On the line the oak on the two sides of a corner post came out
+   * eighteen points apart and read as one face, and the limewash of two faces
+   * turned from the sun fourteen; and toward a dark violet, the shaded
+   * limewash came out a plain grey.
    */
-  shadow: (k) => 2.3 * Math.max(0, 1 - k) ** 1.6,
+  shade: [40, 38, 110],
+  shadow: (k) => 2.45 * Math.max(0, 1 - k) ** 1.6,
   growth: false,
   mix: [['brown', 0.2], ['burnt', 0.2]],
   pairs: [],
@@ -1556,25 +1558,42 @@ function paint(S: Stock): Masonry {
   const XM = TW / 2;
   /**
    * The shade a member standing proud of the limewash throws on it: hard-edged
-   * and cool, a hand wide down the side of a post away from the light and a
-   * finger deep under a plate. At a finger wide down a post it was under a
-   * pixel on screen, and the frame lay flat on the wall.
+   * and a chalky lilac, two hands wide down the side of a post away from the
+   * light and a hand deep under a plate, so on screen the frame stands three
+   * or four pixels off the wall. At a finger it was under a pixel, and near
+   * grey, it read as an outline rather than as depth.
    */
-  const PROUD_SH = 6, PROUD_SIDE = 11, PROUD_INK = 'rgba(87, 92, 129, 0.25)';
+  const PROUD_SH = 11, PROUD_SIDE = 16, PROUD_INK = 'rgba(72, 66, 156, 0.3)';
   /** How far a post's edge wanders off true over its height, and a rail's over its length. */
   const WANDER_POST = 4.5, WANDER_RAIL = 1.2;
+  /** The jambs of an opening: lighter than the frame's own posts, which stay the heaviest thing standing in it. */
+  const JAMB = 32;
+  /** A colour as a hex string, from its three channels. */
+  const hexOf = ([r, g, b]: readonly number[]): string =>
+    '#' + [r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('');
+  /** The frame's own oak, which a member that runs through the seams is always cut from. */
+  const FRAME_OAK = TONES.dress?.lit ?? PASTEL.dress;
   /**
-   * One member of the frame: a squared oak baulk, its tone a little off the
-   * next one's, its grain two long broken strokes down its length, and the
-   * ink round it every member is drawn in. A post's edges wander a hand off
-   * true over the storey, each its own way, and it is lit down its left edge
-   * and dark down its right, the light being on the left of every picture;
-   * a rail runs truer, lit along its top and dark along its underside. At a
-   * finger's width the light on a member was under a pixel on screen, and
-   * every post was one flat strip of brown. `across` is a member that runs
-   * over a section's seams: its edges come true at both ends, so they arrive
-   * at a seam where the next section's leave it. `edges` is false for a
-   * member whose sides are the light of two faces, the renderer's to give.
+   * The oak one member of the frame is cut from: the frame's own, a step
+   * lighter or darker, greyed where it has weathered or warmer where it has
+   * not. One brown for every member was a diagram of a frame.
+   */
+  const OAKS = [
+    FRAME_OAK, hexOf(channels(FRAME_OAK).map((c, i) => c + [3, 9, 11][i])), hexOf(channels(FRAME_OAK).map((c, i) => c + [3, -2, -7][i])),
+    lighten(FRAME_OAK, 3), lighten(FRAME_OAK, -3),
+  ];
+  /**
+   * One member of the frame: a squared oak baulk of its own oak, its grain two
+   * long broken strokes down its length with a check or two opened in it, and
+   * the ink round it every member is drawn in. A post's edges wander a hand
+   * off true over the storey, each its own way; the light down its left edge
+   * swells and narrows along it, as a painter's stroke does, and its right
+   * edge is dark, the light being on the left of every picture. A rail runs
+   * truer, lit along its top and dark along its underside. `across` is a
+   * member that runs over a section's seams: its edges come true at both
+   * ends, it takes the frame's own oak, so it arrives at a seam where the next
+   * section's leaves it. `edges` is false for a member whose sides are the
+   * light of two faces, the renderer's to give.
    */
   function member(g: Ctx, x0: number, y0: number, x1: number, y1: number, R: Rand, across = false, edges = true): void {
     const w = x1 - x0, h = y1 - y0, flat = w > h;
@@ -1590,18 +1609,21 @@ function paint(S: Stock): Masonry {
       else { a.push([x0 + wob(i), y0 + h * u]); b.push([x1 + wob(i), y0 + h * u]); }
     }
     const pts: Pt[] = [...a, ...b.slice().reverse()];
-    /** A band along one edge, `d` px in from it. */
-    const band = (edge: Pt[], dx: number, dy: number): Pt[] => [...edge, ...edge.slice().reverse().map(([x, y]): Pt => [x + dx, y + dy])];
-    const dl = across ? 0 : (R() - 0.5) * 5.2;
+    /** A band along one edge, in from it by `d(i)` at each of its points. */
+    const band = (edge: Pt[], d: (i: number) => number): Pt[] =>
+      [...edge, ...edge.map(([x, y], i): Pt => (flat ? [x, y + d(i)] : [x + d(i), y])).reverse()];
+    const body = across ? FRAME_OAK : OAKS[Math.floor(R() * OAKS.length)];
     const T = TONES.dress;
+    const light = lighten(body, 8), dark = T.shade;
     g.save();
-    g.beginPath(); poly(g, pts); g.fillStyle = lighten(T.lit, dl); g.fill(); g.clip();
+    g.beginPath(); poly(g, pts); g.fillStyle = body; g.fill(); g.clip();
     if (flat) {
-      g.beginPath(); poly(g, band(a, 0, Math.min(7, h * 0.28))); g.fillStyle = hexA(lighten(T.hi, dl), 0.9); g.fill();
-      g.beginPath(); poly(g, band(b, 0, -Math.min(7, h * 0.28))); g.fillStyle = lighten(T.shade, dl); g.fill();
+      g.beginPath(); poly(g, band(a, () => Math.min(7, h * 0.28))); g.fillStyle = hexA(light, 0.9); g.fill();
+      g.beginPath(); poly(g, band(b, () => -Math.min(7, h * 0.28))); g.fillStyle = dark; g.fill();
     } else if (edges) {
-      g.beginPath(); poly(g, band(a, Math.min(10, w * 0.22), 0)); g.fillStyle = hexA(lighten(T.hi, dl), 0.9); g.fill();
-      g.beginPath(); poly(g, band(b, -Math.min(7, w * 0.16), 0)); g.fillStyle = lighten(T.shade, dl); g.fill();
+      const lit = a.map(() => Math.min(w * 0.34, 4 + R() * 12)), dim = b.map(() => Math.min(w * 0.2, 5 + R() * 4));
+      g.beginPath(); poly(g, band(a, (i) => lit[i])); g.fillStyle = hexA(light, 0.9); g.fill();
+      g.beginPath(); poly(g, band(b, (i) => -dim[i])); g.fillStyle = dark; g.fill();
     }
     // The grain: two long strokes, broken where a check has opened.
     const GR = across ? rand(Math.round(y0 * 7 + x1)) : R;
@@ -1617,6 +1639,15 @@ function paint(S: Stock): Masonry {
         else { g.moveTo(x0 + w * at, s); g.lineTo(x0 + w * at + (GR() - 0.5) * 2, e); }
         g.stroke();
         s = e + 10 + GR() * 26;
+      }
+    }
+    // A check or two, where the oak has split as it dried: dark, and long
+    // enough to be seen.
+    if (!flat && edges) {
+      g.strokeStyle = hexA(PASTEL.line, 0.75); g.lineWidth = 2.2;
+      for (let i = 0, k = 1 + (R() < 0.5 ? 1 : 0); i < k; i++) {
+        const cx = x0 + w * (0.45 + R() * 0.3), cy = y0 + h * (0.12 + R() * 0.7), cl = 20 + R() * 30;
+        g.beginPath(); g.moveTo(cx, cy); g.quadraticCurveTo(cx + (R() - 0.5) * 4, cy + cl / 2, cx + (R() - 0.5) * 3, cy + cl); g.stroke();
       }
     }
     g.lineCap = 'butt';
@@ -1659,7 +1690,7 @@ function paint(S: Stock): Masonry {
     const T = TONES.dress, [bx0, by0, bx1, by1] = bay;
     g.save();
     g.beginPath(); g.rect(bx0, by0, bx1 - bx0, by1 - by0); g.clip();
-    g.save(); g.translate(5, PROUD_SH); g.beginPath(); poly(g, pts); g.fillStyle = PROUD_INK; g.fill(); g.restore();
+    g.save(); g.translate(PROUD_SIDE * 0.6, PROUD_SH * 0.8); g.beginPath(); poly(g, pts); g.fillStyle = PROUD_INK; g.fill(); g.restore();
     g.beginPath(); poly(g, pts); g.fillStyle = T.lit; g.fill();
     g.save(); g.clip();
     // Which long edge is the upper: [0]-[1] or [3]-[2].
@@ -1668,7 +1699,7 @@ function paint(S: Stock): Masonry {
     const [u0, u1, l0, l1] = upper ? [p0, p1, p3, p2] : [p3, p2, p0, p1];
     const ln = Math.hypot(l0[0] - u0[0], l0[1] - u0[1]), dx = (l0[0] - u0[0]) / ln, dy = (l0[1] - u0[1]) / ln;
     g.beginPath(); poly(g, [u0, u1, [u1[0] + dx * 7, u1[1] + dy * 7], [u0[0] + dx * 7, u0[1] + dy * 7]]);
-    g.fillStyle = hexA(T.hi, 0.9); g.fill();
+    g.fillStyle = hexA(lighten(T.lit, 8), 0.9); g.fill();
     g.beginPath(); poly(g, [l0, l1, [l1[0] - dx * 6, l1[1] - dy * 6], [l0[0] - dx * 6, l0[1] - dy * 6]]);
     g.fillStyle = T.shade; g.fill();
     g.restore();
@@ -1682,9 +1713,9 @@ function paint(S: Stock): Masonry {
     g.beginPath(); g.arc(x, y - 0.9, 1.3, Math.PI, Math.PI * 2); g.strokeStyle = hexA(TONES.dress.hi, 0.7); g.lineWidth = 0.9; g.stroke();
   }
   /**
-   * The splash and the dirt along the foot of a bay of limewash, from `x0` to
-   * `x1` over `y1`: a tide mark, ragged, higher where the rain threw it up
-   * and lower between, rather than a band ruled along every bay alike.
+   * The splash and the dirt along the foot of the ground storey, from `x0` to
+   * `x1` over `y1`: a tide mark, ragged, higher where the rain threw it up and
+   * lower between. Only there: on the storeys over it no splash reaches.
    */
   function splash(g: Ctx, R: Rand, x0: number, x1: number, y1: number): void {
     const n = Math.max(3, Math.round((x1 - x0) / 18)), hs: number[] = [];
@@ -1696,37 +1727,66 @@ function paint(S: Stock): Masonry {
     g.beginPath(); poly(g, [[x0, y1 + 2], ...edge.map(([x, y]): Pt => [x, y1 - (y1 - y) * 0.45]), [x1, y1 + 2]]);
     g.fillStyle = 'rgba(128, 100, 78, 0.1)'; g.fill();
   }
+  /** On a low wall, which the rain reaches all of: two or three splashes along the foot of a bay, a hand high at most and none alike. */
+  function splashes(g: Ctx, R: Rand, x0: number, x1: number, y1: number): void {
+    for (let i = 0, k = 2 + (R() < 0.5 ? 1 : 0); i < k; i++) {
+      const w = 22 + R() * 46, cx = x0 + (x1 - x0) * ((i + 0.2 + R() * 0.6) / k), h = 5 + R() * 7;
+      g.beginPath(); poly(g, blob(cx, y1 - h / 2 + 1, w / 2, h / 2 + 1, 10, R, 0.8, 0.35, 0.25));
+      g.fillStyle = 'rgba(150, 118, 86, 0.2)'; g.fill();
+    }
+  }
   /**
-   * A bay's limewash: its own coat a step off the next bay's, laid on in two
-   * or three clouds a dozen levels either side of it -- soft at their edges,
-   * as a wash is where the brush ran out -- cooler in the shade under the
-   * member over it, and a tide mark of splash along its foot. Laid in crisp
-   * patches four levels apart, every bay came out the same flat cream on
-   * screen.
+   * The coats a bay of limewash can be laid in: a step or two either side of
+   * the wash's own tone in value and in warmth, as a day's mixing comes out.
+   * `[lightness, warmth]`: warmth takes red up and blue down.
    */
-  function limewash(g: Ctx, R: Rand, x0: number, y0: number, x1: number, y1: number): void {
+  const COATS: Array<[number, number]> = [[0, 0], [3, 1], [-3.2, -1], [1.2, 5], [-1.4, -5], [2.4, -4], [-2.2, 4]];
+  /** A coat's colour. */
+  const coatOf = ([dl, warm]: [number, number]): string => {
+    const [r, gg, b] = channels(lighten(PASTEL.stone, dl));
+    return hexOf([r + warm, gg, b - warm]);
+  };
+  /** The coats of the bays of one section, by a hash: none the same as the one beside it. */
+  function coats(R: Rand, n: number): string[] {
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      let c = Math.floor(R() * COATS.length);
+      if (i > 0 && c === out[i - 1]) c = (c + 1 + Math.floor(R() * (COATS.length - 1))) % COATS.length;
+      out.push(c);
+    }
+    return out.map((c) => coatOf(COATS[c]));
+  }
+  /**
+   * A bay's limewash, its own flat coat, with a mark or two in it cut by
+   * hand: a patch limed again, fresher and paler, a palm to an arm across; or
+   * a patch worn back to the daub against the timber, where hands and weather
+   * catch the edge of a panel. Each is a step off the coat and no more, so the
+   * frame is still what is seen first. Every bay the same flat cream, with a
+   * faint cloud in it, read as graph paper.
+   */
+  function limewash(g: Ctx, R: Rand, x0: number, y0: number, x1: number, y1: number, coat: string, inset: [number, number, number, number]): void {
     const w = x1 - x0, h = y1 - y0;
     g.save();
     g.beginPath(); g.rect(x0, y0, w, h); g.clip();
-    g.fillStyle = lighten(PASTEL.stone, (R() - 0.5) * 2.4); g.fillRect(x0, y0, w, h);
-    const k = 2 + Math.floor(R() * 2);
-    for (let i = 0; i < k; i++) {
-      const cx = x0 + w * (0.1 + R() * 0.8), cy = y0 + h * (0.15 + R() * 0.7);
-      const rx = w * (0.28 + R() * 0.32), ry = Math.max(14, h * (0.16 + R() * 0.2));
-      const [r, gg, b] = channels(lighten(PASTEL.stone, (i + (R() < 0.5 ? 0 : 1)) % 2 ? 4.4 : -4.8));
-      g.save();
-      g.translate(cx, cy); g.scale(rx / ry, 1);
-      const cloud = g.createRadialGradient(0, 0, 0, 0, 0, ry);
-      cloud.addColorStop(0, `rgba(${r}, ${gg}, ${b}, 0.85)`);
-      cloud.addColorStop(0.55, `rgba(${r}, ${gg}, ${b}, 0.6)`);
-      cloud.addColorStop(1, `rgba(${r}, ${gg}, ${b}, 0)`);
-      g.fillStyle = cloud; g.fillRect(-ry, -ry, 2 * ry, 2 * ry);
-      g.restore();
+    g.fillStyle = coat; g.fillRect(x0, y0, w, h);
+    // The bay as it shows between the members that frame it.
+    const [ix0, iy0, ix1, iy1] = inset, iw = ix1 - ix0, ih = iy1 - iy0;
+    const marks = 1 + (R() < 0.55 ? 1 : 0);
+    for (let i = 0; i < marks; i++) {
+      if (R() < 0.6) {
+        const mw = Math.min(iw * 0.8, 40 + R() * 80), mh = Math.min(ih * 0.6, mw * (0.45 + R() * 0.4));
+        const cx = ix0 + mw / 2 + R() * Math.max(0, iw - mw), cy = iy0 + mh / 2 + R() * Math.max(0, ih - mh);
+        g.beginPath(); poly(g, blob(cx, cy, mw / 2, mh / 2, 14, R, 0.8, 0.3, 0.14));
+        g.fillStyle = lighten(coat, 2.6); g.fill();
+      } else {
+        const mw = 15 + R() * 25, mh = mw * (0.8 + R() * 1.4), side = Math.floor(R() * 3);
+        const cx = side === 0 ? ix0 + mw * 0.3 : side === 1 ? ix1 - mw * 0.3 : ix0 + mw + R() * Math.max(0, iw - 2 * mw);
+        const cy = side === 2 ? iy0 + mh * 0.3 : iy0 + mh / 2 + R() * Math.max(0, ih - mh);
+        const [r, gg, b] = channels(lighten(coat, -3.2));
+        g.beginPath(); poly(g, blob(cx, cy, mw / 2, mh / 2, 12, R, 0.75, 0.35, 0.2));
+        g.fillStyle = hexOf([r + 2, gg - 1, b - 6]); g.fill();
+      }
     }
-    const cool = g.createLinearGradient(0, y0, 0, y0 + 28);
-    cool.addColorStop(0, 'rgba(110, 116, 150, 0.16)'); cool.addColorStop(1, 'rgba(110, 116, 150, 0)');
-    g.fillStyle = cool; g.fillRect(x0, y0, w, 28);
-    splash(g, R, x0, x1, y1);
     g.restore();
   }
   /**
@@ -1767,7 +1827,8 @@ function paint(S: Stock): Masonry {
     g.fillStyle = PASTEL.stone; g.fillRect(0, 0, TW, TH);
     const e = POST / 2, m = open ? 0 : e + (R() - 0.5) * 12;
     const bays: Array<[number, number]> = open ? [[0, TW]] : [[0, XM], [XM, TW]];
-    for (const [a, b] of bays) limewash(g, R, a, PLATE, b, TH);
+    const coat = coats(R, bays.length);
+    bays.forEach(([a, b], i) => limewash(g, R, a, PLATE, b, TH, coat[i], [a === 0 ? e : XM + m, PLATE, b === TW ? TW - e : XM - m, TH]));
     const figure = open ? null : FIGURES[(vi < 0 ? Math.floor(R() * FIGURES.length) : vi) % FIGURES.length];
     const foot = PLATE + (TH - PLATE) * BRACE_DROP;
     const bay: [number, number, number, number] = [e - WANDER_POST - 1, PLATE - 3, XM - m + WANDER_POST + 1, TH + 4];
@@ -1780,8 +1841,11 @@ function paint(S: Stock): Masonry {
     proud(g, -6, 0, TW + 6, PLATE);
     for (const [a, b, RR] of posts) member(g, a, PLATE - 2, b, TH + 2, RR);
     member(g, -6, 0, TW + 6, PLATE, rand(1747), true);
-    // Pegs through the joints of the plate with the posts.
-    for (const x of open ? [e, TW - e] : [e, XM, TW - e]) peg(g, x + (x < XM ? 6 : x > XM ? -6 : 0), PLATE / 2 + 1);
+    // Pegs through the joints of the plate with the posts, one on each post
+    // head: the posts at the ends are shared, so theirs is half in this
+    // picture and half in the next, and a pair of them no longer marks
+    // every seam.
+    for (const x of open ? [0, TW] : [0, XM, TW]) peg(g, x, PLATE / 2 + 1);
     return [];
   }
   /**
@@ -1792,14 +1856,14 @@ function paint(S: Stock): Masonry {
    */
   function frameSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
     const sy = sill + RAIL - 2 + shelf * 0.6;
-    proud(g, x0 - POST, PLATE, x0, TH); proud(g, x1, PLATE, x1 + POST, TH);
-    proud(g, x0 - POST, head - RAIL, x1 + POST, head);
-    member(g, x0 - POST, PLATE - 2, x0, TH + 2, R);
-    member(g, x1, PLATE - 2, x1 + POST, TH + 2, R);
-    member(g, x0 - POST, head - RAIL, x1 + POST, head, R);
-    g.fillStyle = PROUD_INK; g.fillRect(x0 - POST - 8 - shelf, sy - 2, x1 - x0 + 2 * POST + 16 + 2 * shelf, PROUD_SH + 4);
-    member(g, x0 - POST - 8 - shelf, sill, x1 + POST + 8 + shelf, sy, R);
-    peg(g, x0 - POST / 2, head - RAIL / 2); peg(g, x1 + POST / 2, head - RAIL / 2);
+    proud(g, x0 - JAMB, PLATE, x0, TH); proud(g, x1, PLATE, x1 + JAMB, TH);
+    proud(g, x0 - JAMB, head - RAIL, x1 + JAMB, head);
+    member(g, x0 - JAMB, PLATE - 2, x0, TH + 2, R);
+    member(g, x1, PLATE - 2, x1 + JAMB, TH + 2, R);
+    member(g, x0 - JAMB, head - RAIL, x1 + JAMB, head, R);
+    g.fillStyle = PROUD_INK; g.fillRect(x0 - JAMB - 8 - shelf, sy - 2, x1 - x0 + 2 * JAMB + 16 + 2 * shelf, PROUD_SH);
+    member(g, x0 - JAMB - 8 - shelf, sill, x1 + JAMB + 8 + shelf, sy, R);
+    peg(g, x0 - JAMB / 2, head - RAIL / 2); peg(g, x1 + JAMB / 2, head - RAIL / 2);
   }
   /**
    * A doorway in it: posts either side from the plate to the ground and a
@@ -1808,18 +1872,18 @@ function paint(S: Stock): Masonry {
    * after, and all that was left of them was a stub either side.
    */
   function frameDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number): void {
-    proud(g, x0 - POST, PLATE, x0, TH); proud(g, x1, PLATE, x1 + POST, TH);
-    proud(g, x0 - POST, head - deep + 4, x1 + POST, head);
-    member(g, x0 - POST, PLATE - 2, x0, TH, R);
-    member(g, x1, PLATE - 2, x1 + POST, TH, R);
-    member(g, x0 - POST, head - deep + 4, x1 + POST, head, R);
-    peg(g, x0 - POST / 2, head - deep / 2); peg(g, x1 + POST / 2, head - deep / 2);
+    proud(g, x0 - JAMB, PLATE, x0, TH); proud(g, x1, PLATE, x1 + JAMB, TH);
+    proud(g, x0 - JAMB, head - deep + 4, x1 + JAMB, head);
+    member(g, x0 - JAMB, PLATE - 2, x0, TH, R);
+    member(g, x1, PLATE - 2, x1 + JAMB, TH, R);
+    member(g, x0 - JAMB, head - deep + 4, x1 + JAMB, head, R);
+    peg(g, x0 - JAMB / 2, head - deep / 2); peg(g, x1 + JAMB / 2, head - deep / 2);
   }
   /** An archway in it: the posts, and the head bent round the curve as one piece of oak. */
   function frameArch(g: Ctx, R: Rand): void {
-    proud(g, A_CX - A_R - POST, PLATE, A_CX - A_R, TH); proud(g, A_CX + A_R, PLATE, A_CX + A_R + POST, TH);
-    member(g, A_CX - A_R - POST, PLATE - 2, A_CX - A_R, TH, R);
-    member(g, A_CX + A_R, PLATE - 2, A_CX + A_R + POST, TH, R);
+    proud(g, A_CX - A_R - JAMB, PLATE, A_CX - A_R, TH); proud(g, A_CX + A_R, PLATE, A_CX + A_R + JAMB, TH);
+    member(g, A_CX - A_R - JAMB, PLATE - 2, A_CX - A_R, TH, R);
+    member(g, A_CX + A_R, PLATE - 2, A_CX + A_R + JAMB, TH, R);
     const T = TONES.dress, w = RAIL;
     const ring = (): void => {
       g.beginPath();
@@ -1837,25 +1901,44 @@ function paint(S: Stock): Masonry {
     ring(); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.7; g.stroke();
   }
   /**
-   * The footing a frame stands on: field stone as it came off the field --
-   * rounded, three or four sizes of it, the biggest twice the smallest, laid
-   * where it fits rather than in courses, a few standing proud of the line
-   * the sole sits on -- in the dark of wet stone, with its joints darker
-   * again. The stones across a seam are laid from their own seed, so the
-   * footing runs on into the next section's.
+   * The footing a frame stands on: field stone laid flat on its bed, as a
+   * waller lays it -- some stones the height of the course and some two
+   * courses of smaller ones, their faces cut roughly square, in five tones of
+   * it from warm to cool, each with the light along its top -- in the dark of
+   * wet stone, its joints darker again. The stones across a seam are laid from
+   * their own seed, so the footing runs on into the next section's. Rounded
+   * pills of one height in two greys read as a course of cobbles.
    */
   function footing(g: Ctx, R: Rand, y0: number, y1: number): void {
-    const h = y1 - y0;
+    const h = y1 - y0, top = y0 + 7;
+    const [fr, fg, fb] = channels(PASTEL.footing);
+    const tones = [PASTEL.footing, lighten(PASTEL.footing, 3.5), lighten(PASTEL.footing, -3.5), hexOf([fr - 13, fg - 16, fb - 24]), hexOf([fr - 27, fg - 22, fb - 14])];
     g.fillStyle = PASTEL.ringJoint; g.fillRect(0, y0, TW, h);
+    /** One stone, its corners knocked off and its faces a hand off square. */
+    const stone = (x: number, y: number, w: number, sh: number, RR: Rand): void => {
+      const c = (): number => 1.5 + RR() * 4, j = (): number => (RR() - 0.5) * 2;
+      const pts: Pt[] = [
+        [x + c(), y + j()], [x + w - c(), y + j()], [x + w + j(), y + c()], [x + w + j(), y + sh - c()],
+        [x + w - c(), y + sh + j()], [x + c(), y + sh + j()], [x + j(), y + sh - c()], [x + j(), y + c()],
+      ];
+      const tone = tones[Math.floor(RR() * tones.length)];
+      g.save();
+      g.beginPath(); poly(g, pts); g.fillStyle = tone; g.fill(); g.clip();
+      g.fillStyle = lighten(tone, 9); g.fillRect(x - 2, y - 3, w + 4, 6 + RR() * 2);
+      g.fillStyle = hexA(PASTEL.ringJoint, 0.5); g.fillRect(x - 2, y + sh - 3, w + 4, 4);
+      g.restore();
+      g.beginPath(); poly(g, pts); g.strokeStyle = hexA(PASTEL.line, 0.85); g.lineWidth = 1.4; g.lineJoin = 'round'; g.stroke();
+    };
     const lay = (x: number, w: number, RR: Rand): void => {
-      const sh = h * (0.55 + RR() * 0.5), top = y1 - sh - 1 + (RR() - 0.5) * 3;
-      const T = RR() < 0.5 ? TONES.foot : TONES.footB;
-      const pts = blob(x + w / 2, top + sh / 2, w / 2 - 1.5, sh / 2, 12, RR, 0.62, 0.3, 0.12);
-      solid(g, pts, T.lit, T.shade, PASTEL.line, 1.5, -w * 0.08, -sh * 0.12);
-      // and the smaller stones packed over a low one
-      if (sh < h * 0.75) {
-        const ph = h - sh - 2, pw = w * (0.4 + RR() * 0.3), px = x + RR() * (w - pw);
-        solid(g, blob(px + pw / 2, y0 + ph / 2 + 1, pw / 2 - 1, ph / 2, 10, RR, 0.62, 0.3, 0.12), T.lit, T.shade, PASTEL.line, 1.3, -pw * 0.08, -ph * 0.12);
+      const room = y1 - 1 - top;
+      if (w > 34 && RR() < 0.4) {
+        // two courses of smaller stones
+        const lo = room * (0.45 + RR() * 0.15), w2 = w * (0.55 + RR() * 0.4);
+        stone(x + 1, y1 - 1 - lo, w - 3, lo, RR);
+        stone(x + 1 + RR() * (w - w2), top, w2 - 3, room - lo - 3, RR);
+      } else {
+        const sh = room * (0.78 + RR() * 0.22);
+        stone(x + 1, y1 - 1 - sh, w - 3, sh, RR);
       }
     };
     const seamW = 44;
@@ -1863,12 +1946,12 @@ function paint(S: Stock): Masonry {
     lay(TW - seamW / 2, seamW, rand(2311));
     let x = seamW / 2;
     while (x < TW - seamW / 2 - 20) {
-      const w = Math.min(TW - seamW / 2 - x, 36 + R() * 46);
+      const w = Math.min(TW - seamW / 2 - x, 30 + R() * 50);
       lay(x, w, R);
       x += w;
     }
     const wet = g.createLinearGradient(0, y1, 0, y0);
-    wet.addColorStop(0, 'rgba(56, 50, 60, 0.3)'); wet.addColorStop(1, 'rgba(56, 50, 60, 0)');
+    wet.addColorStop(0, 'rgba(56, 50, 60, 0.28)'); wet.addColorStop(1, 'rgba(56, 50, 60, 0)');
     g.fillStyle = wet; g.fillRect(0, y0, TW, h);
     // Its top course dressed flat into a ledge a finger out from the frame,
     // lit, with the shade of the sole along the back of it. Flush, the
@@ -1901,7 +1984,13 @@ function paint(S: Stock): Masonry {
   function lowFrame(g: Ctx, R: Rand, fh: number): Block[] {
     const sole = fh - LOW_FOOT, e = POST / 2, top = 24, m = e + (R() - 0.5) * 12;
     g.fillStyle = PASTEL.stone; g.fillRect(0, 0, TW, sole);
-    for (const [a, b] of [[0, XM], [XM, TW]]) limewash(g, R, a, top, b, sole - SOLE);
+    const coat = coats(R, 2);
+    ([[0, XM], [XM, TW]] as Array<[number, number]>).forEach(([a, b], i) => {
+      const ia = a === 0 ? e : XM + m, ib = b === TW ? TW - e : XM - m;
+      limewash(g, R, a, top, b, sole - SOLE, coat[i], [ia, top, ib, sole - SOLE]);
+      splashes(g, R, ia, ib, sole - SOLE);
+    });
+    proud(g, -6, 0, TW + 6, top);
     for (const [a, b] of [[XM - m, XM + m], [-e, e], [TW - e, TW + e]]) proud(g, a, top, b, sole - SOLE);
     member(g, XM - m, top - 2, XM + m, sole - SOLE + 2, R);
     member(g, -e, 0, e, sole, rand(1759));
@@ -1910,9 +1999,8 @@ function paint(S: Stock): Masonry {
     footing(g, R, sole, fh);
     return [];
   }
-  /** Its cap: a rail along the head, and the shade it throws. */
+  /** Its cap: a rail along the head. The shade it throws is laid with the frame, under the posts, which are flush with it. */
   function frameCope(g: Ctx): void {
-    proud(g, -6, 0, TW + 6, 24);
     member(g, -6, 0, TW + 6, 24, rand(1767), true);
   }
   /**
@@ -4582,15 +4670,21 @@ function paint(S: Stock): Masonry {
       g.fillRect(gx0, -PROUD, gx1 - gx0, fh + PROUD);
       g.globalCompositeOperation = 'source-over';
       if (S.lay === 'frame') {
-        // A gate post either side of the way through, from the head of the
-        // fence down to the ground and out to the fence's own end post, with
-        // the rail and the sole run into it -- after the gap is cut, so its
-        // edge on the gateway keeps its ink. A bay of limewash a hand wide
-        // between the two posts was a daub panel nobody would build, and a
-        // pale slit down every gate post.
+        // A gate post either side of the way through, from the rail down to
+        // the sole and out to the fence's own end post -- after the gap is
+        // cut, so its edge on the gateway keeps its ink. A bay of limewash a
+        // hand wide between the two posts was a daub panel nobody would
+        // build, and a pale slit down every gate post; and a post of its own
+        // beside the end post was a doubled post.
         g.save();
         g.beginPath(); g.rect(0, -PROUD, gx0, fh + PROUD); g.rect(gx1, -PROUD, TW - gx1, fh + PROUD); g.clip();
-        for (const [a, b] of [[POST / 2 - 1, gx0], [gx1, TW - POST / 2 + 1]]) { proud(g, a, 0, b, fh); member(g, a, 0, b, fh, R); }
+        const e = POST / 2, sole = fh - LOW_FOOT;
+        // Cut from the same oak as the fence's own end post, laid from the
+        // same seed, so the two read as one post where they meet at the seam.
+        for (const [a, b] of [[-e, gx0], [gx1, TW + e]]) member(g, a, 0, b, sole, rand(1759));
+        // And the sole and the rail run on over them, as over every post of the fence.
+        member(g, -6, sole - SOLE, TW + 6, sole, rand(1763), true);
+        frameCope(g);
         g.restore();
       }
       return c;
