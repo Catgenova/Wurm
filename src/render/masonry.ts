@@ -421,6 +421,16 @@ interface Stock {
   pairs: string[];
   /** The tones a field wall carries that a house wall does not, and how often. */
   field: Array<[string, number]>;
+  /**
+   * On sandstone, the stone's own grain: the beds it was laid down in,
+   * showing as faint laminae across every block and crossing at a slant in
+   * one in five; bands of iron through the iron-rich ones; its arrises worn
+   * soft; blocks of no set length; and time taking it by honeycomb and by
+   * scaling off in skins, where cut stone chips and cracks.
+   */
+  grain?: boolean;
+  /** How much taller than the short courses the tall ones are, turn about: 0.3 lays them 1.3 to 0.7. None lays them alike. */
+  rhythm?: number;
 }
 
 /* ---- the two masonries -------------------------------------------------- */
@@ -757,6 +767,88 @@ const STONE: Stock = ((P) => ({
   pairs: ['warm', 'burnt'],
   field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
 }))(STONE_PASTEL);
+
+/**
+ * And sandstone: a honey-coloured ashlar dressed in a rose-red one.
+ *
+ * The field is a pale honey sand, a dozen values of it, in courses turn
+ * about tall and short, of blocks no two the same length; every block shows
+ * the beds it was laid down in as faint lines across it, and the odd one is
+ * banded with iron. Its dressings -- the band at each floor, the quoins, the
+ * jambs, lintels, sills and voussoirs, the cope of a garden wall -- are a
+ * rose-red sandstone, so a house of it reads as warm stone trimmed in a
+ * warmer; and it stands on a footing of the red a step darker, where the wet
+ * off the ground keeps it. Time takes sandstone by the grain rather than by
+ * the arris: its edges go soft, the salt hollows it into honeycomb where the
+ * wall is damp, and it scales off in skins.
+ */
+const SAND_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the block: its field tone, its shade, the bevel along its top, and its darkest
+  stone: '#e0c6a4', stoneShade: '#cbac8c', stoneHi: '#ecd9be', stoneDark: '#b39278',
+  // a rosier bed out of the same quarry, and a paler, bleached one
+  warm: '#e3bea6', warmShade: '#cda38c', warmHi: '#eed2c0',
+  dark: '#c8a88c', darkHi: '#d8bea4',
+  // the joint, a step under the block, and the ink round every one: a rose-brown, never black
+  joint: '#c3a58d', line: '#9a7666',
+  // the red sandstone it is dressed in, and the band of it at a floor line
+  dress: '#d6a494', dressShade: '#bf8c7e', dressHi: '#e4baac',
+  band: '#daab9a', bandShade: '#c29382', bandHi: '#e7c0b1',
+  ringJoint: '#b8917e', reveal: '#a9826f',
+  // the iron that bands the odd block, and the dark edge of a band
+  iron: '#cc9474', ironDark: '#b47b64',
+  // the hollows of honeycomb, and the rain's wash down a block
+  pit: '#8e6c70', stain: '#d3bea4', stainShade: '#bea88f',
+};
+
+const SAND: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone),
+    /*
+     * The beds a quarry gives up besides its own, every one inside eight
+     * points of the field. The bond asks for them by the kiln's names, and
+     * on sandstone they are the quarry's: `warm` a rosier bed, `burnt` a
+     * pale, bleached one, and `brown` a block with iron in it, which is the
+     * one that shows its bands.
+     */
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    burnt:   { lit: '#e9d6b9', shade: lighten('#e9d6b9', -6), hi: lighten('#e9d6b9', 5) },
+    brown:   { lit: '#dbb492', shade: lighten('#dbb492', -6), hi: lighten('#dbb492', 6) },
+    weather: { lit: lighten(P.stone, -7), shade: lighten(P.stone, -11), hi: lighten(P.stone, -2) },
+    bleach:  { lit: lighten(P.stone, 6), shade: lighten(P.stone, 2), hi: lighten(P.stone, 9) },
+    // The red sandstone, in the two tones its dressings turn about in.
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: '#cc9888', shade: '#b58274', hi: '#dbae9f' },
+    dark:    { lit: '#cc9888', shade: '#b58274', hi: '#dbae9f' },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 6) },
+    // And the footing: the red a step darker, in two beds.
+    foot:    { lit: '#c08a7b', shade: '#a9776b', hi: '#cf9e90' },
+    footB:   { lit: '#c99a88', shade: '#b28676', hi: '#d7ad9d' },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.stone, 6), shade: lighten(P.stone, 1), hi: lighten(P.stone, 10) },
+  },
+  lay: 'bond',
+  rows: 6,
+  across: 3,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 2,
+  bandN: 4,
+  plinth: 96,
+  // Sandstone weathers: it does not chip, it goes by the grain.
+  wear: 0.3,
+  // The lilac every shadow on this island is, on a warm stone.
+  shade: [36, 28, 80],
+  shadow: (k) => (1 - k) * 0.85,
+  growth: false,
+  mix: [['warm', 0.1], ['burnt', 0.06], ['brown', 0.06]],
+  pairs: ['warm', 'burnt'],
+  field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
+  grain: true,
+  rhythm: 0.3,
+}))(SAND_PASTEL);
 
 /**
  * And timbercraft: a frame of oak, pegged together, its panels filled with
@@ -1229,6 +1321,7 @@ let logged: Masonry | undefined;
 let planked: Masonry | undefined;
 let gilded: Masonry | undefined;
 let golden: Masonry | undefined;
+let sanded: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1257,6 +1350,9 @@ export function brickwork(): Masonry {
  */
 export function stonework(): Masonry {
   return dressed ??= paint(STONE);
+}
+export function sandstone(): Masonry {
+  return sanded ??= paint(SAND);
 }
 
 /**
@@ -1398,7 +1494,8 @@ function paint(S: Stock): Masonry {
      * the edges.
      */
     const pn = cut === 'unit' ? 20 : 14;
-    const pts = cut === 'unit' ? blob(cx, cy, w / 2, h / 2, pn, R, 0.15, 0.1, 0.018)
+    // Sandstone's arrises go soft with the weather, and its edges wander more.
+    const pts = cut === 'unit' ? blob(cx, cy, w / 2, h / 2, pn, R, S.grain ? 0.24 : 0.15, 0.1, S.grain ? 0.03 : 0.018)
       : blob(cx, cy, w / 2, h / 2, pn, R, laid ? 0.28 : 0.26, laid ? 0.28 : 0.16, laid ? 0.05 : 0.025);
     if (laid && R() < 0.3) { const k = Math.floor(R() * pts.length); pts[k] = [pts[k][0] * 0.85 + cx * 0.15, pts[k][1] * 0.85 + cy * 0.15]; }
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt); for (const p of pts) { const px = p[0] - cx, py = p[1] - cy; p[0] = cx + px * c - py * s; p[1] = cy + px * s + py * c; } }
@@ -1409,6 +1506,7 @@ function paint(S: Stock): Masonry {
     // brick in the wall, heavier than the joint beside it.
     const [ox, oy] = cut === 'unit' ? [-w * 0.035, -h * 0.1] : [-w * 0.1, -h * 0.14];
     solid(g, pts, T.lit, T.shade, PASTEL.line, ink, ox, oy);
+    if (S.grain) grainOf(g, pts, x, y, w, h, R, T, tone);
     // the bevel: the block's own outline, shifted a little down and right and clipped to the block,
     // shows as a light band along the top and the upper left, where the light lands
     if (!bevel) return pts;
@@ -1504,12 +1602,98 @@ function paint(S: Stock): Masonry {
     }
     g.restore();
   }
+  /**
+   * The beds a block of sandstone was laid down in: two to four laminae
+   * across it, each a hair lighter or darker than the block and gently
+   * waved; in one block in five a set of them at a slant under a bedding
+   * plane, where the sand came in on a current; and in an iron-rich block,
+   * two or three bands of the iron curving through it.
+   */
+  function grainOf(g: Ctx, pts: Pt[], x: number, y: number, w: number, h: number, R: Rand, T: Tone, tone: string): void {
+    if (w < 16 || h < 10) return;
+    g.save(); shape(g, pts); g.clip();
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const cross = w > 70 && h > 34 && R() < 0.2, split = y + h * (0.3 + R() * 0.3);
+    const n = 2 + Math.floor(R() * 3);
+    for (let i = 0; i < n; i++) {
+      const ly = y + h * ((i + 0.3 + R() * 0.4) / n);
+      if (cross && ly > split) continue;
+      const amp = 0.6 + R() * 1.2, ph = R() * 6, f = 0.6 + R() * 0.4;
+      g.beginPath();
+      for (let k = 0; k <= 8; k++) g.lineTo(x - 2 + ((w + 4) * k) / 8, ly + Math.sin(ph + (k / 8) * Math.PI * 2 * f) * amp);
+      g.strokeStyle = hexA(i % 2 ? T.shade : T.hi, i % 2 ? 0.55 : 0.6); g.lineWidth = 1.2 + R() * 1.2; g.stroke();
+    }
+    if (cross) {
+      // the foresets, down a slant under the plane that cut them off
+      const dir = R() < 0.5 ? 1 : -1, slope = Math.tan(0.28 + R() * 0.2), gap = 9 + R() * 4, hh = y + h - split;
+      g.save(); g.beginPath(); g.rect(x - 2, split, w + 4, hh + 2); g.clip();
+      g.strokeStyle = hexA(T.shade, 0.5); g.lineWidth = 1.2;
+      for (let t = -hh / slope; t < w + hh / slope; t += gap) {
+        g.beginPath(); g.moveTo(x + t, split); g.quadraticCurveTo(x + t + dir * (hh / slope) * 0.55, split + hh * 0.55, x + t + dir * (hh / slope) * 1.2, y + h + 2); g.stroke();
+      }
+      g.restore();
+      g.beginPath(); g.moveTo(x - 2, split); g.lineTo(x + w + 2, split + (R() - 0.5) * 3); g.strokeStyle = hexA(T.shade, 0.75); g.lineWidth = 1.5; g.stroke();
+    }
+    if (tone === 'brown') {
+      // the iron: rings of it from a centre off the block, so they cross it as curved bands
+      const below = R() < 0.5, cx = x + w * (0.1 + R() * 0.8), cy = below ? y + h * (1.6 + R() * 1.4) : y - h * (0.6 + R() * 1.4);
+      let r = Math.abs(cy - (below ? y + h : y)) + h * (0.12 + R() * 0.2);
+      for (let k = 0, m = 2 + Math.floor(R() * 2); k < m; k++) {
+        const t = 3 + R() * 4;
+        g.beginPath(); g.ellipse(cx, cy, r * 1.7, r, 0, 0, Math.PI * 2); g.lineWidth = t; g.strokeStyle = hexA(PASTEL.iron, 0.8); g.stroke();
+        g.beginPath(); g.ellipse(cx, cy, r * 1.7 + (below ? -t / 2 : t / 2), r + (below ? -t / 2 : t / 2), 0, 0, Math.PI * 2); g.lineWidth = 1.4; g.strokeStyle = hexA(PASTEL.ironDark, 0.75); g.stroke();
+        r += t + 4 + R() * 8;
+      }
+    }
+    g.restore();
+  }
+  /**
+   * Honeycomb: where salt has worked into a damp block, a patch of it
+   * hollowed into cells packed close, so that what is left of the face is a
+   * lattice of thin walls between them. Each cell is a pocket in the violet
+   * of the shade, with a lit lip along its lower edge where the hollow turns
+   * up at the light; the patch is a step darker than the block round it. A
+   * scatter of loose pits read as shot.
+   */
+  function honeycomb(g: Ctx, s: Block, R: Rand): void {
+    const cx = s.x + s.w * (0.22 + 0.56 * R()), cy = s.y + s.h * (0.42 + 0.3 * R());
+    const rw = Math.min(s.w * 0.32, 18 + R() * 20), rh = Math.min(s.h * 0.36, 10 + R() * 9);
+    const edge = blob(cx, cy, rw, rh, 12, R, 0.85, 0.45, 0.3);
+    g.save(); shape(g, s.pts); g.clip();
+    shape(g, edge); g.fillStyle = hexA(PASTEL.pit, 0.22); g.fill(); g.clip();
+    const r = 2.6 + R() * 1.4, dx = r * 2.5, dy = r * 1.75;
+    for (let j = 0, y = cy - rh; y <= cy + rh + dy; j++, y += dy) {
+      for (let x = cx - rw - (j % 2) * dx * 0.5; x <= cx + rw + dx; x += dx) {
+        const px = x + (R() - 0.5) * r * 0.6, py = y + (R() - 0.5) * r * 0.5, rr = r * (0.8 + R() * 0.4);
+        g.beginPath(); g.ellipse(px, py, rr * 1.3, rr, 0, 0, Math.PI * 2); g.fillStyle = hexA(PASTEL.pit, 0.72); g.fill();
+        g.beginPath(); g.ellipse(px, py + 0.7, rr * 1.3, rr, 0, 0.15 * Math.PI, 0.85 * Math.PI); g.strokeStyle = hexA(PASTEL.stoneHi, 0.8); g.lineWidth = 1.1; g.stroke();
+      }
+    }
+    g.restore();
+  }
+  /**
+   * How time takes sandstone, on the private blocks only: by the grain, not
+   * the arris. Honeycomb in two damp blocks in five -- the lowest course, and
+   * the drip under the band -- and one in twelve elsewhere; a skin scaled
+   * off one in eight; a block sunk back one in thirty; a worn patch on one in
+   * six; and a wash from the joint above one in eight.
+   */
+  function sandWeather(g: Ctx, own: Block[], R: Rand): void {
+    for (const s of own) {
+      const damp = s.course >= COURSES - 1 || s.course === 0;
+      if (R() < (damp ? 0.4 : 0.08)) honeycomb(g, s, R);
+      else { const t = R(); if (t < 0.12) spall(g, s, R); else if (t < 0.155) recessed(g, s, R); }
+      if (R() < 0.16) abrade(g, s, R);
+      if (R() < 0.12 && s.course < COURSES - 1) stain(g, s, R);
+    }
+  }
   /** Wear, on the private stones only, so the seams and the storey line keep their contract. Masonry is
    *  a novice's masonry, and it shows: a chipped corner on one block in five, a crack on one in six, a
    *  flaked edge on one in fourteen, a block sunk deeper on one in twenty and gone on one in fifty;
    *  and over those, an abraded patch on one in five, pits on one in four, mortar squeezed out of one
    *  joint in seven, a water stain under one in seven. */
   function weather(g: Ctx, own: Block[], R: Rand): void {
+    if (S.grain) { sandWeather(g, own, R); return; }
     const k = S.wear;
     for (const s of own) {
       const t = R();
@@ -3387,15 +3571,13 @@ function paint(S: Stock): Masonry {
       // is bonded through its own depth and shows stretchers only.
       const head = S.headers > 0 && i % S.headers === S.headers - 1;
       const n = head ? S.across * 2 : S.across;
-      const uw = TW / n;
       const lap = head ? 0 : (i % 2) * 0.5;
       // The course's own sag. It is a sine on a span that is zero at both
       // ends, so a bed arrives at the seam level however far its middle has
       // dropped, and the drop is what says the wall has stood a while.
       const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
       const q = Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES));
-      for (let k = lap ? -1 : 0; k < n; k++) {
-        const x = (k + lap) * uw;
+      for (const [x, uw] of unitsOf(n, lap, R, 1511 + i * 13)) {
         const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
         const seam = x < 0 || x + uw > TW;
         const sag = Math.sin((Math.PI * kw * (mid - EDGE)) / (TW - 2 * EDGE)) * aw;
@@ -3446,11 +3628,43 @@ function paint(S: Stock): Masonry {
    * section's seam at the height it left the last one -- and because a quoin
    * is two courses of brick deep and has to know where they are.
    */
+  /** How deep course `i` is laid against the others: turn about tall and short where the stock asks for it. */
+  function rhythmOf(i: number): number {
+    return S.rhythm ? (i % 2 ? 1 - S.rhythm : 1 + S.rhythm) : 1;
+  }
+  /**
+   * Where the units of a course of `n` stand, `lap` of one over, as
+   * [x, width]: evenly, or on sandstone at lengths no two alike -- every joint
+   * inside the course moved up to a fifth of a unit either way. A unit that
+   * crosses the section's seam takes its two ends off the course's own
+   * `seed`, so that it is the same stone in every variant.
+   */
+  function unitsOf(n: number, lap: number, R: Rand, seed: number): Array<[number, number]> {
+    const uw = TW / n, out: Array<[number, number]> = [];
+    if (!S.grain) {
+      for (let k = lap ? -1 : 0; k < n; k++) out.push([(k + lap) * uw, uw]);
+      return out;
+    }
+    const jit = (r: Rand): number => (r() - 0.5) * 0.4 * uw;
+    const js: number[] = [];
+    if (!lap) {
+      js.push(0);
+      for (let k = 1; k < n; k++) js.push(k * uw + jit(R));
+      js.push(TW);
+    } else {
+      const SR = rand(seed), a = uw / 2 + jit(SR), b = uw / 2 + jit(SR);
+      js.push(-a, b);
+      for (let k = 1; k <= n - 2; k++) js.push((k + 0.5) * uw + jit(R));
+      js.push(TW - a, TW + b);
+    }
+    for (let k = 0; k + 1 < js.length; k++) out.push([js[k], js[k + 1] - js[k]]);
+    return out;
+  }
   function bedTops(): number[] {
     const HR = rand(2027);
     const hs: number[] = [];
     let tot = 0;
-    for (let i = 0; i < S.rows; i++) { const w = 0.92 + 0.16 * HR(); hs.push(w); tot += w; }
+    for (let i = 0; i < S.rows; i++) { const w = (0.92 + 0.16 * HR()) * rhythmOf(i); hs.push(w); tot += w; }
     const tops: number[] = [BAND];
     for (let i = 0; i < S.rows; i++) tops.push(tops[i] + ((TH - BAND) * hs[i]) / tot);
     return tops;
@@ -5148,19 +5362,18 @@ function paint(S: Stock): Masonry {
     const top = COPE;
     const own: Block[] = [];
     const zone = firing(R);
-    const n = S.across, uw = TW / n;
+    const n = S.across;
     const HR = rand(3121);
     const hs: number[] = [];
     let tot = 0;
-    for (let i = 0; i < rows; i++) { const w = 0.92 + 0.16 * HR(); hs.push(w); tot += w; }
+    for (let i = 0; i < rows; i++) { const w = (0.92 + 0.16 * HR()) * rhythmOf(i); hs.push(w); tot += w; }
     const tops: number[] = [top];
     for (let i = 0; i < rows; i++) tops.push(tops[i] + ((fh - top) * hs[i]) / tot);
     for (let i = 0; i < rows; i++) {
       const y0 = tops[i], ch = tops[i + 1] - y0;
       const lap = (i % 2) * 0.5;
       const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
-      for (let k = lap ? -1 : 0; k < n; k++) {
-        const x = (k + lap) * uw;
+      for (const [x, uw] of unitsOf(n, lap, R, 1733 + i * 17)) {
         const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
         const seam = x < 0 || x + uw > TW;
         const RR = seam ? rand(647 + i * 11) : R;
@@ -6530,7 +6743,8 @@ function paint(S: Stock): Masonry {
     plinth: S.plinth,
     shade: S.shade,
     growth: S.growth,
-    under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' || S.lay === 'plank' || S.lay === 'gild' ? channels(PASTEL.dress) : undefined,
+    under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' || S.lay === 'plank' || S.lay === 'gild' ? channels(PASTEL.dress)
+      : S.grain ? channels(PASTEL.joint) : undefined,
     pad: PAD,
     capH: CAP_H,
     pave,
@@ -6554,7 +6768,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, adobe, timbercraft, logwork, planking, silverwork, goldwork];
+  const sets = [cobble, brickwork, stonework, sandstone, adobe, timbercraft, logwork, planking, silverwork, goldwork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });
