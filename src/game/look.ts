@@ -166,16 +166,18 @@ export const GENDERS: Style[] = [
 ];
 
 /**
- * The build each answers to.
+ * The build each answers to: how wide the shoulders, waist and hips are
+ * against a body in between.
  *
- * Small numbers on purpose. A body that is twenty-eight pixels tall has room
- * for a shoulder line and a waist and nothing else, and a bigger difference
- * than this stops being a build and starts being a caricature.
+ * About a fifth either way. The body is a model turned in three dimensions
+ * now, so a build has to show from the side and the back as well as the
+ * front, and at three-quarters -- where the island mostly sees people --
+ * anything much under a fifth came out looking like the same body twice.
  */
 export const BUILDS: Record<Gender, { shoulder: number; waist: number; hip: number }> = {
-  man: { shoulder: 1.1, waist: 1, hip: 0.95 },
-  woman: { shoulder: 0.9, waist: 0.88, hip: 1.1 },
-  neither: { shoulder: 1, waist: 0.95, hip: 1 },
+  man: { shoulder: 1.18, waist: 1, hip: 0.95 },
+  woman: { shoulder: 0.84, waist: 0.8, hip: 1.16 },
+  neither: { shoulder: 1, waist: 0.92, hip: 1.03 },
 };
 
 export const DEFAULT_LOOK: Look = {

@@ -201,7 +201,7 @@ a { color: var(--ui-accent); }
  * The card grows for it. A sign-up is two fields and wants to be narrow; a
  * character creator is a mirror and eight rows of choices and wants not to be.
  */
-.card.making { max-width: 760px; }
+.card.making { max-width: 920px; }
 .card.making form, .card.making .tabs { display: none; }
 
 .maker {
@@ -221,8 +221,8 @@ a { color: var(--ui-accent); }
 }
 
 #me {
-  width: 200px;
-  height: 320px;
+  width: 360px;
+  height: 460px;
   border: 1px solid var(--ui-border);
   border-radius: 4px;
   background: linear-gradient(#1b2f22, #2c3c26 60%, #3b4429);
@@ -239,7 +239,7 @@ a { color: var(--ui-accent); }
  */
 .turn, .motions {
   display: flex;
-  width: 200px;
+  width: 360px;
   gap: 4px;
 }
 
@@ -258,7 +258,7 @@ a { color: var(--ui-accent); }
   cursor: pointer;
 }
 
-.motions button { flex-basis: calc((100% - 8px) / 3); }
+.motions button { flex-basis: calc((100% - 20px) / 6); }
 .turn #close { flex-grow: 2; }
 
 .turn button:hover, .motions button:hover { border-color: var(--ui-border-light); }
@@ -279,7 +279,7 @@ a { color: var(--ui-accent); }
   cursor: pointer;
 }
 
-#roll { width: 200px; }
+#roll { width: 360px; }
 
 #ashore {
   width: 100%;

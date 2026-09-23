@@ -301,8 +301,12 @@ async function onward(line: string): Promise<void> {
 
 /** What is being chosen, at this moment. */
 let look: Look = randomLook();
-/** The thumbnails, so that changing skin or hair colour redraws all of them. */
-const thumbs: Array<{ canvas: HTMLCanvasElement; of: (l: Look) => Look }> = [];
+/** The thumbnails, so that changing skin or hair colour redraws all of them, and which way round each is shown. */
+const thumbs: Array<{ canvas: HTMLCanvasElement; of: (l: Look) => Look; facing: number }> = [];
+/** Hair that is tied back is chosen by what it is tied into, so its thumbnail shows the back of the head. */
+const FROM_BEHIND = new Set(['ponytail', 'bun', 'braid', 'locs']);
+/** What the pointer is resting on, shown in the mirror until it moves off. */
+let preview: Look | null = null;
 /** Every row's buttons, so the selected one can be marked without rebuilding. */
 const marks: Array<{ kind: keyof Look; id: string; button: HTMLButtonElement; label: HTMLElement }> = [];
 
@@ -350,15 +354,19 @@ function buildChoices(): void {
         // Drawn at the screen's own resolution, so a haircut is not chosen from a blur.
         canvas.width = canvas.height = Math.round(52 * Math.min(3, window.devicePixelRatio || 1));
         button.append(canvas);
-        thumbs.push({ canvas, of: (l) => ({ ...l, [key]: option.id, ...(key === 'hair' ? {} : { hair: 'crop' }) }) });
+        thumbs.push({ canvas, of: (l) => ({ ...l, [key]: option.id, ...(key === 'hair' ? {} : { hair: 'crop' }) }), facing: key === 'hair' && FROM_BEHIND.has(option.id) ? 3 : 1 });
       } else {
         button.className = 'pick word';
         button.textContent = option.name;
       }
       button.addEventListener('click', () => {
         look = cleanLook({ ...look, [key]: option.id });
+        preview = null;
         redraw();
       });
+      // Resting the pointer on a choice tries it on in the mirror; moving off puts back what was chosen.
+      button.addEventListener('pointerenter', () => { preview = cleanLook({ ...look, [key]: option.id }); });
+      button.addEventListener('pointerleave', () => { preview = null; });
       marks.push({ kind: key, id: option.id, button, label: chosen });
       row.append(button);
     }
@@ -380,7 +388,7 @@ function redraw(): void {
     const ctx = t.canvas.getContext('2d');
     if (!ctx) continue;
     ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
-    drawHeadshot(ctx, 0, 0, t.canvas.width, t.of(look));
+    drawHeadshot(ctx, 0, 0, t.canvas.width, t.of(look), t.facing);
   }
 }
 
@@ -410,10 +418,11 @@ function mirrorFrame(now: number): void {
       mirror.height = h;
     }
     ctx.clearRect(0, 0, mirror.width, mirror.height);
+    const shown = preview ?? look;
     if (close) {
-      drawHeadshot(ctx, 0, 0, mirror.width, look, facing, now / 1000, mirror.height);
+      drawHeadshot(ctx, 0, 0, mirror.width, shown, facing, now / 1000, mirror.height);
     } else {
-      drawPortrait(ctx, 0, 0, mirror.width, mirror.height, look, now / 1000, facing, motion);
+      drawPortrait(ctx, 0, 0, mirror.width, mirror.height, shown, now / 1000, facing, motion);
     }
   }
   walking = requestAnimationFrame(mirrorFrame);

@@ -1,5 +1,6 @@
 import { mulberry32 } from '../world/noise';
 import type { Look } from '../game/look';
+import { emotePose } from '../game/emotes';
 import { drawBust, drawFigure, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 
@@ -4355,8 +4356,15 @@ export function facingOf(sx: number, sy: number, was?: number): number {
  * makes a hop look like leaving the ground rather than growing.
  */
 export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
-  if (!pose.swimming && !pose.driving) contact(ctx, sx, sy, 8 * zoom, 3.4 * zoom);
+  if (!pose.swimming && !pose.driving) footShade(ctx, sx, sy, zoom, pose);
   drawFigure(ctx, sx, sy, zoom, pose);
+}
+
+/** The patch of ground a body shades: smaller while a hop has it off the ground, by a fifth at the top. */
+function footShade(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
+  const up = pose.emote === 'hop' ? emotePose('hop', pose.emoteT ?? 0).lift / 7 : 0;
+  const k = 1 - 0.2 * up;
+  contact(ctx, sx, sy, 8 * zoom * k, 3.4 * zoom * k);
 }
 
 /**
@@ -4401,7 +4409,7 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.rect(x, y, w, h);
   ctx.clip();
   const fx = x + w / 2, fy = y + h - h * 0.1;
-  contact(ctx, fx, fy, 8 * zoom, 3.4 * zoom);
+  footShade(ctx, fx, fy, zoom, pose);
   drawFigure(ctx, fx, fy, zoom, pose, { ink: 1.6 });
   ctx.restore();
 }
