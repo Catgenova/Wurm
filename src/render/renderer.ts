@@ -3243,13 +3243,16 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
-    if (kind?.railed && (!cob || cob.railed)) {
+    if (kind?.railed && !cob) {
       /*
        * Posts and rails, each of them a piece of timber with a top to it: a
        * fence drawn flat is a comb, and a comb is what this was.
        *
        * Timber only. A stone fence is not posts and rails -- it is a wall you
-       * can see over -- so cobblestone goes down to its own picture below.
+       * can see over -- so cobblestone goes down to its own picture below, and
+       * so does timbercraft: its fence is its frame at a fence's height, where
+       * posts and rails in plain wood stood out of a garden wall of it as
+       * another material.
        */
       const post = (t: number, w: number): void => {
         const t0 = Math.max(0, t - w);

@@ -307,8 +307,6 @@ export interface Masonry {
   scatter: boolean;
   /** The coat's own lit tone, for the rounded arris where it turns a corner. */
   hi: [number, number, number];
-  /** Whether its fences are posts and rails, as a fence of wood is, rather than a low wall of it. */
-  railed: boolean;
   /**
    * The flat colour to lay under a section before its picture, or none.
    *
@@ -738,14 +736,14 @@ const STONE: Stock = ((P) => ({
  * And timbercraft: a frame of oak, pegged together, its panels filled with
  * daub and limewashed.
  *
- * The frame is the drawing: posts at every section's ends and one between,
- * a rail across the middle of each storey, a plate along its head and a sole
- * along its foot, and in the panels the braces that keep it square -- which
- * is what makes a frame a house rather than a window. The oak is the dark of
- * an old beam weathered to a violet cast, and the limewash between is a warm
- * chalky white, so the whole reads at any distance as dark lines on a pale
- * ground. It stands on a footing of field stone, because oak at the ground
- * rots.
+ * The frame is the drawing, and there is not much of it: posts at every
+ * section's ends and one between, a plate along the head of each storey that
+ * the storey over it stands on, and here and there a brace keeping it square.
+ * The oak is the dark of an old beam weathered to a violet cast, and the
+ * limewash between is a warm chalky white, so the whole reads at any distance
+ * as dark lines on a pale ground. It stands on a footing of field stone,
+ * because oak at the ground rots, and its fences and garden walls are the
+ * same frame at their own height.
  */
 const FRAME_PASTEL: Record<string, string> = {
   ...RUBBLE_PASTEL,
@@ -1531,17 +1529,18 @@ function paint(S: Stock): Masonry {
 
   /* ---- timbercraft --------------------------------------------------------- */
   /**
-   * How thick the frame's members are -- a post, a stud, a rail, a brace --
-   * and the plate at a storey's head and the sole at its foot.
+   * How thick the frame's members are -- a post, the rails over and under an
+   * opening, a brace -- and the plate at a storey's head and the sole the
+   * ground storey stands on.
    *
    * Wider than life across. A face seen from a diagonal is laid at about two
    * thirds of its width, and at the true widths a post came out thinner on
    * screen than the rail it carried: a white box ruled in brown lines rather
    * than a frame with the weight on its posts.
    */
-  const POST = 48, STUD = 34, RAIL = 28, BRACE = 30, PLATE = 28, SOLE = 24;
-  /** Where the rail across the middle of a storey runs, and the middle post: the same in every section, so they meet the next section's and the storey's above. */
-  const MID = Math.round(TH * 0.5), XM = TW / 2;
+  const POST = 48, RAIL = 28, BRACE = 30, PLATE = 28, SOLE = 24;
+  /** Where the middle post stands: the same in every section, so it stands over the one in the storey below. */
+  const XM = TW / 2;
   /** The shade a member standing proud of the limewash throws on it: hard-edged, cool, and a finger wide. */
   const PROUD_SH = 7;
   /**
@@ -1650,86 +1649,66 @@ function paint(S: Stock): Masonry {
     g.fillStyle = 'rgba(120, 126, 160, 0.1)'; g.fillRect(x0, y0, w, Math.min(18, h * 0.2));
     g.fillStyle = 'rgba(150, 118, 86, 0.13)'; g.fillRect(x0, y1 - Math.min(26, h * 0.25), w, Math.min(26, h * 0.25));
   }
-  /** The bracing of a plain face, by variant: one figure to each, and only one of them close-studded. */
-  const FIGURES = ['rise', 'fall', 'cross', 'studs', 'kite'] as const;
+  /**
+   * The bracing of a plain face, by variant: none on most of them, and on two
+   * a single brace, one to each side. A brace in every bay and a rail across
+   * every storey was a lattice -- more timber than wall -- and the frame is
+   * read by its posts, its plates and the odd brace keeping it square.
+   */
+  const FIGURES = ['plain', 'left', 'plain', 'right', 'plain'] as const;
+  /** How far down its post a brace's foot is let in, as a share of the storey under the plate. */
+  const BRACE_DROP = 0.62;
   /**
    * The field of a frame.
    *
-   * The panels first, limewashed over daub. Then what keeps the frame
-   * square, which is the variant's own figure: braces rising from the feet
-   * of the outer posts to the rail at the middle post, braces falling from
-   * the plate at the middle post to the rail at the outer ones, a cross in
-   * one panel, close studs, or both kinds of brace at once -- each run from
-   * one joint to another, its ends under the members. Then the members over
-   * them, each with the shade it throws on the wash: the rail across the
-   * middle, the posts, the plate along the head and the sole along the foot.
-   * The middle post is at the middle of every section, so it stands over the
-   * one in the storey below; the posts at a section's ends are one post
-   * shared with the next section, laid from one seed; and the plate, the
-   * rail and the sole run straight through every seam.
+   * Two bays of limewash to a section, between a post at each end and one in
+   * the middle, under the plate along the storey's head. There is no sole
+   * along its foot: a storey stands on the plate of the one under it, so a
+   * floor is one beam across the wall rather than two, and the ground storey
+   * stands on the sole the foot lays along the footing. On two variants in
+   * five a brace runs up from an end post, let in a little over a third of
+   * the way down it, to the plate at the head of the middle post. The middle
+   * post is at the middle of every section, so it stands over the one in the
+   * storey below; the posts at a section's ends are one post shared with the
+   * next section, laid from one seed; and the plate runs straight through
+   * every seam.
    *
    * `open` is a section an opening will be cut in, which keeps its middle
-   * clear for the opening's own posts and rails, and `vi` the variant a
-   * plain face is.
+   * clear for the opening's own posts and rails, and `vi` the variant a plain
+   * face is.
    */
   function paintFrame(g: Ctx, R: Rand, open: boolean, vi: number): Block[] {
     g.fillStyle = PASTEL.stone; g.fillRect(0, 0, TW, TH);
     const e = POST / 2;
-    const cols: Array<[number, number]> = open ? [[e, TW - e]] : [[e, XM - e], [XM + e, TW - e]];
-    const rows: Array<[number, number]> = [[PLATE, MID], [MID + RAIL, TH - SOLE]];
-    for (const [a, b] of cols) for (const [c, d] of rows) limewash(g, R, a, c, b, d);
-    const lo = rows[1], hi = rows[0];
+    const bays: Array<[number, number]> = open ? [[e, TW - e]] : [[e, XM - e], [XM + e, TW - e]];
+    for (const [a, b] of bays) limewash(g, R, a, PLATE, b, TH);
     const figure = open ? null : FIGURES[(vi < 0 ? Math.floor(R() * FIGURES.length) : vi) % FIGURES.length];
-    if (figure === 'rise' || figure === 'kite') {
-      brace(g, braceAt(e, lo[1], XM - e, lo[0], R));
-      brace(g, braceAt(TW - e, lo[1], XM + e, lo[0], R));
-    }
-    if (figure === 'fall' || figure === 'kite') {
-      brace(g, braceAt(XM - e, hi[0], e, hi[1], R));
-      brace(g, braceAt(XM + e, hi[0], TW - e, hi[1], R));
-    }
-    if (figure === 'cross') {
-      const left = R() < 0.5;
-      const [a, b] = left ? [e, XM - e] : [XM + e, TW - e];
-      brace(g, braceAt(a, lo[0], b, lo[1], R));
-      brace(g, braceAt(a, lo[1], b, lo[0], R));
-      const [c, d] = left ? [XM + e, TW - e] : [e, XM - e];
-      brace(g, braceAt(c, hi[1], d, hi[0], R));
-    }
-    const studs: number[] = [];
-    if (figure === 'studs') for (const [a, b] of cols) for (const f of [1 / 3, 2 / 3]) studs.push(a + (b - a) * f);
+    const foot = PLATE + (TH - PLATE) * BRACE_DROP;
+    if (figure === 'left') brace(g, braceAt(e, foot, XM - e, PLATE, R));
+    if (figure === 'right') brace(g, braceAt(TW - e, foot, XM + e, PLATE, R));
     // The members, each over the shade it throws.
     const posts: Array<[number, number, Rand]> = [[-e, e, rand(1753)], [TW - e, TW + e, rand(1753)]];
     if (!open) posts.push([XM - e, XM + e, R]);
-    for (const x of studs) proud(g, x - STUD / 2, PLATE, x + STUD / 2, TH - SOLE);
-    for (const [a, b] of posts) proud(g, a, PLATE, b, TH - SOLE);
-    proud(g, -6, MID, TW + 6, MID + RAIL);
+    for (const [a, b] of posts) proud(g, a, PLATE, b, TH);
     proud(g, -6, 0, TW + 6, PLATE);
-    for (const x of studs) member(g, x - STUD / 2, PLATE - 2, x + STUD / 2, TH - SOLE + 2, R);
-    member(g, -6, MID, TW + 6, MID + RAIL, rand(1741), true);
-    for (const [a, b, RR] of posts) member(g, a, PLATE - 2, b, TH - SOLE + 2, RR);
+    for (const [a, b, RR] of posts) member(g, a, PLATE - 2, b, TH + 2, RR);
     member(g, -6, 0, TW + 6, PLATE, rand(1747), true);
-    member(g, -6, TH - SOLE, TW + 6, TH, rand(1733), true);
-    // Pegs through the joints of the rail and the plate with the posts.
-    for (const x of open ? [e, TW - e] : [e, XM, TW - e]) {
-      const dx = x < XM ? 6 : x > XM ? -6 : 0;
-      peg(g, x + dx, MID + RAIL / 2);
-      peg(g, x + dx, PLATE / 2 + 1);
-    }
+    // Pegs through the joints of the plate with the posts.
+    for (const x of open ? [e, TW - e] : [e, XM, TW - e]) peg(g, x + (x < XM ? 6 : x > XM ? -6 : 0), PLATE / 2 + 1);
     return [];
   }
   /**
-   * A window in a frame: a post either side of it from the plate to the
-   * sole, a rail over it and a sill rail under it standing out to throw the
-   * rain clear, with the hard shade it throws -- the opening is framed, not
-   * cut.
+   * A window in a frame: a post either side of it from the plate to the foot
+   * of the storey, a rail over it and a sill rail under it standing out to
+   * throw the rain clear, with the hard shade it throws -- the opening is
+   * framed, not cut.
    */
   function frameSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
     const sy = sill + RAIL - 2 + shelf * 0.6;
-    proud(g, x0 - POST, PLATE, x0, TH - SOLE); proud(g, x1, PLATE, x1 + POST, TH - SOLE);
+    proud(g, x0 - POST, PLATE, x0, TH); proud(g, x1, PLATE, x1 + POST, TH);
     proud(g, x0 - POST, head - RAIL, x1 + POST, head);
-    member(g, x0 - POST, PLATE - 2, x0, TH - SOLE + 2, R);
-    member(g, x1, PLATE - 2, x1 + POST, TH - SOLE + 2, R);
+    member(g, x0 - POST, PLATE - 2, x0, TH + 2, R);
+    member(g, x1, PLATE - 2, x1 + POST, TH + 2, R);
     member(g, x0 - POST, head - RAIL, x1 + POST, head, R);
     g.fillStyle = 'rgba(70, 58, 84, 0.26)'; g.fillRect(x0 - POST - 8 - shelf, sy, x1 - x0 + 2 * POST + 16 + 2 * shelf, PROUD_SH + 2);
     member(g, x0 - POST - 8 - shelf, sill, x1 + POST + 8 + shelf, sy, R);
@@ -1805,49 +1784,31 @@ function paint(S: Stock): Masonry {
     wet.addColorStop(0, 'rgba(56, 50, 60, 0.3)'); wet.addColorStop(1, 'rgba(56, 50, 60, 0)');
     g.fillStyle = wet; g.fillRect(0, y0, TW, h);
   }
-  /** The ground storey's foot: the footing, with the sole of the frame sitting on it. */
+  /**
+   * The ground storey's foot: the footing, with the sole of the frame sitting
+   * on it, and over the sole the band of splash and dirt the limewash takes
+   * at the foot of every bay -- which on the ground storey the footing hides.
+   */
   function footingOf(g: Ctx, R: Rand): void {
     const y0 = TH - S.plinth;
+    g.fillStyle = 'rgba(150, 118, 86, 0.13)'; g.fillRect(0, y0 - SOLE - 26, TW, 26);
     footing(g, R, y0, TH);
     g.fillStyle = 'rgba(56, 46, 60, 0.34)'; g.fillRect(0, y0, TW, 5);
     member(g, -6, y0 - SOLE, TW + 6, y0, rand(1733), true);
   }
-  /**
-   * The figure a half wall's frame is braced in, by variant: rising to the
-   * middle post, falling to it, plain, both leaning the one way, or a cross
-   * in one bay. Five figures for five variants, so that two sections side by
-   * side, which never take one variant, never take one figure either: with
-   * a figure to two variants the same one ran on down a garden wall.
-   */
-  const LOW_FIGURES = ['rise', 'fall', 'plain', 'lean', 'cross'] as const;
-  /** How deep the course of footing under a half wall's frame is. */
+  /** How deep the course of footing under a low wall's frame is. */
   const LOW_FOOT = 38;
   /**
-   * A half wall of it: the frame at half the height on a course of the
-   * footing, a post at each end and one in the middle, braced in the
-   * variant's figure, with a rail along its head.
+   * A half wall of it, or a fence: the frame at the height it stands to, on a
+   * course of the footing -- a post at each end and one in the middle, a
+   * rail along its head and a sole along its foot, and no brace. At that
+   * height a brace lies nearly flat, and a run of them, each section braced
+   * its own way, was the busiest thing in the garden.
    */
-  function lowFrame(g: Ctx, R: Rand, fh: number, vi: number): Block[] {
-    const sole = fh - LOW_FOOT;
+  function lowFrame(g: Ctx, R: Rand, fh: number): Block[] {
+    const sole = fh - LOW_FOOT, e = POST / 2, top = 24;
     g.fillStyle = PASTEL.stone; g.fillRect(0, 0, TW, sole);
-    const e = POST / 2, top = 24;
     for (const [a, b] of [[e, XM - e], [XM + e, TW - e]]) limewash(g, R, a, top, b, sole - SOLE);
-    const figure = LOW_FIGURES[Math.max(0, vi) % LOW_FIGURES.length];
-    const bot = sole - SOLE;
-    if (figure === 'rise') {
-      brace(g, braceAt(e, bot, XM - e, top, R));
-      brace(g, braceAt(TW - e, bot, XM + e, top, R));
-    } else if (figure === 'fall') {
-      brace(g, braceAt(e, top, XM - e, bot, R));
-      brace(g, braceAt(TW - e, top, XM + e, bot, R));
-    } else if (figure === 'lean') {
-      brace(g, braceAt(e, bot, XM - e, top, R));
-      brace(g, braceAt(XM + e, bot, TW - e, top, R));
-    } else if (figure === 'cross') {
-      const [a, b] = R() < 0.5 ? [e, XM - e] : [XM + e, TW - e];
-      brace(g, braceAt(a, bot, b, top, R));
-      brace(g, braceAt(a, top, b, bot, R));
-    }
     for (const [a, b] of [[XM - e, XM + e], [-e, e], [TW - e, TW + e]]) proud(g, a, top, b, sole - SOLE);
     member(g, XM - e, top - 2, XM + e, sole - SOLE + 2, R);
     member(g, -e, 0, e, sole, rand(1759));
@@ -1864,9 +1825,9 @@ function paint(S: Stock): Masonry {
   /**
    * The corner post a frame is finished with where a run turns a corner or
    * stops: the heaviest member of the frame, `h` px tall, over the ends of
-   * the plate, the rail and the sole, which run into it and are pegged
-   * there. Its outer edge runs off the picture, so the two faces of a
-   * corner meet on oak and not on the limewash under it.
+   * the plate and the sole, which run into it and are pegged there. Its
+   * outer edge runs off the picture, so the two faces of a corner meet on
+   * oak and not on the limewash under it.
    */
   function cornerPost(h: number, pegs: number[]): HTMLCanvasElement {
     const w = 64, c = cnv(w, h), g = ctxOf(c);
@@ -3567,10 +3528,10 @@ function paint(S: Stock): Masonry {
    * brickwork -- the one thing a field wall is not. Two courses of five or
    * six, at eighty pixels by fifty, is the same masonry as the house.
    */
-  function lowCourses(g: Ctx, R: Rand, fh: number, rows: number, vi: number): Block[] {
+  function lowCourses(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
     if (S.lay === 'bond') return lowBond(g, R, fh, rows);
     if (S.lay === 'render') return lowRender(g, R, fh);
-    if (S.lay === 'frame') return lowFrame(g, R, fh, vi);
+    if (S.lay === 'frame') return lowFrame(g, R, fh);
     const top = COPE + LEVEL;
     /*
      * Courses of unequal depth, the deepest at the bottom.
@@ -4252,12 +4213,12 @@ function paint(S: Stock): Masonry {
     // are the same masonry rather than the same masonry and some brickwork.
     const unitH = S.lay === 'bond' ? (TH - BAND) / S.rows : CH * 0.66;
     const rows = Math.max(S.lay === 'bond' ? 3 : 2, Math.round((fh - COPE - LEVEL) / unitH));
-    const face = VARIANTS.map((v, vi) => {
+    const face = VARIANTS.map((v) => {
       const c = cnv(TW, fh + PROUD), g = ctxOf(c);
       g.translate(0, PROUD);
       const R = rand(v.seed * 83 + 5);
       g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, fh);
-      const own = lowCourses(g, R, fh, rows, vi);
+      const own = lowCourses(g, R, fh, rows);
       levelling(g, R);
       coping(g, copeSeed(v.seed));
       // At the stock's own rate of wear, as the tall wall's is: a garden wall
@@ -4467,6 +4428,7 @@ function paint(S: Stock): Masonry {
       const R = rand(v.seed * 197 + 71);
       for (const side of [-1, 1]) {
         const line = side < 0 ? gx0 : gx1;
+        if (S.lay === 'frame') continue;
         if (S.lay === 'render') {
           /*
            * A pier of the same mud as the wall and in the same coat, built up
@@ -4510,6 +4472,16 @@ function paint(S: Stock): Masonry {
       g.globalCompositeOperation = 'destination-out';
       g.fillRect(gx0, -PROUD, gx1 - gx0, fh + PROUD);
       g.globalCompositeOperation = 'source-over';
+      if (S.lay === 'frame') {
+        // A gate post either side of the way through, from the head of the
+        // fence down to the ground, with the rail and the sole run into it --
+        // after the gap is cut, so its edge on the gateway keeps its ink, and
+        // its shade stays on the frame beside it.
+        g.save();
+        g.beginPath(); g.rect(0, -PROUD, gx0, fh + PROUD); g.rect(gx1, -PROUD, TW - gx1, fh + PROUD); g.clip();
+        for (const x of [gx0 - POST, gx1]) { proud(g, x, 0, x + POST, fh); member(g, x, 0, x + POST, fh, R); }
+        g.restore();
+      }
       return c;
     });
     /**
@@ -4852,7 +4824,6 @@ function paint(S: Stock): Masonry {
     top: TONES.top && { lit: channels(TONES.top.lit), hi: channels(TONES.top.hi), shade: channels(TONES.top.shade) },
     wrap: S.lay === 'render' || S.lay === 'frame',
     scatter: S.lay === 'render' || S.lay === 'frame',
-    railed: S.lay === 'frame',
     hi: channels(PASTEL.stoneHi),
     low,
     spill: SPILL,
@@ -4860,7 +4831,7 @@ function paint(S: Stock): Masonry {
     foot: FOOT,
     cap: CAP_STONE,
     ends: ENDS,
-    post: S.lay === 'frame' ? { img: cornerPost(TH, [PLATE / 2 + 1, MID + RAIL / 2, TH - SOLE / 2]), reach: POST / 2 } : undefined,
+    post: S.lay === 'frame' ? { img: cornerPost(TH, [PLATE / 2 + 1]), reach: POST / 2 } : undefined,
     reveal: channels(PASTEL.reveal),
     line: channels(PASTEL.line),
     beam: channels(PASTEL.beam),
