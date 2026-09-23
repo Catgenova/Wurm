@@ -159,8 +159,13 @@ export interface Low {
    */
   crest?: number[][];
   gateCrest?: number[][];
-  /** On a frame, its post where the run turns a corner or stops: `foot` px over the ground, on the footing, to the head. */
-  post?: { img: HTMLCanvasElement; foot: number };
+  /**
+   * On a frame, its post where the run turns a corner or stops, and on a log
+   * wall its corner: `foot` px over the ground, on the footing, to the head;
+   * `alt` for a wall running the other way, where a corner is laid the other
+   * way round.
+   */
+  post?: { img: HTMLCanvasElement; alt?: HTMLCanvasElement; foot: number };
 }
 
 /** The painted wall, in the pieces a renderer fills its faces with. */
@@ -216,9 +221,12 @@ export interface Masonry {
    * On a frame, the post it is finished with where a run turns a corner or
    * stops, a storey tall, its outer edge on the picture's left; and how far
    * it reaches into a section from the section's end, in picture px, which
-   * is over the half of the end post the section has of its own.
+   * is over the half of the end post the section has of its own. On a log
+   * wall, its corner, where the logs of the two walls cross: `alt` for the
+   * wall that runs the other way, which takes the crossing the other way
+   * round, and no `free`, since a log wall that stops has only its ends.
    */
-  post?: { img: HTMLCanvasElement; reach: number };
+  post?: { img: HTMLCanvasElement; alt?: HTMLCanvasElement; reach: number; free?: boolean };
   /**
    * The stone the wall's own thickness shows in the reveal of an archway.
    *
@@ -373,7 +381,7 @@ interface Stock {
    * is timbercraft: an oak frame pegged together and stood on a footing,
    * its panels filled with daub and limewashed.
    */
-  lay: 'rubble' | 'bond' | 'render' | 'frame';
+  lay: 'rubble' | 'bond' | 'render' | 'frame' | 'log';
   /** For a bond: courses to a storey, and units across a course. */
   rows: number;
   across: number;
@@ -823,6 +831,75 @@ const FRAME: Stock = ((P) => ({
 }))(FRAME_PASTEL);
 
 /**
+ * And log: round logs laid one on another, the gaps between them chinked
+ * with lime, the logs of the two walls at a corner crossing and showing
+ * their cut ends, on a footing of field stone.
+ *
+ * The logs are the drawing, and the chinking between them the pale line
+ * that counts them; the cut ends at a corner and at a stopped end, ringed,
+ * are what says log at a glance. The wood is pine gone a silvered brown in
+ * the weather, a dusty warm grey in the sun and a lilac in the shade; the
+ * chinking a chalky cream.
+ */
+const LOG_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the chinking between the logs
+  stone: '#d4cbb6', stoneShade: '#c0b6a1', stoneHi: '#e0d8c8', stoneDark: '#aa9f89',
+  warm: '#d9cfb9', warmShade: '#c4baa3', warmHi: '#e3dccc',
+  dark: '#c7bda7', darkHi: '#d3cab6',
+  // the logs: their side in the light, their underside, and the light along their top
+  dress: '#98806c', dressShade: '#6c5a57', dressHi: '#b59e86',
+  band: '#98806c', bandShade: '#6c5a57', bandHi: '#b59e86',
+  joint: '#bcb09a', line: '#473935',
+  // the end grain where a log is cut, and the rings in it
+  grain: '#c8ad8b', grainRing: '#a38a70',
+  ringJoint: '#4e4a53', reveal: '#6a574e',
+  stain: '#c1baa1', stainShade: '#aca58c',
+  footing: '#7d787a', footingShade: '#686366', footingHi: '#8c888c',
+  // the sawn boards an opening is framed in
+  beam: '#a8917a', beamShade: '#806b5c', beamHi: '#c0aa92', beamLine: '#473935',
+};
+
+const LOG: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone),
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    dark:    { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    weather: { lit: lighten(P.stone, -6), shade: lighten(P.stone, -10), hi: lighten(P.stone, -1) },
+    bleach:  { lit: lighten(P.stone, 4), shade: lighten(P.stone, 0), hi: lighten(P.stone, 7) },
+    brown:   { lit: lighten(P.dress, 4), shade: lighten(P.dress, -2), hi: lighten(P.dress, 9) },
+    burnt:   { lit: lighten(P.dress, -4), shade: lighten(P.dress, -9), hi: lighten(P.dress, 2) },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 6) },
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: P.footingShade, shade: lighten(P.footingShade, -6), hi: P.footing },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.band, 7), shade: lighten(P.band, 1), hi: lighten(P.band, 12) },
+    foot:    { lit: P.footing, shade: P.footingShade, hi: P.footingHi },
+    footB:   { lit: lighten(P.footing, -5), shade: lighten(P.footingShade, -5), hi: lighten(P.footingHi, -4) },
+  },
+  lay: 'log',
+  rows: 2,
+  across: 2,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 3,
+  bandN: 4,
+  // The footing of field stone at the ground: the height of one course of logs.
+  plinth: 48,
+  // A log checks along its grain as it dries; it does not chip like stone.
+  wear: 0,
+  // The frame's chalky lilac, by the same curve.
+  shade: [40, 38, 110],
+  shadow: (k) => 2.45 * Math.max(0, 1 - k) ** 1.6,
+  growth: false,
+  mix: [['brown', 0.2], ['burnt', 0.2]],
+  pairs: [],
+  field: [['weather', 0.3], ['bleach', 0.3], ['brown', 0.2], ['burnt', 0.2]],
+}))(LOG_PASTEL);
+
+/**
  * And adobe: mud brick, laid in mud, under a coat of mud.
  *
  * There is nothing cut on it and nothing fired. What there is to look at is
@@ -927,6 +1004,7 @@ let bricked: Masonry | undefined;
 let dressed: Masonry | undefined;
 let rendered: Masonry | undefined;
 let framed: Masonry | undefined;
+let logged: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -967,6 +1045,11 @@ export function adobe(): Masonry {
 /** And timbercraft: an oak frame on a stone footing, its panels limewashed. */
 export function timbercraft(): Masonry {
   return framed ??= paint(FRAME);
+}
+
+/** And log: round logs laid on one another, chinked, their ends crossing at the corners. */
+export function logwork(): Masonry {
+  return logged ??= paint(LOG);
 }
 
 function paint(S: Stock): Masonry {
@@ -2017,6 +2100,237 @@ function paint(S: Stock): Masonry {
     return c;
   }
 
+  /* ---- log ------------------------------------------------------------------ */
+  /**
+   * How many logs to a storey, and so how tall a course is -- a log and the
+   * chinking under it -- and how deep the chinking is. Eight to a storey is
+   * a log of a little under forty centimetres, which is a house log; at a
+   * dozen, thin ones, the wall read as boards.
+   */
+  const LOGS = 8, LOG_CH = TH / LOGS, CHINK = 7;
+  /** How far a log's edges wander off true along a section: a log is a tree, not a baulk. */
+  const LOG_WANDER = 2.4;
+  /**
+   * The tone a course's log is cut from: pine gone a silvered brown, a step
+   * lighter or darker, greyer or warmer, course by course -- the same in
+   * every section, so a log runs on through a seam as one log.
+   */
+  const LOG_TONES = ((): string[] => {
+    const R = rand(4391);
+    return Array.from({ length: LOGS }, () => {
+      const [r, gg, b] = channels(lighten(PASTEL.dress, (R() - 0.5) * 7));
+      const warm = (R() - 0.5) * 10;
+      return hexOf([r + warm, gg, b - warm]);
+    });
+  })();
+  /**
+   * One log, from `x0` to `x1` between `y0` and `y1`: round, so lit along its
+   * top a third of its depth and in shade along its underside, each edge of
+   * the light cut by hand; its own shade laid on the chinking under it. Its
+   * edges wander a little along it and come true at both ends, so it meets the
+   * next section's log at the seam. Along it, away from the seams, what the
+   * weather has done to this one: a patch gone silver or dark with damp, a
+   * knot or two, a check where it split as it dried.
+   */
+  function logRun(g: Ctx, y0: number, y1: number, tone: string, R: Rand, x0 = -2, x1 = TW + 2): void {
+    const h = y1 - y0, n = 8;
+    const wob = (i: number, a: number): number => (i === 0 || i === n ? 0 : (R() - 0.5) * 2 * a);
+    const xs = Array.from({ length: n + 1 }, (_, i) => x0 + ((x1 - x0) * i) / n);
+    // The top of the topmost log is the head of the wall, which runs true.
+    const top: Pt[] = xs.map((x, i): Pt => [x, y0 + (y0 > 0 ? wob(i, LOG_WANDER) : 0)]);
+    const bot: Pt[] = xs.map((x, i): Pt => [x, y1 + wob(i, LOG_WANDER)]);
+    const outline: Pt[] = [...top, ...bot.slice().reverse()];
+    g.beginPath(); poly(g, outline.map(([x, y]): Pt => [x, y + CHINK * 0.6])); g.fillStyle = PROUD_INK; g.fill();
+    g.save();
+    g.beginPath(); poly(g, outline); g.fillStyle = tone; g.fill(); g.clip();
+    const lit: Pt[] = xs.map((x, i): Pt => [x, y0 + h * 0.34 + wob(i, 3.5)]);
+    g.beginPath(); poly(g, [...top.map(([x, y]): Pt => [x, y - 4]), ...lit.slice().reverse()]);
+    g.fillStyle = hexA(lighten(tone, 9), 0.95); g.fill();
+    const dim: Pt[] = xs.map((x, i): Pt => [x, y0 + h * 0.7 + wob(i, 3.5)]);
+    g.beginPath(); poly(g, [...dim, ...bot.map(([x, y]): Pt => [x, y + 4]).reverse()]);
+    g.fillStyle = lighten(tone, -9); g.fill();
+    // Weather, away from the seams: a long patch gone silver, or dark.
+    const lo = Math.max(x0, EDGE + 10), hi = Math.min(x1, TW - EDGE - 10);
+    for (let i = 0, k = R() < 0.6 ? 1 : 0; i < k; i++) {
+      const len = 50 + R() * 90, cx = lo + len / 2 + R() * Math.max(0, hi - lo - len), cy = y0 + h * (0.42 + R() * 0.16);
+      const [r, gg, b] = channels(tone), silver = R() < 0.6;
+      g.beginPath(); poly(g, blob(cx, cy, len / 2, h * (0.14 + R() * 0.1), 12, R, 0.8, 0.3, 0.2));
+      g.fillStyle = silver ? hexOf([r + 9, gg + 10, b + 13]) : lighten(tone, -5); g.fill();
+    }
+    // A knot or two: dark, with the light on its upper rim.
+    for (let i = 0, k = Math.floor(R() * 2.4); i < k; i++) {
+      const kx = lo + R() * (hi - lo), ky = y0 + h * (0.4 + R() * 0.25), rx = 4 + R() * 3, ry = 3 + R() * 2;
+      g.beginPath(); g.ellipse(kx, ky, rx, ry, 0, 0, Math.PI * 2); g.fillStyle = lighten(tone, -16); g.fill();
+      g.beginPath(); g.ellipse(kx, ky, rx + 1.5, ry + 1.5, 0, Math.PI * 1.05, Math.PI * 1.75); g.strokeStyle = hexA(lighten(tone, 14), 0.9); g.lineWidth = 1.6; g.stroke();
+    }
+    // A check along it, where it split as it dried.
+    if (R() < 0.7) {
+      const len = 40 + R() * 90, cx = lo + R() * Math.max(0, hi - lo - len), cy = y0 + h * (0.46 + R() * 0.14);
+      g.beginPath(); g.moveTo(cx, cy); g.quadraticCurveTo(cx + len / 2, cy + (R() - 0.5) * 4, cx + len, cy + (R() - 0.5) * 3);
+      g.strokeStyle = hexA(PASTEL.line, 0.6); g.lineWidth = 2; g.lineCap = 'round'; g.stroke(); g.lineCap = 'butt';
+    }
+    g.restore();
+    g.beginPath(); poly(g, outline);
+    g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.7; g.lineJoin = 'round'; g.stroke();
+  }
+  /**
+   * The cut end of a log, seen end on: a disc of pale end grain inside its
+   * bark, lit on its upper left, its rings round a heart a little off centre,
+   * and a check running out from the heart to the bark.
+   */
+  function endGrain(g: Ctx, cx: number, cy: number, rx: number, ry: number, R: Rand): void {
+    g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.fillStyle = PASTEL.dressShade; g.fill();
+    g.save();
+    g.beginPath(); g.ellipse(cx, cy, rx - 3, ry - 3, 0, 0, Math.PI * 2); g.fillStyle = PASTEL.grain; g.fill(); g.clip();
+    g.beginPath(); g.ellipse(cx + rx * 0.34, cy + ry * 0.34, rx, ry, 0, 0, Math.PI * 2); g.fillStyle = hexA(PASTEL.grainRing, 0.5); g.fill();
+    const px = cx + (R() - 0.5) * rx * 0.3, py = cy + (R() - 0.5) * ry * 0.3;
+    g.strokeStyle = hexA(PASTEL.grainRing, 0.9); g.lineWidth = 1.3;
+    for (const f of [0.74, 0.5, 0.26]) { g.beginPath(); g.ellipse(px, py, rx * f, ry * f, 0, 0, Math.PI * 2); g.stroke(); }
+    const a = R() * Math.PI * 2;
+    g.beginPath(); g.moveTo(px, py); g.lineTo(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry);
+    g.strokeStyle = hexA(PASTEL.line, 0.7); g.lineWidth = 1.6; g.stroke();
+    g.restore();
+    g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.6; g.stroke();
+  }
+  /**
+   * The field of a log wall: eight logs one on another, the chinking between
+   * them, and the top of the topmost at the head of the storey, so storeys
+   * meet on a line of chinking. On a variant in two, a log that did not run
+   * the length of the wall is butted to the next where the section's middle
+   * falls, and that joint is the only upright line in it.
+   */
+  function paintLogs(g: Ctx, R: Rand, open: boolean, vi: number): Block[] {
+    g.fillStyle = PASTEL.stone; g.fillRect(0, 0, TW, TH);
+    const joint = !open && vi >= 0 && vi % 2 === 1 ? 1 + Math.floor(R() * (LOGS - 2)) : -1;
+    for (let k = 0; k < LOGS; k++) {
+      const y0 = k * LOG_CH, y1 = (k + 1) * LOG_CH - CHINK;
+      if (k !== joint) { logRun(g, y0, y1, LOG_TONES[k], R); continue; }
+      const at = TW * (0.3 + R() * 0.4);
+      logRun(g, y0, y1, LOG_TONES[k], R, -2, at);
+      logRun(g, y0, y1, lighten(LOG_TONES[k], (R() - 0.5) * 5), R, at, TW + 2);
+      // The end of the right-hand log, catching the light where it meets the other.
+      g.fillStyle = hexA(PASTEL.grain, 0.8); g.fillRect(at + 1, y0 + 3, 3, y1 - y0 - 6);
+    }
+    return [];
+  }
+  /** How wide the sawn boards an opening is framed in are. */
+  const BOARD = 24;
+  /**
+   * A sawn board: flat, a step paler than the logs, lit down its left edge
+   * or along its top and dark down its right or along its underside, the
+   * saw's grain along it, and its shade on what it stands proud of.
+   */
+  function board(g: Ctx, x0: number, y0: number, x1: number, y1: number, R: Rand): void {
+    const w = x1 - x0, h = y1 - y0, flat = w > h;
+    const j = (): number => (R() - 0.5) * 1.6;
+    const pts: Pt[] = [[x0 + j(), y0 + j()], [x1 + j(), y0 + j()], [x1 + j(), y1 + j()], [x0 + j(), y1 + j()]];
+    g.fillStyle = PROUD_INK;
+    if (flat) g.fillRect(x0, y1 - 1, w, PROUD_SH); else g.fillRect(x1 - 1, y0, PROUD_SIDE * 0.8, h);
+    g.save();
+    g.beginPath(); poly(g, pts); g.fillStyle = PASTEL.beam; g.fill(); g.clip();
+    g.fillStyle = hexA(PASTEL.beamHi, 0.9);
+    if (flat) g.fillRect(x0 - 2, y0 - 2, w + 4, 7); else g.fillRect(x0 - 2, y0 - 2, 7, h + 4);
+    g.fillStyle = PASTEL.beamShade;
+    if (flat) g.fillRect(x0 - 2, y1 - 5, w + 4, 7); else g.fillRect(x1 - 5, y0 - 2, 7, h + 4);
+    g.strokeStyle = hexA(PASTEL.beamShade, 0.7); g.lineWidth = 1.2;
+    for (const f of [0.38, 0.66]) {
+      g.beginPath();
+      if (flat) { g.moveTo(x0 + 6 + R() * 20, y0 + h * f); g.lineTo(x1 - 6 - R() * 20, y0 + h * f + (R() - 0.5) * 2); }
+      else { g.moveTo(x0 + w * f, y0 + 6 + R() * 20); g.lineTo(x0 + w * f + (R() - 0.5) * 2, y1 - 6 - R() * 20); }
+      g.stroke();
+    }
+    g.restore();
+    g.beginPath(); poly(g, pts); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.6; g.lineJoin = 'round'; g.stroke();
+  }
+  /**
+   * A window in a log wall: the logs cut back and the opening framed in sawn
+   * boards, a board either side from over the head to under the sill, a head
+   * board over it, and a sill board standing out to throw the rain clear.
+   */
+  function logSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
+    board(g, x0 - BOARD, head - BOARD - 4, x0, sill + BOARD, R);
+    board(g, x1, head - BOARD - 4, x1 + BOARD, sill + BOARD, R);
+    board(g, x0 - BOARD - 6, head - BOARD, x1 + BOARD + 6, head, R);
+    board(g, x0 - BOARD - 10 - shelf, sill, x1 + BOARD + 10 + shelf, sill + 16 + shelf * 0.6, R);
+  }
+  /** A doorway in it: a board either side down to the ground, and a squared head over the way through, a gate's the deeper. */
+  function logDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number): void {
+    board(g, x0 - BOARD, head - deep, x0, TH, R);
+    board(g, x1, head - deep, x1 + BOARD, TH, R);
+    board(g, x0 - BOARD - 8, head - deep, x1 + BOARD + 8, head, R);
+  }
+  /** An archway in it: the boards either side, and a head of boards bent round the curve. */
+  function logArch(g: Ctx, R: Rand): void {
+    board(g, A_CX - A_R - BOARD, A_CY, A_CX - A_R, TH, R);
+    board(g, A_CX + A_R, A_CY, A_CX + A_R + BOARD, TH, R);
+    const w = BOARD;
+    const ring = (): void => {
+      g.beginPath();
+      g.arc(A_CX, A_CY, A_R + w, Math.PI, Math.PI * 2);
+      g.lineTo(A_CX + A_R, A_CY);
+      g.arc(A_CX, A_CY, A_R, Math.PI * 2, Math.PI, true);
+      g.closePath();
+    };
+    g.save(); g.translate(0, PROUD_SH); ring(); g.fillStyle = PROUD_INK; g.fill(); g.restore();
+    ring(); g.fillStyle = PASTEL.beam; g.fill();
+    g.save(); ring(); g.clip();
+    g.beginPath(); g.arc(A_CX, A_CY, A_R + w, Math.PI, Math.PI * 2); g.lineWidth = 7; g.strokeStyle = hexA(PASTEL.beamHi, 0.9); g.stroke();
+    g.beginPath(); g.arc(A_CX, A_CY, A_R, Math.PI, Math.PI * 2); g.lineWidth = 6; g.strokeStyle = PASTEL.beamShade; g.stroke();
+    g.restore();
+    ring(); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.6; g.stroke();
+  }
+  /**
+   * The corner of a log wall, over the face carried round it: in every other
+   * course, where this wall's log is notched over the crossing wall's, the
+   * crossing log's cut end, ringed, in a notch of chinking. `odd` picks the
+   * courses, and the two walls of a corner take them the other way round, so
+   * where one wall shows a log end the other's log runs out to meet it.
+   */
+  function logCorner(h: number, n: number, odd: boolean): HTMLCanvasElement {
+    const w = 64, c = cnv(w, h), g = ctxOf(c), ch = h / n, R = rand(odd ? 2411 : 2417);
+    for (let k = 0; k < n; k++) {
+      if ((k % 2 === 1) !== odd) continue;
+      const y0 = k * ch, y1 = (k + 1) * ch - CHINK;
+      g.fillStyle = PASTEL.stone; g.fillRect(0, Math.max(0, y0 - CHINK), w, y1 - y0 + 2 * CHINK);
+      endGrain(g, w / 2, (y0 + y1) / 2, w * 0.46, (y1 - y0) / 2 + 2, R);
+    }
+    return c;
+  }
+  /** The ground storey's foot: the footing, which the bottom log stands on. */
+  function logFootingOf(g: Ctx, R: Rand): void {
+    footing(g, R, TH - S.plinth, TH);
+  }
+  /** How many logs a low wall `fh` px tall is laid in, over its footing: a log about the house's. */
+  const lowLogCount = (fh: number): number => Math.max(2, Math.round((fh - LOW_FOOT) / 46));
+  /**
+   * A garden wall of it, or a fence: three or four logs on a course of the
+   * footing, the same logs as the house's, the top of the topmost at the head
+   * of the wall.
+   */
+  function lowLogs(g: Ctx, R: Rand, fh: number): Block[] {
+    const sole = fh - LOW_FOOT, n = lowLogCount(fh), ch = sole / n;
+    g.fillStyle = PASTEL.stone; g.fillRect(0, 0, TW, sole);
+    for (let k = 0; k < n; k++) logRun(g, k * ch, (k + 1) * ch - CHINK, LOG_TONES[(k + 2) % LOGS], R);
+    footing(g, R, sole, fh);
+    return [];
+  }
+  /**
+   * A post of round log standing on end, from `y0` to `y1`: lit down its left
+   * side and in shade down its right, as the logs are along their top and
+   * underside.
+   */
+  function logPost(g: Ctx, x0: number, x1: number, y0: number, y1: number, R: Rand): void {
+    const w = x1 - x0;
+    const pts: Pt[] = [[x0 + (R() - 0.5) * 2, y0], [x1 + (R() - 0.5) * 2, y0], [x1 + (R() - 0.5) * 2, y1], [x0 + (R() - 0.5) * 2, y1]];
+    g.fillStyle = PROUD_INK; g.fillRect(x1 - 2, y0, PROUD_SIDE, y1 - y0);
+    g.save();
+    g.beginPath(); poly(g, pts); g.fillStyle = LOG_TONES[3]; g.fill(); g.clip();
+    g.fillStyle = hexA(lighten(LOG_TONES[3], 9), 0.95); g.fillRect(x0 - 2, y0, w * 0.36, y1 - y0);
+    g.fillStyle = lighten(LOG_TONES[3], -9); g.fillRect(x1 - w * 0.3, y0, w * 0.3 + 2, y1 - y0);
+    g.restore();
+    g.beginPath(); poly(g, pts); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.7; g.stroke();
+  }
+
   /**
    * The field of a bond: units of one size, laid to a line in a half lap.
    *
@@ -2279,6 +2593,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'bond') return paintBond(g, R, crests);
     if (S.lay === 'render') return paintRender(g, R, open);
     if (S.lay === 'frame') return paintFrame(g, R, open, vi);
+    if (S.lay === 'log') return paintLogs(g, R, open, vi);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, TH);
     slabs(g, 0, BAND, R);
     const own: Block[] = [];   // not the seam stones, not near the seam
@@ -3190,6 +3505,7 @@ function paint(S: Stock): Masonry {
   function surround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, wide: number, shelf: number): void {
     if (S.lay === 'render') { renderSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'frame') { frameSurround(g, R, x0, x1, head, sill, shelf); return; }
+    if (S.lay === 'log') { logSurround(g, R, x0, x1, head, sill, shelf); return; }
     const top = lintelTop(head);
     winPocket(g, R, x0, x1, top - 46, sill);
     // The sill first, because everything either side of the hole stands on it.
@@ -3331,6 +3647,7 @@ function paint(S: Stock): Masonry {
   function doorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number, reach: number): void {
     if (S.lay === 'render') { renderDoorway(g, R, x0, x1, head, deep, reach); return; }
     if (S.lay === 'frame') { frameDoorway(g, R, x0, x1, head, deep); return; }
+    if (S.lay === 'log') { logDoorway(g, R, x0, x1, head, deep); return; }
     const bTop = head - (reach ? CORBEL_H : 0) - deep + 3;
     const box: Pt[] = [[x0 - 26, bTop - 10], [x1 + 26, bTop - 10], [x1 + 26, TH + 8], [x0 - 26, TH + 8]];
     shape(g, roughen(box, R, 6, 4.5));
@@ -3623,6 +3940,8 @@ function paint(S: Stock): Masonry {
   function coping(g: Ctx, seed: number): void {
     if (S.lay === 'render') { renderCope(g, seed); return; }
     if (S.lay === 'frame') { frameCope(g); return; }
+    // The head of a low wall of logs is the top of its topmost log.
+    if (S.lay === 'log') return;
     // Which way the whole run leans, settled once and kept, so a cope reads as
     // one job rather than as a row of stones that fell that way.
     const tip = (rand(431)() - 0.5) * 0.12;
@@ -3713,6 +4032,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'bond') return lowBond(g, R, fh, rows);
     if (S.lay === 'render') return lowRender(g, R, fh);
     if (S.lay === 'frame') return lowFrame(g, R, fh);
+    if (S.lay === 'log') return lowLogs(g, R, fh);
     const top = COPE + LEVEL;
     /*
      * Courses of unequal depth, the deepest at the bottom.
@@ -3950,6 +4270,7 @@ function paint(S: Stock): Masonry {
     const R = rand(v.seed * 131 + 17);
     if (S.lay === 'render') renderArch(g, R);
     else if (S.lay === 'frame') frameArch(g, R);
+    else if (S.lay === 'log') logArch(g, R);
     else {
       jamb(g, R, -1);
       jamb(g, R, 1);
@@ -4171,6 +4492,7 @@ function paint(S: Stock): Masonry {
     const c = cnv(TW, TH), g = ctxOf(c);
     if (S.lay === 'render') erosionOf(g, rand(v.seed * 23 + 11), S.plinth, TH);
     else if (S.lay === 'frame') footingOf(g, rand(v.seed * 23 + 11));
+    else if (S.lay === 'log') logFootingOf(g, rand(v.seed * 23 + 11));
     else if (S.plinth) plinthOf(g, rand(v.seed * 23 + 11));
     // Moss grows on what is there to grow on: a unit the plinth now covers is
     // not, so it does not get a lens of it hanging in front of cut stone.
@@ -4317,6 +4639,11 @@ function paint(S: Stock): Masonry {
       g.fillStyle = TONES.top.lit; g.fillRect(0, 0, TW, CAP_H);
       return c;
     }
+    if (S.lay === 'log') {
+      // The top of the topmost log, which the renderer lays flat.
+      g.fillStyle = TONES.top.lit; g.fillRect(0, 0, TW, CAP_H);
+      return c;
+    }
     if (S.lay === 'frame') {
       // The top of a frame is its plate seen from above: the oak turned up
       // at the sky, a step paler, and its grain running along it.
@@ -4350,6 +4677,12 @@ function paint(S: Stock): Masonry {
       member(g, -2, 0, Wc + 2, PLATE, R);
       return c;
     }
+    if (S.lay === 'log') {
+      // The end of a log wall is its logs' cut ends, one over another.
+      g.fillStyle = PASTEL.stone; g.fillRect(0, 0, Wc, TH);
+      for (let k = 0; k < LOGS; k++) endGrain(g, Wc / 2, k * LOG_CH + (LOG_CH - CHINK) / 2, Wc * 0.47, (LOG_CH - CHINK) / 2 + 1, R);
+      return c;
+    }
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, Wc, TH);
     stone(g, MORTAR / 2, MORTAR / 2, Wc - MORTAR, BAND - MORTAR, R, 'flat', 'sawn');
     if (S.lay === 'bond') {
@@ -4376,8 +4709,13 @@ function paint(S: Stock): Masonry {
    * sole, and the footing going round the end as it runs along the face. The
    * post ran down into the grass, beside a face that stood on a footing.
    */
-  const ENDS_FOOT = S.lay !== 'frame' ? undefined : (() => {
+  const ENDS_FOOT = S.lay !== 'frame' && S.lay !== 'log' ? undefined : (() => {
     const Wc = 64, c = cnv(Wc, TH), g = ctxOf(c), R = rand(13), y0 = TH - S.plinth;
+    if (S.lay === 'log') {
+      g.drawImage(ENDS, 0, 0);
+      footing(g, R, y0, TH);
+      return c;
+    }
     member(g, -2, 0, Wc + 2, y0, R, false, false);
     member(g, -2, 0, Wc + 2, PLATE, R);
     member(g, -2, y0 - SOLE, Wc + 2, y0, R);
@@ -4465,6 +4803,10 @@ function paint(S: Stock): Masonry {
       if (S.lay === 'render') {
         // A mud cap seen from above is one pale band of coat; there is
         // nothing in it to count.
+        g.fillStyle = TONES.top.lit; g.fillRect(0, -2, TW, CAP_H + 2);
+        return c;
+      }
+      if (S.lay === 'log') {
         g.fillStyle = TONES.top.lit; g.fillRect(0, -2, TW, CAP_H + 2);
         return c;
       }
@@ -4562,6 +4904,14 @@ function paint(S: Stock): Masonry {
         g.fillStyle = 'rgba(46, 34, 62, 0.3)'; g.fillRect(0, COPE + 1, Wc, 4);
         return c;
       }
+      if (S.lay === 'log') {
+        // The cut ends of its logs, one over another, on the footing.
+        const sole = fh - LOW_FOOT, n = lowLogCount(fh), ch = sole / n;
+        g.fillStyle = PASTEL.stone; g.fillRect(0, 0, Wc, sole);
+        for (let k = 0; k < n; k++) endGrain(g, Wc / 2, k * ch + (ch - CHINK) / 2, Wc * 0.47, (ch - CHINK) / 2 + 1, R);
+        footing(g, R, sole, fh);
+        return c;
+      }
       if (S.lay === 'frame') {
         // The side of the end post, the rail over it, and the footing it
         // stands on, which goes round the end as it runs along the face.
@@ -4625,7 +4975,7 @@ function paint(S: Stock): Masonry {
       const R = rand(v.seed * 197 + 71);
       for (const side of [-1, 1]) {
         const line = side < 0 ? gx0 : gx1;
-        if (S.lay === 'frame') continue;
+        if (S.lay === 'frame' || S.lay === 'log') continue;
         if (S.lay === 'render') {
           /*
            * A pier of the same mud as the wall and in the same coat, built up
@@ -4669,6 +5019,18 @@ function paint(S: Stock): Masonry {
       g.globalCompositeOperation = 'destination-out';
       g.fillRect(gx0, -PROUD, gx1 - gx0, fh + PROUD);
       g.globalCompositeOperation = 'source-over';
+      if (S.lay === 'log') {
+        // A post of round log either side of the way through, the logs of the
+        // wall run into it, standing on the footing -- after the gap is cut,
+        // and cut to the wall, so the shade it throws falls on the logs and
+        // not across the gateway.
+        const sole = fh - LOW_FOOT;
+        g.save();
+        g.beginPath(); g.rect(0, -PROUD, gx0, fh + PROUD); g.rect(gx1, -PROUD, TW - gx1, fh + PROUD); g.clip();
+        logPost(g, gx0 - 40, gx0, 0, sole, R);
+        logPost(g, gx1, gx1 + 40, 0, sole, R);
+        g.restore();
+      }
       if (S.lay === 'frame') {
         // A gate post either side of the way through, from the rail down to
         // the sole and out to the fence's own end post -- after the gap is
@@ -4746,7 +5108,9 @@ function paint(S: Stock): Masonry {
         return x > gx0 + OVER && x < gx1 - OVER ? 0 : pillowRise(p, x);
       });
     });
-    const post = S.lay === 'frame' ? { img: cornerPost(fh - LOW_FOOT, []), foot: LOW_FOOT } : undefined;
+    const post = S.lay === 'frame' ? { img: cornerPost(fh - LOW_FOOT, []), foot: LOW_FOOT }
+      : S.lay === 'log' ? { img: logCorner(fh - LOW_FOOT, lowLogCount(fh), true), alt: logCorner(fh - LOW_FOOT, lowLogCount(fh), false), foot: LOW_FOOT }
+        : undefined;
     const made: Low = { face, gate, cap, gateCap, ends, h: fh, proud: PROUD, crest, gateCrest, post };
     LOWS.set(k, made);
     return made;
@@ -5027,8 +5391,8 @@ function paint(S: Stock): Masonry {
     soft: S.lay === 'render',
     shadow: S.shadow,
     top: TONES.top && { lit: channels(TONES.top.lit), hi: channels(TONES.top.hi), shade: channels(TONES.top.shade) },
-    wrap: S.lay === 'render' || S.lay === 'frame',
-    scatter: S.lay === 'render' || S.lay === 'frame',
+    wrap: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log',
+    scatter: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log',
     hi: channels(PASTEL.stoneHi),
     low,
     spill: SPILL,
@@ -5037,8 +5401,10 @@ function paint(S: Stock): Masonry {
     cap: CAP_STONE,
     ends: ENDS,
     endsFoot: ENDS_FOOT,
-    handed: S.lay === 'frame',
-    post: S.lay === 'frame' ? { img: cornerPost(TH, [PLATE / 2 + 1]), reach: POST / 2 } : undefined,
+    handed: S.lay === 'frame' || S.lay === 'log',
+    post: S.lay === 'frame' ? { img: cornerPost(TH, [PLATE / 2 + 1]), reach: POST / 2, free: true }
+      : S.lay === 'log' ? { img: logCorner(TH, LOGS, true), alt: logCorner(TH, LOGS, false), reach: 28, free: false }
+        : undefined,
     reveal: channels(PASTEL.reveal),
     line: channels(PASTEL.line),
     beam: channels(PASTEL.beam),
@@ -5048,7 +5414,7 @@ function paint(S: Stock): Masonry {
     plinth: S.plinth,
     shade: S.shade,
     growth: S.growth,
-    under: S.lay === 'render' ? channels(PASTEL.stone) : S.lay === 'frame' ? channels(PASTEL.dress) : undefined,
+    under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' ? channels(PASTEL.dress) : undefined,
     pad: PAD,
     capH: CAP_H,
     pave,
@@ -5072,7 +5438,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, adobe, timbercraft];
+  const sets = [cobble, brickwork, stonework, adobe, timbercraft, logwork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });

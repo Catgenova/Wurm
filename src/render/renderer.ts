@@ -34,7 +34,7 @@ import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARI
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, stonework, timbercraft } from './masonry';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, logwork, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -3050,7 +3050,8 @@ export class Renderer {
           : wall.material === 'stone_brick' ? stonework()
             : wall.material === 'clay_adobe' ? adobe()
               : wall.material === 'timbercraft' ? timbercraft()
-                : undefined;
+                : wall.material === 'log' ? logwork()
+                  : undefined;
   }
 
   /**
@@ -3663,18 +3664,21 @@ export class Renderer {
       };
       /**
        * A frame's post at each end of the section that turns a corner or
-       * stops, its picture laid from `k0` to `k1` up the face and shown only
-       * above `from`: over the face carried round the corner and the half of
-       * the end post the section has of its own, its outer edge on the
-       * corner. Without it the corner was the ends of two sections' posts
-       * with a strip of the limewash they were painted on between them -- a
-       * pale line down the one place a frame is heaviest.
+       * stops, or a log wall's crossing at a corner, its picture laid from
+       * `k0` to `k1` up the face and shown only above `from`: over the face
+       * carried round the corner and the half of the end post the section has
+       * of its own, its outer edge on the corner. Without it the corner was
+       * the ends of two sections' posts with a strip of the limewash they were
+       * painted on between them -- a pale line down the one place a frame is
+       * heaviest. A wall running the other way takes `alt`, where there is
+       * one: the logs of the two walls at a corner cross turn about.
        */
-      const posts = (img: HTMLCanvasElement, k0: number, k1: number, from: number): void => {
+      const posts = (post: { img: HTMLCanvasElement; alt?: HTMLCanvasElement }, k0: number, k1: number, from: number): void => {
         if (!cob.post || indoors) return;
+        const img = post.alt && border.dir === 'v' ? post.alt : post.img;
         const w = half + cob.post.reach / cob.w;
         for (const [i, e, T] of [[-1, e0, T0], [1, e1, T1]] as Array<[-1 | 1, number, number]>) {
-          if (on(i) || (!e && (square(i, true) || square(i, false)))) continue;
+          if (on(i) || (!e && (!cob.post.free || square(i, true) || square(i, false)))) continue;
           // From the outer edge in, a device pixel past the corner so the
           // edge is oak however the corner falls on the pixels.
           const [a, b] = i < 0 ? [T - hair, T + w] : [T + hair, T - w];
@@ -3787,7 +3791,7 @@ export class Renderer {
           }
         }
         blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h, 1, false, 0, cob.under ? 0.004 : 0, turned);
-        if (lw.post) posts(lw.post.img, lw.post.foot / lw.h, 1, lw.post.foot / lw.h);
+        if (lw.post) posts(lw.post, lw.post.foot / lw.h, 1, lw.post.foot / lw.h);
         wear(lw.h, hung ? [FENCE_GAP.t0 - 0.12, FENCE_GAP.t1 + 0.12] : null, null, false);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
         crown();
@@ -4051,7 +4055,7 @@ export class Renderer {
         if (cob.growth && arched) blit(cob.archWeed[v], 0, 1);
       }
       // After the foot, and down to it: the sole it lays along the footing runs into the post.
-      if (cob.post) posts(cob.post.img, 0, 1, wall.level === 0 ? cob.plinth / cob.h : -sunk);
+      if (cob.post) posts(cob.post, 0, 1, wall.level === 0 ? cob.plinth / cob.h : -sunk);
       // Nothing grows on a masonry that is bare: those pictures are empty, and
       // there is no call to lay an empty picture across a whole wall.
       if (cob.growth) {
