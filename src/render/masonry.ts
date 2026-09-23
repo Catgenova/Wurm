@@ -437,6 +437,14 @@ interface Stock {
    * and a course of dogtooth under the band at the head of every storey.
    */
   ornate?: boolean;
+  /**
+   * Laid by a master, for the masonries that ask the most of a mason: every
+   * course dead level and every joint the width of the next, arrises cut
+   * true, and next to nothing knocked or cracked. The value of each unit,
+   * and the hand in its outline, are left as they are -- that is the
+   * material, not the workmanship.
+   */
+  master?: boolean;
 }
 
 /* ---- the two masonries -------------------------------------------------- */
@@ -855,6 +863,7 @@ const SLATE: Stock = ((P) => ({
   pairs: ['warm'],
   field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
   ornate: true,
+  master: true,
 }))(SLATE_PASTEL);
 
 /**
@@ -1588,7 +1597,7 @@ function paint(S: Stock): Masonry {
      */
     const pn = cut === 'unit' ? 20 : 14;
     // Sandstone's arrises go soft with the weather, and its edges wander more.
-    const pts = cut === 'unit' ? blob(cx, cy, w / 2, h / 2, pn, R, S.grain ? 0.24 : 0.15, 0.1, S.grain ? 0.03 : 0.018)
+    const pts = cut === 'unit' ? blob(cx, cy, w / 2, h / 2, pn, R, S.grain ? 0.24 : S.master ? 0.11 : 0.15, 0.1, S.grain ? 0.03 : S.master ? 0.009 : 0.018)
       : blob(cx, cy, w / 2, h / 2, pn, R, laid ? 0.28 : 0.26, laid ? 0.28 : 0.16, laid ? 0.05 : 0.025);
     if (laid && R() < 0.3) { const k = Math.floor(R() * pts.length); pts[k] = [pts[k][0] * 0.85 + cx * 0.15, pts[k][1] * 0.85 + cy * 0.15]; }
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt); for (const p of pts) { const px = p[0] - cx, py = p[1] - cy; p[0] = cx + px * c - py * s; p[1] = cy + px * s + py * c; } }
@@ -1783,7 +1792,7 @@ function paint(S: Stock): Masonry {
   /**
    * How time takes a wall of slate brick, which is hardly at all: slate is
    * dense and a brick of it was laid for show. An arris knocked on one in
-   * twelve and a hairline crack along the bed of one in thirty -- no pits,
+   * thirty and a hairline crack along the bed of one in a hundred -- no pits,
    * no worn patches and no mortar left on the face, because on a dark brick
    * every one of those is a pale fleck, and a scatter of pale flecks over a
    * dark wall is grit on the picture.
@@ -1791,8 +1800,8 @@ function paint(S: Stock): Masonry {
   function slateWeather(g: Ctx, own: Block[], R: Rand): void {
     for (const s of own) {
       const t = R();
-      if (t < 0.08) chipCorner(g, s, R);
-      else if (t < 0.113) crack(g, s, R);
+      if (t < 0.03) chipCorner(g, s, R);
+      else if (t < 0.04) crack(g, s, R);
     }
   }
   /** Wear, on the private stones only, so the seams and the storey line keep their contract. Masonry is
@@ -1828,17 +1837,17 @@ function paint(S: Stock): Masonry {
       // Cut to what the quarry gave, a quarter either way, so the band is a
       // course of stones rather than one stone printed six times.
       const ws: number[] = []; let sum = 0;
-      for (let k = 0; k < n - 1; k++) { const v = 0.75 + R() * 0.5; ws.push(v); sum += v; }
+      for (let k = 0; k < n - 1; k++) { const v = S.master ? 0.9 + R() * 0.2 : 0.75 + R() * 0.5; ws.push(v); sum += v; }
       let x = w / 2;
       for (const v of ws) {
         const bw = (v / sum) * (TW - w);
         // And no two the same depth either: the arris along the top is the
         // line the course was laid to, and the bottom is where each stone
         // happened to stop, three or four pixels up or down.
-        const bh = h - MORTAR - R() * 5;
+        const bh = h - MORTAR - R() * (S.master ? 1 : 5);
         const t = R();
-        const pts = stone(g, x + MORTAR, y + MORTAR / 2, bw - 2 * MORTAR, bh, R, tone === 'flat' && t < 0.25 ? 'plinth' : tone, cut);
-        if (R() < 0.22) chipCorner(g, { x: x + MORTAR, y: y + MORTAR / 2, w: bw - 2 * MORTAR, h: bh, course: 0, pts }, R);
+        const pts = stone(g, x + MORTAR, y + MORTAR / 2, bw - 2 * MORTAR, bh, R, tone === 'flat' && t < (S.master ? 0.1 : 0.25) ? 'plinth' : tone, cut);
+        if (R() < (S.master ? 0.04 : 0.22)) chipCorner(g, { x: x + MORTAR, y: y + MORTAR / 2, w: bw - 2 * MORTAR, h: bh, course: 0, pts }, R);
         x += bw;
       }
     } else for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, tone, cut);
@@ -3686,7 +3695,7 @@ function paint(S: Stock): Masonry {
       // The course's own sag. It is a sine on a span that is zero at both
       // ends, so a bed arrives at the seam level however far its middle has
       // dropped, and the drop is what says the wall has stood a while.
-      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
+      const kw = 1 + Math.floor(R() * 2), aw = ch * (S.master ? 0.015 : 0.17) * (R() < 0.5 ? -1 : 1);
       const q = Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES));
       const units: Array<[number, number, boolean]> = S.ornate ? flemishOf(i) : unitsOf(n, lap, R, 1511 + i * 13).map(([x, w]): [number, number, boolean] => [x, w, head]);
       for (const [x, uw, hd] of units) {
@@ -3698,9 +3707,9 @@ function paint(S: Stock): Masonry {
         const RR = seam ? rand(811 + i * 7) : R;
         const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
         const tone = S.ornate && hd && diaperAt(x + uw / 2, i) ? 'diaper' : zone(RR, seam ? 0 : x + uw / 2, y0, hd, q, crests, i < 2);
-        const jw = MORTAR + (priv ? RR() * 2.2 : 0);
-        const drift = (RR() - 0.5) * 2.4 + sag;
-        const shrink = RR() * 2;
+        const jw = MORTAR + (priv ? RR() * (S.master ? 0.5 : 2.2) : 0);
+        const drift = (RR() - 0.5) * (S.master ? 0.5 : 2.4) + sag;
+        const shrink = RR() * (S.master ? 0.5 : 2);
         const b: Block = {
           x: x + jw / 2,
           y: y0 + MORTAR / 2 + drift + shrink / 2,
@@ -3712,7 +3721,7 @@ function paint(S: Stock): Masonry {
         // A degree would be a brick somebody dropped in. A bond is laid to a
         // line and what it has instead is a hand's worth of it, which is a
         // fortieth of a degree and shows as an edge rather than as a slope.
-        const tilt = priv && RR() < 0.3 ? (RR() - 0.5) * 0.012 : 0;
+        const tilt = priv && RR() < 0.3 ? (RR() - 0.5) * (S.master ? 0 : 0.012) : 0;
         // And a lost edge here and there: one brick in six drawn with half the
         // ink, so the outline is a hand going round them and not a stencil.
         const ink = priv && RR() < 0.17 ? 0.7 : 1.35;
@@ -3825,7 +3834,7 @@ function paint(S: Stock): Masonry {
     const HR = rand(2027);
     const hs: number[] = [];
     let tot = 0;
-    for (let i = 0; i < S.rows; i++) { const w = (0.92 + 0.16 * HR()) * rhythmOf(i); hs.push(w); tot += w; }
+    for (let i = 0; i < S.rows; i++) { const w = (S.master ? 0.975 + 0.05 * HR() : 0.92 + 0.16 * HR()) * rhythmOf(i); hs.push(w); tot += w; }
     const tops: number[] = [BAND];
     for (let i = 0; i < S.rows; i++) tops.push(tops[i] + ((TH - BAND) * hs[i]) / tot);
     return tops;
@@ -3874,10 +3883,10 @@ function paint(S: Stock): Masonry {
       const x0 = side < 0 ? -6 : TW - reach, x1 = side < 0 ? reach : TW + 6;
       g.fillStyle = PASTEL.joint;
       g.fillRect(x0 - MORTAR, y0, x1 - x0 + MORTAR * 2, y1 - y0);
-      const tone = R() < 0.3 ? 'plinth' : 'dress';
+      const tone = R() < (S.master ? 0.12 : 0.3) ? 'plinth' : 'dress';
       const pts = stone(g, x0 + MORTAR / 2, y0 + MORTAR / 2, x1 - x0 - MORTAR, y1 - y0 - MORTAR, R, tone, 'unit', 0, 1.8);
       const b: Block = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, course: q, pts };
-      if (R() < 0.35) chipCorner(g, b, R);
+      if (R() < (S.master ? 0.04 : 0.35)) chipCorner(g, b, R);
       // A quoin stands a hair proud of the brick and it throws that much
       // shade on the course beside it, on the side away from the light.
       if (side > 0) {
@@ -3952,7 +3961,7 @@ function paint(S: Stock): Masonry {
       if (d < 0.32 && t < 0.16) return head || t < 0.07 ? 'burnt' : 'brown';
       if (d > 0.68 && t < 0.12) return 'warm';
       if (t < 0.02) return 'brown';
-      return (RR() < 0.15 ? 'p' : 'f') + k;
+      return (RR() < (S.master ? 0.05 : 0.15) ? 'p' : 'f') + k;
     };
   }
 
@@ -4926,8 +4935,8 @@ function paint(S: Stock): Masonry {
     g.restore();
     g.beginPath(); poly(g, pts); g.strokeStyle = PASTEL.line; g.lineWidth = 1.8; g.lineJoin = 'round'; g.stroke();
   }
-  /** Which of its two tones a dressing takes: the pale slate, and one in four the step darker. */
-  const dressTone = (R: Rand): string => (R() < 0.25 ? 'plinth' : 'dress');
+  /** Which of its two tones a dressing takes: the pale slate, and one in eight the step darker. */
+  const dressTone = (R: Rand): string => (R() < 0.12 ? 'plinth' : 'dress');
   /**
    * One jamb of an opening laid for show, on the jamb `line` from `top` down
    * to `bottom`: stones laid to the brick's own beds, two courses to a
@@ -5449,8 +5458,8 @@ function paint(S: Stock): Masonry {
        * settling and the arris knocked here and there, not a stone stood on
        * end in the run.
        */
-      const rise = 1 + R() * 3;
-      const pts = stone(g, x + MORTAR / 2, rise, w - MORTAR, COPE - MORTAR / 2 - rise, R, tone, 'unit', (R() - 0.5) * 0.01, 1.6);
+      const rise = 1 + R() * (S.master ? 0.6 : 3);
+      const pts = stone(g, x + MORTAR / 2, rise, w - MORTAR, COPE - MORTAR / 2 - rise, R, tone, 'unit', (R() - 0.5) * (S.master ? 0 : 0.01), 1.6);
       // Its top, turned at the sky and a step lighter than its face.
       g.save(); shape(g, pts); g.clip();
       const lit = g.createLinearGradient(0, rise, 0, rise + 9);
@@ -5674,7 +5683,7 @@ function paint(S: Stock): Masonry {
     const HR = rand(3121);
     const hs: number[] = [];
     let tot = 0;
-    for (let i = 0; i < rows; i++) { const w = (0.92 + 0.16 * HR()) * rhythmOf(i); hs.push(w); tot += w; }
+    for (let i = 0; i < rows; i++) { const w = (S.master ? 0.975 + 0.05 * HR() : 0.92 + 0.16 * HR()) * rhythmOf(i); hs.push(w); tot += w; }
     const tops: number[] = [top];
     for (let i = 0; i < rows; i++) tops.push(tops[i] + ((fh - top) * hs[i]) / tot);
     for (let i = 0; i < rows; i++) {
@@ -5682,7 +5691,7 @@ function paint(S: Stock): Masonry {
       // The course under the cope of an ornate wall is its dogtooth, laid after.
       if (S.ornate && i === 0) continue;
       const lap = (i % 2) * 0.5;
-      const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
+      const kw = 1 + Math.floor(R() * 2), aw = ch * (S.master ? 0.015 : 0.17) * (R() < 0.5 ? -1 : 1);
       const units: Array<[number, number, boolean]> = S.ornate ? flemishOf(i) : unitsOf(n, lap, R, 1733 + i * 17).map(([x, w]): [number, number, boolean] => [x, w, false]);
       for (const [x, uw, hd] of units) {
         const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
@@ -5695,9 +5704,9 @@ function paint(S: Stock): Masonry {
         const tone = S.ornate && hd && diaperAt(x + uw / 2, i) ? 'diaper'
           : !seam && RR() < 0.08 ? fieldTone(RR)
             : zone(RR, seam ? 0 : x + uw / 2, y0, hd, i + COURSES - rows, [], i === 0);
-        const jw = MORTAR + (priv ? RR() * 2.2 : 0);
-        const drift = (RR() - 0.5) * 2.4 + sag;
-        const shrink = RR() * 2;
+        const jw = MORTAR + (priv ? RR() * (S.master ? 0.5 : 2.2) : 0);
+        const drift = (RR() - 0.5) * (S.master ? 0.5 : 2.4) + sag;
+        const shrink = RR() * (S.master ? 0.5 : 2);
         /*
          * The bottom course runs past the picture and the canvas edge cuts
          * it, the way the hedge at its foot already does: a wall a metre and
@@ -5705,7 +5714,7 @@ function paint(S: Stock): Masonry {
          */
         const bh = ch - MORTAR - shrink + (i === rows - 1 ? 4 + RR() * 4 : 0);
         const b: Block = { x: x + jw / 2, y: y0 + MORTAR / 2 + drift + shrink / 2, w: uw - jw, h: bh, course: i, pts: [] };
-        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', priv && RR() < 0.3 ? (RR() - 0.5) * 0.014 : 0, 1.35);
+        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', priv && RR() < 0.3 ? (RR() - 0.5) * (S.master ? 0 : 0.014) : 0, 1.35);
         if (priv && b.w > 24) own.push(b);
       }
     }
@@ -7072,7 +7081,7 @@ function paint(S: Stock): Masonry {
     shade: S.shade,
     growth: S.growth,
     under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' || S.lay === 'plank' || S.lay === 'gild' ? channels(PASTEL.dress)
-      : S.grain ? channels(PASTEL.joint) : undefined,
+      : S.grain || S.master ? channels(PASTEL.joint) : undefined,
     pad: PAD,
     capH: CAP_H,
     pave,
