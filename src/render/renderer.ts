@@ -3065,22 +3065,24 @@ export class Renderer {
    * that on a masonry laid by hand, or framed, a gate hung in a run of taller
    * garden wall stands to that wall's height. Its piers or its posts are the
    * wall built up either side of it, and a gate a foot lower than the wall it
-   * hangs in was a notch.
+   * hangs in was a notch. On a masonry whose gates hang between piers, the
+   * gate stands its piers' height over the tallest wall it hangs in.
    */
   private standing(wall: Wall, border: Border): number {
     const own = WALL_TYPE_BY_ID.get(wall.type)?.height ?? 1;
     const gate = (w: Wall): boolean => w.type === 'fence_gate' || w.type === 'iron_gate';
-    if (!gate(wall) || !this.masonryOf(wall)?.wrap) return own;
-    let tall = own;
+    const cob = gate(wall) ? this.masonryOf(wall) : undefined;
+    if (!cob || !(cob.wrap || cob.piers)) return own;
+    let near = 0;
     for (const i of [-1, 1]) {
       const b: Border = border.dir === 'h'
         ? { dir: 'h', x: border.x + i, y: border.y }
         : { dir: 'v', x: border.x, y: border.y + i };
       const w = this.game.buildings.wallOnBorder(wall.level, b);
       const k = w && WALL_TYPE_BY_ID.get(w.type);
-      if (w && isDone(w) && !gate(w) && k?.low) tall = Math.max(tall, k.height ?? 1);
+      if (w && isDone(w) && !gate(w) && k?.low) near = Math.max(near, k.height ?? 1);
     }
-    return tall;
+    return Math.max(own, near + (cob.piers && near ? cob.piers : 0));
   }
 
   /** Per building, which way its floor joists run, and how many tiles it had when that was worked out. */
