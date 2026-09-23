@@ -11,13 +11,12 @@ import {
   bordersRoom,
   MATERIAL_BY_ID,
   progressOf,
-  ROOF_RISE,
+  ROOF_PITCH,
   roofShapeDef,
   WALL_HEIGHT,
   WALL_THICK,
   FENCE_THICK,
   FLOOR_DEEP,
-  EAVE_DEEP,
   WALL_TYPE_BY_ID,
   workLevel,
   type Border,
@@ -25,7 +24,9 @@ import {
   type MaterialDef,
   type Side,
   type Wall,
+  type Building,
   floorBill,
+  roofShapeOf,
 } from '../game/building';
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
@@ -33,6 +34,8 @@ import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
+import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
+import { COVER_PPT, covering } from './roofing';
 import { drawShine, shines } from './shine';
 import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
@@ -347,16 +350,11 @@ interface WallGeom {
 
 /** Specks of grain laid on each tile once you are close enough to see them. */
 const GRAIN_SPECKS = 14;
-/*
- * Roof shading: how bright a slope is, by the way it falls on screen. The
- * three numbers are the old four tones — 1 falling away up and left, 0.86 up
- * and right, 0.78 down and left, 0.64 towards the viewer — refitted as a plane
- * through those four, so a cardinal viewpoint shades a roof exactly as it
- * always did and every viewpoint between two of them follows on.
- */
-const ROOF_LIGHT = 0.82;
-const ROOF_SIDE = 0.14;
-const ROOF_DROP = 0.22;
+/** How far in from the eaves a roof goes on rising, in tiles: past that it is a flat top. */
+const ROOF_CAP = 2.5;
+/** How far the eaves hang out past the wall's line, and the verge past a gable end, in tiles. */
+const ROOF_OVER = 0.14;
+const ROOF_VERGE = 0.1;
 /** The colour an outline is drawn in round whatever the cursor is on. */
 const HOVER_INK = 'rgb(255, 226, 120)';
 
@@ -594,6 +592,12 @@ export class Renderer {
    * tile asks for it in a frame: up to six tiles ask after the same wall.
    */
   private shades = new Map<string, Float64Array | null>();
+  /** The pitched roofs to lay this frame, by the line of the ground after whose walls each goes on. */
+  private roofQueue = new Map<number, Building[]>();
+  /** Each building's roof, worked out once for the tiles it covers and kept until they change. */
+  private roofShapes = new Map<number, { sig: string; model: RoofModel }>();
+  /** A covering with the hour's light for one face laid into it, as a pattern: see `drawPitchedRoof`. */
+  private roofPatterns = new Map<string, CanvasPattern>();
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -1377,6 +1381,7 @@ export class Renderer {
     const eStep = V.staggered ? 2 : 1;
     const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / stepH) - 2;
     const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / stepH) + 1;
+    this.queueRoofs(V, dLo, dHi);
     const grid = this.game.settings.grid && zoom >= 0.7;
     const vision = this.game.vision;
     const fogged = this.game.settings.fog;
@@ -1802,6 +1807,10 @@ export class Renderer {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
         this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
       }
+      // The roofs of the buildings whose last walls this line drew, before
+      // anything standing in front of them.
+      const roofs = this.roofQueue.get(d);
+      if (roofs) for (const bb of roofs) this.drawPitchedRoof(bb);
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }
     // The surface and then what crossed it, both clipped to the water, so
@@ -2362,7 +2371,10 @@ export class Renderer {
               this.drawLadder(floor, x, y, base, alpha);
               break;
             case 'roof':
-              this.drawRoof(floor, x, y, base, alpha);
+              // A flat roof is a deck, laid a tile at a time like a floor so
+              // anybody out on it stands on it; a pitched one is laid whole,
+              // after its walls: see `queueRoofs`.
+              if (roofShapeOf(building) === 'flat') this.drawDeck(floor, x, y, base, alpha);
               break;
             default:
               this.drawFloor(floor, x, y, base, alpha);
@@ -2694,215 +2706,608 @@ export class Renderer {
   }
 
   /** A roof tile: eaves at the corners, ridges where neighbouring roof tiles meet, hips elsewhere. */
-  private drawRoof(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+  /**
+   * Which pitched roofs are laid this frame, and when.
+   *
+   * A roof is one surface over its building, and it goes on after every wall
+   * under it: its eaves hang out over the walls' heads. Laid a tile at a time
+   * with the tiles, as it was, the walls of the next line of the ground came
+   * out over the roof behind them. So each is laid once, after the line of the
+   * ground that holds the building's front walls -- the line in front of its
+   * front tiles -- and before anything standing on that line.
+   */
+  private queueRoofs(V: View, dLo: number, dHi: number): void {
+    this.roofQueue.clear();
+    const bld = this.game.buildings;
+    // A building pulled down takes its roof's shape with it.
+    for (const id of this.roofShapes.keys()) if (!bld.list.has(id)) this.roofShapes.delete(id);
+    const { viewLevel } = this.game.settings;
+    for (const b of bld.list.values()) {
+      if (roofShapeOf(b) === 'flat') continue;
+      // Looking at one storey lifts everything over it off, the roof with it.
+      if (viewLevel !== null && b.levels > viewLevel) continue;
+      let front = -Infinity;
+      for (const k of b.tiles) {
+        const [x, y] = k.split(',').map(Number);
+        const f = bld.floor(b.levels, x, y);
+        if (f && floorKind(f) === 'roof') front = Math.max(front, depthOf(V, x, y));
+      }
+      if (front === -Infinity || front + 1 < dLo) continue;
+      const d = Math.min(front + 1, dHi);
+      const line = this.roofQueue.get(d);
+      if (line) line.push(b);
+      else this.roofQueue.set(d, [b]);
+    }
+  }
+
+  /**
+   * Which of a covering's three pictures to lay: the coarsest that still has
+   * a pixel of it for every pixel of screen a tile's side covers. The finest
+   * shrunk to a quarter was sampled, not shrunk, and a roof of courses
+   * shimmered into stripes as the camera moved.
+   */
+  private roofMip(): number {
+    const side = Math.hypot(HALF_W, HALF_H) * this.camera.zoom * this.canvas.dpr;
+    return COVER_PPT / 4 >= side * 0.9 ? 2 : COVER_PPT / 2 >= side * 0.9 ? 1 : 0;
+  }
+
+  /**
+   * A tile of a flat roof: the covering's deck, laid across the building in
+   * one piece, from the inner face of the wall round it -- the wall's own top
+   * is the rim of it -- and marked out where it is only planned.
+   */
+  private drawDeck(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
     const bld = this.game.buildings;
-    const mat = MATERIAL_BY_ID.get(floor.material);
-    if (!mat) return;
-    const level = floor.level;
-    const eave = base + level * WALL_HEIGHT;
+    const h = base + floor.level * WALL_HEIGHT;
     const done = isDone(floor);
-    const roof = (tx: number, ty: number): boolean => !!bld.roofAt(level, tx, ty) || (bld.floor(level, tx, ty) !== undefined && floorKind(bld.floor(level, tx, ty) as FloorTile) === 'roof');
-    /*
-     * How high a point of the roof stands, which is the whole of the shape.
-     *
-     * A **hip** rises wherever it is interior — all four tiles round a corner
-     * roofed — so every outside edge falls away and the middle of a big roof
-     * is a plateau. That is what every roof on the island was.
-     *
-     * A **gable** runs one ridge the length of the building and knows nothing
-     * about corners: the height depends only on how far across the short way
-     * you are, full at the middle line and nothing at either eave. The ends
-     * are wall carried up, which is why they are flat against the sky.
-     *
-     * A **flat** roof does not rise at all. It is a deck.
-     */
-    const b = bld.list.get(floor.building);
-    const shape = roofShapeDef(b);
-    const box = b ? bld.footprintBox(b) : { x0: x, y0: y, x1: x + 1, y1: y + 1 };
-    const along: 'x' | 'y' = box.x1 - box.x0 >= box.y1 - box.y0 ? 'x' : 'y';
-    const rise = ROOF_RISE * shape.rise;
-    /** How far up the gable a point is: nothing at the eaves, all of it on the ridge. */
-    const ramp = (px: number, py: number): number => {
-      const lo = along === 'x' ? box.y0 : box.x0;
-      const hi = along === 'x' ? box.y1 : box.x1;
-      if (hi - lo <= 0) return 1;
-      const t = ((along === 'x' ? py : px) - lo) / (hi - lo);
-      return Math.max(0, 1 - Math.abs(2 * t - 1));
+    const decked = (tx: number, ty: number): boolean => {
+      const f = bld.floor(floor.level, tx, ty);
+      return !!f && floorKind(f) === 'roof';
     };
-    const heightAt = (px: number, py: number, interior: boolean): number =>
-      shape.id === 'flat' ? eave : shape.id === 'gable' ? eave + rise * ramp(px, py) : eave + (interior ? rise : 0);
-    // A corner is interior when all four tiles around it carry roof.
-    const cornerH = (cx: number, cy: number): number =>
-      heightAt(cx, cy, roof(cx - 1, cy - 1) && roof(cx, cy - 1) && roof(cx - 1, cy) && roof(cx, cy));
-    const corners: Array<[number, number, number]> = [
-      [x, y, cornerH(x, y)],
-      [x + 1, y, cornerH(x + 1, y)],
-      [x + 1, y + 1, cornerH(x + 1, y + 1)],
-      [x, y + 1, cornerH(x, y + 1)],
-    ];
-    // A hipped ridge sits a little under the corners it springs from, which is
-    // the number this roof has always been drawn with.
-    const ridge = shape.id === 'flat' ? eave : eave + rise * (shape.id === 'gable' ? ramp(x + 0.5, y + 0.5) : 0.7);
-    /** How high the middle of one edge stands: on a gable the ramp decides, and nothing else. */
-    const midH = (mx: number, my: number, next: boolean): number =>
-      shape.id === 'gable' ? heightAt(mx, my, true) : next ? ridge : eave;
-    const avg = corners.reduce((s, c) => s + c[2], 0) / 4;
-    const centreH = Math.max(avg, ridge);
-    // Edge midpoints rise to the ridge where a neighbouring tile is roofed too, so rows form ridges.
-    const neighbours: Array<[number, number]> = [
-      [x, y - 1],
-      [x + 1, y],
-      [x, y + 1],
-      [x - 1, y],
-    ];
-    const cx = x + 0.5;
-    const cy = y + 0.5;
-    const csx = cam.worldToScreenX(cx, cy);
-    const csy = cam.worldToScreenY(cx, cy, centreH);
-    const cu = cam.rotateX(cx, cy);
-    const cv = cam.rotateY(cx, cy);
-    /*
-     * How bright one of the four slopes is: which way it falls on screen, read
-     * as a direction rather than as a quadrant. A quadrant shades the two
-     * halves of a slope by where each half's middle happens to sit, which is
-     * the same answer for both only while the view is square to the grid — an
-     * eighth turn splits every roof down the middle.
-     */
-    const shadeOf = (dx: number, dy: number): number => {
-      const du = cam.rotateX(cx + dx, cy + dy) - cu;
-      const dv = cam.rotateY(cx + dx, cy + dy) - cv;
-      const sx = du - dv;
-      const sy = du + dv;
-      const len = Math.abs(sx) + Math.abs(sy) || 1;
-      return ROOF_LIGHT - (ROOF_SIDE * sx + ROOF_DROP * sy) / len;
-    };
-    const zoom = cam.zoom;
-    /*
-     * What a roof is covered with, drawn in courses running along the slope.
-     *
-     * A slope is a triangle from the middle of the tile out to half of one
-     * side, and a course is that triangle cut across: the band between two
-     * shares of the way up from the eave to the ridge. Every covering there is
-     * goes on in courses from the bottom up, each lapping the one below, and
-     * the shadow line under each lap is the thing that says roof from any
-     * distance at all. How many courses is the material's own business: slate
-     * splits narrow and marble is cut wide.
-     */
-    const courses = mat.courses;
-    const lap = (a: [number, number, number], b: [number, number, number], shade: number): void => {
-      if (zoom < 0.55) return;
-      const n = zoom >= 0.9 ? courses : Math.max(2, courses >> 1);
-      for (let i = 0; i < n; i++) {
-        const t0 = i / n;
-        const t1 = (i + 1) / n;
-        const pt = (p: [number, number, number], t: number): [number, number] => [
-          cam.worldToScreenX(p[0] + (cx - p[0]) * t, p[1] + (cy - p[1]) * t),
-          cam.worldToScreenY(p[0] + (cx - p[0]) * t, p[1] + (cy - p[1]) * t, p[2] + (centreH - p[2]) * t),
-        ];
-        ctx.beginPath();
-        const p0 = pt(a, t0);
-        const p1 = pt(b, t0);
-        const p2 = pt(b, t1);
-        const p3 = pt(a, t1);
-        ctx.moveTo(p0[0], p0[1]);
-        ctx.lineTo(p1[0], p1[1]);
-        ctx.lineTo(p2[0], p2[1]);
-        ctx.lineTo(p3[0], p3[1]);
-        ctx.closePath();
-        // Each course a shade of its own, and darker at its foot where the one
-        // below it laps under.
-        const k = hash2(x * 5 + i, y * 5 + Math.round(a[0] - b[0]), 83);
-        ctx.fillStyle = rgb(mat.floor, 0.9 * shade * (0.94 + k * 0.12));
-        ctx.fill();
-        // The shadow under each lap, once you are near enough for it to be
-        // worth a path of its own.
-        if (zoom >= 0.95) {
-          ctx.strokeStyle = rgb(mat.trim, shade * 0.85, 0.4);
-          ctx.beginPath();
-          ctx.moveTo(p0[0], p0[1]);
-          ctx.lineTo(p1[0], p1[1]);
-          ctx.stroke();
-        }
+    const u0 = decked(x - 1, y) ? 0 : WALL_THICK, u1 = decked(x + 1, y) ? 1 : 1 - WALL_THICK;
+    const v0 = decked(x, y - 1) ? 0 : WALL_THICK, v1 = decked(x, y + 1) ? 1 : 1 - WALL_THICK;
+    const pts = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]): [number, number] => [cam.worldToScreenX(x + u, y + v), cam.worldToScreenY(x + u, y + v, h)]);
+    const cx = (pts[0][0] + pts[2][0]) / 2, cy = (pts[0][1] + pts[2][1]) / 2;
+    ctx.globalAlpha = alpha * (done ? 1 : 0.4);
+    // A hair past its own edges, so nothing shows between it and the next tile of it.
+    ctx.beginPath();
+    for (const [px, py] of pts) {
+      const l = Math.hypot(px - cx, py - cy) || 1;
+      ctx.lineTo(px + ((px - cx) / l) * 0.5, py + ((py - cy) / l) * 0.5);
+    }
+    ctx.closePath();
+    const cov = covering(floor.material);
+    if (done) {
+      const mip = this.roofMip(), k = 1 / (COVER_PPT >> mip);
+      const key = `deck:${floor.material}:${mip}`;
+      let pat = this.roofPatterns.get(key);
+      if (!pat) {
+        pat = ctx.createPattern(cov.deck[mip], 'repeat') ?? undefined;
+        if (pat) this.roofPatterns.set(key, pat);
       }
-    };
-    const tri = (a: [number, number, number], b: [number, number, number], shade: number): void => {
-      ctx.beginPath();
-      ctx.moveTo(csx, csy);
-      ctx.lineTo(cam.worldToScreenX(a[0], a[1]), cam.worldToScreenY(a[0], a[1], a[2]));
-      ctx.lineTo(cam.worldToScreenX(b[0], b[1]), cam.worldToScreenY(b[0], b[1], b[2]));
-      ctx.closePath();
-      ctx.fillStyle = rgb(mat.floor, 0.9 * shade);
+      if (pat) {
+        const sx = cam.worldToScreenX(0, 0), sy = cam.worldToScreenY(0, 0, h);
+        pat.setTransform(new DOMMatrix([
+          cam.worldToScreenX(k, 0) - sx, cam.worldToScreenY(k, 0, h) - sy,
+          cam.worldToScreenX(0, k) - sx, cam.worldToScreenY(0, k, h) - sy,
+          sx, sy,
+        ]));
+        ctx.fillStyle = pat;
+        ctx.fill();
+      }
+    } else {
+      ctx.fillStyle = `rgba(${cov.fascia.body[0]}, ${cov.fascia.body[1]}, ${cov.fascia.body[2]}, 0.5)`;
       ctx.fill();
-      if (done) lap(a, b, shade);
       ctx.beginPath();
-      ctx.moveTo(csx, csy);
-      ctx.lineTo(cam.worldToScreenX(a[0], a[1]), cam.worldToScreenY(a[0], a[1], a[2]));
-      ctx.lineTo(cam.worldToScreenX(b[0], b[1]), cam.worldToScreenY(b[0], b[1], b[2]));
+      for (const [px, py] of pts) ctx.lineTo(px, py);
       ctx.closePath();
-      ctx.strokeStyle = rgb(mat.trim, shade, done ? 0.55 : 1);
-      if (!done) ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.setLineDash([4, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
-    };
-    ctx.globalAlpha = alpha * (done ? 1 : 0.4);
-    for (let i = 0; i < 4; i++) {
-      const a = corners[i];
-      const b = corners[(i + 1) % 4];
-      const [nx, ny] = neighbours[i];
-      const mid: [number, number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, midH((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, roof(nx, ny))];
-      // Both halves of a slope face the same way, so both take the shade of
-      // the slope itself: the way out from the middle of the roof to the
-      // middle of this side.
-      const shade = shadeOf(mid[0] - cx, mid[1] - cy);
-      tri(a, mid, shade);
-      tri(mid, b, shade);
-      /*
-       * And the edge of it, which is where a roof stops being a shape and
-       * starts being a thing. An eave is the ends of the rafters and the
-       * courses over them — a board's depth of it, hanging over whatever is
-       * under — and a roof drawn without one ends in a line and reads as a
-       * folded sheet. Only at an edge with no roof carrying on from it, and
-       * only on the sides the camera is on.
-       */
-      if (done && zoom >= 0.5 && !roof(nx, ny) && cam.nearSide(nx - x, ny - y) > 0) {
-        ctx.beginPath();
-        ctx.moveTo(cam.worldToScreenX(a[0], a[1]), cam.worldToScreenY(a[0], a[1], a[2]));
-        ctx.lineTo(cam.worldToScreenX(b[0], b[1]), cam.worldToScreenY(b[0], b[1], b[2]));
-        ctx.lineTo(cam.worldToScreenX(b[0], b[1]), cam.worldToScreenY(b[0], b[1], b[2] - EAVE_DEEP));
-        ctx.lineTo(cam.worldToScreenX(a[0], a[1]), cam.worldToScreenY(a[0], a[1], a[2] - EAVE_DEEP));
-        ctx.closePath();
-        ctx.fillStyle = rgb(mat.trim, shade * 0.9);
-        ctx.fill();
-        ctx.strokeStyle = rgb(mat.trim, shade * 0.7);
-        ctx.stroke();
-      }
-    }
-    /*
-     * The ridge, capped. Where two slopes meet there is a course of something
-     * laid over the joint — it is what keeps the rain out of the one place a
-     * roof cannot lap — and it is the line that makes a row of roofs read as
-     * a street rather than as a field of pyramids.
-     */
-    if (done && zoom >= 0.55) {
-      ctx.strokeStyle = rgb(mat.floor, 1.14);
-      ctx.lineWidth = Math.max(1.5, 3 * zoom);
-      for (let i = 0; i < 4; i++) {
-        const [nx, ny] = neighbours[i];
-        if (!roof(nx, ny)) continue;
-        const a = corners[i];
-        const b = corners[(i + 1) % 4];
-        const mx = (a[0] + b[0]) / 2;
-        const my = (a[1] + b[1]) / 2;
-        ctx.beginPath();
-        ctx.moveTo(csx, csy);
-        ctx.lineTo(cam.worldToScreenX(mx, my), cam.worldToScreenY(mx, my, midH(mx, my, true)));
-        ctx.stroke();
-      }
-      ctx.lineWidth = 1;
     }
     ctx.globalAlpha = 1;
+  }
+
+  /** How a face turned the way a wall running `ux`, `uy` faces is lit: the light walls are drawn in. */
+  private faceLight(ux: number, uy: number): number {
+    const cam = this.camera;
+    const vx = cam.rotateX(ux, uy);
+    const along = Math.abs(vx);
+    const into = Math.abs(cam.rotateY(ux, uy));
+    const face = along / (along + into || 1);
+    return 0.72 * (1 - face) + (vx > 0 ? 1 : 0.8) * face;
+  }
+
+  /**
+   * A pitched roof, whole: see `roofshape.ts` for its shape and `roofing.ts`
+   * for what covers it.
+   *
+   * Everything on it -- its faces, the capping along its ridges and hips, the
+   * line down its valleys, the board along its eaves and up its verges, and
+   * its gable ends -- goes into one list and is laid back to front. A roof is
+   * a surface never over itself seen from above, so of two pieces of it the
+   * one standing further down the screen is the one in front. The shade its
+   * eaves throw on the walls under them goes on first, under all of it.
+   */
+  private drawPitchedRoof(b: Building): void {
+    const main = this.canvas.ctx;
+    const cam = this.camera;
+    const bld = this.game.buildings;
+    const world = this.game.world;
+    const zoom = cam.zoom;
+    const level = b.levels;
+    const roofs: FloorTile[] = [];
+    for (const k of b.tiles) {
+      const [x, y] = k.split(',').map(Number);
+      const f = bld.floor(level, x, y);
+      if (f && floorKind(f) === 'roof') roofs.push(f);
+    }
+    if (!roofs.length) return;
+    const shape = roofShapeOf(b) === 'gable' ? 'gable' : 'hip';
+    const sig = `${shape}:${roofs.map((f) => `${f.x},${f.y}`).join(';')}`;
+    let kept = this.roofShapes.get(b.id);
+    if (!kept || kept.sig !== sig) {
+      kept = { sig, model: roofModel(roofs.map((f): [number, number] => [f.x, f.y]), shape, ROOF_OVER, ROOF_VERGE, ROOF_CAP) };
+      this.roofShapes.set(b.id, kept);
+    }
+    const model = kept.model;
+    const pitch = ROOF_PITCH * roofShapeDef(b).rise;
+    let eave = -Infinity;
+    for (const f of roofs) eave = Math.max(eave, world.getHeight(f.x, f.y));
+    eave += level * WALL_HEIGHT;
+    const X = (p: RoofPt): number => cam.worldToScreenX(p[0], p[1]);
+    const Y = (p: RoofPt, drop = 0): number => cam.worldToScreenY(p[0], p[1], eave + pitch * p[2] - drop);
+    const deep = (x: number, y: number): number => cam.worldToScreenY(x, y, 0);
+    /*
+     * Standing under it, you see through it. It is laid on a layer of its own
+     * and the layer put over the room at a third: laid straight on at a third,
+     * every place two of its pieces overlap came out darker than the rest.
+     */
+    const under = !!this.roomTiles && roofs.some((f) => this.roomTiles?.has(`${f.x},${f.y}`));
+    const ctx = under ? this.roofLayerCtx() : main;
+    /*
+     * How a face of it is lit, on the scale the walls are: the light from the
+     * camera's left and from above that makes a wall facing down the screen
+     * to the left the bright one, taken on a face tilted at the pitch.
+     */
+    const slope = pitch / UNITS_PER_TILE;
+    const lightOf = (fall: Fall): number => {
+      let nx = 0, ny = 0;
+      if (fall !== 4) {
+        const [fx, fy] = FALLS[fall];
+        nx = cam.rotateX(fx, fy) * slope;
+        ny = cam.rotateY(fx, fy) * slope;
+      }
+      const l = Math.hypot(nx, ny, 1);
+      return 0.55 + 0.55 * ((-0.249 * nx + 0.498 * ny + 0.83) / l);
+    };
+    const mip = this.roofMip();
+    const ppt = COVER_PPT >> mip;
+    /** The covering with a face's light laid into it. Laid over, two faces of one plane overlapping at a seam would take it twice. */
+    const patternOf = (material: string, lit: number): CanvasPattern | null => {
+      const q = Math.round(lit * 50) / 50;
+      const k = `${material}:${mip}:${q}`;
+      let pat = this.roofPatterns.get(k);
+      if (pat) {
+        this.roofPatterns.delete(k);
+        this.roofPatterns.set(k, pat);
+        return pat;
+      }
+      const cov = covering(material);
+      const img = cov.mips[mip];
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext('2d') as CanvasRenderingContext2D;
+      g.drawImage(img, 0, 0);
+      const a = cov.shadow(q);
+      if (a > 0.001) {
+        g.fillStyle = `rgba(${cov.shade[0]}, ${cov.shade[1]}, ${cov.shade[2]}, ${a.toFixed(3)})`;
+        g.fillRect(0, 0, c.width, c.height);
+      } else if (q > 1) {
+        g.fillStyle = `rgba(255, 250, 240, ${Math.min(0.24, (q - 1) * 0.8).toFixed(3)})`;
+        g.fillRect(0, 0, c.width, c.height);
+      }
+      pat = ctx.createPattern(c, 'repeat') ?? undefined;
+      if (!pat) return null;
+      this.roofPatterns.set(k, pat);
+      // A camera turned all the way round asks for forty of them; the oldest go.
+      while (this.roofPatterns.size > 48) {
+        const first = this.roofPatterns.keys().next().value;
+        if (first === undefined) break;
+        this.roofPatterns.delete(first);
+      }
+      return pat;
+    };
+    /*
+     * The items to lay, back to front. A run of faces of one plane next to
+     * each other in that order is laid as one path, with one fill: it is
+     * the same picture in the same place, and a fill is what a roof costs.
+     */
+    const items: Array<{ d: number; draw: () => void; plane?: string; face?: number }> = [];
+    const faceDepth = model.faces.map((f) => {
+      let x = 0, y = 0;
+      for (const p of f.pts) { x += p[0]; y += p[1]; }
+      return deep(x / f.pts.length, y / f.pts.length);
+    });
+    /*
+     * Whether a way of falling faces the camera. A roof is one surface over
+     * the ground, so a slope falling away from the camera more steeply than
+     * the camera looks down is under the slopes in front of it everywhere it
+     * shows: drawn, it only cost a fill and was covered.
+     */
+    const [gx, gy] = [cam.unrotateX(1, 1), cam.unrotateY(1, 1)];
+    const gl = Math.hypot(gx, gy) || 1;
+    const down = (HALF_H * Math.SQRT2) / (HEIGHT_SCALE * UNITS_PER_TILE);
+    const facing = (fall: Fall): boolean => {
+      if (fall === 4) return true;
+      const [fx, fy] = FALLS[fall];
+      return slope * ((fx * gx + fy * gy) / gl) + down > 0;
+    };
+    const planeOf = (f: (typeof model.faces)[number]): string => {
+      const tile = roofs[f.tile];
+      if (!isDone(tile)) return `plan:${tile.material}`;
+      if (f.fall === 4) return `${tile.material}:4:${f.pts[0][2]}`;
+      const [nx, ny] = FALLS[f.fall];
+      const p0 = f.pts[0];
+      return `${tile.material}:${f.fall}:${(p0[2] + nx * p0[0] + ny * p0[1]).toFixed(4)}`;
+    };
+    /** A face's outline, a hair past its own edges, so nothing shows between two faces of one plane. */
+    const outlineOf = (f: (typeof model.faces)[number]): void => {
+      const pts = f.pts.map((p): [number, number] => [X(p), Y(p)]);
+      let cx = 0, cy = 0;
+      for (const [x, y] of pts) { cx += x; cy += y; }
+      cx /= pts.length;
+      cy /= pts.length;
+      pts.forEach(([x, y], i) => {
+        const l = Math.hypot(x - cx, y - cy) || 1;
+        const qx = x + ((x - cx) / l) * 0.5, qy = y + ((y - cy) / l) * 0.5;
+        if (i) ctx.lineTo(qx, qy); else ctx.moveTo(qx, qy);
+      });
+      ctx.closePath();
+    };
+    /** Fill what has been outlined with the face's picture, laid on its plane. */
+    const fillAs = (f: (typeof model.faces)[number]): void => {
+      const tile = roofs[f.tile];
+      if (!isDone(tile)) {
+        const cov = covering(tile.material);
+        ctx.fillStyle = `rgba(${cov.fascia.body[0]}, ${cov.fascia.body[1]}, ${cov.fascia.body[2]}, 0.28)`;
+        ctx.fill();
+        return;
+      }
+      const pat = patternOf(tile.material, lightOf(f.fall));
+      if (!pat) return;
+      /*
+       * The picture laid on the plane: across it along the eave, and down it
+       * from the eave's edge, so a course's tail lies along every eave.
+       */
+      const [nx, ny] = FALLS[f.fall === 4 ? 1 : f.fall];
+      const ex = -ny, ey = nx;
+      const k = 1 / ppt;
+      let ox: number, oy: number, h0: number, rise: number;
+      if (f.fall === 4) {
+        ox = 0; oy = 0; h0 = eave + pitch * f.pts[0][2]; rise = 0;
+      } else {
+        const p0 = f.pts[0];
+        const c = p0[2] + nx * p0[0] + ny * p0[1];
+        ox = nx * (c + ROOF_OVER); oy = ny * (c + ROOF_OVER); h0 = eave - pitch * ROOF_OVER; rise = 1;
+      }
+      const sx = cam.worldToScreenX(ox, oy), sy = cam.worldToScreenY(ox, oy, h0);
+      pat.setTransform(new DOMMatrix([
+        cam.worldToScreenX(ox + ex * k, oy + ey * k) - sx, cam.worldToScreenY(ox + ex * k, oy + ey * k, h0) - sy,
+        cam.worldToScreenX(ox + nx * k, oy + ny * k) - sx, cam.worldToScreenY(ox + nx * k, oy + ny * k, h0 - pitch * rise * k) - sy,
+        sx, sy,
+      ]));
+      ctx.fillStyle = pat;
+      ctx.fill();
+    };
+    const plan: FloorTile[] = [];
+    model.faces.forEach((f, i) => {
+      if (!facing(f.fall)) return;
+      items.push({ d: faceDepth[i], plane: planeOf(f), face: i, draw: () => { ctx.beginPath(); outlineOf(f); fillAs(f); } });
+    });
+    for (const f of roofs) if (!isDone(f)) plan.push(f);
+    // The creases and the edges go on after the faces they lie along.
+    const byPoint = new Map<string, number[]>();
+    model.faces.forEach((f, i) => {
+      for (const p of f.pts) {
+        const k = `${p[0]},${p[1]}`;
+        const at = byPoint.get(k);
+        if (at) at.push(i);
+        else byPoint.set(k, [i]);
+      }
+    });
+    const after = (a: RoofPt, bq: RoofPt): number => {
+      const A = byPoint.get(`${a[0]},${a[1]}`) ?? [];
+      const B = new Set(byPoint.get(`${bq[0]},${bq[1]}`) ?? []);
+      let m = -Infinity;
+      for (const i of A) if (B.has(i)) m = Math.max(m, faceDepth[i]);
+      return m === -Infinity ? deep((a[0] + bq[0]) / 2, (a[1] + bq[1]) / 2) : m;
+    };
+    /** Points at every `every` tiles along a crease from `a` to `b`, counted from the world's own origin so they run on from one piece of it to the next. */
+    const marks = (a: RoofPt, bq: RoofPt, every: number): RoofPt[] => {
+      const out: RoofPt[] = [];
+      const along = Math.abs(bq[0] - a[0]) > 1e-9 ? 0 : 1;
+      const u0 = a[along], u1 = bq[along];
+      if (Math.abs(u1 - u0) < 1e-9) return out;
+      const lo = Math.min(u0, u1), hi = Math.max(u0, u1);
+      for (let u = Math.ceil(lo / every - 1e-9) * every; u <= hi + 1e-9; u += every) {
+        const t = (u - u0) / (u1 - u0);
+        if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+        out.push([a[0] + (bq[0] - a[0]) * t, a[1] + (bq[1] - a[1]) * t, a[2] + (bq[2] - a[2]) * t]);
+      }
+      return out;
+    };
+    /** Whether any face along a crease from `a` to `b` is one the camera sees. */
+    const seen = (a: RoofPt, bq: RoofPt): boolean => {
+      const B = new Set(byPoint.get(`${bq[0]},${bq[1]}`) ?? []);
+      return (byPoint.get(`${a[0]},${a[1]}`) ?? []).some((i) => B.has(i) && facing(model.faces[i].fall));
+    };
+    for (const c of model.creases) {
+      if (!isDone(roofs[c.tile]) || !seen(c.a, c.b)) continue;
+      items.push({ d: after(c.a, c.b) + 0.001, draw: () => {
+        const cov = covering(roofs[c.tile].material);
+        let ax = X(c.a), ay = Y(c.a), bx = X(c.b), by = Y(c.b);
+        const len = Math.hypot(bx - ax, by - ay);
+        if (len < 0.01) return;
+        const ux = (bx - ax) / len, uy = (by - ay) / len;
+        if (c.kind === 'valley') {
+          ctx.strokeStyle = cov.valley;
+          ctx.lineWidth = Math.max(1, 1.6 * zoom);
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+          ctx.lineCap = 'butt';
+          ctx.lineWidth = 1;
+          return;
+        }
+        // A hair longer at both ends, so two pieces of one ridge meet with nothing between them.
+        ax -= ux * 0.5; ay -= uy * 0.5; bx += ux * 0.5; by += uy * 0.5;
+        const cap = cov.cap, w = Math.max(1.5, cap.w * zoom);
+        const run = (width: number, ink: string, oy = 0): void => {
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = width;
+          ctx.beginPath(); ctx.moveTo(ax, ay + oy); ctx.lineTo(bx, by + oy); ctx.stroke();
+        };
+        run(w + Math.max(1.2, 1.4 * zoom), cap.dark, Math.max(0.5, 0.5 * zoom));
+        run(w, cap.body);
+        run(Math.max(0.8, w * 0.28), cap.hi, -w * 0.22);
+        // Across it: the joints of its ridge tiles, the spars pegging a straw ridge down.
+        const tick = (p: RoofPt, dx: number, dy: number, width: number, ink: string): void => {
+          const px = X(p), py = Y(p);
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = width;
+          ctx.beginPath(); ctx.moveTo(px - dx, py - dy); ctx.lineTo(px + dx, py + dy); ctx.stroke();
+        };
+        const nX = -uy * w * 0.5, nY = ux * w * 0.5;
+        if (cap.kind === 'straw') {
+          for (const p of marks(c.a, c.b, cap.joint)) {
+            tick(p, nX + ux * w * 0.35, nY + uy * w * 0.35, Math.max(0.8, 1.1 * zoom), cap.dark);
+            tick(p, nX - ux * w * 0.35, nY - uy * w * 0.35, Math.max(0.8, 1.1 * zoom), cap.dark);
+          }
+        } else if (cap.joint > 0) {
+          for (const p of marks(c.a, c.b, cap.joint)) tick(p, nX, nY, Math.max(0.8, 1 * zoom), cap.dark);
+        }
+        // And on polished metal, a cresting of finials along the ridge itself.
+        if (cap.kind === 'crest' && c.kind === 'ridge') {
+          for (const p of marks(c.a, c.b, 0.25)) {
+            const px = X(p), py = Y(p) - w * 0.4, h = Math.max(2, 4.5 * zoom);
+            ctx.strokeStyle = cap.dark;
+            ctx.lineWidth = Math.max(1, 1.2 * zoom);
+            ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - h); ctx.stroke();
+            ctx.beginPath(); ctx.arc(px, py - h, Math.max(1, 1.4 * zoom), 0, Math.PI * 2);
+            ctx.fillStyle = cap.hi; ctx.fill(); ctx.stroke();
+          }
+        }
+        ctx.lineWidth = 1;
+      } });
+    }
+    for (const e of model.edges) {
+      if (!isDone(roofs[e.tile])) continue;
+      const [ox, oy] = FALLS[e.out];
+      if (cam.nearSide(ox, oy) < 0) continue;
+      const cov = covering(roofs[e.tile].material);
+      const fl = this.faceLight(-oy, ox);
+      // The shade the eave throws down the wall under it, under everything.
+      if (e.wall) {
+        const [wa, wb] = e.wall;
+        const off = (p: RoofPt): RoofPt => [p[0] + ox * WALL_THICK, p[1] + oy * WALL_THICK, 0];
+        const A = off(wa), B = off(wb);
+        items.push({ d: -Infinity, draw: () => {
+          const top = Y(A, pitch * WALL_THICK), bottom = Y(A, 10);
+          ctx.beginPath();
+          ctx.moveTo(X(A), Y(A, pitch * WALL_THICK)); ctx.lineTo(X(B), Y(B, pitch * WALL_THICK));
+          ctx.lineTo(X(B), Y(B, 10)); ctx.lineTo(X(A), Y(A, 10));
+          ctx.closePath();
+          const g = ctx.createLinearGradient(0, top, 0, bottom);
+          g.addColorStop(0, 'rgba(44, 34, 56, 0.3)');
+          g.addColorStop(1, 'rgba(44, 34, 56, 0)');
+          ctx.fillStyle = g;
+          ctx.fill();
+        } });
+      }
+      items.push({ d: after(e.a, e.b) + 0.002, draw: () => {
+        const F = cov.fascia, dp = F.deep;
+        ctx.beginPath();
+        ctx.moveTo(X(e.a), Y(e.a));
+        ctx.lineTo(X(e.b), Y(e.b));
+        ctx.lineTo(X(e.b), Y(e.b, dp));
+        ctx.lineTo(X(e.a), Y(e.a, dp));
+        ctx.closePath();
+        if (F.kind === 'straw') {
+          const g = ctx.createLinearGradient(0, Math.min(Y(e.a), Y(e.b)), 0, Math.max(Y(e.a, dp), Y(e.b, dp)));
+          g.addColorStop(0, rgb(F.body, fl * 1.08));
+          g.addColorStop(1, rgb(F.edge, fl));
+          ctx.fillStyle = g;
+        } else {
+          ctx.fillStyle = rgb(F.body, fl);
+        }
+        ctx.fill();
+        // Its foot, and on a gutter the light along its round.
+        ctx.strokeStyle = rgb(F.edge, fl);
+        ctx.lineWidth = Math.max(1, 1.1 * zoom);
+        ctx.beginPath(); ctx.moveTo(X(e.a), Y(e.a, dp)); ctx.lineTo(X(e.b), Y(e.b, dp)); ctx.stroke();
+        if (F.kind === 'gutter' || F.kind === 'cornice') {
+          ctx.strokeStyle = rgb(F.body, Math.min(1.35, fl * 1.25));
+          ctx.beginPath(); ctx.moveTo(X(e.a), Y(e.a, dp * 0.4)); ctx.lineTo(X(e.b), Y(e.b, dp * 0.4)); ctx.stroke();
+        }
+        // Along a marble eave, the ends of its covers stand up in a row of palmettes.
+        if (F.kind === 'cornice' && e.kind === 'eave') {
+          for (const p of marks(e.a, e.b, 1 / 8)) {
+            const px = X(p), py = Y(p), r = Math.max(1.2, 2.4 * zoom);
+            ctx.beginPath();
+            ctx.moveTo(px - r, py);
+            ctx.arc(px, py, r, Math.PI, 0);
+            ctx.closePath();
+            ctx.fillStyle = rgb(F.body, Math.min(1.3, fl * 1.12));
+            ctx.fill();
+            ctx.strokeStyle = rgb(F.edge, fl);
+            ctx.lineWidth = Math.max(0.7, 0.8 * zoom);
+            ctx.stroke();
+          }
+        }
+        ctx.lineWidth = 1;
+      } });
+    }
+    for (const g of model.gables) {
+      const [ox, oy] = FALLS[g.out];
+      if (cam.nearSide(ox, oy) < 0) continue;
+      // Before everything along its edge: the verge over it stands further out.
+      const d = Math.min(...g.line.map((p) => deep(p[0], p[1]))) - 0.001;
+      // It goes up with the roof over it: under a roof only planned, it is only planned too.
+      const built = g.borders.every((bb) => isDone(roofs[bb.tile]));
+      items.push({ d, draw: () => {
+        const was = ctx.globalAlpha;
+        if (!built) ctx.globalAlpha = was * 0.3;
+        this.drawGable(ctx, g, level, eave, pitch, roofs);
+        ctx.globalAlpha = was;
+      } });
+    }
+    items.sort((p, q) => p.d - q.d);
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.plane === undefined || it.face === undefined) { it.draw(); continue; }
+      ctx.beginPath();
+      outlineOf(model.faces[it.face]);
+      while (i + 1 < items.length && items[i + 1].plane === it.plane && items[i + 1].face !== undefined) {
+        outlineOf(model.faces[items[i + 1].face as number]);
+        i++;
+      }
+      fillAs(model.faces[it.face]);
+    }
+    // What is only planned yet is marked out where it will go.
+    if (plan.length) {
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.setLineDash([5, 4]);
+      for (const f of plan) {
+        ctx.beginPath();
+        for (const [cx, cy] of [[f.x, f.y], [f.x + 1, f.y], [f.x + 1, f.y + 1], [f.x, f.y + 1]]) ctx.lineTo(cam.worldToScreenX(cx, cy), cam.worldToScreenY(cx, cy, eave));
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+    if (under) {
+      main.save();
+      main.setTransform(1, 0, 0, 1, 0, 0);
+      main.globalAlpha = 0.35;
+      main.drawImage(ctx.canvas, 0, 0);
+      main.restore();
+    }
+  }
+
+  /** A canvas the size of the screen, cleared and set up to be drawn on as the screen is, for a roof seen through. */
+  private roofLayer: CanvasRenderingContext2D | null = null;
+  private roofLayerCtx(): CanvasRenderingContext2D {
+    const el = this.canvas.el;
+    if (!this.roofLayer || this.roofLayer.canvas.width !== el.width || this.roofLayer.canvas.height !== el.height) {
+      const c = document.createElement('canvas');
+      c.width = el.width;
+      c.height = el.height;
+      this.roofLayer = c.getContext('2d') as CanvasRenderingContext2D;
+    }
+    const g = this.roofLayer;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+    g.setTransform(this.canvas.ctx.getTransform());
+    g.lineJoin = 'round';
+    return g;
+  }
+
+  /**
+   * A gable end: the wall carried up in a triangle under the roof's line, in
+   * the wall's own picture -- the field of it, without the head of the storey
+   * under it -- laid on over the top storey's a border at a time, and lit as
+   * the wall is. Over a wall with no picture, in its colour.
+   */
+  private drawGable(ctx: CanvasRenderingContext2D, gable: RoofGable, level: number, eave: number, pitch: number, roofs: FloorTile[]): void {
+    const cam = this.camera;
+    const bld = this.game.buildings;
+    const [ox, oy] = FALLS[gable.out];
+    const dir: 'h' | 'v' = gable.out === 0 || gable.out === 2 ? 'v' : 'h';
+    const dx = dir === 'h' ? 1 : 0, dy = dir === 'h' ? 0 : 1;
+    /** A point on the outer face of the wall: a world point on its line, `h` height units over the eaves. */
+    const at = (x: number, y: number, h: number): [number, number] => [
+      cam.worldToScreenX(x + ox * WALL_THICK, y + oy * WALL_THICK),
+      cam.worldToScreenY(x + ox * WALL_THICK, y + oy * WALL_THICK, eave + h),
+    ];
+    const first = gable.line[0], last = gable.line[gable.line.length - 1];
+    const outline = (): void => {
+      ctx.beginPath();
+      ctx.moveTo(...at(first[0], first[1], 0));
+      for (const p of gable.line) ctx.lineTo(...at(p[0], p[1], pitch * p[2]));
+      ctx.lineTo(...at(last[0], last[1], 0));
+      ctx.closePath();
+    };
+    const lit = this.faceLight(dx, dy);
+    const top = Math.max(...gable.line.map((p) => p[2])) * pitch;
+    ctx.save();
+    outline();
+    ctx.clip();
+    let shaded: Masonry | undefined;
+    for (const b of gable.borders) {
+      const border: Border = { dir, x: b.x, y: b.y };
+      const wall = bld.wallOnBorder(level - 1, border);
+      const cob = wall && isDone(wall) ? this.masonryOf(wall) : undefined;
+      const [ax, ay] = borderPoints(border);
+      const P = (t: number, h: number): [number, number] => at(ax + dx * t, ay + dy * t, h);
+      if (!cob) {
+        const mat = MATERIAL_BY_ID.get(wall?.material ?? roofs[b.tile].material);
+        ctx.beginPath();
+        ctx.moveTo(...P(-0.01, -1)); ctx.lineTo(...P(1.01, -1)); ctx.lineTo(...P(1.01, top + 2)); ctx.lineTo(...P(-0.01, top + 2));
+        ctx.closePath();
+        ctx.fillStyle = rgb(mat ? this.painted(mat, wall?.dye).color : [180, 160, 140], lit);
+        ctx.fill();
+        continue;
+      }
+      shaded = shaded ?? cob;
+      const n = cob.face.length;
+      const v = cob.scatter ? scatterOf(border, level, n) : Math.abs(border.x * 31 + border.y * 17 + level * 7) % n;
+      const img = cob.face[v];
+      const head = cob.head, fh = img.height - head;
+      const turned = !!cob.handed && P(1, 0)[0] < P(0, 0)[0];
+      const [t0, t1] = turned ? [1.01, -0.01] : [-0.01, 1.01];
+      // A storey's field at a time, from the head of the top storey up.
+      const step = (WALL_HEIGHT * fh) / img.height;
+      for (let h = 0; h < top; h += step) {
+        const [tlx, tly] = P(t0, h + step), [trx, try_] = P(t1, h + step), [blx, bly] = P(t0, h);
+        ctx.save();
+        ctx.transform((trx - tlx) / img.width, (try_ - tly) / img.width, (blx - tlx) / fh, (bly - tly) / fh, tlx, tly);
+        ctx.drawImage(img, 0, head, img.width, fh, 0, 0, img.width, fh);
+        ctx.restore();
+      }
+    }
+    if (shaded) {
+      const [sr, sg, sb] = shaded.shade;
+      outline();
+      ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, ${shaded.shadow(lit).toFixed(3)})`;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Storeys of any building touching a tile's borders, for tiles just outside a footprint. */

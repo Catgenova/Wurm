@@ -206,6 +206,12 @@ export interface Masonry {
    * never under its own height.
    */
   piers?: number;
+  /**
+   * How much of the top of a face is the head of the storey -- the band
+   * course, the plate, the frieze -- in picture px. A gable end carried up
+   * over the top storey is the field under it laid again, without it.
+   */
+  head: number;
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
   spill: HTMLCanvasElement[];
   /** The hedge at the foot of the ground storey, and the damp along its ground line. */
@@ -7575,6 +7581,7 @@ function paint(S: Stock): Masonry {
     beamLine: channels(PASTEL.beamLine),
     w: TW,
     h: TH,
+    head: S.lay === 'frame' ? PLATE : S.lay === 'log' ? 0 : S.lay === 'plank' ? HEAD_BAND : S.lay === 'gild' ? FRIEZE : BAND,
     plinth: S.plinth,
     shade: S.shade,
     growth: S.growth,

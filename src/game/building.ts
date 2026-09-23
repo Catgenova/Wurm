@@ -171,7 +171,7 @@ export const FENCE_THICK = 0.028;
  * a sheet of paper laid over the storey below.
  */
 export const FLOOR_DEEP = 2.2;
-/** And how deep an eave is: the rafter ends, and the courses lapped over them. */
+/** And how deep an eave is: the board along the rafter ends, under the courses lapped over them. */
 export const EAVE_DEEP = 2.6;
 export const MAX_LEVELS = 10;
 /**
@@ -263,8 +263,13 @@ export const floorKind = (f: FloorTile): FloorKind => f.kind ?? 'floor';
 /** Whether a finished floor tile can be stood on. */
 export const walkableKind = (k: FloorKind): boolean => k !== 'roof';
 export const connectsDown = (k: FloorKind): boolean => k === 'stairs' || k === 'ladder';
-/** Rise of a roof ridge above its eaves, in terrain units. */
-export const ROOF_RISE = 22;
+/**
+ * How far a pitched roof rises for every tile it is in from its eaves, in
+ * terrain units: a roof over a house two tiles across stands one tile's
+ * worth of this over its eaves at the ridge, and one over a hall stands
+ * higher.
+ */
+export const ROOF_PITCH = 22;
 
 /**
  * What shape the roof is.
@@ -288,7 +293,7 @@ export type RoofShape = 'gable' | 'hip' | 'flat';
 export interface RoofShapeDef {
   id: RoofShape;
   name: string;
-  /** How far the ridge stands above the eaves, as a share of `ROOF_RISE`. */
+  /** How far it rises for every tile in from its eaves, as a share of `ROOF_PITCH`. */
   rise: number;
   /** Materials, against a solid wall of the same stuff. */
   factor: number;

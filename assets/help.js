@@ -1,4 +1,4 @@
-import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
+import{Dt as e,ji as t}from"./creatures.js";function n(){return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -963,7 +963,7 @@ import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
     skill</b> by 5, 12 or 25.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${(e*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(t=>`<b>${(e*t*100).toFixed(0)}%</b>`).join(`, `)}
+    ${(t*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(t*e*100).toFixed(0)}%</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
     holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
     kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
@@ -1450,7 +1450,7 @@ import{Ai as e,Dt as t}from"./creatures.js";function n(){return`
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about <b>one swing in
-    ${Math.round(1/t)}</b> a slab comes away of its own accord and the corner drops a
+    ${Math.round(1/e)}</b> a slab comes away of its own accord and the corner drops a
     step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
     than working it, and it gives way about one attempt in four. What breaks away is yours either
