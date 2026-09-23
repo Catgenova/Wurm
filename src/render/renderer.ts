@@ -36,6 +36,7 @@ import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
+import { FLOOR_PPT, FLOOR_TILES, concrete, flooring, slabbing } from './flooring';
 import { LADDER, stairStyle } from './stairing';
 import { drawShine, shines } from './shine';
 import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
@@ -206,6 +207,8 @@ const SHADE_INK = 'rgba(50, 44, 70, 0.26)';
  */
 const CONCRETE: readonly [number, number, number] = [172, 169, 160];
 const CONCRETE_TRIM: readonly [number, number, number] = [112, 109, 102];
+/** How deep a shutter board is, in height units: the width of one band of a foundation's side. */
+const SHUTTER = 3;
 /*
  * Scaffolding: what a plan looks like before anything is built on it.
  *
@@ -599,6 +602,8 @@ export class Renderer {
   private roofShapes = new Map<number, { sig: string; model: RoofModel }>();
   /** A covering with the hour's light for one face laid into it, as a pattern: see `drawPitchedRoof`. */
   private roofPatterns = new Map<string, CanvasPattern>();
+  /** A floor's picture as a pattern, by material, paint and size. */
+  private floorPatterns = new Map<string, CanvasPattern>();
 
   constructor(
     private readonly canvas: FullscreenCanvas,
@@ -1087,34 +1092,6 @@ export class Renderer {
   }
 
   /**
-   * Grain on the ground, close up. From a distance a tile is a flat lozenge of
-   * colour and that is the right amount of detail for it; at the zoom where
-   * you are actually standing on a thing, flat colour reads as paper. Five
-   * specks per tile, placed from the tile's own coordinates so they never
-   * crawl, laid into a path shared by the whole diagonal.
-   *
-   * The specks are plain black and white at low alpha rather than a shade of
-   * the ground, which means no colour has to be worked out per tile and any
-   * ground — sand, rock, a cliff face, a ploughed field — gets grain that
-   * suits it.
-   */
-  /**
-   * What a paved tile is paved with.
-   *
-   * Asked for after the walls: the same treatment for floors, pavements and
-   * roofs. A pavement is the easiest of the three to get wrong, because the
-   * ground it sits in is drawn as one flat colour a tile and paving drawn that
-   * way is a coloured-in square — you cannot tell a road from a lawn that
-   * happens to be grey.
-   *
-   * So the joints are drawn, and the stones between them. Like the grain, it
-   * is laid on in plain black and white at low alpha rather than in a shade of
-   * the ground: the light, the weather and the cold wash over remembered land
-   * are all already in the colour underneath, and none of them has to be
-   * worked out twice. Every figure comes off the tile's own coordinates, so a
-   * road holds still while you walk down it.
-   */
-  /**
    * A square picture laid over a tile, in two triangles.
    *
    * A tile whose four corners stand at four heights is not a parallelogram, so
@@ -1182,23 +1159,25 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * What a paved tile is paved with.
+   *
+   * Asked for after the walls: the same treatment for floors, pavements and
+   * roofs. A pavement is the easiest of the three to get wrong, because the
+   * ground it sits in is drawn as one flat colour a tile and paving drawn that
+   * way is a coloured-in square — you cannot tell a road from a lawn that
+   * happens to be grey.
+   *
+   * So the stones are painted, cobbles and slabs, and laid on in light and
+   * shade rather than in a colour of their own: the light, the weather and
+   * the cold wash over remembered land are all already in the colour
+   * underneath, and none of them has to be worked out twice. Slabs were a
+   * grid of squares a shade lighter or darker than each other, which is a
+   * chequer; they are cut stones now, their arrises lit, their faces the
+   * stone's -- see `slabbing`. Every picture comes off the tile's own
+   * coordinates, so a road holds still while you walk down it.
+   */
   private paving(t: TileType, x: number, y: number, data: number, pts: Float64Array, rot: number): void {
-    const ctx = this.canvas.ctx;
-    /** A point inside the tile, by its two shares across it. */
-    const qx = (u: number, v: number): number =>
-      (pts[0] * (1 - u) + pts[2] * u) * (1 - v) + (pts[6] * (1 - u) + pts[4] * u) * v;
-    const qy = (u: number, v: number): number =>
-      (pts[1] * (1 - u) + pts[3] * u) * (1 - v) + (pts[7] * (1 - u) + pts[5] * u) * v;
-    const patch = (u0: number, u1: number, v0: number, v1: number, fill: string): void => {
-      ctx.beginPath();
-      ctx.moveTo(qx(u0, v0), qy(u0, v0));
-      ctx.lineTo(qx(u1, v0), qy(u1, v0));
-      ctx.lineTo(qx(u1, v1), qy(u1, v1));
-      ctx.lineTo(qx(u0, v1), qy(u0, v1));
-      ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-    };
     if (t === TileType.Cobblestone) {
       /*
        * A road is a picture, not a pattern. It was six by six rectangles with
@@ -1214,28 +1193,11 @@ export class Renderer {
       this.laidOver(road[(((y % q) + q) % q) * q + (((x % q) + q) % q)], pts, rot, 'overlay');
       return;
     }
-    // Slabs are cut square and laid square, in the size their stone is cut in.
-    const slabs = t === TileType.Slabs;
-    const n = slabs ? SLAB_VARIANTS[slabVariant(data)].courses : 6;
-    const stagger = false;
-    const joint = slabs ? 0.06 : 0.11;
-    for (let r = 0; r < n; r++) {
-      const v0 = r / n + joint / n;
-      const v1 = (r + 1) / n - joint / n;
-      const off = stagger ? (r % 2) * 0.5 : 0;
-      for (let c = stagger ? -1 : 0; c < n; c++) {
-        const u0 = Math.max(0, (c + off) / n + joint / n);
-        const u1 = Math.min(1, (c + 1 + off) / n - joint / n);
-        if (u1 <= u0) continue;
-        const k = hash2(x * 8 + c, y * 8 + r, 61);
-        // A cut slab is nearly its neighbour; a cobble is whatever came out of
-        // the field, so no two of them are the same stone.
-        const spread = slabs ? 0.22 : 0.42;
-        patch(u0, u1, v0, v1, k > 0.5
-          ? `rgba(255, 255, 255, ${(k - 0.5) * spread})`
-          : `rgba(0, 0, 0, ${(0.5 - k) * (spread + 0.04)})`);
-      }
-    }
+    // Slabs, laid as their stone splits and in the size it comes off the block in.
+    const v = slabVariant(data);
+    const tiles = slabbing(v, SLAB_VARIANTS[v].courses);
+    const q = FLOOR_TILES;
+    this.laidOver(tiles[(((y % q) + q) % q) * q + (((x % q) + q) % q)], pts, rot, 'overlay');
   }
 
   /**
@@ -1300,6 +1262,18 @@ export class Renderer {
    */
   private oreBuf: [number, number, number] = [0, 0, 0];
 
+  /**
+   * Grain on the ground, close up. From a distance a tile is a flat lozenge of
+   * colour and that is the right amount of detail for it; at the zoom where
+   * you are actually standing on a thing, flat colour reads as paper. Five
+   * specks per tile, placed from the tile's own coordinates so they never
+   * crawl, laid into a path shared by the whole diagonal.
+   *
+   * The specks are plain black and white at low alpha rather than a shade of
+   * the ground, which means no colour has to be worked out per tile and any
+   * ground — sand, rock, a cliff face, a ploughed field — gets grain that
+   * suits it.
+   */
   private addGrain(x: number, y: number, pts: Float64Array, zoom: number): void {
     const size = Math.max(1, 2.6 * zoom);
     for (let i = 0; i < GRAIN_SPECKS; i++) {
@@ -3233,14 +3207,15 @@ export class Renderer {
   }
 
   /**
-   * Which of a covering's three pictures to lay: the coarsest that still has
-   * a pixel of it for every pixel of screen a tile's side covers. The finest
-   * shrunk to a quarter was sampled, not shrunk, and a roof of courses
-   * shimmered into stripes as the camera moved.
+   * Which of a covering's three pictures to lay, or a floor's, painted at
+   * `ppt` pixels to the tile: the coarsest that still has a pixel of it for
+   * every pixel of screen a tile's side covers. The finest shrunk to a
+   * quarter was sampled, not shrunk, and a roof of courses shimmered into
+   * stripes as the camera moved.
    */
-  private roofMip(): number {
+  private roofMip(ppt = COVER_PPT): number {
     const side = Math.hypot(HALF_W, HALF_H) * this.camera.zoom * this.canvas.dpr;
-    return COVER_PPT / 4 >= side * 0.9 ? 2 : COVER_PPT / 2 >= side * 0.9 ? 1 : 0;
+    return ppt / 4 >= side * 0.9 ? 2 : ppt / 2 >= side * 0.9 ? 1 : 0;
   }
 
   /**
@@ -3826,21 +3801,6 @@ export class Renderer {
   }
 
   /**
-   * A floor, laid rather than coloured in.
-   *
-   * It was one flat lozenge of the material's floor colour, which from above
-   * is the same shape and the same nothing as the ground under it — a storey
-   * of oak boards and a storey of marble differed by hue and by no other
-   * thing. And an upper floor had no edge to it at all: a deck five metres up
-   * ended in a line, so a house with its top storey half laid looked like a
-   * sheet of paper laid over the walls.
-   *
-   * So a floor has a thickness at any edge that nothing carries on from, and
-   * it is laid in boards or in flags with the joints showing. The boards run
-   * the way the building runs, which is what makes a room of them read as one
-   * floor rather than as a grid of tiles each doing its own thing.
-   */
-  /**
    * A slab poured over a tile, or the shuttering waiting for it.
    *
    * The top is one flat quad at the level chosen, drawn in whatever the tile
@@ -3894,22 +3854,79 @@ export class Renderer {
     }
     // The faces, nearest last so the one across the view lies over the one
     // running into it, as a wall's two faces do.
+    const zoom = cam.zoom;
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) % 4;
       const [nx, ny] = out[i];
       if (cam.nearSide(nx, ny) <= 0) continue;
+      const face = (): void => {
+        ctx.beginPath();
+        ctx.moveTo(px(i), py(i, f.top));
+        ctx.lineTo(px(j), py(j, f.top));
+        ctx.lineTo(px(j), py(j, c[j]));
+        ctx.lineTo(px(i), py(i, c[i]));
+        ctx.closePath();
+      };
+      // The face that runs across the view catches more light than the one
+      // running into it: the same two tones every wall in the world uses.
+      const lit = Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny)) ? 0.82 : 0.66;
+      face();
+      ctx.fillStyle = rgb(CONCRETE, lit);
+      ctx.fill();
+      /*
+       * Board-marked, as concrete cast against shuttering is: a line where
+       * each board met the next, every other board a shade off its
+       * neighbour, and the holes the ties went through on every other line.
+       * Straight across however the ground under it falls, because the
+       * boards were set level and the ground was dug to them.
+       */
+      if (zoom >= 0.5) {
+        ctx.save();
+        face();
+        ctx.clip();
+        const lo = Math.min(c[i], c[j]);
+        /** A point `t` of the way along the face, at height `h`. */
+        const on = (t: number, h: number): [number, number] => {
+          const wx = at[i][0] + (at[j][0] - at[i][0]) * t, wy = at[i][1] + (at[j][1] - at[i][1]) * t;
+          return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
+        };
+        for (let k = 0, h = f.top; h > lo; k++, h -= SHUTTER) {
+          const [a0, b0] = [on(0, h), on(1, h)], [a1, b1] = [on(0, h - SHUTTER), on(1, h - SHUTTER)];
+          if (k % 2) {
+            ctx.beginPath();
+            ctx.moveTo(a0[0], a0[1]); ctx.lineTo(b0[0], b0[1]); ctx.lineTo(b1[0], b1[1]); ctx.lineTo(a1[0], a1[1]);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(40, 36, 48, 0.05)';
+            ctx.fill();
+          }
+          ctx.beginPath();
+          ctx.moveTo(a1[0], a1[1]);
+          ctx.lineTo(b1[0], b1[1]);
+          ctx.strokeStyle = 'rgba(40, 36, 48, 0.2)';
+          ctx.lineWidth = Math.max(0.7, zoom * 0.9);
+          ctx.stroke();
+          if (k % 2 === 1) {
+            for (const t of [0.25, 0.75]) {
+              const [tx, ty] = on(t, h - SHUTTER * 0.5);
+              ctx.fillStyle = 'rgba(40, 36, 48, 0.35)';
+              ctx.beginPath(); ctx.arc(tx, ty, Math.max(0.8, zoom * 1.1), 0, Math.PI * 2); ctx.fill();
+            }
+          }
+        }
+        ctx.restore();
+      }
+      face();
+      ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.85);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // The arris along its top, where the light catches it.
       ctx.beginPath();
       ctx.moveTo(px(i), py(i, f.top));
       ctx.lineTo(px(j), py(j, f.top));
-      ctx.lineTo(px(j), py(j, c[j]));
-      ctx.lineTo(px(i), py(i, c[i]));
-      ctx.closePath();
-      // The face that runs across the view catches more light than the one
-      // running into it: the same two tones every wall in the world uses.
-      ctx.fillStyle = rgb(CONCRETE, Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny)) ? 0.82 : 0.66);
-      ctx.fill();
-      ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.85);
+      ctx.strokeStyle = rgb(CONCRETE, Math.min(1.25, lit * 1.3));
+      ctx.lineWidth = Math.max(1, zoom * 1.2);
       ctx.stroke();
+      ctx.lineWidth = 1;
     }
     const quad = new Float64Array(8);
     for (let i = 0; i < 4; i++) {
@@ -3931,96 +3948,101 @@ export class Renderer {
     ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.9);
     ctx.stroke();
     // A floor's corners are already in the tile's own order, so nothing turns.
-    if (paved && cam.zoom >= 0.75) this.paving(t, x, y, data, quad, 0);
+    if (cam.zoom >= 0.75) {
+      if (paved) this.paving(t, x, y, data, quad, 0);
+      else this.laidOver(concrete(), quad, 0, 'overlay');
+    }
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * A floor, laid rather than coloured in: see `flooring.ts` for what each
+   * material lays one in.
+   *
+   * It was one lozenge of the material's floor colour a tile, with boards
+   * ruled over the woods and a grid over every stone, so oak and pine were
+   * one floor in two browns and brick, marble and slate one chequer in three
+   * colours. The floor is a picture now, laid as a pattern fixed to the
+   * world, so a room is one floor and a board runs on over the join between
+   * two tiles of it. Boards run the way the building runs, which is what
+   * makes a room of them read as one floor rather than as a grid of tiles
+   * each doing its own thing.
+   *
+   * An upper floor has a thickness wherever nothing carries on from it and
+   * the camera can see its edge: at the edge of the storey, and round the
+   * well a flight comes up through. A ladder's hatch cuts its own.
+   */
   private drawFloor(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
     const bare = MATERIAL_BY_ID.get(floor.material);
     if (!bare) return;
-    const mat = this.painted(bare, floor.dye);
+    const paint = floor.dye ? this.painted(bare, floor.dye).color : undefined;
+    const fl = flooring(floor.material, paint);
     const h = base + floor.level * WALL_HEIGHT + 0.5;
     const done = isDone(floor);
-    const zoom = cam.zoom;
-    /** A point on the deck, by its two shares across the tile. */
+    /** A point on the deck, by its two shares across the tile, and `dh` under it. */
     const fx = (u: number, v: number): number => cam.worldToScreenX(x + u, y + v);
     const fy = (u: number, v: number, dh = 0): number => cam.worldToScreenY(x + u, y + v, h - dh);
-    const patch = (u0: number, u1: number, v0: number, v1: number): void => {
-      ctx.beginPath();
-      ctx.moveTo(fx(u0, v0), fy(u0, v0));
-      ctx.lineTo(fx(u1, v0), fy(u1, v0));
-      ctx.lineTo(fx(u1, v1), fy(u1, v1));
-      ctx.lineTo(fx(u0, v1), fy(u0, v1));
-      ctx.closePath();
-    };
+    const corners: Array<[number, number]> = [[0, 0], [1, 0], [1, 1], [0, 1]];
     ctx.globalAlpha = alpha * (done ? 1 : 0.4);
-    patch(0, 1, 0, 1);
-    ctx.fillStyle = rgb(mat.floor, 0.95);
-    ctx.fill();
-    if (done && zoom >= 0.55) {
+    if (done) {
       /*
-       * Boards one way for wood, flags both ways for stone. Which way the
-       * boards run is the building's, not the tile's, so a room is boarded
-       * across rather than patchworked; and no two boards are quite the same
-       * piece of timber.
+       * A hair past its own edges, so nothing of what is under it shows
+       * between it and the next tile of it -- except seen through, where the
+       * hair laid twice is a line across the ceiling.
        */
-      const along = (floor.building + floor.level) % 2 === 0;
-      if (mat.kind === 'wood') {
-        const n = mat.courses;
-        for (let i = 0; i < n; i++) {
-          const a = i / n;
-          const b = (i + 1) / n;
-          if (along) patch(0, 1, a, b);
-          else patch(a, b, 0, 1);
-          const k = hash2(x * 4 + i, y * 4, 71);
-          ctx.fillStyle = rgb(mat.floor, 0.95 * (0.93 + k * 0.15));
-          ctx.fill();
-        }
-        ctx.strokeStyle = rgb(mat.trim, 0.9, 0.45);
-        for (let i = 1; i < n; i++) {
-          const a = i / n;
-          ctx.beginPath();
-          ctx.moveTo(fx(along ? 0 : a, along ? a : 0), fy(along ? 0 : a, along ? a : 0));
-          ctx.lineTo(fx(along ? 1 : a, along ? a : 1), fy(along ? 1 : a, along ? a : 1));
-          ctx.stroke();
-        }
-      } else {
-        // Flags rather than boards, and one size smaller than the same stone
-        // goes on a roof in: a floor is walked on and a roof is only looked at.
-        // The bed goes down first and the flags on top of it, so the mortar
-        // between them is a colour rather than a gap: a dark floor laid with
-        // flags a shade off each other is a dark floor and nothing else.
-        const n = Math.max(2, mat.courses - 1);
-        patch(0, 1, 0, 1);
-        ctx.fillStyle = rgb(mat.trim, 0.9);
-        ctx.fill();
-        for (let r = 0; r < n; r++) {
-          for (let c = 0; c < n; c++) {
-            const j = 0.07 / n;
-            patch(c / n + j, (c + 1) / n - j, r / n + j, (r + 1) / n - j);
-            const k = hash2(x * 4 + c, y * 4 + r, 73);
-            ctx.fillStyle = rgb(mat.floor, 0.95 * (0.93 + k * 0.16));
-            ctx.fill();
-          }
-        }
+      const cx = fx(0.5, 0.5), cy = fy(0.5, 0.5), grow = alpha < 1 ? 0 : 0.5;
+      ctx.beginPath();
+      for (const [u, v] of corners) {
+        const px = fx(u, v), py = fy(u, v), l = Math.hypot(px - cx, py - cy) || 1;
+        ctx.lineTo(px + ((px - cx) / l) * grow, py + ((py - cy) / l) * grow);
       }
+      ctx.closePath();
+      const mip = this.roofMip(FLOOR_PPT), k = 1 / (FLOOR_PPT >> mip);
+      // Boards run with the building: along one axis on one storey and across it on the next.
+      const turned = fl.runs && (floor.building + floor.level) % 2 === 1;
+      const key = `${floor.material}:${floor.dye ?? ''}:${mip}`;
+      let pat = this.floorPatterns.get(key);
+      if (!pat) {
+        pat = ctx.createPattern(fl.mips[mip], 'repeat') ?? undefined;
+        if (pat) this.floorPatterns.set(key, pat);
+      }
+      if (pat) {
+        const sx = cam.worldToScreenX(0, 0), sy = cam.worldToScreenY(0, 0, h);
+        const ax = cam.worldToScreenX(k, 0) - sx, ay = cam.worldToScreenY(k, 0, h) - sy;
+        const bx = cam.worldToScreenX(0, k) - sx, by = cam.worldToScreenY(0, k, h) - sy;
+        pat.setTransform(new DOMMatrix(turned ? [bx, by, ax, ay, sx, sy] : [ax, ay, bx, by, sx, sy]));
+        ctx.fillStyle = pat;
+      } else {
+        ctx.fillStyle = rgb(fl.mean, 1);
+      }
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      for (const [u, v] of corners) ctx.lineTo(fx(u, v), fy(u, v));
+      ctx.closePath();
+      ctx.fillStyle = rgb(fl.mean, 1);
+      ctx.fill();
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
-    patch(0, 1, 0, 1);
-    ctx.strokeStyle = done ? rgb(mat.trim, 1) : PLAN_COLOR;
-    if (!done) ctx.setLineDash([4, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
     /*
      * And the edge of the deck, where there is nothing to carry on into. A
      * floor is joists and boards and it has a depth, under the deck walked
      * on: drawn without one it ends in a line, which is the one thing a floor
      * five metres up never does, and drawn standing up from its edge it is a
-     * kerb round every hole in it.
+     * kerb round every hole in it. It is edged in what its flights are built
+     * of, the board or the stone along their sides.
      */
     if (done && floor.level > 0) {
       const bld = this.game.buildings;
+      const st = stairStyle(floor.material);
+      const lum = (c: readonly [number, number, number]): number => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      const C = (c: readonly [number, number, number], k: number, a = 1): string =>
+        paint ? rgb(paint, k * Math.max(0.6, Math.min(1.3, lum(c) / Math.max(1, lum(st.string)))), a) : rgb(c, k, a);
       /*
        * The two edges facing the camera, whichever two those are: turn the
        * view and the other pair comes round, the same rule a wall uses to
@@ -4033,20 +4055,32 @@ export class Renderer {
         [0, 1, 0, 0, -1, 0],
       ];
       for (const [u0, v0, u1, v1, nx, ny] of edges) {
-        if (cam.nearSide(nx, ny) < 0) continue;
-        if (bld.floor(floor.level, x + nx, y + ny)) continue;
+        if (cam.rotateX(nx, ny) + cam.rotateY(nx, ny) < 1e-6) continue;
+        // Nothing beyond it, or the well a flight comes up: a ladder's hatch is cut when the ladder goes in.
+        const beyond = bld.floor(floor.level, x + nx, y + ny);
+        if (beyond && floorKind(beyond) !== 'stairs') continue;
+        const across = Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny));
+        // The edge that runs across the view catches more of the light than
+        // the one that runs into it, as a wall's two faces do.
+        const lit = across ? 0.95 : 0.76;
         ctx.beginPath();
         ctx.moveTo(fx(u0, v0), fy(u0, v0));
         ctx.lineTo(fx(u1, v1), fy(u1, v1));
         ctx.lineTo(fx(u1, v1), fy(u1, v1, FLOOR_DEEP));
         ctx.lineTo(fx(u0, v0), fy(u0, v0, FLOOR_DEEP));
         ctx.closePath();
-        // The edge that runs across the view catches more of the light than
-        // the one that runs into it, as a wall's two faces do.
-        ctx.fillStyle = rgb(mat.trim, Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny)) ? 0.95 : 0.76);
+        ctx.fillStyle = C(st.string, lit);
         ctx.fill();
-        ctx.strokeStyle = rgb(mat.trim, 0.6);
+        ctx.strokeStyle = C(st.line, 1, 0.55);
+        ctx.lineWidth = Math.max(0.8, cam.zoom);
         ctx.stroke();
+        // The arris, where the light catches it.
+        ctx.beginPath();
+        ctx.moveTo(fx(u0, v0), fy(u0, v0));
+        ctx.lineTo(fx(u1, v1), fy(u1, v1));
+        ctx.strokeStyle = C(st.stringHi, lit * 1.05);
+        ctx.stroke();
+        ctx.lineWidth = 1;
       }
     }
     ctx.globalAlpha = 1;

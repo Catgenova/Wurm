@@ -7310,10 +7310,12 @@ function paint(S: Stock): Masonry {
    * How big a sett is. Forty centimetres was true of a real road and wrong in
    * this picture: a tile is ninety-six pixels across on screen and squashed by
    * half again going the other way, so ten stones to a tile came out as crumbs
-   * and the road read as grit. Sixty is what carries at the zoom people play
-   * at, which is the size the wall's stones are drawn at too.
+   * and the road read as grit. Sixty still did, laid beside slabs cut a metre
+   * or more: seven stones to a tile each way at the zoom people play at is a
+   * texture, not a road. Seventy-five, five to a tile, is a stone you can
+   * pick out, and about the size the same stone is laid in indoors.
    */
-  const SETT = 36;
+  const SETT = 48;
   const SETT_INK = 1.8;                    // the outline, at this scale
   /** Nothing, and the earth packed between the stones. */
   const NEUTRAL = '#808080', BED = '#7a7a7a';
@@ -7467,7 +7469,10 @@ function paint(S: Stock): Masonry {
         const gap = 1.2 + R() * 1.1;
         const shrink = rh * 0.12 * R();
         const y = y0 + dy + shrink / 2;
-        const tone = R() < 0.14 ? 1 : R() < 0.26 ? 2 : R() < 0.33 ? 3 : R() < 0.4 ? 4 : 0;
+        // Mostly the run of the field, a sixth darker and a sixth bleached, and
+        // one in twenty with moss in it or iron: at one in five of each, the
+        // road was a mosaic of green and pink rather than a grey road.
+        const tone = R() < 0.14 ? 1 : R() < 0.2 ? 2 : R() < 0.075 ? 3 : R() < 0.065 ? 4 : 0;
         lay(x + gap / 2, y + gap / 2, w - gap, rh - gap - shrink, 7001 + r * 977 + k * 31, tone);
         if (R() < 0.13) junctions.push([x, y0 + rh + dy]);
         x += w;
