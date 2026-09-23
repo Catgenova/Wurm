@@ -100,7 +100,7 @@ export interface UICallbacks {
  * the side to climb from is chosen. Q and E turn either.
  */
 type Placing =
-  | { kind: 'furniture'; itemUid: number; piece: string; facing: Side }
+  | { kind: 'furniture'; itemUid: number; piece: string; material?: string; facing: Side }
   | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side };
 
 /** What your rank on a settlement lets you do, in one line. */
@@ -456,7 +456,7 @@ export class UI {
 
   /** Pick up a piece to set down: it follows the cursor from here, and Q and E turn it. */
   startPlacing(item: Item): void {
-    this.placing = { kind: 'furniture', itemUid: item.uid, piece: item.id, facing: 's' };
+    this.placing = { kind: 'furniture', itemUid: item.uid, piece: item.id, material: item.extra, facing: 's' };
     this.game.logMsg(`The ${itemName(item).toLowerCase()} follows the cursor: Q and E turn it, a click sets it down, Escape keeps it.`, 'info');
   }
 
@@ -499,7 +499,7 @@ export class UI {
     }
     const [s0, t0] = subtileOf(pick.x, pick.y, pick.wx, pick.wy);
     const [ax, ay] = furnitureAnchor(p.piece, s0, t0, p.facing);
-    this.renderer.ghost = { kind: 'furniture', piece: p.piece, x: pick.x, y: pick.y, sx: ax, sy: ay, facing: p.facing, ok: !this.game.furniturePlaceReason(p.piece, pick.x, pick.y, ax, ay, p.facing) };
+    this.renderer.ghost = { kind: 'furniture', piece: p.piece, material: p.material, x: pick.x, y: pick.y, sx: ax, sy: ay, facing: p.facing, ok: !this.game.furniturePlaceReason(p.piece, pick.x, pick.y, ax, ay, p.facing) };
   }
 
   /** A click while something is being placed: the left button sets it down where the cursor is, any other keeps it. */

@@ -87,7 +87,7 @@ import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCam
  * `ok` is whether it can go where it is.
  */
 export type Ghost =
-  | { kind: 'furniture'; piece: string; x: number; y: number; sx: number; sy: number; facing: Side; ok: boolean }
+  | { kind: 'furniture'; piece: string; material?: string; x: number; y: number; sx: number; sy: number; facing: Side; ok: boolean }
   | { kind: 'stairs'; x: number; y: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; ok: boolean };
 
 export interface Pick {
@@ -2279,7 +2279,7 @@ export class Renderer {
       const wy = ghost.y + (ghost.sy + h / 2) / SUBTILES;
       const px = cam.worldToScreenX(wx, wy);
       const py = cam.worldToScreenY(wx, wy, this.pieceBase({ kind: ghost.piece }, wx, wy));
-      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, pieceView(ghost.facing, cam.rotation));
+      drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, pieceView(ghost.facing, cam.rotation), ghost.material);
       if (!ghost.ok) {
         const [W, D] = furnitureSpan(ghost.piece);
         ctx.fillStyle = 'rgba(214, 58, 42, 0.5)';

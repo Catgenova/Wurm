@@ -1,4 +1,5 @@
 import { FURNITURE, furnitureDef } from '../game/furniture';
+import { materialOf } from '../game/materials';
 import type { Side } from '../game/building';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { VIEWS } from './view';
@@ -108,7 +109,16 @@ const WOOD_TONE: Record<string, string> = {
 };
 /** What a piece is built of when it does not say: oak. */
 const WOOD_PLAIN = '#b88c5a';
-const woodOf = (material?: string): Paint => paintOf(hex(WOOD_TONE[material ?? ''] ?? WOOD_PLAIN));
+/**
+ * A piece's wood, from what it says it was built of. That is the wood's name
+ * as it was written on the log the planks were sawn from -- "Oak", "Cherry"
+ * -- so it is looked up the way the game looks any material up, whatever its
+ * case, and a piece in a wood it does not know is plain.
+ */
+const woodOf = (material?: string): Paint => {
+  const id = materialOf(material)?.id ?? material?.toLowerCase() ?? '';
+  return paintOf(hex(WOOD_TONE[id] ?? WOOD_PLAIN));
+};
 
 const IRON: Paint = { body: hex('#6b6873'), ink: hex('#34323b') };
 const BRASS: Paint = { body: hex('#d9b460'), ink: hex('#7c5e28') };
