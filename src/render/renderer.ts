@@ -34,7 +34,7 @@ import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARI
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, brickwork, cobble } from './masonry';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -3129,14 +3129,15 @@ export class Renderer {
       return;
     }
     /*
-     * The two masonries that are painted rather than ruled. A coat of paint
-     * over either of them would be two walls at once, so a dyed one goes down
-     * to the flat colours below with everything else.
+     * The masonries that are painted rather than ruled. A coat of paint over
+     * any of them would be two walls at once, so a dyed one goes down to the
+     * flat colours below with everything else.
      */
     const cob = wall.dye ? undefined
       : wall.material === 'cobblestone' ? cobble()
         : wall.material === 'clay_bricks' ? brickwork()
-          : undefined;
+          : wall.material === 'clay_adobe' ? adobe()
+            : undefined;
     if (kind?.railed && !cob) {
       /*
        * Posts and rails, each of them a piece of timber with a top to it: a
@@ -3225,15 +3226,19 @@ export class Renderer {
       const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
       const indoors = !!bld.buildingAt(seenX, seenY);
       /** A picture, between three of its corners: top left, top right, bottom left. */
-      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false, over = 0): void => {
+      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false, over = 0, spread = 0): void => {
         // `over` hangs the far edge of an `across` picture past the back arris,
         // which is where a cope stone standing proud of the run has to go.
         const far = -(1 + 2 * over);
-        const [tlx, tly] = across ? [px(0, k1, far), py(0, k1, far)] : [px(0, k1, s), py(0, k1, s)];
+        // `spread` runs a face picture a hair past both ends of the section, for
+        // a picture whose ends are not the coat's own flat tone: its half-drawn
+        // edge would otherwise show the paler face under it down every seam.
+        const t0 = -spread, t1 = 1 + spread;
+        const [tlx, tly] = across ? [px(0, k1, far), py(0, k1, far)] : [px(t0, k1, s), py(t0, k1, s)];
         const [trx, try_] = across
           ? [px(1, k1, far), py(1, k1, far)]
-          : [px(1, k1, s), py(1, k1, s)];
-        const [blx, bly] = across ? [px(0, k1, 1), py(0, k1, 1)] : [px(0, k0, s), py(0, k0, s)];
+          : [px(t1, k1, s), py(t1, k1, s)];
+        const [blx, bly] = across ? [px(0, k1, 1), py(0, k1, 1)] : [px(t0, k0, s), py(t0, k0, s)];
         ctx.save();
         ctx.transform(
           (trx - tlx) / img.width, (try_ - tly) / img.width,
@@ -3244,6 +3249,28 @@ export class Renderer {
         ctx.restore();
       };
       /** And the hour's light over it, laid the way the flat colours take it. */
+      /*
+       * The face again, with its two ends on whole device pixels.
+       *
+       * A face's ends are true verticals on screen -- a point's height moves
+       * it up the screen and never across -- so on a whole pixel two sections
+       * meet with nothing between them and nothing doubled. Drawn anywhere
+       * else each end is half-covered, and the hour's shade laid over two of
+       * them leaves a pale hairline down the seam: nothing on stone or brick,
+       * where the joints swallow it, and a ruled line every four metres down
+       * a coat of mud. Only the masonries that ask for an under-colour take
+       * this path, so the others draw exactly as they did.
+       */
+      const dpr = this.canvas.dpr;
+      const flush = (t0: number, t1: number, k0: number, k1: number): void => {
+        const sx = (t: number): number => (t === 0 || t === 1 ? Math.round(px(t, 0) * dpr) / dpr : px(t, 0));
+        const x0 = sx(t0), x1 = sx(t1);
+        ctx.beginPath();
+        ctx.moveTo(x0, py(t0, k0)); ctx.lineTo(x1, py(t1, k0));
+        ctx.lineTo(x1, py(t1, k1)); ctx.lineTo(x0, py(t0, k1));
+        ctx.closePath();
+      };
+      const face = (): void => { if (cob.under) flush(0, 1, 0, 1); else quad(0, 1, 0, 1); };
       const light = (k: number): void => {
         if (k >= 0.999) return;
         const [sr, sg, sb] = cob.shade;
@@ -3282,9 +3309,16 @@ export class Renderer {
         ctx.closePath();
         ctx.fillStyle = 'rgba(70, 62, 46, 0.2)';
         ctx.fill();
-        blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h);
+        if (cob.under) {
+          ctx.fillStyle = rgb(cob.under, 1);
+          for (const [a, b] of (hung ? [[0, FENCE_GAP.t0], [FENCE_GAP.t1, 1]] : [[0, 1]]) as Array<[number, number]>) {
+            flush(a, b, 0, 0.8);
+            ctx.fill();
+          }
+        }
+        blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h, 1, false, 0, cob.under ? 0.004 : 0);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
-        quad(0, 1, 0, 1);
+        face();
         light(lit);
         /*
          * The top of a fence, at nine tenths of the light a wall's top gets.
@@ -3406,6 +3440,19 @@ export class Renderer {
         ctx.fillStyle = 'rgba(48, 42, 72, 0.3)';
         ctx.fill();
       }
+      /*
+       * Under the picture, where the masonry asks for it, its own flat colour
+       * a hair wider than the section: two pictures meeting on one line leave
+       * a hairline of whatever is behind, and on a coat of mud that is a
+       * ruled line down the wall at every seam.
+       */
+      if (cob.under) {
+        onStone();
+        flush(0, 1, 0, 1);
+        ctx.fillStyle = rgb(cob.under, 1);
+        ctx.fill();
+        offStone();
+      }
       blit(arched ? cob.arch[v]
         : windowed ? cob.window[v]
         : doored ? cob.door[v]
@@ -3507,7 +3554,7 @@ export class Renderer {
       }
       if (wall.level === 0 && !indoors) {
         onStone();
-        blit(cob.foot[v], 0, 1);
+        blit(cob.foot[v], 0, 1, 1, false, 0, cob.under ? 0.004 : 0);
         // The face's half of the hedge, where a doorway took the other half
         // round the corner with it.
         if (arched) blit(cob.base[v], 0, 1);
@@ -3530,7 +3577,7 @@ export class Renderer {
        * the ground is painted into `foot` instead, on the storey that has a
        * ground to be shaded by.
        */
-      quad(0, 1, 0, 1);
+      face();
       light(lit);
       cap(0, 1, 1);
       ctx.fillStyle = rgb(mat.color, topLit);
