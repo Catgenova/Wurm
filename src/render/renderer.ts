@@ -3697,6 +3697,30 @@ export class Renderer {
         }
       };
       /**
+       * On polished metal, the brightest of a picture laid again over the
+       * shade, from `from` up the face -- but not where a post stands over
+       * the face at a corner or a free end, nor over the foot of a ground
+       * storey: laid over those, the face's own lights came through them.
+       */
+      const gleamed = (img: HTMLCanvasElement, from: number, flip: boolean, spread = 0, H = 1): void => {
+        if (!cob.gleam) return;
+        let a = T0, b = T1;
+        if (cob.post && !indoors) {
+          const w = half + cob.post.reach / cob.w;
+          for (const [i, e] of [[-1, e0], [1, e1]] as Array<[-1 | 1, number]>) {
+            if (on(i) || (!e && (!cob.post.free || square(i, true) || square(i, false)))) continue;
+            if (i < 0) a = T0 + w; else b = T1 - w;
+          }
+        }
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(px(a, from), py(a, from)); ctx.lineTo(px(b, from), py(b, from));
+        ctx.lineTo(px(b, H + 0.3), py(b, H + 0.3)); ctx.lineTo(px(a, H + 0.3), py(a, H + 0.3));
+        ctx.closePath(); ctx.clip();
+        blit(cob.gleam(img), 0, H, 1, false, 0, spread, flip);
+        ctx.restore();
+      };
+      /**
        * Where the weather has taken the coat off this section, out of doors.
        *
        * Not everywhere: on a section in two or three, and where the water
@@ -3799,6 +3823,8 @@ export class Renderer {
         crown();
         face();
         light(lit);
+        // Polished metal keeps its brightest light on a face turned from the sun.
+        if (cob.gleam && cob.shadow(lit) > 0.05) gleamed(hung ? lw.gate[v] : lw.face[v], 0, turned, cob.under ? 0.004 : 0, 1 + lw.proud / lw.h);
         /*
          * The top of a fence, at nine tenths of the light a wall's top gets.
          *
@@ -4122,6 +4148,18 @@ export class Renderer {
       crown();
       face();
       light(lit);
+      /*
+       * Polished metal keeps its brightest light whichever way it is turned:
+       * a mirror turned from the sun still shows the sky. So on a masonry
+       * that is, what is brightest in its pictures goes on again over the
+       * shade, and a face away from the light keeps its white edges on a
+       * darker body. A face the shade barely touches keeps them anyway.
+       */
+      if (cob.gleam && cob.shadow(lit) > 0.05) {
+        const ground = wall.level === 0 && !indoors;
+        gleamed(arched ? cob.arch[v] : windowed ? cob.window[v] : doored ? cob.door[v] : gated ? cob.gate[v] : bayed ? cob.bay[v] : cob.face[v], ground ? (cob.plinth + 8) / cob.h : 0, turned);
+        if (ground) { onStone(); gleamed(cob.foot[v], 0, turned, cob.under ? 0.004 : 0); offStone(); }
+      }
       if (cob.soft && indoors) inside();
       if (cob.soft && e0) roll(T0, endLight);
       if (cob.soft && e1) roll(T1, endLight);
