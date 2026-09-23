@@ -206,6 +206,15 @@ export interface Masonry {
    * renderer draws the ground, not this.
    */
   plinth: number;
+  /**
+   * What the hour darkens a face of it toward, as three channels.
+   *
+   * Cobblestone goes toward a warm near-black, which on grey stone reads as
+   * shade. On red brick the same multiply takes the red to brown -- a face
+   * turned from the light loses light, and on this island it goes cool as it
+   * does, toward the colour of the stone the brick is dressed in.
+   */
+  shade: [number, number, number];
   /** A section is `w` by `h`; the ivy reaches `pad` above it, and the cap is `capH` deep. */
   w: number;
   h: number;
@@ -259,6 +268,8 @@ interface Stock {
   plinth: number;
   /** What share of a novice's wear this masonry takes: kiln-fired units chip, they do not spall. */
   wear: number;
+  /** What the hour's light darkens a face toward; see `Masonry.shade`. */
+  shade: [number, number, number];
   /** The share of units that take each tone, in order; whatever is left takes the field's own. */
   mix: Array<[string, number]>;
   /** The tones that come in pairs rather than singly, because a load of them came in together. */
@@ -348,6 +359,7 @@ const RUBBLE: Stock = ((P) => ({
   bandN: 4,
   plinth: 0,
   wear: 1,
+  shade: [24, 20, 12],
   mix: [['warm', 0.07], ['brown', 0.09], ['green', 0.04], ['dark', 0.1]],
   pairs: ['warm', 'brown'],
   field: [['weather', 0.2], ['bleach', 0.12], ['warm', 0.12], ['brown', 0.1], ['green', 0.1], ['dark', 0.1]],
@@ -366,6 +378,43 @@ const RUBBLE: Stock = ((P) => ({
  * The greens, the oak of a door head and the road are the cobblestone set's,
  * because ivy is ivy and oak is oak whatever they are growing on.
  */
+/** A hex colour with its lightness moved by `dl` points, its hue and saturation kept. */
+function lighten(hex: string, dl: number): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  let h = 0, s = 0;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) / 6;
+  }
+  const L = Math.max(0, Math.min(1, l + dl / 100));
+  const q = L < 0.5 ? L * (1 + s) : L + s - L * s, p = 2 * L - q;
+  const f = (t: number): number => {
+    const u = ((t % 1) + 1) % 1;
+    return u < 1 / 6 ? p + (q - p) * 6 * u : u < 1 / 2 ? q : u < 2 / 3 ? p + (q - p) * (2 / 3 - u) * 6 : p;
+  };
+  return '#' + [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The field brick at seven values two points of lightness apart, for the
+ * firing to choose between.
+ *
+ * `f` is a unit laid flush with its neighbours: the shade along its lower
+ * edge is three points down and barely there, because a wall of brick with a
+ * dark bevel under every one of them is a wall of sweets. `p` is the odd one
+ * standing a hair proud of the face, which is the one that earns the shadow.
+ */
+function values(base: string): Record<string, Tone> {
+  const out: Record<string, Tone> = {};
+  for (let k = -3; k <= 3; k++) {
+    out['f' + k] = { lit: lighten(base, 2 * k), shade: lighten(base, 2 * k - 3), hi: lighten(base, 2 * k + 5) };
+    out['p' + k] = { lit: lighten(base, 2 * k), shade: lighten(base, 2 * k - 8), hi: lighten(base, 2 * k + 6) };
+  }
+  return out;
+}
+
 const BRICK_PASTEL: Record<string, string> = {
   ...RUBBLE_PASTEL,
   // the brick itself: the field tone, its shade, and the bevel along its top
@@ -387,15 +436,28 @@ const BRICK: Stock = ((P) => ({
   pastel: P,
   tones: {
     '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
-    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    ...values(P.stone),
+    /*
+     * The units off another part of the kiln, and every one of them inside
+     * eight points of the field's own lightness. A swap further off than that
+     * is a hole in the wall at the zoom it is played at, and one in three of
+     * them was the whole of an art director's first two complaints.
+     */
+    warm:    { lit: lighten(P.stone, 7), shade: lighten(P.stone, 3), hi: lighten(P.stone, 12) },
+    brown:   { lit: '#ad766f', shade: lighten('#ad766f', -4), hi: lighten('#ad766f', 5) },
+    burnt:   { lit: '#a77677', shade: lighten('#a77677', -4), hi: lighten('#a77677', 5) },
+    weather: { lit: lighten(P.stone, -7), shade: lighten(P.stone, -11), hi: lighten(P.stone, -2) },
+    bleach:  { lit: lighten(P.stone, 7), shade: lighten(P.stone, 3), hi: lighten(P.stone, 11) },
+    /*
+     * And the cut stone. `dark` and `green` are what the openings ask for
+     * when they want a darker stone or one with the moss in it, so on a bond
+     * they are the dressings' own -- a jamb here takes a brick's tone and it
+     * is a brick in the wrong place.
+     */
     dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
-    brown:   { lit: '#ab6f69', shade: '#8d5c58', hi: '#ba8178' },
-    green:   { lit: '#a0937e', shade: '#877c68', hi: '#afa48e' },
-    dark:    { lit: P.dark, shade: '#6e5355', hi: P.darkHi },
-    // and the stone a plinth is cut from: the dressings, a step further down
     plinth:  { lit: '#6a6377', shade: '#57516a', hi: '#7b748a' },
-    weather: { lit: '#875d5a', shade: '#6b4d4c', hi: '#9d6862' },
-    bleach:  { lit: '#c5afa5', shade: '#ad938a', hi: '#d4bfb5' },
+    dark:    { lit: '#6a6377', shade: '#57516a', hi: '#7b748a' },
+    green:   { lit: '#78797f', shade: '#66676d', hi: '#88898f' },
     flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
   },
   lay: 'bond',
@@ -428,11 +490,14 @@ const BRICK: Stock = ((P) => ({
    */
   plinth: 106,
   /*
-   * A third of the wear. Rubble is what the field gave up and a frost gets
+   * A sixth of the wear. Rubble is what the field gave up and a frost gets
    * into it; a brick was fired to take that. What it does get is a chipped
-   * arris, a crack, and the odd one gone -- not a spalled face.
+   * arris, a crack, and the odd one gone -- not a spalled face, and not a
+   * pit or a chip on every other unit, which at a third of rubble's rate was
+   * still enough specks across a section to read as grit on the picture.
    */
-  wear: 0.34,
+  wear: 0.17,
+  shade: [18, 12, 84],
   /*
    * Three units in ten off the field's own tone, not four and a half.
    *
@@ -442,9 +507,10 @@ const BRICK: Stock = ((P) => ({
    * dozen values, and the values have to sit close enough that the field
    * reads as a field before any one unit reads as itself.
    */
-  mix: [['warm', 0.1], ['brown', 0.12], ['green', 0.02], ['dark', 0.07]],
-  pairs: ['warm', 'brown', 'dark'],
-  field: [['weather', 0.08], ['bleach', 0.06], ['warm', 0.1], ['brown', 0.1], ['green', 0.03], ['dark', 0.07]],
+  // What the end grain rolls, which is the one place a bond still draws on it.
+  mix: [['warm', 0.08], ['brown', 0.08], ['burnt', 0.05]],
+  pairs: ['warm', 'brown', 'burnt'],
+  field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['brown', 0.2]],
 }))(BRICK_PASTEL);
 
 let painted: Masonry | undefined;
@@ -580,7 +646,12 @@ function paint(S: Stock): Masonry {
     if (laid && R() < 0.3) { const k = Math.floor(R() * pts.length); pts[k] = [pts[k][0] * 0.85 + cx * 0.15, pts[k][1] * 0.85 + cy * 0.15]; }
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt); for (const p of pts) { const px = p[0] - cx, py = p[1] - cy; p[0] = cx + px * c - py * s; p[1] = cy + px * s + py * c; } }
     const T = TONES[tone] || TONES[''];
-    solid(g, pts, T.lit, T.shade, PASTEL.line, ink, -w * 0.1, -h * 0.14);
+    // How far the lit face sits up and left of the shade, which is how deep
+    // the crescent of shade along the lower right is. A moulded unit is
+    // shallow relief: at a tenth of its width it was a dark rim on every
+    // brick in the wall, heavier than the joint beside it.
+    const [ox, oy] = cut === 'unit' ? [-w * 0.035, -h * 0.1] : [-w * 0.1, -h * 0.14];
+    solid(g, pts, T.lit, T.shade, PASTEL.line, ink, ox, oy);
     // the bevel: the block's own outline, shifted a little down and right and clipped to the block,
     // shows as a light band along the top and the upper left, where the light lands
     if (!bevel) return pts;
@@ -703,7 +774,18 @@ function paint(S: Stock): Masonry {
     // A slab of a rubble wall was picked over; a band course on brickwork was
     // cut to a line, and at this size a rounded corner on it reads as a sweet.
     const cut: 'sawn' | 'unit' = S.lay === 'bond' ? 'unit' : 'sawn';
-    for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, 'flat', cut);
+    if (S.lay === 'bond') {
+      // Cut to what the quarry gave, a quarter either way, so the band is a
+      // course of stones rather than one stone printed six times.
+      const ws: number[] = []; let sum = 0;
+      for (let k = 0; k < n - 1; k++) { const v = 0.75 + R() * 0.5; ws.push(v); sum += v; }
+      let x = w / 2;
+      for (const v of ws) {
+        const bw = (v / sum) * (TW - w);
+        stone(g, x + MORTAR, y + MORTAR / 2, bw - 2 * MORTAR, h - MORTAR, R, R() < 0.25 ? 'plinth' : 'flat', cut);
+        x += bw;
+      }
+    } else for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, 'flat', cut);
     for (const x of [TW - w / 2, -w / 2]) stone(g, x + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, rand(98), 'flat', cut);
   }
 
@@ -767,7 +849,7 @@ function paint(S: Stock): Masonry {
         // laid from a seed of the course's own rather than from the variant's.
         const RR = seam ? rand(811 + i * 7) : R;
         const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
-        const tone = zone(RR, seam ? 0 : x + uw / 2, y0, head, q, crests);
+        const tone = zone(RR, seam ? 0 : x + uw / 2, y0, head, q, crests, i < 2);
         const jw = MORTAR + (priv ? RR() * 2.2 : 0);
         const drift = (RR() - 0.5) * 2.4 + sag;
         const shrink = RR() * 2;
@@ -814,33 +896,49 @@ function paint(S: Stock): Masonry {
    * across a seam like everything else here. The roll inside a zone is what
    * stops the zone having an edge.
    */
-  function firing(R: Rand): (RR: Rand, x: number, y: number, head: boolean, course: number, crests: Pt[]) => string {
+  function firing(R: Rand): (RR: Rand, x: number, y: number, head: boolean, course: number, crests: Pt[], drip?: boolean) => string {
     const NX = 4, NY = 3;
     const edge = rand(1601);
     const grid: number[] = [];
     for (let j = 0; j <= NY; j++) for (let i = 0; i < NX; i++) grid.push(i === 0 ? edge() : R());
+    /*
+     * And a wash: a run down part of the section where the rain off the band
+     * above has had the colour out of the brick. Most sections have one, well
+     * inside the seams, a brick or so wide.
+     */
+    const washed = R() < 0.65;
+    const washX = EDGE + 70 + R() * (TW - 2 * EDGE - 140), washW = 26 + R() * 34;
     const ease = (t: number): number => t * t * (3 - 2 * t);
     const at = (i: number, j: number): number => grid[Math.min(NY, j) * NX + (i % NX)];
-    return (RR, x, y, head, course, crests) => {
+    return (RR, x, y, head, course, crests, drip) => {
       const u = (x / TW) * NX, v = (y / TH) * NY;
       const i = Math.floor(u), j = Math.floor(v);
       const fu = ease(u - i), fv = ease(v - j);
       const top = at(i, j) + (at(i + 1, j) - at(i, j)) * fu;
       const bot = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * fu;
       // Stretched, because the average of four uniforms sits near a half and
-      // a field that never reaches its ends has no zones in it, only a haze.
+      // a field that never reaches its ends has no drifts in it, only a haze.
       const d = clamp(0.5 + (top + (bot - top) * fv - 0.5) * 1.9, 0, 1);
+      /*
+       * Which of the seven values: the drift, a little roll so a drift has no
+       * edge, and three things that darken a brick where it is. A course or
+       * two under a band course is in the drip of it; the foot of a wall and
+       * the brick under a crest of ivy are damp, which is what the moss was
+       * saying, but said as damp and not as a khaki brick; and a header is the
+       * end of the brick, which is the end that went into the fire first.
+       */
+      let k = Math.round((d - 0.5) * 5.2 + (RR() - 0.5) * 1.3);
+      if (drip) k -= 1;
+      if (course >= COURSES - 1 || crests.some(([a, b]) => x > a && x < b)) k -= 1;
+      if (head) k -= 1;
+      if (washed && Math.abs(x - washX) < washW) k += 2;
+      k = clamp(k, -3, 3);
       const t = RR();
-      // Moss, which is not a firing at all: it grows low down where the wall
-      // is damp and under a crest of ivy, where it drips.
-      const damp = (course >= COURSES - 2 ? 0.05 : 0.018)
-        * (crests.some(([a, b]) => x > a && x < b) ? 2.5 : 1);
-      if (t < damp) return 'green';
-      // A header laid in a scorched zone is the darkest thing on the wall: it
-      // is the end of the brick, and the end went into the fire first.
-      if (d < 0.28) return t < (head ? 0.44 : 0.26) ? 'dark' : t < 0.52 ? 'brown' : '';
-      if (d > 0.76) return t < 0.28 ? 'warm' : t < 0.34 ? 'bleach' : '';
-      return t < 0.07 ? 'brown' : t < 0.11 ? 'warm' : '';
+      // One unit in twelve off another part of the kiln -- and near enough in
+      // value to its neighbours that it is a brick, not a hole.
+      if (t < 0.035) return head ? 'burnt' : 'brown';
+      if (t < 0.08) return 'warm';
+      return (RR() < 0.15 ? 'p' : 'f') + k;
     };
   }
 
@@ -1166,7 +1264,7 @@ function paint(S: Stock): Masonry {
         // No two out of the same bed: a plinth is four stones to the section
         // and four of one tone is a painted skirting rather than masonry.
         const t = RR();
-        stone(g, x + MORTAR / 2, y, bw - MORTAR, bh, RR, t < 0.3 ? 'plinth' : t < 0.42 ? 'weather' : 'dress', 'unit', 0, ink);
+        stone(g, x + MORTAR / 2, y, bw - MORTAR, bh, RR, t < 0.38 ? 'plinth' : 'dress', 'unit', 0, ink);
       }
     };
     /*
@@ -1387,7 +1485,12 @@ function paint(S: Stock): Masonry {
    * warmer than the field it is set in and the eye reads the whole doorway as
    * one piece of work instead of as a hole with a fringe.
    */
-  const pickDressed = (R: Rand): string => { const t = R(); return t < 0.18 ? 'green' : t < 0.28 ? 'dark' : 'dress'; };
+  const pickDressed = (R: Rand): string => {
+    const t = R();
+    // On a bond both of the odd ones are the cut stone's own, so the only
+    // question a voussoir asks is which of the dressings' tones it takes.
+    return S.lay === 'bond' ? (t < 0.3 ? 'plinth' : 'dress') : t < 0.18 ? 'green' : t < 0.28 ? 'dark' : 'dress';
+  };
 
   /** The ring: wedges of no two depths, on joints that are not quite radial. */
   function voussoirs(g: Ctx, R: Rand): void {
@@ -2054,6 +2157,10 @@ function paint(S: Stock): Masonry {
    * wall, a line of packing you notice only because the cope sits on it.
    */
   function levelling(g: Ctx, R: Rand): void {
+    // A length of cut cope is bedded straight on the top course of brick. The
+    // packing under a dry cope is how a field wall makes a level bed out of
+    // what it has; brick is already level, so the bond runs up to the cope.
+    if (S.lay === 'bond') return;
     const J = 2, ink = 0.8, room = LEVEL - J;
     /**
      * One of them. Its depth is what the stone happened to be and it sits
@@ -2183,7 +2290,7 @@ function paint(S: Stock): Masonry {
    * unit thick, and there is nothing for a header to bond to.
    */
   function lowBond(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
-    const top = COPE + LEVEL;
+    const top = COPE;
     const own: Block[] = [];
     const zone = firing(R);
     const n = S.across, uw = TW / n;
@@ -2206,8 +2313,8 @@ function paint(S: Stock): Masonry {
         const sag = Math.sin((Math.PI * kw * (mid - EDGE)) / (TW - 2 * EDGE)) * aw;
         // A garden wall was laid out of what was left over, so it carries the
         // weathered and the bleached units a house wall was picked clear of.
-        const tone = !seam && RR() < 0.18 ? fieldTone(RR)
-          : zone(RR, seam ? 0 : x + uw / 2, y0, false, i + COURSES - rows, []);
+        const tone = !seam && RR() < 0.08 ? fieldTone(RR)
+          : zone(RR, seam ? 0 : x + uw / 2, y0, false, i + COURSES - rows, [], i === 0);
         const jw = MORTAR + (priv ? RR() * 2.2 : 0);
         const drift = (RR() - 0.5) * 2.4 + sag;
         const shrink = RR() * 2;
@@ -2532,15 +2639,18 @@ function paint(S: Stock): Masonry {
       const own = lowCourses(g, R, fh, rows);
       levelling(g, R);
       coping(g, copeSeed(v.seed));
+      // At the stock's own rate of wear, as the tall wall's is: a garden wall
+      // of brick took the whole of a novice's rubble's and was specked with it.
+      const k = S.wear;
       for (const s of own) {
         const t = R();
-        if (t < 0.18) chipCorner(g, s, R);
-        else if (t < 0.34) crack(g, s, R);
-        else if (t < 0.41) spall(g, s, R);
-        else if (t < 0.46) recessed(g, s, R);
-        if (R() < 0.22) abrade(g, s, R);
-        if (R() < 0.25) pits(g, s, R);
-        if (R() < 0.15) slop(g, s, R);
+        if (t < 0.18 * k) chipCorner(g, s, R);
+        else if (t < 0.34 * k) crack(g, s, R);
+        else if (t < 0.41 * k) spall(g, s, R);
+        else if (t < 0.46 * k) recessed(g, s, R);
+        if (R() < 0.22 * k) abrade(g, s, R);
+        if (R() < 0.25 * k) pits(g, s, R);
+        if (R() < 0.15 * k) slop(g, s, R);
       }
       // The damp along the ground, then moss in the low joints, then the hedge.
       g.fillStyle = 'rgba(110,100,80,0.16)'; g.fillRect(0, fh - 9, TW, 9);
@@ -2666,6 +2776,15 @@ function paint(S: Stock): Masonry {
       // the lightest tone in the table, so the quietest course in the wall
       // came out as the brightest thing on its head -- one pale pill where
       // the run shows a course of packing.
+      if (S.lay === 'bond') {
+        // Where a brick garden wall stops it is finished in cut stone, the
+        // same quoins a house's corner is: two to the height of the wall.
+        const qh = (fh - COPE) / 2;
+        for (let i = 0; i < 2; i++) {
+          stone(g, MORTAR / 2, COPE + i * qh + MORTAR / 2, Wc - MORTAR, qh - MORTAR, R, i ? 'plinth' : 'dress', 'unit', 0, 1.8);
+        }
+        return c;
+      }
       for (const [f, tn] of [[0.38, 'weather'], [0.34, 'dark'], [0.28, 'brown']] as Array<[number, string]>) {
         const w = f * Wc;
         stone(g, ex + 1, COPE + 1 + R() * 2, w - 2, LEVEL - 3, R, tn, 'laid', (R() - 0.5) * 0.08, 0.9);
@@ -3029,6 +3148,7 @@ function paint(S: Stock): Masonry {
     w: TW,
     h: TH,
     plinth: S.plinth,
+    shade: S.shade,
     pad: PAD,
     capH: CAP_H,
     pave,

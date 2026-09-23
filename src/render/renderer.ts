@@ -3082,13 +3082,24 @@ export class Renderer {
     const endLit = lit * 0.74;
     const done = isDone(wall);
     const zoom = cam.zoom;
-    /** Whether a wall of the same storey carries on past this one's end. */
+    /**
+     * Whether a wall of the same storey carries on past this one's end, and
+     * covers it.
+     *
+     * A neighbour that is lower or thinner does not. Where a garden wall
+     * steps up from a fence to a half wall the taller one's end stood open --
+     * nothing carried on at its full height or thickness, but something was
+     * there, so no end was drawn and the grass showed through the step.
+     */
     const on = (i: number): boolean => {
       const b: Border = border.dir === 'h'
         ? { dir: 'h', x: border.x + i, y: border.y }
         : { dir: 'v', x: border.x, y: border.y + i };
       const w = this.game.buildings.wallOnBorder(wall.level, b);
-      return !!w && isDone(w);
+      if (!w || !isDone(w)) return false;
+      const k2 = WALL_TYPE_BY_ID.get(w.type);
+      const half2 = (k2?.railed ? FENCE_THICK : WALL_THICK) * (k2?.thick ?? 1);
+      return (k2?.height ?? 1) >= (kind?.height ?? 1) - 1e-6 && half2 >= half - 1e-9;
     };
     ctx.globalAlpha = alpha;
     if (!done) {
@@ -3235,7 +3246,8 @@ export class Renderer {
       /** And the hour's light over it, laid the way the flat colours take it. */
       const light = (k: number): void => {
         if (k >= 0.999) return;
-        ctx.fillStyle = `rgba(24, 20, 12, ${((1 - k) * 0.85).toFixed(3)})`;
+        const [sr, sg, sb] = cob.shade;
+        ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, ${((1 - k) * 0.85).toFixed(3)})`;
         ctx.fill();
       };
       /*
@@ -3390,7 +3402,8 @@ export class Renderer {
           ctx.lineTo(px(t, 0, ss), py(t, 0, ss));
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(64, 54, 52, 0.22)';
+        // Cool, as the shade on the brick's own turned face is.
+        ctx.fillStyle = 'rgba(50, 44, 72, 0.24)';
         ctx.fill();
       }
       blit(arched ? cob.arch[v]
