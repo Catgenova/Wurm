@@ -445,6 +445,15 @@ interface Stock {
    * material, not the workmanship.
    */
   master?: boolean;
+  /**
+   * On marble, a house wall faced in great slabs rather than laid in
+   * courses: two to a section across and two courses to a storey, the pair
+   * across opened like a book so its veins meet at the joint between them,
+   * and the veins run on over the bed joint from the upper course into the
+   * lower. Every unit of it, and every dressing, is veined; a garden wall of
+   * it is laid in courses of blocks.
+   */
+  slab?: boolean;
 }
 
 /* ---- the two masonries -------------------------------------------------- */
@@ -781,6 +790,84 @@ const STONE: Stock = ((P) => ({
   pairs: ['warm', 'burnt'],
   field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
 }))(STONE_PASTEL);
+
+/**
+ * And marble: white, and laid by a master.
+ *
+ * A house of it is faced in great slabs -- two to a section across and two
+ * courses to a storey, on joints a hair wide -- and each pair across was
+ * sawn from one block and opened like a book, so its veins meet at the
+ * joint between them as chevrons and run on over the bed joint into the
+ * course below: one surface, divided by joints rather than built up of
+ * them. The white is cool, clouded with grey, and veined in a web of fine
+ * crinkled grey threads with hairlines of pale gold. Its dressings -- the
+ * moulded band at each floor,
+ * the strip down each corner, the architraves, hoods and sills of its
+ * openings, and the plinth -- are a dove-grey marble veined a step darker.
+ * A garden wall of it is laid in courses of blocks the size of great
+ * bricks, each veined on its own, under a cope of the dove grey.
+ */
+const MARBLE_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the white, cool: its field tone, its shade, the light along an arris, and its darkest
+  stone: '#edeff1', stoneShade: '#e0e3e7', stoneHi: '#f8f9fa', stoneDark: '#d3d7dc',
+  // a cream bed and a cooler one out of the same quarry
+  warm: '#f0eeea', warmShade: '#e3e0db', warmHi: '#f8f7f4',
+  dark: '#e2e5e9', darkHi: '#eef0f3',
+  // the joint, a hair wide, and the ink round every piece: a soft cool grey, never dark
+  joint: '#c3c7cd', line: '#9aa1ab',
+  // the dove grey it is dressed in, and the band of it at a floor line
+  dress: '#bec2c9', dressShade: '#adb1b9', dressHi: '#d1d4da',
+  band: '#c6c9d0', bandShade: '#b4b8c0', bandHi: '#d8dbe0',
+  ringJoint: '#b6bac1', reveal: '#d3d6db',
+  // the veins: the clouds, the thread, the darkest thread, a lesser one, and the gold
+  veinSoft: '#cfd5dd', vein: '#a9b0ba', veinDeep: '#8c94a0', veinFaint: '#c3c8d0', veinGold: '#d8c6a2',
+  stain: '#dcdcd6', stainShade: '#cecfc9',
+};
+
+const MARBLE: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone, 1),
+    // The beds besides the white: `warm` a cream, `burnt` a cooler grey-white, `brown` a blush.
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    burnt:   { lit: '#e4e7eb', shade: lighten('#e4e7eb', -5), hi: lighten('#e4e7eb', 4) },
+    brown:   { lit: '#efebe9', shade: lighten('#efebe9', -5), hi: lighten('#efebe9', 3) },
+    weather: { lit: lighten(P.stone, -3), shade: lighten(P.stone, -7), hi: lighten(P.stone, 3) },
+    bleach:  { lit: lighten(P.stone, 3), shade: lighten(P.stone, -1), hi: lighten(P.stone, 6) },
+    // The dove grey, in the two tones its dressings turn about in.
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: '#b4b8c0', shade: '#a3a7b0', hi: '#c6c9cf' },
+    dark:    { lit: '#b4b8c0', shade: '#a3a7b0', hi: '#c6c9cf' },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 6) },
+    // And the plinth: the dove grey a step darker, in two beds.
+    foot:    { lit: '#aeb2ba', shade: '#9ca0a9', hi: '#c0c3ca' },
+    footB:   { lit: '#b6bac2', shade: '#a4a8b0', hi: '#c7cad0' },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.band, 6), shade: lighten(P.band, 1), hi: lighten(P.band, 10) },
+  },
+  lay: 'bond',
+  // What a garden wall of it is laid in: blocks a metre long and a little
+  // under a third of one high, four to a section.
+  rows: 9,
+  across: 4,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 2,
+  bandN: 2,
+  plinth: 72,
+  wear: 0.05,
+  // A cool blue-grey: white stone turned from the light goes toward the sky's colour, not to grey.
+  shade: [42, 46, 74],
+  shadow: (k) => (1 - k) * 0.8,
+  growth: false,
+  mix: [['warm', 0.08], ['burnt', 0.06], ['brown', 0.04]],
+  pairs: [],
+  field: [['warm', 0.4], ['burnt', 0.35], ['brown', 0.25]],
+  master: true,
+  slab: true,
+}))(MARBLE_PASTEL);
 
 /**
  * And slate: an ornate black brick, the island's grandest dark masonry.
@@ -1421,6 +1508,7 @@ let gilded: Masonry | undefined;
 let golden: Masonry | undefined;
 let sanded: Masonry | undefined;
 let slated: Masonry | undefined;
+let marbled: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1455,6 +1543,10 @@ export function sandstone(): Masonry {
 }
 export function slatework(): Masonry {
   return slated ??= paint(SLATE);
+}
+/** Marble: great white slabs, book-matched and veined, dressed in dove grey; its garden walls laid in veined blocks. */
+export function marblework(): Masonry {
+  return marbled ??= paint(MARBLE);
 }
 
 /**
@@ -1549,6 +1641,11 @@ function paint(S: Stock): Masonry {
   /** A hex colour as three numbers, for anything outside that wants to light it itself. */
   const channels = (hex: string): [number, number, number] =>
     [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+  /** `a` taken `t` of the way to `b`, as a hex colour. */
+  const mixHex = (a: string, b: string, t: number): string => {
+    const [p, q] = [channels(a), channels(b)];
+    return '#' + p.map((v, i) => Math.round(v + (q[i] - v) * t).toString(16).padStart(2, '0')).join('');
+  };
   /** What a mass casts on the stones behind it: one flat darkening, down and right. */
   function shadowOf(g: Ctx, cs: Lobe[], ox: number, oy: number): void {
     unionPath(g, cs, ox, oy, 2); g.fillStyle = 'rgba(110,100,80,0.22)'; g.fill();
@@ -1609,6 +1706,7 @@ function paint(S: Stock): Masonry {
     const [ox, oy] = cut === 'unit' ? [-w * 0.035, -h * 0.1] : [-w * 0.1, -h * 0.14];
     solid(g, pts, T.lit, T.shade, PASTEL.line, ink, ox, oy);
     if (S.grain) grainOf(g, pts, x, y, w, h, R, T, tone);
+    if (S.slab) veinOf(g, () => shape(g, pts), x, y, w, h, R, T);
     // the bevel: the block's own outline, shifted a little down and right and clipped to the block,
     // shows as a light band along the top and the upper left, where the light lands
     if (!bevel) return pts;
@@ -1749,6 +1847,88 @@ function paint(S: Stock): Masonry {
     }
     g.restore();
   }
+  /* ---- marble's veins ---------------------------------------------------- */
+  /*
+   * A vein in marble is not a curve. It crinkles -- a thread that jinks
+   * every few pixels about a heading that itself wanders slowly off the slant
+   * of the bed -- and it is fine: grey, with the grey bled into the stone
+   * either side of it, split in two for a stretch and come back, throwing
+   * off lesser threads that run into the next vein, so the veins of a slab
+   * make a web rather than a set of strokes; and a hairline of pale gold goes
+   * its own way across the lot. Drawn as smooth curves a slab of it was
+   * cracked chalk.
+   */
+  /** A vein's course: from (x, y) heading `a`, `step` pixels at a time for `len`, crinkled. */
+  function crinkle(x: number, y: number, a: number, len: number, R: Rand, step = 5, jink = 0.9): Pt[] {
+    const out: Pt[] = [[x, y]];
+    let head = a;
+    for (let d = 0; d < len; d += step) {
+      head = a + clamp(head - a + (R() - 0.5) * 0.3, -0.8, 0.8);
+      const t = head + (R() - 0.5) * jink;
+      x += Math.cos(t) * step; y += Math.sin(t) * step;
+      out.push([x, y]);
+    }
+    return out;
+  }
+  /** The open polyline through `pts`, as a fresh path. */
+  function run(g: Ctx, pts: Pt[]): void {
+    g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  }
+  /** An open curve through the midpoints of `pts`, from the first point to the last. */
+  function smooth(g: Ctx, pts: Pt[]): void {
+    g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length - 1; i++) { const m = mid(pts[i], pts[i + 1]); g.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); }
+    const l = pts[pts.length - 1]; g.lineTo(l[0], l[1]);
+  }
+  /** A thread of vein along `pts` in `col`, about `wd` wide, swelling and thinning as it goes. */
+  function wire(g: Ctx, pts: Pt[], col: string, wd: number, R: Rand): void {
+    const ph = R() * 6, f = 0.08 + R() * 0.1;
+    g.strokeStyle = col; g.lineCap = 'round';
+    for (let i = 0; i + 1 < pts.length; i++) {
+      g.lineWidth = Math.max(0.55, wd * (0.7 + 0.45 * Math.sin(i * f + ph)));
+      g.beginPath(); g.moveTo(pts[i][0], pts[i][1]); g.lineTo(pts[i + 1][0], pts[i + 1][1]); g.stroke();
+    }
+    g.lineCap = 'butt';
+  }
+  /** The grey a vein bleeds into the stone either side of it, `wd` across: two soft passes along its course, smoothed. */
+  function bleed(g: Ctx, pts: Pt[], col: string, wd: number): void {
+    const s = pts.filter((_, i) => i % 3 === 0 || i === pts.length - 1);
+    if (s.length < 2) return;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = hexA(col, 0.13); g.lineWidth = wd; smooth(g, s); g.stroke();
+    g.strokeStyle = hexA(col, 0.17); g.lineWidth = wd * 0.45; smooth(g, s); g.stroke();
+    g.lineCap = 'butt';
+  }
+  /**
+   * The veins of one block of marble, inside whatever `clip` outlines: a
+   * crinkled thread across it at a slant with its grey bled either side, a
+   * lesser thread or three off it, and on the white one block in four with
+   * a hairline of gold. On the dove grey the same, a step darker than the
+   * stone it is in.
+   */
+  function veinOf(g: Ctx, clip: () => void, x: number, y: number, w: number, h: number, R: Rand, T: Tone): void {
+    if (w < 12 || h < 8) return;
+    g.save(); clip(); g.clip();
+    const pale = channels(T.lit)[0] > 215;
+    const body = pale ? PASTEL.vein : mixHex(T.lit, PASTEL.veinDeep, 0.4), faint = pale ? PASTEL.veinFaint : mixHex(T.lit, PASTEL.veinDeep, 0.2);
+    const a = (R() < 0.5 ? 1 : -1) * (0.2 + R() * 0.4);
+    const p = crinkle(x - 6, y + R() * h - Math.tan(a) * w * 0.5, a, (w + 12) / Math.cos(a), R, 4);
+    bleed(g, p, body, 8 + R() * 6);
+    wire(g, p, body, 0.9 + R() * 0.6, R);
+    g.lineJoin = 'round';
+    for (let k = 0, m = 1 + Math.floor(R() * (w > 60 ? 3 : 1.5)); k < m; k++) {
+      const [bx, by] = p[Math.floor(R() * p.length)];
+      g.strokeStyle = faint; g.lineWidth = 0.8;
+      run(g, crinkle(bx, by, a + (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.8), 10 + R() * 30, R, 4)); g.stroke();
+    }
+    if (pale && R() < 0.25) {
+      const b = (R() - 0.5) * 1.2;
+      g.strokeStyle = PASTEL.veinGold; g.lineWidth = 0.9;
+      run(g, crinkle(x - 6, y + R() * h - Math.tan(b) * w * 0.5, b, (w + 12) / Math.cos(b), R, 4, 1)); g.stroke();
+    }
+    g.restore();
+  }
   /**
    * Honeycomb: where salt has worked into a damp block, a patch of it
    * hollowed into cells packed close, so that what is left of the face is a
@@ -1790,14 +1970,13 @@ function paint(S: Stock): Masonry {
     }
   }
   /**
-   * How time takes a wall of slate brick, which is hardly at all: slate is
-   * dense and a brick of it was laid for show. An arris knocked on one in
-   * thirty and a hairline crack along the bed of one in a hundred -- no pits,
-   * no worn patches and no mortar left on the face, because on a dark brick
-   * every one of those is a pale fleck, and a scatter of pale flecks over a
-   * dark wall is grit on the picture.
+   * How time takes a wall a master laid, which is hardly at all: an arris
+   * knocked on one unit in thirty and a hairline crack along the bed of one
+   * in a hundred -- no pits, no worn patches and no mortar left on the face.
+   * On slate's dark brick every one of those was a pale fleck, and a
+   * scatter of pale flecks over a dark wall is grit on the picture.
    */
-  function slateWeather(g: Ctx, own: Block[], R: Rand): void {
+  function masterWeather(g: Ctx, own: Block[], R: Rand): void {
     for (const s of own) {
       const t = R();
       if (t < 0.03) chipCorner(g, s, R);
@@ -1811,7 +1990,7 @@ function paint(S: Stock): Masonry {
    *  joint in seven, a water stain under one in seven. */
   function weather(g: Ctx, own: Block[], R: Rand): void {
     if (S.grain) { sandWeather(g, own, R); return; }
-    if (S.ornate) { slateWeather(g, own, R); return; }
+    if (S.master) { masterWeather(g, own, R); return; }
     const k = S.wear;
     for (const s of own) {
       const t = R();
@@ -3650,6 +3829,120 @@ function paint(S: Stock): Masonry {
   }
 
   /**
+   * One leaf of a book-matched pair of slabs, `w` across and `h` down: both
+   * courses of it at once, so a vein that leaves the upper slab runs on into
+   * the lower. The white; clouds of cool grey laid flat into it, some of
+   * them hugging a vein; five to seven veins crinkling across it at the
+   * bed's slant, two of them bold with their grey bled either side, split in
+   * two for a stretch in one in two; two or three more across them at
+   * another slant, which cut the field into cells; a web of lesser threads
+   * thrown off the lot into the next; and in two leaves in three a hairline
+   * or two of pale gold going
+   * its own way. Painted once and laid twice, the second time mirrored, so
+   * the veins meet at the joint the pair opens at as chevrons.
+   */
+  function slabLeaf(w: number, h: number, R: Rand): HTMLCanvasElement {
+    const c = cnv(w, h), g = ctxOf(c);
+    const t = R();
+    g.fillStyle = t < 0.2 ? TONES.warm.lit : t < 0.4 ? TONES.burnt.lit : PASTEL.stone;
+    g.fillRect(0, 0, w, h);
+    // Down toward the joint the pair opens at, mostly; one leaf in three up toward it.
+    const slant = (0.35 + R() * 0.45) * (R() < 0.34 ? -1 : 1);
+    const mains: Pt[][] = [];
+    const n = 5 + Math.floor(R() * 3);
+    for (let i = 0; i < n; i++) {
+      const a = slant + (R() - 0.5) * 0.4;
+      mains.push(crinkle(-8, h * ((i + 0.1 + R() * 0.8) / n) * 1.15 - h * 0.08 - Math.tan(a) * w * 0.5, a, (w + 16) / Math.cos(a), R));
+    }
+    // And two or three across them at another slant, which is what cuts the field into cells.
+    const cross: Pt[][] = [];
+    for (let i = 0, m = 2 + Math.floor(R() * 2); i < m; i++) {
+      const a = slant + (R() < 0.5 ? -1 : 1) * (0.8 + R() * 0.5);
+      cross.push(crinkle(R() * w, R() * h - Math.tan(a) * w * 0.3, a, 90 + R() * 160, R));
+    }
+    // The clouds, laid first: drifts along the bed, and a few hugging a vein.
+    const cloud = (cx: number, cy: number, rx: number, ry: number, rot: number): void => {
+      g.save(); g.translate(cx, cy); g.rotate(rot);
+      for (const [f, al] of [[1, 0.2], [0.6, 0.18]]) {
+        shape(g, blob(0, 0, rx * f, ry * f, 14, R, 0.85, 0.45, 0.4));
+        g.fillStyle = hexA(PASTEL.veinSoft, al); g.fill();
+      }
+      g.restore();
+    };
+    for (let k = 0; k < 9 + Math.floor(R() * 5); k++) cloud(R() * w, R() * h, 40 + R() * 80, 16 + R() * 30, slant + (R() - 0.5) * 0.6);
+    for (let k = 0; k < 5; k++) {
+      const m = mains[Math.floor(R() * mains.length)], [cx, cy] = m[Math.floor(R() * m.length)];
+      cloud(cx, cy, 24 + R() * 40, 8 + R() * 12, slant);
+    }
+    g.lineJoin = 'round';
+    mains.forEach((p, i) => {
+      // Two of them bold, and the rest fine.
+      if (i < 2 || R() < 0.3) bleed(g, p, PASTEL.vein, 10 + R() * 14);
+      wire(g, p, i === 0 ? PASTEL.veinDeep : i === 1 ? PASTEL.vein : R() < 0.5 ? PASTEL.vein : PASTEL.veinFaint, i === 0 ? 1.7 + R() * 0.5 : i === 1 ? 1.3 + R() * 0.4 : 0.8 + R() * 0.5, R);
+      if (R() < 0.5) {
+        // The vein split in two for a stretch, the second thread fainter.
+        const off = (R() < 0.5 ? -1 : 1) * (3 + R() * 4), from = Math.floor(p.length * R() * 0.5), len = Math.floor(p.length * (0.25 + R() * 0.35));
+        const q = p.slice(from, from + len).map(([px, py]): Pt => [px - Math.sin(slant) * off + (R() - 0.5) * 1.4, py + Math.cos(slant) * off + (R() - 0.5) * 1.4]);
+        if (q.length > 3) wire(g, q, PASTEL.veinFaint, 1, R);
+      }
+    });
+    for (const p of cross) wire(g, p, R() < 0.5 ? PASTEL.vein : PASTEL.veinFaint, 0.8 + R() * 0.4, R);
+    // The web: lesser threads thrown off the veins, into the next one or out to nothing.
+    const all = [...mains, ...cross];
+    for (let k = 0; k < 30 + Math.floor(R() * 14); k++) {
+      const m = all[Math.floor(R() * all.length)], [bx, by] = m[Math.floor(R() * m.length)];
+      g.strokeStyle = R() < 0.6 ? PASTEL.veinFaint : PASTEL.vein; g.lineWidth = 0.7 + R() * 0.5;
+      run(g, crinkle(bx, by, slant + (R() < 0.5 ? -1 : 1) * (0.4 + R() * 1.1), 16 + R() * 100, R, 4)); g.stroke();
+    }
+    // And the gold.
+    for (let k = 0, m = R() < 0.34 ? 0 : 1 + Math.floor(R() * 2); k < m; k++) {
+      const a = slant + (R() - 0.5) * 0.8;
+      g.strokeStyle = PASTEL.veinGold; g.lineWidth = 0.9 + R() * 0.4;
+      run(g, crinkle(-8, R() * h - Math.tan(a) * w * 0.5, a, ((w + 16) / Math.cos(a)) * (0.5 + R() * 0.6), R, 4, 1)); g.stroke();
+    }
+    return c;
+  }
+  /**
+   * The band at the head of a storey of marble: two stones of the dove grey
+   * to a section, on the joints of the slabs under them, moulded -- a nosing
+   * along the top turned up at the sky with a line of shade under it, the
+   * fascia, and a bead along its foot.
+   */
+  function marbleBand(g: Ctx, R: Rand): void {
+    for (const x of [0, TW / 2]) stone(g, x + 1, 1, TW / 2 - 2, BAND - 2, R, 'flat', 'unit', 0, 1.2);
+    g.fillStyle = hexA(TONES.top.lit, 0.92); g.fillRect(0, 1, TW, 7);
+    g.fillStyle = hexA(TONES.flat.shade, 0.9); g.fillRect(0, 8, TW, 3);
+    g.fillStyle = hexA(TONES.flat.hi, 0.85); g.fillRect(0, BAND - 10, TW, 1.6);
+    g.fillStyle = hexA(PASTEL.line, 0.5); g.fillRect(0, BAND - 7, TW, 1.3);
+    g.fillStyle = PASTEL.joint;
+    g.fillRect(0, 0, 1, BAND); g.fillRect(TW / 2 - 1, 0, 2, BAND); g.fillRect(TW - 1, 0, 1, BAND);
+  }
+  /**
+   * A storey of a marble house wall: the band, and under it the slabs -- a
+   * book-matched pair across, two courses down, the veins running on over
+   * the bed joint between them -- on joints a hair wide, each slab's arris
+   * catching the light along its top and its left and the shade along the
+   * others, which is the whole of what shows the joint at a distance.
+   */
+  function paintSlabs(g: Ctx, R: Rand): Block[] {
+    g.fillStyle = PASTEL.joint;
+    g.fillRect(0, 0, TW, TH);
+    marbleBand(g, R);
+    const SW = TW / 2, FH = TH - BAND, bed = BAND + FH / 2;
+    const leaf = slabLeaf(SW, FH, R);
+    g.drawImage(leaf, 0, BAND);
+    g.save(); g.translate(TW, BAND); g.scale(-1, 1); g.drawImage(leaf, 0, 0); g.restore();
+    g.fillStyle = PASTEL.joint;
+    g.fillRect(0, BAND, 1, FH); g.fillRect(TW - 1, BAND, 1, FH); g.fillRect(SW - 1, BAND, 2, FH);
+    g.fillRect(0, bed - 1, TW, 2); g.fillRect(0, TH - 1, TW, 1);
+    for (const [x0, y0, x1, y1] of [[1, BAND, SW - 1, bed - 1], [SW + 1, BAND, TW - 1, bed - 1], [1, bed + 1, SW - 1, TH - 1], [SW + 1, bed + 1, TW - 1, TH - 1]]) {
+      g.fillStyle = hexA(PASTEL.stoneHi, 0.9); g.fillRect(x0, y0, x1 - x0, 1.5); g.fillRect(x0, y0, 1.5, y1 - y0);
+      g.fillStyle = hexA(PASTEL.stoneShade, 0.85); g.fillRect(x0, y1 - 1.5, x1 - x0, 1.5); g.fillRect(x1 - 1.5, y0, 1.5, y1 - y0);
+    }
+    oversail(g, 0, BAND, 12);
+    return [];
+  }
+  /**
    * The field of a bond: units of one size, laid to a line in a half lap.
    *
    * What the rubble field keeps by hand the bond keeps by the lay. Every
@@ -3667,6 +3960,7 @@ function paint(S: Stock): Masonry {
    * whole of what there is to look at.
    */
   function paintBond(g: Ctx, R: Rand, crests: Pt[]): Block[] {
+    if (S.slab) return paintSlabs(g, R);
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, TW, TH);
     slabs(g, 0, BAND, R);
@@ -3870,6 +4164,23 @@ function paint(S: Stock): Masonry {
       g.lineTo(xe, TH + 2); g.closePath();
       g.fillStyle = side < 0 ? hexA(PASTEL.stoneHi, 0.8) : 'rgba(46, 34, 62, 0.22)';
       g.fill();
+      return c;
+    }
+    if (S.slab) {
+      /*
+       * A marble wall is not quoined. Where it stops or turns a corner it is
+       * finished with a strip of the dove grey down the arris, a stone to
+       * each course of slabs, so every face is framed -- the band over it,
+       * a strip down each end and the plinth under it -- and the strip
+       * stands a hair proud, so it throws a line of shade on the white.
+       */
+      const W = 30, FH = TH - BAND, RS = rand(side < 0 ? 1709 : 1733);
+      for (let k = 0; k < 2; k++) {
+        const y0 = BAND + (k * FH) / 2, x0 = side < 0 ? -6 : TW - W;
+        g.fillStyle = PASTEL.joint; g.fillRect(side < 0 ? 0 : x0 - 2, y0, W + 2, FH / 2);
+        stone(g, x0, y0 + 1, W + 6, FH / 2 - 2, RS, k ? 'plinth' : 'dress', 'unit', 0, 1.4);
+      }
+      if (side < 0) { g.fillStyle = 'rgba(60, 52, 84, 0.2)'; g.fillRect(W + 2, BAND, 4, FH); }
       return c;
     }
     const tops = bedTops();
@@ -4904,6 +5215,104 @@ function paint(S: Stock): Masonry {
     });
     if (R() < 0.7) fissure(g, A_CX + (R() - 0.5) * A_R * 0.8, A_CY - A_R - 4, 26 + R() * 24, R, -1);
   }
+  /* ---- the openings of a marble wall ------------------------------------- */
+  /*
+   * On marble every opening is framed as a master frames it: an architrave
+   * of the dove grey round the jambs and the head, in three pieces mitred
+   * where they meet, moulded -- a bead along the outer arris, lit where it
+   * faces the light and in shade where it does not, and a fillet where it
+   * steps back to the opening -- and over the head a cornice standing proud,
+   * its top turned up at the sky and its shade thrown down the architrave;
+   * under a window, a sill of the same. An archway takes a moulded ring on
+   * imposts, locked by a keystone that stands proud of it.
+   */
+  /** How wide an architrave is. */
+  const ARCHI = 22;
+  const rectPts = (x0: number, y0: number, x1: number, y1: number): Pt[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  /** One piece of the dove grey, cut straight round `pts`, veined, with its line. */
+  function marblePiece(g: Ctx, R: Rand, pts: Pt[], tone = 'dress', ink = 1.5): void {
+    const T = TONES[tone] || TONES.dress, bb = bbox(pts);
+    g.beginPath(); poly(g, pts); g.fillStyle = T.lit; g.fill();
+    veinOf(g, () => { g.beginPath(); poly(g, pts); }, bb.x, bb.y, bb.w, bb.h, R, T);
+    g.beginPath(); poly(g, pts); g.strokeStyle = PASTEL.line; g.lineWidth = ink; g.lineJoin = 'round'; g.stroke();
+  }
+  /** An architrave round an opening from `x0` to `x1`, from its head at `head` down to `foot`. */
+  function architrave(g: Ctx, R: Rand, x0: number, x1: number, head: number, foot: number): void {
+    const A = ARCHI, X0 = x0 - A, X1 = x1 + A, H = head - A, T = TONES.dress;
+    marblePiece(g, R, [[X0, H], [x0, head], [x0, foot], [X0, foot]]);
+    marblePiece(g, R, [[x1, head], [X1, H], [X1, foot], [x1, foot]]);
+    marblePiece(g, R, [[X0, H], [X1, H], [x1, head], [x0, head]]);
+    g.lineWidth = 1.8;
+    g.strokeStyle = T.hi;
+    g.beginPath(); g.moveTo(X0 + 4.5, foot); g.lineTo(X0 + 4.5, H + 4.5); g.lineTo(X1 - 4.5, H + 4.5); g.stroke();
+    g.strokeStyle = T.shade;
+    g.beginPath(); g.moveTo(X1 - 4.5, H + 4.5); g.lineTo(X1 - 4.5, foot); g.stroke();
+    g.fillStyle = T.shade;
+    g.fillRect(x0 - 5, head - 5, x1 - x0 + 10, 5);
+    g.fillRect(x0 - 5, head, 5, foot - head);
+    g.fillStyle = T.hi;
+    g.fillRect(x1, head, 5, foot - head);
+  }
+  /** A cornice over a head, `deep` deep with its foot at `y`: its top turned to the sky, a drip along its foot, and its shade down what is under it. */
+  function hood(g: Ctx, R: Rand, x0: number, x1: number, y: number, deep: number): void {
+    const top = y - deep;
+    const sh = g.createLinearGradient(0, y, 0, y + 10);
+    sh.addColorStop(0, 'rgba(58, 50, 84, 0.36)');
+    sh.addColorStop(1, 'rgba(58, 50, 84, 0)');
+    g.fillStyle = sh; g.fillRect(x0 + 2, y, x1 - x0 - 4, 10);
+    marblePiece(g, R, rectPts(x0, top, x1, y));
+    g.fillStyle = TONES.top.lit; g.fillRect(x0 + 1, top + 1, x1 - x0 - 2, 5);
+    g.fillStyle = TONES.dress.shade; g.fillRect(x0 + 1, y - 5, x1 - x0 - 2, 4);
+    g.strokeStyle = PASTEL.line; g.lineWidth = 1.5; g.strokeRect(x0, top, x1 - x0, deep);
+  }
+  /** A window or a bay in marble: the architrave, a sill standing proud under it, and a cornice over it. */
+  function marbleSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
+    architrave(g, R, x0, x1, head, sill);
+    const s0 = x0 - ARCHI - 8, s1 = x1 + ARCHI + 8, sy = sill + 12 + shelf;
+    const sh = g.createLinearGradient(0, sy, 0, sy + 9);
+    sh.addColorStop(0, 'rgba(58, 50, 84, 0.36)');
+    sh.addColorStop(1, 'rgba(58, 50, 84, 0)');
+    g.fillStyle = sh; g.fillRect(s0 + 3, sy, s1 - s0 - 6, 9);
+    marblePiece(g, R, rectPts(s0, sill - 2, s1, sy));
+    g.fillStyle = TONES.top.lit; g.fillRect(s0 + 1, sill - 1, s1 - s0 - 2, 4);
+    hood(g, R, x0 - ARCHI - 10, x1 + ARCHI + 10, head - ARCHI, 16);
+  }
+  /** A doorway or a gate in marble: the architrave to the ground, and a cornice over it. */
+  function marbleDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number): void {
+    architrave(g, R, x0, x1, head, TH + 20);
+    hood(g, R, x0 - ARCHI - 12, x1 + ARCHI + 12, head - ARCHI, 18);
+  }
+  /** An archway in marble: pilaster strips for jambs, an impost on each, the moulded ring over them, and the keystone. */
+  function marbleArch(g: Ctx, R: Rand): void {
+    const A = ARCHI, r0 = A_R, r1 = A_R + A, T = TONES.dress;
+    for (const side of [-1, 1]) {
+      const inner = A_CX + side * r0, outer = A_CX + side * r1;
+      marblePiece(g, R, rectPts(Math.min(inner, outer), A_CY, Math.max(inner, outer), TH + 20));
+    }
+    const n = 7, crown = (n - 1) / 2;
+    const pt = (a: number, r: number): Pt => [A_CX + Math.cos(a) * r, A_CY - Math.sin(a) * r];
+    for (let i = 0; i < n; i++) {
+      if (i === crown) continue;
+      const a0 = Math.PI - (Math.PI * i) / n, a1 = Math.PI - (Math.PI * (i + 1)) / n, pts: Pt[] = [];
+      for (let k = 0; k <= 6; k++) pts.push(pt(a0 + ((a1 - a0) * k) / 6, r1));
+      for (let k = 6; k >= 0; k--) pts.push(pt(a0 + ((a1 - a0) * k) / 6, r0 - 6));
+      marblePiece(g, R, pts);
+    }
+    g.lineWidth = 1.8;
+    g.strokeStyle = T.hi; g.beginPath(); g.arc(A_CX, A_CY, r1 - 4.5, Math.PI, Math.PI * 1.5); g.stroke();
+    g.strokeStyle = T.shade; g.beginPath(); g.arc(A_CX, A_CY, r1 - 4.5, Math.PI * 1.5, Math.PI * 2); g.stroke();
+    g.lineWidth = 5; g.beginPath(); g.arc(A_CX, A_CY, r0 + 2.5, Math.PI, Math.PI * 2); g.stroke();
+    const kh = (Math.PI / n) * 0.36;
+    const kp: Pt[] = [pt(Math.PI / 2 + kh * 1.12, r1 + 14), pt(Math.PI / 2 - kh * 1.12, r1 + 14), pt(Math.PI / 2 - kh, r0 - 6), pt(Math.PI / 2 + kh, r0 - 6)];
+    marblePiece(g, R, kp, 'dress', 1.6);
+    g.fillStyle = TONES.top.lit;
+    g.beginPath(); poly(g, [kp[0], kp[1], [kp[1][0], kp[1][1] + 5], [kp[0][0], kp[0][1] + 5]]); g.fill();
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? A_CX - r1 - 6 : A_CX + r0 - 2, x1 = side < 0 ? A_CX - r0 + 2 : A_CX + r1 + 6;
+      marblePiece(g, R, rectPts(x0, A_CY - 10, x1, A_CY + 4));
+      g.fillStyle = TONES.top.lit; g.fillRect(x0 + 1, A_CY - 9, x1 - x0 - 2, 3);
+    }
+  }
   /* ---- the openings of a wall laid for show ------------------------------ */
   /*
    * On slate the openings are laid for show like the field round them. Every
@@ -5054,6 +5463,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'frame') { frameSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'log' || S.lay === 'plank') { boardSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'gild') { silverSurround(g, R, x0, x1, head, sill, shelf); return; }
+    if (S.slab) { marbleSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.ornate) { ornateSurround(g, R, x0, x1, head, sill, wide, shelf); return; }
     const top = lintelTop(head);
     winPocket(g, R, x0, x1, top - 46, sill);
@@ -5198,6 +5608,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'frame') { frameDoorway(g, R, x0, x1, head, deep); return; }
     if (S.lay === 'log' || S.lay === 'plank') { boardDoorway(g, R, x0, x1, head, deep); return; }
     if (S.lay === 'gild') { silverDoorway(g, R, x0, x1, head, deep); return; }
+    if (S.slab) { marbleDoorway(g, R, x0, x1, head); return; }
     if (S.ornate) { ornateDoorway(g, R, x0, x1, head); return; }
     const bTop = head - (reach ? CORBEL_H : 0) - deep + 3;
     const box: Pt[] = [[x0 - 26, bTop - 10], [x1 + 26, bTop - 10], [x1 + 26, TH + 8], [x0 - 26, TH + 8]];
@@ -5846,6 +6257,7 @@ function paint(S: Stock): Masonry {
     else if (S.lay === 'frame') frameArch(g, R);
     else if (S.lay === 'log' || S.lay === 'plank') boardArch(g, R);
     else if (S.lay === 'gild') silverArch(g, R);
+    else if (S.slab) marbleArch(g, R);
     else if (S.ornate) ornateArch(g, R);
     else {
       jamb(g, R, -1);
@@ -6362,7 +6774,7 @@ function paint(S: Stock): Masonry {
       // At the stock's own rate of wear, as the tall wall's is: a garden wall
       // of brick took the whole of a novice's rubble's and was specked with it.
       const k = S.wear;
-      if (S.ornate) slateWeather(g, own, R);
+      if (S.master) masterWeather(g, own, R);
       else for (const s of own) {
         const t = R();
         if (t < 0.18 * k) chipCorner(g, s, R);
@@ -6626,9 +7038,9 @@ function paint(S: Stock): Masonry {
           g.fillRect(side < 0 ? x - 4 : x + w, 0, 4, fh);
           continue;
         }
-        if (S.ornate) {
-          // Square and true, in the pale slate: stones as deep as the wall
-          // divides into, long and short turn about, and a cap over the lot.
+        if (S.master) {
+          // Square and true, in the dressings' stone: stones as deep as the
+          // wall divides into, long and short turn about, and a cap over the lot.
           const n = Math.max(2, Math.round((fh - COPE) / 52)), qh = (fh + 6 - COPE) / n;
           for (let k = 0; k < n; k++) {
             const w = k % 2 ? 40 : 54;
@@ -7055,7 +7467,7 @@ function paint(S: Stock): Masonry {
     shadow: S.shadow,
     top: TONES.top && { lit: channels(TONES.top.lit), hi: channels(TONES.top.hi), shade: channels(TONES.top.shade) },
     wrap: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank' || S.lay === 'gild',
-    scatter: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank' || S.lay === 'gild',
+    scatter: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank' || S.lay === 'gild' || !!S.slab,
     hi: channels(PASTEL.stoneHi),
     low,
     spill: SPILL,
@@ -7105,7 +7517,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, sandstone, slatework, adobe, timbercraft, logwork, planking, silverwork, goldwork];
+  const sets = [cobble, brickwork, stonework, sandstone, slatework, marblework, adobe, timbercraft, logwork, planking, silverwork, goldwork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });
