@@ -3398,12 +3398,12 @@ export class Renderer {
        */
       if (cob.plinth && wall.level === 0 && !indoors) {
         ctx.beginPath();
-        for (const [t, ss] of [[0, 2.4], [1, 2.4], [1, -2.4], [0, -2.4]] as Array<[number, number]>) {
+        for (const [t, ss] of [[0, 3.4], [1, 3.4], [1, -3.4], [0, -3.4]] as Array<[number, number]>) {
           ctx.lineTo(px(t, 0, ss), py(t, 0, ss));
         }
         ctx.closePath();
         // Cool, as the shade on the brick's own turned face is.
-        ctx.fillStyle = 'rgba(50, 44, 72, 0.24)';
+        ctx.fillStyle = 'rgba(48, 42, 72, 0.3)';
         ctx.fill();
       }
       blit(arched ? cob.arch[v]
@@ -3412,6 +3412,15 @@ export class Renderer {
         : gated ? cob.gate[v]
         : bayed ? cob.bay[v]
         : cob.face[v], 0, 1);
+      /*
+       * Quoins, where the run stops or turns a corner: the masonry's own
+       * dressing of a free end, toothed into the face. Out of doors only --
+       * the end of a partition inside a room is plaster and furniture.
+       */
+      if (!indoors) {
+        if (cob.quoinL && !on(-1)) blit(cob.quoinL, 0, 1);
+        if (cob.quoinR && !on(1)) blit(cob.quoinR, 0, 1);
+      }
       /*
        * The way through goes in before anything that grows, and unlit,
        * because the wash below takes the whole face at once: a bush that has

@@ -174,6 +174,12 @@ export interface Masonry {
   gateWeed: HTMLCanvasElement[];
   /** And a bay: the hole and the shelf it stands on. What stands on it is not flat, so it is not here. */
   bay: HTMLCanvasElement[];
+  /**
+   * The quoins at the left and the right end of a section, over the face, for
+   * where a run stops or turns a corner; absent on a masonry that has none.
+   */
+  quoinL?: HTMLCanvasElement;
+  quoinR?: HTMLCanvasElement;
   /** The low wall at a given fraction of a storey, painted once per height that asks for it. */
   low: (k: number) => Low;
   /** The ivy of the top storey, `pad` px taller than a face, the extra above its top edge. */
@@ -424,10 +430,19 @@ const BRICK_PASTEL: Record<string, string> = {
   dark: '#886364', darkHi: '#9b6f6f',
   // the mortar it is bedded in, a step under the brick, and the ink round every unit
   joint: '#8e6f67', line: '#7e4a44',
-  // the cut stone: the dressings of an opening, and the band at a floor line
-  dress: '#7b718e', dressShade: '#655e73', dressHi: '#8d83a0',
-  band: '#716882', bandShade: '#5e576b', bandHi: '#827897',
-  ringJoint: '#7b5d56', reveal: '#5e576b',
+  /*
+   * The cut stone: the dressings of an opening, and the band at a floor line.
+   *
+   * A chalky slate, half the saturation the first lavender had. At that
+   * chroma the trim was a violet line ruled round every edge of a building
+   * -- a brick-textured box outlined in purple -- where cut stone on a brick
+   * wall is the quieter of the two materials, not the louder. The band is a
+   * step warmer and lighter than the rest, nearer the brick it runs through,
+   * so a three-storey face is not a stack of matching stripes.
+   */
+  dress: '#7f7c8d', dressShade: '#696675', dressHi: '#9491a1',
+  band: '#96888f', bandShade: '#7f7178', bandHi: '#a79aa1',
+  ringJoint: '#7b5d56', reveal: '#5f5c6a',
   // and brick with moss in it: the field pulled half way to the leaf
   stain: '#a99b7e', stainShade: '#928768',
 };
@@ -455,10 +470,12 @@ const BRICK: Stock = ((P) => ({
      * is a brick in the wrong place.
      */
     dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
-    plinth:  { lit: '#6a6377', shade: '#57516a', hi: '#7b748a' },
-    dark:    { lit: '#6a6377', shade: '#57516a', hi: '#7b748a' },
-    green:   { lit: '#78797f', shade: '#66676d', hi: '#88898f' },
+    plinth:  { lit: '#6d6b7b', shade: '#5a5865', hi: '#7d7b8e' },
+    dark:    { lit: '#6d6b7b', shade: '#5a5865', hi: '#7d7b8e' },
+    green:   { lit: '#757f84', shade: '#626b6f', hi: '#879197' },
     flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    // the top of a course of it, turned up at the sky
+    top:     { lit: lighten(P.band, 9), shade: lighten(P.band, 3), hi: lighten(P.band, 14) },
   },
   lay: 'bond',
   /*
@@ -769,7 +786,7 @@ function paint(S: Stock): Masonry {
   }
   /** Four flat slabs across a row, set half a slab over so the seam falls in the middle of one; that
    *  slab is drawn twice, half either side, from its own seed, so it is the same in every variant. */
-  function slabs(g: Ctx, y: number, h: number, R: Rand): void {
+  function slabs(g: Ctx, y: number, h: number, R: Rand, tone = 'flat'): void {
     const n = S.bandN, w = TW / n;
     // A slab of a rubble wall was picked over; a band course on brickwork was
     // cut to a line, and at this size a rounded corner on it reads as a sweet.
@@ -782,11 +799,17 @@ function paint(S: Stock): Masonry {
       let x = w / 2;
       for (const v of ws) {
         const bw = (v / sum) * (TW - w);
-        stone(g, x + MORTAR, y + MORTAR / 2, bw - 2 * MORTAR, h - MORTAR, R, R() < 0.25 ? 'plinth' : 'flat', cut);
+        // And no two the same depth either: the arris along the top is the
+        // line the course was laid to, and the bottom is where each stone
+        // happened to stop, three or four pixels up or down.
+        const bh = h - MORTAR - R() * 5;
+        const t = R();
+        const pts = stone(g, x + MORTAR, y + MORTAR / 2, bw - 2 * MORTAR, bh, R, tone === 'flat' && t < 0.25 ? 'plinth' : tone, cut);
+        if (R() < 0.22) chipCorner(g, { x: x + MORTAR, y: y + MORTAR / 2, w: bw - 2 * MORTAR, h: bh, course: 0, pts }, R);
         x += bw;
       }
-    } else for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, 'flat', cut);
-    for (const x of [TW - w / 2, -w / 2]) stone(g, x + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, rand(98), 'flat', cut);
+    } else for (let k = 0; k < n - 1; k++) stone(g, k * w + w / 2 + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, R, tone, cut);
+    for (const x of [TW - w / 2, -w / 2]) stone(g, x + MORTAR, y + MORTAR / 2, w - 2 * MORTAR, h - MORTAR, rand(98), tone, cut);
   }
 
   /**
@@ -820,12 +843,7 @@ function paint(S: Stock): Masonry {
      * come off a seed every variant shares, because a course has to arrive at
      * a section's seam at the height it left the last one.
      */
-    const HR = rand(2027);
-    const hs: number[] = [];
-    let tot = 0;
-    for (let i = 0; i < S.rows; i++) { const w = 0.92 + 0.16 * HR(); hs.push(w); tot += w; }
-    const tops: number[] = [BAND];
-    for (let i = 0; i < S.rows; i++) tops.push(tops[i] + ((TH - BAND) * hs[i]) / tot);
+    const tops = bedTops();
     for (let i = 0; i < S.rows; i++) {
       const y0 = tops[i], ch = tops[i + 1] - y0;
       // Headers every fourth course, which is what a wall thick enough to
@@ -864,8 +882,11 @@ function paint(S: Stock): Masonry {
         // A degree would be a brick somebody dropped in. A bond is laid to a
         // line and what it has instead is a hand's worth of it, which is a
         // fortieth of a degree and shows as an edge rather than as a slope.
-        const tilt = priv && RR() < 0.3 ? (RR() - 0.5) * 0.014 : 0;
-        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', tilt, 1.35);
+        const tilt = priv && RR() < 0.3 ? (RR() - 0.5) * 0.012 : 0;
+        // And a lost edge here and there: one brick in six drawn with half the
+        // ink, so the outline is a hand going round them and not a stencil.
+        const ink = priv && RR() < 0.17 ? 0.7 : 1.35;
+        b.pts = stone(g, b.x, b.y, b.w, b.h, RR, tone, 'unit', tilt, ink);
         if (priv && b.w > 24) own.push(b);
       }
     }
@@ -876,8 +897,67 @@ function paint(S: Stock): Masonry {
      * course of stone laid on and projecting is the line of shade it throws
      * down the brick, and the arris of it catching the light above that.
      */
-    oversail(g, BAND, 9);
+    oversail(g, 0, BAND, 12);
     return own;
+  }
+
+  /**
+   * Where each bed joint of a bond falls, from the band down.
+   *
+   * Evenly divided courses are the tell of a wall nobody laid: ten beds at
+   * exactly a tenth is graph paper whatever is drawn between them. These come
+   * off a seed every variant shares, because a course has to arrive at a
+   * section's seam at the height it left the last one -- and because a quoin
+   * is two courses of brick deep and has to know where they are.
+   */
+  function bedTops(): number[] {
+    const HR = rand(2027);
+    const hs: number[] = [];
+    let tot = 0;
+    for (let i = 0; i < S.rows; i++) { const w = 0.92 + 0.16 * HR(); hs.push(w); tot += w; }
+    const tops: number[] = [BAND];
+    for (let i = 0; i < S.rows; i++) tops.push(tops[i] + ((TH - BAND) * hs[i]) / tot);
+    return tops;
+  }
+
+  /**
+   * The quoins a free end of a bond is finished with, toothed into the face.
+   *
+   * A column of equal stones up a corner is a strip of trim; what makes it
+   * masonry is that it is bonded into the brick either side -- a long stone,
+   * then a short one, each two courses of brick deep, so the brick is laid
+   * into the notches between them. `side` is which edge of the section the
+   * stones are on, and the two edges start their long-and-short on opposite
+   * courses, so at a corner where two walls meet the long face of one is
+   * over the short face of the other, the way a quoin turns a corner.
+   */
+  function quoins(side: -1 | 1): HTMLCanvasElement {
+    const c = document.createElement('canvas');
+    c.width = TW; c.height = TH;
+    const g = c.getContext('2d') as Ctx;
+    const tops = bedTops();
+    const R = rand(side < 0 ? 1709 : 1733);
+    const LONG = 94, SHORT = 54;
+    for (let q = 0; q * 2 < S.rows; q++) {
+      const y0 = tops[q * 2], y1 = tops[Math.min(S.rows, q * 2 + 2)];
+      const long = (q % 2 === 0) === (side < 0);
+      const reach = (long ? LONG : SHORT) + (R() - 0.5) * 8;
+      // Where the stone ends against the brick, and the mortar round it.
+      const x0 = side < 0 ? -6 : TW - reach, x1 = side < 0 ? reach : TW + 6;
+      g.fillStyle = PASTEL.joint;
+      g.fillRect(x0 - MORTAR, y0, x1 - x0 + MORTAR * 2, y1 - y0);
+      const tone = R() < 0.3 ? 'plinth' : 'dress';
+      const pts = stone(g, x0 + MORTAR / 2, y0 + MORTAR / 2, x1 - x0 - MORTAR, y1 - y0 - MORTAR, R, tone, 'unit', 0, 1.8);
+      const b: Block = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, course: q, pts };
+      if (R() < 0.35) chipCorner(g, b, R);
+      // A quoin stands a hair proud of the brick and it throws that much
+      // shade on the course beside it, on the side away from the light.
+      if (side > 0) {
+        g.fillStyle = 'rgba(46, 38, 60, 0.26)';
+        g.fillRect(x0 - MORTAR - 5, y0 + 2, 5, y1 - y0 - 2);
+      }
+    }
+    return c;
   }
 
   /**
@@ -934,10 +1014,16 @@ function paint(S: Stock): Masonry {
       if (washed && Math.abs(x - washX) < washW) k += 2;
       k = clamp(k, -3, 3);
       const t = RR();
-      // One unit in twelve off another part of the kiln -- and near enough in
-      // value to its neighbours that it is a brick, not a hole.
-      if (t < 0.035) return head ? 'burnt' : 'brown';
-      if (t < 0.08) return 'warm';
+      /*
+       * One unit in twelve off another part of the kiln, near enough in value
+       * to its neighbours that it is a brick and not a hole -- and where that
+       * part of the kiln put it: the over-fired ones in the scorched drift,
+       * the soft ones in the pale, so they come in clusters rather than as a
+       * sprinkle of singles over the whole wall.
+       */
+      if (d < 0.32 && t < 0.16) return head || t < 0.07 ? 'burnt' : 'brown';
+      if (d > 0.68 && t < 0.12) return 'warm';
+      if (t < 0.02) return 'brown';
       return (RR() < 0.15 ? 'p' : 'f') + k;
     };
   }
@@ -946,14 +1032,22 @@ function paint(S: Stock): Masonry {
    * A course of dressed stone standing proud of what is under it: the shade
    * it throws down the wall, and the arris of it taking the light above.
    */
-  function oversail(g: Ctx, y: number, deep: number): void {
+  function oversail(g: Ctx, top: number, y: number, deep: number): void {
+    // The shade it throws down the wall: hard for a hand's width under the
+    // arris and then gone, and cool, as every shadow on this island is.
     const sh = g.createLinearGradient(0, y, 0, y + deep);
-    sh.addColorStop(0, 'rgba(42, 34, 40, 0.42)');
-    sh.addColorStop(1, 'rgba(42, 34, 40, 0)');
+    sh.addColorStop(0, 'rgba(40, 32, 62, 0.46)');
+    sh.addColorStop(0.35, 'rgba(40, 32, 62, 0.3)');
+    sh.addColorStop(1, 'rgba(40, 32, 62, 0)');
     g.fillStyle = sh;
     g.fillRect(0, y, TW, deep);
-    g.fillStyle = hexA(PASTEL.dressHi, 0.4);
-    g.fillRect(0, y - 3, TW, 2);
+    // And its top, weathered and turned up at the sky: a step lighter than
+    // its face, which is the whole of what says the course stands out.
+    const lit = g.createLinearGradient(0, top, 0, top + 7);
+    lit.addColorStop(0, hexA(PASTEL.dressHi, 0.62));
+    lit.addColorStop(1, hexA(PASTEL.dressHi, 0));
+    g.fillStyle = lit;
+    g.fillRect(0, top, TW, 7);
   }
 
   /** The band and the courses, the same contract in every variant, then `extras` marks each on a stone
@@ -1711,6 +1805,16 @@ function paint(S: Stock): Masonry {
     winPocket(g, R, x0, x1, top - 46, sill);
     // The sill first, because everything either side of the hole stands on it.
     wearOne(g, stone(g, x0 - 16 - shelf, sill - 4, x1 - x0 + 32 + shelf * 2, 24 + shelf, R, 'dress', 'laid', (R() - 0.5) * 0.012), R);
+    if (S.lay === 'bond') {
+      // A sill on brick is cut stone standing out to throw the rain clear,
+      // and it throws a shade on the brick below it as the band does.
+      const sx = x0 - 16 - shelf, sw = x1 - x0 + 32 + shelf * 2, sy = sill + 20 + shelf;
+      const sh = g.createLinearGradient(0, sy, 0, sy + 9);
+      sh.addColorStop(0, 'rgba(40, 32, 62, 0.42)');
+      sh.addColorStop(1, 'rgba(40, 32, 62, 0)');
+      g.fillStyle = sh;
+      g.fillRect(sx + 3, sy, sw - 6, 9);
+    }
     winJamb(g, R, -1, x0, x1, head, sill, wide);
     winJamb(g, R, 1, x0, x1, head, sill, wide);
     relieving(g, R, x0, x1, head);
@@ -2091,7 +2195,15 @@ function paint(S: Stock): Masonry {
        * end in the run.
        */
       const rise = 1 + R() * 3;
-      stone(g, x + MORTAR / 2, rise, w - MORTAR, COPE - MORTAR / 2 - rise, R, tone, 'unit', (R() - 0.5) * 0.01, 1.6);
+      const pts = stone(g, x + MORTAR / 2, rise, w - MORTAR, COPE - MORTAR / 2 - rise, R, tone, 'unit', (R() - 0.5) * 0.01, 1.6);
+      // Its top, turned at the sky and a step lighter than its face.
+      g.save(); shape(g, pts); g.clip();
+      const lit = g.createLinearGradient(0, rise, 0, rise + 9);
+      lit.addColorStop(0, hexA(PASTEL.dressHi, 0.6));
+      lit.addColorStop(1, hexA(PASTEL.dressHi, 0));
+      g.fillStyle = lit;
+      g.fillRect(x, rise, w, 9);
+      g.restore();
       return;
     }
     const packer = w < COPE_MIN * 1.6;
@@ -2136,7 +2248,7 @@ function paint(S: Stock): Masonry {
      * the bottom at the zoom people play at.
      */
     const SH = rand(seed + 271);
-    g.fillStyle = 'rgba(96, 86, 66, 0.26)';
+    g.fillStyle = S.lay === 'bond' ? 'rgba(40, 32, 62, 0.38)' : 'rgba(96, 86, 66, 0.26)';
     let sx = CSEAM[0];
     for (const w of [CSEAM[1] - CSEAM[0], ...ws, CSEAM[1] - CSEAM[0]]) {
       g.fillRect(sx, COPE, w + 1, 1.5 + SH() * 5);
@@ -2582,7 +2694,9 @@ function paint(S: Stock): Masonry {
   const CAP_STONE = (() => {
     const c = cnv(TW, CAP_H), g = ctxOf(c);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, CAP_H);
-    slabs(g, 0, CAP_H, rand(99));
+    // On a bond the top is the band course seen from above, and a face
+    // turned up at the sky is a step lighter than the same stone on the side.
+    slabs(g, 0, CAP_H, rand(99), S.lay === 'bond' ? 'top' : 'flat');
     return c;
   })();
   const ENDS = (() => {
@@ -2708,7 +2822,7 @@ function paint(S: Stock): Masonry {
           g.fillStyle = PASTEL.joint;
           g.fillRect(x - 1, 0, w + 2, CAP_H);
           const j0 = RR() * 3, j1 = RR() * 3;
-          void stone(g, x + MORTAR / 2, j0, w - MORTAR, CAP_H - j0 - j1, RR, tone, 'unit', (RR() - 0.5) * 0.01, 1.2, false);
+          void stone(g, x + MORTAR / 2, j0, w - MORTAR, CAP_H - j0 - j1, RR, tone === 'plinth' ? 'dress' : 'top', 'unit', (RR() - 0.5) * 0.01, 1.2, false);
           return;
         }
         // One end jitters hard and the other a little, so the two arrises of
@@ -3135,6 +3249,8 @@ function paint(S: Stock): Masonry {
     gateIvy: GATE_IVY,
     gateWeed: GATE_WEED,
     bay: BAYED,
+    quoinL: S.lay === 'bond' ? quoins(-1) : undefined,
+    quoinR: S.lay === 'bond' ? quoins(1) : undefined,
     low,
     spill: SPILL,
     base: BASE,
