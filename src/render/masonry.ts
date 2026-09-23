@@ -975,14 +975,16 @@ const PLANK: Stock = ((P) => ({
  * storey, and a plinth of it at the ground.
  *
  * Metal in flat pastel reads by what it reflects and where it catches the
- * light. Each panel is a cushioned plate: the sky over its upper part, a soft
- * horizon sagging across its middle, and a paler grey under that, darkening
- * at its foot. The faces turned up at the sky -- the rails over the panels,
- * the frieze, the rolls of the plinth, the capitals -- carry the light, each
- * with a line of reflected dark just inside it. The faces turned down take
- * the lawn's green. The chased work is burnished, its lit half near white and
- * a dark core on its shadow half, and the recesses between the work have gone
- * a cool violet-blue, with warm tarnish pooled along their feet.
+ * light. The panels are one polished plane standing behind the pilasters,
+ * and every one of them shows the same horizon at the same height across a
+ * storey: the sky over it, a bright streak on the line itself, the darkest of
+ * the reflection hard under that, and the ground below, going toward the
+ * lawn's green at the foot. The chasing reflects it too, a step lighter than
+ * the plate behind it, lit along its upper left and dark along its lower
+ * right. The pilasters are chrome, a streak of light down one side and a band
+ * of dark down the other; the faces turned up carry a white hairline, the
+ * faces turned down the lawn; and the recesses between the work have gone a
+ * cool violet-blue, tarnished warm in their corners.
  */
 const SILVER_PASTEL: Record<string, string> = {
   ...RUBBLE_PASTEL,
@@ -993,25 +995,29 @@ const SILVER_PASTEL: Record<string, string> = {
   // the polished work: pilasters, frieze, mouldings
   dress: '#d2d6e0', dressShade: '#9da2b3', dressHi: '#eef1f6',
   band: '#d2d6e0', bandShade: '#9da2b3', bandHi: '#eef1f6',
-  // an edge turned to the sky, held short of white, and the line of
+  // an edge turned to the sky, the white hairline along it, and the line of
   // reflected dark just inside it; an edge turned from the light; a face
   // turned down, which takes the lawn, and the frieze's underside, darker
-  sky: '#e0e6ee', horizon: '#8a93a0', edgeHi: '#e4e8f2', rim: '#e4e8f2', core: '#64687e', edgeLo: '#787d8c',
+  sky: '#e0e6ee', horizon: '#8a93a0', edgeHi: '#e4e8f2', hair: '#f8fafd', rim: '#e4e8f2', core: '#64687e', edgeLo: '#787d8c',
   reflect: '#7e928a', soffit: '#788686',
-  // a panel's plate: the sky over it, the soft band of the horizon, the plate
-  // under that and its foot; and a fence's plate, too low to carry a horizon
-  plateSky: '#d4dcee', plateSoft: '#c0c7d9', plate: '#aab0c2', plateFoot: '#8e94a8', plateFlat: '#b4bacb',
-  // chased work, burnished: its lit half
-  lit: '#f4f2ec',
+  // a panel's plate as a mirror shows it: the sky, bluer at its head; the
+  // streak on the horizon; the reflected dark hard under it and a step
+  // softening it; the ground, and its foot toward the lawn
+  plateSkyTop: '#c8d2e6', plateSky: '#d4dcee', plateSkyLow: '#e0e6f4', streak: '#f6f8fc',
+  plateBand: '#6a708a', plateSoft: '#8d94a6', plate: '#b0b8c2', plateFoot: '#a0aeac', plateFlat: '#b4bacb',
+  // chased work, a step lighter than the plate it stands on, above the
+  // horizon and below it; its lit edge and its dark edge
+  reliefSky: '#e2e8f4', reliefGround: '#bcc2d2', reliefHi: '#f8fafd', reliefLo: '#5c6078', sunk: '#9aa0b4',
   // the recess the work stands in, the deep of it beside a pilaster, and the
-  // tarnish pooled along its foot, warm where it is thickest
-  tarnish: '#62647c', recess: '#4c4e66', patina: '#80706a', pool: '#5c5a70',
+  // warm tarnish in its corners
+  tarnish: '#62647c', recess: '#4c4e66', patina: '#786e72', ruin: '#806e6a',
   // the plinth's face as chrome shows it: sky, a lip on the horizon, the dark
   // under it and the ground stepping lighter to its foot
   skyHead: '#b8c4d8', skyMid: '#ccd5e5', skyLow: '#dce3ef', lip: '#e8ecf4',
   deep: '#6c7286', groundA: '#8e96aa', groundB: '#a4abbd', groundC: '#b6bccb',
-  // a pilaster's polished shaft: its face, the sky down its left, the ground down its right
-  shaft: '#d2d8e6', shaftBand: '#bcc6da', shaftGround: '#98a2aa',
+  // a pilaster's chrome shaft: its face, the streak of light down its left
+  // third, the dark down its right third, and the ground at its edge
+  shaft: '#d2d8e6', shaftStreak: '#f4f7fc', shaftDark: '#606680', shaftGround: '#98a2aa',
   // the glint where it catches the sun, a little warm
   glint: '#fcf9f2',
   joint: '#9a9dae', line: '#56586b',
@@ -2631,21 +2637,30 @@ function paint(S: Stock): Masonry {
   const PIL = 52, FRIEZE = 46;
   /** The shade silver throws on the silver behind it: a cool grey, not the lilac the painted walls share. */
   const SILVER_INK = 'rgba(58, 64, 82, 0.34)';
-  /**
-   * A bay's one big glint, across, and how thick its arms are at the root. A
-   * sprinkle of small ones was flecks among the other whites, and a thin one
-   * was gone at the game's own zoom.
-   */
+  /** A glint, across, and how thick its arms are at the root. */
   const GLINT = 38, GLINT_ARM = 3.2;
   /** How far the recess reaches from a pilaster to the frame of the panel beside it. */
   const GAP = 14;
+  /** Where a storey's panels begin and end, under the frieze and over the foot. */
+  const PANEL_TOP = FRIEZE + 18, PANEL_FOOT = TH - 24;
+  /**
+   * The height of the horizon every panel of a storey shows, the same in all
+   * of them and in every section, so the panels read as one polished plane
+   * standing behind the pilasters: two fifths of the way down the panels. A
+   * horizon at its own height in every panel read as a blind half drawn in
+   * each of them.
+   */
+  const HY = PANEL_TOP + (PANEL_FOOT - PANEL_TOP) * 0.4;
+  /** The horizon the chasing being laid now reflects: above it the chasing takes the sky's tone, below it the ground's. */
+  let horizon = Infinity;
   /**
    * A slab of worked silver from (x0, y0) to (x1, y1), bevelled `b` round its
-   * edge: its face; the bevel along its top at the light, with the reflected
-   * dark just under it, and the one down its left a step up from the face;
-   * the bevel along its underside taking the ground and the one down its
-   * right the dark. No ink round it: the bevels are its edge. For the small
-   * mouldings -- capitals, cornices, sills -- that are cut true.
+   * edge: its face; the bevel along its top carrying the light, a white
+   * hairline along its edge and the reflected dark just under it; the one
+   * down its left a step up from the face, with its hairline; the bevel along
+   * its underside taking the lawn and the one down its right the dark. No ink
+   * round it: the bevels are its edge. For the small mouldings -- capitals,
+   * cornices, sills -- that are cut true.
    */
   function slab(g: Ctx, x0: number, y0: number, x1: number, y1: number, face: string, b: number): void {
     const quad = (pts: Pt[], col: string): void => { g.beginPath(); poly(g, pts); g.fillStyle = col; g.fill(); };
@@ -2655,6 +2670,7 @@ function paint(S: Stock): Masonry {
     quad([[x0, y0], [x0 + b, y0 + b], [x0 + b, y1 - b], [x0, y1]], lighten(face, 7));
     quad([[x0, y1], [x0 + b, y1 - b], [x1 - b, y1 - b], [x1, y1]], PASTEL.reflect);
     quad([[x1, y0], [x1, y1], [x1 - b, y1 - b], [x1 - b, y0 + b]], PASTEL.edgeLo);
+    g.fillStyle = PASTEL.hair; g.fillRect(x0, y0, x1 - x0, Math.min(2.5, b * 0.6)); g.fillRect(x0, y0, Math.min(3, b * 0.7), y1 - y0);
   }
   /**
    * The plinth's face as chrome shows it: a band of sky brightening to a lip
@@ -2683,37 +2699,44 @@ function paint(S: Stock): Masonry {
     g.restore();
   }
   /**
-   * A panel's plate between (x0, y0) and (x1, y1), cushioned: the sky over
-   * its upper part; a soft horizon, a band a step between the two, sagging
-   * across its middle as a cushion's does; the plate under that, a paler
-   * grey; and a darker foot along the bottom of it, curving up a little as
-   * the cushion rolls under. A flat pane cut by a straight dark band read as
-   * tinted glass. `flat` is a plate too low to carry a horizon: one tone.
+   * A panel's plate between (x0, y0) and (x1, y1) as a mirror shows it, its
+   * horizon at `hy`: the sky, bluer at its head and paler to the line; a
+   * bright streak on the line itself; the darkest of the reflection hard
+   * under it, softened by a step into the ground; and the ground, going
+   * toward the lawn in its lowest third. Every line cut by hand. `flat` is a
+   * plate too low for all of that, a fence's: the sky, the streak and the
+   * ground, and nothing between.
    */
-  function cushion(g: Ctx, R: Rand, x0: number, y0: number, x1: number, y1: number, flat: boolean): void {
+  function plate(g: Ctx, R: Rand, x0: number, y0: number, x1: number, y1: number, hy: number, flat: boolean): void {
     const w = x1 - x0, h = y1 - y0;
-    g.fillStyle = flat ? PASTEL.plateFlat : PASTEL.plate; g.fillRect(x0 - 2, y0 - 2, w + 4, h + 4);
-    if (flat) return;
-    const sag = 8 + R() * 4, tilt = (R() - 0.5) * 0.06 * w;
-    const line = (y: number, bow: number): Pt[] => Array.from({ length: 11 }, (_, i): Pt => {
-      const u = i / 10;
-      return [x0 + w * u, y + bow * Math.sin(Math.PI * u) + tilt * (u - 0.5) + (i && i < 10 ? (R() - 0.5) * 2.4 : 0)];
-    });
+    const line = (y: number): Pt[] => Array.from({ length: 13 }, (_, i): Pt => [x0 + (w * i) / 12, y + (i && i < 12 ? (R() - 0.5) * 3 : 0)]);
+    const floorOf = (y: number): Pt[] => [[x0, y], [x1, y]];
     const shape = (top: Pt[], bot: Pt[], col: string): void => {
-      g.beginPath(); poly(g, [[x0 - 3, top[0][1]], ...top, [x1 + 3, top[10][1]], [x1 + 3, bot[10][1]], ...bot.slice().reverse(), [x0 - 3, bot[0][1]]]);
+      g.beginPath(); poly(g, [[x0 - 3, top[0][1]], ...top, [x1 + 3, top[top.length - 1][1]], [x1 + 3, bot[bot.length - 1][1]], ...bot.slice().reverse(), [x0 - 3, bot[0][1]]]);
       g.fillStyle = col; g.fill();
     };
-    const hy = y0 + h * (0.36 + R() * 0.08), soft = 6 + R() * 2, fy = y1 - h * (0.13 + R() * 0.04);
-    const roof = line(y0 - 4, 0).map(([x]): Pt => [x, y0 - 4]), floor = line(y1 + 4, 0).map(([x]): Pt => [x, y1 + 4]);
-    const horizon = line(hy, sag), under = horizon.map(([x, y]): Pt => [x, y + soft]), foot = line(fy, -sag * 0.4);
-    shape(roof, horizon, PASTEL.plateSky);
-    shape(horizon, under, PASTEL.plateSoft);
-    shape(foot, floor, PASTEL.plateFoot);
+    g.save();
+    g.beginPath(); g.rect(x0 - 2, y0 - 2, w + 4, h + 4); g.clip();
+    g.fillStyle = flat ? PASTEL.plateFlat : PASTEL.plate; g.fillRect(x0 - 2, y0 - 2, w + 4, h + 4);
+    const up = floorOf(y0 - 4), down = floorOf(y1 + 4), sky = hy - y0;
+    const lineAt = (y: number): Pt[] => line(y);
+    const streak = lineAt(hy - 3.5), under = lineAt(hy + 0.5);
+    if (flat) {
+      shape(up, streak, PASTEL.plateSky);
+      shape(streak, under, PASTEL.streak);
+    } else {
+      const a = lineAt(hy - sky * 0.55), b2 = lineAt(hy - sky * 0.2), band = lineAt(hy + 13 + R() * 3), soft = lineAt(hy + 21 + R() * 2), foot = lineAt(y1 - (y1 - hy) * 0.33);
+      shape(up, a, PASTEL.plateSkyTop);
+      shape(a, b2, PASTEL.plateSky);
+      shape(b2, streak, PASTEL.plateSkyLow);
+      shape(streak, under, PASTEL.streak);
+      shape(under, band, PASTEL.plateBand);
+      shape(band, soft, PASTEL.plateSoft);
+      shape(foot, down, PASTEL.plateFoot);
+    }
+    g.restore();
   }
-  /**
-   * A four-pointed star where a polished edge catches the sun, `s` across, its
-   * long arms `t` thick at the root either side, a little warm.
-   */
+  /** A four-pointed star where a polished edge catches the sun, `s` across, its long arms `t` thick at the root either side, a little warm. */
   function star(g: Ctx, x: number, y: number, s: number, t = s * 0.09): void {
     g.fillStyle = PASTEL.glint;
     g.beginPath(); poly(g, [[x - s / 2, y], [x - t * 0.6, y - t], [x, y - t * 1.1], [x + t * 0.6, y - t], [x + s / 2, y], [x + t * 0.6, y + t], [x, y + t * 1.1], [x - t * 0.6, y + t]]); g.fill();
@@ -2735,128 +2758,132 @@ function paint(S: Stock): Masonry {
     }
   }
   /**
-   * Tarnish pooled along the foot of a recess from `x0` to `x1`, its floor at
-   * `y`, up to `d` deep: a cool pool with a hand-cut top, a run of it along
-   * only part of the bay, a different part in each, and warm where it lies
-   * thickest. `up` pools it hanging from `y` instead, as under the frieze.
+   * Tarnish gathered in a corner at (x, y), opening along (dx, dy), `r`
+   * long: a soft wedge of warm grey, three layers of it each smaller and
+   * stronger than the last, so it fades out into the recess.
    */
-  function pool(g: Ctx, R: Rand, x0: number, x1: number, y: number, d: number, up = false): void {
-    const len = (x1 - x0) * (0.45 + R() * 0.45), a = x0 + R() * (x1 - x0 - len), s = up ? 1 : -1;
-    const edge = (depth: number, from: number, to: number): Pt[] => Array.from({ length: 9 }, (_, i): Pt => {
-      const u = i / 8, x = from + (to - from) * u;
-      return [x, y + s * depth * Math.sin(Math.PI * u) ** 0.5 * (0.7 + R() * 0.3)];
-    });
-    g.beginPath(); poly(g, [...edge(d, a, a + len), [a + len, y], [a, y]]); g.fillStyle = PASTEL.pool; g.fill();
-    const wa = a + len * (0.1 + R() * 0.3), wl = len * (0.3 + R() * 0.25);
-    g.beginPath(); poly(g, [...edge(d * 0.55, wa, wa + wl), [wa + wl, y], [wa, y]]); g.fillStyle = PASTEL.patina; g.fill();
+  function wedge(g: Ctx, R: Rand, x: number, y: number, dx: number, dy: number, r: number): void {
+    for (const [k, a] of [[1, 0.28], [0.68, 0.45], [0.4, 0.7]]) {
+      const l = r * k * (0.85 + R() * 0.3);
+      g.beginPath(); poly(g, [[x, y], [x + dx * l, y], [x + dx * l * 0.35, y + dy * l * 0.35], [x, y + dy * l]]);
+      g.fillStyle = hexA(PASTEL.patina, a); g.fill();
+    }
   }
   /**
-   * A shape chased up from the silver and burnished: the shade it throws on
-   * the ground to its lower right; its shadow half, a dark core; and its lit
-   * half, near white, laid over that shifted toward the light, so the dark
-   * shows only as a crescent down its lower right. `path` lays the shape;
-   * `lift` is how far the relief stands up; `dim` takes the lit half a step
-   * down, for a rib that turns from the light.
+   * A shape chased up from the silver: a dark edge `e` wide along its lower
+   * right, which is the shade it throws and no more; a white edge along its
+   * upper left; and its body a step lighter than the plate it stands on,
+   * taking the sky's tone above the horizon and the ground's below it, as
+   * the plate does. `tone` lightens the body, for alternate ribs.
    */
-  function emboss(g: Ctx, path: () => void, lift = 2.6, dim = 0): void {
-    g.save(); g.translate(lift * 1.2, lift * 1.2); path(); g.fillStyle = PASTEL.edgeLo; g.fill(); g.restore();
-    path(); g.fillStyle = PASTEL.core; g.fill();
-    g.save(); path(); g.clip(); g.translate(-lift, -lift); path(); g.fillStyle = dim ? lighten(PASTEL.lit, -dim) : PASTEL.lit; g.fill(); g.restore();
+  function emboss(g: Ctx, path: () => void, e = 3, tone = 0): void {
+    g.save(); g.translate(e, e); path(); g.fillStyle = PASTEL.reliefLo; g.fill(); g.restore();
+    g.save(); g.translate(-e * 0.8, -e * 0.8); path(); g.fillStyle = PASTEL.reliefHi; g.fill(); g.restore();
+    path(); g.fillStyle = tone ? lighten(PASTEL.reliefGround, tone) : PASTEL.reliefGround; g.fill();
+    if (horizon > -1e5) {
+      g.save(); path(); g.clip();
+      g.fillStyle = tone ? lighten(PASTEL.reliefSky, tone * 0.5) : PASTEL.reliefSky; g.fillRect(-1e4, -1e4, 2e4, horizon + 1e4);
+      g.restore();
+    }
   }
-  /** A rosette: petals of no two sizes chased round a boss. */
+  /** A rosette: petals of no two sizes chased round a boss, and the tarnish packed between them. */
   function rosette(g: Ctx, R: Rand, cx: number, cy: number, r: number, n: number): void {
+    g.beginPath(); g.arc(cx, cy, r * 0.82, 0, Math.PI * 2); g.fillStyle = hexA(PASTEL.ruin, 0.75); g.fill();
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + (R() - 0.5) * 0.12, rx = r * (0.34 + R() * 0.12), ry = r * (0.2 + R() * 0.08);
       const d = r * (0.54 + R() * 0.08);
-      emboss(g, () => { g.beginPath(); g.ellipse(cx + Math.cos(a) * d, cy + Math.sin(a) * d, rx, ry, a, 0, Math.PI * 2); }, Math.max(1.4, r * 0.09));
+      emboss(g, () => { g.beginPath(); g.ellipse(cx + Math.cos(a) * d, cy + Math.sin(a) * d, rx, ry, a, 0, Math.PI * 2); }, Math.min(3, ry * 0.45));
     }
-    emboss(g, () => { g.beginPath(); g.arc(cx, cy, r * 0.3, 0, Math.PI * 2); }, Math.max(1.6, r * 0.1));
+    boss(g, cx, cy, r * 0.3);
+  }
+  /** A boss: a dome chased up with a ring of tarnish at its root. */
+  function boss(g: Ctx, cx: number, cy: number, r: number): void {
+    g.beginPath(); g.arc(cx, cy, r + 3.5, 0, Math.PI * 2); g.fillStyle = hexA(PASTEL.ruin, 0.8); g.fill();
+    emboss(g, () => { g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); }, Math.min(3.5, r * 0.35));
   }
   /**
    * What a panel is chased with: an oval cartouche with a rosette in it, a
    * great rosette, a scallop shell, a quatrefoil, a lozenge with a boss at
-   * each point, a running scroll, or two scrolls crossed -- each `s` across,
-   * the better part of the panel, burnished, its sunk ground the plate's
-   * darker foot so the work stands clear of it.
+   * each point, a running scroll, or an interlace of two -- each `s` across,
+   * the better part of the panel, its sunk ground a step under the plate.
    */
   type Motif = 'cartouche' | 'rosette' | 'shell' | 'quatrefoil' | 'lozenge' | 'scroll' | 'crossed';
   const MOTIFS: Motif[] = ['cartouche', 'rosette', 'shell', 'quatrefoil', 'lozenge'];
   function motif(g: Ctx, R: Rand, kind: Motif, cx: number, cy: number, s: number, w = s): void {
-    const sunk = PASTEL.plateFoot;
+    const sunk = PASTEL.sunk;
     // a rosette too small to show its petals is a star of scratches: a plain boss instead
-    const boss = (r: number, n: number): void => {
-      if (r >= 10) rosette(g, R, cx, cy, r, n);
-      else emboss(g, () => { g.beginPath(); g.arc(cx, cy, Math.max(4.5, r * 0.7), 0, Math.PI * 2); }, 1.8);
-    };
+    const centre = (r: number, n: number): void => { if (r >= 10) rosette(g, R, cx, cy, r, n); else boss(g, cx, cy, Math.max(4.5, r * 0.7)); };
     if (kind === 'cartouche') {
-      const rx = s * 0.42, ry = s * 0.6, t = Math.max(7, s * 0.09);
+      const rx = s * 0.42, ry = s * 0.6, t = Math.max(8, s * 0.09);
       g.beginPath(); g.ellipse(cx, cy, rx - t, ry - t, 0, 0, Math.PI * 2); g.fillStyle = sunk; g.fill();
-      emboss(g, () => { g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.ellipse(cx, cy, rx - t, ry - t, 0, 0, Math.PI * 2, true); }, 2.8);
-      boss(s * 0.26, 8);
+      emboss(g, () => { g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.ellipse(cx, cy, rx - t, ry - t, 0, 0, Math.PI * 2, true); }, 3.5);
+      centre(s * 0.26, 8);
     } else if (kind === 'rosette') {
       rosette(g, R, cx, cy, s * 0.52, 12);
       rosette(g, R, cx, cy, s * 0.24, 6);
     } else if (kind === 'shell') {
       const r = s * 0.56, hy = cy + r * 0.45;
+      g.beginPath(); g.moveTo(cx, hy); g.arc(cx, hy, r * 0.95, Math.PI * 1.08, Math.PI * 1.92); g.closePath(); g.fillStyle = hexA(PASTEL.ruin, 0.7); g.fill();
       for (let i = 0; i < 9; i++) {
-        const a = Math.PI * (1.08 + (i / 8) * 0.84), b = Math.PI * (1.08 + ((i + 1) / 8) * 0.84) - 0.05;
+        const a = Math.PI * (1.08 + (i / 8) * 0.84), b = Math.PI * (1.08 + ((i + 1) / 8) * 0.84) - 0.07;
         const rr = r * (0.9 + R() * 0.12);
-        emboss(g, () => { g.beginPath(); g.moveTo(cx, hy); g.arc(cx, hy, rr, a, Math.min(b, Math.PI * 1.92)); g.closePath(); }, 2, i % 2 ? 0 : 10);
+        emboss(g, () => { g.beginPath(); g.moveTo(cx, hy); g.arc(cx, hy, rr, a, Math.min(b, Math.PI * 1.92)); g.closePath(); }, 2.4, i % 2 ? 14 : 0);
       }
-      emboss(g, () => { g.beginPath(); g.ellipse(cx, hy, r * 0.2, r * 0.15, 0, 0, Math.PI * 2); }, 2.2);
+      boss(g, cx, hy, r * 0.17);
     } else if (kind === 'quatrefoil') {
       const lobes = [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([dx, dy]) => [dx, dy, s * (0.24 + R() * 0.06)]);
       emboss(g, () => {
         g.beginPath();
         for (const [dx, dy, r] of lobes) { g.moveTo(cx + dx * s * 0.27 + r, cy + dy * s * 0.27); g.arc(cx + dx * s * 0.27, cy + dy * s * 0.27, r, 0, Math.PI * 2); }
         g.moveTo(cx + s * 0.2, cy); g.arc(cx, cy, s * 0.2, 0, Math.PI * 2);
-      }, 3);
-      emboss(g, () => { g.beginPath(); g.arc(cx, cy, s * 0.12, 0, Math.PI * 2); }, 2);
+      }, 4);
+      boss(g, cx, cy, s * 0.12);
     } else if (kind === 'lozenge') {
-      const hw = s * 0.36, hh = s * 0.62, t = Math.max(8, s * 0.1), iw = hw - t, ih = hh - t * 1.5;
+      // no narrower than 1 to 1.4, or it reads as a cross or a blade
+      const hw = s * 0.44, hh = s * 0.62, t = Math.max(8, s * 0.1), iw = hw - t, ih = hh - t * 1.4;
       g.beginPath(); poly(g, [[cx, cy - ih], [cx + iw, cy], [cx, cy + ih], [cx - iw, cy]]); g.fillStyle = sunk; g.fill();
       emboss(g, () => {
         g.beginPath(); poly(g, [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]]);
         g.moveTo(cx, cy - ih); g.lineTo(cx - iw, cy); g.lineTo(cx, cy + ih); g.lineTo(cx + iw, cy); g.closePath();
-      }, 2.6);
-      for (const [px, py] of [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]]) emboss(g, () => { g.beginPath(); g.arc(px, py, Math.max(5, s * 0.07), 0, Math.PI * 2); }, 1.8);
-      boss(s * 0.17, 6);
+      }, 3.5);
+      for (const [px, py] of [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]]) boss(g, px, py, Math.max(4.5, s * 0.06));
+      centre(s * 0.2, 6);
     } else if (kind === 'scroll' || kind === 'crossed') {
-      const x0 = cx - w / 2, x1 = cx + w / 2, amp = s * 0.3, n = Math.max(2, Math.round(w / 64)), step = (x1 - x0) / n, lw = Math.max(6, s * 0.16);
-      const stem = (sign: number): void => {
+      // one stem running the whole length, or two interlaced, and nothing set on them
+      const x0 = cx - w / 2, x1 = cx + w / 2, amp = s * 0.3, n = Math.max(2, Math.round(w / (kind === 'crossed' ? 56 : 64))), step = (x1 - x0) / n, lw = Math.max(5, s * 0.15);
+      const stem = (ph: number): void => {
         g.beginPath();
-        for (let x = x0; x <= x1; x += 3) g.lineTo(x, cy + sign * Math.sin(((x - x0) / step) * Math.PI) * amp);
+        for (let x = x0; x <= x1 + 0.1; x += 3) g.lineTo(x, cy + Math.sin(((x - x0) / step) * Math.PI + ph) * amp * Math.min(1, (x - x0) / 10, (x1 - x) / 10));
       };
       g.lineCap = 'round';
-      for (const sign of kind === 'crossed' ? [1, -1] : [1]) {
-        for (const [d, col, wd] of [[2.8, PASTEL.edgeLo, lw], [0, PASTEL.core, lw], [-1.6, PASTEL.lit, lw * 0.62]] as Array<[number, string, number]>) {
-          g.save(); g.translate(d, d); stem(sign); g.strokeStyle = col; g.lineWidth = wd; g.stroke(); g.restore();
+      for (const ph of kind === 'crossed' ? [0, Math.PI] : [0]) {
+        for (const [d, col, wd] of [[2.6, PASTEL.reliefLo, lw], [-2, PASTEL.reliefHi, lw], [0, cy < horizon ? PASTEL.reliefSky : PASTEL.reliefGround, lw * 0.7]] as Array<[number, string, number]>) {
+          g.save(); g.translate(d, d); stem(ph); g.strokeStyle = col; g.lineWidth = wd; g.stroke(); g.restore();
         }
       }
       g.lineCap = 'butt';
-      for (let i = 0; i < n; i++) {
-        const tx = x0 + step * (i + 0.5), ty = kind === 'crossed' ? cy : cy + (i % 2 ? amp : -amp) * 0.25;
-        emboss(g, () => { g.beginPath(); g.arc(tx, ty, amp * (0.5 + R() * 0.15), 0, Math.PI * 2); }, 2);
-      }
     }
   }
   /** The heads a panel's frame is given: a quarter round cut from each corner, a segmental arch, or square with an ear at each top corner. */
   type Head = 'notch' | 'arch' | 'ears';
   const HEADS: Head[] = ['notch', 'arch', 'ears'];
+  /** How a panel is chased: with `kind` at `scale` of its usual size, or only a boss at its head; `flat` for a plate too low for a horizon. */
+  type Chase = { kind: Motif | null; scale?: number; boss?: boolean; flat?: boolean };
   /**
    * A raised panel of it between (x0, y0) and (x1, y1), standing in the
    * recess, its frame's head `head`: its edges a hand off straight and its
    * bevel its own width, each face of the bevel lit as it faces -- to the sky
    * along the top, the lit side down the left, the dark down the right and
-   * the lawn's green along the foot -- with a line of the reflected dark just
-   * inside the lit ones; its plate a cushion; its own chasing at its middle,
-   * one in three of them bigger; and, where `glint`, the bay's one glint on
-   * the top left of its frame. `flat` is a plate too low for a horizon, as
-   * a fence's is. A separate bead round the inside of the plate read as the
-   * edge of a pane of glass.
+   * the lawn's green along the foot -- a white hairline along the lit ones
+   * and the reflected dark just inside them; its plate the storey's mirror;
+   * tarnish gathered in the corners of the recess round it; and its chasing,
+   * which stands across the horizon, so the relief shows the same sky and
+   * ground the plate does. A separate bead round the inside of the plate
+   * read as the edge of a pane of glass.
    */
-  function silverPanel(g: Ctx, R: Rand, x0: number, y0: number, x1: number, y1: number, kind: Motif | null, head: Head = 'notch', glint = false, flat = false): void {
-    const b = flat ? 7 + R() * 3 : 7 + R() * 7, n = 4, w = x1 - x0, h = y1 - y0;
+  function silverPanel(g: Ctx, R: Rand, x0: number, y0: number, x1: number, y1: number, head: Head, chase: Chase, hy = HY): void {
+    const flat = !!chase.flat, b = flat ? 7 + R() * 3 : 7 + R() * 7, n = 4, w = x1 - x0, h = y1 - y0;
+    for (const [x, y, dx, dy] of [[x0 - 5, y0 - 5, 1, 1], [x1 + 5, y0 - 5, -1, 1], [x0 - 5, y1 + 5, 1, -1], [x1 + 5, y1 + 5, -1, -1]]) wedge(g, R, x, y, dx, dy, 10 + R() * 4);
     const j = (k = 1): number => (R() - 0.5) * 7 * k;
     const edge = (ax: number, ay: number, bx: number, by: number): Pt[] =>
       Array.from({ length: n + 1 }, (_, i): Pt => [ax + ((bx - ax) * i) / n + (i && i < n ? j(0.5) : 0), ay + ((by - ay) * i) / n + (i && i < n ? j(0.5) : 0)]);
@@ -2864,7 +2891,7 @@ function paint(S: Stock): Masonry {
     // Each run of the outline and which way it faces: up, left, right or down.
     type Face = 'up' | 'left' | 'right' | 'down';
     const runs: Array<{ pts: Pt[]; face: Face }> = [];
-    let gx = x0 + b, gy = y0 + b * 0.5;
+    let rise = 0;
     if (head === 'notch') {
       const rc = Math.min(22, w * 0.13, h * 0.2);
       const notch = (k: number, [ox, oy]: number[]): Pt[] =>
@@ -2877,14 +2904,12 @@ function paint(S: Stock): Masonry {
       runs.push({ pts: notch(2, c[3]), face: 'down' });
       runs.push({ pts: edge(c[3][0], c[3][1] - rc, c[0][0], c[0][1] + rc), face: 'left' });
       runs.push({ pts: notch(3, c[0]), face: 'up' });
-      gx = x0 + rc + b * 0.4;
     } else if (head === 'arch') {
-      const rise = Math.min(w * 0.16, h * 0.18);
+      rise = Math.min(w * 0.16, h * 0.18);
       runs.push({ pts: Array.from({ length: 13 }, (_, i): Pt => { const u = i / 12; return [c[0][0] + (c[1][0] - c[0][0]) * u, c[0][1] + rise - rise * Math.sin(Math.PI * u) + (i && i < 12 ? j(0.25) : 0)]; }), face: 'up' });
       runs.push({ pts: edge(c[1][0], c[1][1] + rise, c[2][0], c[2][1]), face: 'right' });
       runs.push({ pts: edge(c[2][0], c[2][1], c[3][0], c[3][1]), face: 'down' });
       runs.push({ pts: edge(c[3][0], c[3][1], c[0][0], c[0][1] + rise), face: 'left' });
-      gx = x0 + w * 0.12; gy = y0 + rise * 0.55 + b * 0.4;
     } else {
       const ew = Math.min(8, GAP * 0.55), eh = Math.min(22, h * 0.25);
       runs.push({ pts: edge(c[0][0] - ew, c[0][1], c[1][0] + ew, c[1][1]), face: 'up' });
@@ -2895,14 +2920,13 @@ function paint(S: Stock): Masonry {
       runs.push({ pts: edge(c[3][0], c[3][1], c[0][0], c[0][1] + eh), face: 'left' });
       runs.push({ pts: [[c[0][0], c[0][1] + eh], [c[0][0] - ew, c[0][1] + eh]], face: 'down' });
       runs.push({ pts: [[c[0][0] - ew, c[0][1] + eh], [c[0][0] - ew, c[0][1]]], face: 'left' });
-      gx = x0 - ew + b * 0.6;
     }
     const outline: Pt[] = runs.flatMap((r) => r.pts);
     // its shade on the recess, down and to the right of it
     g.save(); g.translate(4, 5); g.beginPath(); poly(g, outline); g.fillStyle = SILVER_INK; g.fill(); g.restore();
     g.save();
     g.beginPath(); poly(g, outline); g.fillStyle = PASTEL.stone; g.fill(); g.clip();
-    cushion(g, R, x0 + b - 2, y0 + b - 2, x1 - b + 2, y1 - b + 2, flat);
+    plate(g, R, x0 + b - 2, y0 + b - 2, x1 - b + 2, y1 - b + 2, flat ? y0 + h * 0.42 : hy, flat);
     const stroke = (pts: Pt[], col: string, lw: number): void => {
       g.beginPath(); for (const [x, y] of pts) g.lineTo(x, y);
       g.strokeStyle = col; g.lineWidth = lw; g.stroke();
@@ -2911,13 +2935,17 @@ function paint(S: Stock): Masonry {
     for (const r of runs) if (r.face === 'up' || r.face === 'left') stroke(r.pts, PASTEL.core, 2 * (b + 3.5));
     const COL: Record<Face, string> = { up: PASTEL.edgeHi, left: lighten(PASTEL.stone, 7), right: PASTEL.edgeLo, down: PASTEL.reflect };
     for (const f of ['down', 'right', 'left', 'up'] as Face[]) for (const r of runs) if (r.face === f) stroke(r.pts, COL[f], 2 * b);
+    for (const r of runs) if (r.face === 'up') stroke(r.pts, PASTEL.hair, 7);
+    for (const r of runs) if (r.face === 'left') stroke(r.pts, PASTEL.hair, 12);
     g.restore();
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 + (head === 'arch' ? Math.min(w * 0.16, h * 0.18) * 0.35 : 0);
-    const fw = w - 2 * b - 8, fh2 = h - 2 * b - 8, big = R() < 0.34 ? 1.3 : 1;
-    if (kind === 'scroll' || kind === 'crossed') motif(g, R, kind, cx, cy, Math.min(fh2 * (flat ? 0.8 : 0.7), 52), fw - 26);
-    else if (kind && flat) motif(g, R, kind, cx, cy, Math.min(fw * 0.8, fh2 * 0.78 / 1.2));
-    else if (kind) motif(g, R, kind, cx, cy, Math.min(fw * 0.62 * big, fw * 0.8, fh2 * (fh2 < 120 ? 0.7 : 0.5 * big)));
-    if (glint) star(g, gx, gy, GLINT, GLINT_ARM);
+    horizon = flat ? y0 + h * 0.42 : hy;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 + rise * 0.35;
+    const fw = w - 2 * b - 8, fh2 = h - 2 * b - 8, k = chase.scale ?? 1;
+    if (chase.boss) rosette(g, R, cx, y0 + b + rise + 30, 16, 8);
+    else if (chase.kind === 'scroll' || chase.kind === 'crossed') motif(g, R, chase.kind, cx, cy, Math.min(fh2 * (flat ? 0.8 : 0.7), 52), fw - 26);
+    else if (chase.kind && flat) motif(g, R, chase.kind, cx, cy, Math.min(fw * 0.8, (fh2 * 0.78) / 1.2) * k);
+    else if (chase.kind) motif(g, R, chase.kind, cx, cy, Math.min(fw * 0.62 * k, fw * 0.86, fh2 * (fh2 < 120 ? 0.7 : 0.5 * k)));
+    horizon = Infinity;
   }
   /**
    * An Ionic capital over a shaft from `x0` to `x1`, its top at `y`: a thin
@@ -2931,10 +2959,10 @@ function paint(S: Stock): Masonry {
     g.fillStyle = PASTEL.core; g.fillRect(x0 - 5, y + 9, x1 - x0 + 10, 2);
     g.fillStyle = PASTEL.edgeLo; g.fillRect(x0 - 5, y + 16, x1 - x0 + 10, 2);
     g.fillStyle = PASTEL.dress; g.fillRect(x0 + 2, y + 18, x1 - x0 - 4, 7);
-    g.fillStyle = PASTEL.rim; g.fillRect(x0 + 2, y + 18, x1 - x0 - 4, 3);
+    g.fillStyle = PASTEL.hair; g.fillRect(x0 + 2, y + 18, x1 - x0 - 4, 3);
     g.fillStyle = PASTEL.reflect; g.fillRect(x0 + 2, y + 23, x1 - x0 - 4, 2);
     for (const [vx, dir] of [[x0 - 1, -1], [x1 + 1, 1]]) {
-      emboss(g, () => { g.beginPath(); g.arc(vx, y + 14, 9, 0, Math.PI * 2); }, 1.8);
+      emboss(g, () => { g.beginPath(); g.arc(vx, y + 14, 9, 0, Math.PI * 2); }, 2.2);
       g.beginPath();
       for (let t = 0; t <= 1.0001; t += 1 / 28) {
         const a = -Math.PI / 2 + dir * t * Math.PI * 3.1, r = 7.5 * (1 - t * 0.78);
@@ -2947,7 +2975,7 @@ function paint(S: Stock): Masonry {
   function attic(g: Ctx, x0: number, x1: number, y: number): void {
     const roll = (a: number, b: number, t: number, bot: number): void => {
       g.fillStyle = PASTEL.dress; g.fillRect(a, t, b - a, bot - t);
-      g.fillStyle = PASTEL.rim; g.fillRect(a, t, b - a, (bot - t) * 0.34);
+      g.fillStyle = PASTEL.hair; g.fillRect(a, t, b - a, (bot - t) * 0.34);
       g.fillStyle = PASTEL.core; g.fillRect(a, t + (bot - t) * 0.34, b - a, 1.5);
       g.fillStyle = PASTEL.reflect; g.fillRect(a, bot - (bot - t) * 0.34, b - a, (bot - t) * 0.34);
     };
@@ -2956,87 +2984,88 @@ function paint(S: Stock): Masonry {
     roll(x0 - 4, x1 + 4, y - 16, y - 11);
   }
   /**
-   * A fluted pilaster's shaft from `x0`, `w` wide and `h` high from `y0`:
-   * polished, its lit edge carrying the light with the reflected dark just
-   * inside it, a band of the sky down its left and the ground down its
-   * right; and three flutes down it at `flutes` of its width, each a hollow
-   * dark down its left side and lit down its right.
+   * A pilaster's shaft from `x0`, `w` wide and `h` high from `y0`, as chrome:
+   * a streak of the light down its left third and a band of the dark down
+   * its right third, one flute down the middle, and the ground at its right
+   * edge; with tarnish at the foot of the flute. Three equal flutes were
+   * three hairlines at the game's own zoom.
    */
-  function shaft(g: Ctx, x0: number, y0: number, w: number, h: number, flutes: number[], lit: boolean): void {
+  function shaft(g: Ctx, R: Rand, x0: number, y0: number, w: number, h: number): void {
+    const t = Math.max(5, Math.min(12, w * 0.21));
     g.fillStyle = PASTEL.shaft; g.fillRect(x0, y0, w, h);
-    g.fillStyle = PASTEL.shaftBand; g.fillRect(x0 + w * 0.26, y0, w * 0.22, h);
-    g.fillStyle = PASTEL.deep; g.fillRect(x0 + w * 0.6, y0, 4, h);
-    g.fillStyle = PASTEL.shaftGround; g.fillRect(x0 + w * 0.6 + 4, y0, w * 0.4 - 4, h);
+    g.fillStyle = PASTEL.shaftStreak; g.fillRect(x0 + w * 0.12, y0, t, h);
+    g.fillStyle = PASTEL.shaftDark; g.fillRect(x0 + w * 0.66, y0, t, h);
+    g.fillStyle = PASTEL.shaftGround; g.fillRect(x0 + w * 0.66 + t, y0, w * 0.34 - t, h);
+    const fx = x0 + w * 0.5;
     g.lineCap = 'round';
-    for (const f of flutes) {
-      const fx = x0 + w * f;
-      g.beginPath(); g.moveTo(fx - 1, y0 + 26); g.lineTo(fx - 1, y0 + h - 24); g.lineWidth = 2.4; g.strokeStyle = PASTEL.core; g.stroke();
-      g.beginPath(); g.moveTo(fx + 1.4, y0 + 26); g.lineTo(fx + 1.4, y0 + h - 24); g.lineWidth = 2; g.strokeStyle = PASTEL.rim; g.stroke();
-    }
+    g.beginPath(); g.moveTo(fx - 1, y0 + 26); g.lineTo(fx - 1, y0 + h - 24); g.lineWidth = 2.6; g.strokeStyle = PASTEL.core; g.stroke();
+    g.beginPath(); g.moveTo(fx + 1.6, y0 + 26); g.lineTo(fx + 1.6, y0 + h - 24); g.lineWidth = 2; g.strokeStyle = PASTEL.rim; g.stroke();
     g.lineCap = 'butt';
-    if (lit) {
-      g.fillStyle = PASTEL.rim; g.fillRect(x0 + 2, y0, 7, h);
-      g.fillStyle = PASTEL.core; g.fillRect(x0 + 9, y0, 3, h);
-    }
+    wedge(g, R, fx - 2, y0 + h - 22, 1, -1, 8);
     g.fillStyle = PASTEL.edgeLo; g.fillRect(x0 + w - 2, y0, 2, h);
   }
   /** A fluted pilaster centred on `cx` from `y0` to `y1`: its shaft, its capital and base, and its shade on the bay beside it. */
-  function pilaster(g: Ctx, cx: number, y0: number, y1: number, w = PIL): void {
+  function pilaster(g: Ctx, R: Rand, cx: number, y0: number, y1: number, w = PIL): void {
     const x0 = cx - w / 2, x1 = cx + w / 2;
     g.fillStyle = SILVER_INK; g.fillRect(x1 - 1, y0, PROUD_SIDE * 0.8, y1 - y0);
-    shaft(g, x0, y0, w, y1 - y0, [0.3, 0.5, 0.7], true);
+    shaft(g, R, x0, y0, w, y1 - y0);
     ionic(g, x0, x1, y0);
     attic(g, x0, x1, y1);
   }
   /**
    * The frieze along the head of a storey, `y0` to `y1`, which the storey
    * over it stands on: a polished band, a fillet along its top carrying the
-   * light with the reflected dark under it and a broken run of the glint on
-   * it, and its underside taking the ground; and between them egg and dart --
-   * each egg burnished, lit and standing open, its dark core down its lower
-   * right, sat in a cup; no two the same width; a dart between each two
-   * leaning its own way -- twelve to a section, the same egg on every seam,
-   * so the run goes on through them; and its shade on the wall under it.
+   * light with a white hairline and the reflected dark under it and a broken
+   * run of the glint on it, and its underside taking the ground; and between
+   * them egg and dart -- each egg chased up, lit along its upper left and
+   * dark along its lower right, sat in a cup; no two the same width; a dart
+   * between each two leaning its own way, tarnish where it meets the cups --
+   * twelve to a section, the same egg on every seam, so the run goes on
+   * through them; and its shade on the wall under it.
    */
   function frieze(g: Ctx, R: Rand, y0: number, y1: number): void {
     const h = y1 - y0, my = y0 + h * 0.54, P = TW / 12;
     g.fillStyle = SILVER_INK; g.fillRect(-2, y1, TW + 4, PROUD_SH);
     g.fillStyle = PASTEL.dress; g.fillRect(-2, y0, TW + 4, h);
     g.fillStyle = PASTEL.rim; g.fillRect(-2, y0, TW + 4, 6);
+    g.fillStyle = PASTEL.hair; g.fillRect(-2, y0, TW + 4, 2.5);
     g.fillStyle = PASTEL.core; g.fillRect(-2, y0 + 6, TW + 4, 3);
     g.fillStyle = PASTEL.soffit; g.fillRect(-2, y1 - 8, TW + 4, 8);
     whiteRun(g, R, 24, TW - 24, y0 + 1, 3.5);
     for (let i = 0; i <= 12; i++) {
       const ex = i * P, dx = (i + 0.5) * P, rw = i === 0 || i === 12 ? 11 : 11 + (R() - 0.5) * 6;
-      g.beginPath(); g.ellipse(ex + 2.5, my + 2.5, rw + 1.5, 14, 0, 0, Math.PI * 2); g.fillStyle = PASTEL.edgeLo; g.fill();
-      emboss(g, () => { g.beginPath(); g.ellipse(ex, my, rw, 12.5, 0, 0, Math.PI * 2); }, 3);
+      g.beginPath(); g.ellipse(ex + 1.5, my + 1.5, rw + 2.5, 15, 0, 0, Math.PI * 2); g.fillStyle = PASTEL.edgeLo; g.fill();
+      emboss(g, () => { g.beginPath(); g.ellipse(ex, my, rw, 12.5, 0, 0, Math.PI * 2); }, 3.2);
       if (i < 12) {
         const lean = (R() - 0.5) * 5.4;
-        g.beginPath(); poly(g, blob(dx + lean, my + 11, 4 + R() * 1.5, 2.6, 7, R, 0.8, 0.3, 0.3)); g.fillStyle = hexA(PASTEL.patina, 0.7); g.fill();
-        g.beginPath(); poly(g, [[dx - 5, my - 13], [dx + 5, my - 13], [dx + lean, my + 12]]); g.fillStyle = PASTEL.lit; g.fill();
-        g.beginPath(); g.moveTo(dx + 5, my - 13); g.lineTo(dx + lean, my + 12); g.strokeStyle = PASTEL.core; g.lineWidth = 2; g.stroke();
+        wedge(g, R, dx + lean, my + 13, 1, -1, 7); wedge(g, R, dx + lean, my + 13, -1, -1, 7);
+        g.beginPath(); poly(g, [[dx - 5, my - 13], [dx + 5, my - 13], [dx + lean, my + 12]]); g.fillStyle = PASTEL.reliefSky; g.fill();
+        g.beginPath(); g.moveTo(dx - 5, my - 13); g.lineTo(dx + lean, my + 12); g.strokeStyle = PASTEL.reliefHi; g.lineWidth = 2; g.stroke();
+        g.beginPath(); g.moveTo(dx + 5, my - 13); g.lineTo(dx + lean, my + 12); g.strokeStyle = PASTEL.reliefLo; g.lineWidth = 2; g.stroke();
       }
     }
   }
   /**
    * The bay layout of a plain face, by variant: a tall panel in each bay,
-   * chased at its middle; a short panel under the frieze chased with a
-   * running scroll over a tall one with only the plate in it; or one grand
-   * panel the width of the section with a great cartouche in it and no
-   * pilaster at its middle. Every bay alike and every storey alike read as
-   * one grid laid over two houses.
+   * one chased large and the other with only a boss at its head; a short
+   * panel under the frieze chased with a running scroll over a tall plain
+   * one; or one grand panel the width of the section with a great cartouche
+   * in it and no pilaster at its middle. Every bay alike and every storey
+   * alike read as one grid laid over two houses, and two motifs the same size
+   * in every face as an even speckle.
    */
   const SILVER_LAYOUTS = ['pair', 'frieze', 'pair', 'grand', 'pair'] as const;
   /** Where a bay's recess and its panels begin and end, `a` to `b` between two pilasters. */
   const bayOf = (a: number, b: number): [number, number] => [a + PIL / 2 + GAP, b - PIL / 2 - GAP];
   /**
    * The field of a silver wall: the recess it stands in, deepest beside the
-   * pilasters, with tarnish pooled along its foot and under the frieze; its
-   * panels, each bay's frame head its own; a pilaster at each end -- one
-   * pilaster shared with the next section, laid alike in both -- and at the
-   * middle unless one grand panel fills it; and the frieze along the head. A
-   * face with an opening in it is left without panels: the opening lays its
-   * own, clear of its surround.
+   * pilasters; its panels, each bay's frame head its own; a pilaster at each
+   * end -- one pilaster shared with the next section, laid alike in both --
+   * and at the middle unless one grand panel fills it; the frieze along the
+   * head; and, in two variants in five, one glint on a convex point, an egg
+   * or a volute, so there is at most one to every two sections. A face with
+   * an opening in it is left without panels: the opening lays its own, clear
+   * of its surround.
    */
   function paintSilver(g: Ctx, R: Rand, open: boolean, vi: number): Block[] {
     const top = FRIEZE, bot = TH, v = Math.max(0, vi), layout = open ? 'open' : SILVER_LAYOUTS[v % SILVER_LAYOUTS.length];
@@ -3045,22 +3074,25 @@ function paint(S: Stock): Masonry {
     g.fillStyle = PASTEL.recess;
     for (const x of mid ? [PIL / 2, XM - PIL / 2 - GAP, XM + PIL / 2, TW - PIL / 2 - GAP] : [PIL / 2, TW - PIL / 2 - GAP]) g.fillRect(x, top, GAP, bot - top);
     const bays: Array<[number, number]> = mid ? [bayOf(0, XM), bayOf(XM, TW)] : [bayOf(0, TW)];
-    for (const [a, b] of bays) { pool(g, R, a - GAP, b + GAP, bot, 12 + R() * 8); pool(g, R, a - GAP, b + GAP, top + PROUD_SH, 6 + R() * 6, true); }
-    const y0 = top + 18, y1 = bot - 24;
-    if (layout === 'grand') silverPanel(g, R, bays[0][0], y0, bays[0][1], y1, 'cartouche', HEADS[v % 3], true);
+    const y0 = PANEL_TOP, y1 = PANEL_FOOT, large = v % 2;
+    if (layout === 'grand') silverPanel(g, R, bays[0][0], y0, bays[0][1], y1, HEADS[v % 3], { kind: 'cartouche' });
     else if (mid) {
       for (const [i, [x0, x1]] of bays.entries()) {
-        const kind = MOTIFS[(v + i * 2) % MOTIFS.length], head = HEADS[(v + i) % 3];
-        if (layout === 'pair') silverPanel(g, R, x0, y0, x1, y1, kind, head, true);
+        const head = HEADS[(v + i) % 3];
+        if (layout === 'pair') silverPanel(g, R, x0, y0, x1, y1, head, i === large ? { kind: MOTIFS[(v + i * 2) % MOTIFS.length], scale: 1.5 } : { kind: null, boss: true });
         else {
-          silverPanel(g, R, x0, y0, x1, y0 + 78, 'scroll', 'notch', i === 0);
-          silverPanel(g, R, x0, y0 + 94, x1, y1, null, head, i === 1);
+          silverPanel(g, R, x0, y0, x1, y0 + 78, 'notch', { kind: i === large ? 'crossed' : 'scroll' });
+          silverPanel(g, R, x0, y0 + 94, x1, y1, head, { kind: null });
         }
       }
     }
-    pilaster(g, 0, top, bot); pilaster(g, TW, top, bot);
-    if (mid) pilaster(g, XM, top, bot);
+    pilaster(g, R, 0, top, bot); pilaster(g, R, TW, top, bot);
+    if (mid) pilaster(g, R, XM, top, bot);
     frieze(g, R, 0, top);
+    if (!open && v % 2 === 1) {
+      if (mid && R() < 0.5) star(g, XM + (R() < 0.5 ? -PIL / 2 - 1 : PIL / 2 + 1), top + 14, GLINT, GLINT_ARM);
+      else star(g, (1 + Math.floor(R() * 11)) * (TW / 12) - 3, top * 0.54 - 4, GLINT, GLINT_ARM);
+    }
     return [];
   }
   /**
@@ -3070,19 +3102,18 @@ function paint(S: Stock): Masonry {
    * narrow to carry chasing -- a lozenge shrunk to fit one read as a cross.
    */
   function sidePanels(g: Ctx, R: Rand, a: number, b: number): void {
-    const y0 = FRIEZE + 18, y1 = TH - 24;
     const [l0, r1] = bayOf(0, TW);
-    if (a - GAP - l0 >= 48) silverPanel(g, R, l0, y0, a - GAP, y1, null, 'ears', true);
-    if (r1 - (b + GAP) >= 48) silverPanel(g, R, b + GAP, y0, r1, y1, null, 'ears', false);
+    if (a - GAP - l0 >= 48) silverPanel(g, R, l0, PANEL_TOP, a - GAP, PANEL_FOOT, 'ears', { kind: null });
+    if (r1 - (b + GAP) >= 48) silverPanel(g, R, b + GAP, PANEL_TOP, r1, PANEL_FOOT, 'ears', { kind: null });
   }
   /**
    * The ground storey's foot: a plinth of it, heavy, so a tall front stands on
    * a base -- a torus rolled along its head, which the pilasters stand on,
-   * carrying the light with the reflected dark under it and a broken run of
-   * the glint along its crown, and a face under that polished to chrome, its
-   * horizon level where it meets the next section's and dipping between, so
-   * the run does not step at the seams. `R` places the dip and the glint, so
-   * each variant has its own.
+   * carrying the light with a white hairline, the reflected dark under it and
+   * a broken run of the glint along its crown, and a face under that
+   * polished to chrome, its horizon level where it meets the next section's
+   * and dipping between, so the run does not step at the seams. `R` places
+   * the dip and the glint, so each variant has its own.
    */
   function silverPlinth(g: Ctx, y0: number, y1: number, R: Rand = rand(2621)): void {
     const roll = 16;
@@ -3091,6 +3122,7 @@ function paint(S: Stock): Masonry {
     mirror(g, R, -8, y0 + roll + 3, TW + 8, y1 - 2);
     g.fillStyle = PASTEL.dress; g.fillRect(-2, y0, TW + 4, roll);
     g.fillStyle = PASTEL.rim; g.fillRect(-2, y0, TW + 4, roll * 0.4);
+    g.fillStyle = PASTEL.hair; g.fillRect(-2, y0, TW + 4, 2.5);
     g.fillStyle = PASTEL.core; g.fillRect(-2, y0 + roll * 0.4, TW + 4, 2.5);
     g.fillStyle = PASTEL.reflect; g.fillRect(-2, y0 + roll * 0.66, TW + 4, roll * 0.34);
     g.fillStyle = PASTEL.edgeLo; g.fillRect(-2, y0 + roll - 1.5, TW + 4, 1.5);
@@ -3106,25 +3138,24 @@ function paint(S: Stock): Masonry {
     const aw = 24, ew = 12, eh = 26;
     sidePanels(g, R, x0 - aw - ew, x1 + aw + ew);
     const apron = sill + 30 + shelf;
-    if (TH - 24 - apron >= 40) silverPanel(g, R, x0 - aw + 4, apron, x1 + aw - 4, TH - 24, 'scroll', 'notch', false);
+    if (PANEL_FOOT - apron >= 40) silverPanel(g, R, x0 - aw + 4, apron, x1 + aw - 4, PANEL_FOOT, 'notch', { kind: 'crossed' }, apron + (PANEL_FOOT - apron) * 0.4);
     g.fillStyle = SILVER_INK; g.fillRect(x1 + aw + ew, head - aw, PROUD_SIDE * 0.8, sill - head + aw + 4);
     // the architrave, and its ears at the head
     slab(g, x0 - aw, head - aw, x1 + aw, sill + 4, PASTEL.dress, 6);
     slab(g, x0 - aw - ew, head - aw, x0 - aw + 6, head + eh, PASTEL.dress, 5);
     slab(g, x1 + aw - 6, head - aw, x1 + aw + ew, head + eh, PASTEL.dress, 5);
-    slab(g, x0 - 7, head - 7, x1 + 7, sill + 2, PASTEL.plateFoot, 3);
+    slab(g, x0 - 7, head - 7, x1 + 7, sill + 2, PASTEL.sunk, 3);
     const kc = (x0 + x1) / 2;
-    emboss(g, () => { g.beginPath(); poly(g, [[kc - 12, head - 30], [kc + 12, head - 30], [kc + 8, head + 2], [kc - 8, head + 2]]); }, 2.4);
+    emboss(g, () => { g.beginPath(); poly(g, [[kc - 12, head - 30], [kc + 12, head - 30], [kc + 8, head + 2], [kc - 8, head + 2]]); }, 3);
     g.fillStyle = SILVER_INK; g.fillRect(x0 - aw - ew - 6, head - aw, x1 - x0 + 2 * (aw + ew + 6), PROUD_SH);
     slab(g, x0 - aw - ew - 6, head - aw - 14, x1 + aw + ew + 6, head - aw, PASTEL.dress, 4);
     g.fillStyle = SILVER_INK; g.fillRect(x0 - aw - 4 - shelf, sill + 16, x1 - x0 + 2 * (aw + 4) + 2 * shelf, PROUD_SH);
     slab(g, x0 - aw - 4 - shelf, sill + 2, x1 + aw + 4 + shelf, sill + 18 + shelf * 0.6, PASTEL.dress, 4);
     whiteRun(g, R, x0 - aw - ew, x1 + aw + ew, head - aw - 13, 3);
-    star(g, x0 - aw - ew + 4, head - aw - 10, GLINT, GLINT_ARM);
   }
   /**
    * A doorway in it, the richest work on the wall: an architrave of polished
-   * silver 40 wide down to the ground; a fluted half-pilaster either side
+   * silver 40 wide down to the ground; a chrome half-pilaster either side
    * where there is room for one; a cornice over it with a keystone; a
    * rosette in the head of a gate's; and panels either side, clear of it.
    */
@@ -3135,22 +3166,21 @@ function paint(S: Stock): Masonry {
     if (room) {
       for (const x of [x0 - aw - hp, x1 + aw]) {
         g.fillStyle = SILVER_INK; g.fillRect(x + hp - 1, top, PROUD_SIDE * 0.8, TH - top);
-        shaft(g, x, top + 20, hp, TH - top - 20, [0.35, 0.7], x < x0);
+        shaft(g, R, x, top + 20, hp, TH - top - 20);
         attic(g, x, x + hp, TH);
       }
     }
     g.fillStyle = SILVER_INK; g.fillRect(x1 + aw, top, PROUD_SIDE * 0.8, TH - top);
     slab(g, x0 - aw, top, x1 + aw, TH + 4, PASTEL.dress, 7);
     slab(g, x0 - aw + 12, top + 12, x1 + aw - 12, TH + 4, PASTEL.dress, 4);
-    slab(g, x0 - 7, head - 7, x1 + 7, TH + 4, PASTEL.plateFoot, 3);
+    slab(g, x0 - 7, head - 7, x1 + 7, TH + 4, PASTEL.sunk, 3);
     if (deep > 40) rosette(g, R, (x0 + x1) / 2, head - deep / 2 - 2, Math.min(24, deep * 0.4), 10);
     const kc = (x0 + x1) / 2;
-    emboss(g, () => { g.beginPath(); poly(g, [[kc - 14, top - 6], [kc + 14, top - 6], [kc + 9, head + 2], [kc - 9, head + 2]]); }, 2.4);
+    emboss(g, () => { g.beginPath(); poly(g, [[kc - 14, top - 6], [kc + 14, top - 6], [kc + 9, head + 2], [kc - 9, head + 2]]); }, 3);
     const cx0 = x0 - aw - (room ? hp : 0) - 8, cx1 = x1 + aw + (room ? hp : 0) + 8;
     g.fillStyle = SILVER_INK; g.fillRect(cx0, top, cx1 - cx0, PROUD_SH);
     slab(g, cx0, top - 18, cx1, top, PASTEL.dress, 5);
     whiteRun(g, R, cx0, cx1, top - 17, 3);
-    star(g, cx0 + 8, top - 14, GLINT, GLINT_ARM);
   }
   /**
    * An archway in it: the jambs, an archivolt of polished silver round the
@@ -3171,46 +3201,46 @@ function paint(S: Stock): Masonry {
     ring(); g.fillStyle = PASTEL.dress; g.fill();
     g.save(); ring(); g.clip();
     g.beginPath(); g.arc(A_CX, A_CY, A_R + w, Math.PI, Math.PI * 2); g.lineWidth = 8; g.strokeStyle = PASTEL.rim; g.stroke();
+    g.beginPath(); g.arc(A_CX, A_CY, A_R + w, Math.PI, Math.PI * 2); g.lineWidth = 4; g.strokeStyle = PASTEL.hair; g.stroke();
     g.beginPath(); g.arc(A_CX, A_CY, A_R + w - 5, Math.PI, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = PASTEL.core; g.stroke();
     g.beginPath(); g.arc(A_CX, A_CY, A_R, Math.PI, Math.PI * 2); g.lineWidth = 7; g.strokeStyle = PASTEL.reflect; g.stroke();
     g.restore();
     const ky = A_CY - A_R - w;
-    emboss(g, () => { g.beginPath(); poly(g, [[A_CX - 13, ky - 8], [A_CX + 13, ky - 8], [A_CX + 8, ky + w + 4], [A_CX - 8, ky + w + 4]]); }, 2.4);
-    star(g, A_CX - (A_R + w * 0.6) * 0.72, A_CY - (A_R + w * 0.6) * 0.7, GLINT, GLINT_ARM);
+    emboss(g, () => { g.beginPath(); poly(g, [[A_CX - 13, ky - 8], [A_CX + 13, ky - 8], [A_CX + 8, ky + w + 4], [A_CX - 8, ky + w + 4]]); }, 3);
   }
   /**
    * The pilaster a silver wall is finished with at a corner or a stopped
-   * end, over the face carried round it: polished and fluted, its outer edge
-   * off the picture so the two faces of a corner meet on it, its capital and
-   * base.
+   * end, over the face carried round it: chrome, its outer edge off the
+   * picture so the two faces of a corner meet on it, its capital and base.
    */
   function silverCorner(h: number, capital = true): HTMLCanvasElement {
     const w = 64, c = cnv(w, h), g = ctxOf(c);
-    shaft(g, 0, 0, w, h, [0.3, 0.55, 0.8], false);
+    shaft(g, rand(2633), 0, 0, w, h);
     if (capital) ionic(g, 0, w, 0);
     attic(g, 0, w, h);
     return c;
   }
-  /** What a fence's low panels are chased with, by variant, and a half wall's. */
+  /** What a fence's long panel is chased with, by variant, and a half wall's. */
   const FENCE_MOTIFS: Motif[] = ['scroll', 'shell', 'lozenge', 'crossed', 'cartouche'];
   const HALF_MOTIFS: Motif[] = ['rosette', 'shell', 'quatrefoil', 'cartouche', 'lozenge'];
   /**
-   * A garden wall of it: a cap moulding along its head carrying the light,
-   * raised panels either side of a pilaster -- a plate of one tone, since at a
-   * fence's height the bands of a horizon turned to stripes, and a motif most
-   * of the height of it, burnished -- the two in a section never alike, a
-   * pilaster at each end, and a plinth of it at the foot.
+   * A garden wall of it: a cap moulding along its head carrying the light; a
+   * long panel and a short square one with a rosette boss, either side of a
+   * pilaster, their order turned about from variant to variant, so a run of
+   * it has a beat and is not ruled off in equal plates; a pilaster at each
+   * end; and a plinth of it at the foot.
    */
   function lowSilver(g: Ctx, R: Rand, fh: number, vi: number): Block[] {
-    const sole = fh - LOW_FOOT, cap = 22, v = Math.max(0, vi);
+    const sole = fh - LOW_FOOT, cap = 22, v = Math.max(0, vi), split = TW * (v % 2 ? 0.6 : 0.4);
     g.fillStyle = PASTEL.tarnish; g.fillRect(0, 0, TW, fh);
     g.fillStyle = PASTEL.recess;
-    for (const x of [PIL / 2, XM - PIL / 2 - 12, XM + PIL / 2, TW - PIL / 2 - 12]) g.fillRect(x, cap, 12, sole - cap);
+    for (const x of [PIL / 2, split - PIL / 2 - 12, split + PIL / 2, TW - PIL / 2 - 12]) g.fillRect(x, cap, 12, sole - cap);
     const set = sole - cap - 30 > 90 ? HALF_MOTIFS : FENCE_MOTIFS;
-    for (const [i, [a, b]] of ([[PIL / 2, XM - PIL / 2], [XM + PIL / 2, TW - PIL / 2]] as Array<[number, number]>).entries()) {
-      silverPanel(g, R, a + 12, cap + 12, b - 12, sole - 10, set[(v + i * 2) % set.length], HEADS[(v + i) % 3] === 'arch' ? 'notch' : HEADS[(v + i) % 3], i === 0, true);
+    for (const [i, [a, b]] of ([[PIL / 2, split - PIL / 2], [split + PIL / 2, TW - PIL / 2]] as Array<[number, number]>).entries()) {
+      const long = b - a > TW * 0.4, head = HEADS[(v + i) % 3] === 'arch' ? 'notch' : HEADS[(v + i) % 3];
+      silverPanel(g, R, a + 12, cap + 12, b - 12, sole - 10, head, long ? { kind: set[v % set.length], flat: true } : { kind: 'rosette', flat: true, scale: 0.9 });
     }
-    pilaster(g, 0, cap, sole); pilaster(g, TW, cap, sole); pilaster(g, XM, cap, sole);
+    pilaster(g, R, 0, cap, sole); pilaster(g, R, TW, cap, sole); pilaster(g, R, split, cap, sole);
     g.fillStyle = SILVER_INK; g.fillRect(-2, cap, TW + 4, PROUD_SH);
     slab(g, -8, 0, TW + 8, cap, PASTEL.dress, 5);
     whiteRun(g, R, 24, TW - 24, 1, 3);
@@ -5970,7 +6000,7 @@ function paint(S: Stock): Masonry {
         const sole = fh - LOW_FOOT;
         g.save();
         g.beginPath(); g.rect(0, -PROUD, gx0, fh + PROUD); g.rect(gx1, -PROUD, TW - gx1, fh + PROUD); g.clip();
-        pilaster(g, (PIL / 2 + gx0) / 2, 22, sole, gx0 - PIL / 2); pilaster(g, (gx1 + TW - PIL / 2) / 2, 22, sole, TW - PIL / 2 - gx1);
+        pilaster(g, R, (PIL / 2 + gx0) / 2, 22, sole, gx0 - PIL / 2); pilaster(g, R, (gx1 + TW - PIL / 2) / 2, 22, sole, TW - PIL / 2 - gx1);
         slab(g, -8, 0, TW + 8, 22, PASTEL.dress, 5);
         g.restore();
       }
