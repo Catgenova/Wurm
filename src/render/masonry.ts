@@ -1395,6 +1395,22 @@ function paint(S: Stock): Masonry {
     wet.addColorStop(1, 'rgba(40, 34, 40, 0)');
     g.fillStyle = wet;
     g.fillRect(0, TH - h * 0.55, TW, h * 0.55);
+    /*
+     * And moss on the chamfer, which is the one ledge of the wall the rain
+     * sits on before it runs off: a lens or two along it, and a fleck in the
+     * joints of the course under it, so the wall grows out of the grass
+     * rather than being stood on it.
+     */
+    const n = 1 + (R() < 0.55 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const w = 90 + R() * 110;
+      mossLens(g, { x: EDGE + R() * (TW - 2 * EDGE - w), y: y0, w, h: cap, course: 0, pts: [] }, y0 + 3, R);
+    }
+    for (let i = 0; i < 4; i++) {
+      const x = EDGE + 8 + R() * (TW - 2 * EDGE - 16);
+      g.beginPath(); g.arc(x, y0 + cap + 1 + R() * 2, 1.4 + R() * 1.2, 0, 7);
+      g.fillStyle = hexA(MOSS.fleck, 0.75); g.fill();
+    }
   }
 
   /** The foot of the ground storey: a band of shade along the ground line; one to three lenses of moss
@@ -1814,6 +1830,11 @@ function paint(S: Stock): Masonry {
       sh.addColorStop(1, 'rgba(40, 32, 62, 0)');
       g.fillStyle = sh;
       g.fillRect(sx + 3, sy, sw - 6, 9);
+      // Rain stands on a sill as it does on a plinth, and moss comes after it.
+      if (R() < 0.6) {
+        const w = sw * (0.3 + 0.3 * R());
+        mossLens(g, { x: sx + (sw - w) * R(), y: sill - 4, w, h: 20, course: 0, pts: [] }, sill - 2, R);
+      }
     }
     winJamb(g, R, -1, x0, x1, head, sill, wide);
     winJamb(g, R, 1, x0, x1, head, sill, wide);
