@@ -1,4 +1,4 @@
-import{Dt as e,ji as t}from"./creatures.js";function n(){return`
+import{Ct as e,Di as t}from"./creatures.js";function n(){return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be

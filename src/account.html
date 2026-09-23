@@ -54,7 +54,20 @@
       <section id="maker" hidden>
         <div class="maker">
           <div class="mirror">
-            <canvas id="me" width="240" height="380" aria-label="How you will look"></canvas>
+            <canvas id="me" width="240" height="380" tabindex="0" aria-label="How you will look. Drag, or use the arrow keys, to turn."></canvas>
+            <div class="turn">
+              <button type="button" id="turn-left" aria-label="Turn left">&#9664;</button>
+              <button type="button" id="close" aria-pressed="false">Face</button>
+              <button type="button" id="turn-right" aria-label="Turn right">&#9654;</button>
+            </div>
+            <div class="motions" id="motions" role="group" aria-label="What the mirror shows you doing">
+              <button type="button" data-motion="idle">Stand</button>
+              <button type="button" data-motion="walk">Walk</button>
+              <button type="button" data-motion="run">Run</button>
+              <button type="button" data-motion="work">Work</button>
+              <button type="button" data-motion="wave">Wave</button>
+              <button type="button" data-motion="hop">Hop</button>
+            </div>
             <button type="button" id="roll">Roll me one</button>
           </div>
           <div id="choices" class="choices"></div>

@@ -79,6 +79,7 @@ import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
+import { FIGURE_TOP } from './figure';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 /**
@@ -1950,6 +1951,7 @@ export class Renderer {
         const struck = this.flashOf(player.attackedAt);
         this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ent.sx, ent.sy - (ent.lift ?? 0), (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
+            id: 'player',
             phase: player.moving ? player.walkPhase : this.time * 6,
             moving: player.moving,
             gait: this.gaits.of('player', player.x, player.y, this.frameDt),
@@ -1970,7 +1972,7 @@ export class Renderer {
         // What this body last said, over its own head. No name drawn under it,
         // so the bubble sits where a peer's name would be.
         const mine = this.game.saidAloud;
-        if (mine) this.speechBubble(ctx, zoom, ent.sx, ent.sy - 32 * zoom, mine.text, mine.at);
+        if (mine) this.speechBubble(ctx, zoom, ent.sx, ent.sy - FIGURE_TOP * zoom, mine.text, mine.at);
         continue;
       }
       if (ent.kind === 'peer' && ent.peer) {
@@ -1979,11 +1981,12 @@ export class Renderer {
         // figure at the same size. Without one, the only thing you could ever
         // do to another person was walk to the tile they were standing on.
         if (peer.uid) {
-          this.peerHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 26 * zoom, w: 20 * zoom, h: 28 * zoom, peer: peer.uid });
+          this.peerHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - (FIGURE_TOP - 2) * zoom, w: 20 * zoom, h: FIGURE_TOP * zoom, peer: peer.uid });
         }
         peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
+            id: 'o' + peer.id,
             phase: peer.moving ? peer.walkPhase : this.time * 6,
             moving: peer.moving,
             gait: this.gaits.of('o' + peer.id, peer.x, peer.y, this.frameDt),
@@ -2002,7 +2005,7 @@ export class Renderer {
         if (zoom >= 0.5) {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'alphabetic';
-          const ty = ent.sy - 30 * zoom;
+          const ty = ent.sy - (FIGURE_TOP + 1) * zoom;
           ctx.strokeStyle = 'rgba(10,10,12,0.85)';
           ctx.lineWidth = 3;
           ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
@@ -2035,7 +2038,7 @@ export class Renderer {
         // Over the name and over whatever they are at, so a person talking
         // while they dig reads top to bottom: what they said, what they are
         // doing, who they are.
-        if (peer.said) this.speechBubble(ctx, zoom, ent.sx, ent.sy - 46 * zoom, peer.said, peer.saidAt ?? 0);
+        if (peer.said) this.speechBubble(ctx, zoom, ent.sx, ent.sy - (FIGURE_TOP + 17) * zoom, peer.said, peer.saidAt ?? 0);
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {

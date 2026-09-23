@@ -4,7 +4,7 @@ import {
   setLook, signInAs, signOut, whoAmI,
 } from './net/accounts';
 import { LOOK_TABLES, cleanLook, randomLook, type Look } from './game/look';
-import { drawHeadshot, drawPortrait } from './render/sprites';
+import { drawHeadshot, drawPortrait, type PortraitMotion } from './render/sprites';
 
 /**
  * The landing page: a username, a password, and a way back in.
@@ -41,6 +41,10 @@ const mirror = $<HTMLCanvasElement>('me');
 const choices = $<HTMLElement>('choices');
 const roll = $<HTMLButtonElement>('roll');
 const ashore = $<HTMLButtonElement>('ashore');
+const turnLeft = $<HTMLButtonElement>('turn-left');
+const turnRight = $<HTMLButtonElement>('turn-right');
+const closeUp = $<HTMLButtonElement>('close');
+const motions = $<HTMLElement>('motions');
 
 const NAME_HELP = 'Three to twenty characters: a letter first, then letters, numbers, underscore or hyphen. It is what everybody on the island will see over your head.';
 const PW_HELP_NEW = `${PASSWORD_MIN} characters at the very least, and checked against the list of passwords already known to have leaked. Neither it nor its full fingerprint leaves this page.`;
@@ -343,8 +347,8 @@ function buildChoices(): void {
       } else if (key === 'hair' || key === 'beard') {
         button.className = 'pick face';
         const canvas = document.createElement('canvas');
-        canvas.width = 44;
-        canvas.height = 44;
+        // Drawn at the screen's own resolution, so a haircut is not chosen from a blur.
+        canvas.width = canvas.height = Math.round(52 * Math.min(3, window.devicePixelRatio || 1));
         button.append(canvas);
         thumbs.push({ canvas, of: (l) => ({ ...l, [key]: option.id, ...(key === 'hair' ? {} : { hair: 'crop' }) }) });
       } else {
@@ -381,21 +385,91 @@ function redraw(): void {
 }
 
 /**
- * The mirror walks.
+ * The mirror walks, and turns, and looks close.
  *
  * Standing still is easier to draw and worse to choose from: a walk is how you
  * will actually see yourself, and it is the only way to find out that the
- * ponytail moves and the long beard does not.
+ * ponytail moves and the long beard does not. It turns through the same eight
+ * ways the island draws you -- by its arrows, by dragging across it, or by
+ * the arrow keys -- because a haircut is chosen as much from behind as from
+ * the front, and the face button brings the head up to fill it.
  */
 let walking = 0;
+let facing = 1;
+let motion: PortraitMotion = 'walk';
+let close = false;
+
 function mirrorFrame(now: number): void {
   const ctx = mirror.getContext('2d');
   if (ctx && !maker.hidden) {
+    // The backing store follows the size the page gives the mirror, at the screen's own resolution.
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const w = Math.round(mirror.clientWidth * dpr), h = Math.round(mirror.clientHeight * dpr);
+    if (w > 0 && h > 0 && (mirror.width !== w || mirror.height !== h)) {
+      mirror.width = w;
+      mirror.height = h;
+    }
     ctx.clearRect(0, 0, mirror.width, mirror.height);
-    drawPortrait(ctx, 0, 0, mirror.width, mirror.height, look, now / 110);
+    if (close) {
+      drawHeadshot(ctx, 0, 0, mirror.width, look, facing, now / 1000, mirror.height);
+    } else {
+      drawPortrait(ctx, 0, 0, mirror.width, mirror.height, look, now / 1000, facing, motion);
+    }
   }
   walking = requestAnimationFrame(mirrorFrame);
 }
+
+function turn(by: number): void {
+  facing = (((facing + by) % 8) + 8) % 8;
+}
+
+function showMotion(m: PortraitMotion): void {
+  motion = m;
+  for (const b of motions.querySelectorAll<HTMLButtonElement>('button')) b.setAttribute('aria-pressed', String(b.dataset.motion === m));
+}
+
+turnLeft.addEventListener('click', () => turn(-1));
+turnRight.addEventListener('click', () => turn(1));
+closeUp.addEventListener('click', () => {
+  close = !close;
+  closeUp.setAttribute('aria-pressed', String(close));
+});
+for (const b of motions.querySelectorAll<HTMLButtonElement>('button')) {
+  b.addEventListener('click', () => {
+    showMotion(b.dataset.motion as PortraitMotion);
+    // Asking to see a move is asking to see the body do it.
+    if (close) {
+      close = false;
+      closeUp.setAttribute('aria-pressed', 'false');
+    }
+  });
+}
+showMotion(motion);
+
+// Dragging across the mirror turns it an eighth for every so far dragged.
+const DRAG_STEP = 26;
+let dragFrom: number | null = null;
+mirror.addEventListener('pointerdown', (e) => {
+  dragFrom = e.clientX;
+  mirror.setPointerCapture(e.pointerId);
+});
+mirror.addEventListener('pointermove', (e) => {
+  if (dragFrom === null) return;
+  const steps = Math.trunc((e.clientX - dragFrom) / DRAG_STEP);
+  if (steps) {
+    turn(steps);
+    dragFrom += steps * DRAG_STEP;
+  }
+});
+const letGo = (): void => { dragFrom = null; };
+mirror.addEventListener('pointerup', letGo);
+mirror.addEventListener('pointercancel', letGo);
+mirror.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    turn(e.key === 'ArrowLeft' ? -1 : 1);
+    e.preventDefault();
+  }
+});
 
 const LEDE_ACCOUNT = lede.textContent ?? '';
 const LEDE_MAKER = 'Skin, hair, eyes, build and what you washed ashore in. None of it is fixed — you can come back and change any of it whenever you like.';
@@ -510,7 +584,13 @@ declare global {
       randomLook: typeof randomLook;
       /** What the creator is showing at this moment. */
       look: () => Look;
+      /** Open the creator on a look without an account behind it, to look at; stepping ashore still needs one. */
+      openMaker: (start?: Look) => void;
     };
   }
 }
-window.wurmAccount = { nameTrouble, passwordTrouble, passwordVerdict, breachCount, breachWord, nameEmail, foldName, Unchecked, LOOK_TABLES, cleanLook, randomLook, look: () => look };
+window.wurmAccount = {
+  nameTrouble, passwordTrouble, passwordVerdict, breachCount, breachWord, nameEmail, foldName, Unchecked, LOOK_TABLES, cleanLook, randomLook,
+  look: () => look,
+  openMaker: (start) => toMaker(start ?? randomLook()),
+};

@@ -1,9 +1,6 @@
 import { mulberry32 } from '../world/noise';
-import { emotePose } from '../game/emotes';
-import {
-  BUILDS, DEFAULT_LOOK, darken, eyeColour, hairColour, shirtColour, skinColour, trouserColour,
-  type Gender, type Look,
-} from '../game/look';
+import type { Look } from '../game/look';
+import { drawBust, drawFigure, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
@@ -4300,335 +4297,21 @@ function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   }
 }
 
-export interface PlayerPose {
-  phase: number;
-  moving: boolean;
-  /** How hard they are going: 0 at a walk, 1 at a run. See `CreaturePose.gait`. */
-  gait?: number;
-  /** Which of the eight ways it is turned. See `facingOf`. */
-  facing: number;
-  swimming: boolean;
-  working: boolean;
-  /** Sitting on a seat with the reins in both hands rather than walking. */
-  driving?: boolean;
-  /** The colour of what is on the chest and the legs, when either has been dyed. */
-  tunic?: string;
-  trousers?: string;
-  /** Who this is: skin, hair, eyes, build and the clothes they came ashore in. */
-  look?: Look;
-  /** An emote in progress, and how far through it is (0 to 1). */
-  emote?: string;
-  emoteT?: number;
-}
-
-const BELT = '#33241a';
+/* ---- People ------------------------------------------------------------- */
 
 /**
- * The colours and the build a pose comes to.
- *
- * Dyed cloth beats the clothes you were made in, and that order is the right
- * way round: the shirt in a look is what you washed ashore wearing, and a
- * tunic you dyed madder is what you are wearing now.
+ * What the game says a person is doing, for the drawing: which way they face,
+ * whether they are walking or running, at work, swimming, driving or in the
+ * middle of an emote, and who they are. The body itself -- its rig, its
+ * meshes and every pose -- is `figure.ts`; this is the door the renderer, the
+ * creator and the tests all come in by.
  */
-interface Worn {
-  look: Look;
-  skin: string;
-  shade: string;
-  hair: string;
-  hairShade: string;
-  eye: string;
-  tunic: string;
-  trousers: string;
-  build: (typeof BUILDS)[Gender];
-}
-
-function wornOf(pose: PlayerPose): Worn {
-  const look = pose.look ?? DEFAULT_LOOK;
-  const skin = skinColour(look);
-  const hair = hairColour(look);
-  return {
-    look,
-    skin,
-    shade: darken(skin, 0.18),
-    hair,
-    hairShade: darken(hair, 0.3),
-    eye: eyeColour(look),
-    tunic: pose.tunic ?? shirtColour(look),
-    trousers: pose.trousers ?? trouserColour(look),
-    build: BUILDS[look.gender] ?? BUILDS.neither,
-  };
-}
-
-/* ---- Hair ------------------------------------------------------------- */
-
-/**
- * Twenty haircuts on a head nine pixels across.
- *
- * Nothing about hair survives that scale except its outline, so each of these
- * is a silhouette: how far down the sides it comes, what happens behind the
- * neck, and whether anything stands up. Drawn in the head's own space, centre
- * at the origin, radius `r`, and facing **right** — the figure as a whole is
- * mirrored by the caller when it turns, so there is only ever one side to
- * draw.
- *
- * Two passes rather than one. A ponytail, a mane and an afro all sit *behind*
- * the skull, and painting them after it would put the hair over the face; so
- * `hairBehind` runs before the head goes down and `hairOver` after it. The
- * split is what makes long hair possible at all without a second sprite.
- */
-function hairBehind(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
-  const id = w.look.hair;
-  ctx.fillStyle = w.hairShade;
-  const rope = (x: number, y: number, len: number, wide: number): void => {
-    ctx.fillRect(x - wide / 2, y, wide, len);
-  };
-  switch (id) {
-    case 'afro':
-      ctx.fillStyle = w.hair;
-      ctx.beginPath();
-      ctx.arc(-0.35 * r, -0.4 * r, r * 1.55, 0, TAU);
-      ctx.fill();
-      break;
-    case 'long':
-      ctx.beginPath();
-      ctx.moveTo(-r * 1.15, -r * 0.4);
-      ctx.quadraticCurveTo(-r * 1.6, r * 1.6, -r * 0.5, r * 2.4);
-      ctx.lineTo(r * 0.5, r * 2.2);
-      ctx.quadraticCurveTo(r * 0.6, r * 0.2, r * 0.2, -r * 0.8);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'waves':
-      ctx.beginPath();
-      ctx.moveTo(-r * 1.1, -r * 0.5);
-      ctx.quadraticCurveTo(-r * 1.5, r * 0.7, -r * 0.7, r * 1.3);
-      ctx.lineTo(r * 0.7, r * 1.2);
-      ctx.quadraticCurveTo(r * 0.9, r * 0.2, r * 0.3, -r * 0.7);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'ponytail':
-      rope(-r * 1.25, -r * 0.5, r * 2.2, r * 0.7);
-      ctx.beginPath();
-      ctx.arc(-r * 1.25, r * 1.7, r * 0.42, 0, TAU);
-      ctx.fill();
-      break;
-    case 'braid':
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.ellipse(-r * 1.2, -r * 0.3 + i * r * 0.62, r * 0.36, r * 0.34, 0, 0, TAU);
-        ctx.fill();
-      }
-      break;
-    case 'braids':
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.ellipse(-r * 0.95, r * 0.35 + i * r * 0.55, r * 0.3, r * 0.3, 0, 0, TAU);
-        ctx.fill();
-      }
-      break;
-    case 'locs':
-      for (let i = 0; i < 5; i++) rope(-r * 1.1 + i * r * 0.5, -r * 0.6, r * 2 - i * r * 0.18, r * 0.3);
-      break;
-    case 'bun':
-      ctx.beginPath();
-      ctx.arc(-r * 0.95, -r * 0.5, r * 0.62, 0, TAU);
-      ctx.fill();
-      break;
-    case 'topknot':
-      rope(-r * 0.1, -r * 1.75, r * 1.1, r * 0.34);
-      ctx.beginPath();
-      ctx.arc(-r * 0.1, -r * 1.7, r * 0.5, 0, TAU);
-      ctx.fill();
-      break;
-    default:
-      break;
-  }
-}
-
-function hairOver(ctx: CanvasRenderingContext2D, w: Worn, r: number): void {
-  const id = w.look.hair;
-  if (id === 'bald') return;
-  ctx.fillStyle = w.hair;
-  /** A cap over the skull: from `a` to `b` in turns of π, closed across the front. */
-  const cap = (grow: number, from: number, to: number, front: number): void => {
-    ctx.beginPath();
-    ctx.arc(0, -r * 0.2, r * grow, Math.PI * from, Math.PI * to);
-    ctx.lineTo(r * front, -r * 0.2);
-    ctx.closePath();
-    ctx.fill();
-  };
-  switch (id) {
-    case 'crop':
-      cap(1.02, 1.05, 1.98, 0.8);
-      break;
-    case 'short':
-      cap(1.06, 1, 2, 0.85);
-      break;
-    case 'bowl':
-      ctx.beginPath();
-      ctx.arc(0, -r * 0.3, r * 1.1, Math.PI, TAU);
-      ctx.rect(-r * 1.1, -r * 0.3, r * 2.2, r * 0.28);
-      ctx.fill();
-      break;
-    case 'side':
-      cap(1.06, 1, 2, 0.85);
-      ctx.fillStyle = w.hairShade;
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.5, -r * 1.2);
-      ctx.quadraticCurveTo(r * 0.6, -r * 1.3, r * 1, -r * 0.35);
-      ctx.lineTo(r * 0.45, -r * 0.4);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'swept':
-      ctx.beginPath();
-      ctx.moveTo(-r * 1.15, -r * 0.1);
-      ctx.quadraticCurveTo(-r * 1.1, -r * 1.7, r * 0.2, -r * 1.35);
-      ctx.quadraticCurveTo(r * 1.05, -r * 1.1, r * 0.95, -r * 0.35);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'fringe':
-      cap(1.06, 1, 2, 0.85);
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.5, -r * 1.2);
-      ctx.lineTo(r * 1.05, -r * 1.1);
-      ctx.lineTo(r * 0.95, -r * 0.1);
-      ctx.lineTo(-r * 0.5, -r * 0.3);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'curls':
-      for (const [cx, cy] of [[-0.85, -0.5], [-0.5, -1.05], [0.05, -1.25], [0.6, -1.05], [0.95, -0.5]]) {
-        ctx.beginPath();
-        ctx.arc(cx * r, cy * r, r * 0.46, 0, TAU);
-        ctx.fill();
-      }
-      break;
-    case 'afro':
-      cap(1.12, 1, 2, 0.9);
-      break;
-    case 'waves':
-    case 'long':
-      cap(1.08, 1, 2, 0.88);
-      break;
-    case 'ponytail':
-    case 'bun':
-    case 'topknot':
-      cap(1.04, 1, 2, 0.86);
-      break;
-    case 'braid':
-      cap(1.06, 1, 2, 0.86);
-      break;
-    case 'braids':
-      cap(1.06, 1, 2, 0.86);
-      // The near braid, in front of the cheek. Its twin is behind the skull.
-      ctx.fillStyle = w.hairShade;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.ellipse(r * 0.92, r * 0.35 + i * r * 0.55, r * 0.3, r * 0.3, 0, 0, TAU);
-        ctx.fill();
-      }
-      break;
-    case 'locs':
-      cap(1.06, 1, 2, 0.86);
-      break;
-    case 'ridge':
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.75, -r * 0.95);
-      ctx.lineTo(-r * 0.5, -r * 1.85);
-      ctx.lineTo(r * 0.25, -r * 2);
-      ctx.lineTo(r * 0.7, -r * 1.1);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'undercut':
-      ctx.beginPath();
-      ctx.arc(0, -r * 0.2, r * 1.06, Math.PI * 1.08, Math.PI * 1.92);
-      ctx.lineTo(r * 0.7, -r * 0.62);
-      ctx.lineTo(-r * 0.7, -r * 0.62);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'tonsure':
-      ctx.beginPath();
-      ctx.arc(0, -r * 0.2, r * 1.06, Math.PI * 1.02, Math.PI * 1.98);
-      ctx.arc(0, -r * 0.2, r * 0.62, Math.PI * 1.98, Math.PI * 1.02, true);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    default:
-      cap(1.06, 1, 2, 0.85);
-      break;
-  }
-}
-
-/** Whatever is on the chin, if anything is. */
-function beard(ctx: CanvasRenderingContext2D, w: Worn, r: number, t: Turn): void {
-  const id = w.look.beard;
-  if (id === 'none') return;
-  // A beard is on the front of a face, and gone by the time the face is.
-  const show = Math.min(1, Math.max(0, (t.depth + 0.35) / 0.55));
-  if (show <= 0) return;
-  ctx.fillStyle = id === 'stubble' ? darken(w.hair, -0.05) : w.hair;
-  ctx.globalAlpha = (id === 'stubble' ? 0.45 : 1) * show;
-  switch (id) {
-    case 'stubble':
-      ctx.beginPath();
-      ctx.arc(r * 0.15, r * 0.35, r * 0.85, Math.PI * 1.85, Math.PI * 0.95);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'moustache':
-      ctx.fillRect(r * 0.3, r * 0.12, r * 0.75, r * 0.22);
-      break;
-    case 'goatee':
-      ctx.fillRect(r * 0.3, r * 0.12, r * 0.6, r * 0.2);
-      ctx.beginPath();
-      ctx.ellipse(r * 0.45, r * 0.72, r * 0.26, r * 0.36, 0, 0, TAU);
-      ctx.fill();
-      break;
-    case 'short':
-      ctx.beginPath();
-      ctx.arc(r * 0.1, r * 0.3, r * 0.92, Math.PI * 1.8, Math.PI * 0.9);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'full':
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.75, -r * 0.1);
-      ctx.quadraticCurveTo(-r * 0.4, r * 1.5, r * 0.45, r * 1.45);
-      ctx.quadraticCurveTo(r * 1.15, r * 1.1, r * 1.02, -r * 0.2);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'long':
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.75, -r * 0.1);
-      ctx.quadraticCurveTo(-r * 0.45, r * 2.6, r * 0.35, r * 2.7);
-      ctx.quadraticCurveTo(r * 1.2, r * 1.4, r * 1.02, -r * 0.2);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    default:
-      break;
-  }
-  ctx.globalAlpha = 1;
-}
+export type PlayerPose = FigurePose;
 
 /* ---- Which way a figure is turned -------------------------------------- */
 
 /** How many ways round a figure can be turned, now that the view has eight. */
 export const FACINGS = 8;
-/** How far to each side of the nose an eye sits, in radians. */
-const EYE_APART = 0.61;
-/**
- * How deep a body is front to back against how wide across the shoulders. It
- * is what a figure edge on narrows to, and the one number here that is a
- * judgement rather than geometry.
- */
-const BODY_DEPTH = 0.58;
 /**
  * How far past the halfway line a heading swings before the figure turns.
  *
@@ -4667,290 +4350,58 @@ export function facingOf(sx: number, sy: number, was?: number): number {
 }
 
 /**
- * A figure is a body in plan rather than a picture with two sides.
- *
- * Everything below is drawn facing right and flipped when it turns the other
- * way, which is the whole of what a two-way figure ever needed. Eight ways
- * needs one number more — how much of the front is showing — and then nothing
- * has to be decided twice. The shoulders find their own width, because a torso
- * seen end on is as wide as the body is thick; the arms find their own places
- * on either side of that, and meet in the middle when it is edge on; the eyes
- * sit on the front of a ball and go round the back with it.
+ * Draws the character with its feet at (sx, sy), and the patch of ground it
+ * shades. The shade stays on the ground when a hop leaves it, which is what
+ * makes a hop look like leaving the ground rather than growing.
  */
-interface Turn {
-  /** -1 when the figure is turned to screen left, and the drawing is flipped. */
-  mirror: number;
-  /** How much of the front shows: 1 straight at you, 0 edge on, -1 away. */
-  depth: number;
-  /** And how much of the side: 0 square to you, 1 edge on. */
-  side: number;
-  /** What is left of the shoulders' width at this angle, as a share of it. */
-  girth: number;
-}
-
-function turnOf(facing: number): Turn {
-  const a = (facing / FACINGS) * TAU;
-  const depth = Math.cos(a);
-  const across = Math.sin(a);
-  const side = Math.abs(across);
-  return { mirror: across < -1e-9 ? -1 : 1, depth, side, girth: Math.hypot(depth, BODY_DEPTH * side) };
-}
-
-/**
- * A head at (cx, cy): hair behind, skull, eyes, hair over, beard.
- *
- * The eyes are placed rather than drawn. A head is a ball with two eyes on the
- * front of it; where each lands on screen and whether it is on the near side
- * at all both fall out of the angle. So the same three lines give two eyes
- * face on, one in profile and none from behind, and every step between them.
- */
-function head(ctx: CanvasRenderingContext2D, w: Worn, cx: number, cy: number, r: number, t: Turn): void {
-  ctx.save();
-  ctx.translate(cx, cy);
-  const front = t.depth >= 0;
-  // Whatever hangs behind the skull is behind it while you can see the face —
-  // which is what hides a ponytail when somebody is walking towards you — and
-  // in front of it the moment you are looking at the back of their head.
-  if (front) hairBehind(ctx, w, r);
-  ctx.fillStyle = w.skin;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, TAU);
-  ctx.fill();
-  const nose = Math.atan2(t.side, t.depth);
-  ctx.fillStyle = w.eye;
-  for (const off of [-EYE_APART, EYE_APART]) {
-    const at = nose + off;
-    const on = Math.cos(at);
-    if (on <= 0.12) continue;
-    // Foreshortened on its way round the side, so the last one to go narrows
-    // rather than winking out at full width.
-    const wide = r * 0.28 * Math.max(0.4, on);
-    ctx.fillRect(r * 0.62 * Math.sin(at) - wide / 2, -r * 0.33, wide, r * 0.28);
-  }
-  if (!front) {
-    // The back of a head is hair rather than face. Nothing to do for a bald
-    // one, which is the point of doing it this way round.
-    if (w.look.hair !== 'bald') {
-      // The whole skull, not most of it: a cap short of the jaw leaves a pale
-      // crescent under it, and a crescent of skin at the bottom of the back of
-      // a head reads as a chin on backwards.
-      ctx.globalAlpha = Math.min(1, -t.depth * 1.4);
-      ctx.fillStyle = w.hair;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, TAU);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-    hairBehind(ctx, w, r);
-  }
-  bothSides(ctx, t, () => hairOver(ctx, w, r));
-  bothSides(ctx, t, () => beard(ctx, w, r, t));
-  ctx.restore();
-}
-
-/**
- * Draw something on both sides of a face.
- *
- * A fringe and a beard are the same on the left of a head as on the right, and
- * every one of these silhouettes is drawn facing right because that was all a
- * two-way figure ever needed. So the far half is the same drawing squashed
- * across: the full width of it when the face is square to you, none of it at
- * all in profile, and the right amount of it at every angle between — which is
- * what a cheek looks like from three quarters on.
- *
- * Both halves are the same opaque colours, so where they overlap there is
- * nothing to see and no seam down the middle of anybody.
- */
-function bothSides(ctx: CanvasRenderingContext2D, t: Turn, draw: () => void): void {
-  const far = 1 - t.side;
-  if (far > 0.01) {
-    ctx.save();
-    ctx.scale(-far, 1);
-    draw();
-    ctx.restore();
-  }
-  draw();
-}
-
-/**
- * The same figure, sat down: knees forward over the footboard, both hands out
- * on the reins, and no shadow, because what is under it is the cart.
- */
-function drawDriver(ctx: CanvasRenderingContext2D, pose: PlayerPose, w: Worn, t: Turn): void {
-  const jolt = pose.moving ? gaitSin(pose, 0.9) * 0.6 : 0;
-  const chest = 4.5 * w.build.shoulder;
-  // thighs forward, shins down
-  ctx.fillStyle = w.trousers;
-  ctx.fillRect(-1, -8 + jolt, 8, 3);
-  ctx.fillRect(5.5, -8 + jolt, 3, 7);
-  // body
-  ctx.fillStyle = w.tunic;
-  ctx.fillRect(-chest, -20 + jolt, chest * 2, 13);
-  ctx.fillStyle = BELT;
-  ctx.fillRect(-chest, -9.5 + jolt, chest * 2, 1.6);
-  // arms out to the reins
-  ctx.fillStyle = w.tunic;
-  ctx.fillRect(2, -18 + jolt, 6, 2.4);
-  ctx.fillStyle = w.skin;
-  ctx.fillRect(7.5, -18.2 + jolt, 2.4, 2.4);
-  // reins, running off to the team
-  ctx.strokeStyle = '#4a3524';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(9, -17 + jolt);
-  ctx.lineTo(15, -12 + jolt);
-  ctx.stroke();
-  head(ctx, w, 0, -24.5 + jolt, 4.6, t);
-}
-
-/** Draws the character with its feet at (sx, sy). */
 export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
-  const w = wornOf(pose);
-  const b = w.build;
-  const t = turnOf(pose.facing);
-  ctx.save();
-  ctx.translate(sx, sy);
-  ctx.scale(zoom * t.mirror, zoom);
-  if (pose.swimming) {
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 12, 4.5, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = w.tunic;
-    ctx.fillRect(-6, -8, 12, 7);
-    head(ctx, w, 0, -12, 5.5, t);
-    ctx.restore();
-    return;
-  }
-  if (pose.driving) {
-    drawDriver(ctx, pose, w, t);
-    ctx.restore();
-    return;
-  }
-  const swing = pose.moving ? gaitSin(pose) : 0;
-  /*
-   * A hop lifts the whole figure and a wave swings one arm, and both of them
-   * ride the numbers that were already here: `bob` is subtracted from every y
-   * below, and the shadow is drawn before it and stays where it is — which is
-   * what makes a hop look like leaving the ground rather than growing.
-   */
-  const em = pose.emote ? emotePose(pose.emote, pose.emoteT ?? 0) : null;
-  const bob = pose.moving ? Math.abs(Math.cos(pose.phase)) * 1.2 : 0;
-  /*
-   * A hop lifts the *whole* figure, legs included, which the walking bob above
-   * deliberately does not — a stride rides the chest a pixel over still legs.
-   * Seven pixels of it does not: the first screenshot of a hop had a torso
-   * floating clear of a pair of legs still standing on the ground. So `lift`
-   * is its own number and reaches everything drawn, and only the shadow is
-   * left where it was, because the shadow is the ground.
-   */
-  const lift = em?.lift ?? 0;
-  // Across the shoulders, and then what is left of it at this angle.
-  const span = 4.5 * b.shoulder;
-  const chest = span * t.girth;
-  const waist = 4.5 * b.waist * t.girth;
-  const hips = 3.5 * b.hip;
-  // The shadow marks the one subtile the character stands on.
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 11, 5, 0, 0, TAU);
-  ctx.fill();
-  /*
-   * Legs. They do not get thinner as the figure turns, they come together:
-   * two hips a fixed distance apart, swinging round with the body until edge
-   * on they are one behind the other. Same for the arms below.
-   */
-  const legW = Math.max(1.8, hips * 0.92);
-  const apart = hips * 0.55 * t.depth;
-  ctx.fillStyle = darken(w.trousers, 0.16);
-  ctx.fillRect(apart - legW / 2, -12 - swing * 2 - lift, legW, 12 + swing * 2);
-  ctx.fillStyle = w.trousers;
-  ctx.fillRect(-apart - legW / 2, -12 + swing * 2 - lift, legW, 12 - swing * 2);
-  // arms
-  const armSwing = pose.working ? gaitSin(pose, 2.2) * 5 : swing * 3;
-  const arm = (span + 0.9) * t.depth;
-  const sleeve = 3.3;
-  const hand = 2.5;
-  // The far one goes down before the body and comes up a shade darker, so a
-  // figure with its back to you has an arm behind it rather than stuck on.
-  ctx.fillStyle = darken(w.tunic, 0.16);
-  ctx.fillRect(arm - sleeve / 2, -25 - bob - lift - armSwing, sleeve, 8);
-  ctx.fillStyle = darken(w.skin, 0.16);
-  ctx.fillRect(arm - hand / 2, -17 - bob - lift - armSwing, hand, hand);
-  // body: shoulders at the top, waist at the belt, so a build is a taper
-  // rather than a wider rectangle.
-  ctx.fillStyle = w.tunic;
-  ctx.beginPath();
-  ctx.moveTo(-chest, -26 - bob - lift);
-  ctx.lineTo(chest, -26 - bob - lift);
-  ctx.lineTo(waist, -12 - bob - lift);
-  ctx.lineTo(-waist, -12 - bob - lift);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = BELT;
-  ctx.fillRect(-waist - 0.2, -14.5 - bob - lift, waist * 2 + 0.4, 1.6);
-  // and the near arm over the body it swings across — or up beside the head,
-  // when there is a wave in it.
-  ctx.fillStyle = w.tunic;
-  if (em && em.wave !== 0) {
-    const lean = em.wave * 2.2;
-    ctx.fillRect(-arm - sleeve / 2 + lean, -33 - bob - lift, sleeve, 9);
-    ctx.fillStyle = w.skin;
-    ctx.fillRect(-arm - hand / 2 + lean * 1.6, -35 - bob - lift, hand, hand);
-  } else {
-    ctx.fillRect(-arm - sleeve / 2, -25 - bob - lift + armSwing, sleeve, 8);
-    ctx.fillStyle = w.skin;
-    ctx.fillRect(-arm - hand / 2, -17 - bob - lift + armSwing, hand, hand);
-  }
-  head(ctx, w, 0, -31 - bob - lift, 4.6, t);
-  ctx.restore();
+  if (!pose.swimming && !pose.driving) contact(ctx, sx, sy, 8 * zoom, 3.4 * zoom);
+  drawFigure(ctx, sx, sy, zoom, pose);
 }
 
 /**
- * Just the head, filling the box.
- *
- * Choosing a haircut off a whole body means judging nine pixels of it; the
- * same head at four times the size is the difference between twenty choices
- * and twenty thumbnails that all look the same. Same `head()` as the figure,
- * so a thumbnail cannot drift from the body it is promising.
+ * Just the head and shoulders, filling the box: what a haircut or a beard is
+ * chosen by. The same head the island draws, so a thumbnail cannot promise
+ * what the body will not wear.
  */
-export function drawHeadshot(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, look: Look): void {
-  const w = wornOf({ phase: 0, moving: false, facing: 1, swimming: false, working: false, look });
-  const r = size / 6.6;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, size, size);
-  ctx.clip();
-  // A ground of its own. Without it black hair on a dark card is twenty
-  // identical squares, which is the one thing a row of thumbnails must not be.
-  ctx.fillStyle = '#4b5460';
-  ctx.fillRect(x, y, size, size);
-  // Shoulders, so a head is not a balloon and long hair has something to fall
-  // on — small, because the head is what is being chosen.
-  ctx.fillStyle = w.tunic;
-  ctx.beginPath();
-  ctx.ellipse(x + size / 2, y + size * 1.24, size * 0.36, size * 0.3, 0, 0, TAU);
-  ctx.fill();
-  head(ctx, w, x + size / 2, y + size * 0.5, r, turnOf(1));
-  ctx.restore();
+export function drawHeadshot(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, look: Look, facing = 1, t?: number, tall = size): void {
+  drawBust(ctx, x, y, size, look, facing, t, tall);
 }
 
+/** What the creator's mirror can show a body doing. */
+export type PortraitMotion = 'idle' | 'walk' | 'run' | 'work' | 'wave' | 'hop';
+
 /**
- * The same figure, standing still and big, for the creator to draw into a
- * square of its own. It is `drawPlayer` and not a second drawing of a person:
- * a preview that is its own code is a preview that can lie to you, and the
- * whole point of choosing a face is seeing the one you will get.
+ * The same figure, big, for the creator to draw into a square of its own,
+ * `t` seconds into whatever it is doing and turned `facing` of the eight ways
+ * round. It is `drawPlayer` and not a second drawing of a person: a preview
+ * that is its own code is a preview that can lie to you.
  */
-export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, look: Look, phase = 0, facing = 1): void {
-  const zoom = Math.min(w / 26, h / 42);
+export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, look: Look, t = 0, facing = 1, motion: PortraitMotion = 'idle'): void {
+  const zoom = Math.min(w / 30, h / 44);
+  // One body, so going from standing to walking and turning round are blended as they are on the island.
+  const pose: PlayerPose = { id: 'mirror', phase: t * 6, moving: false, facing, swimming: false, working: false, look };
+  if (motion === 'walk' || motion === 'run') {
+    pose.moving = true;
+    pose.gait = motion === 'run' ? 1 : 0;
+    pose.phase = t * (motion === 'run' ? 12 : 8);
+  } else if (motion === 'work') {
+    pose.working = true;
+  } else if (motion === 'wave' || motion === 'hop') {
+    // The emote over and over, with a breath between.
+    const len = motion === 'wave' ? 1.9 : 1.2;
+    const k = (t % (len + 0.8)) / len;
+    if (k <= 1) {
+      pose.emote = motion;
+      pose.emoteT = k;
+    }
+  }
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
-  // Three quarters on by default, which is the angle a face is easiest to
-  // judge at and the one the game showed everybody before it could turn.
-  drawPlayer(ctx, x + w / 2, y + h - h * 0.08, zoom, {
-    phase, moving: false, facing, swimming: false, working: false, look,
-  });
+  const fx = x + w / 2, fy = y + h - h * 0.1;
+  contact(ctx, fx, fy, 8 * zoom, 3.4 * zoom);
+  drawFigure(ctx, fx, fy, zoom, pose, { ink: 1.6 });
   ctx.restore();
 }

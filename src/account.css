@@ -226,7 +226,48 @@ a { color: var(--ui-accent); }
   border: 1px solid var(--ui-border);
   border-radius: 4px;
   background: linear-gradient(#1b2f22, #2c3c26 60%, #3b4429);
+  cursor: grab;
+  touch-action: pan-y;
 }
+
+#me:active { cursor: grabbing; }
+#me:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+
+/*
+ * Under the mirror: turn it, look close, and see yourself doing things. The
+ * same eight ways round the island draws you, and the same moves.
+ */
+.turn, .motions {
+  display: flex;
+  width: 200px;
+  gap: 4px;
+}
+
+.motions { flex-wrap: wrap; }
+
+.turn button, .motions button {
+  flex: 1 1 0;
+  padding: 5px 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  background: rgba(60, 50, 30, 0.55);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.motions button { flex-basis: calc((100% - 8px) / 3); }
+.turn #close { flex-grow: 2; }
+
+.turn button:hover, .motions button:hover { border-color: var(--ui-border-light); }
+.turn button[aria-pressed='true'], .motions button[aria-pressed='true'] {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 1px var(--ui-accent);
+  color: #fff;
+}
+.turn button:focus-visible, .motions button:focus-visible, .pick:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
 
 #roll, #ashore {
   padding: 8px 12px;
@@ -301,11 +342,12 @@ a { color: var(--ui-accent); }
 .pick.on { border-color: var(--ui-accent); box-shadow: 0 0 0 1px var(--ui-accent); }
 
 .pick.swatch { width: 30px; height: 30px; }
-.pick.face { width: 46px; height: 46px; }
+.pick.face { width: 54px; height: 54px; }
+.pick.face canvas { width: 52px; height: 52px; }
 .pick.word { padding: 6px 12px; line-height: 1.2; }
 
 @media (max-width: 640px) {
   .maker { flex-direction: column; align-items: stretch; }
   .mirror { position: static; }
-  #me, #roll { width: 100%; }
+  #me, #roll, .turn, .motions { width: 100%; }
 }
