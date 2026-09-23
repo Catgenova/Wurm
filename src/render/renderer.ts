@@ -3009,25 +3009,6 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  /**
-   * A wall, with a thickness to it.
-   *
-   * Reported: "walls are paper thin and have no character." They were exactly
-   * paper: one quad standing on the border line, one flat colour, and a few
-   * lines ruled across it. Nothing in that says how thick a thing is or what
-   * it is made of, and a village of it reads as folded card.
-   *
-   * So a wall is a box now rather than a curtain. It is centred on its border
-   * and carries three faces: the one the camera is on, the cap along its top —
-   * which catches the sky and is the whole of what says "thick" in a view from
-   * above — and, at an end with nothing carrying on from it, the end grain.
-   * The three are lit apart: the top brightest, the face by its angle to the
-   * light as before, the end in shadow.
-   *
-   * What it is made of is drawn on the face by `wallGrain`, and only when you
-   * are near enough to see it; from far off a wall is its three faces and
-   * that is the right amount of a wall.
-   */
   /** Per building, which way its floor joists run, and how many tiles it had when that was worked out. */
   private joists = new Map<number, { n: number; h: boolean }>();
 
@@ -3057,6 +3038,25 @@ export class Renderer {
     return had.h === (border.dir === 'h');
   }
 
+  /**
+   * A wall, with a thickness to it.
+   *
+   * Reported: "walls are paper thin and have no character." They were exactly
+   * paper: one quad standing on the border line, one flat colour, and a few
+   * lines ruled across it. Nothing in that says how thick a thing is or what
+   * it is made of, and a village of it reads as folded card.
+   *
+   * So a wall is a box now rather than a curtain. It is centred on its border
+   * and carries three faces: the one the camera is on, the cap along its top —
+   * which catches the sky and is the whole of what says "thick" in a view from
+   * above — and, at an end with nothing carrying on from it, the end grain.
+   * The three are lit apart: the top brightest, the face by its angle to the
+   * light as before, the end in shadow.
+   *
+   * What it is made of is drawn on the face by `wallGrain`, and only when you
+   * are near enough to see it; from far off a wall is its three faces and
+   * that is the right amount of a wall.
+   */
   private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
@@ -3750,16 +3750,6 @@ export class Renderer {
         if (gated) blit(cob.gateWeed[v], 0, 1);
       }
       /*
-       * The hour's light, and only that. A flat wall takes a wash down its
-       * face as well -- dark where the ground throws shade back up it, light
-       * where the sky catches the last of it -- and this one must not: the
-       * wash runs top to bottom of a storey, so at every floor line the lit
-       * top of one storey would meet the shaded foot of the next and draw a
-       * band across a wall that was built to stack without one. The shade at
-       * the ground is painted into `foot` instead, on the storey that has a
-       * ground to be shaded by.
-       */
-      /*
        * The beam ends of the floor over this storey, where this is one of the
        * two walls of the house its joists rest on, and out of doors: inside,
        * the beams are the ceiling of the room. They are painted leaning out
@@ -3803,6 +3793,16 @@ export class Renderer {
       }
       // The coat rolled over the head of a wall nothing stands on.
       if (cob.brow && !roofed) blit(cob.brow[v], 1 - cob.brow[v].height / cob.h, 1);
+      /*
+       * The hour's light, and only that. A flat wall takes a wash down its
+       * face as well -- dark where the ground throws shade back up it, light
+       * where the sky catches the last of it -- and this one must not: the
+       * wash runs top to bottom of a storey, so at every floor line the lit
+       * top of one storey would meet the shaded foot of the next and draw a
+       * band across a wall that was built to stack without one. The shade at
+       * the ground is painted into `foot` instead, on the storey that has a
+       * ground to be shaded by.
+       */
       face();
       light(lit);
       arris();
