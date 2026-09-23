@@ -1913,19 +1913,19 @@ function paint(S: Stock): Masonry {
     const pale = channels(T.lit)[0] > 215;
     const body = pale ? PASTEL.vein : mixHex(T.lit, PASTEL.veinDeep, 0.4), faint = pale ? PASTEL.veinFaint : mixHex(T.lit, PASTEL.veinDeep, 0.2);
     const a = (R() < 0.5 ? 1 : -1) * (0.2 + R() * 0.4);
-    const p = crinkle(x - 6, y + R() * h - Math.tan(a) * w * 0.5, a, (w + 12) / Math.cos(a), R, 4);
-    bleed(g, p, body, 8 + R() * 6);
-    wire(g, p, body, 0.9 + R() * 0.6, R);
+    const p = crinkle(x - 6, y + R() * h - Math.tan(a) * w * 0.5, a, (w + 12) / Math.cos(a), R, 5);
+    bleed(g, p, body, 10 + R() * 6);
+    wire(g, p, body, 1.7 + R() * 0.5, R);
     g.lineJoin = 'round';
-    for (let k = 0, m = 1 + Math.floor(R() * (w > 60 ? 3 : 1.5)); k < m; k++) {
+    for (let k = 0, m = 1 + Math.floor(R() * (w > 60 ? 2.5 : 1.5)); k < m; k++) {
       const [bx, by] = p[Math.floor(R() * p.length)];
-      g.strokeStyle = faint; g.lineWidth = 0.8;
-      run(g, crinkle(bx, by, a + (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.8), 10 + R() * 30, R, 4)); g.stroke();
+      g.strokeStyle = faint; g.lineWidth = 1.3;
+      run(g, crinkle(bx, by, a + (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.8), 12 + R() * 30, R, 5)); g.stroke();
     }
     if (pale && R() < 0.25) {
       const b = (R() - 0.5) * 1.2;
-      g.strokeStyle = PASTEL.veinGold; g.lineWidth = 0.9;
-      run(g, crinkle(x - 6, y + R() * h - Math.tan(b) * w * 0.5, b, (w + 12) / Math.cos(b), R, 4, 1)); g.stroke();
+      g.strokeStyle = PASTEL.veinGold; g.lineWidth = 1.4;
+      run(g, crinkle(x - 6, y + R() * h - Math.tan(b) * w * 0.5, b, (w + 12) / Math.cos(b), R, 5, 1)); g.stroke();
     }
     g.restore();
   }
@@ -3847,56 +3847,56 @@ function paint(S: Stock): Masonry {
     g.fillRect(0, 0, w, h);
     const slant = (0.35 + R() * 0.45) * (R() < 0.5 ? -1 : 1);
     const mains: Pt[][] = [];
-    const n = 5 + Math.floor(R() * 3);
+    const n = 4 + Math.floor(R() * 3);
     for (let i = 0; i < n; i++) {
       const a = slant + (R() - 0.5) * 0.4;
-      mains.push(crinkle(-8, h * ((i + 0.1 + R() * 0.8) / n) * 1.15 - h * 0.08 - Math.tan(a) * w * 0.5, a, (w + 16) / Math.cos(a), R));
+      mains.push(crinkle(-10, h * ((i + 0.1 + R() * 0.8) / n) * 1.15 - h * 0.08 - Math.tan(a) * w * 0.5, a, (w + 20) / Math.cos(a), R, 7, 0.85));
     }
     // And two or three across them at another slant, which is what cuts the field into cells.
     const cross: Pt[][] = [];
     for (let i = 0, m = 2 + Math.floor(R() * 2); i < m; i++) {
       const a = slant + (R() < 0.5 ? -1 : 1) * (0.8 + R() * 0.5);
-      cross.push(crinkle(R() * w, R() * h - Math.tan(a) * w * 0.3, a, 90 + R() * 160, R));
+      cross.push(crinkle(R() * w, R() * h - Math.tan(a) * w * 0.3, a, 90 + R() * 160, R, 7, 0.85));
     }
     // The clouds, laid first: drifts along the bed, and a few hugging a vein.
     const cloud = (cx: number, cy: number, rx: number, ry: number, rot: number): void => {
       g.save(); g.translate(cx, cy); g.rotate(rot);
-      for (const [f, al] of [[1, 0.2], [0.6, 0.18]]) {
+      for (const [f, al] of [[1, 0.22], [0.6, 0.2]]) {
         shape(g, blob(0, 0, rx * f, ry * f, 14, R, 0.85, 0.45, 0.4));
         g.fillStyle = hexA(PASTEL.veinSoft, al); g.fill();
       }
       g.restore();
     };
-    for (let k = 0; k < 9 + Math.floor(R() * 5); k++) cloud(R() * w, R() * h, 40 + R() * 80, 16 + R() * 30, slant + (R() - 0.5) * 0.6);
+    for (let k = 0; k < 8 + Math.floor(R() * 5); k++) cloud(R() * w, R() * h, 50 + R() * 70, 18 + R() * 30, slant + (R() - 0.5) * 0.6);
     for (let k = 0; k < 5; k++) {
       const m = mains[Math.floor(R() * mains.length)], [cx, cy] = m[Math.floor(R() * m.length)];
-      cloud(cx, cy, 24 + R() * 40, 8 + R() * 12, slant);
+      cloud(cx, cy, 30 + R() * 40, 10 + R() * 12, slant);
     }
     g.lineJoin = 'round';
     mains.forEach((p, i) => {
       // Two of them bold, and the rest fine.
-      if (i < 2 || R() < 0.3) bleed(g, p, PASTEL.vein, 10 + R() * 14);
-      wire(g, p, i === 0 ? PASTEL.veinDeep : i === 1 ? PASTEL.vein : R() < 0.5 ? PASTEL.vein : PASTEL.veinFaint, i === 0 ? 1.7 + R() * 0.5 : i === 1 ? 1.3 + R() * 0.4 : 0.8 + R() * 0.5, R);
+      if (i < 2 || R() < 0.35) bleed(g, p, PASTEL.vein, 18 + R() * 16);
+      wire(g, p, i === 0 ? PASTEL.veinDeep : i === 1 ? PASTEL.vein : R() < 0.5 ? PASTEL.vein : PASTEL.veinFaint, i === 0 ? 3 + R() * 0.6 : i === 1 ? 2.4 + R() * 0.5 : 1.7 + R() * 0.5, R);
       if (R() < 0.5) {
         // The vein split in two for a stretch, the second thread fainter.
-        const off = (R() < 0.5 ? -1 : 1) * (3 + R() * 4), from = Math.floor(p.length * R() * 0.5), len = Math.floor(p.length * (0.25 + R() * 0.35));
-        const q = p.slice(from, from + len).map(([px, py]): Pt => [px - Math.sin(slant) * off + (R() - 0.5) * 1.4, py + Math.cos(slant) * off + (R() - 0.5) * 1.4]);
-        if (q.length > 3) wire(g, q, PASTEL.veinFaint, 1, R);
+        const off = (R() < 0.5 ? -1 : 1) * (6 + R() * 5), from = Math.floor(p.length * R() * 0.5), len = Math.floor(p.length * (0.25 + R() * 0.35));
+        const q = p.slice(from, from + len).map(([px, py]): Pt => [px - Math.sin(slant) * off + (R() - 0.5) * 2, py + Math.cos(slant) * off + (R() - 0.5) * 2]);
+        if (q.length > 3) wire(g, q, PASTEL.veinFaint, 1.8, R);
       }
     });
-    for (const p of cross) wire(g, p, R() < 0.5 ? PASTEL.vein : PASTEL.veinFaint, 0.8 + R() * 0.4, R);
+    for (const p of cross) wire(g, p, R() < 0.5 ? PASTEL.vein : PASTEL.veinFaint, 1.6 + R() * 0.4, R);
     // The web: lesser threads thrown off the veins, into the next one or out to nothing.
     const all = [...mains, ...cross];
-    for (let k = 0; k < 30 + Math.floor(R() * 14); k++) {
+    for (let k = 0; k < 14 + Math.floor(R() * 9); k++) {
       const m = all[Math.floor(R() * all.length)], [bx, by] = m[Math.floor(R() * m.length)];
-      g.strokeStyle = R() < 0.6 ? PASTEL.veinFaint : PASTEL.vein; g.lineWidth = 0.7 + R() * 0.5;
-      run(g, crinkle(bx, by, slant + (R() < 0.5 ? -1 : 1) * (0.4 + R() * 1.1), 16 + R() * 100, R, 4)); g.stroke();
+      g.strokeStyle = R() < 0.6 ? PASTEL.veinFaint : PASTEL.vein; g.lineWidth = 1.4 + R() * 0.5;
+      run(g, crinkle(bx, by, slant + (R() < 0.5 ? -1 : 1) * (0.4 + R() * 1.1), 24 + R() * 110, R, 6)); g.stroke();
     }
     // And the gold.
     for (let k = 0, m = R() < 0.34 ? 0 : 1 + Math.floor(R() * 2); k < m; k++) {
       const a = slant + (R() - 0.5) * 0.8;
-      g.strokeStyle = PASTEL.veinGold; g.lineWidth = 0.9 + R() * 0.4;
-      run(g, crinkle(-8, R() * h - Math.tan(a) * w * 0.5, a, ((w + 16) / Math.cos(a)) * (0.5 + R() * 0.6), R, 4, 1)); g.stroke();
+      g.strokeStyle = PASTEL.veinGold; g.lineWidth = 1.7 + R() * 0.4;
+      run(g, crinkle(-10, R() * h - Math.tan(a) * w * 0.5, a, ((w + 20) / Math.cos(a)) * (0.5 + R() * 0.6), R, 6, 1)); g.stroke();
     }
     return c;
   }
@@ -3909,9 +3909,9 @@ function paint(S: Stock): Masonry {
   function marbleBand(g: Ctx, R: Rand): void {
     for (const x of [0, TW / 2]) stone(g, x + 1, 1, TW / 2 - 2, BAND - 2, R, 'flat', 'unit', 0, 1.2);
     g.fillStyle = hexA(TONES.top.lit, 0.92); g.fillRect(0, 1, TW, 7);
-    g.fillStyle = hexA(TONES.flat.shade, 0.9); g.fillRect(0, 8, TW, 3);
-    g.fillStyle = hexA(TONES.flat.hi, 0.85); g.fillRect(0, BAND - 10, TW, 1.6);
-    g.fillStyle = hexA(PASTEL.line, 0.5); g.fillRect(0, BAND - 7, TW, 1.3);
+    g.fillStyle = hexA(TONES.flat.shade, 0.9); g.fillRect(0, 8, TW, 4);
+    g.fillStyle = hexA(TONES.flat.hi, 0.85); g.fillRect(0, BAND - 12, TW, 3);
+    g.fillStyle = hexA(PASTEL.line, 0.45); g.fillRect(0, BAND - 8, TW, 3);
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, 1, BAND); g.fillRect(TW / 2 - 1, 0, 2, BAND); g.fillRect(TW - 1, 0, 1, BAND);
   }
@@ -3937,12 +3937,19 @@ function paint(S: Stock): Masonry {
     if (!cols) { cols = [slabLeaf(SW, FH, R), slabLeaf(SW, FH, R)]; COLUMNS.set(key, cols); }
     g.drawImage(cols[0], 0, BAND);
     g.drawImage(cols[1], SW, BAND);
-    g.fillStyle = PASTEL.joint;
-    g.fillRect(0, BAND, 1, FH); g.fillRect(TW - 1, BAND, 1, FH); g.fillRect(SW - 1, BAND, 2, FH);
-    g.fillRect(0, bed - 1, TW, 2); g.fillRect(0, TH - 1, TW, 1);
-    for (const [x0, y0, x1, y1] of [[1, BAND, SW - 1, bed - 1], [SW + 1, BAND, TW - 1, bed - 1], [1, bed + 1, SW - 1, TH - 1], [SW + 1, bed + 1, TW - 1, TH - 1]]) {
-      g.fillStyle = hexA(PASTEL.stoneHi, 0.9); g.fillRect(x0, y0, x1 - x0, 1.5); g.fillRect(x0, y0, 1.5, y1 - y0);
-      g.fillStyle = hexA(PASTEL.stoneShade, 0.85); g.fillRect(x0, y1 - 1.5, x1 - x0, 1.5); g.fillRect(x1 - 1.5, y0, 1.5, y1 - y0);
+    /*
+     * The joints: a hair wide on the stone, and still three or four pixels
+     * of the picture, in a grey only a little under the white. A line one
+     * or two pixels deep, shrunk to a face at the zoom the game is played
+     * at, is sampled on one row and missed on the next, and a bed joint came
+     * out as a dotted line across every storey.
+     */
+    g.fillStyle = mixHex(PASTEL.joint, PASTEL.stone, 0.25);
+    g.fillRect(0, BAND, 1.5, FH); g.fillRect(TW - 1.5, BAND, 1.5, FH); g.fillRect(SW - 1.5, BAND, 3, FH);
+    g.fillRect(0, bed - 2, TW, 4); g.fillRect(0, TH - 2, TW, 2);
+    for (const [x0, y0, x1, y1] of [[1.5, BAND, SW - 1.5, bed - 2], [SW + 1.5, BAND, TW - 1.5, bed - 2], [1.5, bed + 2, SW - 1.5, TH - 2], [SW + 1.5, bed + 2, TW - 1.5, TH - 2]]) {
+      g.fillStyle = hexA(PASTEL.stoneHi, 0.9); g.fillRect(x0, y0, x1 - x0, 2); g.fillRect(x0, y0, 2, y1 - y0);
+      g.fillStyle = hexA(PASTEL.stoneShade, 0.8); g.fillRect(x0, y1 - 2.5, x1 - x0, 2.5); g.fillRect(x1 - 2, y0, 2, y1 - y0);
     }
     oversail(g, 0, BAND, 12);
     return [];
@@ -5247,11 +5254,11 @@ function paint(S: Stock): Masonry {
     marblePiece(g, R, [[X0, H], [x0, head], [x0, foot], [X0, foot]]);
     marblePiece(g, R, [[x1, head], [X1, H], [X1, foot], [x1, foot]]);
     marblePiece(g, R, [[X0, H], [X1, H], [x1, head], [x0, head]]);
-    g.lineWidth = 1.8;
+    g.lineWidth = 2.6;
     g.strokeStyle = T.hi;
-    g.beginPath(); g.moveTo(X0 + 4.5, foot); g.lineTo(X0 + 4.5, H + 4.5); g.lineTo(X1 - 4.5, H + 4.5); g.stroke();
+    g.beginPath(); g.moveTo(X0 + 5, foot); g.lineTo(X0 + 5, H + 5); g.lineTo(X1 - 5, H + 5); g.stroke();
     g.strokeStyle = T.shade;
-    g.beginPath(); g.moveTo(X1 - 4.5, H + 4.5); g.lineTo(X1 - 4.5, foot); g.stroke();
+    g.beginPath(); g.moveTo(X1 - 5, H + 5); g.lineTo(X1 - 5, foot); g.stroke();
     g.fillStyle = T.shade;
     g.fillRect(x0 - 5, head - 5, x1 - x0 + 10, 5);
     g.fillRect(x0 - 5, head, 5, foot - head);
