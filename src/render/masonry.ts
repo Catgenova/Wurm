@@ -431,6 +431,12 @@ interface Stock {
   grain?: boolean;
   /** How much taller than the short courses the tall ones are, turn about: 0.3 lays them 1.3 to 0.7. None lays them alike. */
   rhythm?: number;
+  /**
+   * On slate, brick laid for show: Flemish bond, a stretcher and a header
+   * turn about in every course; a diaper of violet headers over the field;
+   * and a course of dogtooth under the band at the head of every storey.
+   */
+  ornate?: boolean;
 }
 
 /* ---- the two masonries -------------------------------------------------- */
@@ -565,11 +571,11 @@ function lighten(hex: string, dl: number): string {
  * dark bevel under every one of them is a wall of sweets. `p` is the odd one
  * standing a hair proud of the face, which is the one that earns the shadow.
  */
-function values(base: string): Record<string, Tone> {
+function values(base: string, step = 2): Record<string, Tone> {
   const out: Record<string, Tone> = {};
   for (let k = -3; k <= 3; k++) {
-    out['f' + k] = { lit: lighten(base, 2 * k), shade: lighten(base, 2 * k - 3), hi: lighten(base, 2 * k + 5) };
-    out['p' + k] = { lit: lighten(base, 2 * k), shade: lighten(base, 2 * k - 8), hi: lighten(base, 2 * k + 6) };
+    out['f' + k] = { lit: lighten(base, step * k), shade: lighten(base, step * k - 3), hi: lighten(base, step * k + 5) };
+    out['p' + k] = { lit: lighten(base, step * k), shade: lighten(base, step * k - 8), hi: lighten(base, step * k + 6) };
   }
   return out;
 }
@@ -767,6 +773,89 @@ const STONE: Stock = ((P) => ({
   pairs: ['warm', 'burnt'],
   field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
 }))(STONE_PASTEL);
+
+/**
+ * And slate: an ornate black brick, the island's grandest dark masonry.
+ *
+ * The brick is slate cut to a brick's size, a chalky blue-black -- never
+ * black -- a dozen values of it with a plum bed and a green one out of the
+ * same quarry, and a sheen along the top of every brick where the dense
+ * stone takes the light. It is laid for show: in Flemish bond, a stretcher
+ * and a header turn about in every course; the headers picked out in violet
+ * slate to draw a diaper of great lozenges over the field; and under the
+ * band at the head of every storey a course of dogtooth, the bricks set
+ * corner-out so the course is a row of teeth. Its dressings -- the band,
+ * the quoins, the jambs and the arches, the sills and the plinth -- are a
+ * pale silver-lilac slate, so the dark field is framed wherever it stops.
+ */
+const SLATE_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the brick: its field tone, its shade, the sheen along its top, and its darkest
+  stone: '#4f5369', stoneShade: '#44475c', stoneHi: '#666a84', stoneDark: '#3b3e51',
+  // a plum bed out of the same quarry, and a darker blue one
+  warm: '#544f69', warmShade: '#49455d', warmHi: '#686380',
+  dark: '#43465a', darkHi: '#555970',
+  // the joint, a step over the brick, and the ink round every one: a deep indigo, never black
+  joint: '#6a6c84', line: '#34364a',
+  // the pale slate it is dressed in, and the band of it at a floor line
+  dress: '#aeb0c4', dressShade: '#9799ae', dressHi: '#c4c6d6',
+  band: '#b4b6c8', bandShade: '#9ea0b4', bandHi: '#c8cad8',
+  ringJoint: '#6a6c84', reveal: '#3a3c50',
+  // the violet of the diaper's headers, and a lighter one for the voussoirs that carry it into the dressings
+  diaper: '#625d88', vous: '#7b76a0',
+  // the dogtooth: the face of a tooth turned to the light, the one turned from it, and the dark between them
+  toothLit: '#8d8fa8', toothShade: '#4b4e64', recess: '#303247',
+  stain: '#5d6072', stainShade: '#52556a',
+};
+
+const SLATE: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone, 1.3),
+    /*
+     * The beds a quarry gives up besides its own, every one inside a few
+     * points of the field: `warm` a plum slate, `burnt` a bluer, darker one,
+     * and `brown` a blue one a step off the field. Nothing green: on a wall
+     * that carries no planting a green brick is a patch of moss.
+     */
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    burnt:   { lit: '#474b62', shade: lighten('#474b62', -4), hi: lighten('#474b62', 8) },
+    brown:   { lit: '#4a4f68', shade: lighten('#4a4f68', -4), hi: lighten('#4a4f68', 8) },
+    weather: { lit: lighten(P.stone, -4), shade: lighten(P.stone, -7), hi: lighten(P.stone, 4) },
+    bleach:  { lit: lighten(P.stone, 5), shade: lighten(P.stone, 2), hi: lighten(P.stone, 11) },
+    // The pale slate, in the two tones its dressings turn about in.
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: '#9a9cb2', shade: '#8587a0', hi: '#aeb0c4' },
+    dark:    { lit: '#9a9cb2', shade: '#8587a0', hi: '#aeb0c4' },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 6) },
+    diaper:  { lit: P.diaper, shade: lighten(P.diaper, -6), hi: lighten(P.diaper, 8) },
+    vous:    { lit: P.vous, shade: lighten(P.vous, -8), hi: lighten(P.vous, 9) },
+    // And the footing: the pale slate a step darker, in two beds.
+    foot:    { lit: '#8f92a8', shade: '#7c7f96', hi: '#a3a6ba' },
+    footB:   { lit: '#9a9db2', shade: '#86899f', hi: '#adb0c2' },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.band, 6), shade: lighten(P.band, 1), hi: lighten(P.band, 10) },
+  },
+  lay: 'bond',
+  rows: 12,
+  across: 6,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 3,
+  bandN: 4,
+  plinth: 96,
+  // Slate is hard and dense: an arris knocked here and there, and nothing more.
+  wear: 0.15,
+  // The island's lilac, and gentler than a pale stone's: a dark face has less to lose.
+  shade: [30, 28, 74],
+  shadow: (k) => (1 - k) * 0.7,
+  growth: false,
+  mix: [['warm', 0.08], ['burnt', 0.08], ['brown', 0.05]],
+  pairs: ['warm'],
+  field: [['weather', 0.3], ['bleach', 0.25], ['warm', 0.25], ['burnt', 0.2]],
+  ornate: true,
+}))(SLATE_PASTEL);
 
 /**
  * And sandstone: a honey-coloured ashlar dressed in a rose-red one.
@@ -1322,6 +1411,7 @@ let planked: Masonry | undefined;
 let gilded: Masonry | undefined;
 let golden: Masonry | undefined;
 let sanded: Masonry | undefined;
+let slated: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1353,6 +1443,9 @@ export function stonework(): Masonry {
 }
 export function sandstone(): Masonry {
   return sanded ??= paint(SAND);
+}
+export function slatework(): Masonry {
+  return slated ??= paint(SLATE);
 }
 
 /**
@@ -1687,6 +1780,21 @@ function paint(S: Stock): Masonry {
       if (R() < 0.12 && s.course < COURSES - 1) stain(g, s, R);
     }
   }
+  /**
+   * How time takes a wall of slate brick, which is hardly at all: slate is
+   * dense and a brick of it was laid for show. An arris knocked on one in
+   * twelve and a hairline crack along the bed of one in thirty -- no pits,
+   * no worn patches and no mortar left on the face, because on a dark brick
+   * every one of those is a pale fleck, and a scatter of pale flecks over a
+   * dark wall is grit on the picture.
+   */
+  function slateWeather(g: Ctx, own: Block[], R: Rand): void {
+    for (const s of own) {
+      const t = R();
+      if (t < 0.08) chipCorner(g, s, R);
+      else if (t < 0.113) crack(g, s, R);
+    }
+  }
   /** Wear, on the private stones only, so the seams and the storey line keep their contract. Masonry is
    *  a novice's masonry, and it shows: a chipped corner on one block in five, a crack on one in six, a
    *  flaked edge on one in fourteen, a block sunk deeper on one in twenty and gone on one in fifty;
@@ -1694,6 +1802,7 @@ function paint(S: Stock): Masonry {
    *  joint in seven, a water stain under one in seven. */
   function weather(g: Ctx, own: Block[], R: Rand): void {
     if (S.grain) { sandWeather(g, own, R); return; }
+    if (S.ornate) { slateWeather(g, own, R); return; }
     const k = S.wear;
     for (const s of own) {
       const t = R();
@@ -3565,6 +3674,8 @@ function paint(S: Stock): Masonry {
     const tops = bedTops();
     for (let i = 0; i < S.rows; i++) {
       const y0 = tops[i], ch = tops[i + 1] - y0;
+      // The course under the band of an ornate wall is its dogtooth, laid after.
+      if (S.ornate && i === 0) continue;
       // Headers every fourth course, on brick, which is what a wall thick
       // enough to stand three storeys is actually bonded with, and the thing
       // that stops ten courses of stretchers reading as ruled paper. Cut stone
@@ -3577,7 +3688,8 @@ function paint(S: Stock): Masonry {
       // dropped, and the drop is what says the wall has stood a while.
       const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
       const q = Math.min(COURSES - 1, Math.floor((i / S.rows) * COURSES));
-      for (const [x, uw] of unitsOf(n, lap, R, 1511 + i * 13)) {
+      const units: Array<[number, number, boolean]> = S.ornate ? flemishOf(i) : unitsOf(n, lap, R, 1511 + i * 13).map(([x, w]): [number, number, boolean] => [x, w, head]);
+      for (const [x, uw, hd] of units) {
         const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
         const seam = x < 0 || x + uw > TW;
         const sag = Math.sin((Math.PI * kw * (mid - EDGE)) / (TW - 2 * EDGE)) * aw;
@@ -3585,7 +3697,7 @@ function paint(S: Stock): Masonry {
         // laid from a seed of the course's own rather than from the variant's.
         const RR = seam ? rand(811 + i * 7) : R;
         const priv = x + MORTAR / 2 > EDGE && x + uw - MORTAR / 2 < TW - EDGE;
-        const tone = zone(RR, seam ? 0 : x + uw / 2, y0, head, q, crests, i < 2);
+        const tone = S.ornate && hd && diaperAt(x + uw / 2, i) ? 'diaper' : zone(RR, seam ? 0 : x + uw / 2, y0, hd, q, crests, i < 2);
         const jw = MORTAR + (priv ? RR() * 2.2 : 0);
         const drift = (RR() - 0.5) * 2.4 + sag;
         const shrink = RR() * 2;
@@ -3608,6 +3720,7 @@ function paint(S: Stock): Masonry {
         if (priv && b.w > 24) own.push(b);
       }
     }
+    if (S.ornate) dogtooth(g, tops[0], tops[1]);
     weather(g, own, R);
     /*
      * And the band course standing proud of the brick under it. A dressing
@@ -3659,6 +3772,54 @@ function paint(S: Stock): Masonry {
     }
     for (let k = 0; k + 1 < js.length; k++) out.push([js[k], js[k + 1] - js[k]]);
     return out;
+  }
+  /** Flemish bond: pairs of a stretcher and a header to the section, and the stretcher's share of a pair. */
+  const FLEM = 4, FLEM_P = TW / FLEM, STRETCH = FLEM_P * (2 / 3), HEADER = FLEM_P / 3;
+  /**
+   * The units of course `i` of Flemish bond, as [x, width, header]: a
+   * stretcher and a header turn about, every other course set over by half
+   * a pair, so that each header sits on the middle of the stretcher under
+   * it. The unit across the seam is one stone, laid at both edges.
+   */
+  function flemishOf(i: number): Array<[number, number, boolean]> {
+    const off = (i % 2) * (FLEM_P / 2), out: Array<[number, number, boolean]> = [];
+    for (let k = -1; k <= FLEM; k++) {
+      for (const [dx, w, h] of [[0, STRETCH, false], [STRETCH, HEADER, true]] as Array<[number, number, boolean]>) {
+        const a = off + k * FLEM_P + dx;
+        if (a + w > 0 && a < TW) out.push([a, w, h]);
+      }
+    }
+    return out;
+  }
+  /** The diaper's lozenges, in header steps: a lozenge the section across, and as many courses tall. */
+  const DIAPER = 8;
+  /**
+   * Whether the header centred at `xc` on course `i` of the field is one the
+   * diaper picks out: headers a half pair apart on the courses above and
+   * below lie on a diagonal, and the diaper is two families of them crossing.
+   */
+  function diaperAt(xc: number, i: number): boolean {
+    const m = Math.round((xc - STRETCH - HEADER / 2) / (FLEM_P / 2));
+    const a = (((m - i) % DIAPER) + DIAPER) % DIAPER, b = (((m + i) % DIAPER) + DIAPER) % DIAPER;
+    return a === 0 || b === 0;
+  }
+  /**
+   * A course of dogtooth from `y0` to `y1`: bricks set corner-out, twelve to
+   * the section and one on each seam, so the course is a row of teeth, each
+   * lit down its left face and in shade down its right, with the dark of the
+   * recess between them -- the ornament a bricklayer makes out of nothing
+   * but the brick, and the one that reads from across a deed.
+   */
+  function dogtooth(g: Ctx, y0: number, y1: number): void {
+    const n = 12, P = TW / n, t = y0 + MORTAR / 2, b = y1 - MORTAR / 2;
+    g.fillStyle = PASTEL.recess; g.fillRect(-2, y0, TW + 4, y1 - y0);
+    g.lineJoin = 'round';
+    for (let k = 0; k <= n; k++) {
+      const cx = k * P, l = cx - P / 2 + 1.5, r = cx + P / 2 - 1.5;
+      g.beginPath(); poly(g, [[l, t], [cx, t], [cx, b]]); g.fillStyle = PASTEL.toothLit; g.fill();
+      g.beginPath(); poly(g, [[cx, t], [r, t], [cx, b]]); g.fillStyle = PASTEL.toothShade; g.fill();
+      g.beginPath(); poly(g, [[l, t], [r, t], [cx, b]]); g.strokeStyle = PASTEL.line; g.lineWidth = 1.3; g.stroke();
+    }
   }
   function bedTops(): number[] {
     const HR = rand(2027);
@@ -4353,9 +4514,9 @@ function paint(S: Stock): Masonry {
   };
 
   /** One stone of the ring or a jamb: the same two tones, line and bevel every block has. */
-  function dressed(g: Ctx, pts: Pt[], tone: string): void {
+  function dressed(g: Ctx, pts: Pt[], tone: string, dx = -3.5, dy = -4.5, ink = 2.4): void {
     const T = TONES[tone] || TONES[''];
-    solid(g, pts, T.lit, T.shade, PASTEL.line, 2.4, -3.5, -4.5);
+    solid(g, pts, T.lit, T.shade, PASTEL.line, ink, dx, dy);
     g.save(); shape(g, pts); g.clip();
     g.globalAlpha = 0.45; g.translate(1.5, 2);
     shape(g, pts); g.strokeStyle = T.hi; g.lineWidth = 1.6; g.lineJoin = 'round'; g.stroke();
@@ -4734,11 +4895,157 @@ function paint(S: Stock): Masonry {
     });
     if (R() < 0.7) fissure(g, A_CX + (R() - 0.5) * A_R * 0.8, A_CY - A_R - 4, 26 + R() * 24, R, -1);
   }
+  /* ---- the openings of a wall laid for show ------------------------------ */
+  /*
+   * On slate the openings are laid for show like the field round them. Every
+   * dressing is cut square and set true: the jambs long and short in the pale
+   * slate, two courses of brick to a stone so the brick runs into the notches
+   * between them, and over every head a flat arch of gauged voussoirs, pale
+   * and violet turn about -- the diaper's violet carried into the dressings --
+   * locked by a pale keystone that stands proud of it. No oak: a wall laid
+   * for show was built by somebody who could cut a voussoir.
+   */
+  /** A dressing: its bed of mortar, then the stone on it, square and true. */
+  function dressing(g: Ctx, x: number, y: number, w: number, h: number, R: Rand, tone: string): Pt[] {
+    g.fillStyle = PASTEL.ringJoint;
+    g.fillRect(x - MORTAR, y - MORTAR, w + 2 * MORTAR, h + 2 * MORTAR);
+    return stone(g, x, y, w, h, R, tone, 'unit', 0, 1.8);
+  }
+  /**
+   * A stone cut to a line: the same shade, lit face, bevel and ink as any
+   * block, round a polygon drawn straight from corner to corner rather than
+   * curved through it, because an arris a mason has cut is a corner.
+   */
+  function cutStone(g: Ctx, pts: Pt[], tone: string): void {
+    const T = TONES[tone] || TONES[''];
+    g.beginPath(); poly(g, pts); g.fillStyle = T.shade; g.fill();
+    g.save(); g.clip();
+    g.beginPath(); poly(g, pts, -2, -2.5); g.fillStyle = T.lit; g.fill();
+    g.globalAlpha = 0.45;
+    g.beginPath(); poly(g, pts, 1.5, 2); g.strokeStyle = T.hi; g.lineWidth = 1.6; g.lineJoin = 'round'; g.stroke();
+    g.restore();
+    g.beginPath(); poly(g, pts); g.strokeStyle = PASTEL.line; g.lineWidth = 1.8; g.lineJoin = 'round'; g.stroke();
+  }
+  /** Which of its two tones a dressing takes: the pale slate, and one in four the step darker. */
+  const dressTone = (R: Rand): string => (R() < 0.25 ? 'plinth' : 'dress');
+  /**
+   * One jamb of an opening laid for show, on the jamb `line` from `top` down
+   * to `bottom`: stones laid to the brick's own beds, two courses to a
+   * stone, short and long turn about from the head down and in step on both
+   * sides, the way a surround is set out -- short at the head, so the end of
+   * the arch over it covers it.
+   */
+  function ornateJamb(g: Ctx, R: Rand, side: number, line: number, top: number, bottom: number, long: number, short: number): void {
+    const beds = bedTops().filter((y, i) => i % 2 === 0 && y > top + 12 && y < bottom - 12);
+    const ys = [top, ...beds, bottom];
+    for (let k = 0; k + 1 < ys.length; k++) {
+      const w = (k % 2 ? long : short) + (R() - 0.5) * 4;
+      const x = side < 0 ? line + OVER - w : line - OVER;
+      dressing(g, x, ys[k] + MORTAR / 2, w, ys[k + 1] - ys[k] - MORTAR, R, dressTone(R));
+    }
+  }
+  /**
+   * A flat arch over a head from `x0` to `x1`, `deep` deep: an odd number of
+   * voussoirs on joints that all point at one centre under the opening, so
+   * the arch is wider at its top than at its soffit and its end joints are
+   * the skewbacks it springs from; pale and violet turn about out from the
+   * keystone, which is a size wider than the rest and stands proud above.
+   */
+  function flatArch(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number): void {
+    const span = x1 - x0, cx = (x0 + x1) / 2;
+    let n = Math.max(5, Math.round(span / 32));
+    if (n % 2 === 0) n++;
+    const crown = (n - 1) / 2;
+    // The centre the joints point at: far enough under the soffit that each
+    // skewback leans out by a third of the arch's depth over the whole of it.
+    const cy = head + (span / 2) * 3;
+    const at = (xb: number, y: number): Pt => [cx + ((xb - cx) * (cy - y)) / (cy - head), y];
+    const bs: number[] = [];
+    for (let i = 0; i <= n; i++) bs.push(x0 + (span * i) / n);
+    bs[crown] -= (span / n) * 0.2;
+    bs[crown + 1] += (span / n) * 0.2;
+    const top = head - deep, rise = 8, foot = head - 1;
+    g.beginPath(); poly(g, [at(x0, foot + MORTAR), at(x1, foot + MORTAR), at(x1, top - MORTAR), at(x0, top - MORTAR)]);
+    g.fillStyle = PASTEL.ringJoint; g.fill();
+    const j = MORTAR / 2;
+    for (let i = 0; i < n; i++) {
+      if (i === crown) continue;
+      const wedge: Pt[] = [at(bs[i] + j, foot), at(bs[i + 1] - j, foot), at(bs[i + 1] - j, top), at(bs[i] + j, top)];
+      cutStone(g, roughen(wedge, R, 4, 0.35), (i - crown) % 2 ? 'vous' : 'dress');
+    }
+    // The keystone last, over the joints either side of it: standing proud
+    // above the arch, and flaring a little, as a keystone is cut.
+    const k0 = at(bs[crown] + j - 3, top - rise), k1 = at(bs[crown + 1] - j + 3, top - rise);
+    g.fillStyle = PASTEL.ringJoint;
+    g.fillRect(k0[0] - MORTAR, top - rise - MORTAR, k1[0] - k0[0] + 2 * MORTAR, rise + MORTAR + 2);
+    cutStone(g, roughen([at(bs[crown] + j, foot + 4), at(bs[crown + 1] - j, foot + 4), k1, k0], R, 4, 0.35), 'dress');
+  }
+  /** A window or a bay laid for show: a sill standing proud, the jambs, and a flat arch over the head. */
+  function ornateSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, wide: number, shelf: number): void {
+    const sx = x0 - 16 - shelf, sw = x1 - x0 + 32 + shelf * 2, sy = sill + 20 + shelf;
+    dressing(g, sx, sill - 4, sw, 24 + shelf, R, 'dress');
+    const sh = g.createLinearGradient(0, sy, 0, sy + 9);
+    sh.addColorStop(0, 'rgba(40, 32, 62, 0.42)');
+    sh.addColorStop(1, 'rgba(40, 32, 62, 0)');
+    g.fillStyle = sh;
+    g.fillRect(sx + 3, sy, sw - 6, 9);
+    const short = wide * 0.62;
+    for (const side of [-1, 1]) ornateJamb(g, R, side, side < 0 ? x0 : x1, head, sill - 4 - MORTAR, wide, short);
+    flatArch(g, R, x0 + OVER - short, x1 - OVER + short, head, Math.min(40, head - bedTops()[1] - 2 * MORTAR));
+  }
+  /**
+   * A doorway or a gate laid for show: the jambs to the ground, and the flat
+   * arch over the head. A doorway's head is higher than a window's, so its
+   * arch is let up into the dogtooth, which stops against it.
+   */
+  function ornateDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number): void {
+    for (const side of [-1, 1]) ornateJamb(g, R, side, side < 0 ? x0 : x1, head, TH + 20, 62, 40);
+    flatArch(g, R, x0 + OVER - 40, x1 - OVER + 40, head, 38);
+  }
+  /**
+   * An archway laid for show: the jambs, an impost at the springing, and a
+   * ring of voussoirs cut true to one depth, pale and violet turn about out
+   * from a keystone that stands proud of the ring.
+   */
+  function ornateArch(g: Ctx, R: Rand): void {
+    for (const side of [-1, 1]) ornateJamb(g, R, side, A_CX + side * A_R, A_CY + IMPOST_H, TH + 20, 74, 46);
+    for (const side of [-1, 1]) {
+      const line = A_CX + side * A_R, deep = A_R * 0.4;
+      dressing(g, side < 0 ? line - deep : line - OVER, A_CY - 3, deep + OVER, IMPOST_H + 3, R, 'dress');
+    }
+    const n = 13, crown = (n - 1) / 2, depth = 0.3, key = 0.42, GAP = 0.006;
+    const cut: number[] = [];
+    for (let i = 0; i <= n; i++) cut.push(i / n);
+    cut[crown] -= 0.2 / n;
+    cut[crown + 1] += 0.2 / n;
+    const pt = (c: number, r: number): Pt => {
+      const a = Math.PI * (1 + c);
+      return [A_CX + Math.cos(a) * A_R * (1 + r), A_CY + Math.sin(a) * A_R * (1 + r)];
+    };
+    // The mortar the ring is bedded in, which shows in its joints.
+    g.beginPath();
+    for (let k = 0; k <= 48; k++) { const [x, y] = pt(k / 48, depth + 0.035); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+    for (let k = 48; k >= 0; k--) { const [x, y] = pt(k / 48, -0.1); g.lineTo(x, y); }
+    g.closePath();
+    g.fillStyle = PASTEL.ringJoint; g.fill();
+    const wedgeOf = (i: number, r: number): Pt[] => {
+      const a = cut[i] + GAP, b = cut[i + 1] - GAP, out: Pt[] = [];
+      for (let k = 0; k <= 3; k++) out.push(pt(a + ((b - a) * k) / 3, -0.12));
+      for (let k = 3; k >= 0; k--) out.push(pt(a + ((b - a) * k) / 3, r));
+      return out;
+    };
+    for (let i = 0; i < n; i++) if (i !== crown) dressed(g, roughen(wedgeOf(i, depth), R, 2, 0.5), (i - crown) % 2 ? 'vous' : 'dress', -2, -2.5, 1.8);
+    const kp = wedgeOf(crown, key);
+    g.beginPath(); poly(g, kp.map(([x, y]): Pt => [x + (x < A_CX ? -MORTAR : MORTAR), y - MORTAR]));
+    g.fillStyle = PASTEL.ringJoint; g.fill();
+    dressed(g, roughen(kp, R, 2, 0.5), 'dress', -2, -2.5, 1.8);
+  }
   function surround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, wide: number, shelf: number): void {
     if (S.lay === 'render') { renderSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'frame') { frameSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'log' || S.lay === 'plank') { boardSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'gild') { silverSurround(g, R, x0, x1, head, sill, shelf); return; }
+    if (S.ornate) { ornateSurround(g, R, x0, x1, head, sill, wide, shelf); return; }
     const top = lintelTop(head);
     winPocket(g, R, x0, x1, top - 46, sill);
     // The sill first, because everything either side of the hole stands on it.
@@ -4882,6 +5189,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'frame') { frameDoorway(g, R, x0, x1, head, deep); return; }
     if (S.lay === 'log' || S.lay === 'plank') { boardDoorway(g, R, x0, x1, head, deep); return; }
     if (S.lay === 'gild') { silverDoorway(g, R, x0, x1, head, deep); return; }
+    if (S.ornate) { ornateDoorway(g, R, x0, x1, head); return; }
     const bTop = head - (reach ? CORBEL_H : 0) - deep + 3;
     const box: Pt[] = [[x0 - 26, bTop - 10], [x1 + 26, bTop - 10], [x1 + 26, TH + 8], [x0 - 26, TH + 8]];
     shape(g, roughen(box, R, 6, 4.5));
@@ -5371,9 +5679,12 @@ function paint(S: Stock): Masonry {
     for (let i = 0; i < rows; i++) tops.push(tops[i] + ((fh - top) * hs[i]) / tot);
     for (let i = 0; i < rows; i++) {
       const y0 = tops[i], ch = tops[i + 1] - y0;
+      // The course under the cope of an ornate wall is its dogtooth, laid after.
+      if (S.ornate && i === 0) continue;
       const lap = (i % 2) * 0.5;
       const kw = 1 + Math.floor(R() * 2), aw = ch * 0.17 * (R() < 0.5 ? -1 : 1);
-      for (const [x, uw] of unitsOf(n, lap, R, 1733 + i * 17)) {
+      const units: Array<[number, number, boolean]> = S.ornate ? flemishOf(i) : unitsOf(n, lap, R, 1733 + i * 17).map(([x, w]): [number, number, boolean] => [x, w, false]);
+      for (const [x, uw, hd] of units) {
         const mid = clamp(x + uw / 2, EDGE, TW - EDGE);
         const seam = x < 0 || x + uw > TW;
         const RR = seam ? rand(647 + i * 11) : R;
@@ -5381,8 +5692,9 @@ function paint(S: Stock): Masonry {
         const sag = Math.sin((Math.PI * kw * (mid - EDGE)) / (TW - 2 * EDGE)) * aw;
         // A garden wall was laid out of what was left over, so it carries the
         // weathered and the bleached units a house wall was picked clear of.
-        const tone = !seam && RR() < 0.08 ? fieldTone(RR)
-          : zone(RR, seam ? 0 : x + uw / 2, y0, false, i + COURSES - rows, [], i === 0);
+        const tone = S.ornate && hd && diaperAt(x + uw / 2, i) ? 'diaper'
+          : !seam && RR() < 0.08 ? fieldTone(RR)
+            : zone(RR, seam ? 0 : x + uw / 2, y0, hd, i + COURSES - rows, [], i === 0);
         const jw = MORTAR + (priv ? RR() * 2.2 : 0);
         const drift = (RR() - 0.5) * 2.4 + sag;
         const shrink = RR() * 2;
@@ -5397,6 +5709,7 @@ function paint(S: Stock): Masonry {
         if (priv && b.w > 24) own.push(b);
       }
     }
+    if (S.ornate) dogtooth(g, tops[0], tops[1]);
     return own;
   }
 
@@ -5524,6 +5837,7 @@ function paint(S: Stock): Masonry {
     else if (S.lay === 'frame') frameArch(g, R);
     else if (S.lay === 'log' || S.lay === 'plank') boardArch(g, R);
     else if (S.lay === 'gild') silverArch(g, R);
+    else if (S.ornate) ornateArch(g, R);
     else {
       jamb(g, R, -1);
       jamb(g, R, 1);
@@ -6039,7 +6353,8 @@ function paint(S: Stock): Masonry {
       // At the stock's own rate of wear, as the tall wall's is: a garden wall
       // of brick took the whole of a novice's rubble's and was specked with it.
       const k = S.wear;
-      for (const s of own) {
+      if (S.ornate) slateWeather(g, own, R);
+      else for (const s of own) {
         const t = R();
         if (t < 0.18 * k) chipCorner(g, s, R);
         else if (t < 0.34 * k) crack(g, s, R);
@@ -6300,6 +6615,19 @@ function paint(S: Stock): Masonry {
           g.restore();
           g.fillStyle = 'rgba(46, 34, 62, 0.26)';
           g.fillRect(side < 0 ? x - 4 : x + w, 0, 4, fh);
+          continue;
+        }
+        if (S.ornate) {
+          // Square and true, in the pale slate: stones as deep as the wall
+          // divides into, long and short turn about, and a cap over the lot.
+          const n = Math.max(2, Math.round((fh - COPE) / 52)), qh = (fh + 6 - COPE) / n;
+          for (let k = 0; k < n; k++) {
+            const w = k % 2 ? 40 : 54;
+            dressing(g, side < 0 ? line + OVER - w : line - OVER, COPE + k * qh + MORTAR / 2, w, qh - MORTAR, R, dressTone(R));
+          }
+          dressing(g, side < 0 ? line + OVER - 60 : line - OVER, MORTAR / 2, 60, COPE - MORTAR, R, 'dress');
+          g.fillStyle = 'rgba(40, 32, 62, 0.3)';
+          g.fillRect(side < 0 ? line + OVER - 64 : line - OVER + 60, 0, 4, fh);
           continue;
         }
         let y = fh - 2;
@@ -6768,7 +7096,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, sandstone, adobe, timbercraft, logwork, planking, silverwork, goldwork];
+  const sets = [cobble, brickwork, stonework, sandstone, slatework, adobe, timbercraft, logwork, planking, silverwork, goldwork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });
