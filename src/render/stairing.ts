@@ -120,3 +120,15 @@ const STAIRS: Record<string, StairStyle> = {
 
 /** How a flight of `material` is built; anything without a style of its own is built as plank. */
 export const stairStyle = (material: string): StairStyle => STAIRS[material] ?? STAIRS.plank;
+
+/**
+ * A ladder, which is two planks whatever the house: sawn pine, its stiles a
+ * step darker than its rungs, the light along the rounds of both.
+ */
+export const LADDER = {
+  stile: hex('#b09474'),
+  stileHi: hex('#d2bb9c'),
+  rung: hex('#c4a886'),
+  rungHi: hex('#e0ccb0'),
+  line: hex('#5f4b3f'),
+};

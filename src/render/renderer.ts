@@ -36,7 +36,7 @@ import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
-import { stairStyle } from './stairing';
+import { LADDER, stairStyle } from './stairing';
 import { drawShine, shines } from './shine';
 import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
@@ -2268,18 +2268,6 @@ export class Renderer {
     if (this.ghost) this.drawGhost(ctx, zoom, this.ghost);
   }
 
-  /**
-   * Floors and walls belonging to a tile. Walls are drawn on the two borders
-   * that are the tile's back edges under the current viewpoint, so every wall
-   * is drawn exactly once, after the ground behind it and before whatever
-   * once they would hide the player. What counts as "the player's" is the room
-   * they are standing in rather than the whole building.
-   *
-   * Looked at square on — the four diagonal viewpoints — the two borders
-   * running away from the viewer are edge on and draw as nothing at all, which
-   * is what a wall seen end on looks like. Which of the pair is claimed still
-   * matters: claim both sides of one border and it is drawn twice.
-   */
   /** The ghost of what is being set down, over everything, and washed red where it will not go. */
   private drawGhost(ctx: CanvasRenderingContext2D, zoom: number, ghost: Ghost): void {
     const cam = this.camera;
@@ -2340,6 +2328,19 @@ export class Renderer {
     return !!this.roomTiles && bordersRoom(this.roomTiles, b);
   }
 
+  /**
+   * Floors and walls belonging to a tile. Walls are drawn on the two borders
+   * that are the tile's back edges under the current viewpoint, so every wall
+   * is drawn exactly once, after the ground behind it and before whatever
+   * stands in front. Walls of the player's own room go translucent once they
+   * would hide the player, and what counts as "the player's" is the room they
+   * are standing in rather than the whole building.
+   *
+   * Looked at square on — the four diagonal viewpoints — the two borders
+   * running away from the viewer are edge on and draw as nothing at all, which
+   * is what a wall seen end on looks like. Which of the pair is claimed still
+   * matters: claim both sides of one border and it is drawn twice.
+   */
   private drawStructures(x: number, y: number, V: View, inFront: boolean): void {
     const bld = this.game.buildings;
     const w = this.game.world;
@@ -2356,10 +2357,23 @@ export class Renderer {
     const { cutaway, viewLevel } = this.game.settings;
     // Floors, stairs and ladders for each storey, walls of each storey, then the roof one level up.
     for (let level = 0; level <= maxLevels; level++) {
+      /*
+       * A ladder goes on after the walls of the storey it opens into: its
+       * stiles stand up past the floor, in front of a wall on the far side
+       * of the hatch, which laid after it covered them.
+       */
+      let late: (() => void) | null = null;
       if (building) {
         const floor = bld.floor(level, x, y);
-        // Looking at one storey means lifting the ceilings above it off.
-        if (floor && !(viewLevel !== null && floor.level > viewLevel)) {
+        /*
+         * Looking at one storey means lifting the ceilings above it off, but
+         * not the way up through them: a flight or a ladder stands in the
+         * storey under the floor it climbs to, and a ladder loses only its
+         * hatch.
+         */
+        const above = floor && viewLevel !== null ? floor.level - viewLevel : 0;
+        const climb = !!floor && (floorKind(floor) === 'stairs' || floorKind(floor) === 'ladder');
+        if (floor && (above <= 0 || (above === 1 && climb))) {
           // A floor over your head is the ceiling of the room you are in, and
           // only of that room: the far end of a longhouse keeps its own.
           const dim = level > playerLevel && !!this.roomTiles?.has(`${x},${y}`);
@@ -2369,7 +2383,7 @@ export class Renderer {
               this.drawStairs(floor, x, y, base, alpha);
               break;
             case 'ladder':
-              this.drawLadder(floor, x, y, base, alpha);
+              late = () => this.drawLadder(floor, x, y, base, alpha, above <= 0);
               break;
             case 'roof':
               // A flat roof is a deck, laid a tile at a time like a floor so
@@ -2382,11 +2396,16 @@ export class Renderer {
           }
         }
       }
-      if (level >= maxLevels) break;
-      if (viewLevel !== null && level > viewLevel) continue;
+      if (level >= maxLevels || (viewLevel !== null && level > viewLevel)) {
+        late?.();
+        if (level >= maxLevels) break;
+        continue;
+      }
       // The shade of every wall round the tile, on the ground or on the floor
-      // of the storey, before any wall of the storey stands on it.
-      if (level === 0 || bld.floor(level, x, y)) this.groundShade(x, y, level, V);
+      // of the storey, before any wall of the storey stands on it -- on a
+      // floor, that is: a hatch or a flight has none to take it.
+      const slot = level ? bld.floor(level, x, y) : undefined;
+      if (level === 0 || (slot && (floorKind(slot) === 'floor' || floorKind(slot) === 'roof'))) this.groundShade(x, y, level, V);
       for (const border of [backA, backB]) {
         const wall = bld.wallOnBorder(level, border);
         if (!wall) {
@@ -2418,6 +2437,7 @@ export class Renderer {
         const dim = inFront && this.wallsMyRoom(border);
         this.drawWall(wall, border, base, dim ? 0.3 : 1);
       }
+      late?.();
     }
   }
 
@@ -2603,7 +2623,6 @@ export class Renderer {
     return made;
   }
 
-  /** A staircase climbing from the storey below to this floor's storey, starting at its facing side. */
   /**
    * A flight of stairs up from the storey below to this one: see
    * `stairing.ts` for what each material builds one as.
@@ -2991,53 +3010,192 @@ export class Renderer {
     }
   }
 
-  /** An opening in this storey's floor with a ladder up from the storey below on the facing side. */
-  private drawLadder(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
-    const ctx = this.canvas.ctx;
+  /**
+   * A hatch in this storey's floor and a ladder up to it from the storey
+   * below, climbed from the facing side.
+   *
+   * It was a dark square laid on the floor and two lines standing upright
+   * beside it, which from half the turns of the view stood out in the yard.
+   * The hatch is a hole now: the floor round it shows its cut edges on the
+   * far side, lit as the edge of a deck is, with the dark of the room below
+   * under them. And the ladder leans: its foot out on the floor below toward
+   * the side it is climbed from, its head against the far edge of the hatch
+   * -- clear of a wall standing there -- and its stiles running on up past
+   * the floor as handholds, the way you get off one at the top.
+   *
+   * Over your head, the hatch is dimmed with the ceiling it is cut in; the
+   * ladder is not, because it stands in the room with you and is too thin to
+   * hide you.
+   */
+  private drawLadder(floor: FloorTile, x: number, y: number, base: number, alpha: number, hatch = true): void {
+    const main = this.canvas.ctx;
     const cam = this.camera;
+    const bld = this.game.buildings;
     const facing = floor.facing ?? 's';
     const h0 = base + (floor.level - 1) * WALL_HEIGHT;
     const h1 = base + floor.level * WALL_HEIGHT;
     const done = isDone(floor);
+    const zoom = cam.zoom;
+    const lw = (k: number): number => Math.max(0.8, k * zoom);
+    const W = (t: number, s: number): [number, number] => Renderer.stairPoint(x, y, facing, t, s);
     const P = (t: number, s: number, h: number): [number, number] => {
-      const [wx, wy] = Renderer.stairPoint(x, y, facing, t, s);
+      const [wx, wy] = W(t, s);
       return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
     };
-    ctx.globalAlpha = alpha * (done ? 1 : 0.45);
-    // the opening
-    const o = [P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)];
-    ctx.beginPath();
-    ctx.moveTo(o[0][0], o[0][1]);
-    for (let i = 1; i < 4; i++) ctx.lineTo(o[i][0], o[i][1]);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(30, 22, 16, 0.55)';
-    ctx.fill();
-    ctx.strokeStyle = done ? 'rgba(120, 90, 50, 0.9)' : PLAN_COLOR;
-    if (!done) ctx.setLineDash([4, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    // rails and rungs, inset a little from the climbing side
-    ctx.strokeStyle = '#b08850';
-    ctx.lineWidth = 2;
-    for (const t of [0.4, 0.6]) {
-      const a = P(t, 0.12, h0);
-      const b = P(t, 0.12, h1 + 3);
-      ctx.beginPath();
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(b[0], b[1]);
-      ctx.stroke();
-    }
-    ctx.lineWidth = 1;
-    for (let k = 1; k <= 7; k++) {
-      const h = h0 + ((h1 - h0) * k) / 8;
-      const a = P(0.4, 0.12, h);
-      const b = P(0.6, 0.12, h);
-      ctx.beginPath();
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(b[0], b[1]);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
+    /*
+     * What is laid faint is laid whole on a layer and put over once, as a
+     * flight seen through is: a piece at a time, every place two pieces of it
+     * overlap would come out darker than either.
+     */
+    const lay = (a: number, draw: (g: CanvasRenderingContext2D) => void): void => {
+      if (a >= 1) {
+        main.globalAlpha = 1;
+        draw(main);
+        main.globalAlpha = 1;
+        return;
+      }
+      const dpr = this.canvas.dpr;
+      const xs: number[] = [], ys: number[] = [];
+      for (const t of [-0.2, 1.2]) for (const s of [-0.2, 1.2]) for (const h of [h0, h1 + 12]) {
+        const [qx, qy] = P(t, s, h);
+        xs.push(qx);
+        ys.push(qy);
+      }
+      const bx = Math.max(0, Math.floor(Math.min(...xs) * dpr)), by = Math.max(0, Math.floor(Math.min(...ys) * dpr));
+      const box: [number, number, number, number] = [bx, by, Math.ceil(Math.max(...xs) * dpr) - bx + 1, Math.ceil(Math.max(...ys) * dpr) - by + 1];
+      const g = this.seeThroughCtx(box);
+      draw(g);
+      main.save();
+      main.setTransform(1, 0, 0, 1, 0, 0);
+      main.globalAlpha = a;
+      main.drawImage(g.canvas, box[0], box[1], box[2], box[3], box[0], box[1], box[2], box[3]);
+      main.restore();
+    };
+    const poly = (g: CanvasRenderingContext2D, pts: Array<[number, number]>): void => {
+      g.beginPath();
+      pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.closePath();
+    };
+    const line = (g: CanvasRenderingContext2D, a: [number, number], b: [number, number], ink: string, width: number): void => {
+      g.strokeStyle = ink;
+      g.lineWidth = width;
+      g.beginPath();
+      g.moveTo(a[0], a[1]);
+      g.lineTo(b[0], b[1]);
+      g.stroke();
+    };
+    /*
+     * The hole. What shows through it is the room below, in the shade of the
+     * floor over it; round it, the edges of the floor that are cut to it, on
+     * the side of it away from the camera, where their cut face looks back.
+     */
+    if (hatch) lay(alpha, (g) => {
+      poly(g, [P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)]);
+      g.fillStyle = 'rgba(34, 26, 22, 0.42)';
+      g.fill();
+      // The four edges: along each, the way out of the hatch and the tile there.
+      const edges: Array<[number, number, number, number, number, number]> = [
+        [0, 0, 1, 0, 0, -1], [1, 0, 1, 1, 1, 0], [1, 1, 0, 1, 0, 1], [0, 1, 0, 0, -1, 0],
+      ];
+      for (const [t0, s0, t1, s1, dt, ds] of edges) {
+        const [ax, ay] = W(t0 + dt * 0.5 + 0.5 * (t1 - t0), s0 + ds * 0.5 + 0.5 * (s1 - s0));
+        const nx = ax - (x + 0.5), ny = ay - (y + 0.5);
+        // Only the far edges: their cut face looks back into the hatch, at the camera. One seen edge on is nothing.
+        if (cam.rotateX(-nx, -ny) + cam.rotateY(-nx, -ny) < 1e-6) continue;
+        const beyond = bld.floor(floor.level, x + Math.round(nx), y + Math.round(ny));
+        if (!beyond || floorKind(beyond) === 'ladder' || floorKind(beyond) === 'stairs') continue;
+        const mat = MATERIAL_BY_ID.get(beyond.material);
+        if (!mat) continue;
+        const trim = this.painted(mat, beyond.dye).trim;
+        const lit = Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny)) ? 0.95 : 0.76;
+        poly(g, [P(t0, s0, h1), P(t1, s1, h1), P(t1, s1, h1 - FLOOR_DEEP), P(t0, s0, h1 - FLOOR_DEEP)]);
+        g.fillStyle = rgb(trim, lit);
+        g.fill();
+        // And the shade it throws down into the room, under its lip.
+        poly(g, [P(t0, s0, h1 - FLOOR_DEEP), P(t1, s1, h1 - FLOOR_DEEP), P(t1, s1, h1 - FLOOR_DEEP - 5), P(t0, s0, h1 - FLOOR_DEEP - 5)]);
+        const shade = g.createLinearGradient(0, P(0.5, 0.5, h1 - FLOOR_DEEP)[1], 0, P(0.5, 0.5, h1 - FLOOR_DEEP - 5)[1]);
+        shade.addColorStop(0, 'rgba(34, 26, 22, 0.4)');
+        shade.addColorStop(1, 'rgba(34, 26, 22, 0)');
+        g.fillStyle = shade;
+        g.fill();
+        line(g, P(t0, s0, h1), P(t1, s1, h1), rgb(trim, lit * 1.12), lw(1));
+      }
+      if (!done) {
+        poly(g, [P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)]);
+        g.strokeStyle = PLAN_COLOR;
+        g.lineWidth = 1;
+        g.setLineDash([4, 3]);
+        g.stroke();
+        g.setLineDash([]);
+      }
+    });
+    /*
+     * The ladder: a stile either side and a rung to every three units of
+     * height, leaning at the angle a ladder is safe at -- a quarter of its
+     * height out at the foot -- its head against the far edge of the hatch,
+     * or against the face of a wall standing there. Where three units of
+     * height come to less than six pixels of screen, the rungs would run
+     * together, so they go in at six units, or nine, instead.
+     */
+    const headWall = bld.wallOnBorder(floor.level - 1, borderOf(x, y, ({ n: 's', s: 'n', e: 'w', w: 'e' } as const)[facing]));
+    const sHead = headWall && isDone(headWall) ? 1 - WALL_THICK - 0.02 : 0.985;
+    const sFoot = sHead - ((h1 - h0) / UNITS_PER_TILE) * 0.26;
+    const top = h1 + 7;
+    const sAt = (h: number): number => sFoot + ((sHead - sFoot) * (h - h0)) / (h1 - h0);
+    const pitch = 3 * Math.ceil(6 / (3 * HEIGHT_SCALE * zoom));
+    const bare = MATERIAL_BY_ID.get(floor.material) ?? MATERIAL_BY_ID.get('plank');
+    const paint = floor.dye && bare ? this.painted(bare, floor.dye).color : null;
+    const wood = (c: readonly [number, number, number], k: number): string => {
+      if (!paint) return rgb(c, k);
+      const lum = (q: readonly [number, number, number]): number => 0.299 * q[0] + 0.587 * q[1] + 0.114 * q[2];
+      return rgb(paint, k * Math.max(0.6, Math.min(1.3, lum(c) / lum(LADDER.stile))));
+    };
+    const T0 = 0.36, T1 = 0.64;
+    // The stile further from the camera, the rungs, then the nearer stile.
+    const nearT = cam.nearSide(W(1, 0)[0] - W(0, 0)[0], W(1, 0)[1] - W(0, 0)[1]) > 0 ? T1 : T0;
+    const farT = nearT === T1 ? T0 : T1;
+    const lit = this.faceLight(W(0, 1)[0] - W(0, 0)[0], W(0, 1)[1] - W(0, 0)[1]);
+    lay(done ? 1 : 0.45, (g) => {
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      const ws = Math.max(2.2, 4 * zoom), edge = (ws + lw(1.4)) / 2;
+      const stile = (t: number): void => {
+        const a = P(t, sFoot, h0), b = P(t, sAt(top), top);
+        line(g, a, b, wood(LADDER.line, 1), ws + lw(1.4));
+        line(g, a, b, wood(LADDER.stile, lit), ws);
+        line(g, [a[0] - ws * 0.18, a[1]], [b[0] - ws * 0.18, b[1]], wood(LADDER.stileHi, 1.02), Math.max(0.8, ws * 0.3));
+      };
+      stile(farT);
+      /*
+       * A rung butts against the inside of the stile behind it, cut along
+       * that stile's edge whatever the angle, and the stile in front covers
+       * its other end.
+       */
+      const fa = P(farT, sFoot, h0), fb = P(farT, sAt(top), top);
+      const along = Math.hypot(fb[0] - fa[0], fb[1] - fa[1]) || 1;
+      const ox = (-(fb[1] - fa[1]) / along) * edge, oy = ((fb[0] - fa[0]) / along) * edge;
+      g.save();
+      g.beginPath();
+      g.rect(-1e5, -1e5, 2e5, 2e5);
+      g.moveTo(fa[0] + ox, fa[1] + oy);
+      g.lineTo(fb[0] + ox, fb[1] + oy);
+      g.lineTo(fb[0] - ox, fb[1] - oy);
+      g.lineTo(fa[0] - ox, fa[1] - oy);
+      g.closePath();
+      g.clip('evenodd');
+      g.lineCap = 'butt';
+      for (let h = h0 + pitch; h <= h1 - 1; h += pitch) {
+        const s = sAt(h), a = P(farT, s, h), b = P(nearT, s, h), w = Math.max(1.6, 2.6 * zoom);
+        line(g, a, b, wood(LADDER.line, 1), w + lw(1.2));
+        line(g, a, b, wood(LADDER.rung, 1.02), w);
+        line(g, [a[0], a[1] - w * 0.2], [b[0], b[1] - w * 0.2], wood(LADDER.rungHi, 1.05), Math.max(0.7, w * 0.3));
+      }
+      g.restore();
+      g.lineCap = 'round';
+      stile(nearT);
+      g.lineCap = 'butt';
+      g.lineWidth = 1;
+    });
   }
 
   /**
@@ -3856,8 +4014,10 @@ export class Renderer {
     ctx.setLineDash([]);
     /*
      * And the edge of the deck, where there is nothing to carry on into. A
-     * floor is joists and boards and it has a depth; drawn without one it ends
-     * in a line, which is the one thing a floor five metres up never does.
+     * floor is joists and boards and it has a depth, under the deck walked
+     * on: drawn without one it ends in a line, which is the one thing a floor
+     * five metres up never does, and drawn standing up from its edge it is a
+     * kerb round every hole in it.
      */
     if (done && floor.level > 0) {
       const bld = this.game.buildings;
@@ -3878,8 +4038,8 @@ export class Renderer {
         ctx.beginPath();
         ctx.moveTo(fx(u0, v0), fy(u0, v0));
         ctx.lineTo(fx(u1, v1), fy(u1, v1));
-        ctx.lineTo(fx(u1, v1), fy(u1, v1, -FLOOR_DEEP));
-        ctx.lineTo(fx(u0, v0), fy(u0, v0, -FLOOR_DEEP));
+        ctx.lineTo(fx(u1, v1), fy(u1, v1, FLOOR_DEEP));
+        ctx.lineTo(fx(u0, v0), fy(u0, v0, FLOOR_DEEP));
         ctx.closePath();
         // The edge that runs across the view catches more of the light than
         // the one that runs into it, as a wall's two faces do.
