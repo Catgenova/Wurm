@@ -614,14 +614,46 @@ function crest(fr: Frame, from: number, to: number, h: (t: number) => number, w:
 }
 
 /**
- * Round clusters of hair sat half into a head of it, for curls: each
- * `[round the head, up from level, how big]` in radians and tenths of a metre,
- * stood `out` off the skull as far as the hair under it stands.
+ * A low dome of `n` facets round, `r` across its foot at `c` and standing `h`
+ * out along `up`: a curl on a head of them. Its foot is open and sunk in the
+ * hair under it, and not inked, so a curl facing the viewer is a round of
+ * shading on the hair; only one on the outline gets a line, and that line is
+ * what makes the outline bump.
+ */
+function dome(c: V3, up: V3, r: number, h: number, n: number, mat: Mat): Mesh {
+  const z = unit(up);
+  const x = unit(Math.abs(z[2]) < 0.9 ? cross(z, [0, 0, 1]) : cross(z, [1, 0, 0])), y = cross(z, x);
+  const at = (a: number, rr: number, hh: number): V3 => [
+    c[0] + (x[0] * Math.cos(a) + y[0] * Math.sin(a)) * rr + z[0] * hh,
+    c[1] + (x[1] * Math.cos(a) + y[1] * Math.sin(a)) * rr + z[1] * hh,
+    c[2] + (x[2] * Math.cos(a) + y[2] * Math.sin(a)) * rr + z[2] * hh,
+  ];
+  const v: V3[] = [];
+  for (let j = 0; j < n; j++) v.push(at((j / n) * TAU, r, 0));
+  for (let j = 0; j < n; j++) v.push(at(((j + 0.5) / n) * TAU, r * 0.78, h * 0.66));
+  v.push(at(0, 0, h));
+  // Each facet turned to face away from a point under the middle of the foot.
+  const o = at(0, 0, -r);
+  const f: Face[] = [];
+  for (let j = 0; j < n; j++) {
+    const j2 = (j + 1) % n;
+    for (const q of [[j, j2, n + j], [j2, n + j2, n + j], [n + j, n + j2, 2 * n]]) {
+      const m = middle(q.map((i) => v[i]));
+      f.push({ ...faceOut(v, q, [m[0] - o[0], m[1] - o[1], m[2] - o[2]], mat), soft: true });
+    }
+  }
+  return mesh(v, f);
+}
+
+/**
+ * Round clusters of hair sat on a head of it, for curls: each `[round the
+ * head, up from level, how big]` in radians and tenths of a metre, its foot
+ * `out` off the skull, where the surface of the hair under it is.
  */
 function clusters(fr: Frame, spots: Array<[number, number, number]>, out: (a: number, up: number) => number): Mesh {
   return join(...spots.map(([a, up, r]) => {
     const d: V3 = [Math.cos(up) * Math.cos(a), Math.cos(up) * Math.sin(a), Math.sin(up)];
-    return ball(over(fr, d, out(a, up)), [r, r, r * 0.9], fr.lod < 1 ? 5 : 6, fr.lod < 1 ? 2 : 3, 'hair');
+    return dome(over(fr, d, out(a, up)), d, r, r * 0.6, fr.lod < 1 ? 5 : 7, 'hair');
   }));
 }
 
@@ -1040,7 +1072,7 @@ function hairOf(fr: Frame, id: string): HairKit {
       // A head of loose curls: a close mass with a dozen round clusters standing out of it, over the brow and the tops of the ears.
       return {
         cap: crown({
-          edge: hairline(2.32, 2.1, 1.68, 0.7, 0.15),
+          edge: hairline(2.32, 2.1, 1.68, 0.7),
           loft: (t) => 0.26 + 0.12 * Math.sin(Math.PI * t),
           ridge: 0.05,
           n: 24,
@@ -1054,23 +1086,21 @@ function hairOf(fr: Frame, id: string): HairKit {
         tails,
       };
     case 'afro':
-      // Rounded and even all over, standing well off the head.
+      // Round and close all over, a little over half a tenth off the head, in tight curls that bump its outline from every side; the ears clear of it.
       return {
         cap: crown({
-          edge: hairline(2.48, 2.25, 1.85, 0.7),
-          // Round: as full over the crown as at the sides, in nine soft lobes, and turning in again at the edge, clear of the forehead.
-          loft: (t, lam) => 0.78 + 0.12 * Math.sin(Math.PI * t) + 0.14 * (0.5 + 0.5 * Math.cos(lam * 9)) * Math.sqrt(Math.sin(Math.PI * t))
-            - 0.62 * Math.pow(ramp(t, 0.55, 1), 1.6) - 0.42 * Math.pow(Math.max(0, Math.sin(lam)), 1.5) * ramp(t, 0.3, 0.9),
-          ridge: 0.04,
+          edge: hairline(2.46, 2.22, 1.92, 1.3),
+          loft: (t) => 0.5 + 0.08 * Math.sin(Math.PI * t) - 0.32 * Math.pow(ramp(t, 0.7, 1), 1.4),
+          ridge: 0.03,
           n: 24,
-          rows: 8,
+          rows: 7,
+          under: 'edge',
         }),
-        // Its outline in round lobes all the way round: big clusters sat half into it over the top, the sides and the back.
         top: clusters(fr, [
-          [0.6, 1.2, 0.5], [2.0, 1.2, 0.5], [-0.9, 1.2, 0.52], [-2.3, 1.2, 0.52],
-          [0.1, 0.72, 0.55], [0.95, 0.8, 0.5], [2.2, 0.8, 0.5], [3.05, 0.72, 0.55], [-0.6, 0.7, 0.55], [-1.57, 0.7, 0.56], [-2.55, 0.7, 0.55],
-          [0, 0.22, 0.5], [-0.8, 0.2, 0.52], [-1.57, 0.2, 0.52], [-2.35, 0.2, 0.52], [3.12, 0.22, 0.5],
-        ], (a, up) => 0.62 + 0.14 * Math.sin(up) - 0.35 * Math.pow(Math.max(0, Math.sin(a)), 1.5) * (1 - Math.sin(up))),
+          [0.3, 1.25, 0.42], [1.9, 1.25, 0.42], [-1.3, 1.25, 0.42], [-2.9, 1.25, 0.42],
+          [0, 0.8, 0.44], [0.9, 0.82, 0.42], [1.57, 0.85, 0.42], [2.25, 0.82, 0.42], [3.14, 0.8, 0.44], [-0.8, 0.8, 0.44], [-1.57, 0.8, 0.44], [-2.35, 0.8, 0.44],
+          [-0.75, 0.32, 0.42], [-1.57, 0.3, 0.44], [-2.39, 0.32, 0.42],
+        ], (_a, up) => 0.5 - 0.1 * ramp(0.8 - up, 0, 0.5)),
         tails,
       };
     case 'waves':
@@ -1096,17 +1126,18 @@ function hairOf(fr: Frame, id: string): HairKit {
       const split = (top - 0.45) / (top - end);
       for (const s of [-1, 1]) {
         if (wavy) {
-          // Waves: a thick lock from behind each ear, over the shoulder and down the front in a slow S.
+          // Waves: a thick lock from behind each ear, over the shoulder and down the front in a slow S, lying close
+          // and turned mostly side on, so from the front it is a waving edge to the hair beside the face and not a flap.
           const pts: V3[] = [];
           const w: number[] = [];
           const N = 16;
           for (let k = 0; k <= N; k++) {
             const t = k / N;
-            const sway = 0.22 * Math.sin(t * 2.5 * Math.PI) * ramp(t, 0.15, 0.4);
-            pts.push([s * (0.08 + 0.34 * ramp(t, 0, 0.35) + sway), 0.1 + 1.25 * ramp(t, 0.18, 0.62), -3.1 * t]);
-            w.push(k < N ? 0.62 * (1 - t * 0.5) : 0);
+            const sway = 0.13 * Math.sin(t * 2.5 * Math.PI) * ramp(t, 0.1, 0.35);
+            pts.push([s * (0.02 + 0.12 * ramp(t, 0, 0.3) + sway), 0.05 + 1.1 * ramp(t, 0.15, 0.6), -3 * t]);
+            w.push(k < N ? 0.52 * (1 - t * 0.5) : 0);
           }
-          tails.push({ at: [s * 1.32, -0.2, 1.45], mesh: lockOf(pts, w, [s * 0.5, 1, 0.2]), give: 0.25 });
+          tails.push({ at: [s * 1.3, -0.1, 1.45], mesh: lockOf(pts, w, [s, 0.55, 0.1]), give: 0.25 });
           continue;
         }
         // Long: a lock from each temple straight down in front of the shoulder.
