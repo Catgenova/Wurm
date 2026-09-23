@@ -88,6 +88,8 @@ interface Face {
   soft?: boolean;
   /** Only while this way, in the mesh's own frame, is not toward the viewer: an eye seen side on, drawn only when the face is not. */
   unless?: V3;
+  /** The point, in the mesh's own frame, whose being out of sight behind a solid hides this facet: one for all a curl's facets, so it goes or stays whole. */
+  at?: V3;
 }
 
 interface Mesh {
@@ -337,7 +339,13 @@ const CROWN = 3.34;
  */
 const HEAD_SIZE: V3 = [1.12, 1.12, 1.13];
 const bigger = (p: V3): V3 => [p[0] * HEAD_SIZE[0], p[1] * HEAD_SIZE[1], p[2] * HEAD_SIZE[2] + 0.03];
-const grown = (m: Mesh): Mesh => ({ v: m.v.map(bigger), f: m.f, e: m.e });
+const grown = (m: Mesh): Mesh => ({ v: m.v.map(bigger), f: m.f.map((f) => (f.at ? { ...f, at: bigger(f.at) } : f)), e: m.e });
+
+/** Hands a little over life size too, so that a hand reads at the size the island is played at: a fist, and an open hand waving. */
+const HAND = 1.12;
+const handSized = (m: Mesh): Mesh => ({ v: m.v.map((p): V3 => [p[0] * HAND, p[1] * HAND, p[2] * HAND]), f: m.f, e: m.e });
+/** How far down the hand from the wrist a haft goes through the fist. */
+const GRIP = -0.55 * HAND;
 
 /** The skull as a solid, a little inside the facets, for what lies on it to be hidden behind. */
 const SKULL = { c: bigger([0, 0.1, 1.9]), r: [1.28 * HEAD_SIZE[0], 1.38 * HEAD_SIZE[1], 1.42 * HEAD_SIZE[2]] as V3 };
@@ -615,10 +623,10 @@ function crest(fr: Frame, from: number, to: number, h: (t: number) => number, w:
 
 /**
  * A low dome of `n` facets round, `r` across its foot at `c` and standing `h`
- * out along `up`: a curl on a head of them. Its foot is open and sunk in the
- * hair under it, and not inked, so a curl facing the viewer is a round of
- * shading on the hair; only one on the outline gets a line, and that line is
- * what makes the outline bump.
+ * out along `up`: a curl on a head of them. Its foot is sunk in the hair
+ * under it and its rim is not inked, so a curl facing the viewer is a round
+ * of shading on the hair; only one on the outline gets a line, and that line
+ * is what makes the outline bump.
  */
 function dome(c: V3, up: V3, r: number, h: number, n: number, mat: Mat): Mesh {
   const z = unit(up);
@@ -632,28 +640,31 @@ function dome(c: V3, up: V3, r: number, h: number, n: number, mat: Mat): Mesh {
   for (let j = 0; j < n; j++) v.push(at((j / n) * TAU, r, 0));
   for (let j = 0; j < n; j++) v.push(at(((j + 0.5) / n) * TAU, r * 0.78, h * 0.66));
   v.push(at(0, 0, h));
-  // Each facet turned to face away from a point under the middle of the foot.
-  const o = at(0, 0, -r);
+  // Each facet turned to face away from a point under the middle of the foot; and all of them hidden or shown by the one halfway up.
+  const o = at(0, 0, -r), mid = at(0, 0, h * 0.5);
   const f: Face[] = [];
   for (let j = 0; j < n; j++) {
     const j2 = (j + 1) % n;
     for (const q of [[j, j2, n + j], [j2, n + j2, n + j], [n + j, n + j2, 2 * n]]) {
       const m = middle(q.map((i) => v[i]));
-      f.push({ ...faceOut(v, q, [m[0] - o[0], m[1] - o[1], m[2] - o[2]], mat), soft: true });
+      f.push({ ...faceOut(v, q, [m[0] - o[0], m[1] - o[1], m[2] - o[2]], mat), soft: true, at: mid });
     }
   }
+  // Its foot closed, for when it is seen from under it, over the top of a head from the far side: open, the far rim would show alone.
+  f.push({ ...faceOut(v, Array.from({ length: n }, (_, j) => j), [-z[0], -z[1], -z[2]], mat), at: mid });
   return mesh(v, f);
 }
 
 /**
- * Round clusters of hair sat on a head of it, for curls: each `[round the
- * head, up from level, how big]` in radians and tenths of a metre, its foot
- * `out` off the skull, where the surface of the hair under it is.
+ * Round curls sat on a head of hair laid by `cap`: each `[round the head, up
+ * from level, how big]` in radians and tenths of a metre, its foot a little
+ * into the hair under it wherever that is.
  */
-function clusters(fr: Frame, spots: Array<[number, number, number]>, out: (a: number, up: number) => number): Mesh {
-  return join(...spots.map(([a, up, r]) => {
+function clusters(fr: Frame, cap: Sweep, spots: Array<[number, number, number]>): Mesh {
+  return join(...spots.flatMap(([a, up, r]) => {
     const d: V3 = [Math.cos(up) * Math.cos(a), Math.cos(up) * Math.sin(a), Math.sin(up)];
-    return dome(over(fr, d, out(a, up)), d, r, r * 0.6, fr.lod < 1 ? 5 : 7, 'hair');
+    const out = surface(fr, cap, d);
+    return out > 0 ? [dome(over(fr, d, out - 0.04), d, r, r * 0.6, fr.lod < 1 ? 5 : 7, 'hair')] : [];
   }));
 }
 
@@ -764,7 +775,13 @@ interface Sweep {
   even?: boolean;
 }
 
-function sweep(fr: Frame, s: Sweep): Mesh {
+/**
+ * How a sweep's hair is laid out: `dir` is the way out from the middle of
+ * the skull `lam` round its pole and `mu` out from it, and `lockAt` finds the
+ * lock along `lam` -- where it starts, where it leaves the hair, and where
+ * round the head that is.
+ */
+function laid(fr: Frame, s: Sweep) {
   const P = unit(s.pole);
   const zp = dot(s.zero, P);
   const e1 = unit([s.zero[0] - P[0] * zp, s.zero[1] - P[1] * zp, s.zero[2] - P[2] * zp]);
@@ -773,12 +790,6 @@ function sweep(fr: Frame, s: Sweep): Mesh {
     const c = Math.cos(mu), sn = Math.sin(mu), cl = Math.cos(lam), sl = Math.sin(lam);
     return [c * P[0] + sn * (cl * e1[0] + sl * e2[0]), c * P[1] + sn * (cl * e1[1] + sl * e2[1]), c * P[2] + sn * (cl * e1[2] + sl * e2[2])];
   };
-  const [l0, l1] = s.round;
-  const whole = Math.abs(l1 - l0 - TAU) < 1e-6;
-  // Locks in fours at the finest, so one lies down the middle of the brow; in fours still when cut coarser.
-  const n = fr.lod < 1 ? cut(fr, s.round[2], 8, 4) : s.round[2];
-  const cols = whole ? n : n + 1;
-  const rows = fr.lod < 1 ? cut(fr, s.rows ?? 5, 3) : s.rows ?? 5;
   // From a parting the hair grows toward the pole; from a crown, away from it.
   const way = s.part !== undefined ? -1 : 1;
   const hair = (d: V3): boolean => {
@@ -794,7 +805,6 @@ function sweep(fr: Frame, s: Sweep): Mesh {
     }
     return (a + b) / 2;
   };
-  const v: V3[] = [];
   /*
    * Hair grown from a point does not start at the point: every lock meeting
    * there would make a star of slivers and ink. It starts a little way out,
@@ -820,6 +830,28 @@ function sweep(fr: Frame, s: Sweep): Mesh {
     }
     return { lam, mu0, mu1, end: around(fr, over(fr, dir(lam, mu1), 0)) };
   };
+  return { P, e1, e2, dir, lockAt, way, whorl };
+}
+
+/** How far off the skull a sweep's hair stands along `d`, before any lock stands proud of it; and nought where it has none. */
+function surface(fr: Frame, s: Sweep, d: V3): number {
+  const { P, e1, e2, lockAt } = laid(fr, s);
+  const u = unit(d);
+  const lam = Math.atan2(dot(u, e2), dot(u, e1));
+  const { mu0, mu1 } = lockAt(lam);
+  const t = (Math.acos(Math.max(-1, Math.min(1, dot(u, P)))) - mu0) / (mu1 - mu0 || 1);
+  return t < 0 || t > 1 ? 0 : s.loft(t, lam);
+}
+
+function sweep(fr: Frame, s: Sweep): Mesh {
+  const { P, dir, lockAt, way, whorl } = laid(fr, s);
+  const [l0, l1] = s.round;
+  const whole = Math.abs(l1 - l0 - TAU) < 1e-6;
+  // Locks in fours at the finest, so one lies down the middle of the brow; in fours still when cut coarser.
+  const n = fr.lod < 1 ? cut(fr, s.round[2], 8, 4) : s.round[2];
+  const cols = whole ? n : n + 1;
+  const rows = fr.lod < 1 ? cut(fr, s.rows ?? 5, 3) : s.rows ?? 5;
+  const v: V3[] = [];
   let locks = Array.from({ length: cols }, (_, j) => lockAt(l0 + ((l1 - l0) * j) / n));
   if (s.even) {
     // Where two neighbours end more than a quarter-radian and a bit apart round the head, a lock between them; and between those, up to three times over.
@@ -860,10 +892,11 @@ function sweep(fr: Frame, s: Sweep): Mesh {
       const q = [j * R + k, j * R + k + 1, j2 * R + k + 1, j2 * R + k];
       const c = middle(q.map((i) => v[i]));
       // The last row, where the hair meets the skin, a shade darker: its underside, and what keeps fair hair from running into a fair face.
-      // Not just over the brows, where it would run into them in one dark bar and make a scowl.
+      // Over the face only a little darker, and not at all just over the brows, where it would run into them in one dark bar and make a
+      // scowl; a full step darker there beside plain facets would stand out as a notch.
       const low = Math.min(...q.map((i) => v[i][2]));
-      const brow = low < 2.15 && c[1] > 0.6;
-      f.push(faceOut(v, q, [c[0] - MID[0], c[1] - MID[1], c[2] - MID[2]], k === rows - 1 && m === 'hair' && !brow ? s.under ?? 'brow' : m));
+      const under: Mat = c[1] <= 0.3 ? s.under ?? 'brow' : low < 2.15 && c[1] > 0.6 ? 'hair' : 'edge';
+      f.push(faceOut(v, q, [c[0] - MID[0], c[1] - MID[1], c[2] - MID[2]], k === rows - 1 && m === 'hair' ? under : m));
     }
   }
   if (whorl) {
@@ -982,8 +1015,8 @@ function hairOf(fr: Frame, id: string): HairKit {
   const tails: Tail[] = [];
   // All of it from a whorl at the crown. Locks in fours round, so one lies straight down the middle of the brow.
   type Lay = Omit<Sweep, 'pole' | 'zero' | 'round'> & { n?: number };
-  const crown = (o: Lay, round: [number, number] = [0, TAU]): Mesh =>
-    sweep(fr, { pole: [0, -0.15, 1], zero: [1, 0, 0], round: [round[0], round[1], o.n ?? 16], ...o });
+  const crownOf = (o: Lay, round: [number, number] = [0, TAU]): Sweep => ({ pole: [0, -0.15, 1], zero: [1, 0, 0], round: [round[0], round[1], o.n ?? 16], ...o });
+  const crown = (o: Lay, round: [number, number] = [0, TAU]): Mesh => sweep(fr, crownOf(o, round));
   // Combed to one place: the back of the head, a tie, a knot.
   const toward = (pole: V3, o: Lay): Mesh => sweep(fr, { pole, zero: [1, 0, 0], round: [0, TAU, o.n ?? 16], ...o });
   /*
@@ -1068,41 +1101,43 @@ function hairOf(fr: Frame, id: string): HairKit {
         cap: crown({ edge: (a) => Math.min(2.02, hairline(2.02, 1.72, 1.2, 0.9)(a)), loft: (t) => 0.18 + 0.1 * Math.sin(Math.PI * t * 0.8), hangs: true, ridge: 0.06, tip: 0.1, n: 24, rows: 6 }),
         tails,
       };
-    case 'curls':
-      // A head of loose curls: a close mass with a dozen round clusters standing out of it, over the brow and the tops of the ears.
+    case 'curls': {
+      // Loose curls, full on top and close at the sides as the references cut them: a mass standing off the crown and thinning to the
+      // tops of the ears, with round curls standing out of it over the brow and round the top, and smaller ones low at the sides.
+      const cap = crownOf({ edge: hairline(2.32, 2.1, 1.68, 0.7), loft: (t) => 0.38 - 0.2 * ramp(t, 0.3, 0.9) - 0.12 * ramp(t, 0.85, 1), ridge: 0.05, n: 24, rows: 6 });
+      // One mesh with the hair under them, so a curl behind the head is sorted behind the hair in front of it.
       return {
-        cap: crown({
-          edge: hairline(2.32, 2.1, 1.68, 0.7),
-          loft: (t) => 0.26 + 0.12 * Math.sin(Math.PI * t),
-          ridge: 0.05,
-          n: 24,
-          rows: 6,
-        }),
-        top: clusters(fr, [
+        cap: join(sweep(fr, cap), clusters(fr, cap, [
           [0.9, 1.2, 0.42], [2.3, 1.2, 0.42], [-0.8, 1.15, 0.42], [-2.3, 1.15, 0.42],
-          [1.25, 0.72, 0.4], [1.95, 0.72, 0.4], [0.35, 0.62, 0.42], [2.8, 0.62, 0.42], [-0.55, 0.6, 0.44], [-1.57, 0.62, 0.44], [-2.6, 0.6, 0.44],
-          [0.05, 0.12, 0.38], [3.1, 0.12, 0.38], [-0.9, 0.1, 0.4], [-2.25, 0.1, 0.4],
-        ], (_a, up) => 0.12 + 0.1 * Math.sin(up)),
+          [1.25, 0.72, 0.4], [1.95, 0.72, 0.4], [0.35, 0.62, 0.4], [2.8, 0.62, 0.4], [-0.55, 0.6, 0.4], [-1.57, 0.62, 0.42], [-2.6, 0.6, 0.4],
+          [0.05, 0.15, 0.3], [3.1, 0.15, 0.3], [-0.9, 0.12, 0.32], [-2.25, 0.12, 0.32],
+        ])),
         tails,
       };
-    case 'afro':
-      // Round and close all over, a little over half a tenth off the head, in tight curls that bump its outline from every side; the ears clear of it.
+    }
+    case 'afro': {
+      /*
+       * Round and close, wider than it is tall: low over the crown, fullest
+       * round the upper sides, and tucked under all round an edge that comes
+       * down over the tops of the ears. Over the brow it slopes down to the
+       * hairline rather than standing out over it, where its underside would
+       * be a dark band across the forehead. Tight curls bump its outline from
+       * every side.
+       */
+      const full = (t: number): number => 0.3 + 0.32 * Math.sin((Math.PI / 2) * Math.min(1, t / 0.62));
+      const loft = (t: number, lam: number): number => {
+        const front = Math.max(0, Math.sin(lam)) ** 2;
+        return full(t) * (1 - 0.2 * front * ramp(t, 0.4, 0.8)) - 0.5 * Math.pow(ramp(t, 0.7 - 0.25 * front, 1), 1.3);
+      };
+      const cap = crownOf({ edge: hairline(2.44, 2.18, 1.65, 1.2), loft, ridge: 0.03, n: 24, rows: 7, under: 'edge' });
       return {
-        cap: crown({
-          edge: hairline(2.46, 2.22, 1.92, 1.3),
-          loft: (t) => 0.5 + 0.08 * Math.sin(Math.PI * t) - 0.32 * Math.pow(ramp(t, 0.7, 1), 1.4),
-          ridge: 0.03,
-          n: 24,
-          rows: 7,
-          under: 'edge',
-        }),
-        top: clusters(fr, [
-          [0.3, 1.25, 0.42], [1.9, 1.25, 0.42], [-1.3, 1.25, 0.42], [-2.9, 1.25, 0.42],
-          [0, 0.8, 0.44], [0.9, 0.82, 0.42], [1.57, 0.85, 0.42], [2.25, 0.82, 0.42], [3.14, 0.8, 0.44], [-0.8, 0.8, 0.44], [-1.57, 0.8, 0.44], [-2.35, 0.8, 0.44],
-          [-0.75, 0.32, 0.42], [-1.57, 0.3, 0.44], [-2.39, 0.32, 0.42],
-        ], (_a, up) => 0.5 - 0.1 * ramp(0.8 - up, 0, 0.5)),
+        cap: join(sweep(fr, cap), clusters(fr, cap, [
+          [0, 0.85, 0.44], [0.9, 0.88, 0.42], [1.57, 0.92, 0.4], [2.25, 0.88, 0.42], [3.14, 0.85, 0.44], [-0.8, 0.85, 0.44], [-1.57, 0.85, 0.44], [-2.35, 0.85, 0.44],
+          [-0.75, 0.4, 0.44], [-1.57, 0.38, 0.44], [-2.39, 0.4, 0.44], [0.12, 0.42, 0.44], [3.02, 0.42, 0.44],
+        ])),
         tails,
       };
+    }
     case 'waves':
     case 'long': {
       // Parted in the middle and falling past the ears: to the shoulders in waves, or halfway down the back straight.
@@ -1135,7 +1170,8 @@ function hairOf(fr: Frame, id: string): HairKit {
             const t = k / N;
             const sway = 0.13 * Math.sin(t * 2.5 * Math.PI) * ramp(t, 0.1, 0.35);
             pts.push([s * (0.02 + 0.12 * ramp(t, 0, 0.3) + sway), 0.05 + 1.1 * ramp(t, 0.15, 0.6), -3 * t]);
-            w.push(k < N ? 0.52 * (1 - t * 0.5) : 0);
+            // Coming out from under the hair over its first three points, rather than starting square.
+            w.push(k < N ? 0.52 * (1 - t * 0.5) * Math.max(0.1, Math.min(1, k / 3)) : 0);
           }
           tails.push({ at: [s * 1.3, -0.1, 1.45], mesh: lockOf(pts, w, [s, 0.55, 0.1]), give: 0.25 });
           continue;
@@ -1197,21 +1233,59 @@ function hairOf(fr: Frame, id: string): HairKit {
         tails.push({ at: [s * 1.2, -0.45, 1.3], mesh: braid([[0, 0, 0], [s * 0.2, 0.25, -0.9], [s * 0.3, 0.5, -1.9], [s * 0.3, 0.6, -2.8]], 0.28), give: 0.4 });
       }
       return { cap: parted(0, 0.6, { edge: hairline(2.45, 2.25, 1.6, 0.9, 0.2), loft: (t) => 0.08 + 0.06 * t, ridge: 0.05, back: 0.55, through: true }), tails };
-    case 'locs':
-      // Locs drawn back off the face and hanging to the shoulders.
-      // Eleven of them, no two the same length or thickness, each curving out a little over the shoulders as it falls.
-      for (let k = 0; k < 11; k++) {
-        const a = Math.PI * (1.02 + (k / 10) * 0.96);
-        const x = Math.cos(a) * 1.5, y = 0.05 + Math.sin(a) * 1.55;
-        const len = 2.5 + ((k * 7) % 5) * 0.28;
-        const r = 0.19 + ((k * 3) % 4) * 0.025;
+    case 'locs': {
+      /*
+       * Locs drawn back off the face and hanging to the shoulders, in two
+       * rows: one rooted high on the back of the head, over the place the
+       * hair is drawn back to, and one at the nape under it. No two the same
+       * length, thickness or hang; and the one at each side brought forward
+       * over the shoulder.
+       */
+      // A fraction that looks drawn at random but is the same every time for the same `k`.
+      const jit = (k: number): number => {
+        const x = Math.sin(k * 12.9898 + 4.1) * 43758.5453;
+        return x - Math.floor(x);
+      };
+      const loc = (a: number, z: number, len: number, r: number, bend: number, k: number): void => {
+        const [rxx, ryy, cy] = skull(fr, z);
+        // Its root sunk in the hair, thin, so no end of it shows.
+        const x = Math.cos(a) * rxx * 0.88, y = cy + Math.sin(a) * ryy * 0.88;
+        // Out a little over the back as it falls, and bent to one side or the other.
+        const ox = Math.cos(a), oy = Math.sin(a);
+        const pts: V3[] = [0, 0.12, 0.4, 0.72, 1].map((t) => [ox * (0.16 + 0.24 * t) - oy * bend * Math.sin(t * 1.8), oy * (0.17 + 0.26 * t) + ox * bend * Math.sin(t * 1.8), -len * t]);
+        tails.push({ at: [x, y, z], mesh: chain(pts, [r * 0.5, r, r * 0.95, r * 0.85, r * 0.45], fr.lod < 1 ? 4 : 5, 'hair'), give: 0.35 + 0.25 * jit(k + 100) });
+      };
+      // The row at the nape, round the back from ear to ear.
+      for (let k = 1; k < 12; k++) loc(Math.PI * (1.04 + (k / 12) * 0.92) + (jit(k) - 0.5) * 0.14, 1.02 + 0.4 * jit(k + 20), 2.2 + 1.4 * jit(k + 40), 0.17 + 0.09 * jit(k + 60), (jit(k + 80) - 0.5) * 0.6, k);
+      // The row over it, high on the back of the head, falling to about as low.
+      for (let k = 0; k < 5; k++) {
+        const z = 2.15 + 0.35 * jit(k + 120);
+        loc(-Math.PI / 2 + (k - 2) * 0.3 + (jit(k + 140) - 0.5) * 0.1, z, z - 1.0 + 2.2 + 1.2 * jit(k + 160), 0.19 + 0.07 * jit(k + 180), (jit(k + 200) - 0.5) * 0.5, k + 20);
+      }
+      // And one from each side forward over the shoulder and down the front.
+      for (const side of [-1, 1]) {
+        const [rxx, ryy, cy] = skull(fr, 1.75);
+        const a = side > 0 ? -0.35 : Math.PI + 0.35;
         tails.push({
-          at: [x, y, 1.1],
-          mesh: chain([[0, 0, 0], [x * 0.06, y * 0.08, -len * 0.35], [x * 0.14, y * 0.16, -len * 0.7], [x * 0.18, y * 0.2, -len]], [r, r * 0.95, r * 0.85, r * 0.45], 5, 'hair'),
-          give: 0.4 + (k % 3) * 0.1,
+          at: [Math.cos(a) * rxx * 0.88, cy + Math.sin(a) * ryy * 0.88, 1.75],
+          mesh: chain([[0, 0, 0], [side * 0.2, 0.05, -0.3], [side * 0.36, 0.35, -1.0], [side * 0.5, 0.95, -2.05], [side * 0.44, 1.25, -3.3]], [0.1, 0.2, 0.19, 0.17, 0.09], fr.lod < 1 ? 4 : 5, 'hair'),
+          give: 0.3,
         });
       }
-      return { cap: toward([0, -1, 0.25], { edge: hairline(2.4, 2.15, 1.35, 0.6), loft: () => 0.12, ridge: 0.12, n: 24, hangs: true }), tails };
+      // The hair lies on the scalp along three parts that divide it into sections, and every lock stands proud by its own amount.
+      const parts = [Math.PI / 2 - 0.85, Math.PI / 2, Math.PI / 2 + 0.85];
+      const lift = (lam: number): number => ramp(Math.min(...parts.map((q) => Math.abs(Math.atan2(Math.sin(lam - q), Math.cos(lam - q))))), 0.06, 0.26);
+      return {
+        cap: toward([0, -1, 0.25], {
+          edge: hairline(2.4, 2.15, 1.72, 0.9),
+          loft: (t, lam) => (0.05 + 0.13 * lift(lam)) * (0.6 + 0.4 * Math.sin(Math.PI * t)),
+          ridge: (end) => 0.04 + 0.12 * jit(Math.round(end * 40)),
+          n: 28,
+          even: true,
+        }),
+        tails,
+      };
+    }
     case 'ridge':
       // A crest from the brow to the nape over shaved sides, highest over the crown.
       return {
@@ -1297,8 +1371,9 @@ interface Kit {
   beard?: Mesh;
   upper: Mesh;
   lower: Mesh;
-  /** Left and right, each with its thumb on the inside. */
+  /** Left and right, each with its thumb on the inside: fists, and open. */
   hands: [Mesh, Mesh];
+  open: [Mesh, Mesh];
   /** What is in each hand while at work. */
   mallet: Mesh;
   chisel: Mesh;
@@ -1369,21 +1444,29 @@ function kitOf(look: Look, lod: number): Kit {
     ears: grown(earsOf(fr)),
     hair: grownHair(hairOf(fr, look.hair)),
     beard: beard ? grown(beard) : undefined,
-    upper: rings([[0.45, 0.46, 0.48], [0.05, 0.82 * (0.9 + fr.sh * 0.1), 0.8], [-1.5, 0.74, 0.72], [-3.05, 0.65, 0.63]], 6, 'tunic'),
+    // The sleeve's end in shade, as the inside of a sleeve is: seen end on, with the arm raised toward the viewer, a lit end is a pale disc.
+    upper: rings([[0.45, 0.46, 0.48], [0.05, 0.82 * (0.9 + fr.sh * 0.1), 0.8], [-1.5, 0.74, 0.72], [-3.05, 0.65, 0.63]], 6, (band) => (band === 3 ? 'trim' : 'tunic')),
     lower: join(rings([[0.1, 0.57, 0.54], [-2.3, 0.44, 0.41]], 6, 'skin'), rings([[0.25, 0.7, 0.66], [-0.75, 0.66, 0.62]], 6, 'trim')),
-    hands: [-1, 1].map((s) => join(
+    hands: [-1, 1].map((s) => handSized(join(
       rings([[0.08, 0.42, 0.27], [-0.5, 0.52, 0.31], [-1.1, 0.38, 0.24]], 6, 'skin'),
       chain([[-s * 0.18, 0.12, -0.22], [-s * 0.26, 0.3, -0.52], [-s * 0.22, 0.36, -0.78]], [0.14, 0.12, 0.07], 4, 'skin'),
-    )) as [Mesh, Mesh],
+    ))) as [Mesh, Mesh],
+    // Open: a flat palm, four fingers a little apart and the thumb out from them, the palm on the side a fist's is.
+    open: [-1, 1].map((s) => handSized(join(
+      rings([[0.08, 0.2, 0.33], [-0.5, 0.19, 0.44], [-0.88, 0.15, 0.43]], 6, 'skin'),
+      ...([[0.3, 0.52], [0.1, 0.6], [-0.1, 0.56], [-0.3, 0.44]] as Array<[number, number]>).map(([y, l]) =>
+        chain([[0, y, -0.84], [0, y * 1.3, -0.84 - l]], [0.1, 0.075], 4, 'skin')),
+      chain([[-s * 0.06, 0.28, -0.18], [-s * 0.08, 0.56, -0.46], [-s * 0.08, 0.7, -0.74]], [0.13, 0.11, 0.075], 4, 'skin'),
+    ))) as [Mesh, Mesh],
     // A mallet through the fist, its haft out past the thumb and its head square across the end, faced the way the palm is.
     mallet: join(
-      chain([[0, -0.45, -0.55], [0, MALLET_HEAD[1], -0.55]], [0.11, 0.1], 4, 'haft'),
-      chain([[-0.45, MALLET_HEAD[1], -0.55], [0.45, MALLET_HEAD[1], -0.55]], [0.3, 0.3], 4, 'iron'),
+      chain([[0, -0.45, GRIP], [0, MALLET_HEAD[1], GRIP]], [0.11, 0.1], 4, 'haft'),
+      chain([[-0.45, MALLET_HEAD[1], GRIP], [0.45, MALLET_HEAD[1], GRIP]], [0.3, 0.3], 4, 'iron'),
     ),
     // A chisel through the other fist: the handle up out of it to where it is struck, and the blade down.
     chisel: join(
-      chain([[0, -0.25, -0.55], [0, CHISEL_TOP[1], -0.55]], [0.14, 0.18], 5, 'haft'),
-      chain([[0, -0.25, -0.55], [0, -1.05, -0.55]], [0.1, 0.03], 4, 'iron'),
+      chain([[0, -0.25, GRIP], [0, CHISEL_TOP[1], GRIP]], [0.14, 0.18], 5, 'haft'),
+      chain([[0, -0.25, GRIP], [0, -1.05, GRIP]], [0.1, 0.03], 4, 'iron'),
     ),
     thigh: rings([[-1.05, 1.02 * fr.hi, 1.05], [-3.45, 0.8, 0.84]], 6, 'trousers', { top: false }),
     shin: rings([[0.12, 0.8, 0.84], [-1.55, 0.68, 0.72]], 6, 'trousers', { bottom: false }),
@@ -1434,8 +1517,10 @@ interface Rig {
   sink: number;
   blink: boolean;
   reins: boolean;
-  /** A mallet in the right hand. */
+  /** A mallet in the right hand and a chisel in the left. */
   tool: boolean;
+  /** The pose mirrored left for right, and whatever is in the hands with it. */
+  lefty: boolean;
   /**
    * A run carried on a curve rather than stood on whichever foot is lowest:
    * `h` above where the hips are at mid-stance, `w` of the way (nought at a
@@ -1446,6 +1531,10 @@ interface Rig {
   hover?: { h: number; w: number; thigh: number; knee: number };
   /** Each shoulder raised this far, for an arm lifted high. */
   shrug: [number, number];
+  /** How firmly each foot is on the ground, for the body carried on a curve: its knee gives or straightens to keep it there. */
+  plant?: [number, number];
+  /** Each hand open rather than closed. */
+  open: [boolean, boolean];
 }
 
 function rest(): Rig {
@@ -1453,8 +1542,32 @@ function rest(): Rig {
     at: [0, 0, 0], pelvis: [0, 0, 0], spine: [0, 0, 0], chest: [0, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
     arm: [[4, 8, 0], [4, 8, 0]], elbow: [10, 10], hand: [[0, 0, 0], [0, 0, 0]],
     leg: [[0, 2, 0], [0, 2, 0]], knee: [3, 3], foot: [0, 0], flat: [true, true],
-    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, shrug: [0, 0],
+    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false],
   };
+}
+
+/** The same pose the other way about, left for right. */
+function mirror(r: Rig): void {
+  const m = (e: Euler): Euler => [e[0], -e[1], -e[2]];
+  r.at = [-r.at[0], r.at[1], r.at[2]];
+  r.pelvis = m(r.pelvis);
+  r.spine = m(r.spine);
+  r.chest = m(r.chest);
+  r.neck = m(r.neck);
+  r.head = m(r.head);
+  r.tail = m(r.tail);
+  // The limbs are already set down alike for both sides, so each takes the other's angles; a hand's turn about the arm is the one thing that flips.
+  r.arm = [r.arm[1], r.arm[0]];
+  r.elbow = [r.elbow[1], r.elbow[0]];
+  r.hand = [m(r.hand[1]), m(r.hand[0])];
+  r.leg = [r.leg[1], r.leg[0]];
+  r.knee = [r.knee[1], r.knee[0]];
+  r.foot = [r.foot[1], r.foot[0]];
+  r.flat = [r.flat[1], r.flat[0]];
+  r.shrug = [r.shrug[1], r.shrug[0]];
+  r.open = [r.open[1], r.open[0]];
+  if (r.plant) r.plant = [r.plant[1], r.plant[0]];
+  r.lefty = !r.lefty;
 }
 
 /** What the game says a body is doing: the same fields a player's pose has always had. */
@@ -1548,9 +1661,12 @@ function walk(r: Rig, phi: number, g: number): void {
     r.arm[k] = [-L(20, 44) * s + L(3, 4), L(7, 10), L(0, 18)];
     r.elbow[k] = L(12, 68) + L(14, 52) * Math.max(0, -s) - L(0, 10) * Math.max(0, s);
   }
-  r.pelvis = [0, -L(3, 2) * Math.cos(phi), -L(8, 11) * Math.sin(phi)];
-  r.spine = [-lean, 0, 0];
-  r.chest = [-L(0, 3), L(2, 1) * Math.cos(phi), L(13, 17) * Math.sin(phi)];
+  // The hips turn with the leading leg and the shoulders the other way. The lean is along the way of going, not the way the hips are
+  // turned -- which would tip the whole body to each side in turn -- so the spine takes the hips' turn back out before it leans.
+  const hips = -L(8, 11) * Math.sin(phi);
+  r.pelvis = [0, -L(3, 2) * Math.cos(phi), hips];
+  r.spine = [-lean, 0, -hips];
+  r.chest = [-L(0, 3), L(2, 1) * Math.cos(phi), L(13, 17) * Math.sin(phi) + hips];
   r.neck = [lean * 0.45, 0, -L(4, 5) * Math.sin(phi)];
   r.head = [lean * 0.3, 0, 0];
   r.at = [L(0.16, 0.06) * Math.cos(phi), 0, 0];
@@ -1560,6 +1676,8 @@ function walk(r: Rig, phi: number, g: number): void {
   const air = Math.abs(u - 0.5) < 0.3 ? 0.5 * (1 + Math.cos((Math.PI * (u - 0.5)) / 0.3)) : 0;
   const settle = 0.5 + 0.5 * Math.cos(TAU * (u - 0.6));
   r.hover = { h: L(-0.25 * settle, 0.62 * air), w: 1, thigh: L(0, 9), knee: L(5, 12) + L(4, 34) };
+  // The foot going back under the body is on the ground -- except in the air between strides at a run.
+  r.plant = [0, 1].map((k) => (1 - air * g) * ramp(-Math.cos(phi + k * Math.PI), 0.02, 0.25)) as [number, number];
   r.tail = [L(8, 30) + 10 * Math.sin(phi * 2 + 1), 5 * Math.sin(phi), 0];
 }
 
@@ -1642,8 +1760,8 @@ function loop(keys: Key[], s: number): number[] {
 }
 
 /** Where a mallet's head is and a chisel's top, in the frame of the hand holding it. */
-const MALLET_HEAD: V3 = [0, 2.25, -0.55];
-const CHISEL_TOP: V3 = [0, 0.95, -0.55];
+const MALLET_HEAD: V3 = [0, 2.25, GRIP];
+const CHISEL_TOP: V3 = [0, 0.95, GRIP];
 
 /*
  * The mallet hand through a blow, in the hips' frame: where the wrist is,
@@ -1670,9 +1788,11 @@ const BLOW: Key[] = [
  * and brought down on the top of it. The body rises and turns the right
  * shoulder back as the mallet goes up, and turns and bends into the blow,
  * which jolts through both hands and the knees; the head stays down over
- * the work.
+ * the work. Turned three-quarters away to the right or toward the viewer to
+ * the left, where the right hand wound up by the ear would be across the
+ * face, it is done the other way about, left-handed.
  */
-function work(r: Rig, w: number, fr: Frame): void {
+function work(r: Rig, w: number, fr: Frame, facing: number): void {
   const s = (((w / TAU) % 1) + 1) % 1;
   const T = fr.tall;
   r.tool = true;
@@ -1699,7 +1819,14 @@ function work(r: Rig, w: number, fr: Frame): void {
   BLOW[0].v = [wrist[0] / T, wrist[1] / T, wrist[2] / T, 0.4, -0.6, -0.8, ...haft];
   const k = loop(BLOW, s);
   hold(r, fr, 1, [k[0] * T, k[1] * T, k[2] * T], [k[3], k[4], k[5]], [k[6], k[7], k[8]]);
+  if (lefty(facing)) mirror(r);
 }
+
+/** Whether work is done left-handed from where it is seen: see `work`. */
+const lefty = (facing: number): boolean => {
+  const f = ((Math.round(facing) % 8) + 8) % 8;
+  return f === 3 || f === 7;
+};
 
 /** How far a swimmer is in the water: to the chest. */
 const SINK = 10.2;
@@ -1737,6 +1864,16 @@ function drive(r: Rig, phi: number, moving: boolean): void {
   r.tail = [10 + 6 * Math.sin(phi * 2), 0, 0];
 }
 
+/** How far to turn the hand on side `k` about its forearm, in degrees, for its palm to face as near `want` as it can, in the chest's frame. */
+function palmTo(r: Rig, k: number, want: V3): number {
+  const s = k ? 1 : -1;
+  const [ap, aa, at] = r.arm[k];
+  const m = mm(rz(s * at * DEG), mm(ry(-s * aa * DEG), rx((ap + r.elbow[k]) * DEG)));
+  // Into the forearm's frame, where the palm faces across the hand, away from the side the hand is on, until it is turned.
+  const w: V3 = [m[0] * want[0] + m[3] * want[1] + m[6] * want[2], m[1] * want[0] + m[4] * want[1] + m[7] * want[2], m[2] * want[0] + m[5] * want[1] + m[8] * want[2]];
+  return Math.atan2(-s * w[1], -s * w[0]) / DEG;
+}
+
 /** A wave with the right hand, raised to the side and swung from the shoulder; or a hop, knees tucked in the air. */
 function emote(r: Rig, id: string, t: number, facing: number): void {
   const e = emotePose(id, t);
@@ -1765,7 +1902,9 @@ function emote(r: Rig, id: string, t: number, facing: number): void {
     const [p, a, w] = r.arm[k];
     r.arm[k] = [p + (P - p) * up, a + (A - a) * up, w + (W - w) * up];
     r.elbow[k] = r.elbow[k] + (35 - r.elbow[k]) * up + 25 * e.wave;
-    r.hand[k] = [0, 0, -25 * up * s];
+    // The hand open, its palm turned forward to whoever is being waved at.
+    r.open[k] = up > 0.3;
+    r.hand[k] = [0, 0, palmTo(r, k, [0, 1, 0.3]) * up];
     r.shrug = k ? [r.shrug[0], r.shrug[1] + 0.4 * up] : [r.shrug[0] + 0.4 * up, r.shrug[1]];
     r.chest = [r.chest[0], r.chest[1] - 6 * up * s, r.chest[2]];
     r.head = [r.head[0] + 4 * up, r.head[1] - 3 * up * s, r.head[2] - 6 * up * s];
@@ -1793,7 +1932,7 @@ function rigOf(p: FigurePose, fr: Frame): Rig {
   if (p.swimming) swim(r, p.phase, p.moving);
   else if (p.driving) drive(r, p.phase, p.moving);
   else if (p.moving) walk(r, p.phase, Math.max(0, Math.min(1, p.gait ?? 0)));
-  else if (p.working) work(r, p.phase, fr);
+  else if (p.working) work(r, p.phase, fr, p.facing);
   else idle(r, p.phase / 6);
   if (p.emote && !p.swimming && !p.driving) emote(r, p.emote, p.emoteT ?? 0, p.facing);
   return r;
@@ -1802,7 +1941,7 @@ function rigOf(p: FigurePose, fr: Frame): Rig {
 /* ---- one pose into the next -------------------------------------------------- */
 
 /** What a body is doing, as far as blending goes: a change of it is blended. */
-const doing = (p: FigurePose): string => (p.swimming ? 'swim' : p.driving ? 'drive' : p.moving ? 'walk' : p.working ? 'work' : 'idle');
+const doing = (p: FigurePose): string => (p.swimming ? 'swim' : p.driving ? 'drive' : p.moving ? 'walk' : p.working ? (lefty(p.facing) ? 'work left' : 'work') : 'idle');
 
 /** Seconds to blend from one thing to the next, and to come round one eighth of a turn. */
 const BLEND = 0.22;
@@ -1815,8 +1954,9 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     at: e(a.at, b.at), pelvis: e(a.pelvis, b.pelvis), spine: e(a.spine, b.spine), chest: e(a.chest, b.chest), neck: e(a.neck, b.neck), head: e(a.head, b.head),
     arm: [e(a.arm[0], b.arm[0]), e(a.arm[1], b.arm[1])], elbow: [n(a.elbow[0], b.elbow[0]), n(a.elbow[1], b.elbow[1])], hand: [e(a.hand[0], b.hand[0]), e(a.hand[1], b.hand[1])],
     leg: [e(a.leg[0], b.leg[0]), e(a.leg[1], b.leg[1])], knee: [n(a.knee[0], b.knee[0]), n(a.knee[1], b.knee[1])], foot: [n(a.foot[0], b.foot[0]), n(a.foot[1], b.foot[1])],
-    flat: b.flat, tail: e(a.tail, b.tail), lift: n(a.lift, b.lift), sink: n(a.sink, b.sink), blink: b.blink, reins: b.reins, tool: b.tool,
-    hover: b.hover && { ...b.hover, w: b.hover.w * w }, shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])],
+    flat: b.flat, tail: e(a.tail, b.tail), lift: n(a.lift, b.lift), sink: n(a.sink, b.sink), blink: b.blink, reins: b.reins, tool: b.tool, lefty: b.lefty,
+    hover: b.hover && { ...b.hover, w: b.hover.w * w }, shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])], open: b.open,
+    plant: b.plant && [b.plant[0] * w, b.plant[1] * w],
   };
 }
 
@@ -1908,10 +2048,55 @@ function skeleton(fr: Frame, r: Rig): Bones {
     const T = fr.tall, { h, w, thigh, knee } = r.hover;
     const stood = 0.1 + THIGH * T * Math.cos(thigh * DEG) + SHIN * T * Math.cos((thigh - knee) * DEG) + 0.75;
     const want = stood + h - HIP * T - r.at[2];
-    dz += w * Math.max(0, want - dz);
+    if (r.plant) {
+      /*
+       * Carried on the curve exactly, and the foot that is on the ground
+       * kept on it: its knee bent a little more where the leg is too long
+       * for the body's height there, which is what would otherwise push the
+       * body up off the curve in a jolt, and straightened where it is too
+       * short, which would leave the foot standing on nothing.
+       */
+      dz += w * (want - dz);
+      // A foot swinging through low enough to catch the ground folds its knee just enough to clear it.
+      for (let k = 0; k < 2; k++) plantFoot(b, r, fr, k, dz, r.plant[k], r.plant[k] <= 0);
+      // And never with a foot through the ground, planted or not.
+      let under = Infinity;
+      for (let k = 0; k < 2; k++) for (const p of SOLE) under = Math.min(under, place(b[`ankle${k}`], p)[2] + dz);
+      if (under < 0) dz -= under;
+    } else dz += w * Math.max(0, want - dz);
   }
   for (const key of Object.keys(b)) b[key] = { m: b[key].m, t: [b[key].t[0], b[key].t[1], b[key].t[2] + dz] };
   return b;
+}
+
+/**
+ * A foot put down on the ground, `weight` of the way, by bending or
+ * straightening its knee: the rest of the leg as it was, the body `dz` above
+ * where the bones were built, and the foot kept level if it was being kept so.
+ * Or, `clear`, only lifted out of the ground if it is in it.
+ */
+function plantFoot(b: Bones, r: Rig, fr: Frame, k: number, dz: number, weight: number, clear = false): void {
+  const T = fr.tall, S = SHIN * T;
+  const lp = r.leg[k][0];
+  let kap = r.knee[k] * DEG;
+  for (let q = 0; q < 3; q++) {
+    let low = Infinity;
+    for (const p of SOLE) low = Math.min(low, place(b[`ankle${k}`], p)[2]);
+    // How far the sole is off the ground, to take out.
+    const off = clear ? Math.min(0, low + dz) : (low + dz) * weight;
+    if (Math.abs(off) < 1e-3) return;
+    // The ankle's height below the knee is S times (h1 sin + h2 cos) of the knee's bend, h the hip frame's reach upward; solved for the bend that moves it by `off`.
+    const m = b[`hip${k}`].m;
+    const h1 = m[7], h2 = m[8];
+    const rho = Math.hypot(h1, h2) || 1, alpha = Math.atan2(h1, h2);
+    const c = Math.max(-1, Math.min(1, (rho * Math.cos(kap - alpha) + off / S) / rho));
+    const d = Math.acos(c);
+    kap = alpha + (kap - alpha >= 0 ? d : -d);
+    const deg = kap / DEG;
+    b[`knee${k}`] = joint(b[`hip${k}`], [0, 0, -THIGH * T], -deg);
+    const level = r.flat[k] ? -(r.pelvis[0] + lp - deg) : 0;
+    b[`ankle${k}`] = joint(b[`knee${k}`], [0, 0, -SHIN * T], level + r.foot[k]);
+  }
 }
 
 /**
@@ -2051,12 +2236,12 @@ function partsOf(kit: Kit, r: Rig, b: Bones): Part[] {
   if (kit.hair.fall) parts.push({ mesh: kit.hair.fall, xf: b.head, bias: 0 });
   if (kit.beard) parts.push({ mesh: kit.beard, xf: b.head, bias: 0.02, after: head, front: [0, 1, 0], hide: SKULL });
   for (const t of kit.hair.tails) parts.push({ mesh: t.mesh, xf: joint(b.head, t.at, -r.tail[0] * t.give, r.tail[1] * t.give, 0), bias: 0 });
-  if (r.tool) parts.push({ mesh: kit.mallet, xf: b.wrist1, bias: 0.04 }, { mesh: kit.chisel, xf: b.wrist0, bias: 0.04 });
+  if (r.tool) parts.push({ mesh: kit.mallet, xf: r.lefty ? b.wrist0 : b.wrist1, bias: 0.04 }, { mesh: kit.chisel, xf: r.lefty ? b.wrist1 : b.wrist0, bias: 0.04 });
   for (let k = 0; k < 2; k++) {
     parts.push(
       { mesh: kit.upper, xf: b[`arm${k}`], bias: 0, convex: true },
       { mesh: kit.lower, xf: b[`elbow${k}`], bias: 0.02 },
-      { mesh: kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 },
+      { mesh: r.open[k] ? kit.open[k] : kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 },
       { mesh: kit.thigh, xf: b[`hip${k}`], bias: 0, convex: true },
       { mesh: kit.shin, xf: b[`knee${k}`], bias: 0, convex: true },
       { mesh: kit.boot, xf: b[`knee${k}`], bias: 0.01, convex: true },
@@ -2162,7 +2347,7 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       for (const p of pts) { cx += p[0]; cy += p[1]; cz += p[2]; }
       const c: V3 = [cx / pts.length, cy / pts.length, cz / pts.length];
       const off = face.unless && mv(part.xf.m, face.unless);
-      vis.push(l > 1e-9 && u[0] * T[0] + u[1] * T[1] + u[2] * T[2] > 1e-4 && !(hidden && hidden(c)) && !(off && off[0] * T[0] + off[1] * T[1] + off[2] * T[2] > 0.05));
+      vis.push(l > 1e-9 && u[0] * T[0] + u[1] * T[1] + u[2] * T[2] > 1e-4 && !(hidden && hidden(face.at ? place(part.xf, face.at) : c)) && !(off && off[0] * T[0] + off[1] * T[1] + off[2] * T[2] > 0.05));
       k.push(lightOn(u, L));
       d.push(c[0] * T[0] + c[1] * T[1] + c[2] * T[2]);
     }
