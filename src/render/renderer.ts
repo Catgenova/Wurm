@@ -36,6 +36,7 @@ import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
+import { stairStyle } from './stairing';
 import { drawShine, shines } from './shine';
 import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
@@ -2603,57 +2604,391 @@ export class Renderer {
   }
 
   /** A staircase climbing from the storey below to this floor's storey, starting at its facing side. */
+  /**
+   * A flight of stairs up from the storey below to this one: see
+   * `stairing.ts` for what each material builds one as.
+   *
+   * It was six quads in two flat colours with nothing at either side, so a
+   * flight seen from the side was a stack of boards floating in the room.
+   * Each step is a riser and a tread now, the tread standing a nosing proud
+   * of the riser; the flight has sides -- the wall it is built of cut to the
+   * steps, or its strings -- and a side open to the room is railed. It
+   * stands clear of a wall it runs up beside, against the wall's face, not
+   * in it.
+   */
   private drawStairs(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
-    const ctx = this.canvas.ctx;
+    const main = this.canvas.ctx;
     const cam = this.camera;
-    const mat = MATERIAL_BY_ID.get(floor.material);
-    if (!mat) return;
+    const bld = this.game.buildings;
+    const bare = MATERIAL_BY_ID.get(floor.material);
+    if (!bare) return;
     const facing = floor.facing ?? 's';
     const h0 = base + (floor.level - 1) * WALL_HEIGHT;
     const h1 = base + floor.level * WALL_HEIGHT;
+    // Eight to a storey: six made every step half a metre, and a flight a pile of blocks.
+    const N = 8;
+    const rise = (h1 - h0) / N;
     const done = isDone(floor);
-    const STEPS = 6;
+    const zoom = cam.zoom;
+    const st = stairStyle(floor.material);
+    /*
+     * A painted flight is its paint all over, as a painted wall is -- each
+     * part of it a step lighter or darker in the paint as it was in the
+     * wood, so a tread still reads against its riser.
+     */
+    const paint = floor.dye ? this.painted(bare, floor.dye).color : null;
+    const lum = (c: readonly [number, number, number]): number => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    const C = (c: readonly [number, number, number], k: number, a = 1): string => {
+      if (!paint) return rgb(c, k, a);
+      const f = Math.max(0.6, Math.min(1.3, lum(c) / Math.max(1, lum(st.riser))));
+      return rgb(paint, k * f, a);
+    };
+    const lw = (k: number): number => Math.max(0.8, k * zoom);
+    const W = (t: number, s: number): [number, number] => Renderer.stairPoint(x, y, facing, t, s);
     const P = (t: number, s: number, h: number): [number, number] => {
-      const [wx, wy] = Renderer.stairPoint(x, y, facing, t, s);
+      const [wx, wy] = W(t, s);
       return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
     };
-    const quad = (a: [number, number], b: [number, number], c: [number, number], d: [number, number]): void => {
+    /*
+     * Seen through -- in a room of its own under the storey you are standing
+     * on -- it is laid whole on a layer and put over the room once, over the
+     * box it stands in, rails and all.
+     */
+    let box: [number, number, number, number] | null = null;
+    if (alpha < 1) {
+      const dpr = this.canvas.dpr;
+      const xs: number[] = [], ys: number[] = [];
+      for (const t of [-0.2, 1.2]) for (const u of [-0.2, 1.2]) for (const h of [h0, h1 + 20]) {
+        const [qx, qy] = P(t, u, h);
+        xs.push(qx);
+        ys.push(qy);
+      }
+      const bx = Math.max(0, Math.floor(Math.min(...xs) * dpr)), by = Math.max(0, Math.floor(Math.min(...ys) * dpr));
+      box = [bx, by, Math.ceil(Math.max(...xs) * dpr) - bx + 1, Math.ceil(Math.max(...ys) * dpr) - by + 1];
+    }
+    const ctx = box ? this.seeThroughCtx(box) : main;
+    const poly = (pts: Array<[number, number]>): void => {
+      ctx.beginPath();
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.closePath();
+    };
+    const line = (a: [number, number], b: [number, number], ink: string, width: number): void => {
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = width;
       ctx.beginPath();
       ctx.moveTo(a[0], a[1]);
       ctx.lineTo(b[0], b[1]);
-      ctx.lineTo(c[0], c[1]);
-      ctx.lineTo(d[0], d[1]);
-      ctx.closePath();
+      ctx.stroke();
     };
-    // Draw the steps back to front in view space.
-    const order = Array.from({ length: STEPS }, (_, i) => i).sort((a, b) => {
-      const [ax, ay] = Renderer.stairPoint(x, y, facing, 0.5, (a + 0.5) / STEPS);
-      const [bx, by] = Renderer.stairPoint(x, y, facing, 0.5, (b + 0.5) / STEPS);
+    // Up the flight and across it, in the world.
+    const [ox, oy] = W(0, 0);
+    const ux = W(0, 1)[0] - ox, uy = W(0, 1)[1] - oy;
+    const cx = W(1, 0)[0] - ox, cy = W(1, 0)[1] - oy;
+    // Lit as a wall is: a tread looks at the sky, a riser and the flight's end as a wall across it, its side as a wall along it.
+    const treadLit = 1.12, riserLit = this.faceLight(cx, cy), sideLit = this.faceLight(ux, uy);
+    const risersShow = cam.nearSide(-ux, -uy) > 0;
+    const near: 0 | 1 = cam.nearSide(cx, cy) > 0 ? 1 : 0;
+    /** The border a side of the flight runs along. */
+    const sideBorder = (t: 0 | 1): Border => {
+      const [a, b] = [W(t, 0), W(t, 1)];
+      return Math.abs(a[0] - b[0]) < 1e-9 ? { dir: 'v', x: a[0], y: Math.min(a[1], b[1]) } : { dir: 'h', x: Math.min(a[0], b[0]), y: a[1] };
+    };
+    const walled = (t: 0 | 1): boolean => {
+      const w = bld.wallOnBorder(floor.level - 1, sideBorder(t));
+      return !!w && isDone(w);
+    };
+    /** Whether a flight beside it on side `t` goes up the same way, making one wide flight with it. */
+    const joined = (t: 0 | 1): boolean => {
+      const [nx, ny] = t ? [cx, cy] : [-cx, -cy];
+      const f = bld.floor(floor.level, x + Math.round(nx), y + Math.round(ny));
+      return !!f && floorKind(f) === 'stairs' && (f.facing ?? 's') === facing;
+    };
+    /** Whether a side stands open to the room: no wall along it, and no flight beside it. */
+    const open = (t: 0 | 1): boolean => !walled(t) && !joined(t);
+    // Against a wall, the flight stops at the wall's face.
+    const tLo = walled(0) ? WALL_THICK : 0, tHi = walled(1) ? 1 - WALL_THICK : 1;
+    const tNear = near ? tHi : tLo, tFar = near ? tLo : tHi;
+    const NOSE = st.proud ? 0.03 : 0, NOSE_H = st.proud ? 1.3 : 0;
+    const hTop = (i: number): number => h0 + (i + 1) * rise;
+    /** The top edge of a closed string at `s` up the flight: a hand over the nosings, level with the landing at its head. */
+    const closedTop = (s: number): number => Math.min(h0 + rise + (h1 - h0) * s + 2, h1 + 2);
+    /** The steps' outline up the side at `t`, from the foot of the first riser to the back of the top tread. */
+    const profile = (t: number): Array<[number, number]> => {
+      const out: Array<[number, number]> = [P(t, 0, h0)];
+      for (let i = 0; i < N; i++) {
+        out.push(P(t, i / N, hTop(i)));
+        out.push(P(t, (i + 1) / N, hTop(i)));
+      }
+      return out;
+    };
+    /**
+     * A masonry's own wall picture laid up a vertical face of the flight: the
+     * face from `a` to `b` along the ground, the field of a storey of it from
+     * the floor to the landing -- without the band at the head of the storey,
+     * which cut to the steps was a scrap of cornice under the top one -- cut
+     * to whatever path is set as the clip, and lit as a face that way is.
+     * False where the flight's material has no picture.
+     */
+    const cob = this.masonryOf(floor);
+    const pictured = (a: [number, number], b: [number, number], lit: number): boolean => {
+      if (!cob || st.build !== 'solid') return false;
+      const img = cob.face[Math.abs(x * 31 + y * 17 + floor.level * 7) % cob.face.length];
+      const S = (w: [number, number], k: number): [number, number] => [cam.worldToScreenX(w[0], w[1]), cam.worldToScreenY(w[0], w[1], h0 + WALL_HEIGHT * k)];
+      const turned = !!cob.handed && S(b, 0)[0] < S(a, 0)[0];
+      const [pa, pb] = turned ? [b, a] : [a, b];
+      const [tlx, tly] = S(pa, 1), [trx, try_] = S(pb, 1), [blx, bly] = S(pa, 0);
+      const fh = img.height - cob.head;
+      ctx.save();
+      ctx.clip();
+      ctx.save();
+      ctx.transform((trx - tlx) / img.width, (try_ - tly) / img.width, (blx - tlx) / fh, (bly - tly) / fh, tlx, tly);
+      ctx.drawImage(img, 0, cob.head, img.width, fh, 0, 0, img.width, fh);
+      ctx.restore();
+      const [sr, sg, sb] = cob.shade;
+      ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, ${cob.shadow(lit).toFixed(3)})`;
+      ctx.fillRect(-1e5, -1e5, 2e5, 2e5);
+      ctx.restore();
+      return true;
+    };
+    /** A face of the flight along one side, cut to the steps -- or, on adobe, carried up as a parapet over them. */
+    const side = (t: number, parapet: boolean): void => {
+      const pts = profile(t);
+      if (parapet) {
+        pts.splice(1, pts.length - 1, P(t, 0, h0 + rise + 8), P(t, 0.93, h1 + 8), P(t, 1, h1 + 8));
+      }
+      pts.push(P(t, 1, h0));
+      poly(pts);
+      if (!pictured(W(t, 0), W(t, 1), sideLit)) {
+        ctx.fillStyle = C(st.string, sideLit);
+        ctx.fill();
+      }
+      poly(pts);
+      ctx.strokeStyle = C(st.line, sideLit, 0.55);
+      ctx.lineWidth = lw(1);
+      ctx.stroke();
+      if (parapet) line(P(t, 0, h0 + rise + 8), P(t, 0.93, h1 + 8), C(st.barHi, 1.08), lw(2));
+    };
+    /** A timber string up the side at `t`: cut to the steps, or closed over them. */
+    const string = (t: number): void => {
+      const D = 4;
+      const bottom = (s: number): number => Math.max(h0, h0 + (h1 - h0) * s - D);
+      const pts: Array<[number, number]> = [];
+      if (st.build === 'closed') {
+        pts.push(P(t, 0, h0), P(t, 0, closedTop(0)));
+        const knee = 1 - 1 / N;
+        pts.push(P(t, knee, closedTop(knee)), P(t, 1, closedTop(1)));
+      } else {
+        pts.push(...profile(t));
+      }
+      pts.push(P(t, 1, bottom(1)), P(t, D / (h1 - h0), h0));
+      poly(pts);
+      ctx.fillStyle = C(st.string, sideLit);
+      ctx.fill();
+      ctx.strokeStyle = C(st.line, sideLit, 0.7);
+      ctx.lineWidth = lw(1);
+      ctx.stroke();
+      if (st.build === 'closed') line(P(t, 0, closedTop(0)), P(t, 1, closedTop(1)), C(st.stringHi, 1.05), lw(1.4));
+    };
+    /** A log laid up the side at `t` for the split logs to rest on. */
+    const stringer = (t: number): void => {
+      const a = P(t, 0.02, h0 + 1.5), b = P(t, 1, h1 - 2.5), w = Math.max(3, 8 * zoom);
+      ctx.lineCap = 'round';
+      line(a, b, C(st.line, 1), w + lw(1.6));
+      line(a, b, C(st.string, sideLit), w);
+      line([a[0], a[1] - w * 0.25], [b[0], b[1] - w * 0.25], C(st.stringHi, 1.05), Math.max(1, w * 0.3));
+      ctx.lineCap = 'butt';
+    };
+    /** The rail along an open side at `t`, as its material rails one. */
+    const rail = (t: number): void => {
+      const R = st.rail === 'stone' ? 9 : 10;
+      const s0 = 0.06, s1 = 0.95, b0 = h0 + rise, b1 = h1;
+      const at = (s: number): number => b0 + R + ((b1 - b0) * (s - s0)) / (s1 - s0);
+      const ink = (c: readonly [number, number, number], k = 1, a = 1): string => (st.rail === 'iron' ? rgb(c, k, a) : C(c, k, a));
+      const postW = st.rail === 'stone' ? 4.2 : st.rail === 'pole' ? 3.6 : st.rail === 'wood' ? 3 : 1.8;
+      const barW = st.rail === 'stone' ? 3.2 : st.rail === 'pole' ? 3 : st.rail === 'wood' ? 2.4 : 1.8;
+      const balW = st.rail === 'stone' ? 2.6 : st.rail === 'wood' ? 1.3 : 1;
+      if (st.rail !== 'pole') {
+        // The balusters: one to a step, two on carpentry and stone.
+        const per = st.rail === 'wood' || st.rail === 'stone' ? 2 : 1;
+        for (let i = 0; i < N; i++) {
+          for (let k = 0; k < per; k++) {
+            const s = (i + (k + 0.5) / per) / N;
+            if (s < s0 + 0.03 || s > s1 - 0.03) continue;
+            const foot = st.build === 'closed' ? closedTop(s) : hTop(i);
+            line(P(t, s, foot), P(t, s, at(s)), ink(st.bar, 0.95), lw(balW));
+            if (st.rail === 'stone') line(P(t, s, hTop(i) + R * 0.45), P(t, s, hTop(i) + R * 0.62), ink(st.barHi, 1), lw(balW + 1.4));
+          }
+        }
+      }
+      // The newels at its foot and head, and the rail between them.
+      for (const [s, b] of [[s0, b0], [s1, b1]] as Array<[number, number]>) {
+        line(P(t, s, b), P(t, s, b + R + 2), ink(st.line, 1), lw(postW + 1.2));
+        line(P(t, s, b), P(t, s, b + R + 2), ink(st.post, 1.05), lw(postW));
+        if (st.rail === 'gilt' || st.rail === 'wood') {
+          const [fx, fy] = P(t, s, b + R + 3.4);
+          ctx.beginPath();
+          ctx.arc(fx, fy, lw(postW * 0.62), 0, Math.PI * 2);
+          ctx.fillStyle = ink(st.barHi, 1.05);
+          ctx.fill();
+          ctx.strokeStyle = ink(st.line, 1, 0.8);
+          ctx.lineWidth = lw(0.8);
+          ctx.stroke();
+        }
+      }
+      ctx.lineCap = 'round';
+      line(P(t, s0, at(s0)), P(t, s1, at(s1)), ink(st.line, 1), lw(barW + 1.2));
+      line(P(t, s0, at(s0)), P(t, s1, at(s1)), ink(st.bar, 1.05), lw(barW));
+      line(P(t, s0, at(s0) + barW * 0.2), P(t, s1, at(s1) + barW * 0.2), ink(st.barHi, 1.1), lw(Math.max(0.8, barW * 0.35)));
+      ctx.lineCap = 'butt';
+    };
+    /** One step: its riser where the camera sees it, and its tread. */
+    const step = (i: number): void => {
+      const sF = i / N, sB = (i + 1) / N, hb = h0 + i * rise, ht = hTop(i);
+      const salt = x * 131 + y * 71 + floor.level * 13 + i * 7;
+      if (st.build === 'log') {
+        // A split log across the flight, its flat face up and its round under it.
+        const sm = (sF + sB) / 2, r = rise * 0.55;
+        poly([P(tLo, sF + 0.01, ht), P(tHi, sF + 0.01, ht), P(tHi, sB - 0.01, ht), P(tLo, sB - 0.01, ht)]);
+        ctx.fillStyle = C(st.tread, treadLit);
+        ctx.fill();
+        ctx.strokeStyle = C(st.line, treadLit, 0.6);
+        ctx.lineWidth = lw(1);
+        ctx.stroke();
+        if (risersShow) {
+          poly([P(tLo, sF + 0.01, ht), P(tHi, sF + 0.01, ht), P(tHi, sm - 0.04, ht - r), P(tLo, sm - 0.04, ht - r)]);
+          ctx.fillStyle = C(st.string, riserLit);
+          ctx.fill();
+          ctx.stroke();
+        }
+        // Its end, where the saw cut it: rings in a half round.
+        const [ex, ey] = P(tNear, sm, ht - 0.2);
+        const e2 = P(tNear, sF + 0.01, ht), rr = Math.max(2, Math.hypot(e2[0] - ex, e2[1] - ey));
+        ctx.beginPath();
+        ctx.ellipse(ex, ey, rr, rr * 0.75, 0, 0, Math.PI);
+        ctx.closePath();
+        ctx.fillStyle = C(st.nose, sideLit * 1.05);
+        ctx.fill();
+        ctx.strokeStyle = C(st.line, 1, 0.7);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(ex, ey, rr * 0.55, rr * 0.4, 0, 0, Math.PI);
+        ctx.strokeStyle = C(st.joint, 1, 0.8);
+        ctx.stroke();
+        return;
+      }
+      if (!risersShow && st.build !== 'solid') {
+        // Seen from behind: the back of its riser board, under the tread over it.
+        poly([P(tLo, sF, hb), P(tHi, sF, hb), P(tHi, sF, ht - NOSE_H), P(tLo, sF, ht - NOSE_H)]);
+        ctx.fillStyle = C(st.riser, riserLit * 0.86);
+        ctx.fill();
+        ctx.strokeStyle = C(st.line, riserLit, 0.45);
+        ctx.lineWidth = lw(0.9);
+        ctx.stroke();
+      }
+      if (risersShow) {
+        const rt = ht - NOSE_H;
+        poly([P(tLo, sF, hb), P(tHi, sF, hb), P(tHi, sF, rt), P(tLo, sF, rt)]);
+        ctx.fillStyle = C(st.riser, riserLit);
+        ctx.fill();
+        // Its courses and the joints between its units, broken course to course.
+        const n = Math.max(1, st.courses);
+        for (let k = 0; k < st.courses; k++) {
+          const k0 = hb + ((rt - hb) * k) / n, k1 = hb + ((rt - hb) * (k + 1)) / n;
+          if (k) line(P(tLo, sF, k0), P(tHi, sF, k0), C(st.joint, riserLit, 0.9), lw(1));
+          for (let j = 0; j < st.across; j++) {
+            const tj = tLo + (tHi - tLo) * ((j + 0.5 * ((k + i) % 2) + 0.25 * hash2(salt, k * 5 + j, 29)) / st.across);
+            if (tj <= tLo + 0.04 || tj >= tHi - 0.04) continue;
+            line(P(tj, sF, k0), P(tj, sF, k1), C(st.joint, riserLit, 0.9), lw(1));
+          }
+        }
+        // The shade under the nosing.
+        if (NOSE) {
+          poly([P(tLo, sF, rt), P(tHi, sF, rt), P(tHi, sF, rt - 1.4), P(tLo, sF, rt - 1.4)]);
+          ctx.fillStyle = C(st.line, 1, 0.28);
+          ctx.fill();
+        }
+        poly([P(tLo, sF, hb), P(tHi, sF, hb), P(tHi, sF, rt), P(tLo, sF, rt)]);
+        ctx.strokeStyle = C(st.line, riserLit, 0.45);
+        ctx.lineWidth = lw(0.9);
+        ctx.stroke();
+      }
+      // The tread, a nosing proud of the riser, and the face of the nosing.
+      const sN = sF - NOSE;
+      if (NOSE && risersShow) {
+        poly([P(tLo, sN, ht - NOSE_H), P(tHi, sN, ht - NOSE_H), P(tHi, sN, ht), P(tLo, sN, ht)]);
+        ctx.fillStyle = C(st.nose, riserLit * 1.04);
+        ctx.fill();
+      }
+      poly([P(tLo, sN, ht), P(tHi, sN, ht), P(tHi, sB, ht), P(tLo, sB, ht)]);
+      ctx.fillStyle = C(st.tread, treadLit);
+      ctx.fill();
+      // Where one slab or board of it ends and the next begins.
+      for (let j = 1; j < st.slabs; j++) {
+        const tj = tLo + (tHi - tLo) * ((j + (hash2(salt, j, 31) - 0.5) * 0.4) / st.slabs);
+        line(P(tj, sN, ht), P(tj, sB, ht), C(st.joint, treadLit, 0.85), lw(1));
+      }
+      if (st.build !== 'solid') line(P(tLo, (sN + sB) / 2, ht), P(tHi, (sN + sB) / 2, ht), C(st.joint, treadLit, 0.5), lw(0.8));
+      line(P(tLo, sN, ht), P(tHi, sN, ht), C(st.nose, treadLit * 1.05), lw(1.6));
+      poly([P(tLo, sN, ht), P(tHi, sN, ht), P(tHi, sB, ht), P(tLo, sB, ht)]);
+      ctx.strokeStyle = C(st.line, treadLit, 0.4);
+      ctx.lineWidth = lw(0.9);
+      ctx.stroke();
+    };
+    ctx.globalAlpha = box ? (done ? 1 : 0.45) : alpha * (done ? 1 : 0.45);
+    ctx.lineJoin = 'round';
+    // What stands beyond the steps from the camera: the far string, the far rail.
+    const far: 0 | 1 = near ? 0 : 1;
+    const farOpen = open(far), nearOpen = open(near);
+    if ((st.build === 'string' || st.build === 'closed') && !joined(far)) string(tFar);
+    if (st.build === 'log' && !joined(far)) stringer(tFar + (near ? 0.08 : -0.08));
+    if (farOpen) {
+      if (st.rail === 'parapet') side(tFar, true);
+      else rail(tFar);
+    }
+    // The steps, back to front.
+    const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => {
+      const [ax, ay] = W(0.5, (a + 0.5) / N);
+      const [bx, by] = W(0.5, (b + 0.5) / N);
       return cam.rotateX(ax, ay) + cam.rotateY(ax, ay) - (cam.rotateX(bx, by) + cam.rotateY(bx, by));
     });
-    ctx.globalAlpha = alpha * (done ? 1 : 0.45);
-    for (const i of order) {
-      const s0 = i / STEPS;
-      const s1 = (i + 1) / STEPS;
-      const hp = h0 + ((h1 - h0) * i) / STEPS;
-      const h = h0 + ((h1 - h0) * (i + 1)) / STEPS;
-      quad(P(0, s0, hp), P(1, s0, hp), P(1, s0, h), P(0, s0, h));
-      ctx.fillStyle = rgb(mat.trim, 0.9);
-      ctx.fill();
-      quad(P(0, s0, h), P(1, s0, h), P(1, s1, h), P(0, s1, h));
-      ctx.fillStyle = rgb(mat.floor, 1);
-      ctx.fill();
-      ctx.strokeStyle = rgb(mat.trim, 0.8);
+    for (const i of order) step(i);
+    // A solid flight seen from behind shows the end of it under the landing.
+    if (st.build === 'solid' && !risersShow) {
+      const pts: Array<[number, number]> = [P(tLo, 1, h0), P(tHi, 1, h0), P(tHi, 1, h1), P(tLo, 1, h1)];
+      poly(pts);
+      if (!pictured(W(tLo, 1), W(tHi, 1), riserLit)) {
+        ctx.fillStyle = C(st.string, riserLit);
+        ctx.fill();
+      }
+      poly(pts);
+      ctx.strokeStyle = C(st.line, riserLit, 0.5);
+      ctx.lineWidth = lw(1);
       ctx.stroke();
     }
+    // Then the side toward the camera, and its rail.
+    if (!joined(near)) {
+      if (st.build === 'solid') side(tNear, st.rail === 'parapet' && nearOpen);
+      else if (st.build === 'log') stringer(tNear + (near ? -0.08 : 0.08));
+      else string(tNear);
+    }
+    if (nearOpen && st.rail !== 'parapet') rail(tNear + (near ? -0.05 : 0.05));
     if (!done) {
-      quad(P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1));
+      poly([P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)]);
       ctx.strokeStyle = PLAN_COLOR;
+      ctx.lineWidth = 1;
       ctx.setLineDash([4, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    ctx.lineWidth = 1;
     ctx.globalAlpha = 1;
+    if (box) {
+      main.save();
+      main.setTransform(1, 0, 0, 1, 0, 0);
+      main.globalAlpha = alpha;
+      main.drawImage(ctx.canvas, box[0], box[1], box[2], box[3], box[0], box[1], box[2], box[3]);
+      main.restore();
+    }
   }
 
   /** An opening in this storey's floor with a ladder up from the storey below on the facing side. */
@@ -2705,7 +3040,6 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  /** A roof tile: eaves at the corners, ridges where neighbouring roof tiles meet, hips elsewhere. */
   /**
    * Which pitched roofs are laid this frame, and when.
    *
@@ -2867,7 +3201,7 @@ export class Renderer {
      * every place two of its pieces overlap came out darker than the rest.
      */
     const under = !!this.roomTiles && roofs.some((f) => this.roomTiles?.has(`${f.x},${f.y}`));
-    const ctx = under ? this.roofLayerCtx() : main;
+    const ctx = under ? this.seeThroughCtx() : main;
     /*
      * How a face of it is lit, on the scale the walls are: the light from the
      * camera's left and from above that makes a wall facing down the screen
@@ -3220,20 +3554,28 @@ export class Renderer {
     }
   }
 
-  /** A canvas the size of the screen, cleared and set up to be drawn on as the screen is, for a roof seen through. */
-  private roofLayer: CanvasRenderingContext2D | null = null;
-  private roofLayerCtx(): CanvasRenderingContext2D {
+  /**
+   * A canvas the size of the screen, for something seen through: drawn on it
+   * whole and then put over the picture at the alpha asked for, once, where
+   * drawn straight on at that alpha every place two of its pieces overlap came
+   * out darker than the rest. Cleared over `box` -- device pixels, the whole
+   * of it when not given -- and set up to be drawn on as the screen is.
+   */
+  private seeThrough: CanvasRenderingContext2D | null = null;
+  private seeThroughCtx(box?: [number, number, number, number]): CanvasRenderingContext2D {
     const el = this.canvas.el;
-    if (!this.roofLayer || this.roofLayer.canvas.width !== el.width || this.roofLayer.canvas.height !== el.height) {
+    if (!this.seeThrough || this.seeThrough.canvas.width !== el.width || this.seeThrough.canvas.height !== el.height) {
       const c = document.createElement('canvas');
       c.width = el.width;
       c.height = el.height;
-      this.roofLayer = c.getContext('2d') as CanvasRenderingContext2D;
+      this.seeThrough = c.getContext('2d') as CanvasRenderingContext2D;
     }
-    const g = this.roofLayer;
+    const g = this.seeThrough;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+    if (box) g.clearRect(...box);
+    else g.clearRect(0, 0, g.canvas.width, g.canvas.height);
     g.setTransform(this.canvas.ctx.getTransform());
+    g.globalAlpha = 1;
     g.lineJoin = 'round';
     return g;
   }
@@ -3603,11 +3945,12 @@ export class Renderer {
   }
 
   /**
-   * The masonry a wall is painted in, or none: the others are ruled in flat
-   * colours, and a coat of paint over any of them would be two walls at
-   * once, so a dyed one goes down to the flat colours with everything else.
+   * The masonry a wall -- or a flight of stairs, or anything else built of a
+   * material -- is painted in, or none: the others are ruled in flat colours,
+   * and a coat of paint over any of them would be two walls at once, so a
+   * dyed one goes down to the flat colours with everything else.
    */
-  private masonryOf(wall: Wall): Masonry | undefined {
+  private masonryOf(wall: { material: string; dye?: string }): Masonry | undefined {
     return wall.dye ? undefined
       : wall.material === 'cobblestone' ? cobble()
         : wall.material === 'clay_bricks' ? brickwork()
