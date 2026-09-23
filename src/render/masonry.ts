@@ -565,8 +565,13 @@ const ADOBE_PASTEL: Record<string, string> = {
   // a day's patch laid a little paler, and one a little darker
   warm: '#d5c6ae', warmShade: '#c2ae93', warmHi: '#e2d6c1',
   dark: '#c6ac90', darkHi: '#d2bca3',
-  // what the coat is on: mud brick, a step under the coat, and the mud it is laid in
-  mud: '#b79a80', mudShade: '#a7866c', mudHi: '#c4ab92', joint: '#9d836c',
+  /*
+   * What the coat is on: mud brick, and the mud it is laid in. The same earth
+   * as the coat and barely a step under it -- dark, it was a brown chip stuck
+   * on the wall; where the coat is gone an adobe wall is the same colour,
+   * only rough, and jointed, and in the shade of the coat's broken edge.
+   */
+  mud: '#c2a88e', mudShade: '#b5977d', mudHi: '#cdb79d', joint: '#a58b73',
   // the ink round a bare patch and down a crack, and the eaten foot and its damp
   line: '#8a6851', erode: '#b59a82', damp: '#92735d',
   // an opening has no dressings; what lines it is the same coat, rolled in
@@ -574,7 +579,9 @@ const ADOBE_PASTEL: Record<string, string> = {
   band: '#d0bb9f', bandShade: '#bba286', bandHi: '#e0d1b8',
   ringJoint: '#a0836a', reveal: '#b29576',
   // the beam ends of a floor, silvered, and the rings in their end grain
-  viga: '#958a7e', vigaShade: '#796d63', vigaHi: '#aea498', vigaRing: '#6e6053',
+  viga: '#ada194', vigaShade: '#938576', vigaHi: '#c2b9ae', vigaRing: '#867565',
+  // the back of a hole in the coat, in its own shade
+  hollow: '#967b69',
   // and every other piece of timber in it, a lintel or a door, the same
   beam: '#a29688', beamShade: '#877b6f', beamHi: '#b8aea2', beamLine: '#655a50',
   stain: '#b3a589', stainShade: '#a19372',
@@ -957,9 +964,9 @@ function paint(S: Stock): Masonry {
      * one, not a scatter of small ones: at the zoom the game is played at a
      * handful of little ones came out as a rash on the wall.
      */
-    const ns = R() < 0.3 ? 0 : R() < 0.85 ? 1 : 2;
+    const ns = R() < 0.3 ? 0 : R() < 0.88 ? 1 : 2;
     for (let i = 0; i < ns; i++) {
-      const rx = 36 + R() * 34, ry = 22 + R() * 20;
+      const rx = (i ? 30 : 46) + R() * 34, ry = (i ? 18 : 28) + R() * 18;
       peel(g, inField(rx, R), BAND + 40 + ry + R() * (TH - BAND - 130 - 2 * ry), rx, ry, R);
     }
     // And a crack from the drying, which goes where it likes but downwards.
@@ -996,8 +1003,8 @@ function paint(S: Stock): Masonry {
       g.fillStyle = 'rgba(46, 34, 62, 0.26)'; g.fill();
       // The end itself: shade under the lit face, and the rings in it.
       const pts = blob(x, y, rx, ry, 12, R, 0.9, 0.12, 0.06);
-      solid(g, pts, PASTEL.viga, PASTEL.vigaShade, PASTEL.vigaRing, 1.6, -rx * 0.18, -ry * 0.2);
-      g.strokeStyle = hexA(PASTEL.vigaRing, 0.55); g.lineWidth = 1;
+      solid(g, pts, PASTEL.viga, PASTEL.vigaShade, PASTEL.vigaRing, 1.5, -rx * 0.18, -ry * 0.2);
+      g.strokeStyle = hexA(PASTEL.vigaRing, 0.4); g.lineWidth = 1;
       for (const f of [0.55, 0.28]) {
         g.beginPath(); g.ellipse(x - 1, y - 1, rx * f, ry * f, R() * 3, 0, Math.PI * 2); g.stroke();
       }
@@ -1047,23 +1054,30 @@ function paint(S: Stock): Masonry {
    * is drawn in.
    */
   function peel(g: Ctx, cx: number, cy: number, rx: number, ry: number, R: Rand): void {
-    const pts = blob(cx, cy, rx, ry, 16, R, 0.78, 0.35, 0.28);
+    const pts = blob(cx, cy, rx, ry, 18, R, 0.84, 0.3, 0.14);
     g.save();
     shape(g, pts); g.clip();
-    g.fillStyle = PASTEL.mudShade;
+    // The back of the hole, in the coat's shade. It is what shows along the
+    // top and the left, where the coat's broken edge stands over it -- and it
+    // has to be deep and cool, or the patch reads as a chip stuck on the wall
+    // rather than a place where the wall has lost its coat.
+    g.fillStyle = PASTEL.hollow;
     g.fillRect(cx - rx - 6, cy - ry - 6, rx * 2 + 12, ry * 2 + 12);
     g.save();
-    g.translate(3, 4); shape(g, pts); g.translate(-3, -4); g.clip();
+    g.translate(6, 7); shape(g, pts); g.translate(-6, -7); g.clip();
     g.fillStyle = PASTEL.joint;
     g.fillRect(cx - rx - 6, cy - ry - 6, rx * 2 + 12, ry * 2 + 12);
     mudCourses(g, cx - rx - 8, cy - ry - 8, cx + rx + 8, cy + ry + 8, R);
+    // The brick is set back from the face, so all of it is a step in shade.
+    g.fillStyle = 'rgba(46, 34, 62, 0.14)';
+    g.fillRect(cx - rx - 6, cy - ry - 6, rx * 2 + 12, ry * 2 + 12);
     g.restore();
     // the lit lip along the lower right, inside the hole
-    g.translate(-1.6, -1.8); shape(g, pts);
-    g.strokeStyle = hexA(PASTEL.stoneHi, 0.95); g.lineWidth = 2.4; g.stroke();
+    g.translate(-1.4, -1.6); shape(g, pts);
+    g.strokeStyle = hexA(PASTEL.stoneHi, 0.9); g.lineWidth = 2; g.stroke();
     g.restore();
     shape(g, pts);
-    g.strokeStyle = PASTEL.line; g.lineWidth = 1.5; g.lineJoin = 'round'; g.stroke();
+    g.strokeStyle = hexA(PASTEL.line, 0.7); g.lineWidth = 1.1; g.lineJoin = 'round'; g.stroke();
   }
 
   /** The mud brick in a box: courses of it on the storey's own lines, in a half lap. */
