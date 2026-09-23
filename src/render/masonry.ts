@@ -152,6 +152,13 @@ export interface Low {
   h: number;
   /** How far the face and the cap are painted past the wall, so a cope stone can stand over the run. */
   proud: number;
+  /**
+   * On a masonry whose head is laid by hand, how far that head rises over
+   * its line along a section, per variant, in picture px at evenly spaced
+   * points from end to end: the face's, and the gate's with its piers.
+   */
+  crest?: number[][];
+  gateCrest?: number[][];
 }
 
 /** The painted wall, in the pieces a renderer fills its faces with. */
@@ -246,6 +253,38 @@ export interface Masonry {
   /** Per variant, the coat rolled over the head of a wall nothing stands on; laid over the top of the face. */
   brow?: HTMLCanvasElement[];
   /**
+   * Per variant, how far the head of a wall nothing stands on rises over its
+   * line along the section, in picture px at evenly spaced points from end to
+   * end, nothing at either end; absent where the head runs to a line.
+   */
+  crest?: number[][];
+  /**
+   * Where the coat has come away, for the renderer to lay out of doors where
+   * the weather takes it: off a corner (painted with the corner on the right),
+   * out of the foot (two courses more under it than show, for the foot to
+   * cover), under the end of a sill, under the head. Each is laid with its
+   * first course `lip` px down, on one of the wall's course lines, which are
+   * `ch` apart from `from` down the storey.
+   */
+  losses?: {
+    corner: HTMLCanvasElement[];
+    foot: HTMLCanvasElement[];
+    sill: HTMLCanvasElement[];
+    head: HTMLCanvasElement[];
+    lip: number;
+    ch: number;
+    from: number;
+  };
+  /**
+   * Whether the wall is a coat laid by hand: its head rising and falling, its
+   * corners and ends rolled, its insides in the shade of the room.
+   */
+  soft: boolean;
+  /** How much of `shade` the hour lays over a face it lights `k`. */
+  shadow: (k: number) => number;
+  /** The top of the wall's own tones, where it is drawn flat -- lit, its crown, and the far slope of it -- on a masonry that has them. */
+  top?: { lit: [number, number, number]; hi: [number, number, number]; shade: [number, number, number] };
+  /**
    * Whether the coat goes round a corner: a face carried on past its end by
    * the thickness of the wall that turns there, rather than both walls
    * stopping short and leaving their two ends showing in the angle.
@@ -325,6 +364,8 @@ interface Stock {
   wear: number;
   /** What the hour's light darkens a face toward; see `Masonry.shade`. */
   shade: [number, number, number];
+  /** And how far, for a face the hour lights `k`; see `Masonry.shadow`. */
+  shadow: (k: number) => number;
   /**
    * Whether anything grows on it: ivy over the top, a hedge at the foot,
    * moss in the joints, weeds in a threshold. Cobblestone and brick carry
@@ -421,6 +462,7 @@ const RUBBLE: Stock = ((P) => ({
   plinth: 0,
   wear: 1,
   shade: [24, 20, 12],
+  shadow: (k) => (1 - k) * 0.85,
   growth: true,
   mix: [['warm', 0.07], ['brown', 0.09], ['green', 0.04], ['dark', 0.1]],
   pairs: ['warm', 'brown'],
@@ -571,6 +613,7 @@ const BRICK: Stock = ((P) => ({
    */
   wear: 0.17,
   shade: [18, 12, 84],
+  shadow: (k) => (1 - k) * 0.85,
   growth: true,
   /*
    * Three units in ten off the field's own tone, not four and a half.
@@ -670,7 +713,15 @@ const ADOBE: Stock = ((P) => ({
   plinth: 64,
   // A coat of mud is not a heap of blocks: nothing on it chips like a stone.
   wear: 0,
-  shade: [44, 32, 66],
+  shade: [52, 40, 74],
+  /*
+   * Steeper than the stone's, and by a curve rather than a line. A face in
+   * full sun is untouched either way; the two faces of a house seen from
+   * behind, both turned from the light, came out three points of value
+   * apart on a plain coat and the corner between them went, where stone and
+   * brick have their joints to hold it. This keeps them eight apart.
+   */
+  shadow: (k) => 2.3 * Math.max(0, 1 - k) ** 1.6,
   growth: false,
   mix: [['mudpale', 0.2], ['muddark', 0.2]],
   pairs: [],
@@ -983,15 +1034,6 @@ function paint(S: Stock): Masonry {
   }
 
   /**
-   * Where the coat has come away on a plain face, by variant: on two sections
-   * in five, one patch, either just over the foot, where the splash reaches,
-   * or just under the head of the wall, where the rain comes over it. One on
-   * every section, and one of everything else besides, was a wall you could
-   * count the sections of.
-   */
-  const SPALLS: Array<Array<'low' | 'high'>> = [['low'], [], ['high'], [], []];
-
-  /**
    * The field of a render: a coat of mud laid on by hand over mud brick.
    *
    * Nothing on it is a unit, so what there is to paint is the coat and what
@@ -999,29 +1041,25 @@ function paint(S: Stock): Masonry {
    * and a day's mix never dries quite the tone of the last, so the field
    * carries a pass or two a step either side of the coat's own tone: wide,
    * flat, crisp at the edge, and never so far off the coat that the eye
-   * lands on one before it lands on a beam end or an opening. Then the
-   * weather, sparingly: where the coat has come away and the brick shows,
-   * and a crack from the drying on one section in two.
+   * lands on one before it lands on a beam end or an opening. Then a crack
+   * from the drying, on one section in two.
    *
    * All of it keeps well clear of the section's seams, so the coat is its own
    * plain tone at both edges of every section and any section butts any
-   * other. The beam ends are not in it: only the two walls a floor's joists
-   * rest on carry them, so they are laid over the face by the renderer.
+   * other. Nothing that depends on where the section stands is in it: the
+   * beam ends, which only the two walls a floor's joists rest on carry, and
+   * the places the coat has come away, which the weather takes at corners,
+   * at the foot, under a sill and under the head, and never inside a room,
+   * are laid over it by the renderer.
    *
-   * `open` is a section an opening will be cut in, which is weathered round
-   * its opening instead, and `vi` the variant a plain face is.
+   * `open` is a section an opening will be cut in, which is left to its own
+   * cracks off the corners of the opening.
    */
-  function paintRender(g: Ctx, R: Rand, open: boolean, vi: number): Block[] {
+  function paintRender(g: Ctx, R: Rand, open: boolean): Block[] {
     g.fillStyle = PASTEL.stone;
     g.fillRect(0, 0, TW, TH);
     passes(g, R, BAND + 22, TH - S.plinth - 22);
-    if (open) return [];
-    for (const where of SPALLS[vi] ?? []) {
-      const rx = 56 + R() * 30, ry = 30 + R() * 12;
-      const cy = where === 'low' ? TH - S.plinth - ry - 14 - R() * 16 : 92 + ry + R() * 16;
-      peel(g, inField(rx, R), cy, rx, ry, R);
-    }
-    if (R() < 0.5) fissure(g, inField(20, R), BAND + 40 + R() * 110, 40 + R() * 60, R);
+    if (!open && R() < 0.5) fissure(g, inField(20, R), BAND + 40 + R() * 110, 40 + R() * 60, R);
     return [];
   }
 
@@ -1054,67 +1092,88 @@ function paint(S: Stock): Masonry {
     }
   }
 
+  /* ---- where the coat has come away --------------------------------------- */
+  /** The height of a course of the brick under the coat. */
+  const MUD_CH = (TH - BAND) / S.rows;
+  /** How far over a loss's top edge its picture reaches, for the lit arris of the coat that stands over it. */
+  const LOSS_LIP = 6;
   /**
-   * A patch of the coat come away, and the mud brick under it.
+   * A loss: the coat come away and the brick showing, as a picture for the
+   * renderer to lay where the weather would have taken it -- at a corner, out
+   * of the foot, under a sill, under the head of the wall -- and never inside
+   * a room. Painted into the field of the sections, two losses in five
+   * sections were the same two stamps wherever those sections fell, inside
+   * and out, and the sections could be counted by them.
    *
-   * A hole, not a thing: torn rather than rounded, wider than it is tall,
-   * and lit as a hole is lit, from above. The coat's broken edge along the
-   * top stands over the brick and throws a band of shade down into it; the
-   * broken edge along the bottom faces the sky and shows as a pale lip.
-   * There is no line round it -- a line all the way round, and brick sixty
-   * points under the coat, is what pinned the last one to the wall as a
-   * brown thing -- and both lights run across it, so it reads the same on a
-   * face the picture is laid on the other way round.
+   * It is laid out course by course from the top, `runs[i]` the left and
+   * right of course `i`, because a coat lets go along the bed joints of the
+   * brick under it: what is left is a stair, ragged where it tore. Its
+   * courses start on the picture's own line LOSS_LIP down, so laid on one of
+   * the wall's course lines they run level with the wall's. It is lit as a
+   * hole is lit, from above: the arris of the coat over it catches the light,
+   * and its broken edge throws a band of shade down onto the brick.
    */
-  function peel(g: Ctx, cx: number, cy: number, rx: number, ry: number, R: Rand): void {
-    const pts = torn(cx, cy, rx, ry, R);
-    const x0 = cx - rx * 1.3 - 12, y0 = cy - ry * 1.3 - 12, w = rx * 2.6 + 24, h = ry * 2.6 + 24;
+  function lossPicture(runs: Array<[number, number]>, R: Rand): HTMLCanvasElement {
+    const w = Math.max(...runs.map(([, b]) => b)) + 4, h = runs.length * MUD_CH;
+    const c = cnv(Math.ceil(w), Math.ceil(h + LOSS_LIP + 2)), g = ctxOf(c);
+    g.translate(0, LOSS_LIP);
+    const hole = stair(runs, R);
     g.save();
-    g.beginPath(); poly(g, pts); g.clip();
-    mudBrick(g, x0, y0, x0 + w, y0 + h, R);
-    g.save();
-    g.beginPath(); g.rect(x0, y0, w, h); poly(g, pts, 0, 6); g.clip('evenodd');
-    g.fillStyle = 'rgba(58, 44, 72, 0.22)'; g.fillRect(x0, y0, w, h);
+    g.beginPath(); g.rect(-4, -LOSS_LIP, w + 8, h + LOSS_LIP + 6); poly(g, hole); g.clip('evenodd');
+    g.beginPath(); poly(g, hole, 0, -2.5); g.fillStyle = hexA(PASTEL.stoneHi, 0.8); g.fill();
     g.restore();
     g.save();
-    g.beginPath(); g.rect(x0, y0, w, h); poly(g, pts, 0, -3); g.clip('evenodd');
-    g.fillStyle = hexA(PASTEL.stoneHi, 0.8); g.fillRect(x0, y0, w, h);
+    g.beginPath(); poly(g, hole); g.clip();
+    mudBrick(g, -4, -4, w + 4, h + 4, R, 0);
+    g.beginPath(); g.rect(-4, -4, w + 8, h + 8); poly(g, hole, 0, 7); g.clip('evenodd');
+    g.fillStyle = 'rgba(58, 44, 72, 0.26)'; g.fillRect(-4, -4, w + 8, h + 8);
     g.restore();
-    g.restore();
+    return c;
   }
   /**
-   * A torn edge: a squarish outline of a dozen or so straight breaks, the way
-   * a coat cracks along lines before it lets go, with a bite or two out of it
-   * and a tooth or two left in -- not an oval, which at the size the game is
-   * played at came out as an eye in the wall.
+   * The outline of a stack of runs: across the top of the first, down the
+   * right ends course by course, back along the bottom of the last and up
+   * the left ends -- each corner a hand off true and each riser leaning,
+   * and the long edges torn rather than ruled.
    */
-  function torn(cx: number, cy: number, rx: number, ry: number, R: Rand): Pt[] {
-    const n = 10 + Math.floor(R() * 5), pts: Pt[] = [];
-    for (let i = 0; i < n; i++) {
-      const a = ((i + (R() - 0.5) * 0.7) / n) * Math.PI * 2;
-      const c = Math.cos(a), s = Math.sin(a);
-      let k = 0.8 + R() * 0.24;
-      const t = R();
-      if (t < 0.1) k *= 0.74;
-      else if (t < 0.17) k *= 1.12;
-      pts.push([cx + Math.sign(c) * Math.pow(Math.abs(c), 0.55) * rx * k, cy + Math.sign(s) * Math.pow(Math.abs(s), 0.55) * ry * k]);
+  function stair(runs: Array<[number, number]>, R: Rand): Pt[] {
+    const j = (k: number): number => (R() - 0.5) * k;
+    const edge = (a: number, b: number, y: number): Pt[] => {
+      const out: Pt[] = [];
+      const n = Math.max(1, Math.floor(Math.abs(b - a) / 22));
+      for (let i = 1; i < n; i++) out.push([a + ((b - a) * i) / n + j(6), y + j(3.5)]);
+      return out;
+    };
+    const pts: Pt[] = [];
+    const [a0, b0] = runs[0];
+    pts.push([a0 + j(3), j(2)], ...edge(a0, b0, 0), [b0 + j(3), j(2)]);
+    for (let i = 0; i < runs.length; i++) {
+      const y1 = (i + 1) * MUD_CH, b = runs[i][1], nb = i + 1 < runs.length ? runs[i + 1][1] : null;
+      pts.push([b + j(5), y1 + j(2)]);
+      if (nb !== null) pts.push([nb + j(5), y1 + j(2)]);
+    }
+    const [al, bl] = runs[runs.length - 1], yb = runs.length * MUD_CH;
+    pts.push(...edge(bl, al, yb));
+    for (let i = runs.length - 1; i >= 0; i--) {
+      const y0 = i * MUD_CH, a = runs[i][0], pa = i > 0 ? runs[i - 1][0] : null;
+      pts.push([a + j(5), y0 + MUD_CH + j(2)]);
+      if (pa !== null) pts.push([a + j(5), y0 + j(2)]);
     }
     return pts;
   }
-
   /**
    * The mud brick where the coat is off: courses of it on the storey's own
    * lines in a half lap, each brick a flat tone a step either side of the
    * brick's own and the joint a step under that -- and no more, because the
    * brick is the same earth as the coat and the joints are mud too.
    */
-  function mudBrick(g: Ctx, x0: number, y0: number, x1: number, y1: number, R: Rand): void {
-    const ch = (TH - BAND) / S.rows, uw = TW / S.across;
+  function mudBrick(g: Ctx, x0: number, y0: number, x1: number, y1: number, R: Rand, from = BAND): void {
+    const ch = MUD_CH, uw = TW / S.across;
     g.fillStyle = PASTEL.joint;
     g.fillRect(x0, y0, x1 - x0, y1 - y0);
     const tones = [PASTEL.mud, PASTEL.mudHi, PASTEL.mudShade, PASTEL.mud];
-    for (let i = Math.floor((y0 - BAND) / ch) - 1; i <= Math.ceil((y1 - BAND) / ch); i++) {
-      const cy0 = BAND + i * ch;
+    for (let i = Math.floor((y0 - from) / ch) - 1; i <= Math.ceil((y1 - from) / ch); i++) {
+      const cy0 = from + i * ch;
       const lap = (((i % 2) + 2) % 2) * 0.5;
       for (let k = Math.floor(x0 / uw) - 1; k <= Math.ceil(x1 / uw); k++) {
         const x = (k + lap) * uw;
@@ -1152,33 +1211,37 @@ function paint(S: Stock): Masonry {
   }
 
   /* ---- the beam ends ------------------------------------------------------ */
-  /** A beam end: where the log goes into the wall, how thick it is, how far it stands out in tiles, and how long a streak the rain has left under it. */
-  interface Viga { x: number; y: number; r: number; d: number; streak: number; seed: number }
+  /**
+   * A beam end: where the log goes into the wall, how thick it is, how far it
+   * stands out in tiles and how much it droops doing it, how long a streak
+   * the rain has left under it, and whether the drip off it has taken the
+   * coat at the foot of the streak.
+   */
+  interface Viga { x: number; y: number; r: number; d: number; droop: number; streak: number; drip: boolean; seed: number }
   /** How deep, from the head of a storey down, the beam ends and their streaks are painted; and their shade. */
   const VIGA_H = 300, VIGA_SH = 100;
   /**
    * Where a variant's beams go into the wall.
    *
-   * Four slots a metre apart -- the span the boards laid across them will
-   * take -- with the seam half way between two, so a floor runs along a
-   * street as one floor. But each log is a hand off its mark and a fifth
-   * thicker or thinner than the next; one in seven was sawn off nearly
-   * flush, and one row in three is a log short: they are trees, not dowels.
-   * The row sits a little right of centre because every log is painted
-   * leaning out to the left and its shade falls to the right, and neither
-   * may reach a seam.
+   * Four to a section at one pitch, a metre apart -- the span the boards
+   * laid across them will take -- and half a metre in from each seam, so a
+   * floor runs along a street at that pitch through every join. Shifted
+   * about or left out, a gap across a join was two metres and the sections
+   * could be counted by it. The hand shows in the logs instead of in where
+   * they are: each a little thicker or thinner than the next, standing out
+   * further or less and drooping a little as it does, one in seven sawn off
+   * nearly flush.
    */
   function vigaRow(v: Variant): Viga[] {
     const R = rand(v.seed * 613 + 29);
-    // The one slot a variant leaves empty, if it leaves one: one row in three.
-    const gap = R() < 0.35 ? Math.floor(R() * 4) : -1;
     const out: Viga[] = [];
     for (let k = 0; k < 4; k++) {
-      const x = (k + 0.5) * (TW / 4) + 10 + (R() - 0.5) * 28;
-      const r = 16 * (0.8 + R() * 0.4);
-      const d = R() < 0.14 ? 0.015 + R() * 0.012 : 0.05 + R() * 0.025;
+      const x = (k + 0.5) * (TW / 4) + (R() - 0.5) * 6;
+      const r = 16 * (0.87 + R() * 0.26);
+      const d = R() < 0.14 ? 0.015 + R() * 0.012 : 0.04 + R() * 0.035;
+      const droop = 0.8 + R() * 0.45;
       const streak = R() < 0.5 ? 70 + R() * 160 : 0;
-      if (k !== gap) out.push({ x, y: 24, r, d, streak, seed: v.seed * 17 + k });
+      out.push({ x, y: 24, r, d, droop, streak, drip: !!streak && R() < 0.3, seed: v.seed * 17 + k });
     }
     return out;
   }
@@ -1188,7 +1251,7 @@ function paint(S: Stock): Masonry {
    * that is mostly sideways: the end of a log a foot out of the wall stands
    * well to one side of where it goes in, and not far below it.
    */
-  function vigaLogs(row: Viga[], ax: number, ay: number): HTMLCanvasElement {
+  function vigaLogs(row: Viga[], ax: number, ay: number, drips: HTMLCanvasElement[]): HTMLCanvasElement {
     const c = cnv(TW, VIGA_H), g = ctxOf(c);
     // The rain down the coat under each, darker where it runs and fading as
     // it dries, with an edge that wanders because water does not run down a
@@ -1207,8 +1270,16 @@ function paint(S: Stock): Masonry {
       for (let i = steps; i >= 0; i--) { const t = i / steps; g.lineTo(s.x + w / 2 + t * 2 + (R() - 0.5) * 3, y0 + len * t); }
       g.closePath();
       g.fill();
+      // Where the drip has fallen on the same place for years, the coat has
+      // gone at the foot of the streak -- laid on a course line, as every
+      // loss is, so its brick runs with the wall's.
+      if (s.drip) {
+        const p = drips[s.seed % drips.length];
+        const line = BAND + Math.round((y0 + len * 0.8 - BAND) / MUD_CH) * MUD_CH;
+        g.drawImage(p, Math.round(s.x - p.width / 2), line - LOSS_LIP);
+      }
     }
-    for (const s of row) log(g, s, ax * s.d, ay * s.d);
+    for (const s of row) log(g, s, ax * s.d, ay * s.d * s.droop);
     return c;
   }
   /**
@@ -1520,9 +1591,9 @@ function paint(S: Stock): Masonry {
 
   /** The band and the courses, the same contract in every variant, then `extras` marks each on a stone
    *  of its own. Returns the stones that are this variant's to mark, with the course each is on. */
-  function paintCourses(g: Ctx, R: Rand, crests: Pt[], open = false, vi = -1): Block[] {
+  function paintCourses(g: Ctx, R: Rand, crests: Pt[], open = false): Block[] {
     if (S.lay === 'bond') return paintBond(g, R, crests);
-    if (S.lay === 'render') return paintRender(g, R, open, vi);
+    if (S.lay === 'render') return paintRender(g, R, open);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, TH);
     slabs(g, 0, BAND, R);
     const own: Block[] = [];   // not the seam stones, not near the seam
@@ -1804,36 +1875,35 @@ function paint(S: Stock): Masonry {
    * The foot of a mud wall, where the rain that splashes off the ground has
    * eaten the coat back.
    *
-   * A band `h` px deep at the seams that wanders between half and one and a
-   * quarter of that along the section, its top edge broken in flat chips --
-   * a run level, a step, now and then a bite -- because the coat comes away
-   * in flakes and not in a wave. It is darkest at the ground, where it stays
-   * wet, and pales upward as it dries. It is marked off from the coat by the
-   * change of value and the thin shade of the coat's broken edge over it,
-   * not by a drawn line; and in a place or two it is worn right through, and
-   * a course of the brick shows. The edge comes in at `h` at both ends, so
-   * the foot runs along a street without a step at the seams.
+   * A band `h` px deep at the seams, its top edge a run of shallow scoops,
+   * each an arch the splash has eaten up into the coat and each overlapping
+   * the next, some a good deal higher than others -- not a wave, whose humps
+   * came out all alike, and not a stair of flat flakes, which read as paper
+   * torn along a rule. The coat thins to a feathered lip over it, a step
+   * between the two tones rather than a line drawn round. The bottom third,
+   * where it never dries, is a step darker again, and in a place or two the
+   * coat has gone from the band entirely and the courses of the brick show.
+   * The edge comes in at `h` at both ends, so the foot runs along a street
+   * without a step at the seams.
    */
   function erosionOf(g: Ctx, R: Rand, h: number, bottom: number): void {
-    const pts: Pt[] = [[0, bottom - h]];
-    let x = 0, H = h, goal = h;
-    while (x < TW) {
-      // Where the splash reaches higher and where lower, a few times a section.
-      if (R() < 0.2) goal = h * (0.55 + R() * 0.7);
-      const nx = Math.min(TW, x + 16 + R() * 34);
-      const e = Math.min(1, Math.min(x, TW - nx) / 56);
-      H = clamp(H + (goal - H) * 0.45 + (R() - 0.5) * h * 0.1, h * 0.5, h * 1.25);
-      const y = bottom - (h + (H - h) * e);
-      // From the last flake to this one is a chipped edge, not a ruled step.
-      pts.push([x + (2 + R() * 6) * e, y + (R() - 0.5) * 1.5 * e]);
-      if (e > 0.9 && R() < 0.08) {
-        const bx = x + (nx - x) * (0.25 + R() * 0.3), bw = 10 + R() * 14, bd = 4 + R() * 5;
-        pts.push([bx, y], [bx + 3, y - bd], [bx + bw - 3, y - bd + (R() - 0.5) * 2], [bx + bw, y]);
-      }
-      pts.push([nx, y + (R() - 0.5) * 2.5 * e]);
-      x = nx;
+    const scoops: Array<{ c: number; w: number; top: number }> = [];
+    for (let x = -30; x < TW + 30;) {
+      const w = 44 + R() * 76;
+      scoops.push({ c: x + w / 2, w, top: h * (0.72 + R() * 0.55) });
+      x += w * (0.5 + R() * 0.3);
     }
-    pts.push([TW, bottom - h]);
+    const reach = (x: number): number => {
+      let best = h * 0.6;
+      for (const s of scoops) {
+        const u = (x - s.c) / (s.w / 2);
+        if (Math.abs(u) < 1) best = Math.max(best, s.top * (0.8 + 0.2 * Math.sqrt(1 - u * u)));
+      }
+      const e = Math.min(1, Math.min(x, TW - x) / 56);
+      return h + (best - h) * e;
+    };
+    const pts: Pt[] = [];
+    for (let x = 0; x <= TW; x += 4) pts.push([x, bottom - reach(x)]);
     const zone = (dy: number): void => {
       g.moveTo(-2, bottom + 4);
       for (const [px, py] of pts) g.lineTo(px, py + dy);
@@ -1844,23 +1914,26 @@ function paint(S: Stock): Masonry {
     g.beginPath(); zone(0);
     g.fillStyle = PASTEL.erode; g.fill();
     g.clip();
-    // Worn through, once or twice: a course or so of the brick under the edge.
+    // Where the coat is gone from the band altogether: a course or two of brick.
     for (let i = 0; i < (R() < 0.6 ? 1 : 2); i++) {
-      const rx = 26 + R() * 30, ry = Math.min(h * 0.28, 10 + R() * 6);
-      const cx = inField(rx, R), cy = bottom - h * 0.72 + R() * h * 0.2;
+      const w = 60 + R() * 70, x0 = EDGE + 20 + R() * (TW - 2 * EDGE - 40 - w);
+      const n = h > 50 ? 2 : 1, y0 = bottom - n * MUD_CH - 4 - R() * 6;
+      const runs: Array<[number, number]> = [];
+      for (let k = 0; k < n; k++) runs.push([x0 + R() * 16, x0 + w - R() * 16]);
       g.save();
-      g.beginPath(); poly(g, torn(cx, cy, rx, ry, R)); g.clip();
-      mudBrick(g, cx - rx * 1.3, cy - ry * 1.3, cx + rx * 1.3, cy + ry * 1.3, R);
+      g.translate(0, y0);
+      g.beginPath(); poly(g, stair(runs, R)); g.clip();
+      mudBrick(g, x0 - 8, -4, x0 + w + 8, n * MUD_CH + 4, R, 0);
       g.restore();
     }
-    // Wet at the ground, drying upward.
-    const wet = g.createLinearGradient(0, bottom, 0, bottom - h * 1.3);
-    wet.addColorStop(0, hexA(PASTEL.damp, 0.5));
-    wet.addColorStop(1, hexA(PASTEL.damp, 0));
-    g.fillStyle = wet; g.fillRect(0, bottom - h * 1.4, TW, h * 1.4 + 4);
-    // The coat's broken edge stands over it, and throws a hair of shade.
-    g.beginPath(); g.rect(-4, bottom - h * 2 - 20, TW + 8, h * 2 + 30); zone(5); g.clip('evenodd');
-    g.fillStyle = 'rgba(58, 44, 72, 0.16)'; g.fillRect(-4, bottom - h * 2 - 20, TW + 8, h * 2 + 30);
+    // Where it never dries: the bottom third, a step darker, its top edge as ragged as damp is.
+    g.beginPath(); g.moveTo(-2, bottom + 4);
+    for (let x = 0; x <= TW; x += 8) g.lineTo(x, bottom - h * 0.34 + Math.sin(x * 0.05 + R()) * 1.6);
+    g.lineTo(TW + 2, bottom + 4); g.closePath();
+    g.fillStyle = hexA(PASTEL.damp, 0.34); g.fill();
+    // The coat's lip, feathered: a band between its tone and the foot's.
+    g.beginPath(); g.rect(-4, bottom - h * 2 - 20, TW + 8, h * 2 + 30); zone(4); g.clip('evenodd');
+    g.fillStyle = hexA(PASTEL.stone, 0.5); g.fillRect(-4, bottom - h * 2 - 20, TW + 8, h * 2 + 30);
     g.restore();
   }
   /**
@@ -2388,13 +2461,6 @@ function paint(S: Stock): Masonry {
    * because that is where an adobe wall always cracks first.
    */
   function renderSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
-    // Where the coat lets go first on a wall with a hole in it: off a corner
-    // of the hole, under the end of the sill or beside the end of the head.
-    if (R() < 0.4) {
-      const side = R() < 0.5 ? -1 : 1, low = R() < 0.5, rx = 34 + R() * 16, ry = 16 + R() * 6;
-      const cx = side < 0 ? x0 - 26 - rx * 0.4 : x1 + 26 + rx * 0.4;
-      peel(g, clamp(cx, EDGE + rx + 10, TW - EDGE - rx - 10), low ? sill + shelf + 30 + ry : head - 4 + ry * 0.4, rx, ry, R);
-    }
     rollRim(g, (c) => softRect(c, x0, head, x1 - x0, sill - head, 7));
     baulk(g, R, x0 - 28, x1 + 28, head - 22, 22);
     shadeUnder(g, x0 - 28, x1 + 28, head, 7);
@@ -2410,13 +2476,6 @@ function paint(S: Stock): Masonry {
    * jamb -- the corbel a stone gate has, in wood.
    */
   function renderDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number, reach: number): void {
-    // Off a corner of the way through: beside the end of the lintel, or low
-    // down by the jamb, where every boot and barrow catches it.
-    if (R() < 0.35) {
-      const side = R() < 0.5 ? -1 : 1, low = R() < 0.5, rx = 32 + R() * 14, ry = 15 + R() * 6;
-      const cx = side < 0 ? x0 - 30 - rx * 0.3 : x1 + 30 + rx * 0.3;
-      peel(g, clamp(cx, EDGE + rx + 10, TW - EDGE - rx - 10), low ? TH - S.plinth - ry - 16 : head + ry + 8, rx, ry, R);
-    }
     rollRim(g, (c) => softRect(c, x0, head, x1 - x0, TH - head + 30, 7));
     const bTop = head - (reach ? CORBEL_H : 0) - deep + 3;
     if (reach) {
@@ -2432,11 +2491,6 @@ function paint(S: Stock): Masonry {
   }
   /** An archway in it: the coat rolled round the curve, and a crack off the crown. */
   function renderArch(g: Ctx, R: Rand): void {
-    // Off the springing of the curve, where the thrust of it cracks the coat.
-    if (R() < 0.4) {
-      const side = R() < 0.5 ? -1 : 1, rx = 32 + R() * 14, ry = 15 + R() * 6;
-      peel(g, clamp(A_CX + side * (A_R + 34 + rx * 0.3), EDGE + rx + 10, TW - EDGE - rx - 10), A_CY - 6 + R() * 20, rx, ry, R);
-    }
     rollRim(g, (c) => {
       c.moveTo(A_CX - A_R, TH + 30);
       c.lineTo(A_CX - A_R, A_CY);
@@ -3101,61 +3155,65 @@ function paint(S: Stock): Masonry {
 
   /**
    * A garden wall of mud: the same coat, a pass or two of the trowel on it,
-   * on a length in three a place where it has come away, and a foot the
-   * splash has eaten -- which on a wall a metre and a quarter high is a good
-   * part of it.
+   * and a foot the splash has eaten -- which on a wall a metre and a quarter
+   * high is a good part of it. Where its coat has come away is the
+   * renderer's to lay, as it is on a house.
    */
   function lowRender(g: Ctx, R: Rand, fh: number): Block[] {
     g.fillStyle = PASTEL.stone;
     g.fillRect(0, COPE - 6, TW, fh - COPE + 12);
     passes(g, R, COPE + 12, fh - 36);
-    if (R() < 0.35) {
-      const rx = 42 + R() * 22, ry = 16 + R() * 6;
-      peel(g, inField(rx, R), COPE + 22 + ry + R() * Math.max(1, fh - COPE - 80 - 2 * ry), rx, ry, R);
-    }
     if (R() < 0.4) fissure(g, inField(20, R), COPE + 10, 26 + R() * 30, R);
     erosionOf(g, R, Math.min(38, (fh - COPE) * 0.35), fh);
     return [];
   }
 
   /**
-   * The cap of a mud garden wall: not a coping of anything, but the coat
-   * itself laid thick over the top and rounded off by hand, a pillow at a
-   * time -- high in the middle of each length and low where the next was
-   * joined on. The lengths are what an armful of mud made, three quarters
-   * of a metre to a metre and a half, each its own height; four equal ones
-   * to a section were a wave you could count along a street. It is paler
-   * than the face, being turned up at the sky, and it throws a shade down
-   * the face from its lip. A section starts and ends on a joint at the same
-   * height, so it arrives at a seam where it left.
+   * The pillows a mud garden wall's cap is laid in, by the variant's cope
+   * seed: where each armful meets the next, and how high it stands between.
+   * The lengths are what an armful of mud made, three quarters of a metre to
+   * a metre and a half, each its own height; four equal ones to a section
+   * were a wave you could count along a street. A section starts and ends on
+   * a joint, so the cap arrives at a seam where it left.
    */
-  function renderCope(g: Ctx, seed: number): void {
+  function pillowsOf(seed: number): { joints: number[]; peaks: number[] } {
     const R = rand(seed + 19);
     const joints: number[] = [0];
     for (;;) {
-      const step = 96 + R() * 96, at = joints[joints.length - 1] + step;
+      const at = joints[joints.length - 1] + 96 + R() * 96;
       if (at > TW - 80) break;
       joints.push(at);
     }
     joints.push(TW);
-    const dips = joints.map((_, i) => (i === 0 || i === joints.length - 1 ? 6 : 4 + R() * 4));
-    const peaks = joints.map(() => R() * 2.4);
+    return { joints, peaks: joints.slice(1).map(() => 8 + R() * 8) };
+  }
+  /** How far a cap of pillows rises over the head of its wall at `x`: nothing at a joint, the pillow's height at its middle. */
+  function pillowRise(p: { joints: number[]; peaks: number[] }, x: number): number {
+    let j = 0;
+    while (j < p.joints.length - 2 && x > p.joints[j + 1]) j++;
+    const t = clamp((x - p.joints[j]) / (p.joints[j + 1] - p.joints[j]), 0, 1);
+    return p.peaks[j] * Math.pow(Math.sin(Math.PI * t), 0.7);
+  }
+  /**
+   * The cap of a mud garden wall: not a coping of anything, but the coat
+   * itself laid thick over the top and rounded off by hand, a pillow at a
+   * time. What is painted here is its front, rolled down from the head of
+   * the wall to a lip that throws a shade on the face under it: pale where
+   * it turns up to the sky, a crease where one armful was pressed onto the
+   * last. The humps of the pillows rise over the head itself, and the renderer
+   * cuts them into the top edge of the wall, where they are its outline.
+   */
+  function renderCope(g: Ctx, seed: number): void {
+    const p = pillowsOf(seed);
+    const R = rand(seed + 23);
     const taper = (x: number): number => Math.min(1, Math.min(x, TW - x) / 40);
-    const crown = (x: number): number => {
-      let j = 0;
-      while (j < joints.length - 2 && x > joints[j + 1]) j++;
-      const t = clamp((x - joints[j]) / (joints[j + 1] - joints[j]), 0, 1), bulge = Math.sin(Math.PI * t);
-      return 3 - peaks[j] * bulge + (dips[j] * (1 - t) + dips[j + 1] * t) * (1 - bulge);
-    };
     const a = R() * 6, b = R() * 6;
     const lip = (x: number): number => COPE + 1 + (Math.sin(x * 0.037 + a) * 1.4 + Math.sin(x * 0.091 + b) * 0.9) * taper(x);
     const path = (): void => {
-      g.beginPath(); g.moveTo(0, crown(0));
-      for (let x = 4; x <= TW; x += 4) g.lineTo(x, crown(x));
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(TW, 0);
       for (let x = TW; x >= 0; x -= 4) g.lineTo(x, lip(x));
       g.closePath();
     };
-    // Its shade down the face, then the cap, its turn under, and its crown.
     const sh = g.createLinearGradient(0, COPE, 0, COPE + 12);
     sh.addColorStop(0, 'rgba(46, 34, 62, 0.4)'); sh.addColorStop(1, 'rgba(46, 34, 62, 0)');
     g.fillStyle = sh; g.fillRect(0, COPE, TW, 12);
@@ -3164,14 +3222,15 @@ function paint(S: Stock): Masonry {
     const under = g.createLinearGradient(0, COPE * 0.45, 0, COPE + 3);
     under.addColorStop(0, hexA(PASTEL.stoneShade, 0)); under.addColorStop(1, hexA(PASTEL.stoneShade, 0.75));
     g.fillStyle = under; g.fillRect(0, 0, TW, COPE + 4);
-    g.beginPath();
-    for (let x = 0; x <= TW; x += 4) g.lineTo(x, crown(x) + 2.5);
-    g.strokeStyle = hexA(PASTEL.stoneHi, 0.95); g.lineWidth = 3; g.stroke();
+    // Where one armful was pressed onto the last: a crease down the roll.
+    g.strokeStyle = hexA(PASTEL.stoneShade, 0.55); g.lineWidth = 2.2; g.lineCap = 'round';
+    for (const x of p.joints.slice(1, -1)) {
+      const lean = (R() - 0.5) * 6;
+      g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + lean, COPE * 0.5, x + lean * 0.4, lip(x) - 2); g.stroke();
+    }
+    g.lineCap = 'butt';
     g.restore();
-    g.beginPath();
-    for (let x = 0; x <= TW; x += 4) g.lineTo(x, crown(x));
-    g.strokeStyle = hexA(PASTEL.line, 0.7); g.lineWidth = 1.4; g.stroke();
-    if (R() < 0.6) fissure(g, inField(10, R), crown(TW / 2) + 4, 10 + R() * 12, R);
+    if (R() < 0.6) fissure(g, inField(10, R), 6, 10 + R() * 12, R);
   }
 
   /* ---- the textures ------------------------------------------------------ */
@@ -3182,7 +3241,7 @@ function paint(S: Stock): Masonry {
   const STONES: Block[][] = [];
   const FACE = VARIANTS.map((v, i) => {
     const c = cnv(TW, TH), g = ctxOf(c);
-    STONES[i] = paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, c = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [c - h2, c + h2]; }), false, i);
+    STONES[i] = paintCourses(g, rand(v.seed), (S.growth ? v.drapes : []).map((d): Pt => { const h2 = d.w / 2, c = clamp(d.cx, MARGIN + h2, TW - MARGIN - h2); return [c - h2, c + h2]; }));
     return c;
   });
   /**
@@ -3426,6 +3485,26 @@ function paint(S: Stock): Masonry {
     if (S.growth) footMoss(g, on, v.extras.moss, rand(v.seed * 19 + 7));
     return c;
   });
+  /** How many lengths a head's rise is given in, along a section. */
+  const CREST_N = 16;
+  /**
+   * How far the head of a wall that nothing stands on rises over the line, by
+   * variant, in picture pixels at CREST_N + 1 points along the section: a
+   * hump or two where the last armfuls of mud were heaped and smoothed off,
+   * as much as fourteen pixels, which is two or three on screen, and nothing
+   * at either end, so a head runs on into the next section's. A mud wall
+   * laid to a line was a box with a lid on it.
+   */
+  const CREST = S.lay !== 'render' ? undefined : VARIANTS.map((v) => {
+    const R = rand(v.seed * 131 + 71);
+    const humps = Array.from({ length: 1 + Math.floor(R() * 2.4) }, () => ({ c: 0.18 + R() * 0.64, w: 0.16 + R() * 0.24, a: 4 + R() * 10 }));
+    return Array.from({ length: CREST_N + 1 }, (_, i) => {
+      const x = i / CREST_N, taper = Math.min(1, x / 0.1, (1 - x) / 0.1);
+      let r = 0;
+      for (const h of humps) { const u = (x - h.c) / h.w; if (Math.abs(u) < 1) r += h.a * (1 - u * u) ** 2; }
+      return r * taper;
+    });
+  });
   /**
    * The head of a wall that nothing stands on: the coat laid over the top and
    * rounded off by the hand that laid it, a roll of it paler for turning up
@@ -3462,12 +3541,74 @@ function paint(S: Stock): Masonry {
    * The face round the corner has its picture laid mirrored, which puts its
    * logs the right way for it without a second set.
    */
+  /**
+   * The places the coat has come away, for the renderer to lay where the
+   * weather would have taken it, each a stack of courses from the top:
+   *
+   * `corner` off an arris, three to five courses deep, each course back from
+   * the corner by a different length -- painted with the corner on the
+   * right; `foot` a mound out of the eroded foot, widest at the bottom, with
+   * two courses more under it for the foot to cover; `sill` two courses
+   * under the end of a sill board, where the water off it runs; `head` a
+   * long course or two just under the head, where the rain comes over it,
+   * the top straight along a joint.
+   */
+  const LOSSES = S.lay !== 'render' ? undefined : (() => {
+    const R = rand(4127);
+    const uq = TW / S.across / 4;
+    // A coat that lets go along the joints stops at a brick's end more often than not.
+    const q = (x: number): number => Math.round(x / uq) * uq + (R() - 0.5) * 8;
+    const corner = [0, 1, 2, 3].map(() => {
+      const n = 3 + Math.floor(R() * 3), w = 120;
+      const runs: Array<[number, number]> = [];
+      let d = 34 + R() * 40;
+      for (let i = 0; i < n; i++) {
+        d = clamp(d + (R() - 0.45) * 56, 26, w - 10);
+        runs.push([w - q(d), w + 4]);
+      }
+      return lossPicture(runs, R);
+    });
+    /*
+     * Each course of a loss is let go at each end by its own amount: a stack
+     * that grows the same on both sides course by course was a ziggurat, and
+     * a small one a cross, stamped on the wall.
+     */
+    const grow = (a: number, b: number, lo: number, hi: number): [number, number] =>
+      [clamp(q(a - (R() - 0.3) * 34), lo, b - 30), clamp(q(b + (R() - 0.3) * 34), a + 30, hi)];
+    const foot = [0, 1, 2, 3].map(() => {
+      const n = 2 + Math.floor(R() * 2), w = 150 + R() * 40;
+      const runs: Array<[number, number]> = [];
+      let [a, b] = [q(w * (0.15 + R() * 0.35)), 0];
+      b = q(a + 30 + R() * 40);
+      for (let i = 0; i < n + 2; i++) {
+        runs.push([a, b]);
+        [a, b] = grow(a, b, 2, w - 2);
+      }
+      return lossPicture(runs, R);
+    });
+    const sill = [0, 1, 2].map(() => {
+      // Under the end of the board, the lower course carried off to one side by the water's run.
+      const w = 90 + R() * 30, a = q(8 + R() * 16), b = q(a + 50 + R() * 26);
+      const side = R() < 0.5;
+      return lossPicture([[a, b], side ? [q(a + 18 + R() * 16), q(b + 6 + R() * 14)] : [q(a - 6 - R() * 10), q(b - 18 - R() * 16)]].map(([x, y]) => [clamp(x, 2, w - 32), clamp(y, x + 26, w - 2)] as [number, number]), R);
+    });
+    const head = [0, 1, 2].map(() => {
+      const w = 170 + R() * 80;
+      const runs: Array<[number, number]> = [[4, w - 4]];
+      if (R() < 0.7) {
+        const a = q(10 + R() * (w * 0.5)), b = q(a + 40 + R() * (w * 0.35));
+        runs.push([a, Math.min(w - 4, b)]);
+      }
+      return lossPicture(runs, R);
+    });
+    return { corner, foot, sill, head, lip: LOSS_LIP, ch: MUD_CH, from: BAND };
+  })();
   const perPx = TH / (WALL_HEIGHT * HEIGHT_SCALE);
-  const VIGAS = S.lay !== 'render' ? undefined : (() => {
+  const VIGAS = !LOSSES ? undefined : (() => {
     const rows = VARIANTS.map(vigaRow);
     return {
-      iso: rows.map((r) => vigaLogs(r, -TW, TILE_H * perPx)),
-      square: rows.map((r) => vigaLogs(r, 0, (TILE_H / Math.SQRT2) * perPx)),
+      iso: rows.map((r) => vigaLogs(r, -TW, TILE_H * perPx, LOSSES.sill)),
+      square: rows.map((r) => vigaLogs(r, 0, (TILE_H / Math.SQRT2) * perPx, LOSSES.sill)),
       shade: rows.map(vigaShade),
       h: VIGA_H,
       sh: VIGA_SH,
@@ -3478,10 +3619,9 @@ function paint(S: Stock): Masonry {
     const c = cnv(TW, CAP_H), g = ctxOf(c);
     if (S.lay === 'render') {
       // The top of a mud wall is the same coat turned up at the sky, a step
-      // paler for it, with a crack or two where it has dried in the sun.
+      // paler for it. Plain: one picture over every section, its cracks were
+      // a mark repeating every four metres down the run.
       g.fillStyle = TONES.top.lit; g.fillRect(0, 0, TW, CAP_H);
-      const R = rand(99);
-      for (let i = 0; i < 3; i++) fissure(g, inField(10, R), 6 + R() * 20, 18 + R() * 22, R);
       return c;
     }
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, CAP_H);
@@ -3493,13 +3633,9 @@ function paint(S: Stock): Masonry {
   const ENDS = (() => {
     const Wc = 64, c = cnv(Wc, TH), g = ctxOf(c), R = rand(7);
     if (S.lay === 'render') {
-      // The end of a mud wall is the coat come round the corner, and the
-      // corner it came round is rounded by the hand that laid it, so it
-      // catches the light down its length rather than standing as a post.
+      // The end of a mud wall is the coat come round the corner; the roll of
+      // it round the arris is the renderer's, in the light of both faces.
       g.fillStyle = PASTEL.stone; g.fillRect(0, 0, Wc, TH);
-      const arris = g.createLinearGradient(0, 0, 12, 0);
-      arris.addColorStop(0, hexA(PASTEL.stoneHi, 0.85)); arris.addColorStop(1, hexA(PASTEL.stoneHi, 0));
-      g.fillStyle = arris; g.fillRect(0, 0, 12, TH);
       g.fillStyle = hexA(PASTEL.stoneHi, 0.5); g.fillRect(0, 0, Wc, 6);
       return c;
     }
@@ -3603,11 +3739,9 @@ function paint(S: Stock): Masonry {
       const c = cnv(TW, CAP_H + PROUD), g = ctxOf(c);
       g.translate(0, PROUD);
       if (S.lay === 'render') {
-        // A mud cap seen from above is one pale band of coat with a crack
-        // or two in it from the sun; there is nothing in it to count.
+        // A mud cap seen from above is one pale band of coat; there is
+        // nothing in it to count.
         g.fillStyle = TONES.top.lit; g.fillRect(0, -2, TW, CAP_H + 2);
-        const R = rand(v.seed * 41 + 3);
-        for (let i = 0; i < 2; i++) fissure(g, inField(10, R), 4 + R() * 16, 14 + R() * 18, R);
         return c;
       }
       const w0 = CSEAM[1] - CSEAM[0];
@@ -3687,12 +3821,8 @@ function paint(S: Stock): Masonry {
     const ends = (() => {
       const Wc = 64, c = cnv(Wc, fh), g = ctxOf(c), R = rand(11);
       if (S.lay === 'render') {
-        // The coat come round the end of it, rounded at the corner it came
-        // round, under the cap's paler band.
+        // The coat come round the end of it, under the cap's paler band.
         g.fillStyle = PASTEL.stone; g.fillRect(0, 0, Wc, fh);
-        const arris = g.createLinearGradient(0, 0, 12, 0);
-        arris.addColorStop(0, hexA(PASTEL.stoneHi, 0.85)); arris.addColorStop(1, hexA(PASTEL.stoneHi, 0));
-        g.fillStyle = arris; g.fillRect(0, 0, 12, fh);
         g.fillStyle = TONES.top.lit; g.fillRect(0, 0, Wc, COPE + 1);
         g.fillStyle = 'rgba(46, 34, 62, 0.3)'; g.fillRect(0, COPE + 1, Wc, 4);
         return c;
@@ -3753,21 +3883,24 @@ function paint(S: Stock): Masonry {
         const line = side < 0 ? gx0 : gx1;
         if (S.lay === 'render') {
           /*
-           * A pier of the same mud, built up a hand higher than the wall it
-           * interrupts and rounded over, its coat rolled round its arrises: lit
-           * down its left, shaded down its right, and a shade thrown down the
-           * wall on its field side, because it stands out of it.
+           * A pier of the same mud as the wall and in the same coat, built up
+           * a hand higher than the wall it interrupts and domed over -- the
+           * dome is the renderer's, cut into the head of the wall -- its coat
+           * rolled round its arrises, its foot eaten as the wall's is, and a
+           * shade thrown down the wall on its field side, because it stands
+           * out of it. Cream and square, it was a planed post.
            */
-          const x = side < 0 ? line + OVER - 52 : line - OVER, w = 52, top = -7;
-          g.beginPath(); softRect(g, x, top, w, fh - top + 6, 11);
-          g.fillStyle = TONES.top.lit; g.fill();
+          const x = side < 0 ? line + OVER - 52 : line - OVER, w = 52;
+          g.beginPath(); softRect(g, x, 0, w, fh + 6, 6);
+          g.fillStyle = PASTEL.stone; g.fill();
           g.save(); g.clip();
-          g.fillStyle = hexA(PASTEL.stoneHi, 0.8); g.fillRect(x, top, 7, fh - top);
-          g.fillStyle = hexA(PASTEL.stoneShade, 0.7); g.fillRect(x + w - 8, top, 8, fh - top);
+          g.fillStyle = hexA(PASTEL.stoneHi, 0.45); g.fillRect(x, 0, 6, fh);
+          g.fillStyle = hexA(PASTEL.stoneShade, 0.5); g.fillRect(x + w - 7, 0, 7, fh);
+          const head = g.createLinearGradient(0, 0, 0, 16);
+          head.addColorStop(0, TONES.top.lit); head.addColorStop(1, hexA(TONES.top.lit, 0));
+          g.fillStyle = head; g.fillRect(x, 0, w, 16);
           erosionOf(g, R, Math.min(34, fh * 0.3), fh);
           g.restore();
-          g.beginPath(); softRect(g, x, top, w, fh - top + 6, 11);
-          g.strokeStyle = hexA(PASTEL.line, 0.55); g.lineWidth = 1.3; g.stroke();
           g.fillStyle = 'rgba(46, 34, 62, 0.26)';
           g.fillRect(side < 0 ? x - 4 : x + w, 0, 4, fh);
           continue;
@@ -3828,7 +3961,29 @@ function paint(S: Stock): Masonry {
       g.clearRect(gx0, -PROUD, gx1 - gx0, c.height);
       return c;
     });
-    const made: Low = { face, gate, cap, gateCap, ends, h: fh, proud: PROUD };
+    /*
+     * How far the head of the low wall rises over its line along a section:
+     * the pillows of its cap, by variant; and at a gate, over each pier a
+     * dome standing a hand clear of the wall, and nothing over the gap.
+     */
+    const crest = VARIANTS.map((v) => {
+      const p = pillowsOf(copeSeed(v.seed));
+      return Array.from({ length: 65 }, (_, i) => pillowRise(p, (i / 64) * TW));
+    });
+    const gateCrest = VARIANTS.map((v) => {
+      const p = pillowsOf(copeSeed(v.seed));
+      const piers: Pt[] = [[gx0 + OVER - 52, gx0 + OVER], [gx1 - OVER, gx1 - OVER + 52]];
+      return Array.from({ length: 129 }, (_, i) => {
+        const x = (i / 128) * TW;
+        for (const [a, b] of piers) {
+          if (x < a || x > b) continue;
+          const u = (x - (a + b) / 2) / ((b - a) / 2);
+          return 10 + 12 * Math.sqrt(Math.max(0, 1 - u * u));
+        }
+        return x > gx0 + OVER && x < gx1 - OVER ? 0 : pillowRise(p, x);
+      });
+    });
+    const made: Low = { face, gate, cap, gateCap, ends, h: fh, proud: PROUD, crest, gateCrest };
     LOWS.set(k, made);
     return made;
   };
@@ -4103,6 +4258,11 @@ function paint(S: Stock): Masonry {
     quoinR: S.lay === 'bond' ? quoins(1) : undefined,
     vigas: VIGAS,
     brow: BROW,
+    crest: CREST,
+    losses: LOSSES,
+    soft: S.lay === 'render',
+    shadow: S.shadow,
+    top: TONES.top && { lit: channels(TONES.top.lit), hi: channels(TONES.top.hi), shade: channels(TONES.top.shade) },
     wrap: S.lay === 'render',
     scatter: S.lay === 'render',
     hi: channels(PASTEL.stoneHi),

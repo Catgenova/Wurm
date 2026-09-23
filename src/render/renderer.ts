@@ -300,6 +300,14 @@ function scatterOf(b: Border, level: number, n: number): number {
   return here === (b.dir === 'h' ? at(b.x - 1, b.y) : at(b.x, b.y - 1)) ? (here + 1) % n : here;
 }
 
+/** Four whole numbers to one in [0, 1), the same every time: where a thing falls, by where it is. */
+function hash4(a: number, b: number, c: number, d: number): number {
+  let k = (a * 374761393 + b * 668265263 + c * 1442695041 + d * 2246822519) | 0;
+  k = Math.imul(k ^ (k >>> 13), 1274126177);
+  k = Math.imul(k ^ (k >>> 16), 2654435761);
+  return ((k ^ (k >>> 15)) >>> 0) / 4294967296;
+}
+
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
 /**
@@ -3009,6 +3017,41 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * The masonry a wall is painted in, or none: the others are ruled in flat
+   * colours, and a coat of paint over any of them would be two walls at
+   * once, so a dyed one goes down to the flat colours with everything else.
+   */
+  private masonryOf(wall: Wall): Masonry | undefined {
+    return wall.dye ? undefined
+      : wall.material === 'cobblestone' ? cobble()
+        : wall.material === 'clay_bricks' ? brickwork()
+          : wall.material === 'clay_adobe' ? adobe()
+            : undefined;
+  }
+
+  /**
+   * How tall a wall stands, as a share of a storey: its type's height, except
+   * that on a masonry laid by hand a gate hung in a run of taller garden wall
+   * stands to that wall's height. Its piers are the wall built up either side
+   * of it, and a gate a foot lower than the wall it hangs in was a notch.
+   */
+  private standing(wall: Wall, border: Border): number {
+    const own = WALL_TYPE_BY_ID.get(wall.type)?.height ?? 1;
+    const gate = (w: Wall): boolean => w.type === 'fence_gate' || w.type === 'iron_gate';
+    if (!gate(wall) || !this.masonryOf(wall)?.soft) return own;
+    let tall = own;
+    for (const i of [-1, 1]) {
+      const b: Border = border.dir === 'h'
+        ? { dir: 'h', x: border.x + i, y: border.y }
+        : { dir: 'v', x: border.x, y: border.y + i };
+      const w = this.game.buildings.wallOnBorder(wall.level, b);
+      const k = w && WALL_TYPE_BY_ID.get(w.type);
+      if (w && isDone(w) && !gate(w) && k?.low) tall = Math.max(tall, k.height ?? 1);
+    }
+    return tall;
+  }
+
   /** Per building, which way its floor joists run, and how many tiles it had when that was worked out. */
   private joists = new Map<number, { n: number; h: boolean }>();
 
@@ -3065,8 +3108,10 @@ export class Renderer {
     const mat = this.painted(bare, wall.dye);
     const [ax, ay, bx, by] = borderPoints(border);
     const kind = WALL_TYPE_BY_ID.get(wall.type);
+    const cob = this.masonryOf(wall);
+    const tall = this.standing(wall, border);
     const h0 = base + wall.level * WALL_HEIGHT;
-    const h1 = h0 + WALL_HEIGHT * (kind?.height ?? 1);
+    const h1 = h0 + WALL_HEIGHT * tall;
     const dx = bx - ax;
     const dy = by - ay;
     /*
@@ -3146,7 +3191,7 @@ export class Renderer {
       if (!w || !isDone(w)) return false;
       const k2 = WALL_TYPE_BY_ID.get(w.type);
       const half2 = (k2?.railed ? FENCE_THICK : WALL_THICK) * (k2?.thick ?? 1);
-      return (k2?.height ?? 1) >= (kind?.height ?? 1) - 1e-6 && half2 >= half - 1e-9;
+      return this.standing(w, b) >= tall - 1e-6 && half2 >= half - 1e-9;
     };
     ctx.globalAlpha = alpha;
     if (!done) {
@@ -3175,16 +3220,6 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
-    /*
-     * The masonries that are painted rather than ruled. A coat of paint over
-     * any of them would be two walls at once, so a dyed one goes down to the
-     * flat colours below with everything else.
-     */
-    const cob = wall.dye ? undefined
-      : wall.material === 'cobblestone' ? cobble()
-        : wall.material === 'clay_bricks' ? brickwork()
-          : wall.material === 'clay_adobe' ? adobe()
-            : undefined;
     if (kind?.railed && !cob) {
       /*
        * Posts and rails, each of them a piece of timber with a top to it: a
@@ -3299,6 +3334,35 @@ export class Renderer {
       const e0 = cob.wrap && !on(-1) && square(-1, false) && !square(-1, true) ? half : 0;
       const e1 = cob.wrap && !on(1) && square(1, false) && !square(1, true) ? half : 0;
       const T0 = -e0, T1 = 1 + e1;
+      /** A garden wall's pictures, at the height it stands to, and whether a gate hangs in it. */
+      const lw = kind?.low ? cob.low(tall) : undefined;
+      const hung = wall.type === 'fence_gate' || wall.type === 'iron_gate';
+      /*
+       * The head of the wall, on a masonry laid by hand, where nothing stands
+       * on it: how far it rises over its line at `t`, as a share of the
+       * height the picture is painted to -- the variant's crest, or on a
+       * garden wall its pillows and the domes of a gate's piers -- and
+       * nothing at either end, so a head runs on into the next section's.
+       */
+      const topTones = cob.top ?? { lit: cob.hi, hi: cob.hi, shade: cob.hi };
+      const heads = !cob.soft || roofed ? undefined
+        : lw ? (hung ? lw.gateCrest : lw.crest)?.[v] : cob.crest?.[v];
+      const headPx = lw ? lw.h : cob.h;
+      const rise = (t: number): number => {
+        if (!heads || t <= 0 || t >= 1) return 0;
+        const f = t * (heads.length - 1), i = Math.floor(f), u = f - i;
+        return (heads[i] * (1 - u) + heads[Math.min(i + 1, heads.length - 1)] * u) / headPx;
+      };
+      /** The points from `a` to `b` a head is drawn through: the two ends, and every point its crest is given at between. */
+      const ticks = (a: number, b: number): number[] => {
+        const out = [a];
+        if (heads) {
+          const n = heads.length - 1;
+          for (let i = 1; i < n; i++) if (i / n > a && i / n < b) out.push(i / n);
+        }
+        out.push(b);
+        return out;
+      };
       /** A picture, between three of its corners: top left, top right, bottom left. */
       const dpr = this.canvas.dpr;
       /** A point's distance along the face on whole device pixels: a face's ends are true verticals on screen. */
@@ -3416,7 +3480,114 @@ export class Renderer {
        */
       const below = wall.level > 0 ? bld.wallOnBorder(wall.level - 1, border) : undefined;
       const sunk = cob.under && below && isDone(below) ? 1 / Math.max(1, (py(0, 0) - py(0, 1)) * dpr) : 0;
-      const face = (): void => { if (cob.under) flush(T0, T1, -sunk, 1); else quad(0, 1, 0, 1); };
+      /** The face, with its ends on whole device pixels and its head along the crest. */
+      const hull = (k0: number): void => {
+        const sx = (t: number): number => (t === T0 || t === T1 ? snapX(t) : px(t, 0));
+        const ts = ticks(T0, T1);
+        ctx.beginPath();
+        ctx.moveTo(sx(T0), py(T0, k0)); ctx.lineTo(sx(T1), py(T1, k0));
+        for (let i = ts.length - 1; i >= 0; i--) ctx.lineTo(sx(ts[i]), py(ts[i], 1 + rise(ts[i])));
+        ctx.closePath();
+      };
+      const face = (): void => { if (cob.under) hull(-sunk); else quad(0, 1, 0, 1); };
+      /** The head where it rises over its line: the coat rolled over the top, in the top's own tone. */
+      const crown = (): void => {
+        if (!heads) return;
+        const ts = ticks(0, 1);
+        ctx.beginPath();
+        for (const t of ts) ctx.lineTo(px(t, 0), py(t, 1 + rise(t)));
+        for (let i = ts.length - 1; i >= 0; i--) ctx.lineTo(px(ts[i], 0), py(ts[i], 1));
+        ctx.closePath();
+        ctx.fillStyle = rgb(topTones.lit, 1);
+        ctx.fill();
+      };
+      /** A colour as the hour lights a face at `k`, laid flat rather than shaded over. */
+      const tint = (c: readonly [number, number, number], k: number, a = 1): string => {
+        const f = cob.shadow(k), [sr, sg, sb] = cob.shade;
+        return `rgba(${(c[0] * (1 - f) + sr * f) | 0},${(c[1] * (1 - f) + sg * f) | 0},${(c[2] * (1 - f) + sb * f) | 0},${a})`;
+      };
+      /**
+       * The top of a wall laid by hand, between `a` and `b` along its head: the
+       * coat turned up at the sky, its far slope a step down from its crown and
+       * a line of light along the crown itself. Laid in the hour's light rather
+       * than shaded over, and a device pixel past each end, so two tops meet
+       * with nothing showing between them and nothing doubled.
+       */
+      const top = (a: number, b: number, k: number): void => {
+        const ts = [a - hair, ...ticks(a, b).slice(1, -1), b + hair];
+        const at = (t: number, s: number): [number, number] => [px(t, 1 + rise(t), s), py(t, 1 + rise(t), s)];
+        const band = (s0: number, s1: number): void => {
+          ctx.beginPath();
+          for (const t of ts) ctx.lineTo(...at(t, s0));
+          for (let i = ts.length - 1; i >= 0; i--) ctx.lineTo(...at(ts[i], s1));
+          ctx.closePath();
+        };
+        band(1, -1); ctx.fillStyle = tint(topTones.lit, k); ctx.fill();
+        band(-0.2, -1); ctx.fillStyle = tint(topTones.shade, k, 0.8); ctx.fill();
+        ctx.beginPath();
+        for (const t of ts) ctx.lineTo(...at(t, 0.25));
+        ctx.strokeStyle = tint(topTones.hi, k, 0.9); ctx.lineWidth = Math.max(0.6, 0.9 * zoom); ctx.stroke();
+        ctx.lineWidth = 1;
+      };
+      /**
+       * The coat rolled round an arris, on this face's side of it: nearest the
+       * corner a step between this face's light and the light of the face
+       * round it, and on the lighter of the two a line of light beside that,
+       * wandering a little up the height and swelling where it meets the
+       * ground and where it goes over the head. A ruled strip of light down a
+       * corner was the edge of a box.
+       */
+      const roll = (T: number, other: number): void => {
+        const aT = cob.shadow(lit), aO = cob.shadow(other), mid = (aT + aO) / 2;
+        const x0 = snapX(T), dir = Math.sign(px(0.5, 0) - px(T, 0)) || 1;
+        const w = Math.max(0.75, zoom);
+        // It swells where it meets the ground and where it goes over the head,
+        // and nowhere between storeys, where it runs on up the next.
+        const foot = wall.level === 0 ? 1 : 0, head = roofed ? 0 : 1;
+        const wob = (k: number): number => 1 + 0.6 * (foot * (1 - k) ** 8 + head * k ** 8) + 0.25 * Math.sin(k * 11 + (border.x + border.y) * 1.7 + T * 5);
+        const band = (o0: number, o1: number, fill: string): void => {
+          ctx.beginPath();
+          for (let i = 0; i <= 12; i++) ctx.lineTo(x0 + dir * o1 * wob(i / 12), py(T, i / 12));
+          for (let i = 12; i >= 0; i--) ctx.lineTo(x0 + dir * o0 * wob(i / 12), py(T, i / 12));
+          ctx.closePath();
+          ctx.fillStyle = fill;
+          ctx.fill();
+        };
+        const [sr, sg, sb] = cob.shade;
+        if (aT < aO - 1e-3) {
+          band(0, w, `rgba(${sr}, ${sg}, ${sb}, ${((mid - aT) / (1 - aT)).toFixed(3)})`);
+          band(w, 2 * w, rgb(cob.hi, 1, 0.35));
+        } else if (aT > aO + 1e-3) {
+          band(0, w, rgb(cob.under ?? cob.hi, 1, Math.max(0, 1 - mid / aT)));
+        }
+      };
+      /** And the end's own side of it, on the end grain nearest the face. */
+      const endRoll = (t: number): void => {
+        const aE = cob.shadow(endLight), aM = cob.shadow(lit), mid = (aE + aM) / 2;
+        ctx.beginPath();
+        ctx.moveTo(px(t, 0, 1), py(t, 0, 1)); ctx.lineTo(px(t, 0, 0.3), py(t, 0, 0.3));
+        ctx.lineTo(px(t, 1, 0.3), py(t, 1, 0.3)); ctx.lineTo(px(t, 1, 1), py(t, 1, 1));
+        ctx.closePath();
+        const [sr, sg, sb] = cob.shade;
+        ctx.fillStyle = aE > aM ? rgb(cob.under ?? cob.hi, 1, Math.max(0, 1 - mid / aE))
+          : `rgba(${sr}, ${sg}, ${sb}, ${((mid - aE) / (1 - aE)).toFixed(3)})`;
+        ctx.fill();
+      };
+      /**
+       * A room with no roof on it is still in the shade of its own walls: an
+       * inside face is a step under the same face outside, and deeper toward
+       * the floor, where the far wall's shadow lies across it. Lit as the
+       * outside was, the house read as one card with a line across it.
+       */
+      const inside = (): void => {
+        const [sr, sg, sb] = cob.shade;
+        const g = ctx.createLinearGradient(0, py(0.5, 1), 0, py(0.5, 0));
+        g.addColorStop(0, `rgba(${sr}, ${sg}, ${sb}, 0.06)`);
+        g.addColorStop(1, `rgba(${sr}, ${sg}, ${sb}, 0.2)`);
+        hull(-sunk);
+        ctx.fillStyle = g;
+        ctx.fill();
+      };
       /**
        * An end of a wall is a face turned square to it, and where the coat
        * goes round it is lit as that face is -- as the face round the corner
@@ -3431,27 +3602,78 @@ export class Renderer {
         if (square(end, true) || square(end, false)) return false;
         return (cam.rotateX(dx, dy) + cam.rotateY(dx, dy)) * i > 1e-6;
       };
+      /** A picture laid on the face with its top left `u`, `v` picture px into a section `H` px tall, turned round if `flip`. */
+      const patch = (img: HTMLCanvasElement, u: number, v0: number, H: number, flip = false): void => {
+        const ta = u / cob.w, tb = (u + img.width) / cob.w;
+        const k1 = 1 - v0 / H, k0 = 1 - (v0 + img.height) / H;
+        const [a, b] = flip ? [tb, ta] : [ta, tb];
+        const tlx = px(a, k1), tly = py(a, k1);
+        ctx.save();
+        // Cut to the face, top and bottom as well as at its ends: the courses
+        // a loss at the foot has under it for the foot to cover went on down
+        // past the bottom of the wall onto the grass.
+        hull(0); ctx.clip();
+        ctx.transform((px(b, k1) - tlx) / img.width, (py(b, k1) - tly) / img.width, (px(a, k0) - tlx) / img.height, (py(a, k0) - tly) / img.height, tlx, tly);
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
+      };
       /**
-       * The arris where the coat is carried round a corner, rounded by the
-       * hand that laid it, so it takes the light down its length: a soft line
-       * on the lighter of the two faces that meet there.
+       * Where the weather has taken the coat off this section, out of doors.
+       *
+       * Not everywhere: on a section in two or three, and where the water
+       * and the wear go. Off a corner, where both walls that meet there agree
+       * on it by the corner itself; out of the foot of a ground storey; under
+       * the end of a sill; under the head of a top storey that has no beam
+       * ends to drip -- the ones under the beam ends come with the beams.
+       * `H` is how tall the section's picture is, `keep` a stretch along it
+       * a loss at the foot must stay out of (a doorway, a gateway), and
+       * `sill` the height of a sill in the picture, where there is one.
        */
-      const arris = (): void => {
-        if ((!e0 && !e1) || lit < endLight - 1e-6) return;
-        const w = Math.min(2.2, Math.max(0.8, 1.3 * zoom));
-        ctx.lineWidth = w;
-        ctx.strokeStyle = rgb(cob.hi, 1, 0.5);
-        for (const [e, T] of [[e0, T0], [e1, T1]] as Array<[number, number]>) {
+      const wear = (H: number, keep: [number, number] | null, sill: number | null, bare: boolean): void => {
+        const L = cob.losses;
+        if (!L || indoors) return;
+        const q = (salt: number): number => hash4(border.x, border.y, wall.level * 2 + (border.dir === 'h' ? 0 : 1), salt);
+        const pick = (xs: HTMLCanvasElement[], r: number): HTMLCanvasElement => xs[Math.floor(r * xs.length) % xs.length];
+        const courses = (img: HTMLCanvasElement): number => Math.round((img.height - L.lip - 2) / L.ch);
+        const bottom = Math.round((H - (lw ? 34 : cob.plinth) - L.from) / L.ch);
+        let laid = false;
+        for (const [e, i] of [[e0, -1], [e1, 1]] as Array<[number, number]>) {
           if (!e) continue;
-          const x = snapX(T) - Math.sign(px(T, 0) - px(0.5, 0)) * w / 2;
-          ctx.beginPath(); ctx.moveTo(x, py(T, 0)); ctx.lineTo(x, py(T, 1)); ctx.stroke();
+          const t = i < 0 ? 0 : 1;
+          const cx = border.dir === 'h' ? border.x + t : border.x, cy = border.dir === 'h' ? border.y : border.y + t;
+          if (hash4(cx, cy, wall.level, 17) > 0.45) continue;
+          const img = pick(L.corner, hash4(cx, cy, wall.level, 18)), n = courses(img);
+          const line = wall.level === 0 ? bottom - n + 1 : 1 + Math.floor(hash4(cx, cy, wall.level, 19) * Math.max(1, bottom - n - 1));
+          patch(img, i > 0 ? T1 * cob.w - img.width : T0 * cob.w, L.from + line * L.ch - L.lip, H, i < 0);
+          laid = true;
         }
-        ctx.lineWidth = 1;
+        if (laid) return;
+        if (sill !== null && q(21) < 0.4) {
+          const img = pick(L.sill, q(23)), left = q(22) < 0.5;
+          const x = (left ? WINDOW.t0 : WINDOW.t1) * cob.w + (left ? -18 : 18) - img.width / 2;
+          patch(img, x, L.from + Math.ceil((sill + 18 - L.from) / L.ch) * L.ch - L.lip, H);
+          return;
+        }
+        if (wall.level === 0 && q(31) < (lw ? 0.22 : 0.32)) {
+          const img = pick(L.foot, q(33)), n = courses(img) - 2;
+          const room = cob.w - 2 * 26 - img.width;
+          let x = 26 + q(32) * room;
+          if (keep && x + img.width > keep[0] * cob.w && x < keep[1] * cob.w) {
+            x = q(34) < 0.5 ? Math.max(18, keep[0] * cob.w - img.width - 10) : Math.min(cob.w - img.width - 18, keep[1] * cob.w + 10);
+            if (x + img.width > keep[0] * cob.w && x < keep[1] * cob.w) return;
+          }
+          patch(img, x, L.from + (bottom - n) * L.ch - L.lip, H);
+          return;
+        }
+        if (bare && !lw && !roofed && q(41) < 0.3) {
+          const img = pick(L.head, q(43));
+          patch(img, 30 + q(42) * (cob.w - 60 - img.width), L.from - L.ch - L.lip, H);
+        }
       };
       const light = (k: number): void => {
         if (k >= 0.999) return;
         const [sr, sg, sb] = cob.shade;
-        ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, ${((1 - k) * 0.85).toFixed(3)})`;
+        ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, ${cob.shadow(k).toFixed(3)})`;
         ctx.fill();
       };
       /*
@@ -3469,9 +3691,7 @@ export class Renderer {
        * same three metres squashed into one and a half, and a half wall in
        * cobblestone is a garden wall, which is what this draws.
        */
-      if (kind?.low) {
-        const lw = cob.low(kind.height ?? 1);
-        const hung = wall.type === 'fence_gate' || wall.type === 'iron_gate';
+      if (lw) {
         /*
          * What it throws on the ground it stands on. Entities cast a shadow
          * and walls never have, which on three metres of house nobody misses
@@ -3494,7 +3714,9 @@ export class Renderer {
           }
         }
         blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h, 1, false, 0, cob.under ? 0.004 : 0);
+        wear(lw.h, hung ? [FENCE_GAP.t0 - 0.12, FENCE_GAP.t1 + 0.12] : null, null, false);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
+        crown();
         face();
         light(lit);
         /*
@@ -3517,13 +3739,17 @@ export class Renderer {
         const capRuns: Array<[number, number]> = hung
           ? [[T0, FENCE_GAP.t0], [FENCE_GAP.t1, T1]]
           : [[T0, T1]];
-        for (const [a, b] of capRuns) {
-          cap(a, b, 1);
-          ctx.fillStyle = rgb(mat.color, capLit);
-          ctx.fill();
+        if (cob.soft) {
+          for (const [a, b] of capRuns) top(a, b, capLit);
+        } else {
+          for (const [a, b] of capRuns) {
+            cap(a, b, 1);
+            ctx.fillStyle = rgb(mat.color, capLit);
+            ctx.fill();
+          }
+          blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true, lw.proud / cob.capH);
+          for (const [a, b] of capRuns) { cap(a, b, 1); light(capLit); }
         }
-        blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true, lw.proud / cob.capH);
-        for (const [a, b] of capRuns) { cap(a, b, 1); light(capLit); }
         for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
           if (on(i) || !shows(i)) continue;
           endOf(t, 0, 1);
@@ -3541,8 +3767,10 @@ export class Renderer {
           ctx.restore();
           endOf(t, 0, 1);
           light(endLight);
+          if (cob.soft) { endRoll(t); roll(t, endLight); }
         }
-        arris();
+        if (e0) roll(T0, endLight);
+        if (e1) roll(T1, endLight);
         ctx.globalAlpha = 1;
         return;
       }
@@ -3646,6 +3874,12 @@ export class Renderer {
         if (cob.quoinL && !on(-1)) blit(cob.quoinL, 0, 1);
         if (cob.quoinR && !on(1)) blit(cob.quoinR, 0, 1);
       }
+      wear(
+        cob.h,
+        arched ? [ARCH.t0, ARCH.t1] : doored ? [DOOR.t0, DOOR.t1] : gated ? [DOUBLE.t0, DOUBLE.t1] : null,
+        windowed ? cob.h * (1 - WINDOW.k0) : bayed ? cob.h * (1 - BAY.k0) : null,
+        !(cob.vigas && this.bearsJoists(wall.building, border)),
+      );
       /*
        * The way through goes in before anything that grows, and unlit,
        * because the wash below takes the whole face at once: a bush that has
@@ -3803,15 +4037,22 @@ export class Renderer {
        * the ground is painted into `foot` instead, on the storey that has a
        * ground to be shaded by.
        */
+      crown();
       face();
       light(lit);
-      arris();
-      cap(T0, T1, 1);
-      ctx.fillStyle = rgb(mat.color, topLit);
-      ctx.fill();
-      blit(cob.cap, 1, 1, 1, true);
-      cap(T0, T1, 1);
-      light(topLit);
+      if (cob.soft && indoors) inside();
+      if (e0) roll(T0, endLight);
+      if (e1) roll(T1, endLight);
+      // Where a storey stands on it, the top of a coat laid by hand is under
+      // that storey: carried round a corner it came out past the face above.
+      if (cob.soft) { if (!roofed) top(T0, T1, topLit); } else {
+        cap(T0, T1, 1);
+        ctx.fillStyle = rgb(mat.color, topLit);
+        ctx.fill();
+        blit(cob.cap, 1, 1, 1, true);
+        cap(T0, T1, 1);
+        light(topLit);
+      }
       for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
         if (on(i) || !shows(i)) continue;
         endOf(t, 0, 1);
@@ -3829,6 +4070,7 @@ export class Renderer {
         ctx.restore();
         endOf(t, 0, 1);
         light(endLight);
+        if (cob.soft) { endRoll(t); roll(t, endLight); }
       }
       /*
        * The ivy last, and unlit: it stands proud of the cap, so it has to go on
