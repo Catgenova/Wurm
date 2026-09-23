@@ -286,18 +286,39 @@ const IRON_DARK: readonly [number, number, number] = [0x44, 0x4a, 0x51];
 
 /**
  * Which of `n` pictures a section of a run takes, by a hash of where it is,
- * for a masonry that takes them so: in no order a street shows, and never
- * the same as the section before it along the run, so no picture stands
- * twice in a row.
+ * for a masonry that takes them so: in no order a street shows, never the
+ * same as the section either side of it along the run, and never the same
+ * as the section under it, so no picture stands twice in a row either way.
+ *
+ * Along the run every fourth section takes its picture by the hash alone,
+ * and each of the three after it one of the others -- not the one the
+ * section before took, and the third not the one the next fourth takes
+ * either -- so no section has to know more of the run than the three before
+ * it. Bumping a picture that matched the one before it, as this did, only
+ * moved the match on: three sections running took the same picture. Up the
+ * wall each storey is the one under it turned on by the same step, a step
+ * the run keeps, so the storeys differ and the run still does.
  */
 function scatterOf(b: Border, level: number, n: number): number {
-  const at = (x: number, y: number): number => {
-    let k = (x * 374761393 + y * 668265263 + level * 1442695041 + (b.dir === 'h' ? 0 : 97)) | 0;
+  const along = b.dir === 'h' ? b.x : b.y, run = b.dir === 'h' ? b.y : b.x;
+  const hash = (i: number, salt: number): number => {
+    let k = (i * 374761393 + run * 668265263 + salt * 1442695041 + (b.dir === 'h' ? 0 : 97)) | 0;
     k = Math.imul(k ^ (k >>> 13), 1274126177);
-    return ((k ^ (k >>> 16)) >>> 0) % n;
+    return (k ^ (k >>> 16)) >>> 0;
   };
-  const here = at(b.x, b.y);
-  return here === (b.dir === 'h' ? at(b.x - 1, b.y) : at(b.x, b.y - 1)) ? (here + 1) % n : here;
+  if (n < 3) return (hash(along, 0) + level) % n;
+  /** By a hash, one of the `n` that is none of `not`. */
+  const other = (not: number[], h: number): number => {
+    const free: number[] = [];
+    for (let j = 0; j < n; j++) if (!not.includes(j)) free.push(j);
+    return free[h % free.length];
+  };
+  const first = Math.floor(along / 4) * 4;
+  let v = hash(first, 1) % n;
+  for (let i = first + 1; i <= along; i++) {
+    v = other(i - first === 3 ? [v, hash(first + 4, 1) % n] : [v], hash(i, 2));
+  }
+  return (v + level * (1 + (hash(0, 3) % (n - 1)))) % n;
 }
 
 /** Four whole numbers to one in [0, 1), the same every time: where a thing falls, by where it is. */
@@ -3513,10 +3534,14 @@ export class Renderer {
        * coat turned up at the sky, its far slope a step down from its crown and
        * a line of light along the crown itself. Laid in the hour's light rather
        * than shaded over, and a device pixel past each end, so two tops meet
-       * with nothing showing between them and nothing doubled.
+       * with nothing showing between them and nothing doubled. A device pixel
+       * down the screen as well as across it: on a wall seen end on, which is
+       * no width across, a pixel across was the whole of a section, and the
+       * top of each side wall stood up past the back of the house like a pole.
        */
       const top = (a: number, b: number, k: number): void => {
-        const ts = [a - hair, ...ticks(a, b).slice(1, -1), b + hair];
+        const over = Math.min(hair, 1 / Math.max(1, Math.abs(py(1, 0) - py(0, 0)) * dpr));
+        const ts = [a - over, ...ticks(a, b).slice(1, -1), b + over];
         const at = (t: number, s: number): [number, number] => [px(t, 1 + rise(t), s), py(t, 1 + rise(t), s)];
         const band = (s0: number, s1: number): void => {
           ctx.beginPath();
@@ -3620,6 +3645,35 @@ export class Renderer {
         ctx.restore();
       };
       /**
+       * A frame's post at each end of the section that turns a corner or
+       * stops, its picture laid from `k0` to `k1` up the face and shown only
+       * above `from`: over the face carried round the corner and the half of
+       * the end post the section has of its own, its outer edge on the
+       * corner. Without it the corner was the ends of two sections' posts
+       * with a strip of the limewash they were painted on between them -- a
+       * pale line down the one place a frame is heaviest.
+       */
+      const posts = (img: HTMLCanvasElement, k0: number, k1: number, from: number): void => {
+        if (!cob.post || indoors) return;
+        const w = half + cob.post.reach / cob.w;
+        for (const [i, e, T] of [[-1, e0, T0], [1, e1, T1]] as Array<[-1 | 1, number, number]>) {
+          if (on(i) || (!e && (square(i, true) || square(i, false)))) continue;
+          // From the outer edge in, a device pixel past the corner so the
+          // edge is oak however the corner falls on the pixels.
+          const [a, b] = i < 0 ? [T - hair, T + w] : [T + hair, T - w];
+          ctx.save();
+          strip(snapX(T0), snapX(T1)); ctx.clip();
+          ctx.beginPath();
+          ctx.moveTo(px(a, from), py(a, from)); ctx.lineTo(px(b, from), py(b, from));
+          ctx.lineTo(px(b, 1), py(b, 1)); ctx.lineTo(px(a, 1), py(a, 1));
+          ctx.closePath(); ctx.clip();
+          const tlx = px(a, k1), tly = py(a, k1);
+          ctx.transform((px(b, k1) - tlx) / img.width, (py(b, k1) - tly) / img.width, (px(a, k0) - tlx) / img.height, (py(a, k0) - tly) / img.height, tlx, tly);
+          ctx.drawImage(img, 0, 0);
+          ctx.restore();
+        }
+      };
+      /**
        * Where the weather has taken the coat off this section, out of doors.
        *
        * Not everywhere: on a section in two or three, and where the water
@@ -3716,6 +3770,7 @@ export class Renderer {
           }
         }
         blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h, 1, false, 0, cob.under ? 0.004 : 0);
+        if (lw.post) posts(lw.post.img, lw.post.foot / lw.h, 1, lw.post.foot / lw.h);
         wear(lw.h, hung ? [FENCE_GAP.t0 - 0.12, FENCE_GAP.t1 + 0.12] : null, null, false);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
         crown();
@@ -3741,7 +3796,7 @@ export class Renderer {
         const capRuns: Array<[number, number]> = hung
           ? [[T0, FENCE_GAP.t0], [FENCE_GAP.t1, T1]]
           : [[T0, T1]];
-        if (cob.soft) {
+        if (cob.wrap) {
           for (const [a, b] of capRuns) top(a, b, capLit);
         } else {
           for (const [a, b] of capRuns) {
@@ -3771,8 +3826,8 @@ export class Renderer {
           light(endLight);
           if (cob.soft) { endRoll(t); roll(t, endLight); }
         }
-        if (e0) roll(T0, endLight);
-        if (e1) roll(T1, endLight);
+        if (cob.soft && e0) roll(T0, endLight);
+        if (cob.soft && e1) roll(T1, endLight);
         ctx.globalAlpha = 1;
         return;
       }
@@ -3978,6 +4033,8 @@ export class Renderer {
         if (cob.growth && !arched) blit(cob.base[v], 0, 1);
         if (cob.growth && arched) blit(cob.archWeed[v], 0, 1);
       }
+      // After the foot, and down to it: the sole it lays along the footing runs into the post.
+      if (cob.post) posts(cob.post.img, 0, 1, wall.level === 0 ? cob.plinth / cob.h : -sunk);
       // Nothing grows on a masonry that is bare: those pictures are empty, and
       // there is no call to lay an empty picture across a whole wall.
       if (cob.growth) {
@@ -4043,11 +4100,13 @@ export class Renderer {
       face();
       light(lit);
       if (cob.soft && indoors) inside();
-      if (e0) roll(T0, endLight);
-      if (e1) roll(T1, endLight);
-      // Where a storey stands on it, the top of a coat laid by hand is under
-      // that storey: carried round a corner it came out past the face above.
-      if (cob.soft) { if (!roofed) top(T0, T1, topLit); } else {
+      if (cob.soft && e0) roll(T0, endLight);
+      if (cob.soft && e1) roll(T1, endLight);
+      // A wall whose face goes round its corners has its top laid flat as
+      // well: a picture over it seamed at every section. And where a storey
+      // stands on it, it is under that storey -- carried round a corner, it
+      // came out past the face above.
+      if (cob.wrap) { if (!roofed) top(T0, T1, topLit); } else {
         cap(T0, T1, 1);
         ctx.fillStyle = rgb(mat.color, topLit);
         ctx.fill();
