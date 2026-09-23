@@ -3055,14 +3055,15 @@ export class Renderer {
 
   /**
    * How tall a wall stands, as a share of a storey: its type's height, except
-   * that on a masonry laid by hand a gate hung in a run of taller garden wall
-   * stands to that wall's height. Its piers are the wall built up either side
-   * of it, and a gate a foot lower than the wall it hangs in was a notch.
+   * that on a masonry laid by hand, or framed, a gate hung in a run of taller
+   * garden wall stands to that wall's height. Its piers or its posts are the
+   * wall built up either side of it, and a gate a foot lower than the wall it
+   * hangs in was a notch.
    */
   private standing(wall: Wall, border: Border): number {
     const own = WALL_TYPE_BY_ID.get(wall.type)?.height ?? 1;
     const gate = (w: Wall): boolean => w.type === 'fence_gate' || w.type === 'iron_gate';
-    if (!gate(wall) || !this.masonryOf(wall)?.soft) return own;
+    if (!gate(wall) || !this.masonryOf(wall)?.wrap) return own;
     let tall = own;
     for (const i of [-1, 1]) {
       const b: Border = border.dir === 'h'
@@ -3336,7 +3337,10 @@ export class Renderer {
       const indoors = !!bld.buildingAt(seenX, seenY);
       /**
        * A finished wall of the same kind standing square to this one at its
-       * `i` end, on the camera's side of it (`near`) or the far side.
+       * `i` end, on the camera's side of it (`near`) or the far side, and as
+       * tall and as thick as this one. A fence square to the end of a half
+       * wall does not bury the end: it stands lower and thinner, and the end
+       * left undrawn over it showed the grass under the half wall's cap.
        */
       const square = (i: -1 | 1, near: boolean): boolean => {
         const t = i < 0 ? 0 : 1;
@@ -3347,7 +3351,11 @@ export class Renderer {
           ? { dir: 'v', x: cx, y: mine ? cy : cy - 1 }
           : { dir: 'h', x: mine ? cx - 1 : cx, y: cy };
         const w = bld.wallOnBorder(wall.level, b);
-        return !!w && isDone(w) && !!WALL_TYPE_BY_ID.get(w.type)?.low === !!kind?.low;
+        if (!w || !isDone(w)) return false;
+        const k2 = WALL_TYPE_BY_ID.get(w.type);
+        if (!!k2?.low !== !!kind?.low) return false;
+        const half2 = (k2?.railed ? FENCE_THICK : WALL_THICK) * (k2?.thick ?? 1);
+        return this.standing(w, b) >= tall - 1e-6 && half2 >= half - 1e-9;
       };
       /*
        * Where the run turns a corner away from the camera, a coat of mud goes
@@ -3395,6 +3403,12 @@ export class Renderer {
       const snapX = (t: number): number => Math.round(px(t, 0) * dpr) / dpr;
       /** A device pixel, as a share of the section's length on screen. */
       const hair = 1 / Math.max(1, Math.abs(px(1, 0) - px(0, 0)) * dpr);
+      /**
+       * Whether this face's pictures go on the other way round: on a masonry
+       * painted with its light on the left, a face that runs right to left on
+       * screen, which is the face turned from the light.
+       */
+      const turned = !!cob.handed && px(1, 0) < px(0, 0);
       /**
        * A picture laid from `shift` to `shift + 1` along the run: `flip` lays
        * it the other way round, and `spread` runs it a hair past both ends.
@@ -3772,7 +3786,7 @@ export class Renderer {
             ctx.fill();
           }
         }
-        blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h, 1, false, 0, cob.under ? 0.004 : 0);
+        blit(hung ? lw.gate[v] : lw.face[v], 0, 1 + lw.proud / lw.h, 1, false, 0, cob.under ? 0.004 : 0, turned);
         if (lw.post) posts(lw.post.img, lw.post.foot / lw.h, 1, lw.post.foot / lw.h);
         wear(lw.h, hung ? [FENCE_GAP.t0 - 0.12, FENCE_GAP.t1 + 0.12] : null, null, false);
         if (hung) this.fenceGate(cob, { px, py, quad }, zoom, wall.type === 'iron_gate');
@@ -3924,7 +3938,7 @@ export class Renderer {
         : doored ? cob.door[v]
         : gated ? cob.gate[v]
         : bayed ? cob.bay[v]
-        : cob.face[v], 0, 1);
+        : cob.face[v], 0, 1, 1, false, 0, 0, turned);
       /*
        * Quoins, where the run stops or turns a corner: the masonry's own
        * dressing of a free end, toothed into the face. Out of doors only --
@@ -4026,7 +4040,7 @@ export class Renderer {
       }
       if (wall.level === 0 && !indoors) {
         onStone();
-        blit(cob.foot[v], 0, 1, 1, false, 0, cob.under ? 0.004 : 0);
+        blit(cob.foot[v], 0, 1, 1, false, 0, cob.under ? 0.004 : 0, turned);
         // The face's half of the hedge, where a doorway took the other half
         // round the corner with it.
         if (cob.growth && arched) blit(cob.base[v], 0, 1);
@@ -4117,6 +4131,8 @@ export class Renderer {
         cap(T0, T1, 1);
         light(topLit);
       }
+      // The ground storey's end, where the masonry's foot goes round it.
+      const ends = wall.level === 0 && cob.endsFoot ? cob.endsFoot : cob.ends;
       for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
         if (on(i) || !shows(i)) continue;
         endOf(t, 0, 1);
@@ -4126,11 +4142,11 @@ export class Renderer {
         ctx.clip();
         const [ex, ey] = [px(t, 1, 1), py(t, 1, 1)];
         ctx.transform(
-          (px(t, 1, -1) - ex) / cob.ends.width, (py(t, 1, -1) - ey) / cob.ends.width,
-          (px(t, 0, 1) - ex) / cob.ends.height, (py(t, 0, 1) - ey) / cob.ends.height,
+          (px(t, 1, -1) - ex) / ends.width, (py(t, 1, -1) - ey) / ends.width,
+          (px(t, 0, 1) - ex) / ends.height, (py(t, 0, 1) - ey) / ends.height,
           ex, ey,
         );
-        ctx.drawImage(cob.ends, 0, 0);
+        ctx.drawImage(ends, 0, 0);
         ctx.restore();
         endOf(t, 0, 1);
         light(endLight);
@@ -4872,9 +4888,11 @@ export class Renderer {
       if (zoom >= 0.5) for (let i = 1; i < 6; i++) bar(a + (b - a) * (i / 6), k0, a + (b - a) * (i / 6), k1, 1.1);
       bar(a, k0 + 0.04, b, k1 - 0.04, 1.5);
     } else {
-      // The brace, rising from the hinge stile, which is the way round it has
-      // to go if it is to carry the gate's weight instead of hanging off it.
-      bar(a, k1 - 0.03, b, k0 + 0.03, 2.3 * heavy);
+      // The brace, rising from the foot of the hinge stile to the head of the
+      // latch stile, which is the way round it has to go if it is to carry the
+      // gate's weight instead of hanging off it. It ran from the head of the
+      // hinge stile down, the one way round a brace in wood does nothing.
+      bar(a, k0 + 0.03, b, k1 - 0.03, 2.3 * heavy);
     }
     /*
      * And the straps it swings on, which are iron on either gate.
