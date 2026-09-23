@@ -284,6 +284,22 @@ const IRON: readonly [number, number, number] = [0x7b, 0x81, 0x88];
 const IRON_DARK: readonly [number, number, number] = [0x44, 0x4a, 0x51];
 
 
+/**
+ * Which of `n` pictures a section of a run takes, by a hash of where it is,
+ * for a masonry that takes them so: in no order a street shows, and never
+ * the same as the section before it along the run, so no picture stands
+ * twice in a row.
+ */
+function scatterOf(b: Border, level: number, n: number): number {
+  const at = (x: number, y: number): number => {
+    let k = (x * 374761393 + y * 668265263 + level * 1442695041 + (b.dir === 'h' ? 0 : 97)) | 0;
+    k = Math.imul(k ^ (k >>> 13), 1274126177);
+    return ((k ^ (k >>> 16)) >>> 0) % n;
+  };
+  const here = at(b.x, b.y);
+  return here === (b.dir === 'h' ? at(b.x - 1, b.y) : at(b.x, b.y - 1)) ? (here + 1) % n : here;
+}
+
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
 /**
@@ -3012,6 +3028,35 @@ export class Renderer {
    * are near enough to see it; from far off a wall is its three faces and
    * that is the right amount of a wall.
    */
+  /** Per building, which way its floor joists run, and how many tiles it had when that was worked out. */
+  private joists = new Map<number, { n: number; h: boolean }>();
+
+  /**
+   * Whether a wall is one of the two a building's floor joists rest on.
+   *
+   * A joist spans the short way across a house, because that is the length
+   * of timber there is, so it rests on the two long walls and the gable walls
+   * carry none. A square house has its joists run north to south, which puts
+   * the beam ends on the fronts people build toward the sun.
+   */
+  private bearsJoists(id: number, border: Border): boolean {
+    const b = this.game.buildings.list.get(id);
+    if (!b) return false;
+    let had = this.joists.get(id);
+    if (!had || had.n !== b.tiles.length) {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const key of b.tiles) {
+        const i = key.indexOf(',');
+        const x = +key.slice(0, i), y = +key.slice(i + 1);
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+      had = { n: b.tiles.length, h: x1 - x0 >= y1 - y0 };
+      this.joists.set(id, had);
+    }
+    return had.h === (border.dir === 'h');
+  }
+
   private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
@@ -3071,12 +3116,14 @@ export class Renderer {
     // it does is a matter of degree rather than a choice between two: turning
     // the view an eighth would otherwise jump a wall between the two tones,
     // and at a diagonal it is neither.
-    const vx = cam.rotateX(dx, dy);
-    const vy = cam.rotateY(dx, dy);
-    const along = Math.abs(vx);
-    const into = Math.abs(vy);
-    const face = along / (along + into || 1);
-    const lit = 0.72 * (1 - face) + (vx > 0 ? 1 : 0.8) * face;
+    const litOf = (ux: number, uy: number): number => {
+      const vx = cam.rotateX(ux, uy);
+      const along = Math.abs(vx);
+      const into = Math.abs(cam.rotateY(ux, uy));
+      const face = along / (along + into || 1);
+      return 0.72 * (1 - face) + (vx > 0 ? 1 : 0.8) * face;
+    };
+    const lit = litOf(dx, dy);
     // A cap looks at the sky and an end looks away from it.
     const topLit = Math.min(1.3, lit * 1.24);
     const endLit = lit * 0.74;
@@ -3214,7 +3261,8 @@ export class Renderer {
     if (cob) {
       const bld = this.game.buildings;
       /** Which of the five, by where the wall is: neighbours differ, and a wall keeps its own. */
-      const v = Math.abs(border.x * 31 + border.y * 17 + wall.level * 7) % cob.face.length;
+      const v = cob.scatter ? scatterOf(border, wall.level, cob.face.length)
+        : Math.abs(border.x * 31 + border.y * 17 + wall.level * 7) % cob.face.length;
       const up = bld.wallOnBorder(wall.level + 1, border);
       const roofed = !!up && isDone(up);
       /*
@@ -3225,20 +3273,56 @@ export class Renderer {
       const seenX = border.dir === 'h' ? border.x : (toward > 0 ? border.x - 1 : border.x);
       const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
       const indoors = !!bld.buildingAt(seenX, seenY);
+      /**
+       * A finished wall of the same kind standing square to this one at its
+       * `i` end, on the camera's side of it (`near`) or the far side.
+       */
+      const square = (i: -1 | 1, near: boolean): boolean => {
+        const t = i < 0 ? 0 : 1;
+        const cx = border.dir === 'h' ? border.x + t : border.x;
+        const cy = border.dir === 'h' ? border.y : border.y + t;
+        const mine = near === toward > 0;
+        const b: Border = border.dir === 'h'
+          ? { dir: 'v', x: cx, y: mine ? cy : cy - 1 }
+          : { dir: 'h', x: mine ? cx - 1 : cx, y: cy };
+        const w = bld.wallOnBorder(wall.level, b);
+        return !!w && isDone(w) && !!WALL_TYPE_BY_ID.get(w.type)?.low === !!kind?.low;
+      };
+      /*
+       * Where the run turns a corner away from the camera, a coat of mud goes
+       * round it: the face is carried on past its end by the thickness of the
+       * wall that turns there, to meet that wall's own face carried on the
+       * same way. Stopped at the border, the two left the angle between
+       * their ends showing -- a notch the depth of the wall, which with its
+       * end grain in it was a post of another colour down every corner.
+       */
+      const e0 = cob.wrap && !on(-1) && square(-1, false) && !square(-1, true) ? half : 0;
+      const e1 = cob.wrap && !on(1) && square(1, false) && !square(1, true) ? half : 0;
+      const T0 = -e0, T1 = 1 + e1;
       /** A picture, between three of its corners: top left, top right, bottom left. */
-      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false, over = 0, spread = 0): void => {
+      const dpr = this.canvas.dpr;
+      /** A point's distance along the face on whole device pixels: a face's ends are true verticals on screen. */
+      const snapX = (t: number): number => Math.round(px(t, 0) * dpr) / dpr;
+      /** A device pixel, as a share of the section's length on screen. */
+      const hair = 1 / Math.max(1, Math.abs(px(1, 0) - px(0, 0)) * dpr);
+      /**
+       * A picture laid from `shift` to `shift + 1` along the run: `flip` lays
+       * it the other way round, and `spread` runs it a hair past both ends.
+       */
+      const lay = (img: HTMLCanvasElement, k0: number, k1: number, s: number, across: boolean, over: number, spread: number, shift = 0, flip = false): void => {
         // `over` hangs the far edge of an `across` picture past the back arris,
         // which is where a cope stone standing proud of the run has to go.
         const far = -(1 + 2 * over);
         // `spread` runs a face picture a hair past both ends of the section, for
         // a picture whose ends are not the coat's own flat tone: its half-drawn
         // edge would otherwise show the paler face under it down every seam.
-        const t0 = -spread, t1 = 1 + spread;
-        const [tlx, tly] = across ? [px(0, k1, far), py(0, k1, far)] : [px(t0, k1, s), py(t0, k1, s)];
+        const t0 = shift + (flip ? 1 + spread : -spread), t1 = shift + (flip ? -spread : 1 + spread);
+        const [a0, a1] = flip ? [shift + 1, shift] : [shift, shift + 1];
+        const [tlx, tly] = across ? [px(a0, k1, far), py(a0, k1, far)] : [px(t0, k1, s), py(t0, k1, s)];
         const [trx, try_] = across
-          ? [px(1, k1, far), py(1, k1, far)]
+          ? [px(a1, k1, far), py(a1, k1, far)]
           : [px(t1, k1, s), py(t1, k1, s)];
-        const [blx, bly] = across ? [px(0, k1, 1), py(0, k1, 1)] : [px(t0, k0, s), py(t0, k0, s)];
+        const [blx, bly] = across ? [px(a0, k1, 1), py(a0, k1, 1)] : [px(t0, k0, s), py(t0, k0, s)];
         ctx.save();
         ctx.transform(
           (trx - tlx) / img.width, (try_ - tly) / img.width,
@@ -3247,6 +3331,58 @@ export class Renderer {
         );
         ctx.drawImage(img, 0, 0);
         ctx.restore();
+      };
+      /** Everything on screen between two points along the face, for a clip. */
+      const strip = (x0: number, x1: number): void => {
+        ctx.beginPath();
+        ctx.rect(Math.min(x0, x1), -1e5, Math.abs(x1 - x0), 2e5);
+      };
+      /** The top of the wall between two points along it, out to `far` past the back arris. */
+      const lid = (t0: number, t1: number, far: number): void => {
+        ctx.beginPath();
+        ctx.moveTo(px(t0, 1, 1), py(t0, 1, 1));
+        ctx.lineTo(px(t1, 1, 1), py(t1, 1, 1));
+        ctx.lineTo(px(t1, 1, far), py(t1, 1, far));
+        ctx.lineTo(px(t0, 1, far), py(t0, 1, far));
+        ctx.closePath();
+      };
+      /**
+       * A picture over the section.
+       *
+       * On a masonry laid under a flat colour it goes on between the face's
+       * two ends on whole device pixels, a device pixel past both so nothing
+       * of the colour under it shows along an end, and not a hair past them
+       * into the section beside it. Drawn anywhere else its ends are half
+       * covered: the section drawn second lays a half pixel of unlit picture
+       * over the lit one before it, and down a shaded face that is a pale
+       * line every four metres. Where the face is carried round a corner the
+       * same picture is laid again past that end, cut to it -- the seams
+       * already promise that a section's own edges run on into each other.
+       * `round` says whether a picture goes round: a beam end does not.
+       */
+      const blit = (img: HTMLCanvasElement, k0: number, k1: number, s = 1, across = false, over = 0, spread = 0, flip = false, round = true): void => {
+        if (!cob.under) { lay(img, k0, k1, s, across, over, spread); return; }
+        if (across) {
+          const far = -(1 + 2 * over);
+          lay(img, k0, k1, s, true, over, 0);
+          for (const [e, a, b, shift] of [[e0, T0, 0, -1], [e1, 1, T1, 1]] as Array<[number, number, number, number]>) {
+            if (!e || !round) continue;
+            ctx.save(); lid(a, b, far); ctx.clip();
+            lay(img, k0, k1, s, true, over, 0, shift);
+            ctx.restore();
+          }
+          return;
+        }
+        const sp = Math.max(spread, hair);
+        ctx.save(); strip(snapX(T0), snapX(T1)); ctx.clip();
+        lay(img, k0, k1, s, false, 0, sp, 0, flip);
+        ctx.restore();
+        for (const [e, a, b, shift] of [[e0, T0, 0, -1], [e1, 1, T1, 1]] as Array<[number, number, number, number]>) {
+          if (!e || !round) continue;
+          ctx.save(); strip(snapX(a), snapX(b)); ctx.clip();
+          lay(img, k0, k1, s, false, 0, sp, shift, flip);
+          ctx.restore();
+        }
       };
       /** And the hour's light over it, laid the way the flat colours take it. */
       /*
@@ -3261,16 +3397,57 @@ export class Renderer {
        * a coat of mud. Only the masonries that ask for an under-colour take
        * this path, so the others draw exactly as they did.
        */
-      const dpr = this.canvas.dpr;
       const flush = (t0: number, t1: number, k0: number, k1: number): void => {
-        const sx = (t: number): number => (t === 0 || t === 1 ? Math.round(px(t, 0) * dpr) / dpr : px(t, 0));
+        const sx = (t: number): number => (t === 0 || t === 1 || t === T0 || t === T1 ? snapX(t) : px(t, 0));
         const x0 = sx(t0), x1 = sx(t1);
         ctx.beginPath();
         ctx.moveTo(x0, py(t0, k0)); ctx.lineTo(x1, py(t1, k0));
         ctx.lineTo(x1, py(t1, k1)); ctx.lineTo(x0, py(t0, k1));
         ctx.closePath();
       };
-      const face = (): void => { if (cob.under) flush(0, 1, 0, 1); else quad(0, 1, 0, 1); };
+      /*
+       * And the foot of a storey stood on another is laid a device pixel down
+       * over the head of the one under it. The floor line is not a vertical
+       * and cannot be put on whole pixels, so each storey half covers the
+       * row it falls in and the hour's shade over the two leaves that row
+       * paler than either: a ruled line across a coat of mud at every floor.
+       * The lower storey is drawn first, so the upper one's colour and shade
+       * cover the row outright and only its own edge, a row lower, is shared.
+       */
+      const below = wall.level > 0 ? bld.wallOnBorder(wall.level - 1, border) : undefined;
+      const sunk = cob.under && below && isDone(below) ? 1 / Math.max(1, (py(0, 0) - py(0, 1)) * dpr) : 0;
+      const face = (): void => { if (cob.under) flush(T0, T1, -sunk, 1); else quad(0, 1, 0, 1); };
+      /**
+       * An end of a wall is a face turned square to it, and where the coat
+       * goes round it is lit as that face is -- as the face round the corner
+       * it carries on. A quarter under the wall's own light, it was a post of
+       * a darker colour than either face down every free end.
+       */
+      const endLight = cob.wrap ? litOf(border.dir === 'h' ? 0 : 1, border.dir === 'h' ? 1 : 0) : endLit;
+      /** Whether an end is there to be seen: not buried in a junction, and not turned away from the camera. */
+      const shows = (i: number): boolean => {
+        if (!cob.wrap) return true;
+        const end = i < 0 ? -1 : 1;
+        if (square(end, true) || square(end, false)) return false;
+        return (cam.rotateX(dx, dy) + cam.rotateY(dx, dy)) * i > 1e-6;
+      };
+      /**
+       * The arris where the coat is carried round a corner, rounded by the
+       * hand that laid it, so it takes the light down its length: a soft line
+       * on the lighter of the two faces that meet there.
+       */
+      const arris = (): void => {
+        if ((!e0 && !e1) || lit < endLight - 1e-6) return;
+        const w = Math.min(2.2, Math.max(0.8, 1.3 * zoom));
+        ctx.lineWidth = w;
+        ctx.strokeStyle = rgb(cob.hi, 1, 0.5);
+        for (const [e, T] of [[e0, T0], [e1, T1]] as Array<[number, number]>) {
+          if (!e) continue;
+          const x = snapX(T) - Math.sign(px(T, 0) - px(0.5, 0)) * w / 2;
+          ctx.beginPath(); ctx.moveTo(x, py(T, 0)); ctx.lineTo(x, py(T, 1)); ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+      };
       const light = (k: number): void => {
         if (k >= 0.999) return;
         const [sr, sg, sb] = cob.shade;
@@ -3303,7 +3480,7 @@ export class Renderer {
          * shadow the thing is a sticker laid on the grass.
          */
         ctx.beginPath();
-        for (const [t, ss] of [[0, 2.1], [1, 2.1], [1, -2.1], [0, -2.1]] as Array<[number, number]>) {
+        for (const [t, ss] of [[T0, 2.1], [T1, 2.1], [T1, -2.1], [T0, -2.1]] as Array<[number, number]>) {
           ctx.lineTo(px(t, 0, ss), py(t, 0, ss));
         }
         ctx.closePath();
@@ -3311,7 +3488,7 @@ export class Renderer {
         ctx.fill();
         if (cob.under) {
           ctx.fillStyle = rgb(cob.under, 1);
-          for (const [a, b] of (hung ? [[0, FENCE_GAP.t0], [FENCE_GAP.t1, 1]] : [[0, 1]]) as Array<[number, number]>) {
+          for (const [a, b] of (hung ? [[T0, FENCE_GAP.t0], [FENCE_GAP.t1, T1]] : [[T0, T1]]) as Array<[number, number]>) {
             flush(a, b, 0, 0.8);
             ctx.fill();
           }
@@ -3338,8 +3515,8 @@ export class Renderer {
          * out as a grey bar hanging in the air above the gate.
          */
         const capRuns: Array<[number, number]> = hung
-          ? [[0, FENCE_GAP.t0], [FENCE_GAP.t1, 1]]
-          : [[0, 1]];
+          ? [[T0, FENCE_GAP.t0], [FENCE_GAP.t1, T1]]
+          : [[T0, T1]];
         for (const [a, b] of capRuns) {
           cap(a, b, 1);
           ctx.fillStyle = rgb(mat.color, capLit);
@@ -3348,7 +3525,7 @@ export class Renderer {
         blit(hung ? lw.gateCap[v] : lw.cap[v], 1, 1, 1, true, lw.proud / cob.capH);
         for (const [a, b] of capRuns) { cap(a, b, 1); light(capLit); }
         for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
-          if (on(i)) continue;
+          if (on(i) || !shows(i)) continue;
           endOf(t, 0, 1);
           ctx.fillStyle = rgb(mat.color, endLit);
           ctx.fill();
@@ -3363,8 +3540,9 @@ export class Renderer {
           ctx.drawImage(lw.ends, 0, 0);
           ctx.restore();
           endOf(t, 0, 1);
-          light(endLit);
+          light(endLight);
         }
+        arris();
         ctx.globalAlpha = 1;
         return;
       }
@@ -3432,7 +3610,7 @@ export class Renderer {
        */
       if (cob.plinth && wall.level === 0 && !indoors) {
         ctx.beginPath();
-        for (const [t, ss] of [[0, 3.4], [1, 3.4], [1, -3.4], [0, -3.4]] as Array<[number, number]>) {
+        for (const [t, ss] of [[T0, 3.4], [T1, 3.4], [T1, -3.4], [T0, -3.4]] as Array<[number, number]>) {
           ctx.lineTo(px(t, 0, ss), py(t, 0, ss));
         }
         ctx.closePath();
@@ -3448,7 +3626,7 @@ export class Renderer {
        */
       if (cob.under) {
         onStone();
-        flush(0, 1, 0, 1);
+        flush(T0, T1, -sunk, 1);
         ctx.fillStyle = rgb(cob.under, 1);
         ctx.fill();
         offStone();
@@ -3581,16 +3759,61 @@ export class Renderer {
        * the ground is painted into `foot` instead, on the storey that has a
        * ground to be shaded by.
        */
+      /*
+       * The beam ends of the floor over this storey, where this is one of the
+       * two walls of the house its joists rest on, and out of doors: inside,
+       * the beams are the ceiling of the room. They are painted leaning out
+       * to one side, which is the side a log a foot out of the wall stands to
+       * from a diagonal, and square on it stands straight below; the face
+       * that shows its picture laid the other way round takes them the other
+       * way round. The shade they throw falls on a face with the sun on it
+       * and on no other, and the rain off them runs down to the head of an
+       * opening and no further.
+       */
+      if (cob.vigas && !indoors && !kind?.low && this.bearsJoists(wall.building, border)) {
+        const V = cob.vigas;
+        const ux = px(1, 0) - px(0, 0);
+        if (Math.abs(ux) > 0.5) {
+          const a = (px(0, 0, 1) - px(0, 0, 0)) / half / ux;
+          const iso = Math.abs(a) > 0.5;
+          const k0 = 1 - V.h / cob.h;
+          const sun = cam.rotateX(dx, dy) > 0 && ux > 0 ? Math.min(1, Math.max(0, (lit - 0.72) / 0.28)) : 0;
+          if (sun > 0.02) {
+            ctx.globalAlpha = alpha * sun;
+            blit(V.shade[v], 1 - V.sh / cob.h, 1, 1, false, 0, 0, false, false);
+            ctx.globalAlpha = alpha;
+          }
+          const zone = arched ? [ARCH.t0, ARCH.t1, 0.76] : windowed ? [WINDOW.t0, WINDOW.t1, 0.78]
+            : doored ? [DOOR.t0, DOOR.t1, 0.8] : gated ? [DOUBLE.t0, DOUBLE.t1, 0.8] : bayed ? [BAY.t0, BAY.t1, 0.8] : null;
+          ctx.save();
+          if (zone) {
+            const [z0, z1, zk] = zone;
+            ctx.beginPath();
+            ctx.rect(-1e5, -1e5, 2e5, 2e5);
+            ctx.moveTo(px(z0 - 0.07, -0.2), py(z0 - 0.07, -0.2));
+            ctx.lineTo(px(z1 + 0.07, -0.2), py(z1 + 0.07, -0.2));
+            ctx.lineTo(px(z1 + 0.07, zk), py(z1 + 0.07, zk));
+            ctx.lineTo(px(z0 - 0.07, zk), py(z0 - 0.07, zk));
+            ctx.closePath();
+            ctx.clip('evenodd');
+          }
+          blit(iso ? V.iso[v] : V.square[v], k0, 1, 1, false, 0, 0, iso && a > 0, false);
+          ctx.restore();
+        }
+      }
+      // The coat rolled over the head of a wall nothing stands on.
+      if (cob.brow && !roofed) blit(cob.brow[v], 1 - cob.brow[v].height / cob.h, 1);
       face();
       light(lit);
-      cap(0, 1, 1);
+      arris();
+      cap(T0, T1, 1);
       ctx.fillStyle = rgb(mat.color, topLit);
       ctx.fill();
       blit(cob.cap, 1, 1, 1, true);
-      cap(0, 1, 1);
+      cap(T0, T1, 1);
       light(topLit);
       for (const [t, i] of [[0, -1], [1, 1]] as Array<[number, number]>) {
-        if (on(i)) continue;
+        if (on(i) || !shows(i)) continue;
         endOf(t, 0, 1);
         ctx.fillStyle = rgb(mat.color, endLit);
         ctx.fill();
@@ -3605,7 +3828,7 @@ export class Renderer {
         ctx.drawImage(cob.ends, 0, 0);
         ctx.restore();
         endOf(t, 0, 1);
-        light(endLit);
+        light(endLight);
       }
       /*
        * The ivy last, and unlit: it stands proud of the cap, so it has to go on
