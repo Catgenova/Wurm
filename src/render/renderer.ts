@@ -34,7 +34,7 @@ import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARI
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, logwork, stonework, timbercraft } from './masonry';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, logwork, planking, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -3051,7 +3051,8 @@ export class Renderer {
             : wall.material === 'clay_adobe' ? adobe()
               : wall.material === 'timbercraft' ? timbercraft()
                 : wall.material === 'log' ? logwork()
-                  : undefined;
+                  : wall.material === 'plank' ? planking()
+                    : undefined;
   }
 
   /**

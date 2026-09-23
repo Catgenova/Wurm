@@ -381,7 +381,7 @@ interface Stock {
    * is timbercraft: an oak frame pegged together and stood on a footing,
    * its panels filled with daub and limewashed.
    */
-  lay: 'rubble' | 'bond' | 'render' | 'frame' | 'log';
+  lay: 'rubble' | 'bond' | 'render' | 'frame' | 'log' | 'plank';
   /** For a bond: courses to a storey, and units across a course. */
   rows: number;
   across: number;
@@ -900,6 +900,76 @@ const LOG: Stock = ((P) => ({
 }))(LOG_PASTEL);
 
 /**
+ * And plank: sawn boards stood on end, a batten over every joint between
+ * two, a band along the head of every storey, a board at every corner, on a
+ * footing of field stone.
+ *
+ * The boards are the field, each a pale pine a step off the next, and the
+ * battens the upright lines that count them; the bands, the corner boards
+ * and the boards an opening is framed in are a darker stained trim, so the
+ * wall is a field of one timber in members of another. Eight boards to four
+ * metres: at the width a sawmill cuts, the battens came so close they were
+ * a barcode.
+ */
+const PLANK_PASTEL: Record<string, string> = {
+  ...RUBBLE_PASTEL,
+  // the boards: pine gone pale in the weather
+  stone: '#c9b395', stoneShade: '#b49e81', stoneHi: '#d8c5aa', stoneDark: '#a18a6d',
+  warm: '#cdb391', warmShade: '#b89e7d', warmHi: '#dac3a3',
+  dark: '#bea789', darkHi: '#ccb697',
+  // the battens over the joints, a step darker than the boards
+  batten: '#b09678', battenShade: '#8e785f', battenHi: '#c5ad90',
+  // the trim: the band at a storey's head, the corner boards, the skirt
+  dress: '#8d7361', dressShade: '#65524f', dressHi: '#a78c78',
+  band: '#8d7361', bandShade: '#65524f', bandHi: '#a78c78',
+  joint: '#bcb09a', line: '#473935',
+  grain: '#c8ad8b', grainRing: '#a38a70',
+  ringJoint: '#4e4a53', reveal: '#6a574e',
+  stain: '#c1baa1', stainShade: '#aca58c',
+  footing: '#7d787a', footingShade: '#686366', footingHi: '#8c888c',
+  // the boards an opening is framed in: the trim
+  beam: '#8d7361', beamShade: '#6c5850', beamHi: '#a48a76', beamLine: '#473935',
+};
+
+const PLANK: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone),
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    dark:    { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    weather: { lit: lighten(P.stone, -6), shade: lighten(P.stone, -10), hi: lighten(P.stone, -1) },
+    bleach:  { lit: lighten(P.stone, 4), shade: lighten(P.stone, 0), hi: lighten(P.stone, 7) },
+    brown:   { lit: lighten(P.dress, 4), shade: lighten(P.dress, -2), hi: lighten(P.dress, 9) },
+    burnt:   { lit: lighten(P.dress, -4), shade: lighten(P.dress, -9), hi: lighten(P.dress, 2) },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 6) },
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: P.footingShade, shade: lighten(P.footingShade, -6), hi: P.footing },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.band, 8), shade: lighten(P.band, 3), hi: lighten(P.band, 13) },
+    foot:    { lit: P.footing, shade: P.footingShade, hi: P.footingHi },
+    footB:   { lit: lighten(P.footing, -5), shade: lighten(P.footingShade, -5), hi: lighten(P.footingHi, -4) },
+  },
+  lay: 'plank',
+  rows: 2,
+  across: 2,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 3,
+  bandN: 4,
+  // The footing of field stone at the ground, as under the frame.
+  plinth: 44,
+  wear: 0,
+  // The frame's chalky lilac, by the same curve.
+  shade: [40, 38, 110],
+  shadow: (k) => 2.45 * Math.max(0, 1 - k) ** 1.6,
+  growth: false,
+  mix: [['brown', 0.2], ['burnt', 0.2]],
+  pairs: [],
+  field: [['weather', 0.3], ['bleach', 0.3], ['brown', 0.2], ['burnt', 0.2]],
+}))(PLANK_PASTEL);
+
+/**
  * And adobe: mud brick, laid in mud, under a coat of mud.
  *
  * There is nothing cut on it and nothing fired. What there is to look at is
@@ -1005,6 +1075,7 @@ let dressed: Masonry | undefined;
 let rendered: Masonry | undefined;
 let framed: Masonry | undefined;
 let logged: Masonry | undefined;
+let planked: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1050,6 +1121,11 @@ export function timbercraft(): Masonry {
 /** And log: round logs laid on one another, chinked, their ends crossing at the corners. */
 export function logwork(): Masonry {
   return logged ??= paint(LOG);
+}
+
+/** And plank: boards on end with a batten over every joint, in a trim of darker boards. */
+export function planking(): Masonry {
+  return planked ??= paint(PLANK);
 }
 
 function paint(S: Stock): Masonry {
@@ -2243,24 +2319,25 @@ function paint(S: Stock): Masonry {
     g.beginPath(); poly(g, pts); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.6; g.lineJoin = 'round'; g.stroke();
   }
   /**
-   * A window in a log wall: the logs cut back and the opening framed in sawn
-   * boards, a board either side from over the head to under the sill, a head
-   * board over it, and a sill board standing out to throw the rain clear.
+   * A window in a wall of logs or of planks: the wall cut back and the
+   * opening framed in sawn boards, a board either side from over the head to
+   * under the sill, a head board over it, and a sill board standing out to
+   * throw the rain clear.
    */
-  function logSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
+  function boardSurround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, shelf: number): void {
     board(g, x0 - BOARD, head - BOARD - 4, x0, sill + BOARD, R);
     board(g, x1, head - BOARD - 4, x1 + BOARD, sill + BOARD, R);
     board(g, x0 - BOARD - 6, head - BOARD, x1 + BOARD + 6, head, R);
     board(g, x0 - BOARD - 10 - shelf, sill, x1 + BOARD + 10 + shelf, sill + 16 + shelf * 0.6, R);
   }
   /** A doorway in it: a board either side down to the ground, and a squared head over the way through, a gate's the deeper. */
-  function logDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number): void {
+  function boardDoorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number): void {
     board(g, x0 - BOARD, head - deep, x0, TH, R);
     board(g, x1, head - deep, x1 + BOARD, TH, R);
     board(g, x0 - BOARD - 8, head - deep, x1 + BOARD + 8, head, R);
   }
   /** An archway in it: the boards either side, and a head of boards bent round the curve. */
-  function logArch(g: Ctx, R: Rand): void {
+  function boardArch(g: Ctx, R: Rand): void {
     board(g, A_CX - A_R - BOARD, A_CY, A_CX - A_R, TH, R);
     board(g, A_CX + A_R, A_CY, A_CX + A_R + BOARD, TH, R);
     const w = BOARD;
@@ -2329,6 +2406,117 @@ function paint(S: Stock): Masonry {
     g.fillStyle = lighten(LOG_TONES[3], -9); g.fillRect(x1 - w * 0.3, y0, w * 0.3 + 2, y1 - y0);
     g.restore();
     g.beginPath(); poly(g, pts); g.strokeStyle = hexA(PASTEL.line, 0.8); g.lineWidth = 1.7; g.stroke();
+  }
+
+  /* ---- plank ---------------------------------------------------------------- */
+  /**
+   * How many boards to a section, how wide the batten over the joint between
+   * two is, and how deep the band along the head of a storey and the skirt
+   * along the foot of the ground one.
+   */
+  const BOARDS = 8, BOARD_W = TW / BOARDS, BATTEN = 14, HEAD_BAND = 26, SKIRT = 22;
+  /**
+   * The boards of a wall between `y0` and `y1`: each a pale pine a step off
+   * the next in value and in warmth, so none is the one beside it, its
+   * grain two or three strokes down it and here and there a knot; the odd
+   * one fresher, where a board was put in new. The joints fall on the
+   * section's seams and every eighth of the way between, under the battens.
+   */
+  function boards(g: Ctx, R: Rand, y0: number, y1: number): void {
+    let last = -1;
+    for (let i = 0; i < BOARDS; i++) {
+      const x0 = i * BOARD_W;
+      let c = Math.floor(R() * COATS.length);
+      if (c === last) c = (c + 1 + Math.floor(R() * (COATS.length - 1))) % COATS.length;
+      last = c;
+      const [dl, warm] = COATS[c];
+      const fresh = R() < 0.1;
+      const [r, gg, b] = channels(lighten(PASTEL.stone, dl * 1.4 + (fresh ? 5 : 0)));
+      const tone = hexOf([r + warm * 1.4, gg, b - warm * 1.4]);
+      g.fillStyle = tone; g.fillRect(x0, y0, BOARD_W, y1 - y0);
+      g.strokeStyle = hexA(lighten(tone, -9), 0.8); g.lineWidth = 1.4; g.lineCap = 'round';
+      for (let k = 0, n = 2 + (R() < 0.5 ? 1 : 0); k < n; k++) {
+        const x = x0 + BATTEN / 2 + 4 + R() * (BOARD_W - BATTEN - 8);
+        let y = y0 + R() * 30;
+        while (y < y1) {
+          const e = Math.min(y1, y + 50 + R() * 110);
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 3, e); g.stroke();
+          y = e + 12 + R() * 40;
+        }
+      }
+      g.lineCap = 'butt';
+      if (R() < 0.35) {
+        const kx = x0 + BATTEN / 2 + 8 + R() * (BOARD_W - BATTEN - 16), ky = y0 + 30 + R() * (y1 - y0 - 60);
+        g.beginPath(); g.ellipse(kx, ky, 3 + R() * 2, 4.5 + R() * 2.5, 0, 0, Math.PI * 2); g.fillStyle = lighten(tone, -15); g.fill();
+        g.beginPath(); g.ellipse(kx, ky, 5, 7, 0, Math.PI * 1.1, Math.PI * 1.7); g.strokeStyle = hexA(lighten(tone, 10), 0.9); g.lineWidth = 1.4; g.stroke();
+      }
+    }
+  }
+  /**
+   * The battens over the joints, from `y0` to `y1`: a sawn strip standing
+   * proud of the boards, lit down its left edge and dark down its right, with
+   * its shade on the board beside it. The two on a section's seams are one
+   * batten, half in each section, laid from one seed.
+   */
+  function battens(g: Ctx, R: Rand, y0: number, y1: number): void {
+    const one = (cx: number, RR: Rand): void => {
+      const x0 = cx - BATTEN / 2, x1 = cx + BATTEN / 2, j = (): number => (RR() - 0.5) * 1.4;
+      const pts: Pt[] = [[x0 + j(), y0], [x1 + j(), y0], [x1 + j(), y1], [x0 + j(), y1]];
+      g.fillStyle = PROUD_INK; g.fillRect(x1 - 1, y0, 9, y1 - y0);
+      g.save();
+      g.beginPath(); poly(g, pts); g.fillStyle = PASTEL.batten; g.fill(); g.clip();
+      g.fillStyle = hexA(PASTEL.battenHi, 0.95); g.fillRect(x0 - 1, y0, 5, y1 - y0);
+      g.fillStyle = PASTEL.battenShade; g.fillRect(x1 - 4, y0, 5, y1 - y0);
+      g.restore();
+      g.beginPath(); poly(g, pts); g.strokeStyle = hexA(PASTEL.line, 0.75); g.lineWidth = 1.5; g.stroke();
+    };
+    one(0, rand(2503)); one(TW, rand(2503));
+    for (let i = 1; i < BOARDS; i++) one(i * BOARD_W, R);
+  }
+  /**
+   * The field of a plank wall: the boards, the battens over their joints, and
+   * the band along the head of the storey, which the storey over it stands
+   * on, so a floor is one board across the wall. The ground storey's skirt,
+   * on the footing, is the foot's.
+   */
+  function paintPlanks(g: Ctx, R: Rand): Block[] {
+    boards(g, R, 0, TH);
+    battens(g, R, HEAD_BAND - 2, TH + 2);
+    proud(g, -6, 0, TW + 6, HEAD_BAND);
+    member(g, -6, 0, TW + 6, HEAD_BAND, rand(2521), true);
+    return [];
+  }
+  /** The ground storey's foot: the footing, and the skirt board along it that the boards stand on. */
+  function plankFootingOf(g: Ctx, R: Rand): void {
+    const y0 = TH - S.plinth;
+    footing(g, R, y0, TH);
+    member(g, -6, y0 - SKIRT, TW + 6, y0, rand(2531), true);
+  }
+  /**
+   * The board a plank wall is finished with at a corner or a stopped end,
+   * over the face carried round it and the half of the seam's batten the
+   * section has of its own: sawn trim, its outer edge off the picture so the
+   * two faces of a corner meet on it.
+   */
+  function plankCorner(h: number): HTMLCanvasElement {
+    const w = 64, c = cnv(w, h), g = ctxOf(c);
+    member(g, -8, 0, w - 1, h, rand(2539), false, false);
+    return c;
+  }
+  /**
+   * A garden wall of it, or a fence: boards and battens at the height it
+   * stands to, a cap board along its head and a bottom rail on a course of
+   * the footing.
+   */
+  function lowPlanks(g: Ctx, R: Rand, fh: number): Block[] {
+    const sole = fh - LOW_FOOT, cap = 20;
+    boards(g, R, 0, sole);
+    battens(g, R, cap - 2, sole - SKIRT + 2);
+    proud(g, -6, 0, TW + 6, cap);
+    member(g, -6, 0, TW + 6, cap, rand(2543), true);
+    member(g, -6, sole - SKIRT, TW + 6, sole, rand(2531), true);
+    footing(g, R, sole, fh);
+    return [];
   }
 
   /**
@@ -2594,6 +2782,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'render') return paintRender(g, R, open);
     if (S.lay === 'frame') return paintFrame(g, R, open, vi);
     if (S.lay === 'log') return paintLogs(g, R, open, vi);
+    if (S.lay === 'plank') return paintPlanks(g, R);
     g.fillStyle = PASTEL.joint; g.fillRect(0, 0, TW, TH);
     slabs(g, 0, BAND, R);
     const own: Block[] = [];   // not the seam stones, not near the seam
@@ -3505,7 +3694,7 @@ function paint(S: Stock): Masonry {
   function surround(g: Ctx, R: Rand, x0: number, x1: number, head: number, sill: number, wide: number, shelf: number): void {
     if (S.lay === 'render') { renderSurround(g, R, x0, x1, head, sill, shelf); return; }
     if (S.lay === 'frame') { frameSurround(g, R, x0, x1, head, sill, shelf); return; }
-    if (S.lay === 'log') { logSurround(g, R, x0, x1, head, sill, shelf); return; }
+    if (S.lay === 'log' || S.lay === 'plank') { boardSurround(g, R, x0, x1, head, sill, shelf); return; }
     const top = lintelTop(head);
     winPocket(g, R, x0, x1, top - 46, sill);
     // The sill first, because everything either side of the hole stands on it.
@@ -3647,7 +3836,7 @@ function paint(S: Stock): Masonry {
   function doorway(g: Ctx, R: Rand, x0: number, x1: number, head: number, deep: number, reach: number): void {
     if (S.lay === 'render') { renderDoorway(g, R, x0, x1, head, deep, reach); return; }
     if (S.lay === 'frame') { frameDoorway(g, R, x0, x1, head, deep); return; }
-    if (S.lay === 'log') { logDoorway(g, R, x0, x1, head, deep); return; }
+    if (S.lay === 'log' || S.lay === 'plank') { boardDoorway(g, R, x0, x1, head, deep); return; }
     const bTop = head - (reach ? CORBEL_H : 0) - deep + 3;
     const box: Pt[] = [[x0 - 26, bTop - 10], [x1 + 26, bTop - 10], [x1 + 26, TH + 8], [x0 - 26, TH + 8]];
     shape(g, roughen(box, R, 6, 4.5));
@@ -3940,8 +4129,9 @@ function paint(S: Stock): Masonry {
   function coping(g: Ctx, seed: number): void {
     if (S.lay === 'render') { renderCope(g, seed); return; }
     if (S.lay === 'frame') { frameCope(g); return; }
-    // The head of a low wall of logs is the top of its topmost log.
-    if (S.lay === 'log') return;
+    // The head of a low wall of logs is the top of its topmost log, and of
+    // planks the cap board its boards are painted with.
+    if (S.lay === 'log' || S.lay === 'plank') return;
     // Which way the whole run leans, settled once and kept, so a cope reads as
     // one job rather than as a row of stones that fell that way.
     const tip = (rand(431)() - 0.5) * 0.12;
@@ -4033,6 +4223,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'render') return lowRender(g, R, fh);
     if (S.lay === 'frame') return lowFrame(g, R, fh);
     if (S.lay === 'log') return lowLogs(g, R, fh);
+    if (S.lay === 'plank') return lowPlanks(g, R, fh);
     const top = COPE + LEVEL;
     /*
      * Courses of unequal depth, the deepest at the bottom.
@@ -4270,7 +4461,7 @@ function paint(S: Stock): Masonry {
     const R = rand(v.seed * 131 + 17);
     if (S.lay === 'render') renderArch(g, R);
     else if (S.lay === 'frame') frameArch(g, R);
-    else if (S.lay === 'log') logArch(g, R);
+    else if (S.lay === 'log' || S.lay === 'plank') boardArch(g, R);
     else {
       jamb(g, R, -1);
       jamb(g, R, 1);
@@ -4493,6 +4684,7 @@ function paint(S: Stock): Masonry {
     if (S.lay === 'render') erosionOf(g, rand(v.seed * 23 + 11), S.plinth, TH);
     else if (S.lay === 'frame') footingOf(g, rand(v.seed * 23 + 11));
     else if (S.lay === 'log') logFootingOf(g, rand(v.seed * 23 + 11));
+    else if (S.lay === 'plank') plankFootingOf(g, rand(v.seed * 23 + 11));
     else if (S.plinth) plinthOf(g, rand(v.seed * 23 + 11));
     // Moss grows on what is there to grow on: a unit the plinth now covers is
     // not, so it does not get a lens of it hanging in front of cut stone.
@@ -4639,8 +4831,8 @@ function paint(S: Stock): Masonry {
       g.fillStyle = TONES.top.lit; g.fillRect(0, 0, TW, CAP_H);
       return c;
     }
-    if (S.lay === 'log') {
-      // The top of the topmost log, which the renderer lays flat.
+    if (S.lay === 'log' || S.lay === 'plank') {
+      // The top of the topmost log, or of the head band, which the renderer lays flat.
       g.fillStyle = TONES.top.lit; g.fillRect(0, 0, TW, CAP_H);
       return c;
     }
@@ -4677,6 +4869,12 @@ function paint(S: Stock): Masonry {
       member(g, -2, 0, Wc + 2, PLATE, R);
       return c;
     }
+    if (S.lay === 'plank') {
+      // The end of a plank wall is the side of its corner board, the band over it.
+      member(g, -2, 0, Wc + 2, TH, R, false, false);
+      member(g, -2, 0, Wc + 2, HEAD_BAND, R);
+      return c;
+    }
     if (S.lay === 'log') {
       // The end of a log wall is its logs' cut ends, one over another.
       g.fillStyle = PASTEL.stone; g.fillRect(0, 0, Wc, TH);
@@ -4709,10 +4907,16 @@ function paint(S: Stock): Masonry {
    * sole, and the footing going round the end as it runs along the face. The
    * post ran down into the grass, beside a face that stood on a footing.
    */
-  const ENDS_FOOT = S.lay !== 'frame' && S.lay !== 'log' ? undefined : (() => {
+  const ENDS_FOOT = S.lay !== 'frame' && S.lay !== 'log' && S.lay !== 'plank' ? undefined : (() => {
     const Wc = 64, c = cnv(Wc, TH), g = ctxOf(c), R = rand(13), y0 = TH - S.plinth;
     if (S.lay === 'log') {
       g.drawImage(ENDS, 0, 0);
+      footing(g, R, y0, TH);
+      return c;
+    }
+    if (S.lay === 'plank') {
+      g.drawImage(ENDS, 0, 0);
+      member(g, -2, y0 - SKIRT, Wc + 2, y0, R);
       footing(g, R, y0, TH);
       return c;
     }
@@ -4806,7 +5010,7 @@ function paint(S: Stock): Masonry {
         g.fillStyle = TONES.top.lit; g.fillRect(0, -2, TW, CAP_H + 2);
         return c;
       }
-      if (S.lay === 'log') {
+      if (S.lay === 'log' || S.lay === 'plank') {
         g.fillStyle = TONES.top.lit; g.fillRect(0, -2, TW, CAP_H + 2);
         return c;
       }
@@ -4904,6 +5108,15 @@ function paint(S: Stock): Masonry {
         g.fillStyle = 'rgba(46, 34, 62, 0.3)'; g.fillRect(0, COPE + 1, Wc, 4);
         return c;
       }
+      if (S.lay === 'plank') {
+        // The side of its corner board, the cap and the bottom rail, on the footing.
+        const sole = fh - LOW_FOOT;
+        member(g, -2, 0, Wc + 2, sole, R, false, false);
+        member(g, -2, 0, Wc + 2, 20, R);
+        member(g, -2, sole - SKIRT, Wc + 2, sole, R);
+        footing(g, R, sole, fh);
+        return c;
+      }
       if (S.lay === 'log') {
         // The cut ends of its logs, one over another, on the footing.
         const sole = fh - LOW_FOOT, n = lowLogCount(fh), ch = sole / n;
@@ -4975,7 +5188,7 @@ function paint(S: Stock): Masonry {
       const R = rand(v.seed * 197 + 71);
       for (const side of [-1, 1]) {
         const line = side < 0 ? gx0 : gx1;
-        if (S.lay === 'frame' || S.lay === 'log') continue;
+        if (S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank') continue;
         if (S.lay === 'render') {
           /*
            * A pier of the same mud as the wall and in the same coat, built up
@@ -5019,6 +5232,17 @@ function paint(S: Stock): Masonry {
       g.globalCompositeOperation = 'destination-out';
       g.fillRect(gx0, -PROUD, gx1 - gx0, fh + PROUD);
       g.globalCompositeOperation = 'source-over';
+      if (S.lay === 'plank') {
+        // A squared post either side of the way through, the boards run into
+        // it and the cap and the rail run on over it, cut to the wall.
+        const sole = fh - LOW_FOOT;
+        g.save();
+        g.beginPath(); g.rect(0, -PROUD, gx0, fh + PROUD); g.rect(gx1, -PROUD, TW - gx1, fh + PROUD); g.clip();
+        for (const [a, b] of [[gx0 - 38, gx0], [gx1, gx1 + 38]]) { proud(g, a, 0, b, sole); member(g, a, 0, b, sole, R); }
+        member(g, -6, 0, TW + 6, 20, rand(2543), true);
+        member(g, -6, sole - SKIRT, TW + 6, sole, rand(2531), true);
+        g.restore();
+      }
       if (S.lay === 'log') {
         // A post of round log either side of the way through, the logs of the
         // wall run into it, standing on the footing -- after the gap is cut,
@@ -5110,7 +5334,8 @@ function paint(S: Stock): Masonry {
     });
     const post = S.lay === 'frame' ? { img: cornerPost(fh - LOW_FOOT, []), foot: LOW_FOOT }
       : S.lay === 'log' ? { img: logCorner(fh - LOW_FOOT, lowLogCount(fh), true), alt: logCorner(fh - LOW_FOOT, lowLogCount(fh), false), foot: LOW_FOOT }
-        : undefined;
+        : S.lay === 'plank' ? { img: plankCorner(fh - LOW_FOOT), foot: LOW_FOOT }
+          : undefined;
     const made: Low = { face, gate, cap, gateCap, ends, h: fh, proud: PROUD, crest, gateCrest, post };
     LOWS.set(k, made);
     return made;
@@ -5391,8 +5616,8 @@ function paint(S: Stock): Masonry {
     soft: S.lay === 'render',
     shadow: S.shadow,
     top: TONES.top && { lit: channels(TONES.top.lit), hi: channels(TONES.top.hi), shade: channels(TONES.top.shade) },
-    wrap: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log',
-    scatter: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log',
+    wrap: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank',
+    scatter: S.lay === 'render' || S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank',
     hi: channels(PASTEL.stoneHi),
     low,
     spill: SPILL,
@@ -5401,10 +5626,11 @@ function paint(S: Stock): Masonry {
     cap: CAP_STONE,
     ends: ENDS,
     endsFoot: ENDS_FOOT,
-    handed: S.lay === 'frame' || S.lay === 'log',
+    handed: S.lay === 'frame' || S.lay === 'log' || S.lay === 'plank',
     post: S.lay === 'frame' ? { img: cornerPost(TH, [PLATE / 2 + 1]), reach: POST / 2, free: true }
       : S.lay === 'log' ? { img: logCorner(TH, LOGS, true), alt: logCorner(TH, LOGS, false), reach: 28, free: false }
-        : undefined,
+        : S.lay === 'plank' ? { img: plankCorner(TH), reach: BATTEN / 2, free: true }
+          : undefined,
     reveal: channels(PASTEL.reveal),
     line: channels(PASTEL.line),
     beam: channels(PASTEL.beam),
@@ -5414,7 +5640,7 @@ function paint(S: Stock): Masonry {
     plinth: S.plinth,
     shade: S.shade,
     growth: S.growth,
-    under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' ? channels(PASTEL.dress) : undefined,
+    under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' || S.lay === 'plank' ? channels(PASTEL.dress) : undefined,
     pad: PAD,
     capH: CAP_H,
     pave,
@@ -5438,7 +5664,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, adobe, timbercraft, logwork];
+  const sets = [cobble, brickwork, stonework, adobe, timbercraft, logwork, planking];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });
