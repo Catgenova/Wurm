@@ -1025,6 +1025,8 @@ const SILVER_PASTEL: Record<string, string> = {
   flankLit: '#d6deec', shaft: '#b4bccc', flankShade: '#8c94a8', flute: '#6e748c', fluteLit: '#dce4f2',
   // a glint, where a form turns square to the sun
   glint: '#fafbfd', crown: '#fafbfd', cup: '#606478',
+  // the shade the work throws on the work behind it
+  ink: '#3a4052',
   joint: '#9a9dae', line: '#56586b',
   ringJoint: '#6f7184', reveal: '#8a8ea0',
   stain: '#b9bdc9', stainShade: '#a3a7b5',
@@ -1033,7 +1035,11 @@ const SILVER_PASTEL: Record<string, string> = {
   beam: '#d2d6e0', beamShade: '#9da2b3', beamHi: '#eef1f6', beamLine: '#56586b',
 };
 
-const GILD: Stock = ((P) => ({
+/**
+ * A wall of worked metal in the palette `P`, a face of it turned from the sun
+ * going toward `shade`: the silver, and the gold tinted from it.
+ */
+const metal = (P: Record<string, string>, shade: [number, number, number]): Stock => ({
   pastel: P,
   tones: {
     '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
@@ -1048,7 +1054,7 @@ const GILD: Stock = ((P) => ({
     dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
     plinth:  { lit: P.footingShade, shade: lighten(P.footingShade, -6), hi: P.footing },
     flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
-    top:     { lit: P.sky, shade: P.dress, hi: '#fafbfd' },
+    top:     { lit: P.sky, shade: P.dress, hi: P.glint },
     foot:    { lit: P.footing, shade: P.footingShade, hi: P.footingHi },
     footB:   { lit: lighten(P.footing, -5), shade: lighten(P.footingShade, -5), hi: lighten(P.footingHi, -4) },
   },
@@ -1059,28 +1065,60 @@ const GILD: Stock = ((P) => ({
   base: ['foot', 'footB'],
   mortar: 3,
   bandN: 4,
-  // The plinth of silver at the ground, in the ground storey's own pixels:
+  // The plinth of it at the ground, in the ground storey's own pixels:
   // heavy enough that a tall front has a base to it and not three storeys
   // alike.
   plinth: 70,
   wear: 0,
   /*
-   * A cool grey, not the lilac the painted walls share, which turned it
-   * periwinkle; and a split between the faces as firm as the stone's and
-   * no firmer: at the 0.86 a face three-quarters to the sun is lit to it
-   * takes almost none, at the 0.76 of the face turned from it about a
-   * quarter, and no face more than half. Its brightest paint is laid again
-   * over the shade (`gleam`), so a face turned away keeps its white edges on
-   * a darker body. Shaded a third, with the highlights shaded with it, half
-   * of every silver house went to grey stone.
+   * A split between the faces as firm as the stone's and no firmer: at the
+   * 0.86 a face three-quarters to the sun is lit to it takes almost none, at
+   * the 0.76 of the face turned from it about a quarter, and no face more
+   * than half. Its brightest paint is laid again over the shade (`gleam`),
+   * so a face turned away keeps its white edges on a darker body. Shaded a
+   * third, with the highlights shaded with it, half of every silver house
+   * went to grey stone.
    */
-  shade: [40, 46, 58],
+  shade,
   shadow: (k) => Math.min(0.5, 2.4 * Math.max(0, 0.87 - k)),
   growth: false,
   mix: [['brown', 0.2], ['burnt', 0.2]],
   pairs: [],
   field: [['weather', 0.3], ['bleach', 0.3], ['brown', 0.2], ['burnt', 0.2]],
-}))(SILVER_PASTEL);
+});
+/** Silver turned from the sun goes to a cool grey: under the lilac the painted walls share, it came out periwinkle. */
+const GILD: Stock = metal(SILVER_PASTEL, [40, 46, 58]);
+
+/**
+ * And gold: the same worked metal as the silver, tinted.
+ *
+ * Every tone of the silver keeps its own value and is turned to gold -- a
+ * chalky gold through the middle, going to cream in the lights and to a
+ * warm violet-brown in the darks, never black -- and each keeps what it
+ * reflects over and above the silver's own cool cast, which is the plate's:
+ * the sky a little cooler than the gold round it, the lawn olive, the
+ * tarnish red. So the light, the reflections, the glints and every line of
+ * the chasing are the silver's, and only the metal is changed.
+ */
+function gilt(hex: string, cast0: [number, number, number]): string {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const L = 0.299 * r + 0.587 * g + 0.114 * b;
+  // toward gold through the middle and the lights, toward a warm violet-brown in the darks; each at no change of value
+  const t = Math.max(0, Math.min(1, (L - 70) / 60));
+  const dir = [0.55 + (0.46 - 0.55) * t, -0.2 + (-0.03 + 0.2) * t, -0.06 + (-1 + 0.06) * t];
+  const k = 56 * Math.max(0.35, Math.min(1, (L - 30) / 100)) * (L > 200 ? Math.max(0.15, 1 - (L - 200) / 70) : 1);
+  const cast = [r - L, g - L, b - L];
+  const out = [0, 1, 2].map((i) => Math.round(Math.max(0, Math.min(255, L + dir[i] * k + 0.8 * (cast[i] - cast0[i])))));
+  return '#' + out.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+const GOLD_PASTEL: Record<string, string> = ((P) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(P.plate.slice(i, i + 2), 16));
+  const L = 0.299 * r + 0.587 * g + 0.114 * b, cast0: [number, number, number] = [r - L, g - L, b - L];
+  return Object.fromEntries(Object.entries(P).map(([key, hex]) => [key, gilt(hex, cast0)]));
+})(SILVER_PASTEL);
+/** Gold turned from the sun goes to a warm violet-brown, as its darks do. */
+const GILT: Stock = metal(GOLD_PASTEL, [64, 48, 56]);
 
 /**
  * And adobe: mud brick, laid in mud, under a coat of mud.
@@ -1190,6 +1228,7 @@ let framed: Masonry | undefined;
 let logged: Masonry | undefined;
 let planked: Masonry | undefined;
 let gilded: Masonry | undefined;
+let golden: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1245,6 +1284,10 @@ export function planking(): Masonry {
 /** And silver: worked silver throughout, chased panels between fluted pilasters. */
 export function silverwork(): Masonry {
   return gilded ??= paint(GILD);
+}
+/** The same worked metal in gold, for a wall of ornate gold. */
+export function goldwork(): Masonry {
+  return golden ??= paint(GILT);
 }
 
 function paint(S: Stock): Masonry {
@@ -2647,8 +2690,8 @@ function paint(S: Stock): Masonry {
    * to be painted nearly twice as wide as it is to read.
    */
   const PIL = 64, FRIEZE = 48;
-  /** The shade silver throws on the silver behind it: a cool grey, not the lilac the painted walls share. */
-  const SILVER_INK = 'rgba(58, 64, 82, 0.34)';
+  /** The shade the metal throws on the metal behind it: cool on silver, not the lilac the painted walls share. Only the metals have it. */
+  const SILVER_INK = S.lay === 'gild' ? hexA(PASTEL.ink, 0.34) : '';
   /** How far the recess reaches from a pilaster to the frame of the panel beside it. */
   const GAP = 14;
   /** Eggs to a section's frieze: at twelve and at ten they came out a row of beads and a toothed strip. */
@@ -6511,7 +6554,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, adobe, timbercraft, logwork, planking, silverwork];
+  const sets = [cobble, brickwork, stonework, adobe, timbercraft, logwork, planking, silverwork, goldwork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });
