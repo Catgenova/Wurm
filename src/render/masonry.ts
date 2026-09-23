@@ -447,11 +447,11 @@ interface Stock {
   master?: boolean;
   /**
    * On marble, a house wall faced in great slabs rather than laid in
-   * courses: two to a section across and two courses to a storey, the pair
-   * across opened like a book so its veins meet at the joint between them,
-   * and the veins run on over the bed joint from the upper course into the
-   * lower. Every unit of it, and every dressing, is veined; a garden wall of
-   * it is laid in courses of blocks.
+   * courses: two to a section across and two courses to a storey, each
+   * column of two sawn from its own block, so its veins run on over the bed
+   * joint from the upper slab into the lower and break at every joint
+   * across. Every unit of it, and every dressing, is veined; a garden wall
+   * of it is laid in courses of blocks.
    */
   slab?: boolean;
 }
@@ -795,13 +795,13 @@ const STONE: Stock = ((P) => ({
  * And marble: white, and laid by a master.
  *
  * A house of it is faced in great slabs -- two to a section across and two
- * courses to a storey, on joints a hair wide -- and each pair across was
- * sawn from one block and opened like a book, so its veins meet at the
- * joint between them as chevrons and run on over the bed joint into the
- * course below: one surface, divided by joints rather than built up of
- * them. The white is cool, clouded with grey, and veined in a web of fine
- * crinkled grey threads with hairlines of pale gold. Its dressings -- the
- * moulded band at each floor,
+ * courses to a storey, on joints a hair wide -- and each column of two was
+ * sawn from its own block, so its veins run on over the bed joint into the
+ * course below: a surface divided by joints rather than built up of them.
+ * Nothing in it is matched to anything else, because a wall of slabs
+ * opened like a book is a row of ink blots. The white is cool, clouded with
+ * grey, and veined in a web of fine crinkled grey threads with hairlines of
+ * pale gold. Its dressings -- the moulded band at each floor,
  * the strip down each corner, the architraves, hoods and sills of its
  * openings, and the plinth -- are a dove-grey marble veined a step darker.
  * A garden wall of it is laid in courses of blocks the size of great
@@ -1544,7 +1544,7 @@ export function sandstone(): Masonry {
 export function slatework(): Masonry {
   return slated ??= paint(SLATE);
 }
-/** Marble: great white slabs, book-matched and veined, dressed in dove grey; its garden walls laid in veined blocks. */
+/** Marble: great white slabs, each veined on its own, dressed in dove grey; its garden walls laid in veined blocks. */
 export function marblework(): Masonry {
   return marbled ??= paint(MARBLE);
 }
@@ -3829,25 +3829,23 @@ function paint(S: Stock): Masonry {
   }
 
   /**
-   * One leaf of a book-matched pair of slabs, `w` across and `h` down: both
-   * courses of it at once, so a vein that leaves the upper slab runs on into
-   * the lower. The white; clouds of cool grey laid flat into it, some of
+   * One column of slabs, `w` across and `h` down: both courses of it at
+   * once, so a vein that leaves the upper slab runs on into the lower. The
+   * white; clouds of cool grey laid flat into it, some of
    * them hugging a vein; five to seven veins crinkling across it at the
    * bed's slant, two of them bold with their grey bled either side, split in
    * two for a stretch in one in two; two or three more across them at
    * another slant, which cut the field into cells; a web of lesser threads
    * thrown off the lot into the next; and in two leaves in three a hairline
-   * or two of pale gold going
-   * its own way. Painted once and laid twice, the second time mirrored, so
-   * the veins meet at the joint the pair opens at as chevrons.
+   * or two of pale gold going its own way. Its slant is its own too, one
+   * way or the other, so no two columns side by side have to agree.
    */
   function slabLeaf(w: number, h: number, R: Rand): HTMLCanvasElement {
     const c = cnv(w, h), g = ctxOf(c);
     const t = R();
     g.fillStyle = t < 0.2 ? TONES.warm.lit : t < 0.4 ? TONES.burnt.lit : PASTEL.stone;
     g.fillRect(0, 0, w, h);
-    // Down toward the joint the pair opens at, mostly; one leaf in three up toward it.
-    const slant = (0.35 + R() * 0.45) * (R() < 0.34 ? -1 : 1);
+    const slant = (0.35 + R() * 0.45) * (R() < 0.5 ? -1 : 1);
     const mains: Pt[][] = [];
     const n = 5 + Math.floor(R() * 3);
     for (let i = 0; i < n; i++) {
@@ -3918,20 +3916,27 @@ function paint(S: Stock): Masonry {
     g.fillRect(0, 0, 1, BAND); g.fillRect(TW / 2 - 1, 0, 2, BAND); g.fillRect(TW - 1, 0, 1, BAND);
   }
   /**
-   * A storey of a marble house wall: the band, and under it the slabs -- a
-   * book-matched pair across, two courses down, the veins running on over
-   * the bed joint between them -- on joints a hair wide, each slab's arris
-   * catching the light along its top and its left and the shade along the
-   * others, which is the whole of what shows the joint at a distance.
+   * A storey of a marble house wall: the band, and under it the slabs -- two
+   * columns across, each from its own block and two courses down, the veins
+   * running on over the bed joint between them and breaking at the joint
+   * between the columns as they do at the section's seams, so no seam is
+   * any different from any other joint -- on joints a hair wide, each
+   * slab's arris catching the light along its top and its left and the
+   * shade along the others, which is the whole of what shows the joint at
+   * a distance. Each variant's pair is painted once and kept: the
+   * openings are cut in the same field six times over.
    */
+  const COLUMNS = new Map<number, [HTMLCanvasElement, HTMLCanvasElement]>();
   function paintSlabs(g: Ctx, R: Rand): Block[] {
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, TW, TH);
     marbleBand(g, R);
     const SW = TW / 2, FH = TH - BAND, bed = BAND + FH / 2;
-    const leaf = slabLeaf(SW, FH, R);
-    g.drawImage(leaf, 0, BAND);
-    g.save(); g.translate(TW, BAND); g.scale(-1, 1); g.drawImage(leaf, 0, 0); g.restore();
+    const key = R();
+    let cols = COLUMNS.get(key);
+    if (!cols) { cols = [slabLeaf(SW, FH, R), slabLeaf(SW, FH, R)]; COLUMNS.set(key, cols); }
+    g.drawImage(cols[0], 0, BAND);
+    g.drawImage(cols[1], SW, BAND);
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, BAND, 1, FH); g.fillRect(TW - 1, BAND, 1, FH); g.fillRect(SW - 1, BAND, 2, FH);
     g.fillRect(0, bed - 1, TW, 2); g.fillRect(0, TH - 1, TW, 1);
