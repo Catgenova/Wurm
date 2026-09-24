@@ -36,6 +36,7 @@ import { CREATURE_ACTION_BY_ID } from '../../src/game/creatureActions';
 import { quarry, type IslandCreature } from '../../src/game/creatures';
 import { teamOf } from '../../src/game/furniture';
 import { PLACEABLE_ACTION_BY_ID } from '../../src/game/placeables';
+import type { Side, WallType } from '../../src/game/building';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -139,6 +140,36 @@ for (let t = 0; t < 300 && game.player.path; t++) {
 check('driven, the cart comes along', game.driving() === cart && cart.x > from + 4,
   `${cart.x - from} tiles in ${drove.toFixed(1)}s`);
 check('and hauling it cost the team nothing', orse.hunger === fed, `${fed} → ${orse.hunger} after ${drove.toFixed(1)}s in the traces`);
+
+/*
+ * Through an arch. "can't seem to move the wagon. ensure they can travel
+ * through arches": a wagon was refused every tile a building stands on, so it
+ * could not be driven through an archway, and one standing indoors could not
+ * be driven anywhere. A one-tile room with an arch on its east side, and one
+ * beside it with a plain door on its south side.
+ */
+const room = (x: number, y: number, open: Side, opening: WallType): void => {
+  const b = game.buildings.create('Shed', x, y);
+  for (const side of ['n', 'e', 's', 'w'] as Side[]) {
+    const w = game.buildings.setWall(b, 0, x, y, side, side === open ? opening : 'solid', 'log');
+    for (const k of Object.keys(w.needed)) w.needed[k] = 0;
+  }
+};
+room(px + 6, py + 1, 'e', 'arch');
+room(px + 9, py - 1, 's', 'door');
+const at = (): string => `${cart.x},${cart.y}`;
+const drive = (x: number, y: number): boolean => {
+  const found = game.moveTo(x, y);
+  for (let t = 0; t < 300 && game.player.path; t++) game.update(0.2);
+  return found;
+};
+check('driven at the arch, the wagon goes in through it',
+  drive(px + 6, py + 1) && cart.x === px + 6 && cart.y === py + 1, `the cart is at ${at()}, the room at ${px + 6},${py + 1}`);
+check('and back out of it, the way it came, to the far side of the room',
+  drive(px + 3, py + 1) && cart.x === px + 3 && cart.y === py + 1, `the cart is at ${at()}`);
+drive(px + 9, py + 1);
+check('while a plain door keeps it out', drive(px + 9, py - 1) && !(cart.x === px + 9 && cart.y === py - 1),
+  `the cart is at ${at()}, the room at ${px + 9},${py - 1}`);
 
 // Nothing picks it, even one that is somehow wild.
 orse.mode = 'wild';

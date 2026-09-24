@@ -965,6 +965,8 @@ export class Game {
     if (!this.vehicleGround(x1, y1)) return null;
     // A door is for a person. Wheels want a double door, an archway or a gate.
     if (this.buildings.blocksVehicle(x0, y0, x1, y1)) return null;
+    // And a staircase or a ladder going up from the tile is no road.
+    if (this.connector(x1, y1, 1)) return null;
     // Wheels get the bare cap: no team makes a cart stand on a wall.
     return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) && standsOn(this.world, x1, y1) ? 0 : null;
   };
@@ -4961,15 +4963,23 @@ export class Game {
     this.creatures.gainSkill(this, c, HAUL_SKILL, moved * (0.05 + Math.min(0.5, grade / 12)));
   }
 
-  /** Whether a vehicle could stand on a tile: solid, dry, level enough ground. */
+  /**
+   * Whether a vehicle could stand on a tile: solid, dry, level enough ground.
+   *
+   * Indoors as well, on the ground floor. This refused every tile a building
+   * stands on, so a wagon could not be driven through an archway at all --
+   * and one set down inside a smithy could not be driven anywhere, every way
+   * out "no way there". The walls are what keep wheels out now, and only the
+   * walls: `blocksVehicle` lets them through an arch, a double door or a
+   * gate and nothing narrower.
+   */
   vehicleGround(x: number, y: number): boolean {
     const w = this.world;
     if (!w.inBounds(x, y)) return false;
     // A slab is hard level ground with a road's worth of room on it; a cart
     // crosses one the way it crosses a bridge deck.
-    if (this.foundations.size && this.slabAt(x, y)) return !this.buildings.buildingAt(x, y);
-    if (!w.isPassable(x, y) || w.hasWater(x, y)) return false;
-    return !this.buildings.buildingAt(x, y);
+    if (this.foundations.size && this.slabAt(x, y)) return true;
+    return w.isPassable(x, y) && !w.hasWater(x, y);
   }
 
   /**

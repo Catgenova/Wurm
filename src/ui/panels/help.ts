@@ -682,7 +682,9 @@ function helpText(): string {
     <p>The team is not only the pace but the pitch: a draught beast trains <b>climbing</b> by hauling
     over bad ground, and what the team knows between them decides both how fast the wheels turn and how
     steep a step they will take. A green pair balks at a bank a worked pair goes straight up.</p>
-    <p>Wheels keep to open ground: no fords, no stairs and nothing steeper than a horse would take. You
+    <p>Wheels keep to open ground: no fords, no stairs and nothing steeper than a horse would take. They
+    go indoors on the ground floor through an <b>arch</b>, a <b>double door</b> or a <b>gate</b>, and never
+    through a plain door. You
     cannot pick a vehicle up with anything on it or anything in the yokes.</p>
     <p>A beast in the traces <b>stays hitched until somebody takes it out</b> &mdash; one at a time from
     its own menu, or the whole team from the vehicle's. Until then it stands at the vehicle and goes
