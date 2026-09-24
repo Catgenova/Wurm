@@ -1069,6 +1069,65 @@ kbd {
   white-space: nowrap;
 }
 
+/* How you look: a line, and the button that opens the creator's window. */
+.setting-look {
+  align-items: center;
+  cursor: default;
+}
+
+.setting-look > span { flex: 1 1 auto; }
+.setting-look > .tb-btn { flex: 0 0 auto; }
+
+/*
+ * The creator in a window; its own rules are in ui/creator.css. The creator
+ * scrolls and the bar under it does not, so Cancel and Wear are on screen
+ * however far down the choices somebody has gone.
+ */
+.look-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.look-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #5a4a30 transparent;
+}
+
+.look-lead {
+  margin: 2px 0 10px;
+  color: var(--ui-dim);
+}
+
+.look-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid rgba(107, 88, 54, 0.4);
+}
+
+.look-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ui-dim);
+}
+
+.look-note.bad { color: #ef8a7a; }
+
+.look-wear {
+  border-color: var(--ui-border-light);
+  color: #fff;
+}
+
+.look-wear:disabled { opacity: 0.55; cursor: progress; }
+
 /* The number key that does a row, written at the head of it. */
 .ctx-key {
   flex: 0 0 auto;

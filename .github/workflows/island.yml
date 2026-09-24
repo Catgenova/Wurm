@@ -1048,6 +1048,19 @@ jobs:
             --outfile=node_modules/.cache/drop.mjs --log-level=error
           node node_modules/.cache/drop.mjs
 
+      - name: A new look, worn on an island
+        run: |
+          # "allow players to change their appearance back through the
+          # customizer in Settings". The window is the account page's creator;
+          # on an island it wears a look through `Island.wearLook`. This asks,
+          # against a keeper stubbed on fetch, that the look goes to
+          # rpc_set_look whole, that what is worn is what the keeper kept, that
+          # a body standing still still broadcasts it, and that a refusal
+          # changes nothing.
+          npx esbuild supabase/test/mirror.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/mirror.mjs --log-level=error
+          node node_modules/.cache/mirror.mjs
+
       - name: One pile and not six
         run: |
           # Reported off a screenshot of a pack holding six separate piles of

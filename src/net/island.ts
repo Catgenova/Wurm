@@ -4,6 +4,7 @@ import { blankWorld, layChange, layHistory, layRows, rowsOf, type LandRow, type 
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
+import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
 import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
@@ -2022,6 +2023,26 @@ export class Island {
     const said = data as { title?: string | null; why?: string } | null;
     if (said?.why) this.hooks.say(said.why, 'error');
     this.hooks.mine?.({ title: said?.title ?? null });
+  }
+
+  /**
+   * A new look, from the "How you look" window.
+   *
+   * `rpc_set_look` keeps it with the account, if there is one, and puts it on
+   * every body this sign-in has ashore. What comes back is what was kept —
+   * cleaned against the island's own tables — and that is what is worn here,
+   * so this body cannot look one way to its owner and another to everybody
+   * else. The next body broadcast carries it to whoever is watching, whether
+   * or not we have moved; the twenty-second reconcile reads it off the row for
+   * anybody who missed that.
+   */
+  async wearLook(look: Look): Promise<Look> {
+    const { data, error } = await supabase().rpc('rpc_set_look', { p_look: look });
+    if (error) throw new Error(error.message);
+    const kept = cleanLook(data);
+    if (this.me) this.me.look = kept;
+    this.lastShown = '';
+    return kept;
   }
 
   /** Ask somebody to come and live on your land. */

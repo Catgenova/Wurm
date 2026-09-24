@@ -30,6 +30,7 @@ export class SettingsPanel {
     win: UIWindow,
     game: Game,
     private readonly keys: Keybinds,
+    openLook: () => void,
   ) {
     win.body.classList.add('settings-body');
     const bar = document.createElement('div');
@@ -99,6 +100,24 @@ export class SettingsPanel {
         say();
       });
       row.append(input, text);
+      display.append(row);
+    }
+    /*
+     * How you look, which is chosen once on the account page and was never
+     * offered again. The creator itself is a window of its own: a mirror and
+     * eight rows of choices do not fit in a list of tick boxes.
+     */
+    {
+      const row = document.createElement('div');
+      row.className = 'setting-row setting-look';
+      const text = document.createElement('span');
+      text.innerHTML = '<b>How you look</b><small>Build, skin, hair, hair colour, eyes, beard, shirt and trousers, in the creator from the account page. Nothing changes until you wear it.</small>';
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'tb-btn tb-small';
+      open.textContent = 'Change…';
+      open.addEventListener('click', openLook);
+      row.append(text, open);
       display.append(row);
     }
     add('Show tile grid', 'Outline every tile. Also toggled with G.', () => game.settings.grid, (v) => (game.settings.grid = v));

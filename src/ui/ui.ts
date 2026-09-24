@@ -61,6 +61,7 @@ import { jobEntry, pinEntry, pinnable } from './beltmenu';
 import { creatureLines } from './creatureinfo';
 import { MARK_COLOURS } from '../game/marks';
 import { SettingsPanel } from './panels/settings';
+import { LookPanel } from './panels/looks';
 import { keyName, type Keybinds } from '../game/keybinds';
 import { Hud, WINDOWS } from './hud';
 import { EventLogPanel } from './panels/eventlog';
@@ -197,7 +198,11 @@ export class UI {
     const map = this.windows.create({ id: 'map', title: 'Map', x: 12, y: 370, width: 236, height: 262, anchor: 'tr', open: false });
     this.minimap = new MinimapPanel(map, game, renderer);
     const settings = this.windows.create({ id: 'settings', title: 'Settings', x: 12, y: 56, width: 380, height: 520, anchor: 'tr', open: false });
-    this.settings = new SettingsPanel(settings, game, cb.keys);
+    // How you look: the creator, opened from Settings. Wide enough for the
+    // mirror beside the choices; narrower, and the mirror goes over them.
+    const lookWin = this.windows.create({ id: 'look', title: 'How you look', x: 60, y: 48, width: 720, height: 640, anchor: 'tl', open: false });
+    new LookPanel(lookWin, game, this.island);
+    this.settings = new SettingsPanel(settings, game, cb.keys, () => lookWin.open());
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
     this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'),
       (x, y, title, items) => this.menu.show(x, y, title, items));

@@ -214,7 +214,7 @@ function helpText(): string {
       <tr><td><kbd>B</kbd></td><td>Ledger: everything you have ever made</td></tr>
       <tr><td><kbd>N</kbd></td><td>Settlement: your deed at a glance</td></tr>
       <tr><td><kbd>Y</kbd></td><td>Social: who is waiting on you, who you know, and what has been written</td></tr>
-      <tr><td><kbd>O</kbd></td><td>Settings: what the island looks like, and what every key does</td></tr>
+      <tr><td><kbd>O</kbd></td><td>Settings: what the island looks like, what every key does, and how you look</td></tr>
       <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
       <tr><td>⤢ / double-click title</td><td>Expand a window to nearly the whole screen, and back</td></tr>
     </table>
@@ -242,6 +242,10 @@ function helpText(): string {
     <p>Putting a trade down for another costs <b>silver</b>, and the nodes you bought for the old one go
     with it. The other slot keeps what it had.</p>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
+    <p><b>How you look</b> can be changed at any time: <i>Change…</i> under <b>How you look</b> in
+    Settings (<kbd>O</kbd>) opens the creator from the account page on the look you have on. Nothing
+    changes until you press <i>Wear this look</i>. On an island the look is kept with your account and
+    goes on your body on every island you have one on; playing on your own, it is saved with the game.</p>
     <p>The <b>map</b> (<kbd>M</kbd>) shows the same three states: dark where you have not been, dim
     where you have, and bright where somebody is looking now. The island is a thousand tiles a side, so
     the map does not try to show all of it at once: it looks at the ground you have walked and widens as

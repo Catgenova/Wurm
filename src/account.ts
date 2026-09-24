@@ -4,7 +4,7 @@ import {
   setLook, signInAs, signOut, whoAmI,
 } from './net/accounts';
 import { LOOK_TABLES, cleanLook, randomLook, type Look } from './game/look';
-import { drawHeadshot, drawPortrait, type PortraitMotion } from './render/sprites';
+import { Creator } from './ui/creator';
 
 /**
  * The landing page: a username, a password, and a way back in.
@@ -37,14 +37,7 @@ const peek = $<HTMLButtonElement>('peek');
 const alone = $<HTMLAnchorElement>('alone');
 const lede = $<HTMLParagraphElement>('lede');
 const maker = $<HTMLElement>('maker');
-const mirror = $<HTMLCanvasElement>('me');
-const choices = $<HTMLElement>('choices');
-const roll = $<HTMLButtonElement>('roll');
 const ashore = $<HTMLButtonElement>('ashore');
-const turnLeft = $<HTMLButtonElement>('turn-left');
-const turnRight = $<HTMLButtonElement>('turn-right');
-const closeUp = $<HTMLButtonElement>('close');
-const motions = $<HTMLElement>('motions');
 
 const NAME_HELP = 'Three to twenty characters: a letter first, then letters, numbers, underscore or hyphen. It is what everybody on the island will see over your head.';
 const PW_HELP_NEW = `${PASSWORD_MIN} characters at the very least, and checked against the list of passwords already known to have leaked. Neither it nor its full fingerprint leaves this page.`;
@@ -290,7 +283,7 @@ async function onward(line: string): Promise<void> {
     had = null;
   }
   if (had) {
-    look = had;
+    creator.look = had;
     return settle(line);
   }
   say(`${line} Now, who are you?`, 'good');
@@ -299,209 +292,21 @@ async function onward(line: string): Promise<void> {
 
 /* ---- Step two: who you are ---------------------------------------------- */
 
-/** What is being chosen, at this moment. */
-let look: Look = randomLook();
-/** The thumbnails, so that changing skin or hair colour redraws all of them, and which way round each is shown. */
-const thumbs: Array<{ canvas: HTMLCanvasElement; of: (l: Look) => Look; facing: number }> = [];
-/** Hair that is tied back is chosen by what it is tied into, so its thumbnail shows the back of the head. */
-const FROM_BEHIND = new Set(['ponytail', 'bun', 'braid', 'locs']);
-/** What the pointer is resting on or the keyboard is on, shown in the mirror until it moves off. */
-let preview: Look | null = null;
-/** Every row's buttons, so the selected one can be marked without rebuilding. */
-const marks: Array<{ kind: keyof Look; id: string; button: HTMLButtonElement; label: HTMLElement }> = [];
-
-const TITLES: Record<keyof Look, string> = {
-  gender: 'Build', skin: 'Skin', hair: 'Hair', hairColour: 'Hair colour',
-  eyes: 'Eyes', beard: 'Beard', shirt: 'Shirt', trousers: 'Trousers',
-};
-
-/**
- * Three kinds of button for three kinds of choice.
- *
- * A colour is shown as the colour — a name for it is a word you have to
- * imagine. A shape (a haircut, a beard) is shown as a head wearing it, drawn
- * with `drawHeadshot`, which is the same `head()` the island draws: a
- * thumbnail that came from anywhere else is a thumbnail that can lie about
- * what you are choosing. Only the build, which is neither a colour nor a
- * silhouette you could tell at 46 pixels, is a word.
- */
-function buildChoices(): void {
-  choices.textContent = '';
-  thumbs.length = 0;
-  marks.length = 0;
-  for (const [key, table] of Object.entries(LOOK_TABLES) as Array<[keyof Look, Array<{ id: string; name: string; colour?: string }>]>) {
-    const block = document.createElement('div');
-    block.className = 'choice';
-    const head = document.createElement('h2');
-    head.textContent = TITLES[key];
-    const chosen = document.createElement('span');
-    head.append(chosen);
-    const row = document.createElement('div');
-    row.className = 'row';
-    block.append(head, row);
-    for (const option of table) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.title = option.name;
-      button.dataset.kind = key;
-      button.dataset.id = option.id;
-      if (option.colour) {
-        button.className = 'pick swatch';
-        button.style.background = option.colour;
-      } else if (key === 'hair' || key === 'beard') {
-        button.className = 'pick face';
-        const canvas = document.createElement('canvas');
-        // Drawn at the screen's own resolution, so a haircut is not chosen from a blur.
-        canvas.width = canvas.height = Math.round(52 * Math.min(3, window.devicePixelRatio || 1));
-        button.append(canvas);
-        thumbs.push({ canvas, of: (l) => ({ ...l, [key]: option.id, ...(key === 'hair' ? {} : { hair: 'crop' }) }), facing: key === 'hair' && FROM_BEHIND.has(option.id) ? 3 : 1 });
-      } else {
-        button.className = 'pick word';
-        button.textContent = option.name;
-      }
-      button.addEventListener('click', () => {
-        look = cleanLook({ ...look, [key]: option.id });
-        preview = null;
-        redraw();
-      });
-      // Resting the pointer on a choice, or tabbing to it, tries it on in the mirror; moving off puts back what was chosen.
-      const tryOn = (): void => { preview = cleanLook({ ...look, [key]: option.id }); };
-      const takeOff = (): void => { preview = null; };
-      button.addEventListener('pointerenter', tryOn);
-      button.addEventListener('focus', tryOn);
-      button.addEventListener('pointerleave', takeOff);
-      button.addEventListener('blur', takeOff);
-      marks.push({ kind: key, id: option.id, button, label: chosen });
-      row.append(button);
-    }
-    choices.append(block);
-  }
-}
-
-/** The mirror, the thumbnails and the ticks, all from the one look. */
-function redraw(): void {
-  for (const m of marks) {
-    const on = look[m.kind] === m.id;
-    m.button.classList.toggle('on', on);
-    if (on) {
-      const table = LOOK_TABLES[m.kind] as Array<{ id: string; name: string }>;
-      m.label.textContent = table.find((o) => o.id === m.id)?.name ?? '';
-    }
-  }
-  for (const t of thumbs) {
-    const ctx = t.canvas.getContext('2d');
-    if (!ctx) continue;
-    ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
-    drawHeadshot(ctx, 0, 0, t.canvas.width, t.of(look), t.facing);
-  }
-}
-
-/**
- * The mirror walks, and turns, and looks close.
- *
- * Standing still is easier to draw and worse to choose from: a walk is how you
- * will actually see yourself, and it is the only way to find out that the
- * ponytail moves and the long beard does not. It turns through the same eight
- * ways the island draws you -- by its arrows, by dragging across it, or by
- * the arrow keys -- because a haircut is chosen as much from behind as from
- * the front, and the face button brings the head up to fill it.
- */
-let walking = 0;
-let facing = 1;
-let motion: PortraitMotion = 'walk';
-let close = false;
-
-function mirrorFrame(now: number): void {
-  const ctx = mirror.getContext('2d');
-  if (ctx && !maker.hidden) {
-    // The backing store follows the size the page gives the mirror, at the screen's own resolution.
-    const dpr = Math.min(3, window.devicePixelRatio || 1);
-    const w = Math.round(mirror.clientWidth * dpr), h = Math.round(mirror.clientHeight * dpr);
-    if (w > 0 && h > 0 && (mirror.width !== w || mirror.height !== h)) {
-      mirror.width = w;
-      mirror.height = h;
-    }
-    ctx.clearRect(0, 0, mirror.width, mirror.height);
-    const shown = preview ?? look;
-    if (close) {
-      drawHeadshot(ctx, 0, 0, mirror.width, shown, facing, now / 1000, mirror.height);
-    } else {
-      drawPortrait(ctx, 0, 0, mirror.width, mirror.height, shown, now / 1000, facing, motion);
-    }
-  }
-  walking = requestAnimationFrame(mirrorFrame);
-}
-
-function turn(by: number): void {
-  facing = (((facing + by) % 8) + 8) % 8;
-}
-
-function showMotion(m: PortraitMotion): void {
-  motion = m;
-  for (const b of motions.querySelectorAll<HTMLButtonElement>('button')) b.setAttribute('aria-pressed', String(b.dataset.motion === m));
-}
-
-turnLeft.addEventListener('click', () => turn(-1));
-turnRight.addEventListener('click', () => turn(1));
-closeUp.addEventListener('click', () => {
-  close = !close;
-  closeUp.setAttribute('aria-pressed', String(close));
-});
-for (const b of motions.querySelectorAll<HTMLButtonElement>('button')) {
-  b.addEventListener('click', () => {
-    showMotion(b.dataset.motion as PortraitMotion);
-    // Asking to see a move is asking to see the body do it.
-    if (close) {
-      close = false;
-      closeUp.setAttribute('aria-pressed', 'false');
-    }
-  });
-}
-showMotion(motion);
-
-// Dragging across the mirror turns it an eighth for every so far dragged.
-const DRAG_STEP = 26;
-let dragFrom: number | null = null;
-mirror.addEventListener('pointerdown', (e) => {
-  dragFrom = e.clientX;
-  mirror.setPointerCapture(e.pointerId);
-});
-mirror.addEventListener('pointermove', (e) => {
-  if (dragFrom === null) return;
-  const steps = Math.trunc((e.clientX - dragFrom) / DRAG_STEP);
-  if (steps) {
-    turn(steps);
-    dragFrom += steps * DRAG_STEP;
-  }
-});
-const letGo = (): void => { dragFrom = null; };
-mirror.addEventListener('pointerup', letGo);
-mirror.addEventListener('pointercancel', letGo);
-mirror.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    turn(e.key === 'ArrowLeft' ? -1 : 1);
-    e.preventDefault();
-  }
-});
+/** The creator: the same one the game's "How you look" window shows, put in ahead of the button that keeps what it chose. */
+const creator = new Creator(randomLook(), () => !maker.hidden);
+maker.prepend(creator.el);
 
 const LEDE_ACCOUNT = lede.textContent ?? '';
 const LEDE_MAKER = 'Skin, hair, eyes, build and what you washed ashore in. None of it is fixed — you can come back and change any of it whenever you like.';
 
 function toMaker(start: Look): void {
   lede.textContent = LEDE_MAKER;
-  look = cleanLook(start);
+  creator.look = start;
   card.classList.remove('settled');
   card.classList.add('making');
   maker.hidden = false;
-  if (!marks.length) buildChoices();
-  redraw();
-  if (!walking) walking = requestAnimationFrame(mirrorFrame);
+  creator.wake();
 }
-
-roll.addEventListener('click', () => {
-  look = randomLook();
-  redraw();
-});
 
 ashore.addEventListener('click', () => {
   void (async () => {
@@ -511,7 +316,7 @@ ashore.addEventListener('click', () => {
       // What comes back is what was stored. The keeper clamps every field
       // against its own tables, so drawing anything else here would be a
       // mirror showing a face nobody else would ever see.
-      look = await setLook(look);
+      creator.look = await setLook(creator.look);
       settle('That is you.');
     } catch (e) {
       say(e instanceof Error ? e.message : 'The island keeper would not take that face.', 'bad');
@@ -548,7 +353,7 @@ async function onArrival(): Promise<void> {
     toMaker(randomLook());
     return;
   }
-  look = had;
+  creator.look = had;
   card.classList.add('settled');
   say(`Signed in as ${name}.`, 'good');
   const row = document.createElement('p');
@@ -604,6 +409,6 @@ declare global {
 }
 window.wurmAccount = {
   nameTrouble, passwordTrouble, passwordVerdict, breachCount, breachWord, nameEmail, foldName, Unchecked, LOOK_TABLES, cleanLook, randomLook,
-  look: () => look,
+  look: () => creator.look,
   openMaker: (start) => toMaker(start ?? randomLook()),
 };

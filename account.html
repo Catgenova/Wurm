@@ -7,10 +7,11 @@
     <title>Wildermon — your account</title>
     <meta name="description" content="A username and a password, and nothing else." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 30 11 16 19 2 11z' fill='%235c9a3e'/%3E%3Cpath d='M2 11v8l14 8v-8z' fill='%23795c3c'/%3E%3Cpath d='M30 11v8l-14 8v-8z' fill='%234f3c27'/%3E%3C/svg%3E" />
-    <script type="module" crossorigin src="./assets/account.js?v=77e1fe87"></script>
+    <script type="module" crossorigin src="./assets/account.js?v=62eef716"></script>
     <link rel="modulepreload" crossorigin href="./assets/iso.js?v=d15118ab">
-    <link rel="modulepreload" crossorigin href="./assets/accounts.js?v=05778402">
-    <link rel="stylesheet" crossorigin href="./assets/account.css?v=8a58610d">
+    <link rel="modulepreload" crossorigin href="./assets/creator.js?v=27718913">
+    <link rel="stylesheet" crossorigin href="./assets/creator.css?v=2e53ab75">
+    <link rel="stylesheet" crossorigin href="./assets/account.css?v=e1803f56">
   </head>
   <body>
     <!-- Edit src/account.html, not the generated account.html at the repository root. -->
@@ -53,28 +54,10 @@
 
       <p id="say" class="say" role="status" aria-live="polite"></p>
 
-      <!-- Step two. Hidden until there is an account to hang a face on. -->
+      <!-- Step two. Hidden until there is an account to hang a face on. The
+           creator itself is src/ui/creator.ts, the same one the game's "How you
+           look" window shows, and is put in ahead of the button. -->
       <section id="maker" hidden>
-        <div class="maker">
-          <div class="mirror">
-            <canvas id="me" width="240" height="380" tabindex="0" aria-label="How you will look. Drag, or use the arrow keys, to turn."></canvas>
-            <div class="turn">
-              <button type="button" id="turn-left" aria-label="Turn left">&#9664;</button>
-              <button type="button" id="close" aria-pressed="false">Face</button>
-              <button type="button" id="turn-right" aria-label="Turn right">&#9654;</button>
-            </div>
-            <div class="motions" id="motions" role="group" aria-label="What the mirror shows you doing">
-              <button type="button" data-motion="idle">Stand</button>
-              <button type="button" data-motion="walk">Walk</button>
-              <button type="button" data-motion="run">Run</button>
-              <button type="button" data-motion="work">Work</button>
-              <button type="button" data-motion="wave">Wave</button>
-              <button type="button" data-motion="hop">Hop</button>
-            </div>
-            <button type="button" id="roll">Roll me one</button>
-          </div>
-          <div id="choices" class="choices"></div>
-        </div>
         <button id="ashore" type="button">Step ashore</button>
       </section>
 

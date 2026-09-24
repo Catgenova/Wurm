@@ -1,0 +1,160 @@
+/*
+ * The character creator, wherever it is shown: the account page, and the
+ * game's "How you look" window. Both pages define the --ui-* colours, and
+ * nothing else here is assumed of either.
+ *
+ * It measures itself rather than the screen. On the account page the width it
+ * has is the card's, and in the game it is a window's, which is as narrow as
+ * somebody drags it — so the mirror goes over the choices when the creator is
+ * narrow, whatever the screen is doing.
+ */
+.cr {
+  --cr-w: 360px;
+  --cr-h: 460px;
+  container-type: inline-size;
+}
+
+/* In a window, where the mirror has to share the space with the choices. */
+.cr.cr-snug {
+  --cr-w: 250px;
+  --cr-h: 330px;
+}
+
+.cr-in {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/*
+ * No box of its own to scroll for the choices.
+ *
+ * A fixed-height scroller cut the last row in half and looked like a bug
+ * rather than a scroller. Whatever holds the creator scrolls instead and the
+ * mirror is sticky, which keeps the thing you are judging on screen while you
+ * go down the list — which was the only reason for the box.
+ */
+.cr-mirror {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: var(--cr-w);
+  position: sticky;
+  top: 8px;
+}
+
+.cr-me {
+  width: 100%;
+  height: var(--cr-h);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: linear-gradient(#1b2f22, #2c3c26 60%, #3b4429);
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.cr-me:active { cursor: grabbing; }
+.cr-me:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+
+/*
+ * Under the mirror: turn it, look close, and see yourself doing things. The
+ * same eight ways round the island draws you, and the same moves.
+ */
+.cr-turn, .cr-motions {
+  display: flex;
+  width: 100%;
+  gap: 4px;
+}
+
+.cr-motions { flex-wrap: wrap; }
+
+.cr-turn button, .cr-motions button {
+  flex: 1 1 0;
+  padding: 5px 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  background: rgba(60, 50, 30, 0.55);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.cr-motions button { flex-basis: calc((100% - 20px) / 6); }
+.cr-turn .cr-close { flex-grow: 2; }
+
+.cr-turn button:hover, .cr-motions button:hover { border-color: var(--ui-border-light); }
+.cr-turn button[aria-pressed='true'], .cr-motions button[aria-pressed='true'] {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 1px var(--ui-accent);
+  color: #fff;
+}
+.cr-turn button:focus-visible, .cr-motions button:focus-visible, .cr-roll:focus-visible, .cr-pick:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
+.cr-roll {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: rgba(60, 50, 30, 0.7);
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cr-roll:hover { border-color: var(--ui-accent); color: #fff; }
+
+.cr-choices {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cr-choice { margin-bottom: 14px; }
+
+.cr-choice > h2 {
+  margin: 0 0 6px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cr-choice > h2 span {
+  margin-left: 8px;
+  color: var(--ui-text);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.cr-row { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.cr-pick {
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  background: none;
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.cr-pick:hover { border-color: var(--ui-border-light); }
+.cr-pick.on { border-color: var(--ui-accent); box-shadow: 0 0 0 1px var(--ui-accent); }
+
+.cr-swatch { width: 30px; height: 30px; }
+.cr-face { width: 54px; height: 54px; }
+.cr-face canvas { width: 52px; height: 52px; }
+.cr-word { padding: 6px 12px; line-height: 1.2; }
+
+@container (max-width: 560px) {
+  .cr-in { flex-direction: column; align-items: stretch; }
+  .cr-mirror { position: static; width: 100%; }
+}
