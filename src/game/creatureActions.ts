@@ -699,7 +699,16 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return;
       const f = vehicleFor(g, c);
-      if (!f || !g.hitch(c, f)) return;
+      if (!f || !g.hitch(c, f)) {
+        // Never in silence: whatever stopped it, in the words the island uses.
+        g.logMsg(
+          c.hitchedTo !== null ? `${c.name} is already in the traces.`
+          : c.ridden ? `${c.name} has a rider on it.`
+          : 'There is no cart or wagon here with an empty yoke.',
+          'error',
+        );
+        return;
+      }
       const v = vehicleOf(f);
       const filled = (f.team ?? []).length;
       const short = v && filled < v.needs ? ` It needs ${v.needs - filled} more before it will move.` : '';

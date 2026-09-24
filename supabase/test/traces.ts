@@ -104,6 +104,11 @@ check('a grown orse beside a large cart can be hitched', hitch.applies(beast, ga
   hitch.check?.(beast, game) ?? 'nothing in the way');
 hitch.perform(beast, game);
 check('and is in its traces', orse.hitchedTo === cart.id && teamOf(cart).includes(orse.id));
+const heard = game.log.length;
+hitch.perform(beast, game);
+const again = game.log.slice(heard).map((l) => l.text);
+check('hitched again when it already is, it says so rather than nothing',
+  again.includes('Greyfell is already in the traces.'), again.join(' | ') || 'nothing');
 const fed = orse.hunger;
 const [hx, hy] = [orse.x, orse.y];
 
@@ -216,8 +221,27 @@ begin
 
   insert into said values ('refusal-hitch', coalesce(act_refusal(w, a, 'hitch_creature',
     jsonb_build_object('kind', 'creature', 'id', v_pet)), 'none'));
-  perform act_perform(w, a, 'hitch_creature', jsonb_build_object('kind', 'creature', 'id', v_pet));
+  -- Through the door a browser uses: asked, and finished by the settle when
+  -- the time is up, which is where a hitch used to go quiet. Nothing that
+  -- hunts about, and a body in good heart, so the settle is the job's alone.
+  delete from creature cr using species_def sd
+    where cr.world_id = w and cr.mode = 'wild' and sd.id = cr.species and sd.hunter;
+  update player set stats = jsonb_build_object('health', 1, 'hunger', 1, 'thirst', 1, 'stamina', 1),
+      body_at = now(), act = null, act_queue = '[]'::jsonb
+    where world_id = w and uid = a;
+  delete from event where world_id = w and uid = a;
+  perform set_config('request.jwt.claims', json_build_object('sub', a)::text, true);
+  insert into said values ('asked', rpc_act(w, 'hitch_creature', jsonb_build_object('kind', 'creature', 'id', v_pet), 1)->>'started');
+  update player set act_ends = now() - interval '1 second' where world_id = w and uid = a and act is not null;
+  perform settle(w, a);
+  insert into said select 'told', coalesce(string_agg(text, ' / ' order by n), 'nothing')
+    from event where world_id = w and uid = a and kind in ('info', 'event', 'error');
   perform act_perform(w, a, 'hitch_creature', jsonb_build_object('kind', 'creature', 'id', v_hand));
+  -- And a hitch that cannot happen by the time it is done says why.
+  delete from event where world_id = w and uid = a;
+  perform act_perform(w, a, 'hitch_creature', jsonb_build_object('kind', 'creature', 'id', v_pet));
+  insert into said select 'twice', coalesce(string_agg(kind || ': ' || text, ' / ' order by n), 'nothing')
+    from event where world_id = w and uid = a;
   insert into said select 'hitched', count(*)::text from creature where world_id = w and hitched_to = v_cart.id;
 
   -- An hour gone, and Ivar walked off to the far side of his settlement.
@@ -337,7 +361,12 @@ const said = (key: string): string =>
 
 console.log('--- the island');
 check('a grown orse beside a large cart can be hitched', said('refusal-hitch') === 'none', said('refusal-hitch'));
+check('asked through the door a browser uses, the hitch starts', said('asked') === 'true', said('asked'));
+check('and when it is done it says so', said('told') === 'You start hitching it up. / You back Greyfell into a yoke of the large cart (pine). 1 of 2 filled.',
+  said('told'));
 check('and the cart takes two', said('hitched') === '2', said('hitched'));
+check('hitched again when it already is, it says so rather than nothing',
+  said('twice') === 'error: Greyfell is already in the traces.', said('twice'));
 for (const name of ['Greyfell', 'Dunn']) {
   const [to, off, now, was] = said(`held-${name}`).split('|');
   check(`an hour later, its keeper walked off, ${name} is still in the traces and at the cart`,
