@@ -28,6 +28,9 @@
  * is what the island did before, and the browser answers a null at the join
  * with whatever it has.
  */
+-- Two columns on a table every door writes to: bounded, so a body holding a
+-- row cannot stall the island behind this, and a deploy fails instead.
+set local lock_timeout = '3s';
 alter table player add column if not exists craft_from_stores boolean;
 alter table player add column if not exists craft_spare_rare boolean;
 
