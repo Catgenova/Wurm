@@ -775,6 +775,19 @@ export function bagAdd(bag: Item, item: Item): boolean {
   return true;
 }
 
+/**
+ * Use up `n` of one thing in a list of things -- what is in a bag, a crate or
+ * a chest -- and take it off the list if that was the last of it. False, and
+ * nothing touched, when there are not that many.
+ */
+export function spendOut(items: Item[], uid: number, n: number): boolean {
+  const idx = items.findIndex((it) => it.uid === uid);
+  if (idx < 0 || n <= 0 || items[idx].count < n) return false;
+  items[idx].count -= n;
+  if (items[idx].count <= 0) items.splice(idx, 1);
+  return true;
+}
+
 /** Take something out of a bag, whole. */
 export function bagTake(bag: Item, uid: number): Item | null {
   const idx = (bag.inside ?? []).findIndex((it) => it.uid === uid);

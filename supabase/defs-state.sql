@@ -3730,6 +3730,7 @@ create or replace function dark_shot() returns double precision language sql imm
 create or replace function dark_hit() returns double precision language sql immutable as $fn$ select 0.8::double precision $fn$;
 create or replace function wild_per_region() returns int language sql immutable as $fn$ select 1::int $fn$;
 create or replace function wild_floor() returns int language sql immutable as $fn$ select 96::int $fn$;
+create or replace function craft_reach() returns int language sql immutable as $fn$ select 3::int $fn$;
 create or replace function chip_chance() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function try_learn() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
 create or replace function graze_hungry() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;

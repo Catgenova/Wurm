@@ -1153,11 +1153,13 @@ export class UI {
   /** Everything a lit fire or a hot oven could turn into dinner. */
   private cookEntries(): MenuItem[] {
     const g = this.game;
+    // What is at hand, carried or stored within reach, listed once for every dish.
+    const stock = g.craftStock();
     return RECIPES.filter((r) => r.station === 'campfire').map((r) => {
       const def = ACTION_BY_ID.get(r.id);
-      const st = recipeStatus(r, g);
-      const material = g.inventory.find(r.inputs[0].item);
-      const reason = def ? recipeReason(r, g) : 'Not possible.';
+      const st = recipeStatus(r, g, undefined, stock);
+      const material = stock.find((s) => s.item.id === r.inputs[0].item)?.item;
+      const reason = def ? recipeReason(r, g, undefined, stock) : 'Not possible.';
       return {
         label: `${itemDef(r.result).name}${(r.count ?? 1) > 1 ? ` × ${r.count}` : ''}`,
         note: recipeNeeds(r),

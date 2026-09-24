@@ -840,6 +840,17 @@ jobs:
           npx esbuild supabase/test/wood.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/wood.mjs --log-level=error
           node node_modules/.cache/wood.mjs
+      - name: A craft reaches into the stores around you
+        run: |
+          # Asked for: "When crafting, allow the ingredients to be used from any
+          # container within 3 tiles." A pack, a satchel and a spread of stores
+          # round the body, put to both sides: what is at hand, the order it is
+          # spent in, a run that carries on past the stack it started on, the
+          # wood the window says, and nothing out of reach, locked, thrown away,
+          # for sale, put by or somebody else's.
+          npx esbuild supabase/test/near.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/near.mjs --log-level=error
+          node node_modules/.cache/near.mjs
 
       - name: Eight more trees that bear, held to their islands
         run: |

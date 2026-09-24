@@ -28,7 +28,7 @@ import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
 import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS, FIGHT_SHARE } from '../src/game/traits';
-import { CRAFT_HEAD } from '../src/game/recipes';
+import { CRAFT_HEAD, CRAFT_REACH } from '../src/game/recipes';
 import { SMITH_GAIN } from '../src/game/anvil';
 import { BREW_GAIN } from '../src/game/brewing';
 import { IMPROVE_GAIN } from '../src/game/improve';
@@ -1274,6 +1274,12 @@ for (const [fn, v] of [
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns int language sql immutable as $fn$ select ${q(v)}::int $fn$;`);
 }
+/*
+ * How many tiles a craft reaches for what goes into it. The crafting window
+ * counts the stores around you by this and `craft_stock` reaches into them by
+ * it, so the two cannot disagree about which crate a plank comes out of.
+ */
+out.push(`create or replace function craft_reach() returns int language sql immutable as $fn$ select ${q(CRAFT_REACH)}::int $fn$;`);
 /* How often a chip finds a line in the rock, and what a swing that misses teaches. */
 for (const [fn, v] of [
   ['chip_chance', CHIP_CHANCE], ['try_learn', TRY_LEARN],

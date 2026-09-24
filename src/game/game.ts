@@ -21,12 +21,12 @@ import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
-import { knackable, type Station } from './recipes';
+import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef } from './items';
+import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, spendOut } from './items';
 import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -4199,6 +4199,115 @@ export class Game {
     return item;
   }
 
+  /**
+   * What a craft may make things out of, in the order it spends them.
+   *
+   * Asked for: "When crafting, allow the ingredients to be used from any
+   * container within 3 tiles." So a craft reaches past the pack: into the
+   * bags on your back, and into every crate and every piece of furniture that
+   * holds things within `CRAFT_REACH` tiles of the tile you are standing on,
+   * measured the way any job's reach is.
+   *
+   * The pack is spent first, then the bags, then the stores nearest first: a
+   * craft uses what you are carrying before it reaches for anything, and
+   * reaches no further than it has to. The island spends in the same order,
+   * in `craft_stock`.
+   *
+   * It reaches only where a hand could: not into a store with a padlock you
+   * hold no key to, nor into one that is somebody else's -- a crate the
+   * island says is not yours, a piece neither set down by you nor standing on
+   * a settlement of yours -- nor into a trash crate, whose contents are on
+   * their way out, nor a market stall, whose wares are for sale. A thing put
+   * by is never spent, wherever it is.
+   */
+  craftStock(): CraftStock[] {
+    const pack = this.inventory;
+    const out: CraftStock[] = [];
+    for (const it of pack.items) {
+      if (pack.loose(it)) out.push({ item: it, carried: true, spend: (n) => pack.remove(it.uid, n) });
+    }
+    for (const bag of pack.items) {
+      const inside = bag.inside;
+      if (!inside?.length) continue;
+      for (const it of inside) {
+        if (!pack.loose(it)) continue;
+        out.push({
+          item: it,
+          carried: true,
+          spend: (n) => {
+            if (!spendOut(inside, it.uid, n)) return false;
+            pack.onChange?.();
+            return true;
+          },
+        });
+      }
+    }
+    for (const store of this.storesForCraft()) {
+      for (const it of store.items) {
+        if (it.locked || it.price !== undefined) continue;
+        out.push({
+          item: it,
+          carried: false,
+          spend: (n) => {
+            if (!spendOut(store.items, it.uid, n)) return false;
+            this.events.emit('crate');
+            return true;
+          },
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The crates and pieces a craft may reach into, nearest first. See
+   * `craftStock` for which, and why.
+   */
+  private storesForCraft(): Array<{ items: Item[] }> {
+    const tx = this.player.tileX;
+    const ty = this.player.tileY;
+    const within = (x: number, y: number): boolean => Math.max(Math.abs(x - tx), Math.abs(y - ty)) <= CRAFT_REACH;
+    const found: Array<{ items: Item[]; d: number; order: number }> = [];
+    const far = (cx: number, cy: number): number => Math.hypot(cx - this.player.x, cy - this.player.y);
+    this.placed.crates.around(tx + 0.5, ty + 0.5, CRAFT_REACH, (c) => {
+      if (!c.items.length || !within(c.x, c.y) || c.mine === false || this.lockRefusal(c)) return;
+      const [cx, cy] = crateCentre(c);
+      found.push({ items: c.items, d: far(cx, cy), order: c.id });
+    });
+    this.placed.furniture.around(tx + 0.5, ty + 0.5, CRAFT_REACH, (f) => {
+      if (!f.items.length || !within(f.x, f.y)) return;
+      const def = furnitureDef(f.kind);
+      if (!furnitureHolds(f) || def.trash || def.stall) return;
+      if (f.mine === false && !this.onDeed(f.x, f.y)) return;
+      if (this.lockRefusal(f)) return;
+      const [cx, cy] = furnitureCentre(f);
+      // After the crates at the same distance, to the same rule as the island.
+      found.push({ items: f.items, d: far(cx, cy), order: 1e9 + f.id });
+    });
+    return found.sort((a, b) => a.d - b.d || a.order - b.order);
+  }
+
+  /**
+   * One thing a craft may be aimed at, by its number: in the pack, in a bag
+   * on your back, or in a store within reach. The pack is asked first and on
+   * its own, since that is where nearly every aim is and the question is put
+   * once for every recipe a menu offers.
+   */
+  craftItem(uid: number): Item | undefined {
+    const pack = this.inventory;
+    const it = pack.get(uid);
+    if (it) return pack.loose(it) ? it : undefined;
+    for (const bag of pack.items) {
+      const inside = bag.inside?.find((x) => x.uid === uid);
+      if (inside) return pack.loose(inside) ? inside : undefined;
+    }
+    for (const store of this.storesForCraft()) {
+      const stored = store.items.find((x) => x.uid === uid);
+      if (stored) return !stored.locked && stored.price === undefined ? stored : undefined;
+    }
+    return undefined;
+  }
+
   addCampfire(x: number, y: number, sx: number, sy: number, fuel = 0, lit = false): PlacedCampfire {
     const [ax, ay] = fireAnchor(sx, sy);
     const fire: PlacedCampfire = { id: this.nextFireId++, x, y, sx: ax, sy: ay, fuel, lit };
@@ -5086,6 +5195,7 @@ export class Game {
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
           ferment: r.ferment ?? undefined,
           facing: (r.facing ?? 's') as Side,
+          lock: r.lock ?? undefined,
         });
       }
     }
@@ -5122,6 +5232,13 @@ export class Game {
         units: c.units,
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
         rare: rarityStep(c.rare), ql: c.ql ?? 20,
+        /*
+         * The padlock and whose it is, which the island has always sent and
+         * this dropped. A craft reaches only into a store that is yours and
+         * opens for you, and the crafting window counts what is in one by the
+         * same two questions the island asks.
+         */
+        lock: c.lock ?? undefined, mine: c.mine,
       });
     }
     /*
@@ -5231,6 +5348,7 @@ export class Game {
         units: c.units,
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
         rare: rarityStep(c.rare), ql: c.ql ?? 20,
+        lock: c.lock ?? undefined, mine: c.mine,
       });
     }
     this.placed.crates.reset(this.crates.values());
@@ -6195,6 +6313,8 @@ export interface IslandPlaced {
   caught: number | null;
   state: { jobs?: unknown[]; output?: unknown[] } | null;
   mine: boolean;
+  /** The padlock fitted to it, by the number it shares with its key. */
+  lock?: number | null;
   /**
    * What is in it, for a piece of furniture near enough to reach into.
    *
@@ -6216,6 +6336,8 @@ export interface IslandCrate {
   kind: string;
   /** The padlock fitted to it, by the number it shares with its key. */
   lock?: number | null;
+  /** Whether it is yours: the island's `crate_yours`. */
+  mine?: boolean;
   x: number;
   y: number;
   sx: number;

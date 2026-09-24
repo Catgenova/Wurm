@@ -1,7 +1,7 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { CRAFT_REACH, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 import { Repaint } from '../repaint';
@@ -11,8 +11,13 @@ const lower = (id: string): string => itemDef(id).name.toLowerCase();
 
 /**
  * The recipe book, grouped by craft. Every recipe is listed with its tool and
- * materials marked green when carried and red when missing, and the ones that
+ * materials marked green when at hand and red when missing, and the ones that
  * can be made right now come first. A switch narrows it to just those.
+ *
+ * At hand is what a craft may spend: the pack, the bags on your back, and the
+ * stores within `CRAFT_REACH` tiles that are yours and open for you. So the
+ * book is looked at again when a store's contents change and when you step
+ * onto another tile, since either can change what it would say.
  */
 export class CraftPanel {
   private readonly repaint = new Repaint(250);
@@ -23,6 +28,8 @@ export class CraftPanel {
   private readyOnly = false;
   /** What each recipe is to be made of, where the row was set to a wood or a metal: recipe id to material. */
   private readonly wants = new Map<string, string>();
+  /** The tile you were on when the book last looked, since a step can bring a store into reach or take one out of it. */
+  private tile = '';
 
   constructor(private readonly win: UIWindow, private readonly game: Game) {
     win.body.classList.add('inv-body');
@@ -45,6 +52,7 @@ export class CraftPanel {
     head.className = 'craft-head';
     const hint = document.createElement('span');
     hint.textContent = 'Tool, place and materials each recipe needs';
+    hint.title = `Materials count what you carry, in your pack and your bags, and what is in your stores within ${CRAFT_REACH} tiles. The pack is used first, then the bags, then the nearest store.`;
     const toggle = document.createElement('label');
     const box = document.createElement('input');
     box.type = 'checkbox';
@@ -64,6 +72,8 @@ export class CraftPanel {
     // would say has actually changed.
     game.events.on('inventory', () => this.repaint.ask());
     game.events.on('skill', () => this.repaint.ask());
+    // What is in the crates and chests around you counts too.
+    game.events.on('crate', () => this.repaint.ask());
     this.render();
   }
 
@@ -82,15 +92,26 @@ export class CraftPanel {
 
   /** Look again, on a beat, and redraw only if the book has changed. */
   update(now: number): void {
-    if (!this.win.isOpen || !this.repaint.due(now)) return;
+    if (!this.win.isOpen) return;
+    const tile = `${this.game.player.tileX},${this.game.player.tileY}`;
+    if (tile !== this.tile) {
+      this.tile = tile;
+      this.repaint.ask();
+    }
+    if (!this.repaint.due(now)) return;
     this.render(now);
   }
 
   render(now = performance.now()): void {
-    const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id))]));
+    // What is at hand, listed once for the whole book rather than once a row.
+    const stock = this.game.craftStock();
+    const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id), stock)]));
     // What the book would say. Standing at an anvil hammering, this is the
     // same from one second to the next, so nothing is touched.
-    const sig = `${this.query}\u0000${this.readyOnly ? 1 : 0}\u0000${RECIPES.map((r) => `${r.id}${statuses.get(r)?.ready ? 1 : 0}${statuses.get(r)?.max ?? 0}`).join('')}`;
+    const sig = `${this.query}\u0000${this.readyOnly ? 1 : 0}\u0000${RECIPES.map((r) => {
+      const st = statuses.get(r);
+      return `${r.id}${st?.ready ? 1 : 0}${st?.max ?? 0}${st?.inputs.map((i) => `.${i.have}.${i.carried}`).join('') ?? ''}`;
+    }).join('')}`;
     if (!this.repaint.changed(now, sig)) return;
     this.list.replaceChildren();
     let shown = 0;
@@ -106,7 +127,7 @@ export class CraftPanel {
       this.list.append(header);
       for (const r of rows) {
         const st = statuses.get(r)!;
-        this.list.append(this.row(r, st));
+        this.list.append(this.row(r, st, stock));
         shown++;
         if (st.ready) ready++;
       }
@@ -116,15 +137,16 @@ export class CraftPanel {
       empty.className = 'inv-empty';
       empty.textContent = this.query
         ? `No recipe answers to “${this.search.value.trim()}”${this.readyOnly ? ' that you can make right now' : ''}.`
-        : 'Nothing can be made with what you carry. Untick "Only what I can make" to see what each thing needs.';
+        : `Nothing can be made with what you carry and what is in your stores within ${CRAFT_REACH} tiles. Untick "Only what I can make" to see what each thing needs.`;
       this.list.append(empty);
     }
+    const within = `with what you carry and your stores within ${CRAFT_REACH} tiles`;
     this.footer.textContent = this.query
-      ? `${shown} recipes match, ${ready} of them possible with what you carry`
-      : `${ready} of ${RECIPES.length} recipes possible with what you carry`;
+      ? `${shown} recipes match, ${ready} of them possible ${within}`
+      : `${ready} of ${RECIPES.length} recipes possible ${within}`;
   }
 
-  private row(r: Recipe, st: RecipeStatus): HTMLDivElement {
+  private row(r: Recipe, st: RecipeStatus, stock: readonly CraftStock[]): HTMLDivElement {
     const row = document.createElement('div');
     row.className = 'craft-row' + (st.ready ? '' : ' locked');
     const name = document.createElement('div');
@@ -143,7 +165,7 @@ export class CraftPanel {
      * lot of whetstones and haven't managed anything other than QL 1" — which
      * is what the rule looks like from outside when nobody has said it.
      */
-    const pr = prospect(r, this.game);
+    const pr = prospect(r, this.game, stock);
     const worth = document.createElement('small');
     worth.className = 'craft-ql' + (pr.toolBound ? ' craft-ql-held' : '');
     /*
@@ -155,7 +177,7 @@ export class CraftPanel {
      */
     worth.textContent = pr.fromInputs
       ? pr.partsInHand
-        ? `QL ${pr.ceiling.toFixed(0)}, out of the parts in your pack`
+        ? `QL ${pr.ceiling.toFixed(0)}, out of the parts at hand`
         : `${Math.round(pr.keep * 100)}% of what the parts are worth`
       : !pr.tooled
         ? `up to QL ${pr.ceiling.toFixed(0)}`
@@ -196,7 +218,12 @@ export class CraftPanel {
       const span = document.createElement('span');
       span.className = i.have >= i.need ? 'have' : 'lack';
       span.textContent = `${i.need} ${lower(i.item)}`;
-      span.title = `Have ${i.have}`;
+      // Where they are, so a crate that empties itself into a chest is never
+      // a surprise: what is on you goes first, then the nearest store.
+      const stored = i.have - i.carried;
+      span.title = stored > 0
+        ? `Have ${i.have}: ${i.carried} carried, ${stored} in your stores within ${CRAFT_REACH} tiles. What you carry is used first.`
+        : `Have ${i.have}, carried`;
       const have = document.createElement('em');
       have.textContent = ` (${i.have})`;
       span.append(have);
@@ -205,7 +232,7 @@ export class CraftPanel {
     // What it would come out made of, since the same bill in two woods makes
     // two different things; and a choice of them, when more than one kind is
     // carried. Asked for: an oak chest from a pack that holds pine too.
-    const choices = materialChoices(this.game, r);
+    const choices = materialChoices(this.game, r, stock);
     if (st.material && choices.length > 1) {
       const pick = document.createElement('select');
       pick.className = 'craft-of';
@@ -226,7 +253,7 @@ export class CraftPanel {
       const made = document.createElement('span');
       made.className = 'have';
       made.textContent = `of ${st.material.toLowerCase()}`;
-      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : 'Carry another kind and you can choose between them here';
+      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : `Carry another kind, or keep one in a store within ${CRAFT_REACH} tiles, and you can choose between them here`;
       parts.push(made);
     }
     parts.forEach((p, k) => {
@@ -258,10 +285,14 @@ export class CraftPanel {
   private craft(r: Recipe, times: number): void {
     const def = ACTION_BY_ID.get(r.id);
     // Start on a stack of whatever the window said it would be made of, so
-    // clicking Craft makes the thing the row described.
-    const want = recipeStatus(r, this.game, this.wants.get(r.id)).material;
-    const stock = this.game.inventory.items;
-    const material = (want ? stock.find((it) => it.id === r.inputs[0].item && it.extra === want) : undefined) ?? this.game.inventory.find(r.inputs[0].item);
+    // clicking Craft makes the thing the row described -- the first one a
+    // craft would reach, which is the pack's when there is one, and otherwise
+    // the one in the nearest store.
+    const stock = this.game.craftStock();
+    const want = recipeStatus(r, this.game, this.wants.get(r.id), stock).material;
+    const first = r.inputs[0].item;
+    const material = ((want ? stock.find((s) => s.item.id === first && s.item.extra === want) : undefined)
+      ?? stock.find((s) => s.item.id === first))?.item;
     if (!def || !material) return;
     // The number of goes, which is the island's `p_times`. It used to ride
     // inside the target as `count`, where the island reads it as "how many of

@@ -12,6 +12,12 @@ export type CrateKind = 'log' | 'plank';
 export interface PlacedCrate {
   id: number;
   /**
+   * Whether the island counts it yours: set down by you, from before crates
+   * had owners, or standing on a settlement of yours. Absent in the game you
+   * play by yourself, where every crate is yours because there is only you.
+   */
+  mine?: boolean;
+  /**
    * How full the island says it is, when `items` is not the whole story.
    *
    * A crate too far off to reach into comes over with its count and no
