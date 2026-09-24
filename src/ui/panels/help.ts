@@ -190,6 +190,10 @@ function helpText(): string {
     is about three trees deep to the eye, and the <b>dark takes three quarters of everything</b>. Your
     settlement is watched while you hold it, and your own wildermon are eyes of their own wherever they
     are working.</p>
+    <p>Of a building's walls, only a <b>solid</b> one stops the eye. A window, a bay, a door, a double
+    door, an arch and a gate are seen through, and a fence or a half wall is seen over, as far as you
+    can see anywhere else &mdash; from a doorway you see the wedge of the room beyond it, and from inside
+    a room all of it.</p>
     <p>All of that is in Settings under <b>Fog of war</b>, if you would rather see the whole island at
     once.</p>
     <p>The wildlife works the same way. An island holds so much of it, but only the stretch of country

@@ -42,10 +42,16 @@ export interface WallTypeDef {
    * be, since a cart went through a single door as happily as a person.
    */
   wide?: boolean;
+  /**
+   * Stops the eye. Only a solid wall does: a window and a bay are glass, a
+   * door, an arch and a gate are openings, and a fence or a half wall is
+   * waist-high and seen over.
+   */
+  opaque?: boolean;
 }
 
 export const WALL_TYPES: WallTypeDef[] = [
-  { id: 'solid', name: 'Solid', factor: 1, passable: false },
+  { id: 'solid', name: 'Solid', factor: 1, passable: false, opaque: true },
   { id: 'window', name: 'Window', factor: 0.75, passable: false, fittings: [['glass', 2]] },
   /*
    * No `thick`. It used to carry 1.7 of it, which moved the whole section

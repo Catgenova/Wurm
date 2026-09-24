@@ -1063,6 +1063,21 @@ jobs:
             --outfile=node_modules/.cache/drop.mjs --log-level=error
           node node_modules/.cache/drop.mjs
 
+      - name: Seeing into a house, and out of one
+        run: |
+          # "i can see through the doors, but only one tile deep", and not to
+          # the night's radius either. The line of sight took every tile a
+          # building stood on for a solid block. Walls stand on borders, so a
+          # line is now followed border by border and only a finished solid
+          # wall stops it. This builds one house with a door, a window, an arch
+          # and a half wall and asks, by day and by night, that you see in
+          # through them and out of them as far as you see in the open, the
+          # whole of the inside from its middle, and that a solid wall still
+          # hides what is behind it.
+          npx esbuild supabase/test/sight.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/sight.mjs --log-level=error
+          node node_modules/.cache/sight.mjs
+
       - name: A new look, worn on an island
         run: |
           # "allow players to change their appearance back through the

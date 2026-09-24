@@ -1,4 +1,5 @@
 import { TileType } from '../world/tiles';
+import { isDone, WALL_TYPE_BY_ID } from './building';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
 import { heldReach } from './light';
@@ -75,8 +76,6 @@ const OPACITY: Partial<Record<number, number>> = {
   [TileType.Bush]: 0.12,
   [TileType.Reed]: 0.18,
 };
-/** A finished building stops the view dead. */
-const WALL_OPACITY = 1;
 
 export class Vision {
   /** One byte a tile: 0 unseen, 2 in sight now. Known lives in the world. */
@@ -100,6 +99,14 @@ export class Vision {
   private readonly w: number;
   private readonly h: number;
   private scratch: Uint8Array;
+  /**
+   * The borders a finished solid wall stands on, storey by storey, as numbers
+   * (`borderKey`). Gathered once a look rather than asked of the buildings a
+   * border at a time: a look follows thousands of lines, and asked one at a
+   * time every crossing made a string to look itself up by, which more than
+   * doubled what a look cost among a dozen houses.
+   */
+  private readonly shut = new Map<number, Set<number>>();
 
   constructor(private readonly game: Game) {
     this.w = game.world.w;
@@ -176,6 +183,8 @@ export class Vision {
   private recompute(): void {
     const g = this.game;
     const next = this.scratch;
+    // Walls go up and come down between looks; what shuts the eye is gathered afresh each time.
+    this.shut.clear();
     // Clearing the whole island every look would grow with the map too; only
     // what was written last time needs wiping.
     const last = this.bounds;
@@ -196,7 +205,7 @@ export class Vision {
       if (y > y1) y1 = y;
     };
 
-    this.cast(next, g.player.x, g.player.y, this.sightRange(), mark);
+    this.cast(next, g.player.x, g.player.y, this.sightRange(), mark, g.player.level);
     // Your own creatures are eyes as well, and a settlement is watched by the
     // people in it whether or not you are standing in the middle of it.
     for (const c of g.creatures.list.values()) {
@@ -280,9 +289,10 @@ export class Vision {
   /**
    * Walk a line out to every tile within `range` of an eye and mark what the
    * ground allows it to see. The steepest slope met so far hides anything
-   * lying behind it, which is what makes a hill worth standing on.
+   * lying behind it, which is what makes a hill worth standing on. `level` is
+   * the storey the eye is on, whose walls are the ones in its way.
    */
-  private cast(out: Uint8Array, ex: number, ey: number, range: number, mark: (x: number, y: number) => void): void {
+  private cast(out: Uint8Array, ex: number, ey: number, range: number, mark: (x: number, y: number) => void, level = 0): void {
     const world = this.game.world;
     const eyeX = Math.floor(ex);
     const eyeY = Math.floor(ey);
@@ -301,7 +311,7 @@ export class Vision {
         const d2 = dx * dx + dy * dy;
         if (d2 > r2 || d2 === 0) continue;
         if (out[ty * this.w + tx]) continue;
-        if (this.lineOfSight(eyeX, eyeY, eyeH, tx, ty)) {
+        if (this.lineOfSight(eyeX, eyeY, eyeH, tx, ty, level)) {
           out[ty * this.w + tx] = 1;
           mark(tx, ty);
         }
@@ -310,13 +320,22 @@ export class Vision {
   }
 
   /**
-   * Whether the ground and what grows on it leave the far tile in view. The
-   * ground is judged by slope — a ridge hides the hollow behind it — and trees
-   * and walls by how much of the view they take up between here and there.
+   * Whether the ground, what grows on it and the walls standing on it leave
+   * the far tile in view. The ground is judged by slope — a ridge hides the
+   * hollow behind it — trees by how much of the view they take up between
+   * here and there, and walls by the borders the line crosses.
+   *
+   * A wall stands on the border between two tiles, so that is where it is
+   * asked about (`wallInTheWay`). Only a solid wall stops the eye. It used to
+   * be every tile a building stood on, whatever stood round it, which is the
+   * same rule as a solid block: from a doorway you saw the first tile in and
+   * nothing past it, and from inside a house you saw the tiles touching you
+   * and no further -- reported as "i can see through the doors, but only one
+   * tile deep", with the night's radius a long way off.
    */
-  private lineOfSight(ex: number, ey: number, eyeH: number, tx: number, ty: number): boolean {
+  private lineOfSight(ex: number, ey: number, eyeH: number, tx: number, ty: number, level = 0): boolean {
     const world = this.game.world;
-    const buildings = this.game.buildings;
+    if (this.game.buildings.walls.size && this.wallInTheWay(level, ex, ey, tx, ty)) return false;
     const dx = tx - ex;
     const dy = ty - ey;
     const steps = Math.max(Math.abs(dx), Math.abs(dy));
@@ -329,11 +348,85 @@ export class Vision {
       const cx = Math.round(ex + stepX * i);
       const cy = Math.round(ey + stepY * i);
       opacity += OPACITY[world.tiles[cy * this.w + cx]] ?? 0;
-      if (buildings.list.size && buildings.buildingAt(cx, cy)) opacity += WALL_OPACITY;
       if (opacity >= 1) return false;
       const s = (world.centerHeight(cx, cy) - eyeH) / i;
       if (s > slope) slope = s;
     }
     return (world.centerHeight(tx, ty) + 2 - eyeH) / steps >= slope;
+  }
+
+  /**
+   * Whether a wall that stops the eye stands across the line from the middle
+   * of one tile to the middle of another.
+   *
+   * The line is followed border by border, every border it crosses in the
+   * order it crosses them, rather than tile by rounded tile: rounded, a line
+   * two tiles out from a doorway stepped round the jamb and saw the tile
+   * beside the door on the inside. Followed exactly, a doorway shows the
+   * wedge of the room behind it that a real one does, wider the further in
+   * you look. A line through a corner exactly is stopped only when both ways
+   * round the corner are, as feet are.
+   */
+  private wallInTheWay(level: number, ex: number, ey: number, tx: number, ty: number): boolean {
+    const shut = this.shutAt(level);
+    if (!shut.size) return false;
+    // Across the border on the east or west of (x, y), and on the north or south.
+    const acrossX = (x: number, y: number, sx: number): boolean => shut.has(this.borderKey('v', sx > 0 ? x + 1 : x, y));
+    const acrossY = (x: number, y: number, sy: number): boolean => shut.has(this.borderKey('h', x, sy > 0 ? y + 1 : y));
+    const dx = tx - ex;
+    const dy = ty - ey;
+    const sx = Math.sign(dx);
+    const sy = Math.sign(dy);
+    // How far along the line, as a fraction of it, the borders come: the
+    // first half a tile out, and one tile's worth apart after that.
+    const everyX = dx ? 1 / Math.abs(dx) : Infinity;
+    const everyY = dy ? 1 / Math.abs(dy) : Infinity;
+    let nextX = everyX / 2;
+    let nextY = everyY / 2;
+    let x = ex;
+    let y = ey;
+    while (x !== tx || y !== ty) {
+      if (Math.abs(nextX - nextY) < 1e-9) {
+        const aroundX = !acrossX(x, y, sx) && !acrossY(x + sx, y, sy);
+        const aroundY = !acrossY(x, y, sy) && !acrossX(x, y + sy, sx);
+        if (!aroundX && !aroundY) return true;
+        x += sx;
+        y += sy;
+        nextX += everyX;
+        nextY += everyY;
+      } else if (nextX < nextY) {
+        if (acrossX(x, y, sx)) return true;
+        x += sx;
+        nextX += everyX;
+      } else {
+        if (acrossY(x, y, sy)) return true;
+        y += sy;
+        nextY += everyY;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * One border as a number. A vertical one at `x` stands between tiles x - 1
+   * and x, a horizontal one at `y` between rows y - 1 and y -- the buildings'
+   * own reckoning -- so a border can sit on the far edge of the map, and the
+   * rows are one wider than the map is.
+   */
+  private borderKey(dir: 'v' | 'h', x: number, y: number): number {
+    return (y * (this.w + 1) + x) * 2 + (dir === 'v' ? 1 : 0);
+  }
+
+  /** The borders shut to the eye on a storey: a finished wall of a type that is `opaque`. */
+  private shutAt(level: number): Set<number> {
+    let set = this.shut.get(level);
+    if (set) return set;
+    set = new Set();
+    for (const w of this.game.buildings.walls.values()) {
+      if (w.level !== level || !WALL_TYPE_BY_ID.get(w.type)?.opaque || !isDone(w)) continue;
+      set.add(this.borderKey(w.dir, w.x, w.y));
+    }
+    this.shut.set(level, set);
+    return set;
   }
 }
