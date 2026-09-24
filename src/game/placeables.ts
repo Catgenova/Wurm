@@ -273,7 +273,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f) return;
       f.hitched = true;
-      g.logMsg(`You take up the shafts of the ${furnitureName(f).toLowerCase()}. It will follow you now.`, 'event');
+      g.logMsg(`You take up the shafts of the ${furnitureName(f).toLowerCase()}. It will follow you now, and what you gather goes into it.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
   },
@@ -336,7 +336,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
         return;
       }
       const team = g.team(f).map((c) => c.name);
-      g.logMsg(`You climb onto the ${furnitureName(f).toLowerCase()} and take the reins. ${team.join(' and ')} lean into the traces.`, 'event');
+      g.logMsg(`You climb onto the ${furnitureName(f).toLowerCase()} and take the reins. ${team.join(' and ')} lean into the traces. What you gather from the seat goes into it.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
   },

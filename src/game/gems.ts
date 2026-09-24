@@ -62,6 +62,6 @@ export function rollGem(rand: () => number): GemDef {
 export function maybeGem(g: Game, skill: string, tool: string): void {
   if (g.rand() >= GEM_ODDS) return;
   const gem = rollGem(g.rand);
-  const item = g.inventory.add('gem', { ql: g.productQl(skill, g.toolQl(tool)), extra: gem.name });
+  const item = g.gather('gem', { ql: g.productQl(skill, g.toolQl(tool)), extra: gem.name });
   g.logMsg(`Something glints in the rubble: a ${gem.name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
 }

@@ -81,7 +81,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
         const lumps: string[] = [];
         for (let i = 0; i < Math.round(hoard * (4 + share * 6)); i++) {
           const id = HOARD_METALS[Math.floor(g.rand() * HOARD_METALS.length)];
-          g.inventory.add(id, { ql: Math.max(20, Math.min(100, 40 + g.rand() * 55)) });
+          g.gather(id, { ql: Math.max(20, Math.min(100, 40 + g.rand() * 55)) });
           lumps.push(itemDef(id).name.toLowerCase());
         }
         if (lumps.length) {
@@ -97,7 +97,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
         if (g.rand() < base * share - count) count += 1;
         if (part === 'gland' && count > 0 && g.rand() > GLAND_CHANCE * (0.5 + share)) count = 0;
         if (count <= 0) continue;
-        const made = g.inventory.add(id, { count, ql: Math.max(1, Math.min(100, ql)) });
+        const made = g.gather(id, { count, ql: Math.max(1, Math.min(100, ql)) });
         taken.push(made.count > 1 && count > 1 ? `${count} × ${itemDef(id).name.toLowerCase()}` : itemDef(id).name.toLowerCase());
       }
       removeCorpse(g, t, item);

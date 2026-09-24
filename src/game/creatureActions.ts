@@ -221,7 +221,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const yields = SPECIES[c.species].shearYield ?? 'wool';
       const n = Math.max(1, Math.round(c.fleece * (yields === 'wool' ? 3 : 6)));
       const ql = Math.max(1, Math.min(100, 15 + c.fleece * 45 + g.skills.get('tailoring') * 0.4));
-      const wool = g.inventory.add(yields, { count: n, ql });
+      const wool = g.gather(yields, { count: n, ql });
       c.fleece = 0;
       g.gainSkill('tailoring', 0.4);
       g.gainSkill('taming', 0.1);

@@ -211,7 +211,7 @@ export const FISHING_ACTIONS: ActionDef[] = [
       g.gainSkill('fishing', tryGain(true, NET_GAIN));
       const parts: string[] = [];
       for (const [id, n] of got) {
-        g.inventory.add(id, { count: n, ql: g.productQl('fishing', netQl) });
+        g.gather(id, { count: n, ql: g.productQl('fishing', netQl) });
         g.note(`fish:${id}`);
         parts.push(`${n} \u00d7 ${itemDef(id).name.toLowerCase()}`);
       }
@@ -269,7 +269,7 @@ export const FISHING_ACTIONS: ActionDef[] = [
         g.logMsg(bait ? `Something takes the ${itemDef(bait.id).name.toLowerCase()} and comes off again.` : 'Something takes it and comes off again.', 'event');
         return true;
       }
-      const item = g.inventory.add(got.id, { ql: g.productQl('fishing', rodQl) });
+      const item = g.gather(got.id, { ql: g.productQl('fishing', rodQl) });
       g.note(`fish:${got.id}`);
       if (bait) g.note('baited');
       g.logMsg(

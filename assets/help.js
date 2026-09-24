@@ -688,6 +688,11 @@ import{Ct as e,Di as t}from"./creatures.js";function n(){return`
     <p>A vehicle is <b>anybody's to use</b>. Whoever built it and whosever ground it stands on, anyone
     standing at it may take the reins, take hold of a cart, hitch to it, take a beast out of it, load it,
     empty it or pick it up.</p>
+    <p>While you have the reins of a cart or wagon, or a small cart by the shafts, <b>whatever you gather
+    goes into it</b>: ore, stone and gems from mining, dirt, sand and clay from digging, logs, sprouts,
+    forage and herbs, fruit, a harvest, a catch, what you butcher and what you shear. It fills the cart as
+    far as it has room, and what does not fit goes in your pack, with one line to say the cart is full. A
+    boat is not a cart: what you gather in one goes in your pack.</p>
     <h3>Water: the well and the barrels</h3>
     <p>Until now water meant walking to the shore. A <b>well</b> is a mason's job &mdash; twelve stone
     bricks, mortar, shafts and nails &mdash; and once it is sunk it <b>draws its own water</b>, a little

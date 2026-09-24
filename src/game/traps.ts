@@ -370,7 +370,7 @@ export const TRAP_ACTIONS: ActionDef[] = [
       if (!trap || !trap.fish?.length) return;
       const parts: string[] = [];
       for (const f of trap.fish) {
-        g.inventory.addItem(f);
+        g.gatherItem(f);
         parts.push(`${f.count} \u00d7 ${itemDef(f.id).name.toLowerCase()}`);
       }
       trap.fish = [];

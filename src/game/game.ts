@@ -26,7 +26,7 @@ import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, spendOut } from './items';
+import { bagTake, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
 import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -4563,6 +4563,73 @@ export class Game {
     const me = this.acting.id;
     for (const f of this.furniture.values()) if (f.driven && (f.driverId ?? me) === me) return f;
     return undefined;
+  }
+
+  /**
+   * The cart you are working from: the cart or wagon you have the reins of,
+   * or the small cart you have by the shafts. Not a boat.
+   *
+   * Asked for: "When doing actions from the cart, all gathered materials
+   * should go right to the cart." What a gathering job brings up goes into
+   * this, as far as it has room; see `gather`.
+   */
+  workCart(): PlacedFurniture | undefined {
+    const driven = this.driving();
+    if (driven && vehicleOf(driven)) return driven;
+    for (const f of this.furniture.values()) if (f.hitched) return f;
+    return undefined;
+  }
+
+  /** When the cart was last said to be full, so a run of swings says it once. */
+  private cartFullSaid = -Infinity;
+
+  /**
+   * What a gathering job brings up -- ore, dirt, logs, a catch, a harvest --
+   * put where it belongs: into the cart you are working from, as much as it
+   * has room for and will take, and the rest into the pack. The stack it
+   * went into comes back, the cart's when any of it went there.
+   */
+  gather(id: string, opts: { ql?: number; count?: number; extra?: string } = {}): Item {
+    const cart = this.workCart();
+    const count = opts.count ?? 1;
+    if (!cart) return this.inventory.add(id, opts);
+    const def = itemDef(id);
+    const item: Item = { uid: 0, id, ql: Math.max(1, Math.min(100, opts.ql ?? 20)), dmg: 0, count, extra: opts.extra };
+    if (def.charges) item.charges = def.charges;
+    const fit = furnitureRefuses(cart, item) ? 0 : Math.min(count, furnitureRoom(cart, item));
+    if (fit < count) this.saidCartFull(cart);
+    if (fit <= 0) return this.inventory.add(id, opts);
+    item.uid = this.inventory.nextUid++;
+    item.count = fit;
+    const stack = cart.items.find((it) => sameStack(it, item));
+    if (stack) foldInto(stack, item);
+    else cart.items.push(item);
+    if (fit < count) this.inventory.add(id, { ...opts, count: count - fit });
+    this.events.emit('crate');
+    return stack ?? item;
+  }
+
+  /** A catch that is already a thing -- a creel's -- put the same way `gather` puts one. */
+  gatherItem(item: Item): void {
+    const cart = this.workCart();
+    const fit = !cart || furnitureRefuses(cart, item) ? 0 : Math.min(item.count, furnitureRoom(cart, item));
+    if (cart && fit < item.count) this.saidCartFull(cart);
+    if (!cart || fit <= 0) {
+      this.inventory.addItem(item);
+      return;
+    }
+    const part: Item = fit < item.count ? { ...item, uid: this.inventory.nextUid++, count: fit } : item;
+    const stack = cart.items.find((it) => sameStack(it, part));
+    if (stack) foldInto(stack, part);
+    else cart.items.push(part);
+    if (fit < item.count) this.inventory.addItem({ ...item, count: item.count - fit });
+    this.events.emit('crate');
+  }
+
+  private saidCartFull(cart: PlacedFurniture): void {
+    if (this.time - this.cartFullSaid < 30) return;
+    this.cartFullSaid = this.time;
+    this.logMsg(`The ${furnitureName(cart).toLowerCase()} is full. What does not fit goes in your pack.`, 'error');
   }
 
   /** The wildermon in the traces of a vehicle, dead ones dropped. */

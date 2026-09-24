@@ -141,7 +141,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       // A piece you are still short of, if you are short of any: the ground is kinder than it needs to be.
       const missing = partsMissing(g, relic);
       const part = missing.length ? missing[Math.floor(g.rand() * missing.length)] : 1 + Math.floor(g.rand() * relic.parts);
-      const item = g.inventory.add('fragment', {
+      const item = g.gather('fragment', {
         ql: Math.max(1, g.productQl('archaeology', toolQl) * (0.55 + g.rand() * 0.35)),
         extra: `${relic.name} ${part}/${relic.parts}`,
       });

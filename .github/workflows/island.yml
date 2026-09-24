@@ -1021,6 +1021,19 @@ jobs:
             --outfile=node_modules/.cache/beside.mjs --log-level=error
           node node_modules/.cache/beside.mjs
 
+      - name: What you gather goes in the cart
+        run: |
+          # "When doing actions from the cart, all gathered materials should go
+          # right to the cart." With the reins of a cart or wagon, or a small
+          # cart by the shafts, what a gathering job brings up goes into it as
+          # far as it has room, and the rest into the pack, with the cart said
+          # to be full once an ask. This digs from a wagon on both sides, fills
+          # one to two short, empties a creel into it, pulls a small cart, and
+          # asks that a boat and bare feet still gather into the pack.
+          npx esbuild supabase/test/laden.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/laden.mjs --log-level=error
+          node node_modules/.cache/laden.mjs
+
       - name: One pile and not six
         run: |
           # Reported off a screenshot of a pack holding six separate piles of

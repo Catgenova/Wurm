@@ -222,8 +222,8 @@ export const FARM_ACTIONS: ActionDef[] = [
       // The gardener's path takes a third more out of the same ground.
       const more = g.walks('love', 5) ? 1.34 : 1;
       const got = Math.max(1, Math.round(y.produce * more));
-      const produce = g.inventory.add(def.produce, { count: got, ql });
-      g.inventory.add(def.seed, { count: y.seeds, ql });
+      const produce = g.gather(def.produce, { count: got, ql });
+      g.gather(def.seed, { count: y.seeds, ql });
       g.removeCrop(c.x, c.y);
       g.logMsg(
         `You harvest ${got} × ${itemName(produce).toLowerCase()} and ${y.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${ql.toFixed(1)})`,

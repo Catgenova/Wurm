@@ -593,7 +593,7 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg(`Your shovel comes up with nothing but a smear of ${def.name.toLowerCase()}.`, 'event');
         return;
       }
-      const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
+      const item = g.gather(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You fill a shovel with ${itemDef(yieldId).name.toLowerCase()} off the top of the bed. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
@@ -624,7 +624,7 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg('You turn a spadeful over and nothing is moving in it.', 'event');
         return true;
       }
-      g.inventory.add('worm', { count: n, ql: 20 + g.rand() * 40 });
+      g.gather('worm', { count: n, ql: 20 + g.rand() * 40 });
       g.note('worms');
       g.logMsg(`You turn the dirt over and pick ${n} worm${n > 1 ? 's' : ''} out of it.`, 'event');
       return true;
@@ -674,7 +674,7 @@ export const ACTIONS: ActionDef[] = [
         g.exposeRock(t.cx, t.cy);
       }
       const yieldId = def.digYield ?? 'dirt';
-      const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
+      const item = g.gather(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You dig up some ${itemDef(yieldId).name.toLowerCase()} from the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
       // And one spadeful in a thousand that is not dirt at all.
       maybeMap(g, 'digging', 'shovel');
@@ -720,7 +720,7 @@ export const ACTIONS: ActionDef[] = [
       if (def.turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
       if (left <= 0) g.exposeRock(t.cx, t.cy);
       const yieldId = def.digYield ?? 'dirt';
-      const item = g.inventory.add(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
+      const item = g.gather(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You dredge up some ${itemDef(yieldId).name.toLowerCase()} off the bottom at the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
@@ -788,7 +788,7 @@ export const ACTIONS: ActionDef[] = [
         // What the ground is made of, which digging has always read off the
         // tile and flattening never did: scrape a clay bank and you have clay.
         const got = TILE_DEFS[w.getTile(t.x, t.y)].digYield ?? 'dirt';
-        g.inventory.add(got, { ql: g.productQl('digging', g.toolQl('shovel')) });
+        g.gather(got, { ql: g.productQl('digging', g.toolQl('shovel')) });
         g.logMsg(`You scrape the ground down and pocket the ${itemDef(got).name.toLowerCase()}.`, 'event');
       } else {
         // Its own stuff first, and dirt after: dirt fills anything, and it
@@ -962,7 +962,7 @@ export const ACTIONS: ActionDef[] = [
       const yieldId = type === TileType.Rock ? rock.yields : 'rock_shards';
       if (yieldId.endsWith('_ore')) g.note('ore');
       // No seam gives up more quality than it holds, however good the miner.
-      const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', pickQl)) });
+      const item = g.gather(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', pickQl)) });
       const what = itemDef(yieldId).name.toLowerCase();
       g.logMsg(yieldId.endsWith('lump') ? `You chip a ${what} out of the vein. (QL ${item.ql.toFixed(1)})` : `You mine some ${what}. (QL ${item.ql.toFixed(1)})`, 'event');
       // And one swing in a thousand that brings out something nobody quarried.
@@ -1016,7 +1016,7 @@ export const ACTIONS: ActionDef[] = [
       const rock = bedrockAt(w, t.x, t.y);
       const yieldId = w.getTile(t.x, t.y) === TileType.Rock ? rock.yields : 'rock_shards';
       if (yieldId.endsWith('_ore')) g.note('ore');
-      const item = g.inventory.add(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', g.toolQl('pickaxe'))) });
+      const item = g.gather(yieldId, { ql: Math.min(rock.maxQl, g.productQl('mining', g.toolQl('pickaxe'))) });
       g.logMsg(`The ${cornerName(t)} corner breaks away and drops a step. You gather the ${itemDef(yieldId).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
@@ -1135,7 +1135,7 @@ export const ACTIONS: ActionDef[] = [
       // A tree with timber in it leaves a stump, of its own kind, in the way
       // of the ground for a day or until somebody digs it out.
       w.setTile(t.x, t.y, TileType.Stump, packTreeData(treeSpecies(data), 0));
-      const item = g.inventory.add('log', { count: age.logs, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
+      const item = g.gather('log', { count: age.logs, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
       g.logMsg(`The ${what} comes down. You get ${age.logs} ${age.logs === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)}) The stump is left.`, 'event');
     },
   },
@@ -1189,7 +1189,7 @@ export const ACTIONS: ActionDef[] = [
         g.logMsg('You find no sprout worth picking.', 'event');
         return;
       }
-      g.inventory.add('sprout', { ql: g.productQl('forestry'), extra: def.name });
+      g.gather('sprout', { ql: g.productQl('forestry'), extra: def.name });
       g.logMsg(`You pick a ${def.name.toLowerCase()} sprout.`, 'event');
     },
   },
@@ -1264,7 +1264,7 @@ export const ACTIONS: ActionDef[] = [
       // As fruit off a tree: more to a practised hand, and never nothing.
       const skill = g.skills.get('forestry');
       const count = Math.max(1, Math.round(3 * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
-      const made = g.inventory.add(def.yields, { count, ql: g.productQl('forestry', g.toolQl('sickle')) });
+      const made = g.gather(def.yields, { count, ql: g.productQl('forestry', g.toolQl('sickle')) });
       g.markForaged(t.x, t.y, 'forage');
       g.gainSkill('forestry', 0.35);
       g.logMsg(`You cut ${count} ${itemDef(def.yields).name.toLowerCase()} off the ${def.name.toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
@@ -1307,7 +1307,7 @@ export const ACTIONS: ActionDef[] = [
       const old = treeVariant(data) === 2 || treeVariant(data) === 4;
       const skill = g.skills.get('forestry');
       const count = Math.max(1, Math.round((old ? 5 : 3) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
-      const made = g.inventory.add(def.fruit, { count, ql: g.productQl('forestry'), });
+      const made = g.gather(def.fruit, { count, ql: g.productQl('forestry'), });
       g.markForaged(t.x, t.y, 'forage');
       g.gainSkill('forestry', 0.35);
       g.logMsg(`You pick ${count} ${itemDef(def.fruit).name.toLowerCase()}${count === 1 ? '' : 's'} off the ${def.name.toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
@@ -1426,7 +1426,7 @@ export const ACTIONS: ActionDef[] = [
       for (let i = 0; i < rolls; i++) {
         if (g.rand() < 0.2 || !g.skillCheck('foraging', 5)) continue;
         const id = rollTable(FORAGE_TABLE, g.rand());
-        const item = g.inventory.add(id, { ql: g.productQl('foraging') });
+        const item = g.gather(id, { ql: g.productQl('foraging') });
         found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
       }
       if (!found.length) {
@@ -1458,7 +1458,7 @@ export const ACTIONS: ActionDef[] = [
       for (let i = 0; i < rolls; i++) {
         if (g.rand() < 0.2 || !g.skillCheck('botanizing', 5)) continue;
         const id = rollTable(BOTANIZE_TABLE, g.rand());
-        const item = g.inventory.add(id, { ql: g.productQl('botanizing') });
+        const item = g.gather(id, { ql: g.productQl('botanizing') });
         found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
       }
       if (!found.length) {
@@ -1588,7 +1588,7 @@ export const ACTIONS: ActionDef[] = [
       const kind = wasSlab ? SLAB_VARIANTS[slabVariant(g.world.getData(t.x, t.y))] : null;
       g.world.setTile(t.x, t.y, TileType.Dirt);
       if (kind && g.rand() < 0.6) {
-        const back = g.inventory.add(kind.item, { ql: g.productQl('paving') });
+        const back = g.gather(kind.item, { ql: g.productQl('paving') });
         g.logMsg(`You lever the ${kind.name.toLowerCase().replace(/s$/, '')} up whole. (QL ${back.ql.toFixed(1)})`, 'event');
         return;
       }
@@ -2124,7 +2124,7 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'grass');
-      g.inventory.add('mixed_grass', { count: 2, ql: g.productQl('foraging') });
+      g.gather('mixed_grass', { count: 2, ql: g.productQl('foraging') });
       // Grass kept cut on a deed becomes lawn: the tile counts the days.
       const w = g.world;
       if (w.getTile(t.x, t.y) === TileType.Grass && g.onDeed(t.x, t.y)) {
@@ -2154,7 +2154,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'reed');
       const count = 2 + (g.rand() < g.skills.get('foraging') / 140 ? 1 : 0);
-      g.inventory.add('reed', { count, ql: g.productQl('foraging', g.toolQl('carving_knife')) });
+      g.gather('reed', { count, ql: g.productQl('foraging', g.toolQl('carving_knife')) });
       g.logMsg(`You cut ${count} reeds out of the bed.`, 'event');
     },
   },
