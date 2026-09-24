@@ -1078,6 +1078,22 @@ jobs:
             --outfile=node_modules/.cache/sight.mjs --log-level=error
           node node_modules/.cache/sight.mjs
 
+      - name: The last spadeful, and one fault one job
+        run: |
+          # "something just broke, no actions are working". `take_spoil` and
+          # `site_take` set the last one of a stack to a count of 0, which the
+          # item table refuses, so a cart's last spadeful raised an error --
+          # and `world_tick` settles everybody in one transaction, so that one
+          # job failed every round for everyone. This takes the last one out
+          # of a crate, a cart and a site's pile, settles the reported job
+          # through the clock, and puts a fault in one body's way and then in
+          # a sweep, asking that the round finishes, that everybody else's
+          # work settles, and that the faulty job stops, says why, and is kept
+          # where the deploy reports it.
+          npx esbuild supabase/test/spadeful.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/spadeful.mjs --log-level=error
+          node node_modules/.cache/spadeful.mjs
+
       - name: A new look, worn on an island
         run: |
           # "allow players to change their appearance back through the
@@ -1440,6 +1456,33 @@ jobs:
                  "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
                  -c "$TICK" \
             || echo "::notice::No round timings yet — tick_time is filled by world_tick, so the first deploy that creates it has nothing to show."
+          # And what the clock caught going wrong. A job or a sweep that raises
+          # an error no longer fails the round: it is undone, stopped and kept
+          # in `private.tick_fault`, one row a fault with how often it came
+          # back. Which is also how it would go unnoticed, so here it is.
+          FAULTS=$(cat <<'EOSQL'
+          select to_char(f.at, 'MM-DD HH24:MI') as first,
+                 to_char(f.last_at, 'MM-DD HH24:MI') as last,
+                 f.times,
+                 coalesce(w.name, '') as island,
+                 left(coalesce(f.uid::text, ''), 8) as body,
+                 f.stage,
+                 coalesce(f.job, '') as job,
+                 left(f.error, 100) as error,
+                 left(regexp_replace(coalesce(f.context, ''), '\s+', ' ', 'g'), 160) as at_line
+            from private.tick_fault f
+            left join world w on w.id = f.world_id
+           where f.last_at > now() - interval '1 day'
+           order by f.last_at desc
+           limit 20;
+          EOSQL
+          )
+          supabase db query --linked "$FAULTS" \
+            || printf '%s\n' "$FAULTS" | supabase db query --linked \
+            || PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                 "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
+                 -c "$FAULTS" \
+            || echo "::notice::No faults listed — private.tick_fault could not be read."
 
   found:
     name: Found an island on the project
