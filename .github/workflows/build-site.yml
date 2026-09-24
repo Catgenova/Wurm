@@ -25,7 +25,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # The whole history: the build stamps the site with which deploy it is, by counting the commits on main.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -678,7 +678,7 @@ export class Hud {
     }
     const mobs = this.game.creatures.ticked;
     const watched = this.game.settings.fog ? ` · ${mobs.thought}/${mobs.near + mobs.far + mobs.asleep} mobs` : '';
-    this.say(this.fpsEl, `v${VERSION} · ${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`);
+    this.say(this.fpsEl, `${VERSION} · ${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`);
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
     // What is in your hands and how much armour is on you.

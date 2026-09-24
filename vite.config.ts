@@ -1,9 +1,26 @@
 import { defineConfig } from 'vite';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-/** The version in package.json, written into the game for the corner of the screen (see src/version.ts). */
-const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string };
+/**
+ * Which deploy of the site this build is, for the corner of the screen (see
+ * src/version.ts). Every push to main redeploys the site, so it is the number
+ * of commits on main, counting the one this build goes out in: built here,
+ * that is the commit about to be made, one after HEAD; built by the "Build
+ * site" workflow, it is the commit that was pushed, HEAD itself -- so the two
+ * builds agree, and the workflow finds nothing to rebuild. Without the whole
+ * history to count, in a shallow clone, there is no number.
+ */
+function deploy(): number | undefined {
+  const git = (...args: string[]): string =>
+    execFileSync('git', args, { cwd: import.meta.dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  try {
+    if (git('rev-parse', '--is-shallow-repository') === 'true') return undefined;
+    return Number(git('rev-list', '--count', 'HEAD')) + (process.env.GITHUB_ACTIONS === 'true' ? 0 : 1);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The app source lives in src/ (including the HTML entries). `npm run build`
@@ -20,7 +37,7 @@ const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'packag
 export default defineConfig({
   root: 'src',
   base: './',
-  define: { __VERSION__: JSON.stringify(version) },
+  define: { __DEPLOY__: String(deploy() ?? 'undefined') },
   server: { port: 5173, host: true },
   build: {
     outDir: '../dist',
