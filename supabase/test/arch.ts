@@ -19,7 +19,7 @@
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
-import { MATERIALS, WALL_TYPE_BY_ID, WALL_TYPES, wallBill } from '../../src/game/building';
+import { floorBill, MATERIALS, ROOF_SHAPES, WALL_TYPE_BY_ID, WALL_TYPES, wallBill } from '../../src/game/building';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -79,6 +79,42 @@ check(`an arch in every one of the ${MATERIALS.length} materials, and the same b
 check('and none of them costs more than the solid wall it is a hole in',
   cheaper === MATERIALS.length, `${cheaper} of ${MATERIALS.length}`);
 for (const line of lines) console.log(`    ${line}`);
+
+/*
+ * ---- and every other type and roof, in every material ----
+ *
+ * The arch was the one the suite asked about, and the one that showed the
+ * factor was a four-byte `real` on the island: 0.85 there is 0.8500000238,
+ * and twenty shards times that rounds up to eighteen where the browser's
+ * double makes seventeen. Any factor that is not a whole number of halves is
+ * open to the same, so every type and every roof is put to both sides, in one
+ * query.
+ */
+const island = JSON.parse(psql(`select jsonb_object_agg(m.id || '|' || t.id, wall_bill(m.id, t.id))
+    || (select jsonb_object_agg(m2.id || '|roof:' || r.id, floor_bill(m2.id, 'roof', r.id))
+          from build_material_def m2, roof_shape_def r)
+  from build_material_def m, wall_type_def t`)) as Record<string, Record<string, number>>;
+const differ: string[] = [];
+let asked = 0;
+const same2 = (mine: Record<string, number>, theirs: Record<string, number> | undefined): boolean =>
+  !!theirs && Object.keys(mine).length === Object.keys(theirs).length
+  && Object.entries(mine).every(([k, n]) => theirs[k] === n);
+for (const m of MATERIALS) {
+  for (const t of WALL_TYPES) {
+    asked++;
+    const mine = wallBill(m.id, t.id).needed;
+    const theirs = island[`${m.id}|${t.id}`];
+    if (!same2(mine, theirs)) differ.push(`${m.id} ${t.id}: ${JSON.stringify(mine)} here, ${JSON.stringify(theirs)} there`);
+  }
+  for (const r of ROOF_SHAPES) {
+    asked++;
+    const mine = floorBill(m.id, 'roof', r.id).needed;
+    const theirs = island[`${m.id}|roof:${r.id}`];
+    if (!same2(mine, theirs)) differ.push(`${m.id} ${r.id} roof: ${JSON.stringify(mine)} here, ${JSON.stringify(theirs)} there`);
+  }
+}
+check(`every wall type and every roof, in every material, costs the same on both sides`,
+  differ.length === 0, differ.length ? differ.slice(0, 4).join('; ') : `${asked} bills`);
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

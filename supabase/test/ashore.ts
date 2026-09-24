@@ -119,9 +119,15 @@ if (stone) {
 /*
  * And the line is offered for every recipe rather than the handful somebody
  * thought of, since a recipe with no answer would silently say nothing.
+ *
+ * A thing made out of its parts has no roll and so no short: what it comes
+ * out at is the parts, and until they are at hand the line is the share of
+ * them the hands keep. That rule came after this check was written, and
+ * every one of those recipes failed it for having no roll to report.
  */
 const dumb = RECIPES.filter((r) => {
   const pr = prospect(r, g);
+  if (pr.fromInputs) return !(pr.keep > 0 && pr.keep <= 1 && (!pr.partsInHand || (pr.ceiling >= 1 && pr.ceiling <= 100)));
   return !(pr.ceiling >= 1 && pr.ceiling <= 100 && pr.reach >= 0 && pr.reach <= 1 && pr.short >= 1);
 });
 check('every recipe in the book can say what it would come out at',
