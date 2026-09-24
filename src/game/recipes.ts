@@ -671,7 +671,7 @@ export function materialChoices(g: Game, r: Recipe, stock: readonly CraftStock[]
  * hand, and otherwise whichever there is most of. A recipe that names its
  * wood takes that and nothing else.
  */
-export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: string, stock: readonly CraftStock[] = g.craftStock()): string | undefined {
+export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: string, stock: readonly CraftStock[] = g.craftStock(preferUid)): string | undefined {
   if (!r.material) return undefined;
   if (r.wood) return r.wood;
   for (const i of r.inputs) {
@@ -696,7 +696,7 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: st
 }
 
 /** Why a recipe cannot be made right now, or null. */
-export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock()): string | null {
+export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock(preferUid)): string | null {
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
   const mat = chooseMaterial(g, r, preferUid, undefined, stock);
@@ -834,12 +834,14 @@ export function recipeAction(r: Recipe): ActionDef {
     // the pack, a bag on your back, or a store within `CRAFT_REACH`.
     applies: (t, g) => t.kind === 'item' && materials.includes(g.craftItem(t.uid)?.id ?? ''),
     check: (t, g) => recipeReason(r, g, t.kind === 'item' ? t.uid : undefined),
-    maxRepeat: (_t, g) => recipeStatus(r, g).max,
+    // Counted with the stack it was started on, which may be one the settings would not have picked.
+    maxRepeat: (t, g) => recipeStatus(r, g, undefined, g.craftStock(t.kind === 'item' ? t.uid : undefined)).max,
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       // Everything this go may spend, listed once: the pack, then the bags,
-      // then the stores within reach, nearest first.
-      const stock = g.craftStock();
+      // then the stores within reach, nearest first -- and the stack it was
+      // started on, whatever the settings say about rare stock.
+      const stock = g.craftStock(t.uid);
       const was = stock.find((s) => s.item.uid === t.uid)?.item;
       // An oven holds its heat evenly: what would burn over a fire comes out right.
       const oven = r.station === 'campfire' ? g.hotOvenNear() : undefined;

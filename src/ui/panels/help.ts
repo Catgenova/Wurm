@@ -1,5 +1,5 @@
 import { MINE_COLLAPSE } from '../../game/actions';
-import { RARITY_ROOM } from '../../game/items';
+import { RARITIES, RARITY_ROOM } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
 import type { UIWindow } from '../windows';
 
@@ -302,6 +302,12 @@ function helpText(): string {
     hold no key to, from one somebody else set down off your settlement, from a trash crate or a market
     stall, and nothing put by is ever used. A cart, a wagon or a boat is anybody's store, whoever built
     it.</p>
+    <p>Two settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
+    <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
+    <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
+    ${RARITIES.slice(1, -1).map((r) => r.name).join(', ')} or ${RARITIES[RARITIES.length - 1].name} stack by itself; one you point it at is still
+    used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
+    On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
     <p>The same bill of materials in two different woods, or two different metals, makes two different
     things. A log keeps the wood it was cut from all the way through &mdash; planks, timbers, shafts and

@@ -1,4 +1,4 @@
-import{Ct as e,Oi as t}from"./creatures.js";function n(){return`
+import{Ct as e,Oi as t,ki as n}from"./creatures.js";function r(){return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -296,6 +296,12 @@ import{Ct as e,Oi as t}from"./creatures.js";function n(){return`
     hold no key to, from one somebody else set down off your settlement, from a trash crate or a market
     stall, and nothing put by is ever used. A cart, a wagon or a boat is anybody's store, whoever built
     it.</p>
+    <p>Two settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
+    <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
+    <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
+    ${t.slice(1,-1).map(e=>e.name).join(`, `)} or ${t[t.length-1].name} stack by itself; one you point it at is still
+    used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
+    On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
     <p>The same bill of materials in two different woods, or two different metals, makes two different
     things. A log keeps the wood it was cut from all the way through &mdash; planks, timbers, shafts and
@@ -994,7 +1000,7 @@ import{Ct as e,Oi as t}from"./creatures.js";function n(){return`
     skill</b> by 5, 12 or 25.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${(t*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(t*e*100).toFixed(0)}%</b>`).join(`, `)}
+    ${(n*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(n*e*100).toFixed(0)}%</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
     holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
     kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
@@ -1511,4 +1517,4 @@ import{Ct as e,Oi as t}from"./creatures.js";function n(){return`
     goes for the first point of a skill, a hundred and forty for the ninetieth, and something like
     <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
     a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
-  `}function r(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=n();let r=[],i=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){i=document.createElement(`section`),i.className=`help-sec`,i.id=`help-${r.length}`,i.append(e),r.push({title:e.textContent??``,el:i});continue}i?i.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let a=document.createElement(`input`);a.type=`search`,a.className=`panel-search help-search`,a.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=r.map(({title:e,el:t},n)=>{let i=document.createElement(`button`);return i.type=`button`,i.className=`help-link`,i.textContent=e,i.addEventListener(`click`,()=>{a.value&&(a.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),i.title=`Jump to “${e}” (section ${n+1} of ${r.length})`,i});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),n=0;for(let e=0;e<r.length;e+=1){let{title:i,el:a}=r[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(n+=1)}c.hidden=!t,c.textContent=n?`${n} of ${r.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};a.addEventListener(`input`,()=>u(a.value)),a.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(a.value=``,u(``))}),s.append(...r.map(e=>e.el)),e.body.replaceChildren(a,o,c,s)}export{r as buildHelp};
+  `}function i(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=r();let n=[],i=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){i=document.createElement(`section`),i.className=`help-sec`,i.id=`help-${n.length}`,i.append(e),n.push({title:e.textContent??``,el:i});continue}i?i.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let a=document.createElement(`input`);a.type=`search`,a.className=`panel-search help-search`,a.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=n.map(({title:e,el:t},r)=>{let i=document.createElement(`button`);return i.type=`button`,i.className=`help-link`,i.textContent=e,i.addEventListener(`click`,()=>{a.value&&(a.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),i.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,i});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(r+=1)}c.hidden=!t,c.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};a.addEventListener(`input`,()=>u(a.value)),a.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(a.value=``,u(``))}),s.append(...n.map(e=>e.el)),e.body.replaceChildren(a,o,c,s)}export{i as buildHelp};

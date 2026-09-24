@@ -1021,6 +1021,21 @@ jobs:
             --outfile=node_modules/.cache/beside.mjs --log-level=error
           node node_modules/.cache/beside.mjs
 
+      - name: What a craft may take is the player's to say
+        run: |
+          # "add a toggle in settings for allowing or disallowing crafting from
+          # nearby containers. add another setting that disallows the automatic
+          # use of any rare material in crafting." The browser keeps both in
+          # Settings and tells the island (`rpc_craft_prefs`), which keeps them
+          # on the body because it is the island that spends a job's stock.
+          # This asks both sides: with the stores out nothing in them is at
+          # hand, even named; with rare stock spared the craft and the fire
+          # pass a rare stack over but take it when pointed at it; and with the
+          # rare not spared it is used like any other.
+          npx esbuild supabase/test/spare.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/spare.mjs --log-level=error
+          node node_modules/.cache/spare.mjs
+
       - name: What you gather goes in the cart
         run: |
           # "When doing actions from the cart, all gathered materials should go

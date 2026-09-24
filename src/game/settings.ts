@@ -62,6 +62,23 @@ export const SETTING_DEFAULTS = {
    * tree on every island they ever open.
    */
   guide: true,
+  /**
+   * Whether a craft, and work at a station that uses something up, may take
+   * it from your stores within reach as well as from what you carry.
+   *
+   * Asked for as "a toggle in settings for allowing or disallowing crafting
+   * from nearby containers" -- "a player setting to only use inventory". Off,
+   * the pack and the bags on your back are all there is. On an island the
+   * island keeps a copy of its own on your body, since it is the island that
+   * spends the stock (`Island.craftPrefs`).
+   */
+  fromStores: true,
+  /**
+   * Whether a craft leaves rare, supreme and fantastic stock alone unless it
+   * was pointed at it: "disallows the automatic use of any rare material in
+   * crafting". Kept on the island's copy too.
+   */
+  spareRare: false,
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {

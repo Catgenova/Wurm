@@ -2045,6 +2045,25 @@ export class Island {
     return kept;
   }
 
+  /**
+   * The two crafting settings, for the island's copy on this body: whether a
+   * craft may take from the stores within reach, and whether it leaves rare
+   * stock alone unless pointed at it. The island spends a job's stock when
+   * the job settles, which is not necessarily while this page is open, so it
+   * cannot ask the page -- it reads what it was last told here.
+   *
+   * `quiet` for the join, where nobody asked for anything: an island that
+   * has not heard of the settings yet goes on as it always did, with the
+   * stores in and the rare not spared, and that is not worth a line in red.
+   */
+  async craftPrefs(fromStores: boolean, spareRare: boolean, quiet = false): Promise<void> {
+    if (!this.info) return;
+    const { error } = await supabase().rpc('rpc_craft_prefs', {
+      p_world: this.info.id, p_from_stores: fromStores, p_spare_rare: spareRare,
+    });
+    if (error && !quiet) this.hooks.say(`The island did not hear that (${error.message}).`, 'error');
+  }
+
   /** Ask somebody to come and live on your land. */
   async invite(uid: string): Promise<string | null> {
     return this.door('rpc_invite', { p_uid: uid });

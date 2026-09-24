@@ -2162,6 +2162,14 @@ export class Game {
   woreTitle?: (id: string | null) => void;
 
   /**
+   * Set by the island, when there is one, to carry the two crafting settings
+   * across -- `fromStores` and `spareRare` -- whenever Settings changes one.
+   * The island spends the stock when a job settles, so its copy is the one
+   * that counts there.
+   */
+  craftPrefsChanged?: () => void;
+
+  /**
    * What this body last said out loud, for the bubble over its own head.
    *
    * Everybody else's lives on their `Peer`, which is where everything drawn
@@ -4266,18 +4274,27 @@ export class Game {
    * a settlement of yours -- nor into a trash crate, whose contents are on
    * their way out, nor a market stall, whose wares are for sale. A thing put
    * by is never spent, wherever it is.
+   *
+   * And only as far as the settings let it. With `fromStores` off it stops at
+   * the bags on your back. With `spareRare` on, a rare, supreme or fantastic
+   * stack is left out -- unless it is `chosen`, the stack the work was
+   * pointed at, or the list is `every` stack for a menu to choose from, where
+   * naming a stack is choosing it. The island narrows its `craft_stock` the
+   * same two ways.
    */
-  craftStock(): CraftStock[] {
+  craftStock(chosen?: number, every = false): CraftStock[] {
     const pack = this.inventory;
     const out: CraftStock[] = [];
+    const spare = this.settings.spareRare && !every;
+    const kept = (it: Item): boolean => !spare || !(it.rare ?? 0) || it.uid === chosen;
     for (const it of pack.items) {
-      if (pack.loose(it)) out.push({ item: it, carried: true, spend: (n) => pack.remove(it.uid, n) });
+      if (pack.loose(it) && kept(it)) out.push({ item: it, carried: true, spend: (n) => pack.remove(it.uid, n) });
     }
     for (const bag of pack.items) {
       const inside = bag.inside;
       if (!inside?.length) continue;
       for (const it of inside) {
-        if (!pack.loose(it)) continue;
+        if (!pack.loose(it) || !kept(it)) continue;
         out.push({
           item: it,
           carried: true,
@@ -4291,7 +4308,7 @@ export class Game {
     }
     for (const store of this.storesForCraft()) {
       for (const it of store.items) {
-        if (it.locked || it.price !== undefined) continue;
+        if (it.locked || it.price !== undefined || !kept(it)) continue;
         out.push({
           item: it,
           carried: false,
@@ -4317,6 +4334,8 @@ export class Game {
    * it still keeps a craft out, as it keeps out a hand.
    */
   private storesForCraft(): Array<{ items: Item[]; name: string }> {
+    // "A player setting to only use inventory."
+    if (!this.settings.fromStores) return [];
     const tx = this.player.tileX;
     const ty = this.player.tileY;
     const within = (x: number, y: number): boolean => Math.max(Math.abs(x - tx), Math.abs(y - ty)) <= CRAFT_REACH;
@@ -4353,12 +4372,20 @@ export class Game {
    * a mould, a coin die, a file -- are still the ones you carry.
    */
   stockEntry(uid: number): CraftStock | undefined {
-    return this.craftStock().find((s) => s.item.uid === uid);
+    return this.craftStock(uid).find((s) => s.item.uid === uid);
   }
 
   /** Every stack at hand that answers `pick`, in the order a craft spends them. */
   stockOf(pick: (it: Item) => boolean): CraftStock[] {
     return this.craftStock().filter((s) => pick(s.item));
+  }
+
+  /**
+   * The same, for a station's menu to choose from: rare stock included
+   * whatever the settings say, because a stack named off a menu is chosen.
+   */
+  stockChoices(pick: (it: Item) => boolean): CraftStock[] {
+    return this.craftStock(undefined, true).filter((s) => pick(s.item));
   }
 
   /** How many of a kind are at hand to be spent, carried and stored within reach. */

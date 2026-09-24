@@ -23,6 +23,7 @@ export class CraftPanel {
   private readonly repaint = new Repaint(250);
   private list: HTMLDivElement;
   private footer: HTMLDivElement;
+  private hint: HTMLSpanElement;
   private search: HTMLInputElement;
   private query = '';
   private readyOnly = false;
@@ -52,7 +53,7 @@ export class CraftPanel {
     head.className = 'craft-head';
     const hint = document.createElement('span');
     hint.textContent = 'Tool, place and materials each recipe needs';
-    hint.title = `Materials count what you carry, in your pack and your bags, and what is in your stores within ${CRAFT_REACH} tiles. The pack is used first, then the bags, then the nearest store.`;
+    this.hint = hint;
     const toggle = document.createElement('label');
     const box = document.createElement('input');
     box.type = 'checkbox';
@@ -108,11 +109,19 @@ export class CraftPanel {
     const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id), stock)]));
     // What the book would say. Standing at an anvil hammering, this is the
     // same from one second to the next, so nothing is touched.
-    const sig = `${this.query}\u0000${this.readyOnly ? 1 : 0}\u0000${RECIPES.map((r) => {
+    const { fromStores, spareRare } = this.game.settings;
+    const sig = `${this.query}\u0000${this.readyOnly ? 1 : 0}${fromStores ? 1 : 0}${spareRare ? 1 : 0}\u0000${RECIPES.map((r) => {
       const st = statuses.get(r);
       return `${r.id}${st?.ready ? 1 : 0}${st?.max ?? 0}${st?.inputs.map((i) => `.${i.have}.${i.carried}`).join('') ?? ''}`;
     }).join('')}`;
     if (!this.repaint.changed(now, sig)) return;
+    // What the counts count, which Settings decides.
+    const atHand = fromStores ? `what you carry and what is in your stores within ${CRAFT_REACH} tiles` : 'what you carry';
+    this.hint.title = `Materials count ${fromStores
+      ? `what you carry, in your pack and your bags, and what is in your stores within ${CRAFT_REACH} tiles. The pack is used first, then the bags, then the nearest store.`
+      : 'what you carry, in your pack and your bags: Settings keeps your stores out. The pack is used first, then the bags.'}${spareRare
+      ? ' Rare stock is left out of the counts, as Settings asks; right-click a rare stack to make something from it.'
+      : ''}`;
     this.list.replaceChildren();
     let shown = 0;
     let ready = 0;
@@ -137,10 +146,10 @@ export class CraftPanel {
       empty.className = 'inv-empty';
       empty.textContent = this.query
         ? `No recipe answers to “${this.search.value.trim()}”${this.readyOnly ? ' that you can make right now' : ''}.`
-        : `Nothing can be made with what you carry and what is in your stores within ${CRAFT_REACH} tiles. Untick "Only what I can make" to see what each thing needs.`;
+        : `Nothing can be made with ${atHand}. Untick "Only what I can make" to see what each thing needs.`;
       this.list.append(empty);
     }
-    const within = `with what you carry and your stores within ${CRAFT_REACH} tiles`;
+    const within = `with ${atHand}`;
     this.footer.textContent = this.query
       ? `${shown} recipes match, ${ready} of them possible ${within}`
       : `${ready} of ${RECIPES.length} recipes possible ${within}`;

@@ -1,6 +1,8 @@
 import type { Game } from '../../game/game';
 import { BINDS, BIND_GROUPS, keyName, keyReserved, MAX_KEYS, type Keybinds } from '../../game/keybinds';
 import { whoAmI } from '../../net/accounts';
+import { RARITIES } from '../../game/items';
+import { CRAFT_REACH } from '../../game/recipes';
 import type { UIWindow } from '../windows';
 
 interface Toggle {
@@ -165,6 +167,38 @@ export class SettingsPanel {
       'Draw the green boundary of your settlement at all times. Otherwise it only shows while pointing at the token.',
       () => game.settings.deedBorder,
       (v) => (game.settings.deedBorder = v),
+    );
+
+    /*
+     * What a craft may take. "A toggle in settings for allowing or
+     * disallowing crafting from nearby containers", and "another setting that
+     * disallows the automatic use of any rare material in crafting". Both
+     * reach the island as well (`craftPrefsChanged`), which is where a job's
+     * stock is spent.
+     */
+    const craftHead = document.createElement('h4');
+    craftHead.className = 'keys-group';
+    craftHead.textContent = 'Crafting';
+    display.append(craftHead);
+    const rareNames = RARITIES.slice(1).map((r) => r.name);
+    const rareWords = `${rareNames.slice(0, -1).join(', ')} or ${rareNames[rareNames.length - 1]}`;
+    add(
+      'Use stores within reach',
+      `A craft, and work at a station that uses something up, takes it from your pack, then the bags on your back, then crates, pieces and vehicles within ${CRAFT_REACH} tiles. Untick to take it from your pack and bags only.`,
+      () => game.settings.fromStores,
+      (v) => {
+        game.settings.fromStores = v;
+        game.craftPrefsChanged?.();
+      },
+    );
+    add(
+      'Keep rare materials out of crafting',
+      `A craft or a station never picks a ${rareWords} stack by itself. It still uses one you point it at: the stack you right-click to make something, or one you choose off a station's menu.`,
+      () => game.settings.spareRare,
+      (v) => {
+        game.settings.spareRare = v;
+        game.craftPrefsChanged?.();
+      },
     );
 
     /**

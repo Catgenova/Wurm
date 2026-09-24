@@ -506,6 +506,21 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   };
   game.emoted = (id: string) => island.emote(id);
   game.woreTitle = (id: string | null) => void island.wearTitle(id);
+  /*
+   * The two crafting settings. The island spends the stock, so it keeps a
+   * copy on the body. A copy it already has wins -- it was set from some
+   * browser, perhaps another one, and a setting that keeps rare stock safe
+   * should not come undone because this browser never heard of it -- and a
+   * body that has never been told is told what this browser has.
+   */
+  const toldStores = me.craft_from_stores;
+  const toldRare = me.craft_spare_rare;
+  if (typeof toldStores === 'boolean') game.settings.fromStores = toldStores;
+  if (typeof toldRare === 'boolean') game.settings.spareRare = toldRare;
+  game.craftPrefsChanged = () => void island.craftPrefs(game.settings.fromStores, game.settings.spareRare);
+  if (typeof toldStores !== 'boolean' || typeof toldRare !== 'boolean') {
+    void island.craftPrefs(game.settings.fromStores, game.settings.spareRare, true);
+  }
   island.hooks.people = (people: PlayerRow[]) => {
     game.roster.sawAll(people
       .filter((p) => p.uid !== island.uid)

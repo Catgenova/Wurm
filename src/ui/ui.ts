@@ -111,8 +111,9 @@ type Placing =
  */
 const storedIn = (s: CraftStock): string | undefined =>
   s.carried || !s.store ? undefined : `in the ${s.store.charAt(0).toLowerCase()}${s.store.slice(1)}`;
-/** What a station's menu says when nothing it takes is at hand. */
-const noneAtHand = (what: string): string => `You have ${what} on you or in your stores within ${CRAFT_REACH} tiles.`;
+/** What a station's menu says when nothing it takes is at hand: on you, and in your stores too unless Settings keeps them out. */
+const noneAtHand = (g: Game, what: string): string =>
+  g.settings.fromStores ? `You have ${what} on you or in your stores within ${CRAFT_REACH} tiles.` : `You have ${what} on you.`;
 
 /** What your rank on a settlement lets you do, in one line. */
 function standingWord(role: DeedRole | undefined): string {
@@ -1183,7 +1184,7 @@ export class UI {
     const ft: Target = { kind: 'campfire', id: fire.id };
     const entries: MenuItem[] = [];
     const fuelDef = ACTION_BY_ID.get('fuel_campfire');
-    const wood = g.stockOf((it) => isFuel(it.id));
+    const wood = g.stockChoices((it) => isFuel(it.id));
     if (fuelDef && wood.length) entries.push({ label: 'Fuel', children: wood.map((s) => this.stackRow(fuelDef, ft, s)) });
     for (const id of ['light_campfire', 'put_out_campfire', 'take_apart_campfire']) {
       const def = ACTION_BY_ID.get(id);
@@ -1246,36 +1247,36 @@ export class UI {
      * moulds are tools, and are the ones you carry.
      */
     const fuelDef = ACTION_BY_ID.get('fuel_smelter');
-    const fuel = g.stockOf((it) => isFuel(it.id));
+    const fuel = g.stockChoices((it) => isFuel(it.id));
     if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((k) => this.stackRow(fuelDef, st, k)) });
     const smeltDef = ACTION_BY_ID.get('smelt_ore');
-    const ores = g.stockOf((it) => isOreItem(it.id));
+    const ores = g.stockChoices((it) => isOreItem(it.id));
     if (smeltDef) {
       entries.push({
         label: 'Smelt ore',
         disabled: !ores.length,
-        hint: ores.length ? undefined : noneAtHand('no ore'),
+        hint: ores.length ? undefined : noneAtHand(g, 'no ore'),
         children: ores.length ? ores.map((k) => this.stackRow(smeltDef, st, k)) : undefined,
       });
     }
     // Scrap goes back into the fire: anything cast from metal, or hafted to a cast head.
     const meltDef = ACTION_BY_ID.get('melt_down');
-    const scrap = g.stockOf((it) => meltable(it));
+    const scrap = g.stockChoices((it) => meltable(it));
     if (meltDef) {
       entries.push({
         label: 'Melt down',
         disabled: !scrap.length,
-        hint: scrap.length ? undefined : noneAtHand('nothing made of metal'),
+        hint: scrap.length ? undefined : noneAtHand(g, 'nothing made of metal'),
         children: scrap.length ? scrap.map((k) => this.stackRow(meltDef, st, k)) : undefined,
       });
     }
     const castDef = ACTION_BY_ID.get('cast_anvil');
-    const lumps = g.stockOf((it) => isLump(it.id));
+    const lumps = g.stockChoices((it) => isLump(it.id));
     if (castDef && g.inventory.has('anvil_mould')) {
       entries.push({
         label: 'Cast an anvil',
         disabled: !lumps.length,
-        hint: lumps.length ? undefined : noneAtHand('no metal'),
+        hint: lumps.length ? undefined : noneAtHand(g, 'no metal'),
         children: lumps.length
           ? lumps.map((k) => {
               const it = k.item;
@@ -1293,7 +1294,7 @@ export class UI {
       entries.push({
         label: 'Pour a mould',
         disabled: !moulds.length || !lumps.length,
-        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? noneAtHand('no metal') : undefined,
+        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? noneAtHand(g, 'no metal') : undefined,
         children:
           moulds.length && lumps.length
             ? moulds.map((mould) => {
@@ -1452,7 +1453,7 @@ export class UI {
     // An oven is fed and lit like a fire, and cooks like one.
     if (def.hearth) {
       const fuelDef = ACTION_BY_ID.get('fuel_oven');
-      const wood = g.stockOf((it) => isFuel(it.id));
+      const wood = g.stockChoices((it) => isFuel(it.id));
       if (fuelDef && wood.length) entries.push({ label: 'Fuel', children: wood.map((s) => this.stackRow(fuelDef, ft, s)) });
       if (f.lit) entries.push({ label: 'Cook', children: this.cookEntries() });
     }
@@ -1490,15 +1491,15 @@ export class UI {
     const entries: MenuItem[] = [];
     // Fuel and clay from the same stock a craft spends, stores within reach included.
     const fuelDef = ACTION_BY_ID.get('fuel_kiln');
-    const fuel = g.stockOf((it) => isFuel(it.id));
+    const fuel = g.stockChoices((it) => isFuel(it.id));
     if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((s) => this.stackRow(fuelDef, kt, s)) });
     const loadDef = ACTION_BY_ID.get('load_kiln');
-    const green = g.stockOf((it) => isGreenware(it.id));
+    const green = g.stockChoices((it) => isGreenware(it.id));
     if (loadDef) {
       entries.push({
         label: 'Fire clay',
         disabled: !green.length,
-        hint: green.length ? undefined : noneAtHand('no unfired clay'),
+        hint: green.length ? undefined : noneAtHand(g, 'no unfired clay'),
         children: green.length ? green.map((s) => this.stackRow(loadDef, kt, s)) : undefined,
       });
     }
@@ -1639,8 +1640,8 @@ export class UI {
     const smithDef = ACTION_BY_ID.get('smith');
     // Castings poured at the smelter, each named for the piece it is of, and
     // the metal for coins: from the pack, a bag, or a store within reach.
-    const castings = g.stockOf(isCasting);
-    const lumps = g.stockOf((it) => isLump(it.id));
+    const castings = g.stockChoices(isCasting);
+    const lumps = g.stockChoices((it) => isLump(it.id));
     if (smithDef) {
       entries.push({
         label: 'Smith',
