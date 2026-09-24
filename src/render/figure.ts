@@ -316,28 +316,45 @@ const SHIN = 3.1;
 
 /**
  * The head, bottom to top: [height, half-width, half-depth, 0, how far
- * forward]. Chin, jaw, cheekbones, temples, and two rings rounding the crown;
- * the face is the lower half, the eyes on the middle line.
+ * forward]. Chin, jaw, cheekbones, the temples where it is widest, and
+ * three rings rounding the dome of the skull over them. The eyes come a
+ * little under halfway up, the brows a little over, and the mouth a quarter
+ * of the way, as on a head: the face is not a small thing under a big skull.
+ *
+ * The island draws a tenth of a metre of height taller than a tenth across
+ * -- 2.25 pixels up against about 1.7 along -- so a skull modelled round
+ * would be drawn as an egg standing on end, and one that narrowed to the
+ * crown in two steps as a cone. So the dome is modelled as much lower than
+ * it is wide as that stretches it, and is drawn round: as tall over the
+ * temples as it is wide from them, and full far up before it turns over.
  */
 function headRings(fr: Frame): number[][] {
   const jaw = 1.06 - fr.fem * 0.14;
+  // The dome over the temples, a quarter-ellipse: [how far round from the side, as a fraction of a right angle].
+  const W = 1.46, D = 1.56, top = CROWN - 2;
+  const dome = [0.33, 0.61, 0.83].map((f) => {
+    const a = (f * Math.PI) / 2;
+    return [2 + top * Math.sin(a), W * Math.cos(a), D * Math.cos(a), 0, 0.06 - 0.14 * f];
+  });
   return [
-    [0.42, 0.6 * jaw, 0.46, 0, 0.62],
-    [0.82, 1.04 * jaw, 1.06, 0, 0.4],
-    [1.3, 1.37, 1.42, 0, 0.18],
-    [2, 1.43, 1.52, 0, 0.08],
-    [2.75, 1.22, 1.38, 0, -0.02],
-    [3.2, 0.64, 0.78, 0, -0.08],
+    [0.22, 0.74 * jaw, 0.55, 0, 0.8],
+    [0.72, 1.16 * jaw, 1.1, 0, 0.42],
+    [1.3, 1.38, 1.46, 0, 0.18],
+    [2, W, D, 0, 0.06],
+    ...dome,
   ];
 }
-const CROWN = 3.34;
+/** The top of the skull: over the temples by as much as the stretch of the drawing leaves the dome looking as tall as it is wide. */
+const CROWN = 2 + (1.46 * 1.7) / 2.25 / 1.01;
+/** How far forward the front of the neck is where it goes up under the jaw: a beard that hangs below the chin turns back in to here. */
+const THROAT = 0.55;
 
 /**
  * The head is made at one size and then scaled up to the one it is drawn at,
  * hair, beard, face and all, so every haircut sits on the skull it was cut
  * for whatever size heads end up.
  */
-const HEAD_SIZE: V3 = [1.12, 1.12, 1.13];
+const HEAD_SIZE: V3 = [1.24, 1.22, 1.08];
 const bigger = (p: V3): V3 => [p[0] * HEAD_SIZE[0], p[1] * HEAD_SIZE[1], p[2] * HEAD_SIZE[2] + 0.03];
 const grown = (m: Mesh): Mesh => ({ v: m.v.map(bigger), f: m.f.map((f) => (f.at ? { ...f, at: bigger(f.at) } : f)), e: m.e });
 
@@ -348,7 +365,13 @@ const handSized = (m: Mesh): Mesh => ({ v: m.v.map((p): V3 => [p[0] * HAND, p[1]
 const GRIP = -0.55 * HAND;
 
 /** The skull as a solid, a little inside the facets, for what lies on it to be hidden behind. */
-const SKULL = { c: bigger([0, 0.1, 1.9]), r: [1.28 * HEAD_SIZE[0], 1.38 * HEAD_SIZE[1], 1.42 * HEAD_SIZE[2]] as V3 };
+const SKULL = { c: bigger([0, 0.1, 1.85]), r: [1.3 * HEAD_SIZE[0], 1.4 * HEAD_SIZE[1], (CROWN - 1.85 - 0.08) * HEAD_SIZE[2]] as V3 };
+/**
+ * And the jaw, inside the cheeks and the chin, for a beard: what of one is
+ * round the far side of the face, or hangs behind the chin seen from behind,
+ * is out of sight behind it.
+ */
+const JAW = { c: bigger([0, 0.35, 0.85]), r: [1.05 * HEAD_SIZE[0], 1.1 * HEAD_SIZE[1], 0.6 * HEAD_SIZE[2]] as V3 };
 
 /** The skull at height `z`: half-width, half-depth, and how far forward its middle is. */
 function skull(fr: Frame, z: number): [number, number, number] {
@@ -409,9 +432,9 @@ function faceMarks(fr: Frame, s: number, shape: Pt[], m: Mat): Array<{ q: V3[]; 
   });
 }
 
-/** The ears: a flattened ball each side, half sunk into the head. */
+/** The ears: a flat oval each side, from the line of the brows down to the bottom of the nose, standing a little off the head. */
 const earsOf = (fr: Frame): Mesh =>
-  join(...[-1, 1].map((s) => ball([s * 1.3, -0.1, 1.5], [0.15, 0.2, 0.3], fr.lod < 1 ? 4 : 5, fr.lod < 1 ? 2 : 3, 'skin')));
+  join(...[-1, 1].map((s) => ball([s * (skull(fr, 1.5)[0] + 0.02), -0.12, 1.5], [0.13, 0.24, 0.34], fr.lod < 1 ? 4 : 5, fr.lod < 1 ? 2 : 3, 'skin')));
 
 /**
  * A head: eight facets round, a jaw that narrows to the chin, a nose,
@@ -440,9 +463,12 @@ function headMesh(fr: Frame, blink: boolean): Mesh {
     ? [[-0.16, 1.5], [0.15, 1.52], [0.15, 1.55], [-0.16, 1.53]]
     : [[-0.16, 1.54], [-0.09, 1.66], [0.06, 1.67], [0.15, 1.57], [0.07, 1.44], [-0.09, 1.44]]).map(([u, z]) => [u - 0.11, z]);
   const brow: Pt[] = [[-0.33, 1.8], [0.08, 1.82], [0.1, 1.87], [-0.15, 1.91], [-0.34, 1.86]];
-  const mouth = (w: number, z: number, y: number): V3[] => [
-    [-w, y, z + 0.03], [0, y + 0.02, z - 0.03], [w, y, z + 0.03], [w * 0.8, y, z + 0.055], [0, y + 0.02, z + 0.01], [-w * 0.8, y, z + 0.055],
-  ];
+  // On the front facet at its height, which is as far forward as the ring's corners are, times the cosine of half a facet.
+  const mouth = (w: number, z: number): V3[] => {
+    const [, ryy, cy] = skull(fr, z);
+    const y = cy + ryy * Math.cos(Math.PI / 8) + 0.005;
+    return [[-w, y, z + 0.03], [0, y + 0.02, z - 0.03], [w, y, z + 0.03], [w * 0.8, y, z + 0.055], [0, y + 0.02, z + 0.01], [-w * 0.8, y, z + 0.055]];
+  };
   // The white of the eye showing round the dark of it, most at the outer corner.
   const [eu, ez] = [eye.reduce((a, p) => a + p[0], 0) / eye.length, eye.reduce((a, p) => a + p[1], 0) / eye.length];
   const white: Pt[] = eye.map(([u, z]) => [eu + (u - eu) * 1.22 + 0.012, ez + (z - ez) * 1.15]);
@@ -456,7 +482,7 @@ function headMesh(fr: Frame, blink: boolean): Mesh {
       ...faceMarks(fr, s, blink ? [[0.01, 1.5], [0.13, 1.52], [0.13, 1.55], [0.01, 1.53]] : [[0.01, 1.45], [0.12, 1.47], [0.13, 1.64], [0.01, 1.66]], 'eye')
         .map((d) => ({ ...d, unless: [0, 1, 0] as V3 })),
     ]),
-    { q: mouth(0.21 - fr.fem * 0.03, 1, 1.45), m: 'lip' as Mat },
+    { q: mouth(0.21 - fr.fem * 0.03, 1), m: 'lip' as Mat },
   ];
   return join(face, decals(marks.map((d: { q: V3[]; m: Mat; unless?: V3 }) => {
     const k = newell(d.q);
@@ -1322,33 +1348,54 @@ function hairOf(fr: Frame, id: string): HairKit {
  * there to smile with, and up to the sideburns at the ears.
  */
 function beardOf(fr: Frame, id: string): Mesh | undefined {
-  const jaw = (below: number, loft: number, mat: Mat = 'hair'): Mesh => shell(fr, {
-    arc: [0.02 * Math.PI, 0.98 * Math.PI],
-    lo: (a) => {
-      const s = Math.sin(a);
-      return 1.25 - (1.25 - below) * Math.pow(s, 0.8);
-    },
-    hi: (a) => 0.88 + 0.77 * (1 - Math.pow(Math.sin(a), 2)),
-    loft: (a) => loft * (0.5 + 0.5 * Math.sin(a)),
-    n: 10,
-    rows: 3,
-    mat,
-  });
+  const chin = headRings(fr)[0][0];
+  const jaw = (below: number, loft: number, mat: Mat = 'hair'): Mesh => {
+    const spec: ShellSpec = {
+      arc: [0.02 * Math.PI, 0.98 * Math.PI],
+      lo: (a) => 1.25 - (1.25 - below) * Math.pow(Math.sin(a), 0.8),
+      hi: (a) => 0.88 + 0.77 * (1 - Math.pow(Math.sin(a), 2)),
+      loft: (a) => loft * (0.5 + 0.5 * Math.sin(a)),
+      n: 10,
+      rows: 3,
+      mat,
+    };
+    const outer = shell(fr, spec);
+    if (mat !== 'hair') return outer;
+    // Its underside, from the lower edge in to the skin -- or, where it hangs below the chin, back
+    // under the jaw to the front of the neck -- so that it is a mass of hair and not a mask, and has
+    // a depth from the side.
+    const [a0, a1] = spec.arc!;
+    const n = cut(fr, spec.n!, 8);
+    const v: V3[] = [];
+    for (let j = 0; j <= n; j++) {
+      const a = a0 + ((a1 - a0) * j) / n;
+      const z = spec.lo(a), l = spec.loft(a, z);
+      const [rxx, ryy, cy] = skull(fr, z);
+      v.push([Math.cos(a) * (rxx + l), cy + Math.sin(a) * (ryy + l), z]);
+      const up = Math.max(z, chin);
+      const [rx2, ry2, cy2] = skull(fr, up);
+      const y = cy2 + Math.sin(a) * ry2;
+      v.push([Math.cos(a) * rx2, y + (THROAT - y) * Math.min(1, (up - z) / 0.4), up]);
+    }
+    const f: Face[] = [];
+    for (let j = 0; j < n; j++) f.push(faceOut(v, [2 * j, 2 * j + 1, 2 * j + 3, 2 * j + 2], [0, -0.4, -1], mat));
+    return join(outer, mesh(v, f));
+  };
   const moustache = (): Mesh => chain([[-0.46, 1.36, 1.02], [-0.2, 1.52, 1.14], [0.2, 1.52, 1.14], [0.46, 1.36, 1.02]], [0.07, 0.11, 0.11, 0.07], 4, 'hair');
   switch (id) {
     case 'stubble':
       // A shadow on the skin of the jaw and no further: it stops where the chin does.
-      return jaw(0.45, 0.025, 'stubble');
+      return jaw(0.25, 0.025, 'stubble');
     case 'moustache':
       return moustache();
     case 'goatee':
-      return join(moustache(), chain([[0, 1.28, 0.62], [0, 1.2, 0.2], [0, 1.02, -0.2]], [0.22, 0.2, 0.08], 5, 'hair'));
+      return join(moustache(), chain([[0, 1.36, 0.5], [0, 1.3, 0], [0, 1.12, -0.4]], [0.22, 0.2, 0.08], 5, 'hair'));
     case 'short':
-      return join(jaw(0.28, 0.1), moustache());
+      return join(jaw(0.08, 0.1), moustache());
     case 'full':
-      return join(jaw(-0.25, 0.22), moustache());
+      return join(jaw(-0.45, 0.22), moustache());
     case 'long':
-      return join(jaw(-0.25, 0.22), moustache(), chain([[0, 1.05, 0.2], [0, 1.2, -0.9], [0, 1.2, -1.9], [0, 1.05, -2.6]], [0.62, 0.5, 0.3, 0.06], 6, 'hair'));
+      return join(jaw(-0.45, 0.22), moustache(), chain([[0, 1.15, 0], [0, 1.3, -1.1], [0, 1.3, -2.1], [0, 1.15, -2.8]], [0.62, 0.5, 0.3, 0.06], 6, 'hair'));
     default:
       return undefined;
   }
@@ -2191,9 +2238,12 @@ interface Part {
    */
   after?: Part | Part[];
   /**
-   * Only after it while this side of the part is toward the viewer, and
-   * before it otherwise: a beard is on the front of the head, and from behind
-   * the head is in front of it.
+   * Only after it while this side of the part is toward the viewer, or not
+   * far off square to them, and before it once it is turned well away: a
+   * beard lies on the cheek seen side on, and from behind the head and the
+   * neck are in front of it. Well away is past a third of the way from
+   * square to straight away, so a head a little turned at either does not
+   * flip it.
    */
   front?: V3;
   /**
@@ -2205,12 +2255,13 @@ interface Part {
   /** No facet of it can be in front of another, so its facets may go down in any order. */
   convex?: boolean;
   /**
-   * A solid in the part's own frame, `c` its middle and `r` its half-sizes,
-   * that hides whatever of the part is behind it. Hair is drawn after the
-   * head so that it lies on it; this is what keeps a bun or the end of a
-   * crest out of sight when it is round the far side.
+   * Solids in the part's own frame, each `c` its middle and `r` its
+   * half-sizes, that hide whatever of the part is behind them. Hair is drawn
+   * after the head so that it lies on it; this is what keeps a bun or the end
+   * of a crest out of sight when it is round the far side, and a beard when
+   * it is round the far side of the jaw.
    */
-  hide?: { c: V3; r: V3 };
+  hide?: Array<{ c: V3; r: V3 }>;
 }
 
 function partsOf(kit: Kit, r: Rig, b: Bones): Part[] {
@@ -2227,14 +2278,14 @@ function partsOf(kit: Kit, r: Rig, b: Bones): Part[] {
     { mesh: kit.neck, xf: b.neck, bias: 0, under: head, convex: true },
     head,
     // The ears on the head, the far one hidden behind the skull rather than drawn through it.
-    { mesh: kit.ears, xf: b.head, bias: 0.005, after: head, hide: SKULL },
+    { mesh: kit.ears, xf: b.head, bias: 0.005, after: head, hide: [SKULL] },
   ];
-  const cap: Part | undefined = kit.hair.cap && { mesh: kit.hair.cap, xf: b.head, bias: 0.01, after: head, hide: SKULL };
+  const cap: Part | undefined = kit.hair.cap && { mesh: kit.hair.cap, xf: b.head, bias: 0.01, after: head, hide: [SKULL] };
   if (cap) parts.push(cap);
   // What stands up out of the hair -- a crest, a knot -- goes on over it.
-  if (kit.hair.top) parts.push({ mesh: kit.hair.top, xf: b.head, bias: 0.012, after: cap ?? head, hide: SKULL });
+  if (kit.hair.top) parts.push({ mesh: kit.hair.top, xf: b.head, bias: 0.012, after: cap ?? head, hide: [SKULL] });
   if (kit.hair.fall) parts.push({ mesh: kit.hair.fall, xf: b.head, bias: 0 });
-  if (kit.beard) parts.push({ mesh: kit.beard, xf: b.head, bias: 0.02, after: head, front: [0, 1, 0], hide: SKULL });
+  if (kit.beard) parts.push({ mesh: kit.beard, xf: b.head, bias: 0.02, after: head, front: [0, 1, 0], hide: [SKULL, JAW] });
   for (const t of kit.hair.tails) parts.push({ mesh: t.mesh, xf: joint(b.head, t.at, -r.tail[0] * t.give, r.tail[1] * t.give, 0), bias: 0 });
   if (r.tool) parts.push({ mesh: kit.mallet, xf: r.lefty ? b.wrist0 : b.wrist1, bias: 0.04 }, { mesh: kit.chisel, xf: r.lefty ? b.wrist1 : b.wrist0, bias: 0.04 });
   for (let k = 0; k < 2; k++) {
@@ -2337,7 +2388,8 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
     const pv = (part.v ?? part.mesh.v).map((p) => place(part.xf, p));
     const s = pv.map((p): Pt => [p[0] * ex[0] + p[1] * ey[0], p[0] * ex[1] + p[1] * ey[1] - p[2] * HEIGHT_SCALE]);
     const vis: boolean[] = [], k: number[] = [], d: number[] = [];
-    const hidden = part.hide && behind(part.xf, part.hide, T);
+    const tests = (part.hide ?? []).map((solid) => behind(part.xf, solid, T));
+    const hidden = tests.length ? (p: V3): boolean => tests.some((t) => t(p)) : undefined;
     for (const face of part.mesh.f) {
       const pts = face.i.map((i) => pv[i]);
       const n = newell(pts);
@@ -2360,9 +2412,8 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
     const leads = l.part.after ? (Array.isArray(l.part.after) ? l.part.after : [l.part.after]) : [];
     const keys = leads.map((p) => laid.find((m) => m.part === p)?.key).filter((x): x is number => x !== undefined);
     if (!keys.length) continue;
-    const lead = Math.max(...keys);
     const fw = l.part.front && mv(l.part.xf.m, l.part.front);
-    if (!fw || fw[0] * T[0] + fw[1] * T[1] + fw[2] * T[2] > -0.08) l.key = lead + l.part.bias;
+    if (!fw || fw[0] * T[0] + fw[1] * T[1] + fw[2] * T[2] > -1 / 3) l.key = Math.max(...keys) + l.part.bias;
     else l.key = Math.min(l.key, Math.min(...keys) - l.part.bias);
   }
   for (const l of laid) {
