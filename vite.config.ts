@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+/** The version in package.json, written into the game for the corner of the screen (see src/version.ts). */
+const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string };
 
 /**
  * The app source lives in src/ (including the HTML entries). `npm run build`
@@ -16,6 +20,7 @@ import { resolve } from 'node:path';
 export default defineConfig({
   root: 'src',
   base: './',
+  define: { __VERSION__: JSON.stringify(version) },
   server: { port: 5173, host: true },
   build: {
     outDir: '../dist',
