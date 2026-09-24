@@ -978,6 +978,15 @@ jobs:
           # keeps the plan every `get_byte` unpacks the whole line again to
           # read one byte. Measured here rather than asserted, because it is
           # one character away from coming back.
+          #
+          # And the morning the woods die, which that fix never met: a quarter
+          # of the wood going at once was ten minutes of reading bytes where
+          # they lie -- the corners, the ground round every stump, every line
+          # a sapling went into. So the corners are asked for unpacked, the
+          # seeds for a band read once, `b_i16` for an expression the planner
+          # inlines with the same answer for all 65,536 values, a die-off on a
+          # real island for stumps, saplings and a record that matches, and
+          # the tick for one island a go.
           npx esbuild supabase/test/dawn.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/dawn.mjs --log-level=error
           node node_modules/.cache/dawn.mjs
