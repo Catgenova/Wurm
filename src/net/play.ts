@@ -278,6 +278,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     for (const h of game.creatures.sawAll(rows, game.time)) {
       game.events.emit('hit', h.x, h.y, h.taken, 'dealt');
     }
+    // And which of them are in whose traces, which lives on the vehicle here.
+    game.teamsFromCreatures();
     game.events.emit('creature');
   };
 
@@ -286,7 +288,9 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * reason: the island keeps it and nothing here ever looked. A campfire laid
    * on a live island was a row in `placed` and a blank patch of grass.
    */
-  island.hooks.built = (ground) => game.sawGround(ground, island);
+  // Whose uid this is, so the seat and the shafts that are ours can be told
+  // from somebody else's.
+  island.hooks.built = (ground) => game.sawGround(ground, island, island.uid || null);
   // Where the island put the body, which is only ever somewhere we did not put
   // it ourselves — and the only thing that does that is dying.
   island.hooks.moved = (x, y, level) => game.putBody(x, y, level);

@@ -991,6 +991,21 @@ jobs:
             --outfile=node_modules/.cache/dawn.mjs --log-level=error
           node node_modules/.cache/dawn.mjs
 
+      - name: A team stays in the traces until it is taken out
+        run: |
+          # "hitching wildermon to the wagon doesn't seem to be working". On an
+          # island the hitch was written and nothing read it: the settle every
+          # second walked a companion back to its keeper and sent a worker to
+          # its trade, its belly went on emptying, the bell called it off the
+          # shafts, and the browser was never told it was hitched, who was
+          # driving or who had a cart by the shafts. This asks both sides that
+          # one in the traces stays there, is nobody's quarry and gets no
+          # hungrier until it is taken out; that everything that would send it
+          # elsewhere says why not; and that a vehicle is anybody's to use.
+          npx esbuild supabase/test/traces.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/traces.mjs --log-level=error
+          node node_modules/.cache/traces.mjs
+
       - name: One pile and not six
         run: |
           # Reported off a screenshot of a pack holding six separate piles of

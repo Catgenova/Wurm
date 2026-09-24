@@ -282,7 +282,7 @@ const DAMAGE_WARN = 75;
 const MAX_VEHICLE_SPEED = 4;
 /** How far ahead of the shafts a hitched team walks. */
 const TRACE_LENGTH = 1.6;
-/** How fast a wildermon in the traces works its dinner off while hauling. */
+/** How fast a mount works its dinner off under a rider. One in the traces does not. */
 const HAUL_HUNGER = 0.0006;
 /** Steepest ground a green team will take a wheel up, against a walker's limit. */
 const VEHICLE_STEP = MAX_STEP / 2;
@@ -4994,8 +4994,8 @@ export class Game {
         c.dirX = fx;
         c.dirY = fy;
         c.walkPhase += dt * 12;
-        // Hauling is work, and work is hungry — and it teaches the hills.
-        c.hunger = Math.max(0, c.hunger - dt * HAUL_HUNGER);
+        // Hauling teaches the hills. It costs no hunger: nothing in the traces
+        // gets hungry, which is what a team was asked to be.
         if (c.skills[HAUL_SKILL] !== undefined) this.workClimb(c, moved);
       }
       c.enemy = null;
@@ -5094,7 +5094,7 @@ export class Game {
    * Ids are the island's, which is what makes replacing safe — the same fire
    * comes back as the same fire.
    */
-  sawGround(ground: IslandGround, aged: Aged = UNLIT): void {
+  sawGround(ground: IslandGround, aged: Aged = UNLIT, me: string | null = null): void {
     /*
      * What is lying on the ground, which until now the island never said.
      *
@@ -5196,6 +5196,16 @@ export class Game {
           ferment: r.ferment ?? undefined,
           facing: (r.facing ?? 's') as Side,
           lock: r.lock ?? undefined,
+          /*
+           * The reins and the shafts, which the island has always sent and
+           * this dropped: somebody who took the reins on an island walked
+           * beside the wagon at their own pace while the island dragged it
+           * after them a second behind. Only our own — a vehicle somebody
+           * else is driving is the island's to move, and this side moves a
+           * driven one to the body at this screen.
+           */
+          ...(me !== null && r.driver === me ? { driven: true, driverId: this.local.id } : {}),
+          ...(me !== null && r.puller === me ? { hitched: true } : {}),
         });
       }
     }
@@ -5324,8 +5334,28 @@ export class Game {
     this.placed.kilns.reset(this.kilns.values());
     this.placed.furniture.reset(this.furniture.values());
     this.placed.anvils.reset(this.anvils.values());
+    this.teamsFromCreatures();
     this.events.emit('crate');
     this.events.emit('smelter');
+  }
+
+  /**
+   * Who is in which traces, on an island, read off the creatures.
+   *
+   * The island keeps a team on the animals (`hitched_to`) and the browser
+   * keeps it on the vehicle (`team`), and on an island nothing ever wrote the
+   * second from the first: every wagon read as having empty yokes whatever
+   * was backed into them. Asked after either half arrives, because a ground
+   * read rebuilds every vehicle from nothing and a creature read is the only
+   * thing that knows who is hitched.
+   */
+  teamsFromCreatures(): void {
+    for (const f of this.furniture.values()) if (f.team?.length) f.team = [];
+    const hitched = [...this.creatures.list.values()].filter((c) => c.hitchedTo !== null).sort((a, b) => a.id - b.id);
+    for (const c of hitched) {
+      const f = this.furniture.get(c.hitchedTo as number);
+      if (f) f.team = [...teamOf(f), c.id];
+    }
   }
 
   /**
@@ -6315,6 +6345,10 @@ export interface IslandPlaced {
   mine: boolean;
   /** The padlock fitted to it, by the number it shares with its key. */
   lock?: number | null;
+  /** Whoever has the reins of it or is sitting in it, by uid. */
+  driver?: string | null;
+  /** Whoever has a cart by the shafts, by uid. */
+  puller?: string | null;
   /**
    * What is in it, for a piece of furniture near enough to reach into.
    *

@@ -666,14 +666,21 @@ function helpText(): string {
     have with you, a deed worker, or one fetched straight out of the token if you are standing on your
     own deed. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
     else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
-    drags its feet, so feed the team. A Seavic pair will outrun you at a walk; four Quarra will not,
-    but they will shift ten thousand bricks.</p>
+    drags its feet, so feed the team before it goes in. A Seavic pair will outrun you at a walk; four
+    Quarra will not, but they will shift ten thousand bricks.</p>
     <p>The team is not only the pace but the pitch: a draught beast trains <b>climbing</b> by hauling
     over bad ground, and what the team knows between them decides both how fast the wheels turn and how
     steep a step they will take. A green pair balks at a bank a worked pair goes straight up.</p>
     <p>Wheels keep to open ground: no fords, no stairs and nothing steeper than a horse would take. You
-    cannot pick a vehicle up with anything on it or anything in the yokes, and a beast in the traces
-    cannot be sent to the token or released until you unbuckle it.</p>
+    cannot pick a vehicle up with anything on it or anything in the yokes.</p>
+    <p>A beast in the traces <b>stays hitched until somebody takes it out</b> &mdash; one at a time from
+    its own menu, or the whole team from the vehicle's. Until then it stands at the vehicle and goes
+    where the vehicle goes. It does not follow you, work, answer the bell or wander; it cannot be sent
+    to the token, set to a post, released or culled; <b>it does not get hungry</b>, though feeding it
+    still fills it; and <b>nothing picks it as a target</b>.</p>
+    <p>A vehicle is <b>anybody's to use</b>. Whoever built it and whosever ground it stands on, anyone
+    standing at it may take the reins, take hold of a cart, hitch to it, take a beast out of it, load it,
+    empty it or pick it up.</p>
     <h3>Water: the well and the barrels</h3>
     <p>Until now water meant walking to the shore. A <b>well</b> is a mason's job &mdash; twelve stone
     bricks, mortar, shafts and nails &mdash; and once it is sunk it <b>draws its own water</b>, a little

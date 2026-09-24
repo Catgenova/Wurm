@@ -1690,6 +1690,13 @@ export const HAUL_SKILL = 'climbing';
 export const FIGHT_SKILL = 'fighting';
 
 /**
+ * What a fight may pick as its quarry: something wild, and nothing in the
+ * traces. Nothing tame is ever picked; one in harness is not picked whatever
+ * else is true of it.
+ */
+export const quarry = (o: Creature): boolean => o.mode === 'wild' && o.hitchedTo === null;
+
+/**
  * A wild thing as the island describes it.
  *
  * `rpc_creatures` builds this; nothing here invents any of it. The leg — where
@@ -1729,6 +1736,8 @@ export interface IslandCreature {
   mine?: boolean;
   /** Shod, by the island's clock. */
   shod?: boolean;
+  /** The vehicle it is in the traces of; absent from older islands. */
+  hitchedTo?: number | null;
   /** The trade a worker was set to, which is its species' own unless it was told otherwise. */
   job?: string | null;
   /*
@@ -2315,6 +2324,12 @@ export class Creatures {
       if (r.job !== undefined) c.trade = r.job && r.job !== SPECIES[c.species]?.gathers && (SPECIES[c.species]?.trades ?? []).includes(r.job as GatherKind) ? (r.job as GatherKind) : null;
       // Shod or not is the island's word; the browser keeps its own clock of it.
       if (r.shod !== undefined) c.shodAt = r.shod ? (isShod(time, c) ? c.shodAt : time) : -1e9;
+      /*
+       * And which traces it is in, which the island never said: every hitched
+       * animal on an island read as free, so its menu offered to hitch it again
+       * and never to take it out, and the wagon's yokes read empty.
+       */
+      if (r.hitchedTo !== undefined) c.hitchedTo = r.hitchedTo;
       // The working life, which comes for yours and for nobody else's.
       if (r.care !== undefined) c.care = r.care;
       if (r.xp !== undefined) c.xp = r.xp;
@@ -3807,7 +3822,7 @@ export class Creatures {
     const inside = (o: Creature): boolean => Math.max(Math.abs(o.x - deed.x), Math.abs(o.y - deed.y)) <= range;
     if (c.enemy !== null && c.enemy !== PLAYER_ATTACKER) {
       const e = this.list.get(c.enemy);
-      if (!e || e.mode !== 'wild' || !inside(e)) c.enemy = null;
+      if (!e || !quarry(e) || !inside(e)) c.enemy = null;
       else {
         if (Math.hypot(e.x - c.x, e.y - c.y) <= 1) {
           if (c.cooldown <= 0) {
@@ -3824,7 +3839,7 @@ export class Creatures {
     let best: Creature | null = null;
     let bestD = Infinity;
     for (const o of this.list.values()) {
-      if (o.id === c.id || o.mode !== 'wild' || !inside(o)) continue;
+      if (o.id === c.id || !quarry(o) || !inside(o)) continue;
       // A defensive one waits to be given a reason; an aggressive one does not.
       if (c.stance === 'defensive') {
         const struck = (recent(c.attackedAt) && c.attackedBy === o.id) || (recent(game.player.attackedAt) && game.player.attackedBy === o.id);
@@ -3856,7 +3871,7 @@ export class Creatures {
     const range = siteRange(c, def, deed);
     if (c.enemy !== null) {
       const e = this.list.get(c.enemy);
-      const gone = !e || e.mode !== 'wild' || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 4;
+      const gone = !e || !quarry(e) || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 4;
       if (gone) c.enemy = null;
       else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);
@@ -3909,7 +3924,7 @@ export class Creatures {
       let best: Creature | null = null;
       let bestD = Infinity;
       for (const o of this.list.values()) {
-        if (o.id === c.id || o.mode !== 'wild') continue;
+        if (o.id === c.id || !quarry(o)) continue;
         if (Math.max(Math.abs(o.x - deed.x), Math.abs(o.y - deed.y)) > range) continue;
         const d = Math.hypot(o.x - c.x, o.y - c.y);
         if (d < bestD) {
@@ -3943,7 +3958,7 @@ export class Creatures {
     const range = deed.radius + 1;
     if (c.enemy !== null) {
       const e = this.list.get(c.enemy);
-      const gone = !e || e.mode !== 'wild' || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 3;
+      const gone = !e || !quarry(e) || Math.max(Math.abs(e.x - deed.x), Math.abs(e.y - deed.y)) > range + 3;
       if (gone) c.enemy = null;
       else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);
@@ -3961,7 +3976,7 @@ export class Creatures {
       let best: Creature | null = null;
       let bestD = Infinity;
       for (const o of this.list.values()) {
-        if (o.id === c.id || o.mode !== 'wild') continue;
+        if (o.id === c.id || !quarry(o)) continue;
         if (Math.max(Math.abs(o.x - deed.x), Math.abs(o.y - deed.y)) > range) continue;
         const d = Math.hypot(o.x - c.x, o.y - c.y);
         if (d < bestD) {
@@ -4171,7 +4186,7 @@ export class Creatures {
       if (c.stance === 'aggressive') {
         let bestD = Infinity;
         for (const o of this.list.values()) {
-          if (o.id === c.id || o.mode !== 'wild') continue;
+          if (o.id === c.id || !quarry(o)) continue;
           const d = Math.hypot(o.x - p.x, o.y - p.y);
           if (d <= COMPANION_SIGHT && d < bestD) {
             bestD = d;
@@ -4183,7 +4198,7 @@ export class Creatures {
         const threat = recent(c.attackedAt) ? c.attackedBy : recent(p.attackedAt) ? p.attackedBy : null;
         const t = threat === null ? undefined : this.list.get(threat);
         // Only something wild: a worker of your own that nipped you is not a fight for it.
-        if (t && t.id !== c.id && t.mode === 'wild') found = t;
+        if (t && t.id !== c.id && quarry(t)) found = t;
       }
       if (found) {
         c.enemy = found.id;
@@ -4192,7 +4207,7 @@ export class Creatures {
     }
     if (c.enemy !== null) {
       const e = c.enemy === PLAYER_ATTACKER ? undefined : this.list.get(c.enemy);
-      if (!e || e.mode === 'stored' || Math.hypot(e.x - p.x, e.y - p.y) > COMPANION_LEASH) {
+      if (!e || !quarry(e) || Math.hypot(e.x - p.x, e.y - p.y) > COMPANION_LEASH) {
         c.enemy = null;
       } else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);

@@ -615,10 +615,11 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f || !g.deed) return;
       // Every wildermon working the deed drops what it is doing and comes to
-      // whoever rang, the way one called over does.
+      // whoever rang, the way one called over does — except one in the traces,
+      // which stays hitched until somebody takes it out.
       let came = 0;
       for (const c of g.creatures.list.values()) {
-        if (c.mode !== 'deed') continue;
+        if (c.mode !== 'deed' || c.hitchedTo !== null) continue;
         c.calledAt = g.time;
         c.enemy = null;
         came++;
