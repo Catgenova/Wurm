@@ -298,6 +298,51 @@ export class UI {
   }
 
   /**
+   * What standing in the world a dragged thing could be let go into, under the
+   * cursor: a crate, or a piece of furniture that holds things -- a chest, a
+   * larder, a cart, a wagon. Not a trash crate, which destroys what goes in,
+   * and not a market stall, whose wares want a price; both keep to the menu.
+   */
+  storeAt(pick: Pick | null): { kind: 'crate' | 'furniture'; id: number } | null {
+    if (!pick) return null;
+    if (pick.crate !== undefined && this.game.crates.has(pick.crate)) return { kind: 'crate', id: pick.crate };
+    if (pick.furniture === undefined) return null;
+    const f = this.game.furniture.get(pick.furniture);
+    if (!f || !furnitureHolds(f)) return null;
+    const def = furnitureDef(f.kind);
+    return def.trash || def.stall ? null : { kind: 'furniture', id: f.id };
+  }
+
+  /**
+   * A thing dragged out of the pack and let go over something in the world
+   * that holds things goes into it: the whole stack, by the same door the
+   * store window's drop and the "Put in" entries use, so the same rules hold.
+   * Across the yard the feet go first. False when there was nothing there to
+   * take it.
+   */
+  dropOnWorld(p: DragPayload, pick: Pick | null): boolean {
+    const g = this.game;
+    const at = this.storeAt(pick);
+    if (!at || p.from !== 'inventory') return false;
+    const held = g.inventory.get(p.uid);
+    if (!held) return true;
+    if (g.isEquipped(held.uid)) {
+      g.logMsg(`Take the ${p.name.toLowerCase()} off first.`, 'error');
+      return true;
+    }
+    const def = ACTION_BY_ID.get(at.kind === 'crate' ? 'store_in_crate' : 'store_in_furniture');
+    if (!def) return true;
+    const target: Target = { kind: 'item', uid: held.uid, count: held.count, into: at.id };
+    if (!def.applies(target, g)) {
+      const where = at.kind === 'crate' ? crateName(g.crates.get(at.id)!) : furnitureName(g.furniture.get(at.id)!);
+      g.logMsg(`The ${p.name.toLowerCase()} will not go in the ${where.toLowerCase()}.`, 'error');
+      return true;
+    }
+    g.requestAction(def, target);
+    return true;
+  }
+
+  /**
    * Carry a dragged thing from one window to the other. The same rules apply as
    * to the menu entries that do the same job: you have to be able to reach the
    * container, and it has to be willing to hold what you are giving it.

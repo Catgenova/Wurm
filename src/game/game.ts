@@ -13,7 +13,7 @@ import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, MAX_LEVELS, roofShapeDef, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
-import { crateCentre, crateName, crateCapacity, crateUnits, subtileOf, type CrateKind, type PlacedCrate } from './crates';
+import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
@@ -2756,7 +2756,8 @@ export class Game {
       const c = this.creatures.get(a.target.id);
       if (c) c.busyUntil = this.time + a.duration + 0.2;
     }
-    this.logMsg(`You start ${a.def.verb}.`, 'info');
+    // A job with no length to it has no start to speak of.
+    if (!a.def.instant) this.logMsg(`You start ${a.def.verb}.`, 'info');
     this.events.emit('action');
   }
 
@@ -3139,16 +3140,24 @@ export class Game {
       this.ask(def, target, goes);
       return;
     }
-    const reason = def.check?.(target, this);
-    if (reason) {
-      this.logMsg(reason, 'error');
-      return;
+    /*
+     * A thing put into a store across the yard walks to that store first, the
+     * way the island's half above does, and is asked when the feet arrive --
+     * by `beginPerform`, which asks every job again before doing it.
+     */
+    const walkFirst = target.kind === 'item' && this.intoStore(def, target) !== null && !this.inRange(def, target);
+    if (!walkFirst) {
+      const reason = def.check?.(target, this);
+      if (reason) {
+        this.logMsg(reason, 'error');
+        return;
+      }
+      if (def.instant) {
+        def.perform(target, this);
+        return;
+      }
     }
-    if (def.instant) {
-      def.perform(target, this);
-      return;
-    }
-    if (this.player.stats.stamina < EXHAUSTED) {
+    if (!def.instant && this.player.stats.stamina < EXHAUSTED) {
       this.logMsg('You are too exhausted to do that. Rest a moment.', 'error');
       return;
     }
@@ -3362,8 +3371,38 @@ export class Game {
     return { x: target.x, y: target.y };
   }
 
+  /**
+   * The store a thing is being put into, when the ask names one: the crate or
+   * the piece `into` points at, for the two doors that put things away -- the
+   * tile it stands on, to walk to, and its centre, which is where the doors
+   * measure reach from.
+   *
+   * A thing let go over a crate across the yard is meant for that crate, and
+   * the doors only honour a name within reach -- out of it they fall back on
+   * whatever stands nearest. So the feet go first, as they do for any job
+   * with a place to be done at.
+   */
+  private intoStore(def: ActionDef, target: Target): { x: number; y: number; centre: [number, number] } | null {
+    if (target.kind !== 'item' || target.into === undefined) return null;
+    if (def.id === 'store_in_crate') {
+      const c = this.crates.get(target.into);
+      return c ? { x: c.x, y: c.y, centre: crateCentre(c) } : null;
+    }
+    if (def.id === 'store_in_furniture') {
+      const f = this.furniture.get(target.into);
+      return f ? { x: f.x, y: f.y, centre: furnitureCentre(f) } : null;
+    }
+    return null;
+  }
+
   inRange(def: ActionDef, target: Target): boolean {
-    if (target.kind === 'item') return true;
+    if (target.kind === 'item') {
+      const into = this.intoStore(def, target);
+      if (!into) return true;
+      // Measured the way the doors measure it, or a corner of the next tile
+      // would count as near here and not there.
+      return Math.hypot(into.centre[0] - this.player.x, into.centre[1] - this.player.y) <= STORE_REACH;
+    }
     const tile = this.targetTile(target);
     if (!tile) return false;
     const px = this.player.tileX;
@@ -3373,8 +3412,8 @@ export class Game {
   }
 
   private walkToward(def: ActionDef, target: Target): boolean {
-    if (target.kind === 'item') return true;
-    const tile = this.targetTile(target);
+    if (target.kind === 'item' && !this.intoStore(def, target)) return true;
+    const tile = target.kind === 'item' ? this.intoStore(def, target) : this.targetTile(target);
     if (!tile) return false;
     let candidates: Array<{ x: number; y: number }>;
     if (def.corner && target.kind === 'tile') {
@@ -3394,7 +3433,13 @@ export class Game {
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
     const { rule, levels } = this.movement();
     for (const c of candidates) {
-      if (this.player.walkTo(this.world, c.x, c.y, rule, levels)) return true;
+      if (!this.player.walkTo(this.world, c.x, c.y, rule, levels)) continue;
+      // Already on the tile, but in the corner of it furthest from the store:
+      // to the middle of it, which every tile beside a store is near enough from.
+      if (target.kind === 'item' && !this.player.path && !this.inRange(def, target)) {
+        this.player.path = [{ x: c.x, y: c.y, level: this.player.level }];
+      }
+      return true;
     }
     return false;
   }

@@ -1,4 +1,4 @@
-import { crateCentre, crateName, crateCapacity, crateSpare } from '../../game/crates';
+import { crateCentre, crateName, crateCapacity, crateSpare, STORE_REACH } from '../../game/crates';
 import { furnitureCapacity, furnitureCentre, furnitureHeft, furnitureName, furnitureRefuses, furnitureRoom } from '../../game/furniture';
 import { bloodMul } from '../../game/creatures';
 import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
@@ -165,7 +165,7 @@ export class CratePanel {
     const store = this.store();
     if (!store) return false;
     const [cx, cy] = store.centre;
-    return Math.hypot(cx - this.game.player.x, cy - this.game.player.y) <= 2.4;
+    return Math.hypot(cx - this.game.player.x, cy - this.game.player.y) <= STORE_REACH;
   }
 
   private store(): Store | undefined {
@@ -422,7 +422,7 @@ export class CratePanel {
       take.addEventListener('click', (e) => {
         e.stopPropagation();
         const [cx, cy] = store.centre;
-        if (Math.hypot(cx - this.game.player.x, cy - this.game.player.y) > 2.4) {
+        if (Math.hypot(cx - this.game.player.x, cy - this.game.player.y) > STORE_REACH) {
           this.game.logMsg(`Stand next to the ${store.what} to take things out.`, 'error');
           return;
         }

@@ -528,6 +528,9 @@ function helpText(): string {
     Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
     again until it has been emptied.</p>
+    <p>A stack <b>dragged</b> out of the inventory window and let go over a crate, a cart, a wagon or a
+    piece that holds things goes into it whole, under the same rules as <b>Put away</b>. If it is out of
+    reach you walk to it first. A trash crate and a market stall do not take a drop.</p>
     <h3>Calling things by name</h3>
     <p>A settlement of any age has six bins, four crates and a row of chests, and every one of them is
     called <i>Raw material bin (oak)</i>. Any crate, bin, chest, cart, piece of furniture, work post or trap

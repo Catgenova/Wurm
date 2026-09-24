@@ -1034,6 +1034,20 @@ jobs:
             --outfile=node_modules/.cache/laden.mjs --log-level=error
           node node_modules/.cache/laden.mjs
 
+      - name: Let go over a container
+        run: |
+          # "Allow drag and drop from the player inventory directly to a
+          # container by dragging the item to the asset model and releasing."
+          # A pack row let go over a crate or a store in the world asks the
+          # door the store window's drop uses, naming the store. This asks
+          # that a crate in reach takes the stack at once, that one across the
+          # yard is walked to and takes it (not the one beside you, which is
+          # where a name out of reach used to fall back to), that a chest does
+          # too, and that on an island the island is asked on arrival.
+          npx esbuild supabase/test/drop.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/drop.mjs --log-level=error
+          node node_modules/.cache/drop.mjs
+
       - name: One pile and not six
         run: |
           # Reported off a screenshot of a pack holding six separate piles of

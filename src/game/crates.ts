@@ -73,6 +73,9 @@ export const CRATE_DEFS: Record<CrateKind, CrateDef> = {
 
 export const SUBTILES = 4;
 
+/** How far from a store's centre you can stand and still put things in or take them out, in tiles. */
+export const STORE_REACH = 2.4;
+
 export const crateKindOfItem = (itemId: string): CrateKind | null => (itemId === 'crate_log' ? 'log' : itemId === 'crate_plank' ? 'plank' : null);
 /**
  * How full it is.
@@ -110,7 +113,7 @@ type CrateTarget = Extract<Target, { kind: 'crate' }>;
 const crateOf = (g: Game, t: Target): PlacedCrate | undefined => (t.kind === 'crate' ? g.crates.get((t as CrateTarget).id) : undefined);
 const nearCrate = (g: Game, c: PlacedCrate): boolean => {
   const [cx, cy] = crateCentre(c);
-  return Math.hypot(cx - g.player.x, cy - g.player.y) <= 2.4;
+  return Math.hypot(cx - g.player.x, cy - g.player.y) <= STORE_REACH;
 };
 
 /**
@@ -297,7 +300,7 @@ CRATE_ACTIONS.push({
     if (!where) return 'It is gone.';
     const dx = where.at[0] - g.player.x;
     const dy = where.at[1] - g.player.y;
-    return Math.hypot(dx, dy) > 2.4 ? `Stand next to the ${where.what} to take things out of it.` : null;
+    return Math.hypot(dx, dy) > STORE_REACH ? `Stand next to the ${where.what} to take things out of it.` : null;
   },
   perform: (t, g) => {
     if (t.kind !== 'item') return;

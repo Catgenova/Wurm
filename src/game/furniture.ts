@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import { SIDE_NAMES, type Side } from './building';
-import { SUBTILES } from './crates';
+import { STORE_REACH, SUBTILES } from './crates';
 import { CROP_BY_SEED } from './farming';
 import type { Game } from './game';
 import { isWorked, itemDef, itemName, rarityOf, roomFor, storedLine, type Item } from './items';
@@ -619,7 +619,7 @@ type FurnitureTarget = Extract<Target, { kind: 'furniture' }>;
 const pieceOf = (g: Game, t: Target): PlacedFurniture | undefined => (t.kind === 'furniture' ? g.furniture.get((t as FurnitureTarget).id) : undefined);
 const nearPiece = (g: Game, f: PlacedFurniture): boolean => {
   const [cx, cy] = furnitureCentre(f);
-  return Math.hypot(cx - g.player.x, cy - g.player.y) <= 2.4;
+  return Math.hypot(cx - g.player.x, cy - g.player.y) <= STORE_REACH;
 };
 
 /**

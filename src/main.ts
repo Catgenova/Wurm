@@ -33,7 +33,7 @@ import { Keybinds } from './game/keybinds';
 import { loadGame, saveGame, saveOnExit, warmSave } from './game/save';
 import { warmMasonry } from './render/masonry';
 import { warmMeadow } from './render/meadow';
-import { Renderer, skyWash, sunAt } from './render/renderer';
+import { Renderer, skyWash, sunAt, type Pick } from './render/renderer';
 import { Sound } from './audio/sound';
 import { SWAY_MAX, swayAt } from './render/sway';
 import { PUFFS, PUFF_LIFE, PUFF_RISE, puffAge, puffOf } from './render/smoke';
@@ -42,6 +42,7 @@ import { FLOAT_LIFE, FLOAT_RISE, Floaters, MERGE_WINDOW } from './render/floater
 import { HAZE_MAX, HAZE_REACH, skyAt, unknownInk } from './render/sky';
 import { Asker } from './ui/ask';
 import { UI } from './ui/ui';
+import { dragging } from './ui/dragdrop';
 // Debug surface only. These come last on purpose: main is the entry point, so
 // the order of its imports is the order the module graph is evaluated in.
 import { groundRoll, ROCK_VARIANTS, TILE_DEFS } from './world/tiles';
@@ -247,6 +248,32 @@ input.onClick = (x, y, button) => {
   }
 };
 
+/*
+ * Something dragged out of the pack and let go over a crate, a chest, a cart --
+ * anything standing in the world that holds things -- goes into it.
+ *
+ * The browser's own drag and drop holds pointer events back while it lasts, so
+ * the frame loop below cannot see where the cursor is. What is under it is
+ * asked here, of the drag itself, and kept for the loop to outline.
+ */
+let dropOver: { pick: Pick; x: number; y: number } | null = null;
+canvasEl.addEventListener('dragover', (e) => {
+  const carried = dragging();
+  if (!carried || carried.from !== 'inventory') return;
+  const pick = renderer.pick(e.clientX, e.clientY);
+  dropOver = pick && ui.storeAt(pick) ? { pick, x: e.clientX, y: e.clientY } : null;
+  if (!dropOver) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+});
+canvasEl.addEventListener('dragleave', () => (dropOver = null));
+window.addEventListener('dragend', () => (dropOver = null));
+canvasEl.addEventListener('drop', (e) => {
+  const carried = dragging();
+  dropOver = null;
+  if (carried && ui.dropOnWorld(carried, renderer.pick(e.clientX, e.clientY))) e.preventDefault();
+});
+
 input.onDrag = (dx, dy, button) => {
   if (button === 0 || button === 1) camera.panBy(dx, dy);
 };
@@ -395,7 +422,11 @@ const loop = new GameLoop(
 
     sound.step();
 
-    if (input.pointer.overCanvas && !input.dragging && !ui.menu.isOpen) {
+    if (dropOver) {
+      renderer.hover = dropOver.pick;
+      ui.setHover(dropOver.pick, dropOver.x, dropOver.y);
+      ui.syncGhost(null);
+    } else if (input.pointer.overCanvas && !input.dragging && !ui.menu.isOpen) {
       renderer.hover = renderer.hoverPick(input.pointer.x, input.pointer.y);
       ui.setHover(renderer.hover, input.pointer.x, input.pointer.y);
       ui.syncGhost(renderer.hover);
