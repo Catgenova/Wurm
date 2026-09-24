@@ -2,10 +2,11 @@ import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, rarityOf, rollRarity, RARITY_WORD, type Item } from './items';
+import { itemDef, rarityOf, rollRarity, RARITY_WORD } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
 import { metalOfItem } from './melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_MAKES, type MouldDef } from './metal';
+import type { CraftStock } from './recipes';
 
 /**
  * An anvil: cast whole in a smelter, set down on four subtiles, and the place
@@ -58,22 +59,23 @@ const anvilOf = (g: Game, t: Target): PlacedAnvil | undefined => (t.kind === 'an
 /** A name said of more than one, without doubling an s that is already there. */
 const plural = (name: string, n: number): string => (n > 1 && !name.endsWith('s') ? `${name}s` : name);
 
-/** The casting to beat out: the one the player chose, or any in the pack when none was. */
-function castingFor(g: Game, uid?: number): Item | undefined {
-  if (uid !== undefined) {
-    const it = g.inventory.get(uid);
-    return it && isCasting(it) ? it : undefined;
-  }
-  return g.inventory.items.find(isCasting);
+/**
+ * The casting to beat out: the one the player chose, or the first there is
+ * when none was. From the same stock a craft spends -- the pack, a bag on
+ * your back, a store within `CRAFT_REACH` -- so castings left in a crate
+ * beside the anvil are as good as castings carried.
+ */
+function castingFor(g: Game, uid?: number): CraftStock | undefined {
+  if (uid === undefined) return g.stockOf(isCasting)[0];
+  const s = g.stockEntry(uid);
+  return s && isCasting(s.item) ? s : undefined;
 }
 
-/** The metal to strike: whichever lump the player chose. */
-function lumpFor(g: Game, uid?: number): Item | undefined {
-  if (uid !== undefined) {
-    const it = g.inventory.get(uid);
-    return it && METAL_BY_LUMP.has(it.id) ? it : undefined;
-  }
-  return g.inventory.items.find((it) => METAL_BY_LUMP.has(it.id));
+/** The metal to strike: whichever lump the player chose, from the same stock. */
+function lumpFor(g: Game, uid?: number): CraftStock | undefined {
+  if (uid === undefined) return g.stockOf((it) => METAL_BY_LUMP.has(it.id))[0];
+  const s = g.stockEntry(uid);
+  return s && METAL_BY_LUMP.has(s.item.id) ? s : undefined;
 }
 
 /** What the anvil is worth to beat on: its quality, and how hard its own metal is. */
@@ -146,7 +148,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const [cx, cy] = anvilCentre(a);
       if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return 'Stand at the anvil.';
       if (!g.inventory.has('coin_die')) return 'You need a coin die.';
-      const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined);
+      const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined)?.item;
       if (!lump) return 'You have no metal to strike.';
       if (!COIN_METALS.includes(METAL_BY_LUMP.get(lump.id)?.id ?? '')) return 'Coins are struck from silver or gold.';
       return null;
@@ -155,10 +157,11 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const a = anvilOf(g, t);
       if (!a || t.kind !== 'anvil') return;
       const die = g.inventory.find('coin_die');
-      const lump = lumpFor(g, t.itemUid);
+      const stack = lumpFor(g, t.itemUid);
+      const lump = stack?.item;
       const metal = lump && METAL_BY_LUMP.get(lump.id);
-      if (!die || !lump || !metal || !COIN_METALS.includes(metal.id)) return;
-      if (!g.inventory.remove(lump.uid, 1)) return;
+      if (!die || !stack || !lump || !metal || !COIN_METALS.includes(metal.id)) return;
+      if (!stack.spend(1)) return;
       // The die wears with every strike, good or bad, and no die can be mended.
       const dieQl = Math.max(1, die.ql - die.dmg / 2);
       die.dmg = Math.min(100, die.dmg + DIE_WEAR);
@@ -206,7 +209,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return 'Stand at the anvil.';
       // A casting poured at the smelter, which is the only thing an anvil takes.
       const named = t.kind === 'anvil' ? t.itemUid : undefined;
-      const casting = castingFor(g, named);
+      const casting = castingFor(g, named)?.item;
       if (!casting) return named !== undefined ? 'Choose a casting.' : 'Pour a mould at the smelter first.';
       if (!MOULD_BY_MAKES.has(casting.piece as string)) return 'Choose a casting.';
       return null;
@@ -214,12 +217,13 @@ export const ANVIL_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const a = anvilOf(g, t);
       if (!a || t.kind !== 'anvil') return;
-      const casting = castingFor(g, t.itemUid);
+      const stack = castingFor(g, t.itemUid);
+      const casting = stack?.item;
       const def = casting && MOULD_BY_MAKES.get(casting.piece as string);
-      if (!casting || !def) return;
+      if (!stack || !casting || !def) return;
       const metal = metalOfItem(casting);
       const metalWord = (metal?.name ?? casting.extra ?? 'metal').toLowerCase();
-      if (!g.inventory.remove(casting.uid, 1)) return;
+      if (!stack.spend(1)) return;
       g.events.emit('inventory');
       // The deeper the seam it came out of, the harder it is to beat into shape.
       const hard = def.difficulty + matOf(casting.extra).difficulty;

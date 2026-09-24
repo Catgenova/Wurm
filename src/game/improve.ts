@@ -6,6 +6,7 @@ import type { Game } from './game';
 import { itemDef, itemName, liftRarity, rarityOf, RARITIES, RARITY_LIFT, type Item } from './items';
 import { isMould } from './metal';
 import { materialOfItem, matOf } from './materials';
+import type { CraftStock } from './recipes';
 
 /** What one pass with a file teaches, whichever way it comes out. */
 export const IMPROVE_GAIN = 0.4;
@@ -105,24 +106,29 @@ function missingTool(g: Game, def: MaterialDef): string | null {
 }
 
 /**
- * The stock carried for a material, preferring the poorest so the good stays.
+ * The stock for a material, preferring the poorest so the good stays.
+ *
+ * From the same stock a craft spends: what you carry, and then what is in
+ * your stores within `CRAFT_REACH` -- a crate of lumps beside the anvil works
+ * a blade up as well as lumps in the pack do. Carried stock is used before
+ * any store is touched, and within whichever it is, the poorest first.
+ *
  * A thing that is made of something can only be built up with more of the
  * same: you do not patch an oak chest with pine, and a copper blade will not
  * take bronze.
  */
-function stockFor(g: Game, def: MaterialDef, made: string | undefined): Item | undefined {
-  let worst: Item | undefined;
-  for (const it of g.inventory.items) {
-    if (!def.stock.includes(it.id)) continue;
+function stockFor(g: Game, def: MaterialDef, made: string | undefined): CraftStock | undefined {
+  let worst: CraftStock | undefined;
+  for (const s of g.stockOf((it) => def.stock.includes(it.id))) {
     /*
      * Stock that says what it is made of has to say the right thing; stock
      * that says nothing — an unmarked plank, a shaft off an old save — is
      * stock of no particular sort and will go into anything. A lump always
      * says: its metal is in its name, which is what `materialOfItem` reads.
      */
-    const its = materialOfItem(it)?.name;
+    const its = materialOfItem(s.item)?.name;
     if (made && its && its !== made) continue;
-    if (!worst || it.ql < worst.ql) worst = it;
+    if (!worst || (s.carried && !worst.carried) || (s.carried === worst.carried && s.item.ql < worst.item.ql)) worst = s;
   }
   return worst;
 }
@@ -184,7 +190,7 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       if (!item || !what) return;
       const made = madeOf(item);
       const stock = stockFor(g, what.material, made);
-      if (!stock || !g.inventory.remove(stock.uid, 1)) return;
+      if (!stock || !stock.spend(1)) return;
       const toolQl = Math.max(...what.material.tools.map((id) => g.toolQl(id)));
       // A failed pass marks the piece rather than spoiling it outright. Oak
       // and the deep metals are stubborn under the file as under the saw.

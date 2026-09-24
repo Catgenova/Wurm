@@ -3,6 +3,7 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, type Item } from './items';
 import { world } from './pace';
+import type { CraftStock } from './recipes';
 
 /**
  * Campfires: the first thing you build on the ground rather than carry. A fire
@@ -110,6 +111,17 @@ export const FUEL_SAID = `${FUELS.slice(0, -1).map((f) => f.said).join(', ')} or
 const RECOVERABLE = ['log', 'timber', 'plank', 'shaft', 'thatch'];
 
 export const isFuel = (id: string): boolean => FUEL_VALUES[id] !== undefined;
+/**
+ * The fuel to feed a fire, a smelter, a kiln or an oven: the stack named, or
+ * the first there is when none was. From the same stock a craft spends -- the
+ * pack, a bag on your back, a store within `CRAFT_REACH` -- so a crate of
+ * logs beside the furnace keeps it going as well as an armful does.
+ */
+export function fuelAtHand(g: Game, uid?: number): CraftStock | undefined {
+  if (uid === undefined) return g.stockOf((it) => isFuel(it.id))[0];
+  const s = g.stockEntry(uid);
+  return s && isFuel(s.item.id) ? s : undefined;
+}
 /** World position of a fire's centre. */
 export const fireCentre = (f: PlacedCampfire): [number, number] => [f.x + (f.sx + 1) / SUBTILES, f.y + (f.sy + 1) / SUBTILES];
 export const fireBurnsFor = (f: PlacedCampfire): string => {
@@ -209,21 +221,22 @@ export const CAMPFIRE_ACTIONS: ActionDef[] = [
       const f = fireOf(g, t);
       if (!f) return 'It is gone.';
       if (!nearFire(g, f)) return 'Stand next to the fire.';
-      const item = t.kind === 'campfire' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return `Fires take ${FUEL_SAID}.`;
+      const item = fuelAtHand(g, t.kind === 'campfire' ? t.itemUid : undefined)?.item;
+      if (!item) return `Fires take ${FUEL_SAID}.`;
       if (f.fuel >= FIRE_CAPACITY) return 'It is already piled as high as it will take.';
       return null;
     },
     perform: (t, g) => {
       const f = fireOf(g, t);
       if (!f || t.kind !== 'campfire') return;
-      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return;
+      const stack = fuelAtHand(g, t.itemUid);
+      if (!stack) return;
+      const item = stack.item;
       const want = Math.min(t.count ?? 1, item.count);
       const per = FUEL_VALUES[item.id];
       const room = Math.max(0, FIRE_CAPACITY - f.fuel);
       const fits = Math.max(1, Math.min(want, Math.ceil(room / per)));
-      if (!g.inventory.remove(item.uid, fits)) return;
+      if (!stack.spend(fits)) return;
       f.fuel = Math.min(FIRE_CAPACITY, f.fuel + per * fits);
       g.events.emit('world', f.x, f.y);
       g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} to the fire. ${fireBurnsFor(f)} of fuel.`, 'event');

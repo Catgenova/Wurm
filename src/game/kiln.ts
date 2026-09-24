@@ -1,9 +1,10 @@
 import type { ActionDef, Target } from './actions';
-import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
+import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, fuelAtHand, hasAshes, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, rarityOf, roomFor, type Item } from './items';
 import { world } from './pace';
+import type { CraftStock } from './recipes';
 
 /**
  * A kiln: four subtiles of stone brick with a firebox under them. Clay is
@@ -69,6 +70,16 @@ export const POTTERY: PotteryDef[] = [
 
 export const POTTERY_BY_UNFIRED = new Map(POTTERY.map((p) => [p.unfired, p]));
 export const isGreenware = (id: string): boolean => POTTERY_BY_UNFIRED.has(id);
+/**
+ * The unfired clay to pack: the stack named, or the first there is, from the
+ * same stock a craft spends -- the pack, a bag on your back, a store within
+ * `CRAFT_REACH`.
+ */
+export function greenwareAtHand(g: Game, uid?: number): CraftStock | undefined {
+  if (uid === undefined) return g.stockOf((it) => isGreenware(it.id))[0];
+  const s = g.stockEntry(uid);
+  return s && isGreenware(s.item.id) ? s : undefined;
+}
 
 /** How long a piece takes: its own size, quickened by a well-built kiln. */
 export const fireSeconds = (def: PotteryDef, kilnQl: number): number => Math.max(6, def.seconds * (1.4 - kilnQl / 160));
@@ -173,19 +184,20 @@ export const KILN_ACTIONS: ActionDef[] = [
       const k = kilnOf(g, t);
       if (!k) return 'It is gone.';
       if (!nearKiln(g, k)) return 'Stand next to the kiln.';
-      const item = t.kind === 'kiln' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return `A kiln burns ${FUEL_SAID}.`;
+      const item = fuelAtHand(g, t.kind === 'kiln' ? t.itemUid : undefined)?.item;
+      if (!item) return `A kiln burns ${FUEL_SAID}.`;
       if (k.fuel >= FIRE_CAPACITY) return 'The firebox is full.';
       return null;
     },
     perform: (t, g) => {
       const k = kilnOf(g, t);
       if (!k || t.kind !== 'kiln') return;
-      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return;
+      const stack = fuelAtHand(g, t.itemUid);
+      if (!stack) return;
+      const item = stack.item;
       const per = FUEL_VALUES[item.id];
       const fits = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), Math.ceil(Math.max(0, FIRE_CAPACITY - k.fuel) / per)));
-      if (!g.inventory.remove(item.uid, fits)) return;
+      if (!stack.spend(fits)) return;
       k.fuel = Math.min(FIRE_CAPACITY, k.fuel + per * fits);
       g.events.emit('smelter');
       g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} into the kiln. ${kilnBurnsFor(k)} of fuel.`, 'event');
@@ -206,20 +218,21 @@ export const KILN_ACTIONS: ActionDef[] = [
       const k = kilnOf(g, t);
       if (!k) return 'It is gone.';
       if (!nearKiln(g, k)) return 'Stand next to the kiln.';
-      const item = t.kind === 'kiln' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isGreenware(it.id));
-      if (!item || !isGreenware(item.id)) return 'A kiln takes unfired clay.';
+      const item = greenwareAtHand(g, t.kind === 'kiln' ? t.itemUid : undefined)?.item;
+      if (!item) return 'A kiln takes unfired clay.';
       if (k.jobs.length >= kilnCapacity(k)) return 'The kiln is packed as full as it will go.';
       return null;
     },
     perform: (t, g) => {
       const k = kilnOf(g, t);
       if (!k || t.kind !== 'kiln') return;
-      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isGreenware(it.id));
+      const stack = greenwareAtHand(g, t.itemUid);
+      const item = stack?.item;
       const def = item && POTTERY_BY_UNFIRED.get(item.id);
-      if (!item || !def) return;
-      const n = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), KILN_CAPACITY - k.jobs.length));
-      const taken = g.inventory.take(item.uid, n);
-      if (!taken) return;
+      if (!stack || !item || !def) return;
+      const n = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), kilnCapacity(k) - k.jobs.length));
+      const taken: Item = { ...item, count: n };
+      if (!stack.spend(n)) return;
       const seconds = fireSeconds(def, k.ql);
       for (let i = 0; i < n; i++) k.jobs.push({ item: { ...taken, count: 1 }, makes: def.fired, left: seconds, total: seconds, ql: firedQl(taken.ql, k.ql) });
       g.events.emit('smelter');

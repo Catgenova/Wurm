@@ -1,5 +1,5 @@
 import type { ActionDef, Target } from './actions';
-import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
+import { FIRE_CAPACITY, FUEL_SAID, FUEL_VALUES, fuelAtHand, hasAshes, rakeAshes } from './campfire';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { itemDef, itemName, rarityOf, roomFor, type Item } from './items';
@@ -168,19 +168,20 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const s = smelterOf(g, t);
       if (!s) return 'It is gone.';
       if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
-      const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return `A smelter burns ${FUEL_SAID}.`;
+      const item = fuelAtHand(g, t.kind === 'smelter' ? t.itemUid : undefined)?.item;
+      if (!item) return `A smelter burns ${FUEL_SAID}.`;
       if (s.fuel >= FIRE_CAPACITY) return 'The firebox is full.';
       return null;
     },
     perform: (t, g) => {
       const s = smelterOf(g, t);
       if (!s || t.kind !== 'smelter') return;
-      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return;
+      const stack = fuelAtHand(g, t.itemUid);
+      if (!stack) return;
+      const item = stack.item;
       const per = FUEL_VALUES[item.id];
       const fits = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), Math.ceil(Math.max(0, FIRE_CAPACITY - s.fuel) / per)));
-      if (!g.inventory.remove(item.uid, fits)) return;
+      if (!stack.spend(fits)) return;
       s.fuel = Math.min(FIRE_CAPACITY, s.fuel + per * fits);
       g.events.emit('smelter');
       g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} into the smelter. ${smelterBurnsFor(s)} of fuel.`, 'event');
@@ -240,7 +241,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const s = smelterOf(g, t);
       if (!s) return 'It is gone.';
       if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
-      const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.stockEntry(t.itemUid)?.item : undefined;
       if (!item || !isOreItem(item.id)) return 'Smelters take ore.';
       // A charge is one ore, which comes out as one lump.
       if (item.count < ORE_PER_LUMP) return `A charge is ${ORE_PER_LUMP} ore; you have ${item.count}.`;
@@ -250,19 +251,20 @@ export const SMELTER_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const s = smelterOf(g, t);
       if (!s || t.kind !== 'smelter' || t.itemUid === undefined) return;
-      const item = g.inventory.get(t.itemUid);
+      const stack = g.stockEntry(t.itemUid);
+      const item = stack?.item;
       const metal = item && METAL_BY_ORE.get(item.id);
-      if (!item || !metal) return;
+      if (!stack || !item || !metal) return;
       /*
        * Charges, not ore. One charge is `ORE_PER_LUMP` of it and comes out as
        * one lump; that is one for one now, so "all" of a stack is the whole
        * stack, up to what the furnace will hold.
        */
       const want = Math.max(1, Math.floor((t.count ?? 1) / ORE_PER_LUMP));
-      const n = Math.min(want, Math.floor(item.count / ORE_PER_LUMP), SMELTER_CAPACITY - s.jobs.length);
+      const n = Math.min(want, Math.floor(item.count / ORE_PER_LUMP), smelterCapacity(s) - s.jobs.length);
       if (n < 1) return;
-      const taken = g.inventory.take(item.uid, n * ORE_PER_LUMP);
-      if (!taken) return;
+      const taken: Item = { ...item, count: n * ORE_PER_LUMP };
+      if (!stack.spend(n * ORE_PER_LUMP)) return;
       const seconds = smeltSeconds(metal.id, taken.ql, s.ql);
       for (let i = 0; i < n; i++) {
         s.jobs.push({ item: { ...taken, count: ORE_PER_LUMP }, makes: metal.lump, left: seconds, total: seconds, ql: taken.ql });
@@ -288,26 +290,27 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const s = smelterOf(g, t);
       if (!s) return 'It is gone.';
       if (!nearSmelter(g, s)) return 'Stand next to the smelter.';
-      const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const item = t.kind === 'smelter' && t.itemUid !== undefined ? g.stockEntry(t.itemUid)?.item : undefined;
       if (!item) return 'Choose something to melt down.';
       const why = meltRefusal(item);
       if (why) return why;
       const n = Math.min(Math.max(1, (t.kind === 'smelter' ? t.count : undefined) ?? 1), item.count);
-      if (s.jobs.length + meltLumps(item, n) > SMELTER_CAPACITY) return 'The furnace is charged as full as it will go.';
+      if (s.jobs.length + meltLumps(item, n) > smelterCapacity(s)) return 'The furnace is charged as full as it will go.';
       return null;
     },
     perform: (t, g) => {
       const s = smelterOf(g, t);
       if (!s || t.kind !== 'smelter' || t.itemUid === undefined) return;
-      const item = g.inventory.get(t.itemUid);
+      const stack = g.stockEntry(t.itemUid);
+      const item = stack?.item;
       const metal = item && metalOfItem(item);
-      if (!item || !metal || meltRefusal(item)) return;
+      if (!stack || !item || !metal || meltRefusal(item)) return;
       const n = Math.min(Math.max(1, t.count ?? 1), item.count);
       const lumps = meltLumps(item, n);
-      if (s.jobs.length + lumps > SMELTER_CAPACITY) return;
+      if (s.jobs.length + lumps > smelterCapacity(s)) return;
       const ql = meltQl(item);
-      const taken = g.inventory.take(item.uid, n);
-      if (!taken) return;
+      const taken: Item = { ...item, count: n };
+      if (!stack.spend(n)) return;
       // Scrap is quicker than ore: it has been through the fire once already.
       const seconds = smeltSeconds(metal.id, item.ql, s.ql) * MELT_HEAT;
       for (let i = 0; i < lumps; i++) {
@@ -334,7 +337,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const mould = g.inventory.find('anvil_mould');
       if (!mould) return 'You need an anvil mould.';
       const def = MOULD_BY_ID.get('anvil_mould');
-      const lump = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const lump = t.kind === 'smelter' && t.itemUid !== undefined ? g.stockEntry(t.itemUid)?.item : undefined;
       if (!lump || !METAL_BY_LUMP.has(lump.id)) return 'Choose the metal to pour.';
       const metal = METAL_BY_LUMP.get(lump.id) as { id: string };
       const need = def ? mouldLumps(def, metal.id) : 0;
@@ -346,12 +349,13 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const s = smelterOf(g, t);
       if (!s || t.kind !== 'smelter' || t.itemUid === undefined) return;
       const mould = g.inventory.find('anvil_mould');
-      const lump = g.inventory.get(t.itemUid);
+      const stack = g.stockEntry(t.itemUid);
+      const lump = stack?.item;
       const metal = lump && METAL_BY_LUMP.get(lump.id);
       const def = MOULD_BY_ID.get('anvil_mould');
-      if (!mould || !lump || !metal || !def) return;
+      if (!mould || !stack || !lump || !metal || !def) return;
       const need = mouldLumps(def, metal.id);
-      if (lump.count < need || !g.inventory.remove(lump.uid, need)) return;
+      if (lump.count < need || !stack.spend(need)) return;
       // The mould is spent by a piece this size, whatever quality it was.
       g.inventory.remove(mould.uid, 1);
       const ql = Math.max(1, Math.min(100, (lump.ql + mould.ql + g.productQl('blacksmithing')) / 3));
@@ -378,7 +382,7 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       const def = mould && MOULD_BY_ID.get(mould.id);
       if (!mould || !def) return 'Choose a mould.';
       if (def.makes === 'anvil') return 'An anvil is cast whole: pour it with Cast an anvil.';
-      const lump = t.kind === 'smelter' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const lump = t.kind === 'smelter' && t.itemUid !== undefined ? g.stockEntry(t.itemUid)?.item : undefined;
       const metal = lump && METAL_BY_LUMP.get(lump.id);
       if (!lump || !metal) return 'You have no metal to pour.';
       // A mould wants a weight of metal, and a lump of the rare six weighs a
@@ -393,11 +397,12 @@ export const SMELTER_ACTIONS: ActionDef[] = [
       if (!s || t.kind !== 'smelter' || t.mouldUid === undefined || t.itemUid === undefined) return;
       const mould = g.inventory.get(t.mouldUid);
       const def = mould && MOULD_BY_ID.get(mould.id);
-      const lump = g.inventory.get(t.itemUid);
+      const stack = g.stockEntry(t.itemUid);
+      const lump = stack?.item;
       const metal = lump && METAL_BY_LUMP.get(lump.id);
-      if (!mould || !def || def.makes === 'anvil' || !lump || !metal || s.jobs.length >= smelterCapacity(s)) return;
+      if (!mould || !def || def.makes === 'anvil' || !stack || !lump || !metal || s.jobs.length >= smelterCapacity(s)) return;
       const need = mouldLumps(def, metal.id);
-      if (lump.count < need || !g.inventory.remove(lump.uid, need)) return;
+      if (lump.count < need || !stack.spend(need)) return;
       const mouldQl = Math.max(1, mould.ql - mould.dmg / 2);
       // Every filling wears the mould, and no mould can be mended. A hard
       // metal takes more out of it than a soft one.

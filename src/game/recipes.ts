@@ -34,6 +34,8 @@ export interface CraftStock {
   item: Item;
   /** Whether it is on you, in the pack or a bag, rather than in a store you are standing near. */
   carried: boolean;
+  /** The store it is in, by name, when it is not carried: "Wagon (pine)". */
+  store?: string;
   /** Use up `n` of it; false when there are not that many. */
   spend(n: number): boolean;
 }

@@ -1,7 +1,7 @@
 import { INDOORS_REST } from './building';
 import { drinkable, isBrew, isWorking } from './brewing';
 import type { ActionDef, Target } from './actions';
-import { FUEL_SAID, FUEL_VALUES, hasAshes, isFuel, rakeAshes } from './campfire';
+import { FUEL_SAID, FUEL_VALUES, fuelAtHand, hasAshes, rakeAshes } from './campfire';
 import {
   BUCKET_LITRES,
   BUCKET_OF,
@@ -167,20 +167,21 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f || !isOven(f)) return 'That is not something you can light a fire in.';
       if (!nearPiece(g, f)) return `Stand next to the ${hearthName(f)}.`;
-      const item = t.kind === 'furniture' && t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return `An oven takes what a fire takes: ${FUEL_SAID}.`;
+      const item = fuelAtHand(g, t.kind === 'furniture' ? t.itemUid : undefined)?.item;
+      if (!item) return `An oven takes what a fire takes: ${FUEL_SAID}.`;
       if ((f.fuel ?? 0) >= hearthCapacity(f)) return 'It is packed as full as it will take.';
       return null;
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f || t.kind !== 'furniture') return;
-      const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => isFuel(it.id));
-      if (!item || !isFuel(item.id)) return;
+      const stack = fuelAtHand(g, t.itemUid);
+      if (!stack) return;
+      const item = stack.item;
       const per = FUEL_VALUES[item.id];
       const room = Math.max(0, hearthCapacity(f) - (f.fuel ?? 0));
       const fits = Math.max(1, Math.min(Math.min(t.count ?? 1, item.count), Math.ceil(room / per)));
-      if (!g.inventory.remove(item.uid, fits)) return;
+      if (!stack.spend(fits)) return;
       f.fuel = Math.min(hearthCapacity(f), (f.fuel ?? 0) + per * fits);
       g.events.emit('world', f.x, f.y);
       g.logMsg(`You feed ${fits > 1 ? `${fits} × ` : 'a '}${itemDef(item.id).name.toLowerCase()} into the ${hearthName(f)}. ${ovenBurnsFor(f)} of fuel.`, 'event');

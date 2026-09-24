@@ -1006,6 +1006,21 @@ jobs:
             --outfile=node_modules/.cache/traces.mjs --log-level=error
           node node_modules/.cache/traces.mjs
 
+      - name: The wagon beside the furnace
+        run: |
+          # "pouring a mould, as an action that requires ingredients, should be
+          # pulling the iron from the adjacent wagon as it is within 3 tiles".
+          # A craft reached into the stores around you and no station did: a
+          # smelter, a kiln, a fire, an oven, an anvil, a barrel and bettering
+          # a thing all asked for what was in your hands. They take what they
+          # use up from the same stock a craft does now, on both sides, and a
+          # cart, a wagon or a boat counts as a store whoever built it. This
+          # sets one spread round a body and asks every station of it, and
+          # that the stores it may not touch are not touched.
+          npx esbuild supabase/test/beside.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/beside.mjs --log-level=error
+          node node_modules/.cache/beside.mjs
+
       - name: One pile and not six
         run: |
           # Reported off a screenshot of a pack holding six separate piles of

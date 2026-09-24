@@ -46,7 +46,7 @@ import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed'
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, type DeedRole } from '../game/game';
-import { recipeNeeds, recipeReason, recipeStatus, RECIPES } from '../game/recipes';
+import { CRAFT_REACH, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
 import { TilePanel } from './panels/tile';
@@ -102,6 +102,16 @@ export interface UICallbacks {
 type Placing =
   | { kind: 'furniture'; itemUid: number; piece: string; material?: string; facing: Side }
   | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side };
+
+/**
+ * Where a stack at hand is, on its menu row, when it is not on you: "in the
+ * wagon (pine)". A station takes what it uses up from your stores within
+ * `CRAFT_REACH` as well as from the pack, and says so here.
+ */
+const storedIn = (s: CraftStock): string | undefined =>
+  s.carried || !s.store ? undefined : `in the ${s.store.charAt(0).toLowerCase()}${s.store.slice(1)}`;
+/** What a station's menu says when nothing it takes is at hand. */
+const noneAtHand = (what: string): string => `You have ${what} on you or in your stores within ${CRAFT_REACH} tiles.`;
 
 /** What your rank on a settlement lets you do, in one line. */
 function standingWord(role: DeedRole | undefined): string {
@@ -1123,23 +1133,8 @@ export class UI {
     const ft: Target = { kind: 'campfire', id: fire.id };
     const entries: MenuItem[] = [];
     const fuelDef = ACTION_BY_ID.get('fuel_campfire');
-    const wood = g.inventory.items.filter((it) => isFuel(it.id));
-    if (fuelDef && wood.length) {
-      entries.push({
-        label: 'Fuel',
-        children: wood.map((it) => ({
-          label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
-          children:
-            it.count > 1
-              ? [
-                  { label: 'One', onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 }) },
-                  { label: `All (${it.count})`, onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: it.count }) },
-                ]
-              : undefined,
-          onSelect: it.count > 1 ? undefined : () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 }),
-        })),
-      });
-    }
+    const wood = g.stockOf((it) => isFuel(it.id));
+    if (fuelDef && wood.length) entries.push({ label: 'Fuel', children: wood.map((s) => this.stackRow(fuelDef, ft, s)) });
     for (const id of ['light_campfire', 'put_out_campfire', 'take_apart_campfire']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
@@ -1172,58 +1167,71 @@ export class UI {
     });
   }
 
+  /**
+   * One stack on a station's menu, to put in one at a time or all at once:
+   * fuel for a fire, ore or scrap for a smelter, clay for a kiln. A stack in
+   * one of your stores rather than on you says which store it is in.
+   */
+  private stackRow(def: ActionDef, target: Target, stack: CraftStock): MenuItem {
+    const g = this.game;
+    const it = stack.item;
+    const put = (count: number) => (): void => g.requestAction(def, { ...target, itemUid: it.uid, count } as Target);
+    return {
+      label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+      note: storedIn(stack),
+      children: it.count > 1 ? [{ label: 'One', onSelect: put(1) }, { label: `All (${it.count})`, onSelect: put(it.count) }] : undefined,
+      onSelect: it.count > 1 ? undefined : put(1),
+    };
+  }
+
   /** Fuelling, charging and drawing off a smelter. */
   private smelterEntries(s: PlacedSmelter): MenuItem[] {
     const g = this.game;
     const st: Target = { kind: 'smelter', id: s.id };
     const entries: MenuItem[] = [];
-    const quantity = (def: ActionDef, it: Item, extra: Partial<Target> = {}): MenuItem => ({
-      label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
-      children:
-        it.count > 1
-          ? [
-              { label: 'One', onSelect: () => g.requestAction(def, { ...st, itemUid: it.uid, count: 1, ...extra } as Target) },
-              { label: `All (${it.count})`, onSelect: () => g.requestAction(def, { ...st, itemUid: it.uid, count: it.count, ...extra } as Target) },
-            ]
-          : undefined,
-      onSelect: it.count > 1 ? undefined : () => g.requestAction(def, { ...st, itemUid: it.uid, count: 1, ...extra } as Target),
-    });
+    /*
+     * Everything the furnace takes in -- fuel, ore, scrap and metal -- comes
+     * from the same stock a craft spends: the pack, a bag on your back, and
+     * your stores within reach, a wagon drawn up beside it included. The
+     * moulds are tools, and are the ones you carry.
+     */
     const fuelDef = ACTION_BY_ID.get('fuel_smelter');
-    const fuel = g.inventory.items.filter((it) => isFuel(it.id));
-    if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((it) => quantity(fuelDef, it)) });
+    const fuel = g.stockOf((it) => isFuel(it.id));
+    if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((k) => this.stackRow(fuelDef, st, k)) });
     const smeltDef = ACTION_BY_ID.get('smelt_ore');
-    const ores = g.inventory.items.filter((it) => isOreItem(it.id));
+    const ores = g.stockOf((it) => isOreItem(it.id));
     if (smeltDef) {
       entries.push({
         label: 'Smelt ore',
         disabled: !ores.length,
-        hint: ores.length ? undefined : 'You carry no ore.',
-        children: ores.length ? ores.map((it) => quantity(smeltDef, it)) : undefined,
+        hint: ores.length ? undefined : noneAtHand('no ore'),
+        children: ores.length ? ores.map((k) => this.stackRow(smeltDef, st, k)) : undefined,
       });
     }
     // Scrap goes back into the fire: anything cast from metal, or hafted to a cast head.
     const meltDef = ACTION_BY_ID.get('melt_down');
-    const scrap = g.inventory.items.filter((it) => meltable(it));
+    const scrap = g.stockOf((it) => meltable(it));
     if (meltDef) {
       entries.push({
         label: 'Melt down',
         disabled: !scrap.length,
-        hint: scrap.length ? undefined : 'You carry nothing made of metal.',
-        children: scrap.length ? scrap.map((it) => quantity(meltDef, it)) : undefined,
+        hint: scrap.length ? undefined : noneAtHand('nothing made of metal'),
+        children: scrap.length ? scrap.map((k) => this.stackRow(meltDef, st, k)) : undefined,
       });
     }
     const castDef = ACTION_BY_ID.get('cast_anvil');
-    const lumps = g.inventory.items.filter((it) => isLump(it.id));
+    const lumps = g.stockOf((it) => isLump(it.id));
     if (castDef && g.inventory.has('anvil_mould')) {
       entries.push({
         label: 'Cast an anvil',
         disabled: !lumps.length,
-        hint: lumps.length ? undefined : 'You carry no metal.',
+        hint: lumps.length ? undefined : noneAtHand('no metal'),
         children: lumps.length
-          ? lumps.map((it) => {
+          ? lumps.map((k) => {
+              const it = k.item;
               const t: Target = { ...st, itemUid: it.uid };
               const reason = castDef.check?.(t, g) ?? null;
-              return { label: `${itemName(it)} (${it.count})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(castDef, t) };
+              return { label: `${itemName(it)} (${it.count})`, note: storedIn(k), hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(castDef, t) };
             })
           : undefined,
       });
@@ -1235,7 +1243,7 @@ export class UI {
       entries.push({
         label: 'Pour a mould',
         disabled: !moulds.length || !lumps.length,
-        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? 'You carry no metal.' : undefined,
+        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? noneAtHand('no metal') : undefined,
         children:
           moulds.length && lumps.length
             ? moulds.map((mould) => {
@@ -1243,7 +1251,8 @@ export class UI {
                 return {
                   label: itemName(mould),
                   note: `${itemDef(def.makes).name.toLowerCase()} · ${def.lumps} lump${def.lumps > 1 ? 's' : ''} · ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left`,
-                  children: lumps.map((lump) => {
+                  children: lumps.map((k) => {
+                    const lump = k.item;
                     const t: Target = { ...st, mouldUid: mould.uid, itemUid: lump.uid };
                     const reason = pourDef.check?.(t, g) ?? null;
                     // What this metal costs, which is not the same for all of
@@ -1252,6 +1261,7 @@ export class UI {
                     const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
                     return {
                       label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count}) · ${need} needed`,
+                      note: storedIn(k),
                       hint: reason ?? undefined,
                       disabled: !!reason,
                       onSelect: () => g.requestAction(pourDef, t),
@@ -1392,23 +1402,8 @@ export class UI {
     // An oven is fed and lit like a fire, and cooks like one.
     if (def.hearth) {
       const fuelDef = ACTION_BY_ID.get('fuel_oven');
-      const wood = g.inventory.items.filter((it) => isFuel(it.id));
-      if (fuelDef && wood.length) {
-        entries.push({
-          label: 'Fuel',
-          children: wood.map((it) => ({
-            label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
-            children:
-              it.count > 1
-                ? [
-                    { label: 'One', onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 } as Target) },
-                    { label: `All (${it.count})`, onSelect: () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: it.count } as Target) },
-                  ]
-                : undefined,
-            onSelect: it.count > 1 ? undefined : () => g.requestAction(fuelDef, { ...ft, itemUid: it.uid, count: 1 } as Target),
-          })),
-        });
-      }
+      const wood = g.stockOf((it) => isFuel(it.id));
+      if (fuelDef && wood.length) entries.push({ label: 'Fuel', children: wood.map((s) => this.stackRow(fuelDef, ft, s)) });
       if (f.lit) entries.push({ label: 'Cook', children: this.cookEntries() });
     }
     // A barrel of water is where every brew starts.
@@ -1443,28 +1438,18 @@ export class UI {
     const g = this.game;
     const kt: Target = { kind: 'kiln', id: k.id };
     const entries: MenuItem[] = [];
-    const quantity = (def: ActionDef, it: Item): MenuItem => ({
-      label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
-      children:
-        it.count > 1
-          ? [
-              { label: 'One', onSelect: () => g.requestAction(def, { ...kt, itemUid: it.uid, count: 1 } as Target) },
-              { label: `All (${it.count})`, onSelect: () => g.requestAction(def, { ...kt, itemUid: it.uid, count: it.count } as Target) },
-            ]
-          : undefined,
-      onSelect: it.count > 1 ? undefined : () => g.requestAction(def, { ...kt, itemUid: it.uid, count: 1 } as Target),
-    });
+    // Fuel and clay from the same stock a craft spends, stores within reach included.
     const fuelDef = ACTION_BY_ID.get('fuel_kiln');
-    const fuel = g.inventory.items.filter((it) => isFuel(it.id));
-    if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((it) => quantity(fuelDef, it)) });
+    const fuel = g.stockOf((it) => isFuel(it.id));
+    if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((s) => this.stackRow(fuelDef, kt, s)) });
     const loadDef = ACTION_BY_ID.get('load_kiln');
-    const green = g.inventory.items.filter((it) => isGreenware(it.id));
+    const green = g.stockOf((it) => isGreenware(it.id));
     if (loadDef) {
       entries.push({
         label: 'Fire clay',
         disabled: !green.length,
-        hint: green.length ? undefined : 'You carry no unfired clay.',
-        children: green.length ? green.map((it) => quantity(loadDef, it)) : undefined,
+        hint: green.length ? undefined : noneAtHand('no unfired clay'),
+        children: green.length ? green.map((s) => this.stackRow(loadDef, kt, s)) : undefined,
       });
     }
     for (const id of ['light_kiln', 'damp_kiln', 'kiln_take_all', 'take_ashes_kiln', 'pick_up_kiln']) {
@@ -1602,22 +1587,25 @@ export class UI {
     const at: Target = { kind: 'anvil', id: a.id };
     const entries: MenuItem[] = [];
     const smithDef = ACTION_BY_ID.get('smith');
-    // Castings poured at the smelter, each named for the piece it is of.
-    const castings = g.inventory.items.filter(isCasting);
-    const lumps = g.inventory.items.filter((it) => isLump(it.id));
+    // Castings poured at the smelter, each named for the piece it is of, and
+    // the metal for coins: from the pack, a bag, or a store within reach.
+    const castings = g.stockOf(isCasting);
+    const lumps = g.stockOf((it) => isLump(it.id));
     if (smithDef) {
       entries.push({
         label: 'Smith',
         disabled: !castings.length,
         hint: castings.length ? undefined : 'Pour a mould at the smelter first.',
         children: castings.length
-          ? castings.map((c) => {
+          ? castings.map((s) => {
+              const c = s.item;
               const def = MOULD_BY_MAKES.get(c.piece as string);
               const t: Target = { ...at, itemUid: c.uid };
               const reason = smithDef.check?.(t, g) ?? null;
+              const where = storedIn(s);
               return {
                 label: `${itemName(c)} (${c.count})`,
-                note: def ? `${def.per && def.per > 1 ? `${def.per} ` : 'a '}${itemDef(def.makes).name.toLowerCase()} · QL ${c.ql.toFixed(0)}` : undefined,
+                note: def ? `${def.per && def.per > 1 ? `${def.per} ` : 'a '}${itemDef(def.makes).name.toLowerCase()} · QL ${c.ql.toFixed(0)}${where ? ` · ${where}` : ''}` : where,
                 hint: reason ?? undefined,
                 disabled: !!reason,
                 onSelect: () => g.requestAction(smithDef, t),
@@ -1629,7 +1617,7 @@ export class UI {
     // Coins: a die in the pack, and a lump of silver or gold named off the menu.
     const strikeDef = ACTION_BY_ID.get('strike_coins');
     const die = g.inventory.find('coin_die');
-    const precious = lumps.filter((it) => COIN_METALS.includes(METAL_BY_LUMP.get(it.id)?.id ?? ''));
+    const precious = lumps.filter((s) => COIN_METALS.includes(METAL_BY_LUMP.get(s.item.id)?.id ?? ''));
     if (strikeDef) {
       entries.push({
         label: 'Strike coins',
@@ -1638,10 +1626,11 @@ export class UI {
         note: die ? `${Math.ceil((100 - die.dmg) / DIE_WEAR)} strikes left in the die` : undefined,
         children:
           die && precious.length
-            ? precious.map((lump) => {
+            ? precious.map((s) => {
+                const lump = s.item;
                 const t: Target = { ...at, itemUid: lump.uid };
                 const reason = strikeDef.check?.(t, g) ?? null;
-                return { label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(strikeDef, t) };
+                return { label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count})`, note: storedIn(s), hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(strikeDef, t) };
               })
             : undefined,
       });

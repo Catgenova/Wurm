@@ -62,7 +62,10 @@ export function brewReason(g: Game, f: PlacedFurniture | undefined, brew: BrewDe
   if (isWorking(f)) return 'It is already working. Leave it alone.';
   if (f.liquid !== 'water') return `A brew is started in water. Empty the ${furnitureName(f).toLowerCase()} and fill it from a well.`;
   if (litresIn(f) < brew.litres) return `That takes ${brew.litres} litres of water; there are ${litresIn(f).toFixed(0)} in it.`;
-  if (g.inventory.count(brew.input) < brew.count) return `That takes ${brew.count} × ${itemDef(brew.input).name.toLowerCase()}; you have ${g.inventory.count(brew.input)}.`;
+  // What goes in comes from the same stock a craft spends: the pack, a bag on
+  // your back, and your stores within reach.
+  const have = g.stockCount(brew.input);
+  if (have < brew.count) return `That takes ${brew.count} × ${itemDef(brew.input).name.toLowerCase()}; you have ${have}.`;
   return null;
 }
 
@@ -88,9 +91,8 @@ export const BREWING_ACTIONS: ActionDef[] = [
       if (!f || !brew || brewReason(g, f, brew)) return;
       // What goes in decides most of what comes out; the hand only decides
       // how much of it survives the working.
-      const stock = g.inventory.find(brew.input);
-      const stockQl = stock?.ql ?? 20;
-      if (!g.inventory.consume(brew.input, brew.count)) return;
+      const stockQl = g.stockOf((it) => it.id === brew.input)[0]?.item.ql ?? 20;
+      if (!g.spendStock(brew.input, brew.count)) return;
       if (!g.skillCheck('brewing', brew.difficulty, 0, g.mindEase())) {
         f.litres = Math.max(0, litresIn(f) - brew.litres);
         if (f.litres <= 0) f.liquid = undefined;

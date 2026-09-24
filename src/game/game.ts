@@ -4248,6 +4248,7 @@ export class Game {
         out.push({
           item: it,
           carried: false,
+          store: store.name,
           spend: (n) => {
             if (!spendOut(store.items, it.uid, n)) return false;
             this.events.emit('crate');
@@ -4262,29 +4263,78 @@ export class Game {
   /**
    * The crates and pieces a craft may reach into, nearest first. See
    * `craftStock` for which, and why.
+   *
+   * A vehicle is the one piece that is anybody's: a cart, a wagon or a boat
+   * may be loaded and emptied by whoever stands at it, so a craft reaches
+   * into one whoever built it and whosever ground it stands on. A padlock on
+   * it still keeps a craft out, as it keeps out a hand.
    */
-  private storesForCraft(): Array<{ items: Item[] }> {
+  private storesForCraft(): Array<{ items: Item[]; name: string }> {
     const tx = this.player.tileX;
     const ty = this.player.tileY;
     const within = (x: number, y: number): boolean => Math.max(Math.abs(x - tx), Math.abs(y - ty)) <= CRAFT_REACH;
-    const found: Array<{ items: Item[]; d: number; order: number }> = [];
+    const found: Array<{ items: Item[]; name: string; d: number; order: number }> = [];
     const far = (cx: number, cy: number): number => Math.hypot(cx - this.player.x, cy - this.player.y);
     this.placed.crates.around(tx + 0.5, ty + 0.5, CRAFT_REACH, (c) => {
       if (!c.items.length || !within(c.x, c.y) || c.mine === false || this.lockRefusal(c)) return;
       const [cx, cy] = crateCentre(c);
-      found.push({ items: c.items, d: far(cx, cy), order: c.id });
+      found.push({ items: c.items, name: crateName(c), d: far(cx, cy), order: c.id });
     });
     this.placed.furniture.around(tx + 0.5, ty + 0.5, CRAFT_REACH, (f) => {
       if (!f.items.length || !within(f.x, f.y)) return;
       const def = furnitureDef(f.kind);
       if (!furnitureHolds(f) || def.trash || def.stall) return;
-      if (f.mine === false && !this.onDeed(f.x, f.y)) return;
+      const anybodys = !!(def.cart || def.vehicle || def.boat);
+      if (f.mine === false && !anybodys && !this.onDeed(f.x, f.y)) return;
       if (this.lockRefusal(f)) return;
       const [cx, cy] = furnitureCentre(f);
       // After the crates at the same distance, to the same rule as the island.
-      found.push({ items: f.items, d: far(cx, cy), order: 1e9 + f.id });
+      found.push({ items: f.items, name: furnitureName(f), d: far(cx, cy), order: 1e9 + f.id });
     });
     return found.sort((a, b) => a.d - b.d || a.order - b.order);
+  }
+
+  /**
+   * One stack that work at a station may spend, by its number: in the pack,
+   * in a bag on your back, or in a store within `CRAFT_REACH`.
+   *
+   * Asked for: "pouring a mould, as an action that requires ingredients,
+   * should be pulling the iron from the adjacent wagon as it is within 3
+   * tiles". So whatever a smelter, a kiln, a fire, an oven, an anvil, a
+   * barrel or an improvement uses up comes from the same stock a craft does,
+   * in the same order and by the same rules (see `craftStock`). The tools --
+   * a mould, a coin die, a file -- are still the ones you carry.
+   */
+  stockEntry(uid: number): CraftStock | undefined {
+    return this.craftStock().find((s) => s.item.uid === uid);
+  }
+
+  /** Every stack at hand that answers `pick`, in the order a craft spends them. */
+  stockOf(pick: (it: Item) => boolean): CraftStock[] {
+    return this.craftStock().filter((s) => pick(s.item));
+  }
+
+  /** How many of a kind are at hand to be spent, carried and stored within reach. */
+  stockCount(id: string): number {
+    return this.stockOf((it) => it.id === id).reduce((n, s) => n + s.item.count, 0);
+  }
+
+  /**
+   * Use up `n` of a kind from what is at hand, across as many stacks as it
+   * takes and in the order a craft spends them: a bill, like a brew's twenty
+   * apples, rather than one stack pointed at. False, and nothing spent, when
+   * there are not that many.
+   */
+  spendStock(id: string, n: number): boolean {
+    const from = this.stockOf((it) => it.id === id);
+    if (from.reduce((sum, s) => sum + s.item.count, 0) < n) return false;
+    let left = n;
+    for (const s of from) {
+      if (left <= 0) break;
+      const take = Math.min(left, s.item.count);
+      if (take > 0 && s.spend(take)) left -= take;
+    }
+    return left === 0;
   }
 
   /**

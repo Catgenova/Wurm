@@ -278,10 +278,20 @@ import{Ct as e,Di as t}from"./creatures.js";function n(){return`
     <h3>Crafting</h3>
     <p>The crafting window (<kbd>R</kbd>) is your recipe book, grouped by craft: a carving knife and a
     log give shafts or a mallet, a shaft becomes a deed stake, a saw gives planks and timbers, a chisel
-    turns shards into bricks, and so on. Each recipe lists its tool and materials, green when you carry
-    them and red when you do not, and whatever you can make right now sits at the top of its group. Tick
+    turns shards into bricks, and so on. Each recipe lists its tool and materials, green when you have
+    them at hand and red when you do not, and whatever you can make right now sits at the top of its group. Tick
     <i>Only what I can make</i> to hide the rest. The same recipes are on each material's own menu,
     where <i>All</i> keeps going until the materials run out.</p>
+    <p><b>What is at hand.</b> A craft, and any work at a station that uses something up, takes it from
+    your pack, then the bags on your back, then your stores within <b>3 tiles</b> of where you
+    stand, nearest first. At a station that means the metal for a mould or an anvil, ore and scrap for
+    a smelter, unfired clay for a kiln, fuel for a campfire, smelter, kiln or oven, a casting or coin
+    metal at an anvil, the stock worked into a thing to improve it, and what goes into a brew. A stack in
+    a store is marked with the store's name on the station's menu. Tools still have to be carried:
+    the moulds, the coin die, files and the rest. Nothing is taken from a store behind a padlock you
+    hold no key to, from one somebody else set down off your settlement, from a trash crate or a market
+    stall, and nothing put by is ever used. A cart, a wagon or a boat is anybody's store, whoever built
+    it.</p>
     <h3>What a thing is made of</h3>
     <p>The same bill of materials in two different woods, or two different metals, makes two different
     things. A log keeps the wood it was cut from all the way through &mdash; planks, timbers, shafts and
