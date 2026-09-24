@@ -1077,7 +1077,8 @@ function hairOf(fr: Frame, id: string): HairKit {
    * Parted at `x` across the head, each side lying away from the parting
    * toward a pole low on its own side. The parting runs from the brow to the
    * crown, and behind that the hair falls from the crown -- unless it goes
-   * `through` to the nape, as it does for two braids.
+   * `through` to the nape, as it does for two braids, and under the fall of
+   * long hair.
    */
   const parted = (x: number, drop: number, o: Omit<Lay, 'part'> & { back?: number; through?: boolean }): Mesh => join(
     ...[1, -1].map((s) => sweep(fr, {
@@ -1160,7 +1161,7 @@ function hairOf(fr: Frame, id: string): HairKit {
       };
     case 'curls': {
       // Loose curls, full on top and close at the sides as the references cut them: a mass standing off the crown and thinning to the
-      // tops of the ears, with round curls standing out of it over the brow and round the top, and smaller ones low at the sides.
+      // tops of the ears, with round curls standing out of it over the brow and round the top, and smaller ones low round the back.
       // Close over the ears above all: at the sides the hair thins to little more than half as far out below the crown, so the curls stand
       // up in a mass taller than it is wide, where an afro is rounder and wider.
       const side = (lam: number): number => Math.cos(lam) ** 2;
