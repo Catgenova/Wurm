@@ -1391,6 +1391,22 @@ jobs:
             --outfile=node_modules/.cache/wanted.mjs --log-level=error
           node node_modules/.cache/wanted.mjs
 
+      - name: A field guide of the wildermon
+        run: |
+          # A page for every kind, marking whether you have seen, tamed and
+          # bred it, and where it lives. Each page's lines are its kind's own
+          # rules read out, number for number, and nothing is said without its
+          # rule. Both sides mark a kind seen when one stands in view out of a
+          # crate, tamed when an offering takes or a catch comes out of a trap,
+          # and bred when a young one is born to a dam somebody keeps; the
+          # browser keeps its book in the save, and the island takes a sighting
+          # only while one of the kind is standing near you, answers a second
+          # one as had, refuses too many at once and anybody not on the island,
+          # and hands the book back whole to its owner and to nobody else.
+          npx esbuild supabase/test/guide.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/guide.mjs --log-level=error
+          node node_modules/.cache/guide.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

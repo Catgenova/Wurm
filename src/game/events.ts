@@ -23,6 +23,8 @@ export type GameEvents = {
   crate: [];
   smelter: [];
   creature: [];
+  /** A page of the field guide took a mark: a kind seen, tamed or bred. */
+  guide: [];
   /**
    * Something was hurt, somewhere. Carried so the renderer can put a number
    * over it without having to go looking for what changed; the log says what

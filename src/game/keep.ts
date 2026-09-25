@@ -439,6 +439,26 @@ export const FOG_BYTES = 262144;
 export const FOG_EVERY = 45;
 
 /**
+ * How often the browser hands the field guide a kind it has just seen, at
+ * most, in seconds.
+ *
+ * Unlike the fog, a sighting is worth sending at once: the island takes one
+ * only while a creature of that kind is standing near you, and a rabba shot
+ * the moment it stepped out of the trees is not standing anywhere a minute
+ * later. So the first goes the moment it is seen and the rest wait out this
+ * much behind it, which is a dozen calls a minute at the very most and only
+ * while kinds new to this session keep coming into view -- a few calls a
+ * session, against `CALLS_A_MINUTE`.
+ */
+export const GUIDE_EVERY = 5;
+
+/**
+ * And the most kinds one hand-over carries. More than a session ever sees in
+ * one breath, and a ceiling on what one call may ask the island to look for.
+ */
+export const GUIDE_BATCH = 8;
+
+/**
  * How often the browser asks what is on the ground around it.
  *
  * The same beat as the wildlife now. It used to be slower on the grounds that

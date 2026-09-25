@@ -73,6 +73,7 @@ import { TradesPanel } from './panels/trades';
 import { SocialPanel } from './panels/social';
 import { MarketPanel } from './panels/market';
 import { BoardsPanel } from './panels/boards';
+import { GuidePanel } from './panels/guide';
 import { HoardPanel } from './panels/hoard';
 import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
@@ -137,6 +138,7 @@ export class UI {
   private readonly social: SocialPanel;
   private readonly market: MarketPanel;
   private readonly boards: BoardsPanel;
+  private readonly guide: GuidePanel;
   private readonly hoard: HoardPanel;
   /** The island, for the one window that asks it things directly. */
   private readonly island: Island | null;
@@ -212,6 +214,13 @@ export class UI {
       (id) => this.creatureEntries(id),
       (x, y, title, items) => this.menu.show(x, y, title, items),
     );
+    /*
+     * Every kind of creature, and which of them you have seen, tamed and bred.
+     * Beside the Wildermon window, which is the herd you have; this is the
+     * whole of what there is to have. Opened from a creature's own menu too.
+     */
+    const guideWin = this.windows.create({ id: 'guide', title: 'Field guide', x: 364, y: 56, width: 400, height: 480, anchor: 'tr', open: false });
+    this.guide = new GuidePanel(guideWin, game, this.island);
     const stores = this.windows.create({ id: 'stores', title: 'Stores', x: 12, y: 486, width: 360, height: 300, anchor: 'tr', open: false });
     this.stores = new StoresPanel(
       stores,
@@ -1901,6 +1910,10 @@ export class UI {
     push(item('release_creature'));
     push(item('cull_creature'));
     push(item('attack_creature'));
+    // Its kind's page, wherever a creature's actions are listed: the menu, the
+    // Tile window and the card of one of your own. Last, so the number keys
+    // the Tile window hands out are the ones they always were.
+    entries.push({ label: 'Field guide', note: `The ${SPECIES[c.species]?.name ?? 'kind'}'s page`, onSelect: () => this.guide.openAt(c.species) });
     return entries;
   }
 

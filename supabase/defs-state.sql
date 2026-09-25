@@ -3697,6 +3697,8 @@ create or replace function found_max() returns double precision language sql imm
 create or replace function peace_reach() returns double precision language sql immutable as $fn$ select 24::double precision $fn$;
 create or replace function leg_slack() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
 create or replace function fog_bytes() returns double precision language sql immutable as $fn$ select 262144::double precision $fn$;
+create or replace function guide_batch() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function mobs_range() returns double precision language sql immutable as $fn$ select 40::double precision $fn$;
 create or replace function wild_reach() returns double precision language sql immutable as $fn$ select 1.5::double precision $fn$;
 create or replace function wild_rest() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function wild_rest_spread() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;

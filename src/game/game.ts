@@ -23,7 +23,7 @@ import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { ACROSS_OF, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { cropDef, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -37,6 +37,7 @@ import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SH
 import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
 import { cleanSaid } from './chat';
 import { ALL_GOALS } from './journal';
+import { FieldGuide, GUIDE_LOOK, seenLine, type GuideBook, type GuideMark } from './guide';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
 import { catchChance, CHECK_EVERY, CREEL_BAIT_LOSS, creelOdds, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
@@ -271,6 +272,8 @@ export interface GameInit {
   tally?: Record<string, number>;
   ledger?: Ledger;
   ticked?: string[];
+  /** The field guide: the kinds seen, tamed and bred. */
+  guide?: GuideBook;
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   marks?: Marker[];
@@ -614,6 +617,20 @@ export class Game {
   /** Goals already ticked off, which stay ticked whatever happens after. */
   readonly ticked = new Set<string>();
   /**
+   * The field guide: every kind with a page, and which of them you have seen,
+   * tamed and bred (`guide.ts`). Alone it is this side's and goes in the save;
+   * on an island it is the island's, and this holds what the island has said.
+   */
+  readonly guide = new FieldGuide();
+  /**
+   * Who to tell about a kind that has just come into view, on an island,
+   * where the book is kept over there and a sighting is only one once the
+   * island has taken it. Nothing here off one: alone, the book is written on
+   * the spot.
+   */
+  guideSaw?: (species: string) => void;
+  private guideClock = 0;
+  /**
    * Who to tell when one is ticked, on an island. Nothing here off one.
    *
    * The journal reads the book, the pack, the ground and what is standing on
@@ -637,6 +654,65 @@ export class Game {
   /** Note that something was done, once. */
   note(key: string, n = 1): void {
     this.tally[key] = (this.tally[key] ?? 0) + n;
+  }
+
+  /**
+   * Mark a kind in the field guide, for the person at this screen, and say so
+   * the first time it is seen. A guest's taming on a host's machine is the
+   * guest's, and it is not written into the host's book.
+   */
+  guideMark(species: string, what: GuideMark): void {
+    if (this.acting !== this.local || !SPECIES[species]) return;
+    const fresh = this.guide.mark(species, what);
+    if (!fresh.length) return;
+    if (fresh.includes('seen')) this.logMsg(seenLine(SPECIES[species], this.guide), 'event');
+    this.events.emit('guide');
+  }
+
+  /**
+   * What the island said of kinds handed over as seen: the ones it wrote down
+   * just now, which are said in the log exactly as they are alone, and the
+   * ones it had already, which are only marked.
+   */
+  guideHeard(added: string[], had: string[]): void {
+    let changed = false;
+    for (const id of had) if (SPECIES[id] && this.guide.mark(id, 'seen').length) changed = true;
+    for (const id of added) {
+      if (!SPECIES[id] || !this.guide.mark(id, 'seen').length) continue;
+      changed = true;
+      this.logMsg(seenLine(SPECIES[id], this.guide), 'event');
+    }
+    if (changed) this.events.emit('guide');
+  }
+
+  /** The whole book as the island keeps it, read as the window opens. */
+  guideRead(book: GuideBook): void {
+    this.guide.take(book);
+    this.events.emit('guide');
+  }
+
+  /**
+   * Whatever is in view, looked over for a kind the book has not got.
+   *
+   * In view is what the drawing means by it: a creature out of a crate, on a
+   * tile in sight now, which counts your own wildermon's eyes and the ground
+   * of your settlement as the drawing does. Once a `GUIDE_LOOK`, and one
+   * question a kind however many of it are standing about. Alone the book is
+   * written here; on an island the kind is handed over, and it goes in the
+   * book when the island has taken it.
+   */
+  private lookForKinds(dt: number): void {
+    this.guideClock += dt;
+    if (this.guideClock < GUIDE_LOOK) return;
+    this.guideClock = 0;
+    let asked: Set<string> | null = null;
+    for (const c of this.creatures.list.values()) {
+      if (c.mode === 'stored' || this.guide.seen.has(c.species) || asked?.has(c.species)) continue;
+      if (!this.vision.isWatched(c.x, c.y)) continue;
+      (asked ??= new Set()).add(c.species);
+      if (this.guideSaw) this.guideSaw(c.species);
+      else this.guideMark(c.species, 'seen');
+    }
   }
 
   /**
@@ -917,6 +993,7 @@ export class Game {
     Object.assign(this.tally, init.tally ?? {});
     Object.assign(this.ledger, init.ledger ?? {});
     for (const id of init.ticked ?? []) this.ticked.add(id);
+    this.guide.take(init.guide);
     for (const p of init.posts ?? []) {
       this.posts.set(p.id, p);
       this.placed.posts.add(p);
@@ -2483,6 +2560,8 @@ export class Game {
     // The fog is the one thing that stays on the machine it belongs to, so it
     // is advanced for the person sitting here and for nobody else.
     this.vision.update();
+    // And whatever it has just shown you goes in the field guide.
+    this.lookForKinds(dt);
     // Which way the hulls other people are steering point, before anybody aboard one is put on her deck.
     this.trackHelms();
     // Every body on the island walks, tires, heals and gets on with whatever

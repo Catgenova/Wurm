@@ -331,6 +331,9 @@ export const TRAP_ACTIONS: ActionDef[] = [
         g.logMsg(`You get the noose off the ${s?.name.toLowerCase() ?? 'thing'} and it stays. It comes with you.`, 'event');
       }
       g.note('trapped');
+      // Won over as surely as by hand, and by the same taming: the field guide
+      // counts it as tamed.
+      g.guideMark(c.species, 'tamed');
       g.events.emit('creature');
       g.events.emit('world', trap.x, trap.y);
     },

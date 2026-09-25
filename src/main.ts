@@ -322,6 +322,7 @@ const PRESSES: Record<string, () => void> = {
   win_events: () => ui.toggleWindow('events'),
   win_map: () => ui.toggleWindow('map'),
   win_wildermon: () => ui.toggleWindow('wildermon'),
+  win_guide: () => ui.toggleWindow('guide'),
   win_deed: () => ui.toggleWindow('deed'),
   win_ledger: () => ui.toggleWindow('ledger'),
   win_stores: () => ui.toggleWindow('stores'),

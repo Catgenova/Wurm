@@ -22,6 +22,7 @@ import type { Marker } from './marks';
 import type { Hoard } from './treasure';
 import type { Nutrient } from './nutrition';
 import type { Ledger } from './ledger';
+import type { GuideBook } from './guide';
 import type { Crop } from './farming';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -244,6 +245,8 @@ interface SaveData {
   tally?: Record<string, number>;
   ledger?: Ledger;
   ticked?: string[];
+  /** The field guide: the kinds seen, tamed and bred. A save from before it has none, and starts an empty book. */
+  guide?: GuideBook;
   anvils?: PlacedAnvil[];
   crops?: Crop[];
   crate?: { x: number; y: number; items: Item[] } | null;
@@ -321,6 +324,7 @@ function meta(game: Game): SaveMeta {
     tally: { ...game.tally },
     ledger: { ...game.ledger },
     ticked: [...game.ticked],
+    guide: game.guide.toJSON(),
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
     guests: game.guestRecords(),
@@ -576,6 +580,7 @@ function finish(world: World, m: SaveMeta): Game {
     tally: m.tally,
     ledger: m.ledger,
     ticked: m.ticked,
+    guide: m.guide,
     anvils: m.anvils,
     crops: m.crops,
     marks: m.marks,

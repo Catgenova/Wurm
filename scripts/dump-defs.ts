@@ -90,7 +90,7 @@ import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
-import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, SENT_INLINE, STIR_COARSE_EVERY, STIR_SLACK, STORED_SETTLE, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
+import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, GUIDE_BATCH, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, MOBS_RANGE, PEACE_REACH, REGION, SENT_INLINE, STIR_COARSE_EVERY, STIR_SLACK, STORED_SETTLE, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
@@ -1204,6 +1204,10 @@ for (const [fn, v] of [
   /* And the most fog of war the island keeps for one body, so the one thing
      a browser writes by the yard cannot become free storage. */
   ['fog_bytes', FOG_BYTES],
+  /* And the field guide: the most kinds one sighting may name, and how far
+     from you one of them has to be standing, which is as far as a browser is
+     told what is moving about and so as far as it can have seen anything. */
+  ['guide_batch', GUIDE_BATCH], ['mobs_range', MOBS_RANGE],
   /*
    * And what keeping a body alive costs.
    *

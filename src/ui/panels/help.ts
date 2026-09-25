@@ -37,6 +37,8 @@ import { PAIR_RANGE, TIER_LEVEL } from '../../game/husbandry';
 import { IMPROVE_DAMAGE, IMPROVE_FLOOR } from '../../game/improve';
 import { billWords, countOf, DEED_DECAY, HOARD_METALS, itemDef, ITEM_DEFS, RARITIES, RARITY_ROOM, rarityChance, roomFor } from '../../game/items';
 import { ALL_GOALS, JOURNAL, LEGEND_AT } from '../../game/journal';
+import { guidePages, keepable } from '../../game/guide';
+import { MOBS_RANGE } from '../../game/keep';
 import { KILN_CAPACITY } from '../../game/kiln';
 import { candleBurn, FIRE_REACH, HELD_LIGHTS, lanternReach, OVEN_REACH, torchBurn, torchReach } from '../../game/light';
 import { MARK_CAP } from '../../game/marks';
@@ -1175,6 +1177,19 @@ export function helpText(): string {
     happens first. So one you walk in on at its den will chase you a long way, and one you meet at
     the edge of its range gives up quickly, because it is already nearly as far out as it goes.
     Either way it turns for home afterwards rather than staying where it stopped.</p>
+    <h3>The field guide</h3>
+    <p>The <b>Field guide</b> window (<kbd>F4</kbd>) has a page for each of the ${numberWord(guidePages().length)} kinds of
+    creature there are, and marks which of them you have <b>seen</b>, <b>tamed</b> and <b>bred</b>. A kind is seen once one
+    has stood out of a crate somewhere you could see it, which counts what your own wildermon and your settlement see for
+    you; tamed once an offering takes, or you get one out of a trap; bred once a young one is born to a dam you keep. Taming
+    or breeding one marks it seen as well, and the first time you see a kind the event log says so. The index draws every
+    kind you have seen and leaves the rest as a shadow of their shape, and over it says how far along you are: seen out of
+    all ${numberWord(guidePages().length)}, tamed and bred out of the ${numberWord(guidePages().filter(keepable).length)} that
+    can be, since a monster cannot. A kind's page says where the wild puts it down and how far it keeps from its home, how
+    often the wild's roll comes out as it, the taming it asks and what it takes from your hand, what it does for you once
+    it is yours, what it is like to meet and what a carcass gives &mdash; all of it read off the rules. <b>Field guide</b>
+    on any creature's menu opens its page. Alone, the book is kept in your save; on an island the island keeps it, and
+    takes a kind you have seen only while one is standing within ${numberWord(MOBS_RANGE)} tiles of you.</p>
     <h3>What the island will not tell you</h3>
     <p>A handful of rules here are real, load-bearing, and findable only by being refused or by
     making a great many of something and noticing. They are worth knowing up front.</p>

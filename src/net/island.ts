@@ -7,7 +7,8 @@ import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
 import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
-import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
 import type { Away } from '../game/away';
 
@@ -654,6 +655,12 @@ export interface IslandHooks {
    * and wrong for an answer that names two crates.
    */
   stored?: (crates: IslandCrate[]) => void;
+  /**
+   * What the island said of kinds handed over as seen: written into the field
+   * guide just now, or in it already. A kind it found none of standing near
+   * us is in neither, and goes over again the next time one is in view.
+   */
+  guided?: (added: string[], had: string[]) => void;
   /** Getting an island down takes a moment; this says how it is going. */
   progress?: (done: number, total: number, what: string) => void;
   /**
@@ -858,6 +865,15 @@ export class Island {
   private lastReconcile = 0;
   /** When the fog of war last went over, so it goes rarely and not per step. */
   private lastFog = 0;
+  /**
+   * The field guide's sightings: kinds seen and not handed over yet, kinds on
+   * their way, and kinds the island has answered for this session, which are
+   * not handed over again. And when the last lot went.
+   */
+  private readonly guideWaiting = new Set<string>();
+  private readonly guideAsking = new Set<string>();
+  private readonly guideTold = new Set<string>();
+  private lastGuide = -1e9;
   /**
    * The signed-in token, kept rather than asked for.
    *
@@ -2115,6 +2131,7 @@ export class Island {
     void this.refreshMobs(now);
     void this.refreshGround(now);
     void this.keepFog(now);
+    void this.keepGuide(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
 
     /*
@@ -2217,6 +2234,56 @@ export class Island {
    */
   tickGoal(id: string): void {
     if (!this.ticked.includes(id)) this.ticked.push(id);
+  }
+
+  /** A kind has come into view: it goes over on the next round, unless the island has answered for it already. */
+  sawKind(species: string): void {
+    if (this.guideTold.has(species) || this.guideAsking.has(species)) return;
+    this.guideWaiting.add(species);
+  }
+
+  /**
+   * Hand the field guide what has been seen: `GUIDE_BATCH` kinds at a time,
+   * no oftener than `GUIDE_EVERY`, and the first the moment it is seen.
+   *
+   * The island takes a kind only while one of it is standing near us, which
+   * is its check that the browser saw what it says it saw; so a kind it found
+   * none of is simply not told, and the next sighting asks again. A call that
+   * failed puts the lot back to go on the next round.
+   */
+  private async keepGuide(now: number): Promise<void> {
+    if (!this.info || !this.guideWaiting.size || now - this.lastGuide < GUIDE_EVERY) return;
+    this.lastGuide = now;
+    const batch = [...this.guideWaiting].slice(0, GUIDE_BATCH);
+    for (const id of batch) {
+      this.guideWaiting.delete(id);
+      this.guideAsking.add(id);
+    }
+    const { data, error } = await supabase().rpc('rpc_guide_seen', { p_world: this.info.id, p_species: batch });
+    for (const id of batch) this.guideAsking.delete(id);
+    if (error || !data || typeof data !== 'object') {
+      for (const id of batch) this.guideWaiting.add(id);
+      return;
+    }
+    const got = data as { added?: unknown; had?: unknown };
+    const added = rowsIn<string>(got.added).filter((id) => typeof id === 'string');
+    const had = rowsIn<string>(got.had).filter((id) => typeof id === 'string');
+    for (const id of [...added, ...had]) this.guideTold.add(id);
+    this.hooks.guided?.(added, had);
+  }
+
+  /**
+   * The field guide as the island keeps it: the kinds you have seen, tamed and
+   * bred. Asked once as the window opens. Null when the island did not answer,
+   * so the window keeps what it had rather than going blank.
+   */
+  async guide(): Promise<GuideBook | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_guide', { p_world: this.info.id });
+    if (error || !data || typeof data !== 'object') return null;
+    const got = data as Partial<Record<keyof GuideBook, unknown>>;
+    const kinds = (v: unknown): string[] => rowsIn<string>(v).filter((id) => typeof id === 'string');
+    return { seen: kinds(got.seen), tamed: kinds(got.tamed), bred: kinds(got.bred) };
   }
 
   /**

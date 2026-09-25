@@ -57,8 +57,8 @@ export const LIGHT_GIVES_BACK = 0.75;
 const AWARE_FLOOR = 0.36;
 export const awarenessReach = (level: number): number =>
   AWARE_FLOOR + (1 - AWARE_FLOOR) * Math.sqrt(Math.max(0, Math.min(100, level)) / 100);
-/** Tamed creatures are extra eyes, but not far-seeing ones. */
-const COMPANION_SIGHT = 7;
+/** Tamed creatures are extra eyes, but not far-seeing ones: this many tiles, unless the kind says otherwise. */
+export const COMPANION_SIGHT = 7;
 /** A lit fire shows its own ground, however dark it is. */
 const FIRE_SIGHT = 6;
 /**

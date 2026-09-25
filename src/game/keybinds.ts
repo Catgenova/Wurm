@@ -70,6 +70,8 @@ export const BINDS: BindDef[] = [
   { id: 'win_events', label: 'Event log', hint: 'What has been happening, and the box you talk in.', group: 'Windows', keys: ['KeyL'] },
   { id: 'win_map', label: 'Map', hint: 'The island as far as you have seen it.', group: 'Windows', keys: ['KeyM'] },
   { id: 'win_wildermon', label: 'Wildermon', hint: 'Your tamed creatures, what they carry and what they are set to.', group: 'Windows', keys: ['KeyP'] },
+  // F3 is the browser's own Find in every one of them, and F4 is nobody's.
+  { id: 'win_guide', label: 'Field guide', hint: 'A page for every kind of creature: which you have seen, tamed and bred, where each lives and what it gives.', group: 'Windows', keys: ['F4'] },
   { id: 'win_deed', label: 'Settlement', hint: 'Your deed at a glance.', group: 'Windows', keys: ['KeyN'] },
   { id: 'win_market', label: 'Market', hint: 'Every stall and buy order on the board, your own orders, deals offered and taken, what your stall has sold, and parcels waiting in the post.', group: 'Windows', keys: ['KeyU'] },
   { id: 'win_social', label: 'Social', hint: 'Who is waiting on you, who you know and where they are, and what has been written to you.', group: 'Windows', keys: ['KeyY'] },

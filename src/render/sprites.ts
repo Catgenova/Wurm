@@ -2487,6 +2487,52 @@ function standingSprite(pose: CreaturePose): Sprite | null {
 }
 
 /**
+ * Where each kind's standing body puts ink, measured once at half size for the
+ * field guide. Kept apart from the sprite cache, which is thrown away as the
+ * camera steps, because this is four numbers a kind and does not depend on it.
+ */
+const PORTRAIT_BOX = new Map<string, { x: number; y: number; w: number; h: number } | null>();
+
+/**
+ * A kind on its own, for a page rather than for the island: standing, grown
+ * and fleeced, turned the way `facing` says, and scaled to fill a `w` by `h`
+ * box on `ctx`, feet down. The same body the island draws, measured to the ink
+ * it lays down, so a dragon and a rabba each fill their frame.
+ *
+ * With `ink`, every pixel of it is that one colour instead: the shape and
+ * nothing else, for a kind nobody has seen yet.
+ */
+export function drawCreaturePortrait(ctx: CanvasRenderingContext2D, w: number, h: number, species: string, colors: [string, string],
+  facing = 1, ink?: string): void {
+  const pose: CreaturePose = { species, colors, facing, phase: 0, moving: false, gait: 0, health: 1, fleece: 1 };
+  const key = `${species}:${colors.join(',')}:${facing}`;
+  if (!PORTRAIT_BOX.has(key)) {
+    const half = inkBox((c) => drawBody(c, BODY_PAD / 2, BODY_FOOT / 2, 0.5, pose), BODY_PAD, BODY_SKY / 2);
+    PORTRAIT_BOX.set(key, half && { x: half.x * 2, y: half.y * 2, w: half.w * 2, h: half.h * 2 });
+  }
+  const box = PORTRAIT_BOX.get(key);
+  if (!box) return;
+  const k = Math.min(w / box.w, h / box.h);
+  const x = (w - box.w * k) / 2 + (BODY_PAD - box.x) * k;
+  const y = (h - box.h * k) / 2 + (BODY_FOOT - box.y) * k;
+  if (!ink) {
+    drawBody(ctx, x, y, k, pose);
+    return;
+  }
+  // Drawn on a pad of its own and filled over, so only the body takes the ink.
+  const pad = document.createElement('canvas');
+  pad.width = Math.ceil(w);
+  pad.height = Math.ceil(h);
+  const p = pad.getContext('2d');
+  if (!p) return;
+  drawBody(p, x, y, k, pose);
+  p.globalCompositeOperation = 'source-in';
+  p.fillStyle = ink;
+  p.fillRect(0, 0, pad.width, pad.height);
+  ctx.drawImage(pad, 0, 0);
+}
+
+/**
  * Where a drawing actually put ink, so a picture of it can be cut to size.
  *
  * Done once per body the first time it is wanted and never again: the

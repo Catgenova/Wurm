@@ -856,6 +856,134 @@ kbd {
   color: var(--ui-accent);
 }
 
+/*
+ * The field guide: a card a kind on the index, drawn and named once it has
+ * been seen and a shadow until then, and a page for each.
+ */
+.guide-counts {
+  padding: 0 2px 6px;
+  color: var(--ui-accent);
+  font-size: 12px;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+}
+
+.guide-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 2px 5px;
+  border: 1px solid #3f3428;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.guide-card:hover {
+  border-color: var(--ui-border-light);
+}
+
+.guide-card.guide-unseen {
+  color: var(--ui-dim);
+}
+
+.guide-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guide-tags {
+  display: flex;
+  gap: 3px;
+  min-height: 13px;
+}
+
+.guide-tag {
+  padding: 0 4px;
+  border: 1px solid #6f9a6a;
+  border-radius: 2px;
+  color: #a8d08a;
+  font-size: 9px;
+  line-height: 11px;
+}
+
+.guide-picture {
+  display: block;
+}
+
+.panel-bar.guide-bar {
+  padding: 0 0 4px;
+}
+
+.guide-where {
+  margin-left: auto;
+  color: var(--ui-dim);
+  font-size: 11px;
+}
+
+.guide-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 2px 0;
+}
+
+.guide-head .guide-picture {
+  border: 1px solid #3f3428;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.guide-title {
+  color: var(--ui-accent);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.guide-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.guide-mark {
+  padding: 2px 6px;
+  border: 1px dashed #4a5550;
+  border-radius: 3px;
+  color: #6d7a72;
+  font-size: 11px;
+}
+
+.guide-mark.guide-mark-on {
+  border-style: solid;
+  border-color: #6f9a6a;
+  color: #a8d08a;
+}
+
+.guide-lines {
+  margin: 2px 0 4px;
+  padding-left: 16px;
+}
+
+.guide-lines li {
+  margin: 2px 0;
+  line-height: 1.4;
+}
+
 .goal-next-how {
   margin-top: 2px;
   color: var(--ui-dim);

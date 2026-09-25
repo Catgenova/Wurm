@@ -273,6 +273,11 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   // has not arrived yet is an empty one, and every goal already met would be
   // announced all over again on every refresh.
   game.journalReady = false;
+  // And the field guide, which the island keeps too: a kind that comes into
+  // view is handed over rather than written down here, and goes in the book
+  // when the island has taken it.
+  game.guideSaw = (species) => island.sawKind(species);
+  island.hooks.guided = (added, had) => game.guideHeard(added, had);
   island.hooks.mobs = (rows) => {
     // Everything that lost health since the last answer gets its number, which
     // is the half of the fight that happens away from your own body.

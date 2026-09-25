@@ -206,6 +206,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         }
         forgetCoaxing(c);
         g.note('tamed');
+        g.guideMark(c.species, 'tamed');
         g.gainSkill('taming', tryGain(true, TAME_GAIN));
         g.gainSkill('soul_strength', tryGain(true, TAME_NERVE));
       } else {

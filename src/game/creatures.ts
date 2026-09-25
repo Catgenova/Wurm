@@ -1543,8 +1543,12 @@ const HEARTH_FULL = 600;
 /** A deed worker goes looking for a meal once its belly is down to this. */
 export const HUNGRY = 0.25;
 
-/** How close to open water a water-bound species will settle. */
-const WATER_RANGE = 4;
+/**
+ * How close to open water a water-bound species will settle, and to the
+ * trees, the clay or the black ground the others want. Exported for the field
+ * guide, which says so in tiles.
+ */
+export const WATER_RANGE = 4;
 
 /** Whether open water lies within a few tiles of here. */
 export function nearWater(game: Game, x: number, y: number, range = WATER_RANGE): boolean {
@@ -2138,7 +2142,7 @@ export const forgetCoaxing = (c: Creature): void => {
 /** Seconds a wild creature spends grazing. */
 const FORAGE_TIME = 2.5;
 /** Seconds between chances for an unruly companion to turn on its keeper. */
-const NIP_EVERY = 25;
+export const NIP_EVERY = 25;
 
 /** A creature's level, read off its best task skill. */
 export const creatureLevel = (c: Creature): number => 1 + Math.floor(Math.max(0, ...Object.values(c.skills), 0) / 5);
@@ -4129,6 +4133,9 @@ export class Creatures {
     if (crate) shutIn(game, c, crate);
     game.logMsg(`${dam.name} drops a young ${def.name.toLowerCase()} (${SEX_NAMES[c.sex]}): ${traitList(c.traits)}.${where}`, 'event');
     game.note('bred');
+    // A page of the field guide, for a young one born to a dam somebody keeps:
+    // one let go before her hour drops hers in the wild, and it is nobody's.
+    if (dam.mode !== 'wild') game.guideMark(dam.species, 'bred');
     if (c.traits.some((t) => traitTier(t) === 'supreme' || traitTier(t) === 'fantastic')) game.note('goodblood');
     game.events.emit('creature');
     return c;
