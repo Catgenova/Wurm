@@ -82,6 +82,8 @@ export const BINDS: BindDef[] = [
   { id: 'win_journal', label: 'Journal', hint: 'Everything worth doing, ticking itself off.', group: 'Windows', keys: ['KeyJ'] },
   { id: 'win_settings', label: 'Settings', hint: 'This window.', group: 'Windows', keys: ['KeyO'] },
   { id: 'win_help', label: 'Help', hint: 'How any of this works.', group: 'Windows', keys: ['F1', 'KeyH'] },
+  // No key out of the box: every letter is spoken for, and it opens by itself when there is something new.
+  { id: 'win_news', label: "What's new", hint: 'What changed on the island, newest first, with what you had not read yet marked.', group: 'Windows', keys: [] },
 
   { id: 'walk_home', label: 'Walk home', hint: 'Set off for your settlement token, or your bed.', group: 'Doing things', keys: ['Home'] },
   /*

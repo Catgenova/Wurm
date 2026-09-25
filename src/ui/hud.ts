@@ -69,6 +69,7 @@ export const WINDOWS: Array<{ label: string; bind: string; id: string }> = [
   { label: 'Leaderboards', bind: 'win_boards', id: 'boards' },
   { label: 'Settings', bind: 'win_settings', id: 'settings' },
   { label: 'Help', bind: 'win_help', id: 'help' },
+  { label: "What's new", bind: 'win_news', id: 'news' },
 ];
 
 /*

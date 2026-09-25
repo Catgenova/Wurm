@@ -49,6 +49,7 @@ import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
 import { CRAFT_REACH, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
+import { NewsPanel, unseenNews } from './panels/news';
 import { CratePanel } from './panels/crate';
 import { TilePanel } from './panels/tile';
 import type { DragPayload } from './dragdrop';
@@ -306,6 +307,20 @@ export class UI {
         game.write(line, 'system');
       }
       awayWin.open();
+    }
+
+    /*
+     * What's new: made always, so the UI Menu can open it, and opened here by
+     * itself when something has changed since this browser last showed it --
+     * a little lower than the away window, when that is open too, so neither
+     * hides the other.
+     */
+    const newsWin = this.windows.create({ id: 'news', title: "What's new", x: 0, y: 0, width: 440, height: 380, open: false });
+    new NewsPanel(newsWin);
+    if (unseenNews()) {
+      newsWin.el.style.left = `${Math.max(0, (uiBox().w - 440) / 2 + (away.length ? 32 : 0))}px`;
+      newsWin.el.style.top = `${Math.max(0, uiBox().h / 4 + (away.length ? 48 : 0))}px`;
+      newsWin.open();
     }
   }
 

@@ -344,6 +344,35 @@ kbd {
   font-weight: 600;
 }
 
+/* What's new: a heading a day, a list a deploy, and what this browser had not shown ruled in the accent. */
+.news-day {
+  margin: 10px 0 6px;
+  color: var(--ui-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.news-day:first-child {
+  margin-top: 2px;
+}
+
+.news-entry {
+  margin: 0 0 10px;
+  padding: 0 0 0 18px;
+  border-left: 2px solid transparent;
+}
+
+.news-entry li {
+  margin: 0 0 6px;
+  line-height: 1.45;
+}
+
+.news-new {
+  border-left-color: var(--ui-accent);
+}
+
 /* HUD ------------------------------------------------------------------ */
 
 .hud-status {
