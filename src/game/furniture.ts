@@ -172,24 +172,24 @@ const piece = (
  * builds here is nailed rather than pegged, so every one of them takes nails.
  */
 export const FURNITURE: FurnitureDef[] = [
-  piece('stool', 'Stool', 1, 1, [['plank', 1], ['shaft', 3], ['nail', 6]], 8, 6, 'You nail up a {bill.shaft:w}-legged stool.'),
-  piece('chair', 'Chair', 1, 1, [['plank', 2], ['shaft', 4], ['nail', 10]], 12, 8, 'You nail up a chair with a proper back to it.'),
-  piece('bench', 'Bench', 2, 1, [['plank', 4], ['shaft', 4], ['nail', 14]], 12, 9, 'You nail up a long bench.'),
-  piece('table', 'Table', 2, 2, [['plank', 6], ['shaft', 4], ['nail', 16]], 14, 11, 'You nail up a square table.'),
-  piece('long_table', 'Long table', 3, 2, [['plank', 10], ['timber', 2], ['shaft', 4], ['nail', 26]], 20, 16, 'You nail up a long table, the sort a hall is built around.'),
-  piece('desk', 'Writing desk', 2, 2, [['plank', 8], ['timber', 2], ['nail', 20]], 22, 14, 'You nail up a writing desk, drawers and all.', 20),
-  piece('bed', 'Bed', 3, 2, [['plank', 6], ['timber', 4], ['cloth', 2], ['nail', 20]], 18, 15, 'You nail up a bed and stuff the mattress.', undefined, { bed: 1 }),
-  piece('cot', 'Cot', 2, 2, [['plank', 4], ['timber', 2], ['cloth', 1], ['nail', 12]], 12, 10, 'You nail up a narrow cot.', undefined, { bed: 0.7 }),
-  piece('chest', 'Chest', 2, 2, [['plank', 8], ['timber', 2], ['nail', 18]], 16, 12, 'You nail up a banded chest.', 60),
-  piece('coffer', 'Coffer', 1, 1, [['plank', 4], ['nail', 10]], 14, 8, 'You nail up a small coffer.', 25),
-  piece('cupboard', 'Cupboard', 2, 1, [['plank', 10], ['timber', 2], ['nail', 22]], 20, 14, 'You nail up a cupboard and hang its doors.', 80),
-  piece('wardrobe', 'Wardrobe', 2, 2, [['plank', 14], ['timber', 4], ['nail', 30]], 24, 18, 'You nail up a wardrobe tall enough to hang a cloak in.', 100),
-  piece('shelves', 'Shelves', 3, 1, [['plank', 12], ['timber', 2], ['nail', 26]], 18, 15, 'You nail up a long rack of shelves.', 120),
-  piece('bookshelf', 'Bookshelf', 2, 1, [['plank', 10], ['timber', 2], ['nail', 22]], 20, 14, 'You nail up a bookshelf with a cornice on top.', 90),
-  piece('larder', 'Larder', 2, 2, [['plank', 16], ['timber', 4], ['nail', 34]], 26, 20,
+  piece('stool', 'Stool', 1, 1, [['plank', 4], ['shaft', 3], ['nail', 12]], 8, 6, 'You nail up a {bill.shaft:w}-legged stool.'),
+  piece('chair', 'Chair', 1, 1, [['plank', 8], ['shaft', 4], ['nail', 20]], 12, 8, 'You nail up a chair with a proper back to it.'),
+  piece('bench', 'Bench', 2, 1, [['plank', 16], ['shaft', 4], ['nail', 28]], 12, 9, 'You nail up a long bench.'),
+  piece('table', 'Table', 2, 2, [['plank', 24], ['shaft', 4], ['nail', 32]], 14, 11, 'You nail up a square table.'),
+  piece('long_table', 'Long table', 3, 2, [['plank', 40], ['timber', 8], ['shaft', 4], ['nail', 52]], 20, 16, 'You nail up a long table, the sort a hall is built around.'),
+  piece('desk', 'Writing desk', 2, 2, [['plank', 32], ['timber', 8], ['nail', 40]], 22, 14, 'You nail up a writing desk, drawers and all.', 20),
+  piece('bed', 'Bed', 3, 2, [['plank', 24], ['timber', 16], ['cloth', 8], ['nail', 40]], 18, 15, 'You nail up a bed and stuff the mattress.', undefined, { bed: 1 }),
+  piece('cot', 'Cot', 2, 2, [['plank', 16], ['timber', 8], ['cloth', 4], ['nail', 24]], 12, 10, 'You nail up a narrow cot.', undefined, { bed: 0.7 }),
+  piece('chest', 'Chest', 2, 2, [['plank', 32], ['timber', 8], ['nail', 36]], 16, 12, 'You nail up a banded chest.', 60),
+  piece('coffer', 'Coffer', 1, 1, [['plank', 16], ['nail', 20]], 14, 8, 'You nail up a small coffer.', 25),
+  piece('cupboard', 'Cupboard', 2, 1, [['plank', 40], ['timber', 8], ['nail', 44]], 20, 14, 'You nail up a cupboard and hang its doors.', 80),
+  piece('wardrobe', 'Wardrobe', 2, 2, [['plank', 56], ['timber', 16], ['nail', 60]], 24, 18, 'You nail up a wardrobe tall enough to hang a cloak in.', 100),
+  piece('shelves', 'Shelves', 3, 1, [['plank', 48], ['timber', 8], ['nail', 52]], 18, 15, 'You nail up a long rack of shelves.', 120),
+  piece('bookshelf', 'Bookshelf', 2, 1, [['plank', 40], ['timber', 8], ['nail', 44]], 20, 14, 'You nail up a bookshelf with a cornice on top.', 90),
+  piece('larder', 'Larder', 2, 2, [['plank', 64], ['timber', 16], ['nail', 68]], 26, 20,
     'You nail up a deep larder and slate the floor of it cold. Food, drink, flour and dough go in it, and nothing else.', 250,
     { takes: 'food' }),
-  piece('barrel', 'Barrel', 1, 1, [['plank', 6], ['shaft', 2], ['nail', 10]], 18, 10, 'You raise the staves and hoop a barrel.', undefined, { liquid: 80 }),
+  piece('barrel', 'Barrel', 1, 1, [['plank', 24], ['shaft', 2], ['nail', 20]], 18, 10, 'You raise the staves and hoop a barrel.', undefined, { liquid: 80 }),
   /*
    * The two pieces that exist for other people.
    *
@@ -204,19 +204,19 @@ export const FURNITURE: FurnitureDef[] = [
    * in at one of these and comes out at another, which is what turns writing
    * to somebody into sending them something.
    */
-  piece('stall', 'Market stall', 3, 2, [['plank', 12], ['timber', 4], ['cloth', 4], ['nail', 26]], 22, 18,
+  piece('stall', 'Market stall', 3, 2, [['plank', 48], ['timber', 16], ['cloth', 16], ['nail', 52]], 22, 18,
     'You nail up a counter, stretch the awning over it and stand back. Set a price on anything you lay out and it sells whether you are here or not.', 60,
     { stall: true }),
-  piece('mailbox', 'Mailbox', 1, 1, [['plank', 4], ['ribbon', 2], ['nail', 8]], 18, 10,
+  piece('mailbox', 'Mailbox', 1, 1, [['plank', 16], ['ribbon', 4], ['nail', 16]], 18, 10,
     'You nail up a box with a slot in it and a door on the back. A parcel goes in at one and comes out at any other.', 30,
     { post: true }),
   // One wildermon, shut in to be carried or set down: see `creaturecrate.ts`.
-  piece('creature_crate', 'Creature crate', 2, 2, [['plank', 8], ['nail', 4], ['ribbon', 2]], 16, 10,
+  piece('creature_crate', 'Creature crate', 2, 2, [['plank', 32], ['nail', 8], ['ribbon', 4]], 16, 10,
     'You nail up a creature crate. It holds one wildermon.'),
-  piece('lectern', 'Lectern', 1, 1, [['plank', 4], ['shaft', 2], ['nail', 8]], 16, 9, 'You nail up a lectern with a good slant on it.'),
-  piece('coat_rack', 'Coat rack', 1, 1, [['plank', 1], ['shaft', 4], ['nail', 6]], 10, 6, 'You nail up a rack of pegs for the door.'),
-  piece('planter', 'Planter', 2, 1, [['plank', 6], ['nail', 10]], 10, 7, 'You nail up a planter and fill it with earth.'),
-  piece('firewood_rack', 'Firewood rack', 2, 1, [['plank', 2], ['shaft', 6], ['nail', 10]], 12, 8, 'You nail up a rack to keep firewood off the wet.', 40),
+  piece('lectern', 'Lectern', 1, 1, [['plank', 16], ['shaft', 2], ['nail', 16]], 16, 9, 'You nail up a lectern with a good slant on it.'),
+  piece('coat_rack', 'Coat rack', 1, 1, [['plank', 4], ['shaft', 4], ['nail', 12]], 10, 6, 'You nail up a rack of pegs for the door.'),
+  piece('planter', 'Planter', 2, 1, [['plank', 24], ['nail', 20]], 10, 7, 'You nail up a planter and fill it with earth.'),
+  piece('firewood_rack', 'Firewood rack', 2, 1, [['plank', 8], ['shaft', 6], ['nail', 20]], 12, 8, 'You nail up a rack to keep firewood off the wet.', 40),
   /*
    * The biggest thing a carpenter builds, and the only one whose footprint is
    * the point of it: two subtiles across and four deep, and every one of the
@@ -229,17 +229,17 @@ export const FURNITURE: FurnitureDef[] = [
    * of it is full.
    */
   piece('crate_shelf', 'Crate shelf', 2, 4,
-    [['plank', 20], ['timber', 8], ['nail', 44]], 24, 22,
+    [['plank', 80], ['timber', 32], ['nail', 88]], 24, 22,
     'You frame the rack, deck it over and set the runners. It will take {crates:w} crates.',
     undefined, { crates: 8 }),
-  piece('bell', 'Bell', 1, 1, [['bell_casting', 1], ['timber', 2], ['thick_rope', 1], ['nail', 8]], 22, 18, 'You hang the bell in its frame and knot the rope to the tongue. Rung on your settlement, every wildermon of the deed comes and every citizen hears where it hangs.', undefined, { bell: true, material: 'metal' }),
+  piece('bell', 'Bell', 1, 1, [['bell_casting', 1], ['timber', 8], ['thick_rope', 1], ['nail', 16]], 22, 18, 'You hang the bell in its frame and knot the rope to the tongue. Rung on your settlement, every wildermon of the deed comes and every citizen hears where it hangs.', undefined, { bell: true, material: 'metal' }),
   piece('statue', 'Statue', 1, 1, [['statue_casting', 1], ['stone_slab', 1]], 24, 20, 'You set the casting on its slab and it stands, and will go on standing. It is on the map from here on.', undefined, { landmark: true, material: 'metal', skill: 'masonry', tool: 'trowel' }),
-  piece('hive', 'Hive', 2, 1, [['plank', 6], ['shaft', 2], ['cloth', 1], ['nail', 12]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
+  piece('hive', 'Hive', 2, 1, [['plank', 24], ['shaft', 2], ['cloth', 4], ['nail', 24]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
   // The two the cloth trade is built on. Stand at one to spin or weave.
-  piece('spindle', 'Spindle', 1, 1, [['plank', 2], ['shaft', 3], ['nail', 8]], 14, 9, 'You turn a spindle and set it on its stand.'),
-  piece('loom', 'Loom', 2, 2, [['plank', 8], ['timber', 4], ['shaft', 6], ['nail', 24]], 22, 18, 'You build a loom and thread the warp.'),
+  piece('spindle', 'Spindle', 1, 1, [['plank', 8], ['shaft', 3], ['nail', 16]], 14, 9, 'You turn a spindle and set it on its stand.'),
+  piece('loom', 'Loom', 2, 2, [['plank', 32], ['timber', 16], ['shaft', 6], ['nail', 48]], 22, 18, 'You build a loom and thread the warp.'),
   // Masonry, not carpentry: these two are laid in brick and mortar.
-  piece('oven', 'Oven', 2, 2, [['stone_brick', 10], ['mortar', 4]], 24, 18, 'You lay the courses, turn an arch over the mouth and leave it to set. An oven.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
+  piece('oven', 'Oven', 2, 2, [['stone_brick', 40], ['mortar', 16]], 24, 18, 'You lay the courses, turn an arch over the mouth and leave it to set. An oven.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
   /*
    * A fire you can put where you want one, which an oven is not.
    *
@@ -250,12 +250,12 @@ export const FURNITURE: FurnitureDef[] = [
    * itself at dusk, goes out at dawn, and shows the ground around it while it
    * burns.
    */
-  piece('brazier', 'Brazier', 1, 1, [['stone_brick', 6], ['mortar', 2], ['ribbon', 2]], 20, 12, 'You lay a shallow bowl of brick and band it with iron. A brazier.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
-  piece('altar', 'Altar', 2, 2, [['stone_brick', 16], ['mortar', 8], ['stone_slab', 4], ['gold_lump', 1]], 40, 40, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true }),
-  piece('banner', 'Banner', 1, 1, [['cloth', 4], ['shaft', 2], ['rope', 1], ['nail', 6]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
-  piece('well', 'Well', 2, 2, [['stone_brick', 12], ['mortar', 4], ['shaft', 4], ['thick_rope', 1], ['nail', 8]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
+  piece('brazier', 'Brazier', 1, 1, [['stone_brick', 24], ['mortar', 8], ['ribbon', 4]], 20, 12, 'You lay a shallow bowl of brick and band it with iron. A brazier.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
+  piece('altar', 'Altar', 2, 2, [['stone_brick', 64], ['mortar', 32], ['stone_slab', 4], ['gold_lump', 1]], 40, 40, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true }),
+  piece('banner', 'Banner', 1, 1, [['cloth', 16], ['shaft', 2], ['rope', 1], ['nail', 12]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
+  piece('well', 'Well', 2, 2, [['stone_brick', 48], ['mortar', 16], ['shaft', 4], ['thick_rope', 1], ['nail', 16]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: raw materials, rubbish, and something to pull it in.
-  piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { takes: 'raw' }),
+  piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 48], ['timber', 16], ['nail', 48]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { takes: 'raw' }),
   /*
    * Its opposite number, off the same bill of materials.
    *
@@ -269,7 +269,7 @@ export const FURNITURE: FurnitureDef[] = [
    * two hundred and fifty thousand nails or twelve hundred planks. There is
    * no count limit on it at all.
    */
-  piece('craft_bin', 'Craft material bin', 2, 2, [['plank', 12], ['timber', 4], ['nail', 24]], 20, 16, 'You build a deep bin with a partitioned lid, the sort a morning at the anvil goes into.', undefined, { heft: 2500, takes: 'worked' }),
+  piece('craft_bin', 'Craft material bin', 2, 2, [['plank', 48], ['timber', 16], ['nail', 48]], 20, 16, 'You build a deep bin with a partitioned lid, the sort a morning at the anvil goes into.', undefined, { heft: 2500, takes: 'worked' }),
   /*
    * And the two small ones, for the two things a farmer and a forester carry
    * home by the handful.
@@ -279,31 +279,31 @@ export const FURNITURE: FurnitureDef[] = [
    * is a thousand sprouts or five thousand seeds, and no one number of things
    * would have been right for both.
    */
-  piece('seed_bin', 'Seed bin', 1, 1, [['plank', 5], ['nail', 10]], 12, 9,
+  piece('seed_bin', 'Seed bin', 1, 1, [['plank', 20], ['nail', 20]], 12, 9,
     'You build a bin with a tight lid and a scoop, the sort a season\'s seed keeps dry in.',
     undefined, { heft: 100, takes: 'seed' }),
-  piece('sprout_bin', 'Sprout bin', 1, 1, [['plank', 5], ['nail', 10]], 12, 9,
+  piece('sprout_bin', 'Sprout bin', 1, 1, [['plank', 20], ['nail', 20]], 12, 9,
     'You build a bin with a damp cloth under the lid. Sprouts wilt in the open; they will keep in this.',
     undefined, { heft: 100, takes: 'sprout' }),
-  piece('trash_crate', 'Trash crate', 1, 1, [['plank', 3], ['nail', 6]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
-  piece('cart', 'Small cart', 2, 1, [['plank', 8], ['shaft', 4], ['nail', 16]], 18, 14, 'You build a small cart, light enough for one person to pull.', 100, { cart: true }),
+  piece('trash_crate', 'Trash crate', 1, 1, [['plank', 12], ['nail', 12]], 8, 5, 'You knock together an open crate with a rotten bottom. Nothing lasts in it.', 30, { trash: 30 }),
+  piece('cart', 'Small cart', 2, 1, [['plank', 32], ['shaft', 4], ['nail', 32]], 18, 14, 'You build a small cart, light enough for one person to pull.', 100, { cart: true }),
   // The two that are driven rather than carried. A wheelwright's bill: wheels
   // on cast axles, a body banded with metal ribbon, and a yoke a wildermon is
   // hitched into.
-  piece('large_cart', 'Large cart', 3, 2, [['plank', 20], ['timber', 6], ['large_wheel', 2], ['big_axle', 1], ['ribbon', 8], ['yoke', 2], ['nail', 40]], 30, 40, 'You build a large cart: box body, seat over the axle and a yoke to each side.', 1000, { skill: 'carpentry', vehicle: { yokes: 2, needs: 1, seat: 15 } }),
-  piece('wagon', 'Wagon', 4, 3, [['plank', 40], ['timber', 12], ['large_wheel', 4], ['big_axle', 2], ['ribbon', 16], ['yoke', 4], ['nail', 80]], 45, 75, 'You build a wagon: {bill.large_wheel:w} wheels under a long bed, a driver\'s box at the front and {vehicle.yokes:w} yokes ahead of it.', 10000, { skill: 'carpentry', vehicle: { yokes: 4, needs: 4, seat: 19 } }),
+  piece('large_cart', 'Large cart', 3, 2, [['plank', 80], ['timber', 24], ['large_wheel', 2], ['big_axle', 1], ['ribbon', 16], ['yoke', 2], ['nail', 80]], 30, 40, 'You build a large cart: box body, seat over the axle and a yoke to each side.', 1000, { skill: 'carpentry', vehicle: { yokes: 2, needs: 1, seat: 15 } }),
+  piece('wagon', 'Wagon', 4, 3, [['plank', 160], ['timber', 48], ['large_wheel', 4], ['big_axle', 2], ['ribbon', 32], ['yoke', 4], ['nail', 160]], 45, 75, 'You build a wagon: {bill.large_wheel:w} wheels under a long bed, a driver\'s box at the front and {vehicle.yokes:w} yokes ahead of it.', 10000, { skill: 'carpentry', vehicle: { yokes: 4, needs: 4, seat: 19 } }),
   // The two that float. Built on the bank and launched into water with a
   // couple of feet under it; they carry their load and their crew and will
   // not be dragged up a beach.
-  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 20], ['timber', 6], ['shaft', 2], ['rope', 2], ['nail', 30]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
-  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 40], ['timber', 14], ['shaft', 3], ['cloth', 6], ['rope', 8], ['thick_rope', 2], ['ribbon', 4], ['nail', 70]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
+  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 80], ['timber', 24], ['shaft', 2], ['rope', 2], ['nail', 60]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
+  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 160], ['timber', 56], ['shaft', 3], ['cloth', 24], ['rope', 8], ['thick_rope', 2], ['ribbon', 8], ['nail', 140]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
   // Barrels hold liquid and nothing else, in three sizes.
-  piece('small_barrel', 'Small barrel', 1, 1, [['plank', 3], ['shaft', 1], ['nail', 6]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
-  piece('large_barrel', 'Large barrel', 2, 2, [['plank', 14], ['shaft', 4], ['nail', 26]], 26, 20, 'You raise a great barrel, as tall as you are.', undefined, { liquid: 250 }),
+  piece('small_barrel', 'Small barrel', 1, 1, [['plank', 12], ['shaft', 1], ['nail', 12]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
+  piece('large_barrel', 'Large barrel', 2, 2, [['plank', 56], ['shaft', 4], ['nail', 52]], 26, 20, 'You raise a great barrel, as tall as you are.', undefined, { liquid: 250 }),
   // A board on a post, made to carry writing. Name it and the name stands in
   // the world where anyone walking past can read it.
-  piece('sign', 'Sign', 1, 1, [['plank', 2], ['shaft', 2], ['nail', 6]], 10, 7, 'You nail a board across {bill.shaft:w} posts and set it up straight.', undefined, { sign: true }),
-  piece('great_sign', 'Signboard', 2, 1, [['plank', 5], ['timber', 1], ['shaft', 2], ['nail', 12]], 18, 12, 'You nail up a board wide enough to write a sentence on.', undefined, { sign: true }),
+  piece('sign', 'Sign', 1, 1, [['plank', 8], ['shaft', 2], ['nail', 12]], 10, 7, 'You nail a board across {bill.shaft:w} posts and set it up straight.', undefined, { sign: true }),
+  piece('great_sign', 'Signboard', 2, 1, [['plank', 20], ['timber', 4], ['shaft', 2], ['nail', 24]], 18, 12, 'You nail up a board wide enough to write a sentence on.', undefined, { sign: true }),
 ];
 
 export const FURNITURE_BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));

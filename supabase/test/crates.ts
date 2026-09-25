@@ -12,8 +12,9 @@
  *
  * Asked of both sides:
  *
- *   * the crate is built of 8 planks, 4 nails and 2 ribbons, weighs 10 kg,
- *     and does not rot;
+ *   * the crate is built of planks, nails and ribbons -- eight, four and two
+ *     when this was asked for, raised since with the rest of the furniture,
+ *     so the count is the bill's own -- weighs 10 kg, and does not rot;
  *   * the first wildermon tamed follows you; the next is refused, in the same
  *     words on both sides, until an empty crate is in the pack, and then goes
  *     into the crate;
@@ -46,6 +47,7 @@ import { Game } from '../../src/game/game';
 import { ACTION_BY_ID, type Target } from '../../src/game/actions';
 import { RECIPES } from '../../src/game/recipes';
 import { itemDef, groundDecayRate } from '../../src/game/items';
+import { furnitureDef } from '../../src/game/furniture';
 import type { Creature } from '../../src/game/creatures';
 import { CREATURE_CRATE, crateTheKept, emptyCrate, occupiedRefusal } from '../../src/game/creaturecrate';
 
@@ -82,9 +84,14 @@ const at = (c: Creature): Target => ({ kind: 'creature', id: c.id });
 const beside = (): Creature => game.creatures.spawn('rabba', game.player.x + 0.3, game.player.y, 'wild', game.rand, 0);
 
 const recipe = RECIPES.find((r) => r.id === `make_${CREATURE_CRATE}`);
-check('the crate is built of 8 planks, 4 nails and 2 ribbons',
-  JSON.stringify(recipe?.inputs) === JSON.stringify([{ item: 'plank', count: 8 }, { item: 'nail', count: 4 }, { item: 'ribbon', count: 2 }]),
-  JSON.stringify(recipe?.inputs));
+const crateBill = furnitureDef(CREATURE_CRATE).bill;
+const billSaid = crateBill.map(([item, n]) => `${n} ${item}`).join(', ');
+const islandBill = psql(`select string_agg(count || ' ' || item, ', ' order by ord) from recipe_input where recipe = 'make_${CREATURE_CRATE}';`);
+check(`the crate is built of ${billSaid}, its own bill, on both sides`,
+  crateBill.map(([item]) => item).join() === 'plank,nail,ribbon'
+    && JSON.stringify(recipe?.inputs) === JSON.stringify(crateBill.map(([item, count]) => ({ item, count })))
+    && islandBill === billSaid,
+  `browser ${JSON.stringify(recipe?.inputs)}, island ${islandBill}`);
 check('it weighs 10 kg and does not rot', itemDef(CREATURE_CRATE).weight === 10
   && groundDecayRate({ uid: 0, id: CREATURE_CRATE, ql: 20, dmg: 0, count: 1 }) === 0);
 

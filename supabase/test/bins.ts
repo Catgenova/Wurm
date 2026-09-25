@@ -212,8 +212,9 @@ for (const [what, f] of [['seed bin', seedBin], ['sprout bin', sproutBin]] as Ar
   check(`the ${what} is a hundred kilograms and counts nothing`,
     def.heft === 100 && def.capacity === undefined && furnitureHeft(f) === 100 && furnitureHolds(f),
     `heft ${furnitureHeft(f)} kg, capacity ${def.capacity ?? 'none'}`);
-  check(`and comes off five planks and ten nails on one subtile`,
-    JSON.stringify(def.bill) === JSON.stringify([['plank', 5], ['nail', 10]]) && def.w === 1 && def.h === 1,
+  check(`and comes off planks and nails alone, the same bill as the other small bin, on one subtile`,
+    JSON.stringify(def.bill) === JSON.stringify(furnitureDef('seed_bin').bill)
+      && def.bill.map(([i]) => i).join() === 'plank,nail' && def.w === 1 && def.h === 1,
     `${def.bill.map(([i, n]) => `${n} ${i}`).join(', ')} · ${def.w}×${def.h}`);
 }
 const seeds = CROP_LIST.map((c) => c.seed);
