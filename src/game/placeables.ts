@@ -9,12 +9,15 @@ import {
   furnitureDef,
   furnitureName,
   holdsLiquid,
+  freeSeat,
   isBoat,
   isDriveable,
   isWell,
   liquidCapacity,
   litresIn,
   LIQUID_NAME,
+  passengerPlaces,
+  ridersOf,
   teamOf,
   vehicleOf,
   VESSELS,
@@ -300,15 +303,25 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     verb: 'climbing aboard',
     stamina: 0.01,
     baseTime: 1.5,
-    labelFor: (t, g) => (isBoat(pieceOf(g, t) ?? { kind: '' }) ? 'Climb aboard' : 'Take the reins'),
+    // A hull with room for passengers has a helm to take; one without is climbed into and rowed or sailed.
+    labelFor: (t, g) => {
+      const f = pieceOf(g, t) ?? { kind: '' };
+      return !isBoat(f) ? 'Take the reins' : passengerPlaces(f) ? 'Take the helm' : 'Climb aboard';
+    },
     applies: (t, g) => {
       const f = pieceOf(g, t);
-      return !!f && isDriveable(f) && !f.driven;
+      return !!f && isDriveable(f) && !f.driven && !f.helm;
     },
     check: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
-      if (!nearPiece(g, f)) return 'Stand beside it first.';
+      // Nobody takes the reins or the helm out of somebody else's hands.
+      if (f.helm) return isBoat(f) ? 'Somebody else has the helm.' : 'Somebody else has the reins.';
+      // Aboard her already, the helm is a step away; aboard anything else, it is not yours to reach.
+      const here = g.player.aboard === f.id;
+      if (g.player.aboard !== null && !here) return 'You are aboard another vessel. Step ashore first.';
+      if (f.helmAway && isBoat(f) && !here) return 'Somebody else has the helm.';
+      if (!here && !nearPiece(g, f)) return 'Stand beside it first.';
       if (g.driving()) return 'You are already driving something.';
       // A hull asks nothing but that she is still floating.
       if (isBoat(f)) return g.launchSpot(f.kind, f.x, f.y) ? null : 'She is aground. Push her off first.';
@@ -324,6 +337,12 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return;
+      // Out of a passenger's place and to the helm: the place is somebody else's to have now.
+      if (g.player.aboard === f.id) {
+        f.riders = ridersOf(f).filter((r) => r.who !== g.riderId());
+        g.player.aboard = null;
+        g.player.seat = 0;
+      }
       f.driven = true;
       f.driverId = g.actor.id;
       if (isBoat(f)) {
@@ -371,6 +390,76 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       }
       g.leaveVehicle(f);
       g.logMsg(`You climb down off the ${furnitureName(f).toLowerCase()}.`, 'event');
+    },
+  },
+  /*
+   * Passengers: a place on deck in a hull that has them.
+   *
+   * A passenger comes aboard from beside her, goes wherever whoever has the
+   * helm takes her, and steps ashore when there is land within reach. Nothing
+   * a passenger asks of their own feet moves them while they are aboard.
+   */
+  {
+    id: 'board_passenger',
+    label: 'Come aboard as a passenger',
+    verb: 'climbing aboard',
+    stamina: 0.01,
+    baseTime: 1.5,
+    applies: (t, g) => {
+      const f = pieceOf(g, t);
+      return !!f && passengerPlaces(f) > 0 && g.player.aboard !== f.id && !f.driven;
+    },
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      const places = passengerPlaces(f);
+      if (!places) return 'She carries nobody but whoever steers her.';
+      if (g.player.aboard === f.id) return 'You are aboard her already.';
+      if (g.player.aboard !== null) return 'You are aboard another vessel. Step ashore first.';
+      if (g.driving()) return 'You are already driving something.';
+      if (g.mounted()) return 'Get down off your mount first.';
+      if (!nearPiece(g, f)) return 'Stand beside her first.';
+      if (!g.launchSpot(f.kind, f.x, f.y)) return 'She is aground. Push her off first.';
+      if (freeSeat(f) === null) return `Every one of her ${places} places is taken.`;
+      return null;
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      const seat = f ? freeSeat(f) : null;
+      if (!f || seat === null) return;
+      f.riders = [...ridersOf(f), { who: g.riderId(), seat }];
+      g.boardAsPassenger(f, seat);
+      g.logMsg(`You climb aboard the ${furnitureName(f).toLowerCase()} and find a place on deck. `
+        + `${ridersOf(f).length} of ${passengerPlaces(f)} places are taken.`, 'event');
+      g.events.emit('world', f.x, f.y);
+    },
+  },
+  {
+    id: 'leave_passenger',
+    label: 'Step ashore',
+    verb: 'stepping ashore',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      const f = pieceOf(g, t);
+      return !!f && g.player.aboard === f.id;
+    },
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      if (g.player.aboard !== f.id) return 'You are not aboard her.';
+      if (!shoreNear(g)) return 'There is no shore within reach. Wait until she comes in close.';
+      return null;
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      const shore = shoreNear(g);
+      if (!f || !shore) return;
+      f.riders = ridersOf(f).filter((r) => r.who !== g.riderId());
+      g.leaveAsPassenger(shore.x + 0.5, shore.y + 0.5);
+      g.logMsg(`You step ashore from the ${furnitureName(f).toLowerCase()}.`, 'event');
+      g.events.emit('world', f.x, f.y);
     },
   },
   {
@@ -634,9 +723,10 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
 export const PLACEABLE_ACTION_BY_ID = new Map(PLACEABLE_ACTIONS.map((a) => [a.id, a]));
 
 /** Dry land within stepping distance of the boat, if there is any. */
-export function shoreNear(g: Game, range = 2): { x: number; y: number } | null {
-  const px = g.player.tileX;
-  const py = g.player.tileY;
+export function shoreNear(g: Game, range = 2, from?: [number, number]): { x: number; y: number } | null {
+  // From where the body is, or from a hull's middle: the island asks it of the body, and a body aboard is there.
+  const px = from ? Math.floor(from[0]) : g.player.tileX;
+  const py = from ? Math.floor(from[1]) : g.player.tileY;
   let best: { x: number; y: number } | null = null;
   let bestD = Infinity;
   for (let dy = -range; dy <= range; dy++) {

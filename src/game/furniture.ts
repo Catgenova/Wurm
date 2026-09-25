@@ -152,6 +152,17 @@ export interface BoatDef {
   seat: number;
   /** True when the wind does the work, so the body behind it matters less. */
   sail?: boolean;
+  /**
+   * People she carries besides whoever has the helm. They come aboard beside
+   * her, go wherever she is steered, and step ashore when land is in reach.
+   */
+  passengers?: number;
+  /**
+   * Where each of them stands, in tiles from her middle: along her toward the
+   * bow, and across her toward starboard. One a place, in the order the
+   * places are handed out.
+   */
+  deck?: Array<[number, number]>;
 }
 
 const piece = (
@@ -295,8 +306,14 @@ export const FURNITURE: FurnitureDef[] = [
   // The two that float. Built on the bank and launched into water with a
   // couple of feet under it; they carry their load and their crew and will
   // not be dragged up a beach.
-  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 80], ['timber', 24], ['shaft', 2], ['rope', 2], ['nail', 60]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
-  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 160], ['timber', 56], ['shaft', 3], ['cloth', 24], ['rope', 8], ['thick_rope', 2], ['ribbon', 8], ['nail', 140]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
+  piece('rowing_boat', 'Rowing boat', 3, 2, [['plank', 200], ['timber', 60], ['shaft', 2], ['rope', 4], ['nail', 150]], 28, 34, 'You lay the strakes over the ribs, caulk the seams and set a pair of oars in her.', 300, { skill: 'carpentry', boat: { speed: 1.9, draught: 2, seat: 9 } }),
+  piece('sailing_boat', 'Sailing boat', 4, 3, [['plank', 480], ['timber', 168], ['shaft', 6], ['cloth', 72], ['rope', 24], ['thick_rope', 6], ['ribbon', 24], ['nail', 420]], 42, 70, 'You plank her, step the mast, bend the sail on and hang a rudder off the stern.', 1500, { skill: 'carpentry', boat: { speed: 3.4, draught: 4, seat: 13, sail: true } }),
+  /*
+   * And the ship. Every line of her bill is at least three times the sailing
+   * boat's, she takes the whole of a tile, she wants deeper water under her,
+   * and she is the one hull that carries anybody besides whoever is steering.
+   */
+  piece('caravel', 'Caravel', 4, 4, [['plank', 1500], ['timber', 520], ['shaft', 18], ['cloth', 220], ['rope', 80], ['thick_rope', 20], ['ribbon', 80], ['nail', 1300]], 60, 180, 'You lay her keel, raise the frames, plank her up to a castle at either end and step her masts.', 5000, { skill: 'carpentry', boat: { speed: 4, draught: 5, seat: 18, sail: true, passengers: 3, deck: [[-0.2, -0.14], [0.12, 0.14], [0.42, 0]] } }),
   // Barrels hold liquid and nothing else, in three sizes.
   piece('small_barrel', 'Small barrel', 1, 1, [['plank', 12], ['shaft', 1], ['nail', 12]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
   piece('large_barrel', 'Large barrel', 2, 2, [['plank', 56], ['shaft', 4], ['nail', 52]], 26, 20, 'You raise a great barrel, as tall as you are.', undefined, { liquid: 250 }),
@@ -364,6 +381,23 @@ export interface PlacedFurniture {
   team?: number[];
   /** Set while the player is up on the seat with the reins in hand. */
   driven?: boolean;
+  /**
+   * Somebody else at the helm or on the reins, by their uid on the island,
+   * while they are there to hold it. Only an island says this: on this
+   * machine alone the only hands are the ones `driven` stands for.
+   */
+  helm?: string;
+  /**
+   * Somebody else's helm or reins whose holder has gone away. The reins of a
+   * wagon left like that are anybody's; the helm of a hull is taken over from
+   * her deck only, so the one who went away has a place to be put in.
+   */
+  helmAway?: string;
+  /**
+   * Who is aboard as a passenger, and the place on deck each one has. On an
+   * island these are uids; on this machine alone, `riderId` of the body.
+   */
+  riders?: Array<{ who: string; seat: number }>;
   /** Who has the reins, by who they are on the wire. Absent means whoever is local. */
   driverId?: number;
   /** Comb drawn but not yet capped, for a hive. */
@@ -548,6 +582,21 @@ export const boatOf = (f: { kind: string }): BoatDef | undefined => furnitureDef
 export const isBoat = (f: { kind: string }): boolean => !!furnitureDef(f.kind).boat;
 /** Anything that is boarded and steered: wheels or hull. */
 export const isDriveable = (f: { kind: string }): boolean => isVehicle(f) || isBoat(f);
+/** Places on deck for passengers: none on anything but a hull built to carry them. */
+export const passengerPlaces = (f: { kind: string }): number => furnitureDef(f.kind).boat?.passengers ?? 0;
+/** Who is aboard her as a passenger. */
+export const ridersOf = (f: PlacedFurniture): Array<{ who: string; seat: number }> => f.riders ?? [];
+/** The first place on deck nobody has, or null when every one is taken. */
+export function freeSeat(f: PlacedFurniture): number | null {
+  const taken = new Set(ridersOf(f).map((r) => r.seat));
+  for (let s = 1; s <= passengerPlaces(f); s++) if (!taken.has(s)) return s;
+  return null;
+}
+/** The way a piece's width runs in the world for each way it faces; a hull's bow is at the far end of it. */
+export const ACROSS_OF: Record<Side, [number, number]> = { s: [1, 0], e: [0, -1], n: [-1, 0], w: [0, 1] };
+/** Where the passenger in a place stands, in tiles from her middle: along toward the bow, and across toward starboard. */
+export const deckSpot = (kind: string, seat: number): [number, number] =>
+  furnitureDef(kind).boat?.deck?.[seat - 1] ?? [0, 0];
 /** Wildermon hitched to it, which is an empty list for everything else. */
 export const teamOf = (f: PlacedFurniture): number[] => f.team ?? [];
 
@@ -641,6 +690,9 @@ export function furnitureState(f: PlacedFurniture): string {
   if (heft) return `${ql} · ${furnitureKg(f).toFixed(0)} / ${heft} kg`;
   const cap = furnitureCapacity(f);
   const held = cap ? `${ql} · ${furnitureUnits(f)} / ${cap} things` : ql;
+  // A hull with places for passengers says how many are taken.
+  const places = passengerPlaces(f);
+  if (places) return `${held} · ${ridersOf(f).length} of ${places} passenger places taken`;
   const v = def.vehicle;
   if (!v) return held;
   return `${held} · ${teamOf(f).length} of ${v.yokes} yoked${f.driven ? ' · you have the reins' : ''}`;
@@ -721,6 +773,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (f.hitched) return 'Let go of it first.';
       if (teamOf(f).length) return 'Unhitch the team first.';
       if (f.driven) return 'Get down off it first.';
+      if (ridersOf(f).length) return 'There are people aboard her.';
       if (rackSpots(f) && g.cratesOn(f).length) return 'Take the crates off it first.';
       const facing = turnedFacing(facingOf(f), 1);
       const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
@@ -763,11 +816,12 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (f.hitched) return 'Let go of it first.';
       if (teamOf(f).length) return 'Unhitch the team first.';
       if (f.driven) return 'Get down off it first.';
+      if (ridersOf(f).length) return 'There are people aboard her.';
       return null;
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
-      if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length) return;
+      if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length || ridersOf(f).length) return;
       if (rackSpots(f) && g.cratesOn(f).length) return;
       g.removeFurniture(f.id);
       const back = g.inventory.add(f.kind, { ql: f.ql, extra: f.material });

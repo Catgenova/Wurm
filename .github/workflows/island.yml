@@ -1357,6 +1357,19 @@ jobs:
             --outfile=node_modules/.cache/sent.mjs --log-level=error
           node node_modules/.cache/sent.mjs
 
+      - name: A caravel, and the people she carries
+        run: |
+          # Her bill against the sailing boat's, her hold and her three places,
+          # on both sides; then in a harbour cut for it, a passenger comes
+          # aboard, goes where she goes, is not in the water and steps ashore
+          # only with land in reach; the fourth is told she is full; a helm
+          # somebody present holds is theirs and one left by somebody gone away
+          # is taken from her deck; she is not picked up with anybody aboard;
+          # and the island says who is aboard her, in the browser's words.
+          npx esbuild supabase/test/aboard.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/aboard.mjs --log-level=error
+          node node_modules/.cache/aboard.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

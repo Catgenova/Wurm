@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { defaultKey } from './keybinds';
 import { numberWord, share, spanWords } from './words';
-import { brazierBurn } from './placeables';
+import { brazierBurn, shoreNear } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
 import { oreAt } from '../world/ore';
@@ -20,7 +20,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
@@ -2483,6 +2483,8 @@ export class Game {
     // The fog is the one thing that stays on the machine it belongs to, so it
     // is advanced for the person sitting here and for nobody else.
     this.vision.update();
+    // Which way the hulls other people are steering point, before anybody aboard one is put on her deck.
+    this.trackHelms();
     // Every body on the island walks, tires, heals and gets on with whatever
     // it is doing — each wearing its own arms for the length of its own turn.
     if (this.actors.size > 1) {
@@ -2514,8 +2516,29 @@ export class Game {
     // And whether your own feet are in the water at all, which is the whole of
     // what deep water is asking. A hull, a cart bed or a saddle is not.
     p.carried = !!(driven || up);
-    const { rule } = this.movement();
-    const moved = p.update(dt, this.world, rule);
+    /*
+     * A passenger goes where she goes. The place on her deck is worked out
+     * from where her middle is and the way she points, every frame, and the
+     * body is put there; nothing it walks is asked. A hull that has gone —
+     * taken up, or no longer in the island's answer — leaves nobody aboard.
+     */
+    const ship = this.aboardShip();
+    if (p.aboard !== null && !ship) {
+      p.aboard = null;
+      p.seat = 0;
+    }
+    let moved = 0;
+    if (ship) {
+      p.carried = true;
+      p.path = null;
+      p.moving = false;
+      p.swimming = false;
+      p.level = 0;
+      [p.x, p.y] = this.passengerSpot(ship, p.seat);
+    } else {
+      const { rule } = this.movement();
+      moved = p.update(dt, this.world, rule);
+    }
     this.acting.stepped = moved;
     if (boat && furnitureDef(boat.kind).boat?.sail && moved > 0) {
       const w = this.wind();
@@ -3403,6 +3426,11 @@ export class Game {
    * somewhere is how anybody stops following without thinking about it.
    */
   moveTo(x: number, y: number, keepFollowing = false): boolean {
+    if (this.player.aboard !== null) {
+      if (keepFollowing) this.unfollow();
+      else this.logMsg('You are aboard as a passenger. Step ashore first.', 'error');
+      return false;
+    }
     if (!keepFollowing) this.unfollow();
     // Following somebody about is not you deciding to go anywhere, so it
     // gives the work up as it always did. A click is, and a click holds.
@@ -4724,6 +4752,88 @@ export class Game {
     return undefined;
   }
 
+  /** Who this body is in a hull's list of passengers, on this machine. An island names them by uid instead. */
+  riderId(): string {
+    return `local:${this.acting.id}`;
+  }
+
+  /** The hull this body is riding in as a passenger, if it is. */
+  aboardShip(): PlacedFurniture | undefined {
+    const id = this.player.aboard;
+    return id === null ? undefined : this.furniture.get(id);
+  }
+
+  /** Into a place on her deck: the walk given up, and the body where the place is. */
+  boardAsPassenger(f: PlacedFurniture, seat: number): void {
+    const p = this.player;
+    p.aboard = f.id;
+    p.seat = seat;
+    p.stop();
+    [p.x, p.y] = this.passengerSpot(f, seat);
+    p.level = 0;
+  }
+
+  /** Out of her and onto the ground at `x`, `y`. */
+  leaveAsPassenger(x: number, y: number): void {
+    const p = this.player;
+    p.aboard = null;
+    p.seat = 0;
+    p.x = x;
+    p.y = y;
+    p.stop();
+  }
+
+  /**
+   * Which way a hull points, in world radians: the way whoever has her helm
+   * last took her, or the way she was set down.
+   *
+   * The helm is somebody else's on an island, so what is known of it is where
+   * their body has been; `helmHeadings` keeps the last way it moved.
+   */
+  shipHeading(f: PlacedFurniture): number {
+    if (f.driven && (f.driverId ?? this.acting.id) === this.acting.id) return this.heading();
+    const known = this.helmHeadings.get(f.id);
+    if (known !== undefined) return known;
+    const [ax, ay] = ACROSS_OF[f.facing ?? 's'];
+    return Math.atan2(ay, ax);
+  }
+
+  /** The place on deck where the passenger in `seat` stands, in the world. */
+  passengerSpot(f: PlacedFurniture, seat: number): [number, number] {
+    const [cx, cy] = this.hullCentre(f);
+    const a = this.shipHeading(f);
+    const [along, across] = deckSpot(f.kind, seat);
+    return [cx + Math.cos(a) * along - Math.sin(a) * across, cy + Math.sin(a) * along + Math.cos(a) * across];
+  }
+
+  /**
+   * Where her middle is now: the body of whoever has the helm when that is
+   * somebody else — they are moved a dozen times a second and she is re-read
+   * once — and where she was set down when nobody has it.
+   */
+  hullCentre(f: PlacedFurniture): [number, number] {
+    if (f.helm) {
+      const who = this.roster.list().find((p) => p.uid === f.helm);
+      if (who) return this.roster.drawnAt(who);
+    }
+    return furnitureCentre(f);
+  }
+
+  /** The way each hull with somebody else at her helm last moved, and where that helm was. */
+  private readonly helmHeadings = new Map<number, number>();
+  private readonly helmWas = new Map<number, [number, number]>();
+
+  /** Follows the hulls other people are steering, for the way each points. */
+  private trackHelms(): void {
+    for (const f of this.furniture.values()) {
+      if (!f.helm) continue;
+      const [x, y] = this.hullCentre(f);
+      const was = this.helmWas.get(f.id);
+      if (was && Math.hypot(x - was[0], y - was[1]) > 0.02) this.helmHeadings.set(f.id, Math.atan2(y - was[1], x - was[0]));
+      if (!was || Math.hypot(x - was[0], y - was[1]) > 0.02) this.helmWas.set(f.id, [x, y]);
+    }
+  }
+
   /**
    * The cart you are working from: the cart or wagon you have the reins of,
    * or the small cart you have by the shafts. Not a boat.
@@ -5375,6 +5485,10 @@ export class Game {
    * comes back as the same fire.
    */
   sawGround(ground: IslandGround, aged: Aged = UNLIT, me: string | null = null): void {
+    // What we were in before this read, for the moment the island says we are not in it any more.
+    const wasAboard = this.player.aboard;
+    const steered = this.driving();
+    const steeredHull = steered && isBoat(steered) ? steered.id : null;
     /*
      * What is lying on the ground, which until now the island never said.
      *
@@ -5487,7 +5601,39 @@ export class Game {
            */
           ...(me !== null && r.driver === me ? { driven: true, driverId: this.local.id } : {}),
           ...(me !== null && r.puller === me ? { hitched: true } : {}),
+          /*
+           * And somebody else's hands on the helm or the reins, while they are
+           * here to hold them, and who is aboard as a passenger: what the
+           * menu may offer, where a passenger stands, and whether it is us.
+           */
+          ...(me !== null && r.driver && r.driver !== me ? (r.helm_open ? { helmAway: r.driver } : { helm: r.driver }) : {}),
+          ...(Array.isArray(r.riders) && r.riders.length ? { riders: r.riders.map((x) => ({ who: x.uid, seat: x.seat })) } : {}),
         });
+      }
+    }
+    /*
+     * Whether we are aboard something as a passenger, which is the island's to
+     * say: it moves us with her and keeps our place, and the list of who is
+     * aboard is where it says so.
+     */
+    if (me !== null) {
+      let mine: { id: number; seat: number } | null = null;
+      for (const f of this.furniture.values()) for (const r of f.riders ?? []) if (r.who === me) mine = { id: f.id, seat: r.seat };
+      this.player.aboard = mine?.id ?? null;
+      this.player.seat = mine?.seat ?? 0;
+      /*
+       * Stepped ashore, from a place on deck or from the helm: the island has
+       * put the body on the nearest dry ground to her, and this side has only
+       * just heard. The shore is found by the same rule from the same tile, so
+       * the body goes where the island put it rather than being left in the
+       * water beside her until it swims. Not when what happened is that we
+       * have the helm now, and not when the body is on dry ground already.
+       */
+      const left = wasAboard !== null && !mine ? wasAboard : steeredHull !== null && !this.driving() && !mine ? steeredHull : null;
+      const hull = left !== null ? this.furniture.get(left) : undefined;
+      if (hull && !hull.driven && this.world.hasWater(this.player.tileX, this.player.tileY)) {
+        const shore = shoreNear(this, 2, furnitureCentre(hull));
+        if (shore) this.putBody(shore.x + 0.5, shore.y + 0.5, 0);
       }
     }
     /*
@@ -6628,6 +6774,10 @@ export interface IslandPlaced {
   lock?: number | null;
   /** Whoever has the reins of it or is sitting in it, by uid. */
   driver?: string | null;
+  /** Whether that helm is as good as empty, its holder having gone away; only sent when there is a holder. */
+  helm_open?: boolean;
+  /** Who is aboard as a passenger and in which place on deck, for a hull that has any; absent when nobody is. */
+  riders?: Array<{ uid: string; seat: number }>;
   /** Whoever has a cart by the shafts, by uid. */
   puller?: string | null;
   /** The wildermon shut in it, for a creature crate; absent from older islands. */

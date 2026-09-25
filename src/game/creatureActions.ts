@@ -674,6 +674,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (c.hitchedTo !== null) return `${c.name} is in the traces.`;
       if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
       if (g.driving()) return 'Get down off what you are driving first.';
+      if (g.player.aboard !== null) return 'Step ashore first.';
       return null;
     },
     perform: (t, g) => {

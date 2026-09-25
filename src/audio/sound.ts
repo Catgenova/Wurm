@@ -126,7 +126,7 @@ export const HUSHED: ReadonlySet<string> = new Set([
   // sitting still.
   'pray', 'cast', 'meditate',
   // Getting on and off things, and being pulled along by one.
-  'board_vehicle', 'mount_creature', 'dismount_creature', 'pull_cart', 'unhitch_team',
+  'board_vehicle', 'board_passenger', 'mount_creature', 'dismount_creature', 'pull_cart', 'unhitch_team',
   // Winning an animal over, which is done by standing very quietly.
   'tame', 'take_catch', 'pair_creature',
   // Ceremony. A stake going in has already made the noise of a stake going in.

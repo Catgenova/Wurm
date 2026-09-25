@@ -24,7 +24,7 @@ import { DYE_BY_NAME, type DyeDef } from './dyestuffs';
  * them. Metal will not, and neither will a tool you are going to get dirty.
  */
 const DYEABLE_ARMOUR = new Set(['cloth', 'leather']);
-export const DYEABLE_ITEMS = new Set(['cloth', 'sack', 'satchel', 'backpack', 'saddle', 'bridle', 'banner', 'sailing_boat']);
+export const DYEABLE_ITEMS = new Set(['cloth', 'sack', 'satchel', 'backpack', 'saddle', 'bridle', 'banner', 'sailing_boat', 'caravel']);
 export function takesDye(id: string): boolean {
   const a = ARMOUR_BY_ID.get(id);
   if (a) return DYEABLE_ARMOUR.has(a.cls);

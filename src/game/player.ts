@@ -128,6 +128,13 @@ export class Player {
    * only the game knows what is under you, so it says so each tick.
    */
   carried = false;
+  /**
+   * The hull this body rides in as a passenger, by its furniture id, and the
+   * place on her deck it has. A passenger goes where she goes: nothing it
+   * asks of its own feet moves it.
+   */
+  aboard: number | null = null;
+  seat = 0;
   walkPhase = 0;
   path: PathPoint[] | null = null;
   stats: Stats = { health: 1, stamina: 1, hunger: 1, thirst: 1 };

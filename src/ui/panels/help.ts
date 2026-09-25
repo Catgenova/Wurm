@@ -254,6 +254,7 @@ const SIDES = Object.keys(SIDE_NAMES).length;
 const BOATS = FURNITURE.filter((f) => f.boat);
 const ROWER = furnitureDef('rowing_boat');
 const SAILER = furnitureDef('sailing_boat');
+const SHIP = furnitureDef('caravel');
 const CART = furnitureDef('large_cart');
 const WAGON = furnitureDef('wagon');
 /** The barrels, smallest first. */
@@ -951,16 +952,25 @@ export function helpText(): string {
     it what it wants, one unit a go. Until the last span is decked nothing crosses. Pulling one down
     again gives you half of what went into it. A boat passes underneath.</p>
     <h3>Boats</h3>
-    <p>${NumberWord(BOATS.length)} hulls, both a carpenter's work. A <b>rowing boat</b> is ${bill('make_rowing_boat', true)};
+    <p>${NumberWord(BOATS.length)} hulls, all of them a carpenter's work. A <b>rowing boat</b> is ${bill('make_rowing_boat', true)};
     she carries <b>${ROWER.capacity} things</b>, wants <b>${numberWord(ROWER.boat?.draught ?? 0)} deep</b> of water under her and is rowed, so your
     <b>body strength</b> is the engine. A <b>sailing boat</b> is ${bill('make_sailing_boat', true)};
     she carries <b>${SAILER.capacity}</b>, wants <b>${numberWord(SAILER.boat?.draught ?? 0)} deep</b>, and the wind
-    does the work, so it is <b>body control</b> that decides how much of it you waste.</p>
+    does the work, so it is <b>body control</b> that decides how much of it you waste. A <b>caravel</b> is
+    ${bill('make_caravel', true)}, and she takes a whole tile; she carries <b>${SHIP.capacity}</b>, wants
+    <b>${numberWord(SHIP.boat?.draught ?? 0)} deep</b>, makes <b>${SHIP.boat?.speed}</b> tiles a second at a fair effort to the
+    sailing boat's <b>${SAILER.boat?.speed}</b>, and carries <b>${numberWord(SHIP.boat?.passengers ?? 0)} passengers</b> besides
+    whoever has her helm.</p>
     <p><b>Launch</b> her by setting her down on water deep enough while you stand on the bank &mdash; she
     will not go on land and will not go in a puddle. <b>Climb aboard</b> from the shore and she moves
     with you, over any water with depth enough and over nothing else: no beaching, no dragging her over
     a sandbar. <b>Step ashore</b> puts you on the nearest dry ground, and refuses if there is none within
     reach, so bring her in before you get out.</p>
+    <p><b>Passengers.</b> Stand beside a caravel and <b>Come aboard as a passenger</b>: you take the first of her
+    ${numberWord(SHIP.boat?.passengers ?? 0)} places on deck that is free, and from then on you go where she goes and your own
+    feet go nowhere. <b>Step ashore</b> works for a passenger as it does for the helm. Anybody on her deck may
+    <b>Take the helm</b> when nobody holds it, or when whoever held it has gone away and left her at sea; nobody
+    takes it out of the hands of somebody who is here. She is not picked up or turned with anybody aboard.</p>
     <p>What a boat is really for, besides the coast itself, is the water under it. A line cast over the
     side of a boat in deep water reaches everything that swims &mdash; pike and sturgeon
     included &mdash; which no bank on a shelving shore will ever do.</p>

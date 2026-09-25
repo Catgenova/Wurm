@@ -583,6 +583,15 @@ function finish(world: World, m: SaveMeta): Game {
     crate: m.crate ?? null,
     guests: m.guests,
   });
+  // Aboard as a passenger when it was saved: the hull's list of who is aboard
+  // is what was kept, so the body's place is read back off it.
+  for (const f of game.furniture.values()) {
+    const mine = (f.riders ?? []).find((r) => r.who === game.riderId());
+    if (mine) {
+      game.player.aboard = f.id;
+      game.player.seat = mine.seat;
+    }
+  }
   // Whatever the save had, the island is brought up to the wildlife it should
   // hold. Species no longer need seeding one at a time: what is let out of the
   // bank is rolled from the whole table, so every one of them turns up.

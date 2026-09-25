@@ -3642,7 +3642,7 @@ select '479. a rowing boat dragged up a hillside that stands '
      || (select draught from boat_def where id = 'rowing_boat') || ' of it under her: '
      || coalesce(act_refusal(:'world2', :'ivar', 'board_vehicle',
         ('{"kind":"furniture","id":' || :'boat' || '}')::jsonb), 'allowed');
-select '480. the eleven that came with the reins: '
+select '480. the ' || (select count(*) from action_def where ride_action(id)) || ' that came with the reins and the helm: '
      || (select string_agg(id, ', ' order by id) from action_def where ride_action(id))
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));
 
