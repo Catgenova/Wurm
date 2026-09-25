@@ -771,7 +771,12 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     largest coins first, so eleven silver out of a gold and five leaves you the four rather than
     breaking the small change.</p>
     <p>Three ways goods change hands, and they are three because they answer three different
-    questions. The <b>Market</b> window (<kbd>U</kbd>) holds all of them.</p>
+    questions, and a board that finds what is for sale. The <b>Market</b> window (<kbd>U</kbd>) holds
+    all of them.</p>
+    <p><b>The market board</b> is read at a settlement token or a mailbox: every stall on the island,
+    where it stands, whose it is, what is for sale on it and at what price, nearest first. Buying is
+    done at the stall: stand at its counter and press <b>Buy</b>, and the price comes out of your
+    purse and goes into its till.</p>
     <p><b>A deal</b> is two people standing together. Tick what you are giving, name what you want
     for it, and choose who: the offer goes out with its terms written down, and whatever you put up
     is held out of your pack while it stands, so nothing offered can be eaten, sold or promised
@@ -781,11 +786,17 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     <p><b>A stall</b> is for when you are not there. Nail one up, put goods on the counter, set a
     price on each, and it sells while you are asleep: the coins go into its till and wait for you.
     It is the only thing on this island that does anything for you while you are away, and it is
-    the whole reason coins are worth striking.</p>
+    the whole reason coins are worth striking. What is on it comes back off it for its owner alone;
+    anybody else buys it. A thing taken back off the counter is not for sale again until it is
+    priced again.</p>
     <p><b>A parcel</b> is for when neither of you is there. A letter has carried four hundred
     characters and nothing else; it carries things now, posted at a <b>mailbox</b> and drawn out at
     any other. Both ends want a box — without one you may still write, and nothing but words will
-    cross the island.</p>
+    cross the island. A parcel is the other person's from the moment it goes in.</p>
+    <p><b>A wildermon</b> changes hands in its creature crate: in a deal, on a stall and in the post,
+    and on a stall in no other store. Whoever the crate goes to keeps the wildermon in it. While the
+    crate is on offer, on a stall or in the post it cannot be opened, and what is in it cannot be let
+    go or culled.</p>
     <h3>Who may do what on a settlement</h3>
     <p>Being asked onto somebody's land used to be all or nothing: everybody on the roll could dig
     up the gardens, empty the stores and pull the walls down. There are four standings now.</p>

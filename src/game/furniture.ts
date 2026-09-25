@@ -592,6 +592,8 @@ export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null 
   if (holdsLiquid(f)) return `${it} holds liquid and nothing else.`;
   if (def.hive) return `${it} is the swarm's, not yours. Take what is in it; do not put anything back.`;
   if (!furnitureHolds(f)) return `${it} does not hold things.`;
+  // Its id is spelled out rather than imported: creaturecrate.ts imports this file.
+  if (item.id === 'creature_crate' && !def.stall) return 'A creature crate goes on a stall, and in no other store.';
   const takes = def.takes && TAKES[def.takes];
   if (takes && !takes.is(item.id)) return takes.refusal;
   return null;
@@ -798,7 +800,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && !isFurniture(item.id) && storeInto(g, t, item) !== undefined;
+      // A piece of furniture goes into no store, but for a creature crate, which goes on a stall to be sold.
+      return !!item && (!isFurniture(item.id) || item.id === 'creature_crate') && storeInto(g, t, item) !== undefined;
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;

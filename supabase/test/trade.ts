@@ -159,9 +159,9 @@ begin
   insert into said select 'CHANGE|' || (select string_agg(extra || ':' || count, ',' order by extra)
     from item where world_id = w and holder_uid = b and def = 'coin');
 
-  -- A stall of A's, with a plank on it at five silver.
+  -- A stall of A's, as a builder leaves one, with a plank on it at five silver.
   insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, made_by)
-    values (w, 'stall', 0, floor(ax)::int, floor(ay)::int, 0, 0,
+    values (w, 'furniture', 'stall', floor(ax)::int, floor(ay)::int, 0, 0,
             floor(ax)::int + 0.5, floor(ay)::int + 0.5, a) returning id into v_stall;
   insert into item (world_id, holder, holder_uid, def, ql, count, placed, price)
     values (w, 'furniture', a, 'plank', 30, 1, v_stall, 5) returning id into v_goods;
@@ -177,9 +177,9 @@ begin
   update placed set till = 0 where world_id = w and id = v_stall;
   insert into said select 'TOOK|' || purse(w, a)::text;
 
-  -- A mailbox, and a parcel through it.
+  -- A mailbox, as a builder leaves one, and a parcel through it.
   insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, made_by)
-    values (w, 'mailbox', 0, floor(ax)::int, floor(ay)::int, 1, 1,
+    values (w, 'furniture', 'mailbox', floor(ax)::int, floor(ay)::int, 1, 1,
             floor(ax)::int + 0.5, floor(ay)::int + 0.5, a) returning id into v_box;
   insert into said select 'ATBOX|' || ((mailbox_at(w, a)).id is not null)::text;
   -- Shafts, because B already holds a plank bought off the stall and a count

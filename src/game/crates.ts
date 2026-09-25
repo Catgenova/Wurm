@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemName, rarityOf, roomFor, storedLine, type Item } from './items';
 import { matOf } from './materials';
+import { furnitureDef } from './furniture';
 
 /**
  * Crates are the first placeable objects. Each tile is a 4 by 4 grid of
@@ -300,7 +301,12 @@ CRATE_ACTIONS.push({
     if (!where) return 'It is gone.';
     const dx = where.at[0] - g.player.x;
     const dy = where.at[1] - g.player.y;
-    return Math.hypot(dx, dy) > STORE_REACH ? `Stand next to the ${where.what} to take things out of it.` : null;
+    if (Math.hypot(dx, dy) > STORE_REACH) return `Stand next to the ${where.what} to take things out of it.`;
+    // A counter is not a chest: what is on somebody else's stall is bought, not taken.
+    if (where.piece && furnitureDef(where.piece.kind).stall && where.piece.mine === false) {
+      return "That is on somebody else's stall. Buy it at the counter.";
+    }
+    return null;
   },
   perform: (t, g) => {
     if (t.kind !== 'item') return;

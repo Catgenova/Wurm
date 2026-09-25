@@ -60,6 +60,9 @@ const MOVE_EVERY = 1.0;
  */
 const rowsIn = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
 
+/** The longest line a letter or a parcel's note takes: the island's `letter_length` check holds it to this. */
+export const LETTER_MAX = 400;
+
 /**
  * How many steps coming ashore has, for the bar on the boot screen.
  *
@@ -323,7 +326,40 @@ export interface Deal {
   /** Silver asked for it, or silver offered with it. One or the other, never both. */
   want: number;
   give: number;
-  things: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null; rare: number | null }>;
+  things: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null; rare: number | null; creature?: Occupant | null }>;
+}
+
+/** The wildermon in a creature crate, as a deal, a parcel or a stall names it. */
+export interface Occupant {
+  name: string;
+  species: string;
+}
+
+/** A thing on a stall: what it is, and its price, or null while it is not for sale. */
+export interface Good {
+  id: number;
+  def: string;
+  ql: number;
+  dmg: number;
+  count: number;
+  extra: string | null;
+  rare: number | null;
+  price: number | null;
+  creature: Occupant | null;
+}
+
+/** A stall on the market board: where it stands, whose it is, and what is on it. */
+export interface Stall {
+  id: number;
+  x: number;
+  y: number;
+  owner: string;
+  mine: boolean;
+  /** The settlement it stands on, if any. */
+  deed: string | null;
+  /** Silver in the till, for your own stalls only. */
+  till: number | null;
+  goods: Good[];
 }
 
 /** A thing waiting in the post, and who sent it. */
@@ -337,6 +373,7 @@ export interface Parcel {
   rare: number | null;
   letter: number | null;
   from: string | null;
+  creature?: Occupant | null;
 }
 
 /**
@@ -2164,6 +2201,19 @@ export class Island {
 
   async takings(placed: number): Promise<string | null> {
     return this.asked('rpc_takings', { p_id: placed });
+  }
+
+  /**
+   * The market board: every stall on the island and what is for sale on it,
+   * when you stand at a settlement token or a mailbox; and your own stalls
+   * wherever you are, with their tills.
+   */
+  async market(): Promise<{ board: boolean; stalls: Stall[] }> {
+    if (!this.info) return { board: false, stalls: [] };
+    const { data, error } = await supabase().rpc('rpc_market', { p_world: this.info.id });
+    if (error || !data) return { board: false, stalls: [] };
+    const got = data as { board?: boolean; stalls?: unknown };
+    return { board: !!got.board, stalls: rowsIn<Stall>(got.stalls) };
   }
 
   async post(uid: string, text: string, items: number[]): Promise<string | null> {

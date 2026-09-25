@@ -68,6 +68,8 @@ export function standingCrate(g: Game, x: number, y: number): PlacedFurniture | 
  */
 export const OCCUPIED_CRATE_ACTIONS: ReadonlySet<string> = new Set([
   'examine_item', 'place_furniture', 'crate_follow', 'crate_work', 'lock_item', 'unlock_item', 'name_thing',
+  // On a stall, to be sold, and back off it; the store itself takes a creature crate nowhere else.
+  'store_in_furniture', 'take_from_store',
 ]);
 
 /** Why this cannot be asked of the thing aimed at, when that is a crate with a wildermon in it; null otherwise. */
@@ -76,7 +78,7 @@ export function occupiedRefusal(g: Game, actionId: string, t: Target): string | 
   const it = g.inventory.get(t.uid);
   if (!it || it.creature === undefined) return null;
   const c = g.creatures.get(it.creature);
-  return `${c?.name ?? 'A wildermon'} is in that crate. A crate with a wildermon in it can be carried, set down or opened, and nothing else.`;
+  return `${c?.name ?? 'A wildermon'} is in that crate. A crate with a wildermon in it can be carried, set down, opened or traded, and nothing else.`;
 }
 
 /**

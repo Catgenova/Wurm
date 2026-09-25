@@ -1295,6 +1295,18 @@ jobs:
             --outfile=node_modules/.cache/stir.mjs --log-level=error
           node node_modules/.cache/stir.mjs
 
+      - name: Goods that change hands
+        run: |
+          # The stalls had never sold anything: a price and a mailbox were
+          # looked up by a kind no builder leaves. This builds the pieces the
+          # way a builder does and goes through the doors: priced, read off the
+          # board at a mailbox, bought at the counter, not taken off somebody
+          # else's stall; and a wildermon in its crate offered, posted, laid on
+          # a stall and bought, and kept by whoever ends up with the crate.
+          npx esbuild supabase/test/market.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/market.mjs --log-level=error
+          node node_modules/.cache/market.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

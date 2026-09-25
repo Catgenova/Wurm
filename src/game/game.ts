@@ -4235,7 +4235,7 @@ export class Game {
    * Crates and the chests and barrels that hold things are shown through the
    * same window, and had the same hole in them, so both are looked in.
    */
-  storeWith(uid: number): { what: string; at: [number, number]; take: (id: number) => Item | null } | null {
+  storeWith(uid: number): { what: string; at: [number, number]; take: (id: number) => Item | null; piece?: PlacedFurniture } | null {
     /*
      * A bag on your back is the third of these, and was missing.
      *
@@ -4267,6 +4267,7 @@ export class Game {
         what: furnitureName(f).toLowerCase(),
         at: [f.x + 0.5, f.y + 0.5],
         take: (id) => this.furnitureTake(f, id),
+        piece: f,
       };
     }
     return null;

@@ -17,9 +17,10 @@
  *   * the first wildermon tamed follows you; the next is refused, in the same
  *     words on both sides, until an empty crate is in the pack, and then goes
  *     into the crate;
- *   * a crate with a wildermon in it is carried, set down or opened and
- *     nothing else: it is not dropped, and on the island nothing can move it
- *     anywhere else even past the door;
+ *   * a crate with a wildermon in it is carried, set down, opened or traded
+ *     (market.ts goes through the trading) and nothing else: it is not
+ *     dropped, and on the island nothing can put it on the ground even past
+ *     the door;
  *   * set down, the crate stands with the wildermon in it, which stands where
  *     the crate does -- the renderer draws it inside from that;
  *   * opened to follow you, the one inside comes out and the companion you
@@ -101,7 +102,7 @@ check('and goes into the crate', second.mode === 'stored' && crate.creature === 
 const held: Target = { kind: 'item', uid: crate.uid };
 const offered = game.actionsFor(held).map((a) => a.def.id);
 check('an occupied crate is not offered to be dropped or put away', !offered.includes('drop') && !offered.includes('stow_item'), offered.join(','));
-check('and says why when asked', occupiedRefusal(game, 'drop', held) === 'Rabba is in that crate. A crate with a wildermon in it can be carried, set down or opened, and nothing else.');
+check('and says why when asked', occupiedRefusal(game, 'drop', held) === 'Rabba is in that crate. A crate with a wildermon in it can be carried, set down, opened or traded, and nothing else.');
 check('nothing takes it out of the pack', game.inventory.take(crate.uid) === null);
 
 // Set down beside you, on the first spot that will have it.
@@ -323,8 +324,8 @@ check('the next is refused without a crate, in the browser\'s words', said('NOCR
 check('and allowed with one', said('WITHCRATE') === 'allowed', said('WITHCRATE'));
 check('and goes into the crate', said('CRATED') === 'stored,true', said('CRATED'));
 check('an occupied crate is not dropped, in the browser\'s words',
-  said('DROP') === 'Rabba is in that crate. A crate with a wildermon in it can be carried, set down or opened, and nothing else.', said('DROP'));
-check('and nothing moves it anywhere else, past any door', said('STAYS') === 'A creature crate with a wildermon in it is carried or set down, and nothing else.', said('STAYS'));
+  said('DROP') === 'Rabba is in that crate. A crate with a wildermon in it can be carried, set down, opened or traded, and nothing else.', said('DROP'));
+check('and nothing moves it anywhere else, past any door', said('STAYS') === 'A creature crate with a wildermon in it is carried, set down, opened or traded, and nothing else.', said('STAYS'));
 check('it may be set down', said('PLACEOK') === 'allowed', said('PLACEOK'));
 check('set down, it stands with the wildermon in it, which stands where it does', said('PLACED') === 'true,true,0.00', said('PLACED'));
 check('and the ground the browser is sent says who is in it', said('GROUND') !== 'none' && said('GROUND') !== '', said('GROUND'));

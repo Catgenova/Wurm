@@ -1,4 +1,4 @@
-import type { Folk, Island, Letter, MyDeed, Social } from '../../net/island';
+import { LETTER_MAX, type Folk, type Island, type Letter, type MyDeed, type Social } from '../../net/island';
 import type { Game } from '../../game/game';
 import type { UIWindow } from '../windows';
 
@@ -478,7 +478,7 @@ export class SocialPanel {
     box.type = 'text';
     box.id = 'social-draft';
     box.className = 'log-search';
-    box.maxLength = 400;
+    box.maxLength = LETTER_MAX;
     box.placeholder = `Write to ${who.name}…`;
     box.value = this.draft;
     box.addEventListener('input', () => {

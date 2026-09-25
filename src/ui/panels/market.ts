@@ -1,6 +1,8 @@
-import type { Deal, Island, Parcel } from '../../net/island';
+import { LETTER_MAX, type Deal, type Good, type Island, type Occupant, type Parcel, type Stall } from '../../net/island';
 import type { Game } from '../../game/game';
-import { itemName, type Item } from '../../game/items';
+import { itemDef, itemName, type Item } from '../../game/items';
+import { furnitureDef } from '../../game/furniture';
+import { SPECIES } from '../../game/creatures';
 import { priceWords, purse } from '../../game/money';
 import type { UIWindow } from '../windows';
 
@@ -12,8 +14,13 @@ const REFRESH = 5;
  *
  * Coins have existed since there was an anvil to strike them on and have
  * never bought anything, because there was nothing to buy them with and
- * nobody to buy from. Three tabs, and they are three because they answer
- * three different questions:
+ * nobody to buy from. Four tabs, because they answer four different
+ * questions:
+ *
+ *   **Board** — what is for sale anywhere on the island. Every stall, where it
+ *   stands, what is on it and for how much, read at a settlement token or a
+ *   mailbox; and a Buy for each, which goes through when you stand at that
+ *   stall's counter.
  *
  *   **Deals** — two people standing together. An offer with its terms written
  *   down, held out of the offerer's pack while it stands, taken or turned
@@ -28,15 +35,23 @@ const REFRESH = 5;
  *   at any other.
  *
  * Nothing here works in the game you play by yourself, and the window says so
- * rather than showing three empty tabs: there is one person in that game and
- * none of these is a thing you do alone.
+ * rather than showing empty tabs: there is one person in that game and none
+ * of these is a thing you do alone.
+ *
+ * A creature crate with a wildermon in it goes everywhere the rest do: into a
+ * deal, onto a stall, into the post. Whoever it goes to keeps the wildermon.
  */
+type Tab = 'board' | 'deals' | 'stall' | 'post';
 export class MarketPanel {
   private readonly bar: HTMLDivElement;
   private readonly page: HTMLDivElement;
   private readonly tabs = new Map<string, HTMLButtonElement>();
-  private tab: 'deals' | 'stall' | 'post' = 'deals';
+  private tab: Tab = 'board';
   private deals: Deal[] = [];
+  private market: { board: boolean; stalls: Stall[] } = { board: false, stalls: [] };
+  /** What is ticked to go in a parcel, by item uid, and the note that goes with it. */
+  private readonly posting = new Set<number>();
+  private note = '';
   private waiting: { at_box: boolean; things: Parcel[] } = { at_box: false, things: [] };
   private asking = false;
   private clock = 0;
@@ -55,10 +70,11 @@ export class MarketPanel {
     this.bar = document.createElement('div');
     this.bar.className = 'log-tabs';
     for (const [id, label, title] of [
+      ['board', 'Board', 'Every stall on the island, read at a settlement token or a mailbox'],
       ['deals', 'Deals', 'Offers out and offers in'],
       ['stall', 'Stall', 'What you have laid out, and what it has taken'],
       ['post', 'Post', 'Parcels waiting at a mailbox'],
-    ] as Array<['deals' | 'stall' | 'post', string, string]>) {
+    ] as Array<[Tab, string, string]>) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'tb-btn tb-small log-tab' + (id === this.tab ? ' tb-on' : '');
@@ -74,7 +90,7 @@ export class MarketPanel {
     this.draw();
   }
 
-  private show(id: 'deals' | 'stall' | 'post'): void {
+  private show(id: Tab): void {
     this.tab = id;
     for (const [key, el] of this.tabs) el.classList.toggle('tb-on', key === id);
     this.draw();
@@ -95,6 +111,7 @@ export class MarketPanel {
     try {
       this.deals = await this.island.deals();
       this.waiting = await this.island.waiting();
+      this.market = await this.island.market();
     } finally {
       this.asking = false;
     }
@@ -111,11 +128,12 @@ export class MarketPanel {
   private draw(): void {
     this.page.replaceChildren();
     if (!this.island) {
-      this.say('There is one person on this island and all three of these want two. '
-        + 'Deals, stalls and the post are for an island with other people on it.');
+      this.say('There is one person on this island, and every one of these wants two. '
+        + 'The board, deals, stalls and the post are for an island with other people on it.');
       return;
     }
-    if (this.tab === 'deals') this.drawDeals();
+    if (this.tab === 'board') this.drawBoard();
+    else if (this.tab === 'deals') this.drawDeals();
     else if (this.tab === 'stall') this.drawStall();
     else this.drawPost();
   }
@@ -191,26 +209,7 @@ export class MarketPanel {
         + 'or have written to, is somebody you can deal with.');
       return;
     }
-    // Nothing put by, no coin, and no crate with a wildermon in it, which goes nowhere but down on the ground.
-    const pack = this.game.inventory.items.filter((it) => !it.locked && it.id !== 'coin' && it.creature === undefined);
-    const list = document.createElement('div');
-    list.className = 'market-pick';
-    for (const it of pack.slice(0, 40)) {
-      const label = document.createElement('label');
-      const box = document.createElement('input');
-      box.type = 'checkbox';
-      box.checked = this.picked.has(it.uid);
-      box.addEventListener('change', () => {
-        if (box.checked) this.picked.add(it.uid);
-        else this.picked.delete(it.uid);
-      });
-      const name = document.createElement('span');
-      name.textContent = it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it);
-      label.append(box, name);
-      list.append(label);
-    }
-    this.page.append(list);
-    if (pack.length > 40) this.say(`…and ${pack.length - 40} more. Offer what is at the top of your pack, or put the rest away first.`);
+    this.pick(this.picked, 'Offer');
 
     const bar = document.createElement('div');
     bar.className = 'panel-bar';
@@ -242,41 +241,98 @@ export class MarketPanel {
     /*
      * A stall is a piece of furniture, so what is on it is already the store
      * window's business. What belongs here is the price on each thing and the
-     * till underneath, which is the part no other window has a place for.
+     * till underneath, which is the part no other window has a place for --
+     * and they come from the island, which keeps them, for your own stalls
+     * wherever you stand.
      */
-    const stalls = [...this.game.furniture.values()].filter((f) => f.kind === 'stall');
+    const stalls = this.market.stalls.filter((st) => st.mine);
     if (!stalls.length) {
-      this.say('You have no stall. Nail one up — twelve planks, four timbers, four cloth and '
-        + 'twenty-six nails — and stand it somewhere people walk past.');
+      this.say(`You have no stall. Nail one up — ${billOf('stall')} — and stand it somewhere people walk past.`);
       return;
     }
-    for (const f of stalls) {
-      this.head(`Stall at ${f.x},${f.y}`);
-      const till = (f as { till?: number }).till ?? 0;
+    for (const st of stalls) {
+      this.head(`Stall at ${st.x},${st.y}${st.deed ? ` on ${st.deed}` : ''}`);
+      const till = st.till ?? 0;
       const row = document.createElement('div');
       row.className = 'skill-row';
       const text = document.createElement('span');
       text.textContent = till > 0 ? `The till holds ${priceWords(till)}.` : 'The till is empty.';
       row.append(text);
-      if (till > 0) row.append(this.button('Take the takings', 'Stand at the counter', () => void this.act(this.island!.takings(f.id))));
+      if (till > 0) row.append(this.button('Take the takings', 'Stand at the counter', () => void this.act(this.island!.takings(st.id))));
       this.page.append(row);
-      const goods = f.items ?? [];
-      if (!goods.length) this.say('Nothing on the counter. Put something in it, then set a price.');
-      for (const it of goods) {
+      if (!st.goods.length) this.say('Nothing on the counter. Put something in it, then set a price.');
+      for (const good of st.goods) {
         const line = document.createElement('div');
         line.className = 'skill-row';
         const name = document.createElement('span');
-        const asking = (it as Item & { price?: number }).price ?? 0;
-        name.textContent = `${itemName(it)}${asking ? ` — ${priceWords(asking)}` : ' — not for sale'}`;
+        name.textContent = `${goodName(good)}${good.price ? ` — ${priceWords(good.price)}` : ' — not for sale'}`;
         const box = document.createElement('input');
         box.type = 'number';
         box.min = '0';
         box.className = 'panel-select market-price';
-        box.value = String(asking);
+        box.value = String(good.price ?? 0);
         line.append(name, box, this.button('Set', 'Nought takes it off sale', () =>
-          void this.act(this.island!.setPrice(it.uid, Math.max(0, Number(box.value) || 0)))));
+          void this.act(this.island!.setPrice(good.id, Math.max(0, Number(box.value) || 0)))));
         this.page.append(line);
       }
+    }
+  }
+
+  /**
+   * Everything for sale on the island, stall by stall, nearest first. It is
+   * read at a settlement token or a mailbox; buying is done at the stall,
+   * whose counter you have to be standing at when you press Buy.
+   */
+  private drawBoard(): void {
+    if (!this.market.board) {
+      this.say('The market board is read at a settlement token or a mailbox. Stand at one to see every stall on the island.');
+      return;
+    }
+    const me = this.game.player;
+    const theirs = this.market.stalls
+      .filter((st) => !st.mine && st.goods.length)
+      .sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y));
+    if (!theirs.length) this.say('Nobody has anything for sale.');
+    for (const st of theirs) {
+      const far = Math.round(Math.hypot(st.x + 0.5 - me.x, st.y + 0.5 - me.y));
+      this.head(`${st.owner}'s stall at ${st.x},${st.y}${st.deed ? ` on ${st.deed}` : ''} — ${far} ${far === 1 ? 'tile' : 'tiles'} away`);
+      for (const good of st.goods) {
+        const row = document.createElement('div');
+        row.className = 'skill-row';
+        const text = document.createElement('span');
+        text.textContent = `${goodName(good)} — ${priceWords(good.price ?? 0)}`;
+        row.append(text, this.button('Buy', 'Stand at the counter of this stall', () => void this.act(this.island!.buy(good.id))));
+        this.page.append(row);
+      }
+    }
+    this.say(`You are carrying ${priceWords(purse(this.game.inventory.items))}. Your own stalls are on the Stall tab.`);
+  }
+
+  /** A tick list of what is in your pack, to offer or to post. A crate with a wildermon in it is on it too. */
+  private pick(into: Set<number>, doing: string): void {
+    // Nothing put by and no coin: coins go by the number in the box, not by the stack.
+    const pack = this.game.inventory.items.filter((it) => !it.locked && it.id !== 'coin');
+    const list = document.createElement('div');
+    list.className = 'market-pick';
+    for (const it of pack.slice(0, PICK_SHOWN)) {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = into.has(it.uid);
+      box.addEventListener('change', () => {
+        if (box.checked) into.add(it.uid);
+        else into.delete(it.uid);
+      });
+      const name = document.createElement('span');
+      const occupant = it.creature === undefined ? undefined : this.game.creatures.get(it.creature);
+      const named = occupant ? `${itemName(it)} — ${occupant.name}, ${speciesName(occupant.species)}` : itemName(it);
+      name.textContent = it.count > 1 ? `${named} (${it.count})` : named;
+      label.append(box, name);
+      list.append(label);
+    }
+    this.page.append(list);
+    if (pack.length > PICK_SHOWN) {
+      this.say(`…and ${pack.length - PICK_SHOWN} more. ${doing} what is at the top of your pack, or put the rest away first.`);
     }
   }
 
@@ -302,9 +358,65 @@ export class MarketPanel {
       this.page.append(bar);
       if (!this.waiting.at_box) this.say('Stand at a mailbox to draw it out. Any mailbox will do.');
     }
+
+    /*
+     * And sending: tick what goes, write a line with it, choose who. It goes
+     * into the post at the mailbox you stand at and is theirs from then on,
+     * waiting for them at any mailbox.
+     */
+    this.head('Send a parcel');
+    if (!this.waiting.at_box) {
+      this.say('Stand at a mailbox to send one.');
+      return;
+    }
+    const people = this.folk();
+    if (!people.length) {
+      this.say('You know nobody to send anything to yet. Anybody you share land with, or have written to, is somebody you can post to.');
+      return;
+    }
+    this.pick(this.posting, 'Send');
+    const bar = document.createElement('div');
+    bar.className = 'panel-bar';
+    const note = document.createElement('input');
+    note.type = 'text';
+    note.maxLength = LETTER_MAX;
+    note.className = 'panel-select market-note-input';
+    note.placeholder = 'A line with it';
+    note.value = this.note;
+    note.addEventListener('input', () => (this.note = note.value));
+    const who = document.createElement('select');
+    who.className = 'panel-select';
+    for (const f of people) {
+      const o = document.createElement('option');
+      o.value = f.uid;
+      o.textContent = f.name;
+      who.append(o);
+    }
+    bar.append(note, who, this.button('Send', 'It is theirs from the moment it goes in', () => {
+      const items = [...this.posting];
+      this.posting.clear();
+      const text = this.note;
+      this.note = '';
+      void this.act(this.island!.post(who.value, text, items));
+    }));
+    this.page.append(bar);
   }
 }
 
-/** A thing in a deal or in the post, named the way the pack names it. */
-const nameOf = (t: { def: string; extra: string | null; ql: number; count: number }): string =>
-  itemName({ uid: 0, id: t.def, extra: t.extra ?? undefined, ql: t.ql, count: t.count, dmg: 0 } as Item);
+/** How many things of the pack a tick list shows. */
+const PICK_SHOWN = 40;
+
+/** A thing in a deal or in the post, named the way the pack names it, and a crate with who is in it. */
+const nameOf = (t: { def: string; extra: string | null; ql: number; count: number; creature?: Occupant | null }): string => {
+  const named = itemName({ uid: 0, id: t.def, extra: t.extra ?? undefined, ql: t.ql, count: t.count, dmg: 0 } as Item);
+  return t.creature ? `${named} — ${t.creature.name}, ${speciesName(t.creature.species)}` : named;
+};
+/** A species as a sentence names it. */
+const speciesName = (id: string): string => (SPECIES[id]?.name ?? id).toLowerCase();
+const goodName = (g: Good): string => (g.count > 1 ? `${g.count} × ${nameOf(g)}` : nameOf(g));
+
+/** What a piece is built of, read off its bill: "12 × plank, 4 × timber, 4 × cloth and 26 × nails". */
+const billOf = (id: string): string => {
+  const parts = furnitureDef(id).bill.map(([item, n]) => `${n} × ${itemDef(item).name.toLowerCase()}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] ?? 'nothing';
+};
