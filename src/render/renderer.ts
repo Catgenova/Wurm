@@ -51,7 +51,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { drawFurniture, furnitureSpan, FURNITURE_HEIGHT, headingView, pieceView } from './furniture';
+import { crewOrder, drawFurniture, furnitureSpan, FURNITURE_HEIGHT, headingView, pieceView, type Crew, type PieceView } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -136,7 +136,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'anvil' | 'post' | 'trap' | 'deck';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck';
   x: number;
   y: number;
   sx: number;
@@ -171,6 +171,34 @@ interface Entity {
   drawDy?: number;
   /** On a deck on their feet rather than sat at a helm or on a seat. */
   standing?: boolean;
+  /** Which way round a piece is drawn this frame, worked out once where it is taken, so its layers and its crew agree. */
+  view?: PieceView;
+  /** For a hull drawn in layers round the people on her (`takeAboard`): which layer this is. */
+  layer?: number;
+}
+
+/**
+ * Where the people on a hull stand, for baking her in layers round them
+ * (`Crew` in `./furniture`): her helm first, then each passenger's place, in
+ * her own units. Only a hull with a deck of her own to stand on has one --
+ * a rowing boat's or a sailing boat's helm sits in her middle, under
+ * nothing -- and only one of those is worth a picture per person.
+ */
+const crews = new Map<string, Crew | null>();
+function crewOf(kind: string): Crew | null {
+  let c = crews.get(kind);
+  if (c === undefined) {
+    const boat = furnitureDef(kind).boat;
+    c = boat && (boat.helm || boat.deck?.length) ? {
+      tall: FIGURE_TOP / HEIGHT_SCALE,
+      at: [
+        [(boat.helm?.[0] ?? 0) * UNITS_PER_TILE, (boat.helm?.[1] ?? 0) * UNITS_PER_TILE, boat.seat / HEIGHT_SCALE],
+        ...(boat.deck ?? []).map(([along, across]): [number, number, number] => [along * UNITS_PER_TILE, across * UNITS_PER_TILE, (boat.waist ?? boat.seat) / HEIGHT_SCALE]),
+      ],
+    } : null;
+    crews.set(kind, c);
+  }
+  return c;
 }
 
 interface HitRect {
@@ -523,6 +551,8 @@ export class Renderer {
     e.drawDy = undefined;
     e.standing = undefined;
     e.rare = undefined;
+    e.view = undefined;
+    e.layer = undefined;
     this.ents.push(e);
     return e;
   }
@@ -1488,6 +1518,9 @@ export class Renderer {
       if (f.helm) this.seated.add(f.helm);
       for (const r of f.riders ?? []) this.seated.add(r.who);
     }
+    // A hull with a deck of her own whose helm I have: I am drawn among her crew, by `takeAboard`, rather than on my own.
+    const mine = this.game.driving();
+    this.helming = mine && crewOf(mine.kind) ? mine : null;
     const hw = stepW * zoom;
     const hh = stepH * zoom;
     const hs = HEIGHT_SCALE * zoom;
@@ -1742,8 +1775,9 @@ export class Renderer {
             const [wx, wy] = fu.helm ? this.game.hullCentre(fu) : furnitureCentre(fu);
             const fe = this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.pieceBase(fu, wx, wy)), null);
             fe.piece = fu;
+            fe.view = this.viewOf(fu);
             if (fu.rare) fe.rare = fu.rare;
-            if (fu.helm || fu.riders?.length || player.aboard === fu.id) this.takeAboard(fu, x, y, fe.sx, fe.sy, zoom);
+            if (fu.helm || fu.riders?.length || player.aboard === fu.id || this.helming === fu) this.takeAboard(fu, fe, x, y, zoom);
           }
           for (const an of this.game.anvilsOnTile(x, y)) {
             const [wx, wy] = anvilCentre(an);
@@ -1797,7 +1831,7 @@ export class Renderer {
         if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
       }
 
-      if (d === playerDepth && player.aboard === null) {
+      if (d === playerDepth && player.aboard === null && !this.helming) {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
         const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
@@ -1852,29 +1886,62 @@ export class Renderer {
    * on the surface however deep it is under her rather than on the bottom.
    */
   /**
-   * The people on a hull: whoever else has her helm and whoever is aboard as a
-   * passenger, us among them. Each sorts a hair after her, so her deck is never
-   * drawn over them, and is drawn at their own place on it, lifted to it: the
-   * helm to `seat`, sat in her middle or on their feet on a deck of its own,
-   * and the passengers on their feet at her waist.
+   * The people on a hull: whoever has her helm and whoever is aboard as a
+   * passenger, us among them. Each is drawn at their own place on her,
+   * lifted to it: the helm to `seat`, sat in her middle or on their feet on a
+   * deck of its own, and the passengers on their feet at her waist.
+   *
+   * And each is drawn among her, not over her. A hull with a deck of her own
+   * is baked in layers split where each place on her comes in the order her
+   * parts are drawn (`crewOf`, `crewOrder`), and whoever stands at a place
+   * goes between the layer before it and the one after: a fore course nearer
+   * you than the waist is drawn over the people in the waist, and the mizzen
+   * behind them under. Everybody sorts a hair after her, and in that order.
+   * Any other hull is one picture with its people after it, as they come.
    */
   private readonly seated = new Set<string>();
-  private takeAboard(f: PlacedFurniture, x: number, y: number, sx: number, sy: number, zoom: number): void {
+  /** The hull with a deck of her own that I have the helm of, this frame. */
+  private helming: PlacedFurniture | null = null;
+  private takeAboard(f: PlacedFurniture, fe: Entity, x: number, y: number, zoom: number): void {
     const boat = furnitureDef(f.kind).boat;
     if (!boat) return;
     const waist = boat.waist ?? boat.seat;
-    let k = 1;
-    const aboard = (uid: string, at: (peer: Peer) => [number, number], deck: number, standing: boolean): void => {
+    const me = this.game.player;
+    // Who is where: place 0 is her helm, and a passenger's place is their seat.
+    const hands: Array<{ spot: number; take: (sy: number) => void }> = [];
+    const aboard = (uid: string, spot: number, at: (peer: Peer) => [number, number], deck: number, standing: boolean): void => {
       const peer = this.game.roster.list().find((p) => p.uid === uid);
       if (!peer) return;
-      const e = this.take('peer', x, y, sx, sy + 0.01 * k++, null);
-      e.peer = peer;
-      this.onDeck(e, f, at(peer), deck * zoom, standing);
+      hands.push({ spot, take: (sy) => {
+        const e = this.take('peer', x, y, fe.sx, sy, null);
+        e.peer = peer;
+        this.onDeck(e, f, at(peer), deck * zoom, standing);
+      } });
     };
-    if (f.helm) aboard(f.helm, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
-    const me = this.game.player;
-    if (me.aboard === f.id) this.onDeck(this.take('player', x, y, sx, sy + 0.01 * k++, null), f, [me.x, me.y], waist * zoom, true);
-    for (const r of f.riders ?? []) aboard(r.who, (peer) => this.game.roster.drawnAt(peer), waist, true);
+    if (f.helm) aboard(f.helm, 0, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
+    if (this.helming === f) hands.push({ spot: 0, take: (sy) => this.onDeck(this.take('player', x, y, fe.sx, sy, null), f, this.game.helmSpot(f), boat.seat * zoom, true) });
+    if (me.aboard === f.id) hands.push({ spot: me.seat ?? 0, take: (sy) => this.onDeck(this.take('player', x, y, fe.sx, sy, null), f, [me.x, me.y], waist * zoom, true) });
+    for (const r of f.riders ?? []) aboard(r.who, r.seat, (peer) => this.game.roster.drawnAt(peer), waist, true);
+
+    const crew = crewOf(f.kind);
+    const HAIR = 0.01;
+    if (!crew || !fe.view) {
+      hands.forEach((h, i) => h.take(fe.sy + HAIR * (i + 1)));
+      return;
+    }
+    const order = crewOrder(zoom, f.kind, !!f.lit, dyeOf(f) ?? undefined, this.pieceTrim(f), fe.view, f.material, crew);
+    fe.layer = 0;
+    order.forEach((spot, n) => {
+      for (const h of hands) if (h.spot === spot) h.take(fe.sy + HAIR * (2 * n + 1));
+      const le = this.take('hull', x, y, fe.sx, fe.sy + HAIR * (2 * n + 2), null);
+      le.piece = f;
+      le.view = fe.view;
+      le.layer = n + 1;
+      // Drawn where she is, whatever it sorts as.
+      le.drawDy = -HAIR * (2 * n + 2);
+    });
+    // Anybody at a place she has no stand-in for goes over the lot.
+    for (const h of hands) if (!order.includes(h.spot)) h.take(fe.sy + HAIR * (2 * order.length + 1));
   }
 
   /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
@@ -2009,7 +2076,6 @@ export class Renderer {
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
     if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx || (a.lift ?? 0) - (b.lift ?? 0));
     const player = this.game.player;
-    const cam = this.camera;
     this.playerFacing = this.facingOnScreen(player.dirX, player.dirY, this.playerFacing);
     for (const ent of ents) {
       // Being hit beats being pointed at: a blow should read as a blow even
@@ -2144,23 +2210,18 @@ export class Renderer {
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
         continue;
       }
+      // The layers of a hull in front of somebody on her deck; see `takeAboard`.
+      if (ent.kind === 'hull' && ent.piece && ent.view) {
+        const piece = ent.piece;
+        drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer);
+        continue;
+      }
       if (ent.kind === 'furniture' && ent.piece) {
         const piece = ent.piece;
-        // What is being driven or pulled points the way it is going, and stays pointing the way it went when it
-        // stops; anything else stands the way it was set.
-        if ((piece.driven || piece.hitched) && this.game.player.moving) {
-          const step = (Math.PI * 2) / 64;
-          this.pieceHeadings.set(piece.id, Math.round(this.game.heading() / step) * step);
-        }
-        // A hull somebody else is steering, or with people on her deck, points the way the game has her
-        // pointing, which is the way they are stood along her.
-        if (piece.helm || piece.riders?.length) {
-          const step = (Math.PI * 2) / 64;
-          this.pieceHeadings.set(piece.id, Math.round(this.game.shipHeading(piece) / step) * step);
-        }
-        const heading = this.pieceHeadings.get(piece.id);
-        const view = heading !== undefined ? headingView(heading, cam.rotation) : pieceView(pieceFacing(piece), cam.rotation);
+        const view = ent.view ?? this.viewOf(piece);
         const [W, D] = furnitureSpan(piece.kind);
+        // What it covered when it was drawn, from its floor contact, for the box it is clicked by.
+        let drawn: [number, number, number, number] | null = null;
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
         /*
          * A creature crate with somebody in it: its far half, the wildermon
@@ -2202,7 +2263,16 @@ export class Renderer {
             ctx.lineWidth = 1;
           }
         } else {
-          this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material));
+          /*
+           * Only the first of her layers when she is drawn in layers round her
+           * crew, the rest coming after them; or all of them at once under the
+           * pointer, so the ring round her is round the whole of her, and the
+           * layers in front then drawn again over whoever is aboard.
+           */
+          const crew = ent.layer === 0 ? crewOf(piece.kind) ?? undefined : undefined;
+          this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
+            drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all');
+          });
         }
         // A sign is a board made to be read, so what is written on it stands
         // over it in the world rather than waiting in a tooltip.
@@ -2219,7 +2289,21 @@ export class Renderer {
           ctx.fillText(text, ent.sx, ty);
           ctx.textAlign = 'left';
         }
-        this.furnitureHits.push({ x: ent.x, y: ent.y, left: ent.sx - W * zoom, top: ent.sy - (h + D + 2) * zoom, w: W * 2 * zoom, h: (h + D * 2 + 4) * zoom, furniture: piece.id });
+        /*
+         * Clicked by the box it stands in, or by what it is drawn as where that
+         * is bigger. The box is its footprint and its height, which for most
+         * things is what is drawn; a caravel lies out over the water at bow
+         * and stern, half as long again as the tile she is built on, and could
+         * only be clicked in her middle.
+         */
+        let [left, top, right, bottom] = [ent.sx - W * zoom, ent.sy - (h + D + 2) * zoom, ent.sx + W * zoom, ent.sy + (D + 2) * zoom];
+        if (drawn) {
+          left = Math.min(left, ent.sx + drawn[0]);
+          top = Math.min(top, ent.sy + drawn[1]);
+          right = Math.max(right, ent.sx + drawn[2]);
+          bottom = Math.max(bottom, ent.sy + drawn[3]);
+        }
+        this.furnitureHits.push({ x: ent.x, y: ent.y, left, top, w: right - left, h: bottom - top, furniture: piece.id });
         if (shines(ent.rare)) drawShine(ctx, ent.sx, ent.sy, zoom, ent.rare as number, piece.id, this.time, W * 2 * zoom, h * zoom);
       }
       if (ent.kind === 'kiln' && ent.kiln) {
@@ -7427,6 +7511,23 @@ export class Renderer {
    * nothing else has ever needed one and a second parameter for the second
    * user would be a parameter for every piece that has no use for either.
    */
+  /**
+   * Which way round a piece is drawn this frame.
+   *
+   * What is being driven or pulled points the way it is going, and stays
+   * pointing the way it went when it stops; a hull somebody else is steering,
+   * or with people on her deck, points the way the game has her pointing,
+   * which is the way they are stood along her; anything else stands the way
+   * it was set.
+   */
+  private viewOf(piece: PlacedFurniture): PieceView {
+    const step = (Math.PI * 2) / 64;
+    if ((piece.driven || piece.hitched) && this.game.player.moving) this.pieceHeadings.set(piece.id, Math.round(this.game.heading() / step) * step);
+    if (piece.helm || piece.riders?.length) this.pieceHeadings.set(piece.id, Math.round(this.game.shipHeading(piece) / step) * step);
+    const heading = this.pieceHeadings.get(piece.id);
+    return heading !== undefined ? headingView(heading, this.camera.rotation) : pieceView(pieceFacing(piece), this.camera.rotation);
+  }
+
   private pieceTrim(f: PlacedFurniture): number | undefined {
     if (rackSpots(f)) {
       let mask = 0;

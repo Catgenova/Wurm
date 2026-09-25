@@ -29,6 +29,8 @@ import { VIEWS } from './view';
  * kept, so a room full of it costs a blit a piece.
  */
 const TAU = Math.PI * 2;
+/** Half the width a stand-in for somebody on a deck takes, in units: a body's shoulders, and no more, so it does not reach past a bulkhead it stands beside. */
+const STAND_R = 1.2;
 
 type RGB = readonly [number, number, number];
 type V3 = readonly [number, number, number];
@@ -143,6 +145,8 @@ interface Part {
   z0: number;
   z1: number;
   draw: () => void;
+  /** A deck somebody may stand on, which a stand-in for them is put on top of (`Scene.standIns`). */
+  floor?: boolean;
 }
 
 /**
@@ -230,8 +234,28 @@ class Scene {
     return up + (1 - up) * side;
   }
 
-  part(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, draw: () => void): void {
-    this.parts.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1), z0: Math.min(z0, z1), z1: Math.max(z0, z1), draw });
+  part(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, draw: () => void, floor = false): void {
+    this.parts.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1), z0: Math.min(z0, z1), z1: Math.max(z0, z1), draw, floor });
+  }
+
+  /**
+   * Somebody standing at each of `at` -- across the piece, toward its front,
+   * and the deck under their feet, in its own units -- as a part that draws
+   * nothing but calls `split` with which of them it is, where the sort puts
+   * it among the rest.
+   *
+   * Each goes on top of whatever floor it stands in, so that the deck and the
+   * bulwarks round it go first however the sort is broken; and it is laid
+   * among the masts and the sails by where it stands, like any other part, so
+   * a sail nearer you than they are comes after them and one further off
+   * before.
+   */
+  standIns(at: V3[], tall: number, split: (i: number) => void): void {
+    at.forEach(([x, y, z], i) => {
+      let z0 = z;
+      for (const p of this.parts) if (p.floor && p.x0 <= x && x <= p.x1 && p.y0 <= y && y <= p.y1) z0 = Math.max(z0, p.z1);
+      this.part(x - STAND_R, x + STAND_R, y - STAND_R, y + STAND_R, z0, Math.max(z0 + 1, z + tall), () => split(i));
+    });
   }
 
   /* -- drawing -- */
@@ -2628,7 +2652,7 @@ const MODELS: Record<string, Model> = {
         }
         if (o.stem && bowNear) stemLine();
         if (bowNear) o.sprit?.();
-      });
+      }, true);
     };
 
     // What stands on the decks: the mizzen, the main and the fore, the hatch, and the whipstaff the helmsman steers by from just aft of it.
@@ -2882,6 +2906,30 @@ interface Baked {
   ox: number;
   oy: number;
   scale: number;
+  /** What it covers, in pixels at zoom 1 from its floor contact: left, top, right, bottom. */
+  bounds: [number, number, number, number];
+  /** Baked round a crew: the layers after the first, one after each stand-in, all the size of `canvas`. */
+  layers?: HTMLCanvasElement[];
+  /** And which stand-in each of `layers` comes after, in the order they are drawn. */
+  order?: number[];
+}
+
+/**
+ * The people on a piece, for baking it in layers round them.
+ *
+ * Somebody on a hull's deck is drawn by the renderer, not in the hull, so
+ * whatever the hull is drawn as -- one picture -- they are drawn either all
+ * over it or all under it; the caravel's crew were all over it, fore course
+ * and all, wherever they stood. So a piece with a crew is baked as a picture
+ * for what is behind the first of them, one for what is between that one and
+ * the next, and so on, and each person is drawn between the two that are
+ * either side of where they stand (`crewOrder`).
+ */
+export interface Crew {
+  /** Where each of them stands, in the piece's own units: along it, across it, and the deck under their feet. */
+  at: V3[];
+  /** How tall a body stands, in units. */
+  tall: number;
 }
 
 /**
@@ -2894,7 +2942,7 @@ const BAKED_BUDGET = 16e6;
 const baked = new Map<string, Baked>();
 let bakedArea = 0;
 
-function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, frame: number, scale: number, zoom: number): Baked {
+function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, frame: number, scale: number, zoom: number, crew?: Crew): Baked {
   const sc = new Scene(null as unknown as CanvasRenderingContext2D, view, zoom);
   build(sc, kind, lit, tint, trim, material, frame);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -2904,25 +2952,45 @@ function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number |
   };
   for (const p of sc.parts) for (const x of [p.x0, p.x1]) for (const y of [p.y0, p.y1]) for (const z of [p.z0, p.z1]) take(x, y, z);
   for (const [a, b, c, d] of sc.shadows ?? []) for (const x of [a, b]) for (const y of [c, d]) take(x, y, 0);
+  const bounds: [number, number, number, number] = [x0, y0, x1, y1];
   // Room for the ink round the edge, and for the light a fire throws past its flames.
   const pad = 3 + sc.ink * 2 + (lit ? 16 : 0);
   x0 = Math.floor(x0 - pad); y0 = Math.floor(y0 - pad); x1 = Math.ceil(x1 + pad); y1 = Math.ceil(y1 + pad);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.ceil((x1 - x0) * scale));
-  canvas.height = Math.max(1, Math.ceil((y1 - y0) * scale));
-  const g = canvas.getContext('2d');
-  if (!g) throw new Error('no 2d context');
-  g.scale(scale, scale);
-  g.translate(-x0, -y0);
+  const sheet = (): [HTMLCanvasElement, CanvasRenderingContext2D] => {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.ceil((x1 - x0) * scale));
+    canvas.height = Math.max(1, Math.ceil((y1 - y0) * scale));
+    const g = canvas.getContext('2d');
+    if (!g) throw new Error('no 2d context');
+    g.scale(scale, scale);
+    g.translate(-x0, -y0);
+    return [canvas, g];
+  };
+  const [canvas, g] = sheet();
   sc.g = g;
   for (const [a, b, c, d] of sc.shadows ?? []) {
     sc.poly([sc.P(a, c, 0), sc.P(b, c, 0), sc.P(b, d, 0), sc.P(a, d, 0)]);
     g.fillStyle = 'rgba(44, 74, 78, 0.17)';
     g.fill();
   }
+  // Put in after the piece is measured, so that its layers are the size its one picture would have been.
+  let layers: HTMLCanvasElement[] | undefined, order: number[] | undefined;
+  if (crew) {
+    const sheets = crew.at.map(() => sheet());
+    layers = sheets.map(([c]) => c);
+    order = [];
+    const o = order;
+    sc.standIns(crew.at, crew.tall, (i) => {
+      sc.g = sheets[o.length][1];
+      o.push(i);
+    });
+  }
   sc.flush();
-  return { canvas, ox: -x0 * scale, oy: -y0 * scale, scale };
+  return { canvas, ox: -x0 * scale, oy: -y0 * scale, scale, bounds, layers, order };
 }
+
+/** The canvas pixels a baked piece holds, all its layers counted. */
+const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.layers?.length ?? 0));
 
 /**
  * Draw one piece with its floor contact at (sx, sy), turned as `view` says
@@ -2930,27 +2998,49 @@ function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number |
  * which is finer than the eye can tell a sail by and keeps a boat being
  * sailed from baking a new one every frame.
  */
-export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, view: PieceView = pieceView('s', 0), material?: string): void {
+export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, view: PieceView = pieceView('s', 0), material?: string,
+  crew?: Crew, layer: number | 'all' = 'all'): [number, number, number, number] {
+  const b = bakedFor(zoom, kind, lit, tint, trim, view, material, crew);
+  const k = zoom / b.scale;
+  const sheets = [b.canvas, ...(b.layers ?? [])];
+  for (const [i, c] of sheets.entries()) {
+    if (layer === 'all' || layer === i) ctx.drawImage(c, sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k);
+  }
+  // What it covers on the screen, from its floor contact: the box it is clicked by.
+  return [b.bounds[0] * zoom, b.bounds[1] * zoom, b.bounds[2] * zoom, b.bounds[3] * zoom];
+}
+
+/**
+ * The order the people standing at `crew.at` come in among the layers of the
+ * piece baked round them: the first of these is drawn after layer 0, the
+ * second after layer 1, and so on (`drawFurniture` with a `layer`).
+ */
+export function crewOrder(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew: Crew): number[] {
+  return bakedFor(zoom, kind, lit, tint, trim, view, material, crew).order ?? [];
+}
+
+/** A piece's bake for this zoom, turn and trim, from the ones kept or new. */
+function bakedFor(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew?: Crew): Baked {
   const scale = BAKE_STEPS.find((s) => s >= zoom - 1e-3) ?? zoom;
   // The ink is a pixel wide on the screen until the zoom is under one, when it is held at a pixel and so is its own bake.
   const inkZoom = zoom < 0.95 ? Math.round(zoom * 20) / 20 : 1;
   const frame = lit ? Math.floor(performance.now() / 150) % 4 : 0;
   const set = trim === undefined || Number.isInteger(trim) ? trim : Math.round(trim * 20) / 20;
-  const key = `${kind}|${material ?? ''}|${lit ? frame : '-'}|${tint?.colour ?? ''}|${set ?? ''}|${view.ux.toFixed(3)},${view.uy.toFixed(3)},${view.vx.toFixed(3)},${view.vy.toFixed(3)}|${scale}|${inkZoom}`;
+  const aboard = crew ? `|${crew.tall}:${crew.at.map((a) => a.join(',')).join(';')}` : '';
+  const key = `${kind}|${material ?? ''}|${lit ? frame : '-'}|${tint?.colour ?? ''}|${set ?? ''}|${view.ux.toFixed(3)},${view.uy.toFixed(3)},${view.vx.toFixed(3)},${view.vy.toFixed(3)}|${scale}|${inkZoom}${aboard}`;
   let b = baked.get(key);
   if (b) {
     baked.delete(key);
     baked.set(key, b);
   } else {
-    b = bake(kind, lit, tint, set, view, material, frame, scale, inkZoom);
+    b = bake(kind, lit, tint, set, view, material, frame, scale, inkZoom, crew);
     baked.set(key, b);
-    bakedArea += b.canvas.width * b.canvas.height;
+    bakedArea += areaOf(b);
     for (const [k, old] of baked) {
       if (bakedArea <= BAKED_BUDGET || old === b) break;
       baked.delete(k);
-      bakedArea -= old.canvas.width * old.canvas.height;
+      bakedArea -= areaOf(old);
     }
   }
-  const k = zoom / b.scale;
-  ctx.drawImage(b.canvas, sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k);
+  return b;
 }
