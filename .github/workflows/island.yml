@@ -1407,6 +1407,14 @@ jobs:
             --outfile=node_modules/.cache/guide.mjs --log-level=error
           node node_modules/.cache/guide.mjs
 
+      - name: One purse, two payments at once
+        run: |
+          # Two payments out of one purse at the same moment: the first pays,
+          # the second waits for it, counts what is left and is refused.
+          npx esbuild supabase/test/purse.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/purse.mjs --log-level=error
+          node node_modules/.cache/purse.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where
