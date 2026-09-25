@@ -1,6 +1,10 @@
 # Working on this repo
 
 - Always commit and push directly to `main`. Do not create feature branches or pull requests unless asked.
+- Always deploy to live. After every push to `main`, dispatch the Island workflow (`island.yml`) on
+  `main` with `live: true`, `found: false` and `reconcile: off`, without being asked. It pushes the
+  migrations to the Supabase project and plays on the real island. Never start one while another
+  live run is still going.
 - GitHub Pages serves `main` from the repository root. `index.html` and `assets/` at the root are
   generated: run `npm run build` (typecheck + bundle + copy to root) before committing and commit
   the regenerated files together with the source change. Edit `src/index.html`, never the root one.
