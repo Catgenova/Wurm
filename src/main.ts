@@ -62,6 +62,7 @@ import { smeltSeconds } from './game/metal';
 import { needsIron } from './world/ore';
 import { tileUses } from './ui/tileinfo';
 import { startIsland } from './net/play';
+import { mountSavingBanner } from './ui/saving';
 import type { Island } from './net/island';
 import { LOOK_TABLES, cleanLook, randomLook } from './game/look';
 import { WORLD_PACE } from './game/pace';
@@ -196,6 +197,8 @@ for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
 }
 
 const ui = new UI(game, renderer, uiRoot, canvasEl, { turn: turnView, keys, island });
+// Only an island can refuse to save; a game in this browser always can.
+if (island) mountSavingBanner(uiRoot);
 
 /*
  * The game asks in its own words, on its own canvas.

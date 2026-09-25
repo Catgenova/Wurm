@@ -24,9 +24,61 @@ export function supabase(): SupabaseClient {
       // Twice a second is plenty for other people's bodies and far more than
       // the ground needs; the default of ten is a lot of wake-ups for nothing.
       realtime: { params: { eventsPerSecond: 5 } },
+      global: { fetch: watchedFetch },
     });
   }
   return client;
+}
+
+/**
+ * Whether the island is taking changes at all.
+ *
+ * On 09-25 its database filled and went read-only, and every door that
+ * writes answered "cannot execute UPDATE in a read-only transaction": one
+ * line in the log for every step and every click, in the database's words,
+ * and nothing to say that it was the island and not the player. Postgres says
+ * that with SQLSTATE 25006 whichever door it is, so it is watched for here,
+ * once, on the way back from every call, rather than at each of the fifty
+ * places that make one.
+ *
+ * It clears when a door that was refused for it answers again, which is the
+ * only sign that writing works: a door that only reads is let through
+ * read-only and would say nothing either way.
+ */
+export const READ_ONLY = '25006';
+
+/** The line under the banner, and in the log when an action is refused for it. */
+export const CANNOT_SAVE = "The island can't save right now. Until it can, nothing you do is kept.";
+
+const refused = new Set<string>();
+const savingWatchers = new Set<(saving: boolean) => void>();
+
+/** Be told when the island stops taking changes and when it starts again. */
+export function onSaving(watch: (saving: boolean) => void): () => void {
+  savingWatchers.add(watch);
+  return () => savingWatchers.delete(watch);
+}
+
+/** Exported for supabase/test/saving.ts, which asks it with a stand-in `fetch`. */
+export async function watchedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init);
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const door = /\/rest\/v1\/rpc\/([\w]+)/.exec(url)?.[1];
+  if (!door) return res;
+  if (res.ok) {
+    if (refused.has(door)) {
+      refused.clear();
+      for (const watch of savingWatchers) watch(true);
+    }
+  } else {
+    const body = (await res.clone().json().catch(() => null)) as { code?: string } | null;
+    if (body?.code === READ_ONLY) {
+      const was = refused.size;
+      refused.add(door);
+      if (was === 0) for (const watch of savingWatchers) watch(false);
+    }
+  }
+  return res;
 }
 
 /**

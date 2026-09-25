@@ -1265,6 +1265,15 @@ jobs:
           npx esbuild supabase/test/rot.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/rot.mjs --log-level=error
           node node_modules/.cache/rot.mjs
+      - name: The island saying that it cannot save
+        run: |
+          # On 09-25 the database filled and went read-only, and a refused
+          # action did nothing on the screen at all. The banner comes on at the
+          # first door refused with 25006, stays through doors that only read,
+          # and goes when a refused door answers again.
+          npx esbuild supabase/test/saving.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/saving.mjs --log-level=error
+          node node_modules/.cache/saving.mjs
 
   migrate:
     name: Push the migrations to the project
@@ -1327,10 +1336,15 @@ jobs:
             || { echo "::warning::Could not link to measure the database; pushing without."; exit 0; }
           # `transaction_read_only` is the mode of the transaction asking, so
           # it is what an ALTER from the same place would run into.
+          #
+          # And whether it is past 400 MB: a Free Plan project goes read-only
+          # at 500, and 400 is early enough to delete something first.
           MODE=$(cat <<'EOSQL'
           select case when current_setting('transaction_read_only') = 'on' then 'READ-ONLY' else 'writable' end as mode,
                  current_user as as_role,
-                 pg_size_pretty(pg_database_size(current_database())) as database;
+                 pg_size_pretty(pg_database_size(current_database())) as database,
+                 case when pg_database_size(current_database()) > 400 * 1024 * 1024
+                      then 'PAST-400-MB' else 'under 400 MB' end as room;
           EOSQL
           )
           BIGGEST=$(cat <<'EOSQL'
@@ -1354,6 +1368,9 @@ jobs:
             || { echo "$now"; echo "::warning::Could not measure the database; pushing without."; exit 0; }
           echo "$now"
           ask "$BIGGEST" || echo "::warning::Could not list the biggest things in the database."
+          if printf '%s' "$now" | grep -q 'PAST-400-MB'; then
+            echo "::warning::The database is past 400 MB. A Free Plan project goes read-only at 500 MB, and then nothing on the island can be saved. The biggest tables are listed above."
+          fi
           printf '%s' "$now" | grep -q 'READ-ONLY' || exit 0
 
           echo "::warning::The database is read-only. Emptying pg_cron's run log to bring it back under its limit."
