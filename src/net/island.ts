@@ -61,6 +61,35 @@ const MOVE_EVERY = 1.0;
  */
 const rowsIn = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
 
+/** A line of the event log as the island sends it, by either way of listening. */
+interface HeardLine {
+  n?: number;
+  text: string;
+  kind: string;
+  uid: string | null;
+  said_by?: string | null;
+  at?: unknown;
+}
+
+/** What a Broadcast message from the island carries: rows, lines or a pack, or how far the island has got. */
+interface HeardBody {
+  rows?: unknown;
+  lines?: unknown;
+  set?: unknown;
+  gone?: unknown;
+  upto?: unknown;
+  refresh?: unknown;
+}
+
+/** The body of a Broadcast message, as `supabase-js` hands it over. */
+const heardBody = (m: unknown): HeardBody => {
+  const p = (m as { payload?: unknown } | null)?.payload;
+  return p && typeof p === 'object' ? (p as HeardBody) : {};
+};
+
+/** Seconds between history reads a message may ask for, when it says only that there is more land than it carried. */
+const LAND_ASKED_EVERY = 2;
+
 /** The longest line a letter or a parcel's note takes: the island's `letter_length` check holds it to this. */
 export const LETTER_MAX = 400;
 
@@ -777,6 +806,17 @@ export class Island {
   private bodies: RealtimeChannel | null = null;
   /** Numbers the row topics, so no two subscriptions are ever the same name. */
   private static topics = 0;
+  /**
+   * The island sends land, lines and packs as Broadcast messages itself:
+   * `rpc_join` says so. An island that does not say so is listened to the old
+   * way, through Postgres Changes, so a browser that is newer than the island
+   * it lands on is not deaf on it.
+   */
+  private hears = false;
+  /** The private topics we are listening to while `hears`, by name. */
+  private readonly heard = new Map<string, RealtimeChannel>();
+  /** When a message last said there was more land than it carried, so the read it asks for goes once and not per message. */
+  private landAsked = 0;
   private lastBody = 0;
   private lastReconcile = 0;
   /** When the fog of war last went over, so it goes rarely and not per step. */
@@ -869,6 +909,7 @@ export class Island {
     this.pinClock((got as { time?: unknown }).time);
     this.me = got.you;
     this.away = (got as { away?: Away | null }).away ?? null;
+    this.hears = (got as { hears?: boolean }).hears === true;
 
     const size = got.world.size;
     const seed = got.world.seed;
@@ -1498,6 +1539,12 @@ export class Island {
   /**
    * Listen to the island, and only to the part of it we are standing in.
    *
+   * An island that sends its own messages (`hears`, from the join) is
+   * listened to by `listen`, below, and none of the rest of this applies to
+   * it but the bodies: Postgres Changes had Realtime reading the change log
+   * over and over whether anything had changed or not, and sent a message a
+   * row. This is the way for an island that does not say it sends.
+   *
    * Still the tables rather than messages invented for the purpose — there is
    * no wire format here to keep in step with anything — but three of the four
    * streams changed shape, and each for its own reason.
@@ -1521,6 +1568,7 @@ export class Island {
    * seconds, which is what notices somebody arriving or leaving.
    */
   private async watch(worldId: string): Promise<void> {
+    if (this.hears) return this.listen(worldId);
     const sb = supabase();
     /*
      * A new name every time, and the old channel thrown away rather than
@@ -1559,56 +1607,11 @@ export class Island {
     }
     this.channel = listening
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event', filter: on },
-        (m) => {
-          const e = m.new as { n?: number; text: string; kind: string; uid: string | null; said_by?: string | null };
-          if (e.uid && e.uid !== this.uid) return;
-          /*
-           * The cursor, and this path obeys it too.
-           *
-           * It used to only *advance* `said` here and say the line regardless,
-           * so the beat's catch-up would not repeat what came down the
-           * subscription — but nothing stopped the subscription repeating
-           * itself. It can and does: the channel is rebuilt whenever the body
-           * walks into a new block, `removeChannel` is asynchronous, and for a
-           * moment two of them are listening to the same `event` filter. Every
-           * line in that window arrived twice, which is what was reported —
-           * "You eat the onion." and "It is gone." printed twice apiece, from
-           * an island that measurably said each of them once.
-           *
-           * So the rule is the same rule on both paths: a line at or below the
-           * cursor has been said. One statement of it, and neither can say
-           * what the other already has.
-           */
-          if (typeof e.n === 'number') {
-            if (e.n <= this.said) return;
-            this.said = e.n;
-          }
-          this.hooks.say(e.text, e.kind, whenSaid((e as { at?: unknown }).at));
-          // And over the speaker's head, which only a line arriving live gets.
-          if (e.kind === 'chat' && e.said_by) this.hooks.spoke?.(e.said_by, e.text);
-          /*
-           * A line of trouble means the island has done something to the body.
-           *
-           * Being bitten, burned or killed writes one of these and changes
-           * `stats` and `wounds` with it — and nothing on this side would ask
-           * about that until the next heartbeat, which is a minute away. A
-           * walk carries the body now, but standing still while something eats
-           * you is exactly the case a walk does not cover.
-           *
-           * Refusals come down this kind too, and a beat for one of those
-           * costs a settle that was due within the minute anyway. A blow
-           * taken is filed under `fight` now, and wants the same beat.
-           */
-          if (e.kind === 'error' || e.kind === 'fight') this.armBeat(0.5);
-        })
+        (m) => this.hearLine(m.new as HeardLine))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item', filter: `holder_uid=eq.${this.uid}` },
         (m) => {
           if (m.eventType === 'DELETE') this.pack.delete((m.old as ItemRow).id);
-          else {
-            const it = m.new as ItemRow;
-            if (it.holder === 'player' || it.holder === 'bag') this.pack.set(it.id, it);
-            else this.pack.delete(it.id);
-          }
+          else this.packRow(m.new as ItemRow);
           this.hooks.pack([...this.pack.values()]);
         });
     // Held from here rather than read back off `this.channel` below: there is
@@ -1616,58 +1619,8 @@ export class Island {
     // whatever the island has been asked to do since.
     const armed = this.channel;
 
-    /*
-     * Bodies, on the one name everybody on the island agrees on.
-     *
-     * This is the opposite case to the rows above and for the same reason:
-     * Broadcast only reaches people listening to the same topic, so it *has*
-     * to be shared, and the block we are standing in has nothing to do with
-     * it. Taken once at the join and held until we leave.
-     */
-    if (!this.bodies) {
-      this.bodiesTopic = `island:${worldId}`;
-      this.bodies = hold(this.bodiesTopic, () =>
-        sb.channel(this.bodiesTopic, { config: { broadcast: { self: false } } }));
-      this.bodies.on('broadcast', { event: 'body' }, (m) => {
-        // A channel shared with another `Island` in the same page goes on
-        // carrying bodies after we have left it; they are not ours any more.
-        if (!this.bodies) return;
-        const b = (m as { payload?: PlayerRow }).payload;
-        if (!b?.uid || b.uid === this.uid) return;
-        this.people.set(b.uid, { ...(this.people.get(b.uid) ?? b), ...b });
-        this.hooks.people([...this.people.values()]);
-      });
-      /*
-       * And a wave, which rides the same channel as its own event.
-       *
-       * Not folded into `body`: that one only goes out when the position
-       * changed, so standing still and waving would have sent nothing at all.
-       * Like `body` it is a drawing message and the island is not told — there
-       * is no rule anywhere that reads whether somebody waved, so there is
-       * nothing for it to keep.
-       */
-      this.bodies.on('broadcast', { event: 'emote' }, (m) => {
-        if (!this.bodies) return;
-        const e = (m as { payload?: { uid?: string; name?: string; emote?: string } }).payload;
-        if (!e?.uid || !e.emote || e.uid === this.uid) return;
-        this.hooks.emote?.(e.uid, e.name ?? '', e.emote);
-      });
-      this.bodies.subscribe();
-    }
-
-    // Realtime authorises against the signed-in user's token; make sure it has
-    // the current one rather than whatever it started life with.
-    try {
-      const { data } = await sb.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        this.token = token;
-        (sb.realtime as unknown as { setAuth: (t: string) => void }).setAuth(token);
-      }
-    } catch {
-      // An older or newer client may not want telling; the status below says
-      // whether it mattered.
-    }
+    this.holdBodies(worldId);
+    await this.freshToken();
 
     /*
      * Still the current go? The token above is awaited, and a `leave` or a
@@ -1708,6 +1661,227 @@ export class Island {
     }
     await this.refreshPeople();
     await this.refreshPack();
+  }
+
+  /*
+   * Bodies, on the one name everybody on the island agrees on.
+   *
+   * This is the opposite case to the rows above and for the same reason:
+   * Broadcast only reaches people listening to the same topic, so it *has*
+   * to be shared, and the block we are standing in has nothing to do with
+   * it. Taken once at the join and held until we leave.
+   */
+  private holdBodies(worldId: string): void {
+    const sb = supabase();
+    if (!this.bodies) {
+      this.bodiesTopic = `island:${worldId}`;
+      this.bodies = hold(this.bodiesTopic, () =>
+        sb.channel(this.bodiesTopic, { config: { broadcast: { self: false } } }));
+      this.bodies.on('broadcast', { event: 'body' }, (m) => {
+        // A channel shared with another `Island` in the same page goes on
+        // carrying bodies after we have left it; they are not ours any more.
+        if (!this.bodies) return;
+        const b = (m as { payload?: PlayerRow }).payload;
+        if (!b?.uid || b.uid === this.uid) return;
+        this.people.set(b.uid, { ...(this.people.get(b.uid) ?? b), ...b });
+        this.hooks.people([...this.people.values()]);
+      });
+      /*
+       * And a wave, which rides the same channel as its own event.
+       *
+       * Not folded into `body`: that one only goes out when the position
+       * changed, so standing still and waving would have sent nothing at all.
+       * Like `body` it is a drawing message and the island is not told — there
+       * is no rule anywhere that reads whether somebody waved, so there is
+       * nothing for it to keep.
+       */
+      this.bodies.on('broadcast', { event: 'emote' }, (m) => {
+        if (!this.bodies) return;
+        const e = (m as { payload?: { uid?: string; name?: string; emote?: string } }).payload;
+        if (!e?.uid || !e.emote || e.uid === this.uid) return;
+        this.hooks.emote?.(e.uid, e.name ?? '', e.emote);
+      });
+      this.bodies.subscribe();
+    }
+  }
+
+  private async freshToken(): Promise<void> {
+    const sb = supabase();
+    // Realtime authorises against the signed-in user's token; make sure it has
+    // the current one rather than whatever it started life with.
+    try {
+      const { data } = await sb.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) {
+        this.token = token;
+        // Awaited: a private channel carries the token in its join, and one
+        // joined before the token is set is joined as nobody.
+        await (sb.realtime as unknown as { setAuth: (t: string) => Promise<void> | void }).setAuth(token);
+      }
+    } catch {
+      // An older or newer client may not want telling; the status below says
+      // whether it mattered.
+    }
+  }
+
+  /**
+   * Listen to an island that sends: land, lines and the pack as Broadcast
+   * messages the island writes itself, once a statement, on private topics
+   * only the people they are meant for may join.
+   *
+   * `own:<island>:<you>` carries your lines and your pack, `said:<island>` the
+   * island's lines, and `land:<island>:<block>` what changed in each of the
+   * nine blocks round you. Walking into a new block leaves the three behind
+   * and joins the three ahead; the rest are kept as they are. The island
+   * sends a block only while somebody is in it or beside it, and nothing to
+   * anybody who is away, so there is nothing here to filter.
+   */
+  private async listen(worldId: string): Promise<void> {
+    const sb = supabase();
+    const gen = (this.watchGen += 1);
+    const here = this.me ?? { x: 0, y: 0 };
+    this.block = `${Math.floor(here.x / REGION)},${Math.floor(here.y / REGION)}`;
+    const own = `own:${worldId}:${this.uid}`;
+    const wanted = new Map<string, (ch: RealtimeChannel) => RealtimeChannel>([
+      [own, (ch) => ch
+        .on('broadcast', { event: 'said' }, (m) => this.heardLines(heardBody(m)))
+        .on('broadcast', { event: 'pack' }, (m) => this.heardPack(heardBody(m)))],
+      [`said:${worldId}`, (ch) => ch.on('broadcast', { event: 'said' }, (m) => this.heardLines(heardBody(m)))],
+    ]);
+    for (const b of this.blocksAround(here.x, here.y)) {
+      wanted.set(`land:${worldId}:${b}`, (ch) => ch.on('broadcast', { event: 'land' }, (m) => this.heardLand(heardBody(m))));
+    }
+    /*
+     * What is behind us goes first, and is waited for: `supabase-js` hands
+     * back the channel it already has for a name, and a topic joined again
+     * before it has finished leaving is never joined at all.
+     */
+    const going = [...this.heard].filter(([topic]) => !wanted.has(topic));
+    for (const [topic] of going) this.heard.delete(topic);
+    await Promise.all(going.map(([, ch]) => sb.removeChannel(ch)));
+    for (const [topic, bind] of wanted) {
+      if (!this.heard.has(topic)) this.heard.set(topic, bind(sb.channel(topic, { config: { private: true } })));
+    }
+    this.holdBodies(worldId);
+    await this.freshToken();
+    // A leave, or a walk into the next block, during the awaits: that go has
+    // the channels now, and joins whatever this one did not get to.
+    if (gen !== this.watchGen) return;
+    /*
+     * Join whatever is not joined yet -- new, or left behind by a go that was
+     * overtaken -- and wait for our own topic to answer, which is the one that
+     * says whether the island is talking to us at all. Closed ones only: one
+     * that errored rejoins by itself, and `subscribe` on it does nothing and
+     * never answers.
+     */
+    const joining = [...this.heard].filter(([, ch]) => ch.state === 'closed');
+    const answers = joining.map(([topic, ch]) => new Promise<[string, string]>((resolve) => {
+      let answered = false;
+      const settle = (why: string): void => {
+        if (!answered) {
+          answered = true;
+          resolve([topic, why]);
+        }
+      };
+      ch.subscribe((status: string, err?: Error) => {
+        if (status === 'SUBSCRIBED') settle('listening');
+        else settle(`${status}${err ? `: ${err.message}` : ''}`);
+      });
+      setTimeout(() => settle('never answered'), 20000);
+    }));
+    const said = await Promise.all(answers);
+    if (gen !== this.watchGen) return;
+    const ours = said.find(([topic]) => topic === own);
+    if (ours) this.channelState = ours[1];
+    const deaf = said.filter(([, why]) => why !== 'listening');
+    if (deaf.length) {
+      this.hooks.say(`The island is not telling this machine what it does (${deaf.map(([t, why]) => `${t.split(':')[0]}: ${why}`).join('; ')}).`, 'error');
+    }
+    if (ours) {
+      await this.refreshPeople();
+      await this.refreshPack();
+    }
+  }
+
+  /** Lines the island sent: the lines themselves, or only how far it has got, for the beat to read. */
+  private heardLines(body: HeardBody): void {
+    if (Array.isArray(body.lines)) {
+      for (const e of body.lines as HeardLine[]) this.hearLine(e);
+    } else if (typeof body.upto === 'number' && body.upto > this.said) {
+      this.armBeat(0.5);
+    }
+  }
+
+  /** The pack as the island sent it: what is in it now and what has left it, or that there is too much to send. */
+  private heardPack(body: HeardBody): void {
+    if (body.refresh) {
+      void this.refreshPack();
+      return;
+    }
+    for (const it of (Array.isArray(body.set) ? body.set : []) as ItemRow[]) this.packRow(it);
+    for (const id of (Array.isArray(body.gone) ? body.gone : []) as number[]) this.pack.delete(id);
+    this.hooks.pack([...this.pack.values()]);
+  }
+
+  /** Land as the island sent it: the changes themselves, or how far it has got, for the history read to catch up to. */
+  private heardLand(body: HeardBody): void {
+    if (Array.isArray(body.rows)) {
+      for (const c of body.rows as Array<TileChange & { n: number }>) this.applyChange(c);
+    } else if (typeof body.upto === 'number' && body.upto > this.seenChange) {
+      const now = Date.now();
+      if (now - this.landAsked < LAND_ASKED_EVERY * 1000) return;
+      this.landAsked = now;
+      void this.catchUpQuietly();
+    }
+  }
+
+  /** A row of ours as it now is: in the pack or a bag, or gone from both. */
+  private packRow(it: ItemRow): void {
+    if (it.holder === 'player' || it.holder === 'bag') this.pack.set(it.id, it);
+    else this.pack.delete(it.id);
+  }
+
+  /** A line the island said, from either way of listening. */
+  private hearLine(e: HeardLine): void {
+    if (e.uid && e.uid !== this.uid) return;
+    /*
+     * The cursor, and this path obeys it too.
+     *
+     * It used to only *advance* `said` here and say the line regardless,
+     * so the beat's catch-up would not repeat what came down the
+     * subscription — but nothing stopped the subscription repeating
+     * itself. It can and does: the channel is rebuilt whenever the body
+     * walks into a new block, `removeChannel` is asynchronous, and for a
+     * moment two of them are listening to the same `event` filter. Every
+     * line in that window arrived twice, which is what was reported —
+     * "You eat the onion." and "It is gone." printed twice apiece, from
+     * an island that measurably said each of them once.
+     *
+     * So the rule is the same rule on both paths: a line at or below the
+     * cursor has been said. One statement of it, and neither can say
+     * what the other already has.
+     */
+    if (typeof e.n === 'number') {
+      if (e.n <= this.said) return;
+      this.said = e.n;
+    }
+    this.hooks.say(e.text, e.kind, whenSaid(e.at));
+    // And over the speaker's head, which only a line arriving live gets.
+    if (e.kind === 'chat' && e.said_by) this.hooks.spoke?.(e.said_by, e.text);
+    /*
+     * A line of trouble means the island has done something to the body.
+     *
+     * Being bitten, burned or killed writes one of these and changes
+     * `stats` and `wounds` with it — and nothing on this side would ask
+     * about that until the next heartbeat, which is a minute away. A
+     * walk carries the body now, but standing still while something eats
+     * you is exactly the case a walk does not cover.
+     *
+     * Refusals come down this kind too, and a beat for one of those
+     * costs a settle that was due within the minute anyway. A blow
+     * taken is filed under `fight` now, and wants the same beat.
+     */
+    if (e.kind === 'error' || e.kind === 'fight') this.armBeat(0.5);
   }
 
   /**
@@ -2536,6 +2710,9 @@ export class Island {
     const sb = supabase();
     if (this.channel) await sb.removeChannel(this.channel);
     this.channel = null;
+    const heard = [...this.heard.values()];
+    this.heard.clear();
+    await Promise.all(heard.map((ch) => sb.removeChannel(ch)));
     this.bodies = null;
     await drop(this.bodiesTopic);
     this.bodiesTopic = '';

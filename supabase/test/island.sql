@@ -8256,9 +8256,11 @@ select '896. the newest thing said on this island: "' || e.text || '", said by '
      || ', heard by ' || coalesce(e.uid::text, 'everyone')
      || ' — the name is in the line for the log, and `said_by` is who to draw it over'
   from event e where e.world_id = :'world2' and e.kind = 'chat' order by e.n desc limit 1;
-select '897. and what Realtime hands a browser off that row: '
-     || (select array_to_string(attnames, ', ') from pg_publication_tables
-          where pubname = 'supabase_realtime' and tablename = 'event')
+select '897. and what the island sends a browser with that line: '
+     || coalesce((select string_agg(k, ', ' order by k)
+                    from jsonb_object_keys((select m.payload->'lines'->0 from realtime.messages m
+                                             where m.topic = 'said:' || :'world2' and m.event = 'said'
+                                             order by m.id desc limit 1)) k), 'NOTHING SENT')
      || ' — `said_by` among them, or the bubbles stop with nothing to say why';
 
 /*

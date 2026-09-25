@@ -158,6 +158,17 @@ export const SWEEP_ROWS = 50000;
  */
 export const REGION = 256;
 
+/**
+ * The most rows one Broadcast message from the island carries: tile changes,
+ * lines, or things in a pack. Past it the message says only how far the
+ * island has got, and the browser reads the rest the way it reads a join --
+ * which for the woods turning over at dawn, a few thousand tiles a block, is
+ * one read rather than a message a tile. A changed tile is about a hundred
+ * bytes of JSON and a thing in a pack about five hundred, so a message stays
+ * under fifty kilobytes.
+ */
+export const SENT_INLINE = 100;
+
 /** How often a body tells the island where it is, over Broadcast. */
 export const BODY_EVERY = 0.2;
 

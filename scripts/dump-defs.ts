@@ -88,7 +88,7 @@ import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
-import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, STIR_COARSE_EVERY, STIR_SLACK, STORED_SETTLE, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
+import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, SENT_INLINE, STIR_COARSE_EVERY, STIR_SLACK, STORED_SETTLE, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
@@ -1184,6 +1184,8 @@ for (const [fn, v] of [
   ['stir_slack', STIR_SLACK], ['stir_coarse_every', STIR_COARSE_EVERY], ['stored_settle', STORED_SETTLE],
   ['walk_samples', WALK_SAMPLES], ['sweep_every', SWEEP_EVERY], ['sweep_rows', SWEEP_ROWS],
   ['region_size', REGION],
+  /* And the most rows one Broadcast message from the island carries. */
+  ['sent_inline', SENT_INLINE],
   /* And the side of the biggest square of land one ask may carry. */
   ['land_ask', LAND_ASK],
   /* And the square the land is read in, which is the browser's streaming square. */

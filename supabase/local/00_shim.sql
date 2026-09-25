@@ -59,3 +59,39 @@ grant select on auth.users to authenticated;
  */
 alter default privileges in schema public grant all on tables to anon, authenticated;
 alter default privileges in schema public grant all on sequences to anon, authenticated;
+
+/**
+ * Realtime's corner of the database, enough of it for Broadcast from the
+ * database to be written and read back.
+ *
+ * On a project `realtime.send` puts a row in `realtime.messages` for Realtime
+ * to carry to whoever has joined the topic, and `realtime.topic()` is the
+ * topic a join is being authorised for, which Realtime sets on the connection
+ * it checks the policy with. Here the row simply stays, so a test can read
+ * what would have gone out, and a test sets `realtime.topic` itself to ask
+ * the policy who may join. Same names, same argument names, since the
+ * migration that uses them checks both.
+ */
+create schema if not exists realtime;
+create table if not exists realtime.messages (
+  id bigserial primary key,
+  topic text not null,
+  extension text not null,
+  payload jsonb,
+  event text,
+  private boolean default false,
+  inserted_at timestamptz not null default now()
+);
+alter table realtime.messages enable row level security;
+create or replace function realtime.topic() returns text language sql stable as $$
+  select nullif(current_setting('realtime.topic', true), '')::text
+$$;
+create or replace function realtime.send(payload jsonb, event text, topic text, private boolean default true)
+returns void language plpgsql as $$
+begin
+  insert into realtime.messages (topic, extension, payload, event, private)
+  values (topic, 'broadcast', payload, event, private);
+end $$;
+grant usage on schema realtime to anon, authenticated;
+grant select on realtime.messages to anon, authenticated;
+grant execute on function realtime.topic() to anon, authenticated;
