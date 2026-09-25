@@ -1127,6 +1127,21 @@ jobs:
             --outfile=node_modules/.cache/leave.mjs --log-level=error
           node node_modules/.cache/leave.mjs
 
+      - name: Butchering is learnt by butchering, and decides what comes off
+        run: |
+          # "Add the Butchering skill that gains experience from the matching
+          # option. Butchering skill determines ql of Butchering output". On
+          # an island a go at Butcher never raised the skill -- the butcher
+          # branch had no `skill_raise` -- and what came off was scaled down
+          # again by the corpse's own quality. With a knife of QL 100, whose
+          # roll always lands, this asks both sides that a go raises the skill,
+          # that everything comes off at the skill whatever the carcass's QL,
+          # that the log line says the QL, and that the menu's Butcher line
+          # gives the range for the knife in hand, from the same rule.
+          npx esbuild supabase/test/butchery.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/butchery.mjs --log-level=error
+          node node_modules/.cache/butchery.mjs
+
       - name: A new look, worn on an island
         run: |
           # "allow players to change their appearance back through the

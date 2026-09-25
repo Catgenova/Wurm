@@ -1,6 +1,7 @@
 import { MINE_COLLAPSE } from '../../game/actions';
 import { RARITIES, RARITY_ROOM } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
+import { QL_LOW, QL_SPAN } from '../../game/game';
 import type { UIWindow } from '../windows';
 
 function helpText(): string {
@@ -488,6 +489,11 @@ function helpText(): string {
     <b>corpse</b> on the ground. Right-click the tile and choose <b>Butcher</b> for meat, fur, <b>hide</b>,
     bone and the occasional gland. The <b>Butchering</b> skill and a <b>butchering knife</b> both decide
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
+    Every carcass you butcher raises the Butchering skill, and the skill sets the <b>QL</b> of everything
+    that comes off it. With a knife of QL <i>n</i> it comes off at your Butchering <i>n</i>% of the time,
+    and otherwise at the knife's QL times ${QL_LOW.toFixed(1)} to ${(QL_LOW + QL_SPAN).toFixed(1)}, never above
+    your Butchering; with bare hands it comes off at your Butchering times ${QL_LOW.toFixed(1)} to
+    ${(QL_LOW + QL_SPAN).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
     A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the

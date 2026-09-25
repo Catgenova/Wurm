@@ -1,4 +1,4 @@
-import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
+import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -307,7 +307,7 @@ import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
     <p>Two settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
     <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
     <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
-    ${t.slice(1,-1).map(e=>e.name).join(`, `)} or ${t[t.length-1].name} stack by itself; one you point it at is still
+    ${n.slice(1,-1).map(e=>e.name).join(`, `)} or ${n[n.length-1].name} stack by itself; one you point it at is still
     used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
     On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
@@ -482,6 +482,11 @@ import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
     <b>corpse</b> on the ground. Right-click the tile and choose <b>Butcher</b> for meat, fur, <b>hide</b>,
     bone and the occasional gland. The <b>Butchering</b> skill and a <b>butchering knife</b> both decide
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
+    Every carcass you butcher raises the Butchering skill, and the skill sets the <b>QL</b> of everything
+    that comes off it. With a knife of QL <i>n</i> it comes off at your Butchering <i>n</i>% of the time,
+    and otherwise at the knife's QL times ${e.toFixed(1)} to ${(e+i).toFixed(1)}, never above
+    your Butchering; with bare hands it comes off at your Butchering times ${e.toFixed(1)} to
+    ${(e+i).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
     A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
@@ -1008,7 +1013,7 @@ import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
     skill</b> by 5, 12 or 25.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${(e*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(t=>`<b>${(e*t*100).toFixed(0)}%</b>`).join(`, `)}
+    ${(r*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(r*e*100).toFixed(0)}%</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
     holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
     kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
@@ -1495,7 +1500,7 @@ import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about <b>one swing in
-    ${Math.round(1/n)}</b> a slab comes away of its own accord and the corner drops a
+    ${Math.round(1/t)}</b> a slab comes away of its own accord and the corner drops a
     step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
     than working it, and it gives way about one attempt in four. What breaks away is yours either
@@ -1525,4 +1530,4 @@ import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
     goes for the first point of a skill, a hundred and forty for the ninetieth, and something like
     <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
     a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
-  `}function i(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=r();let n=[],i=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){i=document.createElement(`section`),i.className=`help-sec`,i.id=`help-${n.length}`,i.append(e),n.push({title:e.textContent??``,el:i});continue}i?i.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let a=document.createElement(`input`);a.type=`search`,a.className=`panel-search help-search`,a.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=n.map(({title:e,el:t},r)=>{let i=document.createElement(`button`);return i.type=`button`,i.className=`help-link`,i.textContent=e,i.addEventListener(`click`,()=>{a.value&&(a.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),i.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,i});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(r+=1)}c.hidden=!t,c.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};a.addEventListener(`input`,()=>u(a.value)),a.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(a.value=``,u(``))}),s.append(...n.map(e=>e.el)),e.body.replaceChildren(a,o,c,s)}export{i as buildHelp};
+  `}function o(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=a();let n=[],r=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){r=document.createElement(`section`),r.className=`help-sec`,r.id=`help-${n.length}`,r.append(e),n.push({title:e.textContent??``,el:r});continue}r?r.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let i=document.createElement(`input`);i.type=`search`,i.className=`panel-search help-search`,i.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=n.map(({title:e,el:t},r)=>{let a=document.createElement(`button`);return a.type=`button`,a.className=`help-link`,a.textContent=e,a.addEventListener(`click`,()=>{i.value&&(i.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),a.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,a});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(r+=1)}c.hidden=!t,c.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};i.addEventListener(`input`,()=>u(i.value)),i.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(i.value=``,u(``))}),s.append(...n.map(e=>e.el)),e.body.replaceChildren(i,o,c,s)}export{o as buildHelp};

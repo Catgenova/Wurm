@@ -1,12 +1,13 @@
 import type { ActionDef, Target } from './actions';
 import { SPECIES, type ButcherPart } from './creatures';
-import type { Game } from './game';
+import { productQlRange, type Game } from './game';
 import { HOARD_METALS, itemDef, itemName, type Item } from './items';
 
 /**
  * Butchering a corpse. The Butchering skill decides how much of a carcass is
- * worth keeping, and a butchering knife makes the difference between tearing
- * a body apart and taking it cleanly to pieces.
+ * worth keeping and the quality of all of it, a butchering knife makes the
+ * difference between tearing a body apart and taking it cleanly to pieces,
+ * and every go raises the skill (`skill: 'butchering'` on the action).
  */
 export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
   ['meat', 'meat'],
@@ -41,6 +42,15 @@ const GLAND_CHANCE = 0.35;
 export const corpseSpecies = (item: Item): (typeof SPECIES)[string] | undefined =>
   Object.values(SPECIES).find((s) => s.name.toLowerCase() === (item.extra ?? '').toLowerCase());
 
+/**
+ * The quality what comes off a carcass is taken at: the Butchering skill's,
+ * with the knife, as every trade's skill decides what it makes. It used to be
+ * scaled down again by the corpse's own quality, 0.6 to 1.0 times, so a
+ * butcher at 100 took meat off at 66 to 80 and the skill did not decide it.
+ */
+export const butcherQl = (g: Game, knifeQl: number | null): number =>
+  g.productQl('butchering', knifeQl ?? 0);
+
 /** What a corpse would give right now, for the menu and the log. */
 export function butcherPreview(g: Game, item: Item): string {
   const def = corpseSpecies(item);
@@ -48,7 +58,9 @@ export function butcherPreview(g: Game, item: Item): string {
   const knife = g.inventory.tool('butchering_knife');
   const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
   const parts = BUTCHER_PARTS.filter(([p]) => (def.butcher[p] ?? 0) > 0).map(([, id]) => itemDef(id).name.toLowerCase());
-  return `about ${Math.round(share * 100)}% of its ${parts.join(', ')}`;
+  const [lo, hi] = productQlRange(g.skills.get('butchering'), knife ? knife.ql : 0);
+  const ql = Math.round(lo) === Math.round(hi) ? `QL ${Math.round(hi)}` : `QL ${Math.round(lo)}–${Math.round(hi)}`;
+  return `about ${Math.round(share * 100)}% of its ${parts.join(', ')}, at ${ql}`;
 }
 
 export const BUTCHER_ACTIONS: ActionDef[] = [
@@ -73,7 +85,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
       if (!item || !def) return;
       const knife = g.inventory.tool('butchering_knife');
       const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
-      const ql = g.productQl('butchering', knife ? knife.ql : 0) * (0.6 + item.ql / 250);
+      const ql = Math.max(1, Math.min(100, butcherQl(g, knife ? knife.ql : null)));
       const taken: string[] = [];
       // What it was sleeping on, which is not a part of it at all.
       const hoard = def.butcher.hoard ?? 0;
@@ -97,7 +109,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
         if (g.rand() < base * share - count) count += 1;
         if (part === 'gland' && count > 0 && g.rand() > GLAND_CHANCE * (0.5 + share)) count = 0;
         if (count <= 0) continue;
-        const made = g.gather(id, { count, ql: Math.max(1, Math.min(100, ql)) });
+        const made = g.gather(id, { count, ql });
         taken.push(made.count > 1 && count > 1 ? `${count} × ${itemDef(id).name.toLowerCase()}` : itemDef(id).name.toLowerCase());
       }
       removeCorpse(g, t, item);
@@ -105,7 +117,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
         g.logMsg(`You make a mess of the ${def.name.toLowerCase()} carcass and salvage nothing.`, 'event');
         return;
       }
-      g.logMsg(`You butcher the ${def.name.toLowerCase()} and take ${taken.join(', ')}.${knife ? '' : ' Bare hands waste most of a carcass.'}`, 'event');
+      g.logMsg(`You butcher the ${def.name.toLowerCase()} and take ${taken.join(', ')} (QL ${ql.toFixed(1)}).${knife ? '' : ' Bare hands waste most of a carcass.'}`, 'event');
     },
   },
 ];

@@ -139,6 +139,25 @@ export interface Deed {
  */
 export type DeedRole = 'founder' | 'mayor' | 'builder' | 'guest';
 
+/**
+ * How far a go's quality is spread when it is not simply your skill: from
+ * `QL_LOW` times what it is spread from, up by as much as `QL_SPAN` more --
+ * 0.6 to 1.4 times. Bare hands spread your skill (and add one); a tool that
+ * misses spreads its own quality, never above your skill. See `productQl`.
+ */
+export const QL_LOW = 0.6;
+export const QL_SPAN = 0.8;
+
+/**
+ * The lowest and highest quality `productQl` can give at a skill, with a tool
+ * of this quality or none (0), for anything that says so before the go.
+ */
+export function productQlRange(skill: number, toolQl = 0): [number, number] {
+  const s = Math.min(100, Math.max(1, skill));
+  if (toolQl <= 0) return [Math.min(100, s * QL_LOW + 1), Math.min(100, s * (QL_LOW + QL_SPAN) + 1)];
+  return [Math.min(s, Math.max(1, toolQl * QL_LOW)), s];
+}
+
 /** The ranks in order, so "at least a builder" is one comparison. */
 export const DEED_RANKS: DeedRole[] = ['guest', 'builder', 'mayor', 'founder'];
 
@@ -3561,7 +3580,7 @@ export class Game {
    */
   productQl(skill: string, toolQl = 0): number {
     const s = Math.min(100, Math.max(1, this.skills.get(skill)));
-    if (toolQl <= 0) return Math.min(100, Math.max(1, s * (0.6 + this.rand() * 0.8) + 1));
+    if (toolQl <= 0) return Math.min(100, Math.max(1, s * (QL_LOW + this.rand() * QL_SPAN) + 1));
     /*
      * And what a go that did not come off is worth.
      *
@@ -3580,7 +3599,7 @@ export class Game {
      * good one puts nearly every piece at your own ceiling as it always did.
      */
     if (this.rand() * 100 < toolQl) return s;
-    return Math.min(s, Math.max(1, toolQl * (0.6 + this.rand() * 0.8)));
+    return Math.min(s, Math.max(1, toolQl * (QL_LOW + this.rand() * QL_SPAN)));
   }
 
   nearestCornerToPlayer(): { cx: number; cy: number } {
