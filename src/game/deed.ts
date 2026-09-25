@@ -1,5 +1,5 @@
 import type { ActionDef } from './actions';
-import { deedRadiusAt, deedWorkersAt, MAX_DEED_LEVEL, type Game } from './game';
+import { deedRadiusAt, deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed, type DeedRole, type Game } from './game';
 
 /**
  * Settlement upgrades. Each one pushes the border out two tiles and lets one
@@ -69,12 +69,35 @@ export function upgradeProgress(g: Game): Array<{ label: string; met: boolean }>
 /** Why the settlement cannot be upgraded right now, or null. */
 export function upgradeReason(g: Game): string | null {
   if (!g.deed) return 'You have no settlement.';
+  // One you were asked onto is shown to you and is not yours to grow: the
+  // island refuses anybody but the founder, and said "You have no settlement."
+  if (!rankAtLeast(g.deed.role, 'founder')) return `Only whoever founded ${g.deed.name} can upgrade it.`;
   const next = nextDeedLevel(g);
   if (!next) return `${g.deed.name} is as grand as a settlement gets.`;
   const missing = upgradeProgress(g).filter((r) => !r.met);
   if (missing.length) return `Still wanted: ${missing.map((r) => r.label.toLowerCase()).join(', ')}.`;
   return null;
 }
+
+/** What your rank on a settlement lets you do, in one line. */
+export function standingWord(role: DeedRole | undefined): string {
+  switch (role ?? 'founder') {
+    case 'founder': return 'You founded this one: everything here is yours, locks included.';
+    case 'mayor': return 'You are a mayor here: you may build, and ask others in or out.';
+    case 'guest': return 'You are a guest here: you may walk it and shape nothing.';
+    default: return 'You are a citizen here: you may shape the ground and build on it.';
+  }
+}
+
+/**
+ * What leaving a settlement you were asked onto costs, asked before it is
+ * done. It is `rpc_leave_deed`: off the roll at once, the founder is told, and
+ * nothing but a fresh invitation puts you back on it.
+ */
+export const leaveQuestion = (d: Deed, holder?: string | null): string =>
+  `Leave ${d.name}? You come off its roll at once and are a stranger there: you may walk it and `
+  + `shape nothing, and of the stores on it only the ones you made yourself still open for you. `
+  + `${holder ? `${holder} is` : 'Its founder is'} told, and only an invitation puts you back on it.`;
 
 export const DEED_ACTIONS: ActionDef[] = [
   {
@@ -83,7 +106,8 @@ export const DEED_ACTIONS: ActionDef[] = [
     verb: 'marking out the new boundary',
     stamina: 0.05,
     baseTime: 8,
-    applies: (_t, g) => !!g.deed,
+    // The founder's to do, so only a founder is offered it on every tile.
+    applies: (_t, g) => !!g.deed && rankAtLeast(g.deed.role, 'founder'),
     check: (_t, g) => upgradeReason(g),
     perform: (_t, g) => {
       const d = g.deed;

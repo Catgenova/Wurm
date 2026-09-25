@@ -1,4 +1,4 @@
-import{Ct as e,Oi as t,ki as n}from"./creatures.js";function r(){return`
+import{Mi as e,ji as t,wt as n}from"./creatures.js";function r(){return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -78,6 +78,10 @@ import{Ct as e,Oi as t,ki as n}from"./creatures.js";function r(){return`
     or not you hold one. A border you may work inside is drawn at the same weight as your own, so land
     you were asked onto does not look like a stranger's. Leaving a roll frees the place at once, and an
     invitation you had no room for is left standing until you do.</p>
+    <p>To <b>leave</b> a settlement you were asked onto, right-click its land and choose <b>Leave</b> under
+    its name, or use the button in the Settlement window or the People window. You come off its roll at
+    once and are a stranger there: you may walk it and shape nothing, and of the stores on it only the ones
+    you made yourself still open for you. Its founder is told, and only a new invitation puts you back.</p>
     <p>A <b>friend</b> is mutual: you ask, they say yes, and after that each of you can see where the
     other is &mdash; but only while they are actually at the keyboard. A friend who has gone shows as
     away and nothing more. <b>Letters</b> are kept: one reaches an open tab the moment it is written and
@@ -1004,7 +1008,7 @@ import{Ct as e,Oi as t,ki as n}from"./creatures.js";function r(){return`
     skill</b> by 5, 12 or 25.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${(n*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(n*e*100).toFixed(0)}%</b>`).join(`, `)}
+    ${(e*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(t=>`<b>${(e*t*100).toFixed(0)}%</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
     holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
     kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
@@ -1491,7 +1495,7 @@ import{Ct as e,Oi as t,ki as n}from"./creatures.js";function r(){return`
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about <b>one swing in
-    ${Math.round(1/e)}</b> a slab comes away of its own accord and the corner drops a
+    ${Math.round(1/n)}</b> a slab comes away of its own accord and the corner drops a
     step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
     than working it, and it gives way about one attempt in four. What breaks away is yours either

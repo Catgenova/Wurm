@@ -84,6 +84,10 @@ function helpText(): string {
     or not you hold one. A border you may work inside is drawn at the same weight as your own, so land
     you were asked onto does not look like a stranger's. Leaving a roll frees the place at once, and an
     invitation you had no room for is left standing until you do.</p>
+    <p>To <b>leave</b> a settlement you were asked onto, right-click its land and choose <b>Leave</b> under
+    its name, or use the button in the Settlement window or the People window. You come off its roll at
+    once and are a stranger there: you may walk it and shape nothing, and of the stores on it only the ones
+    you made yourself still open for you. Its founder is told, and only a new invitation puts you back.</p>
     <p>A <b>friend</b> is mutual: you ask, they say yes, and after that each of you can see where the
     other is &mdash; but only while they are actually at the keyboard. A friend who has gone shows as
     away and nothing more. <b>Letters</b> are kept: one reaches an open tab the moment it is written and

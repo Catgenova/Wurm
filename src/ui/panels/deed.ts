@@ -1,5 +1,5 @@
-import { DEED_RADIUS_PER_LEVEL, MAX_DEED_LEVEL, deedWorkersAt, type Game } from '../../game/game';
-import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../../game/deed';
+import { DEED_RADIUS_PER_LEVEL, MAX_DEED_LEVEL, deedWorkersAt, rankAtLeast, type Deed, type Game } from '../../game/game';
+import { DEED_ACTION_BY_ID, standingWord, upgradeProgress, upgradeReason } from '../../game/deed';
 import { furnitureDef, furnitureName } from '../../game/furniture';
 import { STANCES, STANCE_NAMES } from '../../game/creatures';
 import { ACTION_BY_ID } from '../../game/actions';
@@ -26,6 +26,8 @@ export class DeedPanel {
     private readonly win: UIWindow,
     private readonly game: Game,
     private readonly walkTo: (x: number, y: number) => void,
+    /** Off the roll of a settlement you were asked onto; absent off an island. */
+    private readonly leave?: (d: Deed) => void,
   ) {
     win.body.classList.add('deed-body');
     this.body = document.createElement('div');
@@ -97,6 +99,29 @@ export class DeedPanel {
     const kept = [...g.creatures.list.values()].filter((c) => c.mode === 'stored' || c.mode === 'deed');
     const side = d.radius * 2 + 1;
     this.body.append(this.head(d.name));
+    /*
+     * One you were asked onto: whose it is, what you are on it, and the way
+     * off it -- which used to be a line at the foot of the People window's
+     * settlement page and nowhere else.
+     */
+    if (!rankAtLeast(d.role, 'founder')) {
+      const holder = g.neighbourDeeds.find((n) => n.x === d.x && n.y === d.y)?.holder;
+      if (holder) this.body.append(this.row('Founded by', holder));
+      const standing = document.createElement('div');
+      standing.className = 'deed-note';
+      standing.textContent = standingWord(d.role);
+      this.body.append(standing);
+      if (this.leave) {
+        const leave = this.leave;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tb-btn deed-leave';
+        btn.textContent = `Leave ${d.name}`;
+        btn.title = 'Takes you off its roll. You are asked first.';
+        btn.addEventListener('click', () => leave(d));
+        this.body.append(btn);
+      }
+    }
     this.body.append(this.row('Level', `${level} of ${MAX_DEED_LEVEL}`));
     this.body.append(this.row('Border', `${d.radius} tiles out · ${side} × ${side}`, `From the token at (${d.x}, ${d.y}).`));
     this.body.append(this.row('Working', `${workers} of ${g.workerCap}`, 'Wildermon set to work the deed; the rest are kept but idle.'));
@@ -187,7 +212,9 @@ export class DeedPanel {
       for (const m of marks.slice(0, 40)) this.body.append(this.place(m.name, m.x, m.y));
     }
 
-    // Standing orders, and the two things done to the deed itself.
+    // Standing orders, and the two things done to the deed itself: the
+    // founder's, which the island refuses anybody else.
+    if (!rankAtLeast(d.role, 'founder')) return;
     this.body.append(this.head('Orders for everything kept here'));
     const stance = g.deedStance();
     const row = document.createElement('div');

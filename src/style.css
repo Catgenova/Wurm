@@ -2029,7 +2029,8 @@ kbd {
   text-overflow: ellipsis;
 }
 
-.deed-upgrade {
+.deed-upgrade,
+.deed-leave {
   width: 100%;
   margin-top: 6px;
 }

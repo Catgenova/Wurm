@@ -243,6 +243,13 @@ export interface MyDeed {
   folk: Folk[];
 }
 
+/**
+ * Of the settlements you belong to, the one whose token stands at (x, y) and
+ * that you did not found: the one a citizen can leave from its own land.
+ */
+export const rollAt = (deeds: MyDeed[], x: number, y: number): MyDeed | undefined =>
+  deeds.find((d) => d.x === x && d.y === y && !d.mine);
+
 /** Everything the social window shows, in one answer. */
 /** What the island will say about a map, which is a picture and a tier. */
 export interface TreasureMap {
@@ -2078,9 +2085,30 @@ export class Island {
    * Off one roll: yourself, or somebody the founder is sending away.
    *
    * Which settlement has to be named now that a person may be on several.
+   * And when it worked, the settlements come with the next ground read rather
+   * than the next reconcile: which ones you belong to rides the slow half, so
+   * the one you had just left went on being called yours for up to twenty
+   * seconds -- its menu, its window and its border drawn as your own.
    */
   async leaveDeed(founder: string, uid?: string): Promise<string | null> {
-    return this.door('rpc_leave_deed', { p_founder: founder, p_uid: uid ?? null });
+    const why = await this.door('rpc_leave_deed', { p_founder: founder, p_uid: uid ?? null });
+    if (!why) this.groundSlow = true;
+    return why;
+  }
+
+  /**
+   * Off the roll of the settlement whose token stands at (x, y).
+   *
+   * The ground names a settlement by where its token is, and `rpc_leave_deed`
+   * by who founded it. The social answer has both, so it is asked which
+   * founder that is: one ask more, for something done once in a long while.
+   */
+  async leaveDeedAt(x: number, y: number): Promise<string | null> {
+    const s = await this.social();
+    if (!s) return 'The island did not answer. Try again in a moment.';
+    const d = rollAt(s.deeds, x, y);
+    if (!d) return 'You are not a citizen of a settlement there.';
+    return this.leaveDeed(d.founder);
   }
 
   /** Ask to be somebody's friend, or say yes when they asked first. */

@@ -1110,6 +1110,23 @@ jobs:
             --outfile=node_modules/.cache/citizen.mjs --log-level=error
           node node_modules/.cache/citizen.mjs
 
+      - name: Leaving a settlement you were asked onto
+        run: |
+          # "add a leave settlement option so citizens can quit oceanport".
+          # The island has had `rpc_leave_deed`; the settlement's own menu gave
+          # a citizen the founder's entries and no way off the roll. The menu
+          # and the Settlement window now offer Leave, found by the token's
+          # place through the social answer. This asks that the social answer
+          # gives the founder and the token and `rollAt` finds it (not your own,
+          # not a tile that is not a token), that a citizen is told the upgrade
+          # is the founder's, that leaving asks first in words that name the
+          # settlement and who is told, and that on the island the builder
+          # leaves by that founder, is off the roll, is told, the founder is
+          # told, and there is nothing left there to leave.
+          npx esbuild supabase/test/leave.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/leave.mjs --log-level=error
+          node node_modules/.cache/leave.mjs
+
       - name: A new look, worn on an island
         run: |
           # "allow players to change their appearance back through the

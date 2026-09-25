@@ -42,10 +42,10 @@ import { meltable } from '../game/melt';
 import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureName, furnitureState, furnitureUnits, isFurniture, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
-import { DEED_ACTION_BY_ID, upgradeProgress, upgradeReason } from '../game/deed';
+import { DEED_ACTION_BY_ID, leaveQuestion, standingWord, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
-import { deedWorkersAt, MAX_DEED_LEVEL, type DeedRole } from '../game/game';
+import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
 import { CRAFT_REACH, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
 import { CratePanel } from './panels/crate';
@@ -114,16 +114,6 @@ const storedIn = (s: CraftStock): string | undefined =>
 /** What a station's menu says when nothing it takes is at hand: on you, and in your stores too unless Settings keeps them out. */
 const noneAtHand = (g: Game, what: string): string =>
   g.settings.fromStores ? `You have ${what} on you or in your stores within ${CRAFT_REACH} tiles.` : `You have ${what} on you.`;
-
-/** What your rank on a settlement lets you do, in one line. */
-function standingWord(role: DeedRole | undefined): string {
-  switch (role ?? 'founder') {
-    case 'founder': return 'You founded this one: everything here is yours, locks included.';
-    case 'mayor': return 'You are a mayor here: you may build, and ask others in or out.';
-    case 'guest': return 'You are a guest here: you may walk it and shape nothing.';
-    default: return 'You are a citizen here: you may shape the ground and build on it.';
-  }
-}
 
 export class UI {
   readonly windows: WindowManager;
@@ -229,7 +219,7 @@ export class UI {
     this.deedPanel = new DeedPanel(deedWin, game, (x, y) => {
       game.moveTo(x, y);
       game.logMsg(`Walking to (${x}, ${y}).`, 'info');
-    });
+    }, this.island ? (d) => void this.leaveSettlement(d) : undefined);
     // Everybody, and what they are to you: who is waiting on an answer, who
     // you know and where they are, and what has been written.
     const socialWin = this.windows.create({ id: 'social', title: 'Social', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
@@ -825,7 +815,11 @@ export class UI {
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     entries.push(...this.settlementEntry(pick));
-    if (this.game.onDeed(pick.x, pick.y)) entries.push(this.deedEntry());
+    // The settlement this tile is on, if it is one of yours: the whole menu
+    // for one you founded, and what you are and the way off it for one you
+    // were asked onto.
+    const settled = this.game.deedOfMineAt(pick.x, pick.y);
+    if (settled) entries.push(rankAtLeast(settled.role, 'founder') ? this.deedEntry() : this.citizenEntry(settled));
     // Laying a campfire on the block of subtiles under the cursor.
     const fireDef = ACTION_BY_ID.get('build_campfire');
     if (fireDef && this.game.inventory.count('shaft') >= FIRE_COST) {
@@ -1689,6 +1683,49 @@ export class UI {
     const up = ACTION_BY_ID.get('pick_up_anvil');
     if (up) entries.push({ label: up.label, onSelect: () => g.requestAction(up, at) });
     return entries;
+  }
+
+  /**
+   * A settlement you were asked onto: what you are on it, and the way off it.
+   *
+   * It used to get the founder's menu -- its wildermon, an upgrade, a new
+   * name, disbanding -- all of which the island refuses to anybody but the
+   * founder, and nothing that would take you off the roll. Leaving was a line
+   * at the foot of the People window's settlement page and nowhere else.
+   * Asked for: "add a leave settlement option so citizens can quit
+   * oceanport".
+   */
+  private citizenEntry(d: Deed): MenuItem {
+    const holder = this.holderOf(d);
+    return {
+      label: `${d.name}${holder ? ` \u00b7 ${holder}\u2019s` : ''}`,
+      children: [
+        { label: standingWord(d.role), disabled: true },
+        {
+          label: `Leave ${d.name}`,
+          note: 'Takes you off its roll',
+          hint: this.island ? undefined : 'Only on an island.',
+          disabled: !this.island,
+          onSelect: () => void this.leaveSettlement(d),
+        },
+      ],
+    };
+  }
+
+  /** Who founded a settlement you belong to, as the island names them. */
+  private holderOf(d: Deed): string | null {
+    return this.game.neighbourDeeds.find((n) => n.x === d.x && n.y === d.y)?.holder ?? null;
+  }
+
+  /** Off the roll of one you were asked onto, once you have said you mean it. */
+  private async leaveSettlement(d: Deed): Promise<void> {
+    const isle = this.island;
+    if (!isle) return;
+    if (!(await this.game.hooks.confirm(leaveQuestion(d, this.holderOf(d))))) return;
+    // Said by the island when it is done, in the log: "You are no longer a
+    // citizen of ...". Only a refusal is said here.
+    const why = await isle.leaveDeedAt(d.x, d.y);
+    if (why) this.game.logMsg(why, 'error');
   }
 
   /** The settlement menu: its wildermon, its upgrade, its name. */
