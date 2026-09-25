@@ -44,6 +44,7 @@ import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
 import { ageDef } from '../game/creatures';
+import { CRATE_DOOR, CREATURE_CRATE } from '../game/creaturecrate';
 import { fireCentre, type PlacedCampfire } from '../game/campfire';
 import { smelterCentre, type PlacedSmelter } from '../game/smelter';
 import { kilnCentre, type PlacedKiln } from '../game/kiln';
@@ -70,6 +71,11 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
  * rather than one per tree per frame.
  */
 const HAZE_STEPS = 6;
+
+/** The top of a creature crate's floor, in pixels at zoom 1: 0.7 units up. */
+const CRATE_FLOOR = 0.7 * HEIGHT_SCALE;
+/** How big a wildermon is drawn in a crate against out in the world, so a grown one stands inside it. */
+const CRATE_SCALE = 0.8;
 import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
@@ -1759,6 +1765,8 @@ export class Renderer {
           // Anything standing on a tile with a deck or a slab over it stands on that.
           const deckHere = this.game.laidOver(x, y);
           for (const cr of this.game.creatures.atTile(x, y)) {
+            // One shut in a crate is drawn in the crate, by the crate.
+            if (cr.mode === 'stored') continue;
             this.take('creature', x, y, cam.worldToScreenX(cr.x, cr.y),
               cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), -4)), null).creature = cr;
           }
@@ -2082,9 +2090,50 @@ export class Renderer {
         }
         const heading = this.pieceHeadings.get(piece.id);
         const view = heading !== undefined ? headingView(heading, cam.rotation) : pieceView(pieceFacing(piece), cam.rotation);
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material));
         const [W, D] = furnitureSpan(piece.kind);
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
+        /*
+         * A creature crate with somebody in it: its far half, the wildermon
+         * standing on its floor facing the door, and its near half and lid
+         * over them, so it is seen inside rather than on top. Its name stands
+         * over the crate the way a companion's stands over its head.
+         */
+        const inside = piece.kind === CREATURE_CRATE && piece.creature !== undefined ? this.game.creatures.get(piece.creature) : undefined;
+        if (inside && inside.mode === 'stored') {
+          const def = SPECIES[inside.species] ?? SPECIES.rabba;
+          const [fx, fy] = CRATE_DOOR[pieceFacing(piece)];
+          const turned = this.facingOnScreen(fx, fy, this.beastFacing.get(inside.id));
+          this.beastFacing.set(inside.id, turned);
+          const tint = dyeOf(piece) ?? undefined;
+          this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
+            drawFurniture(g, px, py, zoom, piece.kind, false, tint, 0, view, piece.material);
+            drawCreature(g, px, py - CRATE_FLOOR * zoom, zoom, {
+              species: def.id,
+              facing: turned,
+              phase: 0,
+              moving: false,
+              colors: def.variants[inside.variant] ?? def.variants[0],
+              health: 1,
+              fleece: inside.fleece,
+              scale: ageDef(inside, this.game.time).scale * CRATE_SCALE,
+            });
+            drawFurniture(g, px, py, zoom, piece.kind, false, tint, 1, view, piece.material);
+          });
+          if (zoom >= 0.6) {
+            ctx.font = `${Math.max(9, 10 * zoom)}px "Segoe UI", system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+            ctx.strokeText(inside.name, ent.sx, ent.sy - (h + 4) * zoom);
+            ctx.fillStyle = '#e3b657';
+            ctx.fillText(inside.name, ent.sx, ent.sy - (h + 4) * zoom);
+            ctx.textAlign = 'left';
+            ctx.lineWidth = 1;
+          }
+        } else {
+          this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material));
+        }
         // A sign is a board made to be read, so what is written on it stands
         // over it in the world rather than waiting in a tooltip.
         if (piece.name && furnitureDef(piece.kind).sign && zoom >= 0.6) {

@@ -59,6 +59,7 @@ export function packed(it: ItemRow, island: Aged): Item {
     bless: it.bless ?? undefined,
     maker: it.maker ?? undefined,
     piece: it.piece ?? undefined,
+    creature: it.creature ?? undefined,
   };
 }
 

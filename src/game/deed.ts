@@ -42,7 +42,7 @@ const anvils = (n: number): DeedRequirement => ({
 
 const workers = (n: number): DeedRequirement => ({
   label: n === 1 ? 'A wildermon working the deed' : `${n} wildermon working the deed`,
-  met: (g) => g.creatures.workers().length >= n,
+  met: (g) => g.creatures.workers(g.time).length >= n,
 });
 
 /**

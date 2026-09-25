@@ -1,9 +1,10 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, GATHER_DO, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
+import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName } from './items';
 import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 import { matOfItem } from './materials';
@@ -65,13 +66,43 @@ function nearPlayer(g: Game, c: Creature): boolean {
   return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= 1.9;
 }
 
-/**
- * The vehicle this one would be hitched to: the nearest with a yoke free,
- * looked for where it stands, or where the player stands when it is being
- * fetched out of the token.
- */
+/** The vehicle this one would be hitched to: the nearest with a yoke free, looked for where it stands. */
 function vehicleFor(g: Game, c: Creature) {
-  return c.mode === 'stored' ? g.vehicleNear(g.player.x, g.player.y, 3) : g.vehicleNear(c.x, c.y, 5);
+  return g.vehicleNear(c.x, c.y, 5);
+}
+
+/**
+ * Why one more wildermon cannot be tamed, or null: the first follows you, and
+ * every one after that goes into an empty creature crate you carry.
+ */
+export function tameRoomRefusal(g: Game): string | null {
+  const with_ = g.creatures.active();
+  if (!with_ || emptyCrate(g)) return null;
+  return `${with_.name} already follows you. Carry an empty creature crate to tame another: it goes into the crate.`;
+}
+
+/**
+ * Where the companion you have goes when a worker is taken off the deed to
+ * follow you instead: onto the deed in its place, when the settlement has
+ * work for one more once the worker leaves; otherwise into an empty creature
+ * crate you carry; otherwise nowhere, and the worker stays where it is.
+ */
+export function companionSwap(g: Game, taking: Creature): { current: Creature; to: 'deed' | 'crate' } | { current: Creature; refused: string } | null {
+  const current = g.creatures.active();
+  if (!current || current === taking) return null;
+  if (current.hitchedTo !== null) return { current, refused: `${current.name} is in the traces. Take it out first.` };
+  if (current.ridden) return { current, refused: `Get down off ${current.name} first.` };
+  // What the deed counts once the one being taken is off it and this one is on it.
+  const freed = taking.mode === 'deed' && taking.post === null && ageDef(taking, g.time).works ? 1 : 0;
+  const adds = ageDef(current, g.time).works ? 1 : 0;
+  if (g.deed && g.creatures.workers(g.time).length - freed + adds <= g.workerCap) return { current, to: 'deed' };
+  if (emptyCrate(g)) return { current, to: 'crate' };
+  return {
+    current,
+    refused: g.deed
+      ? `${current.name} has nowhere to go: ${g.deed.name} has work for ${g.workerCap} wildermon at level ${g.deedLevel}, and you carry no empty creature crate.`
+      : `${current.name} has nowhere to go: you have no settlement to set it to work on, and you carry no empty creature crate.`,
+  };
 }
 
 /** What has to be fitted before anything can be ridden. */
@@ -133,8 +164,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (def.monster) return `A ${def.name.toLowerCase()} is not a wildermon. There is nothing to be done with it but kill it.`;
       if (g.skills.get('taming') < def.tameLevel) return `You need taming ${def.tameLevel} to try.`;
       if (!bait(g, c)) return `${def.name}s take ${dietText(c)}. Bring some.`;
-      if (g.creatures.active() && !g.deed) return 'You already have a companion and no settlement to keep another.';
-      return null;
+      return tameRoomRefusal(g);
     },
     perform: (t, g) => {
       const c = creatureOf(g, t);
@@ -146,6 +176,12 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       }
       const food = bait(g, c);
       if (!food) return;
+      // The crate may have gone out of the pack since the offering was begun.
+      const full = tameRoomRefusal(g);
+      if (full) {
+        g.logMsg(full, 'error');
+        return;
+      }
       const foodName = itemDef(food.id).name.toLowerCase();
       g.inventory.remove(food.uid, 1);
       const skill = g.skills.get('taming');
@@ -158,12 +194,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         c.name = def.name;
         c.enemy = null;
         c.attackedBy = null;
-        if (g.creatures.active()) {
-          c.mode = 'stored';
-          g.logMsg(`The ${def.name.toLowerCase()} takes the ${foodName} from your hand and trusts you. As you already travel with a companion, it is kept at the token of ${g.deed?.name ?? 'your settlement'}.`, 'system');
+        c.stance = 'defensive';
+        const crate = g.creatures.active() ? emptyCrate(g) : undefined;
+        if (crate) {
+          shutIn(g, c, crate);
+          g.logMsg(`The ${def.name.toLowerCase()} takes the ${foodName} from your hand and trusts you. It goes into the creature crate in your pack: set the crate down, or open it to have it follow you or work the deed.`, 'system');
         } else {
           c.mode = 'active';
-          c.stance = 'defensive';
           g.logMsg(`The ${def.name.toLowerCase()} takes the ${foodName} from your hand and trusts you. ${c.name} now follows you.`, 'system');
         }
         forgetCoaxing(c);
@@ -279,13 +316,15 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.mode === 'stored' || c.post !== null);
+      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.post !== null);
     },
     check: (t, g) => {
       if (!g.deed) return 'You have no settlement to assign it to.';
       const c = creatureOf(g, t);
-      const working = g.creatures.workers().length;
-      if (c && c.mode !== 'deed' && working >= g.workerCap) {
+      // Only a grown one works, and so only a grown one takes a place -- one
+      // off a post as much as one off the road, since a post costs none.
+      const working = g.creatures.workers(g.time).length;
+      if (c && ageDef(c, g.time).works && (c.mode !== 'deed' || c.post !== null) && working >= g.workerCap) {
         return `${g.deed.name} has work for ${g.workerCap} wildermon at level ${g.deedLevel}. Upgrade the settlement to take on more.`;
       }
       // A trade it was asked for by name has to be one of its own.
@@ -306,17 +345,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       // does anyway.
       const want = t.kind === 'creature' ? t.job : undefined;
       c.trade = want && want !== SPECIES[c.species].gathers ? (want as GatherKind) : null;
-      if (c.mode === 'stored') {
-        c.x = d.x + 0.5;
-        c.y = d.y + 1.5;
-      }
       c.mode = 'deed';
       c.enemy = null;
       c.state = 'idle';
       c.until = g.time;
-      const gathers = c.trade ?? SPECIES[c.species].gathers;
-      const job = gathers ? `${GATHER_DO[gathers]} within ${workRangeOf(c, SPECIES[c.species])} tiles of the token and bring what it finds to the crate` : 'stay around the settlement';
-      g.logMsg(`${c.name} will ${job}.`, 'system');
+      g.logMsg(ageDef(c, g.time).works
+        ? `${c.name} will ${deedJobLine(c)}.`
+        : `${c.name} is not grown, and stays about ${d.name} until it is. Then it will ${deedJobLine(c)}.`, 'system');
     },
   },
   {
@@ -328,51 +363,46 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 0,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'deed' || c.mode === 'stored');
+      return !!c && c.hitchedTo === null && !c.ridden && c.mode === 'deed';
     },
-    check: (_t, g) => (g.creatures.active() && !g.deed ? 'Nowhere to keep your current companion.' : null),
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return 'It is gone.';
+      const swap = companionSwap(g, c);
+      return swap && 'refused' in swap ? swap.refused : null;
+    },
     perform: (t, g) => {
       const c = creatureOf(g, t);
-      if (!c) return;
+      if (!c || c.mode !== 'deed') return;
+      const swap = companionSwap(g, c);
+      if (swap && 'refused' in swap) return;
       g.clearPost(c);
-      const current = g.creatures.active();
-      if (current) {
-        current.mode = 'stored';
-        g.logMsg(`${current.name} stays at the token for now.`, 'info');
-      }
-      if (c.mode === 'stored') {
-        c.x = g.player.x;
-        c.y = g.player.y;
-      }
+      const crate = g.deedCrate();
+      if (c.carrying && !(crate && g.crateAdd(crate, c.carrying))) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
       c.mode = 'active';
       c.carrying = null;
       c.enemy = null;
       c.state = 'idle';
+      c.until = g.time;
       g.logMsg(`${c.name} now follows you.`, 'system');
-    },
-  },
-  {
-    id: 'store_creature',
-    label: 'Keep at token',
-    verb: 'sending it home',
-    instant: true,
-    stamina: 0,
-    baseTime: 0,
-    applies: (t, g) => {
-      const c = creatureOf(g, t);
-      return !!c && c.hitchedTo === null && !c.ridden && (c.mode === 'active' || c.mode === 'deed');
-    },
-    check: (_t, g) => (g.deed ? null : 'You have no settlement token to keep it at.'),
-    perform: (t, g) => {
-      const c = creatureOf(g, t);
-      if (!c || !g.deed) return;
-      g.clearPost(c);
-      const crate = g.deedCrate();
-      if (c.carrying && !(crate && g.crateAdd(crate, c.carrying))) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
-      c.carrying = null;
-      c.mode = 'stored';
-      c.enemy = null;
-      g.logMsg(`${c.name} is kept at the token of ${g.deed.name}.`, 'system');
+      // The one that was following you takes its place, on the deed or in a crate.
+      if (swap && swap.to === 'deed') {
+        const was = swap.current;
+        was.mode = 'deed';
+        was.trade = null;
+        was.enemy = null;
+        was.state = 'idle';
+        was.until = g.time;
+        g.logMsg(ageDef(was, g.time).works
+          ? `${was.name} stays behind in its place, and will ${deedJobLine(was)}.`
+          : `${was.name} stays behind in its place. It is not grown, and stays about the settlement until it is.`, 'info');
+      } else if (swap) {
+        const into = emptyCrate(g);
+        if (into) {
+          shutIn(g, swap.current, into);
+          g.logMsg(`${swap.current.name} goes into the creature crate in your pack.`, 'info');
+        }
+      }
     },
   },
   {
@@ -557,7 +587,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 4,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && !c.tacked;
+      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && c.mode !== 'stored' && !c.tacked;
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
@@ -587,7 +617,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 6,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && !isShod(g.time, c);
+      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && c.mode !== 'stored' && !isShod(g.time, c);
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
@@ -615,7 +645,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 2,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.tacked && !c.ridden;
+      return !!c && c.tacked && !c.ridden && c.mode !== 'stored';
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
@@ -638,7 +668,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 1.5,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && !c.ridden;
+      return !!c && !!SPECIES[c.species].mount && c.mode !== 'wild' && c.mode !== 'stored' && !c.ridden;
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
@@ -681,7 +711,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     baseTime: 2.5,
     applies: (t, g) => {
       const c = creatureOf(g, t);
-      return !!c && c.mode !== 'wild' && c.hitchedTo === null && !c.ridden && !!vehicleFor(g, c);
+      return !!c && c.mode !== 'wild' && c.mode !== 'stored' && c.hitchedTo === null && !c.ridden && !!vehicleFor(g, c);
     },
     check: (t, g) => {
       const c = creatureOf(g, t);
@@ -690,7 +720,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!f) return 'There is no cart or wagon here with an empty yoke.';
       const [cx, cy] = furnitureCentre(f);
       if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return `Stand by the ${furnitureName(f).toLowerCase()}.`;
-      if (c.mode !== 'stored' && Math.hypot(c.x - g.player.x, c.y - g.player.y) > 4) return `${c.name} is too far off. Call it over first.`;
+      if (c.mode === 'stored') return `${c.name} is in a creature crate. Let it out first.`;
+      if (Math.hypot(c.x - g.player.x, c.y - g.player.y) > 4) return `${c.name} is too far off. Call it over first.`;
       if (!ageDef(c, g.time).works) return `${c.name} is not grown. A yearling is no use in the traces.`;
       if (c.hunger < 0.15) return `${c.name} is too hungry to pull anything. Feed it first.`;
       return null;
@@ -766,12 +797,9 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
-      // A kept one stands at the token, like everything else done to one: a
-      // carcass nobody can walk to is a carcass nobody can butcher.
-      if (c.mode === 'stored' && g.deed) {
-        c.x = g.deed.x + 0.5;
-        c.y = g.deed.y + 1.5;
-      }
+      // One in a crate is let out of it first: a carcass lies in front of a
+      // crate standing on the ground, and at your feet from one you carry.
+      if (c.mode === 'stored') letOut(g, c);
       const x = Math.floor(c.x);
       const y = Math.floor(c.y);
       // Whatever it was holding is not buried with it.
@@ -812,10 +840,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
-      if (c.mode === 'stored' && g.deed) {
-        c.x = g.deed.x + 0.5;
-        c.y = g.deed.y + 1.5;
-      }
+      if (c.mode === 'stored') letOut(g, c);
       if (c.carrying) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
       c.carrying = null;
       c.mode = 'wild';

@@ -207,6 +207,8 @@ export interface ItemRow {
   maker: string | null;
   /** The piece a casting is of, for a casting; null for everything else. */
   piece: string | null;
+  /** The wildermon shut in it, for a creature crate; null for everything else. */
+  creature?: number | null;
   /** Alight, for the things that burn, and when it was set going. */
   lit: boolean;
   lit_at: string | null;

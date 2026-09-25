@@ -19,6 +19,7 @@ import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire 
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
+import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
@@ -1351,7 +1352,7 @@ export class Game {
     this.deed.stance = stance;
     let n = 0;
     for (const c of this.creatures.list.values()) {
-      if (c.mode !== 'deed' && c.mode !== 'stored') continue;
+      if (c.mode !== 'deed') continue;
       c.stance = stance;
       c.enemy = null;
       n++;
@@ -2991,6 +2992,8 @@ export class Game {
     const out: Array<{ def: ActionDef; reason: string | null }> = [];
     for (const def of ACTIONS) {
       if (def.hidden || !def.applies(target, this)) continue;
+      // Nothing is offered for a crate with a wildermon in it that would be refused.
+      if (occupiedRefusal(this, def.id, target)) continue;
       out.push({ def, reason: def.check?.(target, this) ?? null });
     }
     return out;
@@ -3113,6 +3116,12 @@ export class Game {
   }
 
   requestAction(def: ActionDef, target: Target, goes?: number): void {
+    // A crate with a wildermon in it is carried, set down or opened, and that is all.
+    const held = occupiedRefusal(this, def.id, target);
+    if (held) {
+      this.logMsg(held, 'error');
+      return;
+    }
     /*
      * A name, or a yes, before anything else.
      *
@@ -4085,22 +4094,20 @@ export class Game {
     c.state = 'idle';
     c.until = this.time;
     c.enemy = null;
+    const into = emptyCrate(this);
     if (!this.creatures.active()) {
       c.mode = 'active';
       this.logMsg(`The post ${why}. ${c.name} comes looking for you.`, 'system');
     } else if (this.deed) {
-      // Whatever it was holding goes into the settlement's own crate.
-      const crate = this.deedCrate();
-      if (c.carrying && crate && this.crateAdd(crate, c.carrying)) c.carrying = null;
-      else if (c.carrying) this.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
-      c.carrying = null;
-      c.mode = 'stored';
-      c.x = this.deed.x + 0.5;
-      c.y = this.deed.y + 1.5;
-      this.logMsg(`The post ${why}. ${c.name} goes back to the token of ${this.deed.name}.`, 'system');
+      // Back to the settlement it came from, as the island has it.
+      c.mode = 'deed';
+      this.logMsg(`The post ${why}. ${c.name} goes back to work on ${this.deed.name}.`, 'system');
+    } else if (into) {
+      shutIn(this, c, into);
+      this.logMsg(`The post ${why}. ${c.name} goes into the creature crate in your pack.`, 'system');
     } else {
       c.mode = 'wild';
-      this.logMsg(`The post ${why}, and with no settlement to go to and you already spoken for, ${c.name} wanders off.`, 'error');
+      this.logMsg(`The post ${why}, and with no settlement to go to, you already spoken for and no empty creature crate in your pack, ${c.name} wanders off.`, 'error');
     }
     this.events.emit('creature');
   }
@@ -5045,14 +5052,8 @@ export class Game {
   /** Put a wildermon in a vehicle's traces. */
   hitch(c: Creature, f: PlacedFurniture): boolean {
     const v = vehicleOf(f);
-    if (!v || c.hitchedTo !== null || c.ridden || teamOf(f).length >= v.yokes) return false;
-    if (c.mode === 'stored') {
-      // Fetched out of the token and walked round to the front.
-      const [cx, cy] = furnitureCentre(f);
-      c.x = cx;
-      c.y = cy;
-      c.mode = this.deed ? 'deed' : 'active';
-    }
+    // One shut in a crate is let out before it is anything else.
+    if (!v || c.mode === 'stored' || c.hitchedTo !== null || c.ridden || teamOf(f).length >= v.yokes) return false;
     f.team = [...teamOf(f), c.id];
     c.hitchedTo = f.id;
     c.carrying = null;
@@ -5414,6 +5415,7 @@ export class Game {
           ferment: r.ferment ?? undefined,
           facing: (r.facing ?? 's') as Side,
           lock: r.lock ?? undefined,
+          creature: r.creature ?? undefined,
           /*
            * The reins and the shafts, which the island has always sent and
            * this dropped: somebody who took the reins on an island walked
@@ -6567,6 +6569,8 @@ export interface IslandPlaced {
   driver?: string | null;
   /** Whoever has a cart by the shafts, by uid. */
   puller?: string | null;
+  /** The wildermon shut in it, for a creature crate; absent from older islands. */
+  creature?: number | null;
   /**
    * What is in it, for a piece of furniture near enough to reach into.
    *

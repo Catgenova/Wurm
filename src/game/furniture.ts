@@ -209,6 +209,9 @@ export const FURNITURE: FurnitureDef[] = [
   piece('mailbox', 'Mailbox', 1, 1, [['plank', 4], ['ribbon', 2], ['nail', 8]], 18, 10,
     'You nail up a box with a slot in it and a door on the back. A parcel goes in at one and comes out at any other.', 30,
     { post: true }),
+  // One wildermon, shut in to be carried or set down: see `creaturecrate.ts`.
+  piece('creature_crate', 'Creature crate', 2, 2, [['plank', 8], ['nail', 4], ['ribbon', 2]], 16, 10,
+    'You nail up a creature crate. It holds one wildermon.'),
   piece('lectern', 'Lectern', 1, 1, [['plank', 4], ['shaft', 2], ['nail', 8]], 16, 9, 'You nail up a lectern with a good slant on it.'),
   piece('coat_rack', 'Coat rack', 1, 1, [['plank', 1], ['shaft', 4], ['nail', 6]], 10, 6, 'You nail up a rack of pegs for the door.'),
   piece('planter', 'Planter', 2, 1, [['plank', 6], ['nail', 10]], 10, 7, 'You nail up a planter and fill it with earth.'),
@@ -383,6 +386,8 @@ export interface PlacedFurniture {
    * thing on this island that does anything for you while you are away.
    */
   till?: number;
+  /** The wildermon shut in it, for a creature crate standing on the ground. It is drawn inside. */
+  creature?: number;
 }
 
 /** The two liquids worth keeping a barrel for. */
@@ -660,7 +665,16 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       // Everything the thing was keeps standing when the thing is standing.
       if (item.rare) f.rare = item.rare;
       if (item.maker) f.maker = item.maker;
-      g.logMsg(`You set the ${furnitureName(f).toLowerCase()} down.`, 'event');
+      // And whoever is shut in it, who stands where it stands and is seen in it.
+      const inside = item.creature !== undefined ? g.creatures.get(item.creature) : undefined;
+      if (inside?.mode === 'stored') {
+        f.creature = inside.id;
+        [inside.x, inside.y] = furnitureCentre(f);
+        g.events.emit('creature');
+      }
+      g.logMsg(inside?.mode === 'stored'
+        ? `You set the ${furnitureName(f).toLowerCase()} down with ${inside.name} in it.`
+        : `You set the ${furnitureName(f).toLowerCase()} down.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
   },
@@ -734,7 +748,17 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (f.dye) back.dye = f.dye;
       if (f.rare) back.rare = f.rare;
       if (f.maker) back.maker = f.maker;
-      g.logMsg(`You pick the ${furnitureName(f).toLowerCase()} up.`, 'event');
+      // Whoever is shut in it comes too, and is where you are from now on.
+      const inside = f.creature !== undefined ? g.creatures.get(f.creature) : undefined;
+      if (inside?.mode === 'stored') {
+        back.creature = inside.id;
+        inside.x = g.player.x;
+        inside.y = g.player.y;
+        g.events.emit('creature');
+      }
+      g.logMsg(inside?.mode === 'stored'
+        ? `You pick the ${furnitureName(f).toLowerCase()} up with ${inside.name} in it.`
+        : `You pick the ${furnitureName(f).toLowerCase()} up.`, 'event');
       g.events.emit('world', f.x, f.y);
     },
   },

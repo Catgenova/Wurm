@@ -84,7 +84,7 @@ const asRow = (it: Partial<Item> & { id?: string }): string =>
   + ` ${lit(it.extra ?? null)}, ${lit(it.rare ?? null)}, ${lit(it.dye ?? null)}, ${lit(it.bless ?? null)},`
   + ` ${lit(it.charges ?? null)}, ${lit(it.locked ?? false)}, ${lit(it.issued ?? false)}, now(), null,`
   + ` ${lit(it.lit ?? false)}, null, null, null, ${lit(it.maker ?? null)}, ${lit(it.piece ?? null)},`
-  + ` null, null, null, null)::item`;
+  + ` null, null, null, null, null)::item`;
 
 const out = psql(`
 begin;

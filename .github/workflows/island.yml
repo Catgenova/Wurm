@@ -1141,6 +1141,24 @@ jobs:
           npx esbuild supabase/test/butchery.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/butchery.mjs --log-level=error
           node node_modules/.cache/butchery.mjs
+      - name: A wildermon past the first goes into a creature crate, and out of it again
+        run: |
+          # Asked for: "Wildermon can be tamed to be set to active if currently
+          # no active wildermon, but any additional wildermon cannot be tamed
+          # unless the player carries a creature crate ... Wildermon can no
+          # longer be Kept at Token. Interacting with a creature crate allows
+          # you to pick it up / place it, assign the creature to active, or
+          # assign the creature to work the deed." Both sides are asked the
+          # bill and the weight, the taming rule in the same words, that an
+          # occupied crate goes nowhere but down on the ground, setting it down
+          # and picking it up with the wildermon in it, letting it out to
+          # follow you or to work, that a worker taken off the deed leaves the
+          # companion in its place, and where a young one is born; the island
+          # also that your own crated wildermon come down from anywhere, and the
+          # browser that an old save's kept-at-token wildermon get a crate.
+          npx esbuild supabase/test/crates.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/crates.mjs --log-level=error
+          node node_modules/.cache/crates.mjs
 
       - name: A new look, worn on an island
         run: |

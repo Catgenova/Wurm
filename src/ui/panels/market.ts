@@ -191,7 +191,8 @@ export class MarketPanel {
         + 'or have written to, is somebody you can deal with.');
       return;
     }
-    const pack = this.game.inventory.items.filter((it) => !it.locked && it.id !== 'coin');
+    // Nothing put by, no coin, and no crate with a wildermon in it, which goes nowhere but down on the ground.
+    const pack = this.game.inventory.items.filter((it) => !it.locked && it.id !== 'coin' && it.creature === undefined);
     const list = document.createElement('div');
     list.className = 'market-pick';
     for (const it of pack.slice(0, 40)) {

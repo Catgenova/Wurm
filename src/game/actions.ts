@@ -26,6 +26,7 @@ import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear 
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
+import { CREATURE_CRATE_ACTIONS } from './creaturecrate';
 import { HUSBANDRY_ACTIONS } from './husbandry';
 import { DYE_ACTIONS } from './dyes';
 import { TRAP_ACTIONS } from './traps';
@@ -2085,14 +2086,11 @@ export const ACTIONS: ActionDef[] = [
     perform: (_t, g) => {
       if (!g.deed) return;
       const name = g.deed.name;
-      const d = g.deed;
       let freed = 0;
+      // The settlement's workers go with it. One in a creature crate is in
+      // your crate, not the settlement's, and stays yours.
       for (const c of g.creatures.list.values()) {
-        if (c.mode === 'stored' || c.mode === 'deed') {
-          if (c.mode === 'stored') {
-            c.x = d.x + 0.5;
-            c.y = d.y + 1.5;
-          }
+        if (c.mode === 'deed') {
           if (c.carrying) g.dropOnGround(Math.floor(c.x), Math.floor(c.y), c.carrying);
           c.carrying = null;
           c.mode = 'wild';
@@ -2170,6 +2168,7 @@ export const ACTIONS: ActionDef[] = [
   },
   ...BUILD_ACTIONS,
   ...CREATURE_ACTIONS,
+  ...CREATURE_CRATE_ACTIONS,
   ...HUSBANDRY_ACTIONS,
   ...DYE_ACTIONS,
   ...TRAP_ACTIONS,

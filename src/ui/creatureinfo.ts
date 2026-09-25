@@ -1,5 +1,6 @@
 import { clockLeft } from '../game/boons';
 import {
+  ageDef,
   ageOf,
   attackOf,
   careWord,
@@ -17,6 +18,7 @@ import {
   type Creature,
 } from '../game/creatures';
 import { baitHint, tameChance } from '../game/creatureActions';
+import { crateOf } from '../game/creaturecrate';
 import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
 import { traitOf } from '../game/traits';
@@ -74,8 +76,14 @@ export function creatureLines(g: Game, c: Creature): string[] {
   // What it is doing, and how well it does it.
   if (c.ridden) lines.push('Under the saddle');
   else if (c.hitchedTo !== null) lines.push('In the traces');
-  else if (c.mode === 'stored') lines.push('Kept at the token · idle');
-  else if (c.mode === 'deed') {
+  else if (c.mode === 'stored') {
+    // Where the crate is: standing somewhere, or on your back.
+    const h = crateOf(g, c.id);
+    const where = h && 'piece' in h ? ` at (${h.piece.x}, ${h.piece.y})` : h?.carried ? ' in your pack' : '';
+    lines.push(`In a creature crate${where} · does not get hungry in there`);
+  } else if (c.mode === 'deed' && !ageDef(c, g.time).works) {
+    lines.push('Of the herd · not put to work, and taking no place, until grown');
+  } else if (c.mode === 'deed') {
     // A reach means nothing to something with no trade to range out and do.
     if (def.gathers) lines.push(`Deed worker · ${GATHER_VERB[def.gathers]} at ${taskSkill(c, def).toFixed(1)} · reaches ${workRangeOf(c, def)} tiles`);
     else lines.push(`Deed worker · no trade of its own, so it keeps the deed company`);

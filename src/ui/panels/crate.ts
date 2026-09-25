@@ -9,6 +9,7 @@ import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 import { orderBy, sortSelect, type SortKey } from '../sorting';
 import { damageCell, nameCell, qualityCell } from '../itemcells';
+import { occupantOf } from '../../game/creaturecrate';
 
 /** A crate or a piece of storage furniture, seen through the same window. */
 export interface Store {
@@ -321,7 +322,7 @@ export class CratePanel {
        */
       let asked = 0;
       for (const item of [...this.game.inventory.items]) {
-        if (item.locked || this.game.isEquipped(item.uid)) continue;
+        if (item.locked || item.creature !== undefined || this.game.isEquipped(item.uid)) continue;
         if (sameKinds && !kinds.has(item.id)) continue;
         asked++;
         this.game.requestAction(door, { kind: 'item', uid: item.uid, count: item.count, into: store.id });
@@ -333,7 +334,7 @@ export class CratePanel {
     let left = 0;
     let refused = '';
     for (const item of [...this.game.inventory.items]) {
-      if (item.locked || this.game.isEquipped(item.uid)) continue;
+      if (item.locked || item.creature !== undefined || this.game.isEquipped(item.uid)) continue;
       if (sameKinds && !kinds.has(item.id)) continue;
       const why = store.refuses(item);
       if (why) {
@@ -412,7 +413,7 @@ export class CratePanel {
        * one list you go to when you are looking for a particular thing was
        * the one list that told you least about what was in it.
        */
-      const name = nameCell(item, { worn: this.game.isEquipped(item.uid) });
+      const name = nameCell(item, { worn: this.game.isEquipped(item.uid), occupant: occupantOf(this.game, item) });
       const ql = qualityCell(this.game, item);
       const dmg = damageCell(item);
       const take = document.createElement('button');

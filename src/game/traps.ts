@@ -3,6 +3,8 @@ import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { isBaitFor, SPECIES, type Creature } from './creatures';
+import { emptyCrate, shutIn } from './creaturecrate';
+import { tameRoomRefusal } from './creatureActions';
 import { itemDef, itemName, type Item } from './items';
 import { BAIT_BY_ID, isBait } from './fishing';
 import { matOf } from './materials';
@@ -285,8 +287,8 @@ export const TRAP_ACTIONS: ActionDef[] = [
       if (!nearTrap(g, trap)) return 'Stand at the trap.';
       const s = SPECIES[c.species];
       if (s && g.skills.get('taming') < s.tameLevel) return `A ${s.name.toLowerCase()} takes taming ${s.tameLevel} to handle, trapped or not. It is held; come back when you can.`;
-      if (!g.deed && g.creatures.active()) return 'You have a companion at your side and no settlement to send this one to.';
-      return null;
+      // The same rule as taming: the first follows you, and every one after that goes into a crate.
+      return tameRoomRefusal(g);
     },
     perform: (t, g) => {
       const trap = trapOf(g, t);
@@ -294,6 +296,11 @@ export const TRAP_ACTIONS: ActionDef[] = [
       const c = g.creatures.get(trap.caught);
       if (!c) return;
       const s = SPECIES[c.species];
+      const full = tameRoomRefusal(g);
+      if (full) {
+        g.logMsg(full, 'error');
+        return;
+      }
       // It is held, not willing. Getting it out without being bitten is the skill.
       const clean = g.skillCheck('taming', s ? s.tameLevel + 10 : 10, trap.ql, g.mindEase());
       g.gainSkill('taming', tryGain(clean, FREE_GAIN));
@@ -306,14 +313,13 @@ export const TRAP_ACTIONS: ActionDef[] = [
       trap.bait = null;
       c.state = 'idle';
       c.enemy = null;
-      if (!g.creatures.active()) {
+      const crate = g.creatures.active() ? emptyCrate(g) : undefined;
+      if (crate) {
+        shutIn(g, c, crate);
+        g.logMsg(`You get the noose off the ${s?.name.toLowerCase() ?? 'thing'} and put it straight into the creature crate in your pack.`, 'event');
+      } else {
         c.mode = 'active';
         g.logMsg(`You get the noose off the ${s?.name.toLowerCase() ?? 'thing'} and it stays. It comes with you.`, 'event');
-      } else if (g.deed) {
-        c.mode = 'stored';
-        c.x = g.deed.x + 0.5;
-        c.y = g.deed.y + 1.5;
-        g.logMsg(`You get it out of the trap and walk it home to the token of ${g.deed.name}.`, 'event');
       }
       g.note('trapped');
       g.events.emit('creature');

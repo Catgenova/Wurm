@@ -3,6 +3,7 @@ import { SUBTILES } from './crates';
 import type { Game } from './game';
 import { matOf } from './materials';
 import { SPECIES, workRangeOf, GATHER_DO, type Creature } from './creatures';
+import { letOut } from './creaturecrate';
 import { world } from './pace';
 
 /**
@@ -135,7 +136,9 @@ export const POST_ACTIONS: ActionDef[] = [
       const c = id !== undefined ? g.creatures.get(id) : undefined;
       if (!p || !c) return;
       const [cx, cy] = postCentre(p);
+      // Out of its crate, and set down at the post.
       if (c.mode === 'stored') {
+        letOut(g, c);
         c.x = cx;
         c.y = cy + 0.6;
       }

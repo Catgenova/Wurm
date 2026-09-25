@@ -1667,6 +1667,49 @@ const MODELS: Record<string, Model> = {
     crate(sc, paintOf(hex('#b08850')), -x + 1.4, -x + 6.4, -y + 0.8, -y + 5.4, 0, 4.6);
     sc.lathe(x - 3, -y + 3.6, [[0, 2], [1.6, 2.4], [3.6, 2], [4.6, 1], [5.2, 0.5]], paintOf(hex('#d9caa4')), 12);
   },
+  /*
+   * A creature crate: a boarded floor, a post at each corner, and open sides
+   * -- a rail at the foot, a rail at the top, one slat between and two thin
+   * bars -- so whatever is inside can be seen. Its lid is two slats with the
+   * two metal ribbons of its bill strapped across them, and a hasp on the
+   * front. Drawn whole while it is empty. With a wildermon in it `trim` asks
+   * for it in two halves -- 0 the floor and whatever is on the far side of the
+   * beast, 1 whatever is on the near side and the lid -- and the renderer
+   * draws the beast between them, so it is seen inside, behind the slats.
+   */
+  creature_crate: ({ sc, wood, trim }) => {
+    const X = 8, Y = 8, H = 10, P = 0.7, FL = 0.7;
+    const back = trim === undefined || trim === 0;
+    const front = trim === undefined || trim === 1;
+    // Near or far of the middle, from wherever it is seen.
+    const layer = (nearer: boolean): boolean => (nearer ? front : back);
+    if (back) sc.box(-X, X, -Y, Y, 0, FL, wood, { top: boardsOn(sc, wood, 5, false) });
+    for (const [cx, cy] of [[-X + P, -Y + P], [X - P, -Y + P], [X - P, Y - P], [-X + P, Y - P]] as Pt[]) {
+      if (layer(sc.depth(cx, cy) > 0.01)) sc.box(cx - P, cx + P, cy - P, cy + P, 0, H + 0.3, wood);
+    }
+    // The four sides, each on the side of the beast it stands.
+    for (const [nx, ny] of [[0, 1], [0, -1], [1, 0], [-1, 0]] as Pt[]) {
+      if (!layer(sc.sees(nx, ny))) continue;
+      const along = nx === 0;
+      // A box along the side from a to b, t deep into it, between two heights.
+      const run = (a: number, b: number, t: number, z0: number, z1: number, p: Paint = wood): void => {
+        if (along) sc.box(a, b, ny * Y - (ny > 0 ? t : 0), ny * Y + (ny < 0 ? t : 0), z0, z1, p);
+        else sc.box(nx * X - (nx > 0 ? t : 0), nx * X + (nx < 0 ? t : 0), a, b, z0, z1, p);
+      };
+      const span = (along ? X : Y) - 2 * P;
+      run(-span, span, 0.7, FL, FL + 1.1);
+      run(-span, span, 0.7, H - 1, H);
+      run(-span, span, 0.6, H * 0.55 - 0.4, H * 0.55 + 0.4);
+      for (const c of [-span / 3, span / 3]) run(c - 0.3, c + 0.3, 0.45, FL + 1.1, H - 1);
+      // The hasp, on the front.
+      if (ny === 1) run(-0.7, 0.7, 0.9, H - 2.1, H - 0.3, IRON);
+    }
+    // The lid, over everything: two slats, and the two ribbons strapped across them.
+    if (front) {
+      for (const y of [-Y * 0.42, Y * 0.42]) sc.box(-X + 0.3, X - 0.3, y - 1, y + 1, H, H + 0.6, wood, { top: grain(sc, wood, 1) });
+      for (const x of [-X * 0.45, X * 0.45]) sc.box(x - 0.4, x + 0.4, -Y + 0.3, Y - 0.3, H + 0.6, H + 0.8, IRON);
+    }
+  },
   mailbox: ({ sc, wood }) => {
     sc.shadows = [[-2.8, 2.8, -2.8, 2.8]];
     sc.box(-2.4, 2.4, -0.55, 0.55, 0, 0.8, wood);

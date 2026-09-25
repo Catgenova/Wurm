@@ -294,7 +294,7 @@ begin
 
   -- Everything that would send one in harness somewhere else.
   insert into said values ('again', coalesce(act_refusal(w, a, 'hitch_creature', jsonb_build_object('kind', 'creature', 'id', v_pet)), 'none'));
-  insert into said values ('store', coalesce(act_refusal(w, a, 'store_creature', jsonb_build_object('kind', 'creature', 'id', v_pet)), 'none'));
+  insert into said values ('crate', coalesce(act_refusal(w, a, 'crate_creature', jsonb_build_object('kind', 'creature', 'id', v_pet)), 'none'));
   insert into said values ('take', coalesce(act_refusal(w, a, 'take_creature', jsonb_build_object('kind', 'creature', 'id', v_hand)), 'none'));
   insert into said values ('release', coalesce(act_refusal(w, a, 'release_creature', jsonb_build_object('kind', 'creature', 'id', v_pet)), 'none'));
   insert into said values ('assign', coalesce(act_refusal(w, a, 'assign_deed', jsonb_build_object('kind', 'creature', 'id', v_pet)), 'none'));
@@ -409,7 +409,7 @@ check('while one beside it that is not in harness has eaten into its belly',
   Number(loose1) < Number(loose0), `${loose0} → ${loose1}`);
 
 check('asked to hitch one already in, the island says so', said('again') === 'Greyfell is already in the traces.', said('again'));
-for (const [key, what] of [['store', 'to the token'], ['take', 'back to you'], ['release', 'back to the wild'], ['assign', 'to work'], ['cull', 'to the knife']]) {
+for (const [key, what] of [['crate', 'into a crate'], ['take', 'back to you'], ['release', 'back to the wild'], ['assign', 'to work'], ['cull', 'to the knife']]) {
   check(`and nothing sends one in harness ${what}`, said(key).endsWith('is in the traces. Take it out first.'), said(key));
 }
 check('or to a post, in the browser\'s words', said('post') === 'Greyfell is in harness.', said('post'));

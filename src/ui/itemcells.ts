@@ -25,11 +25,12 @@ import { itemDef, itemName, type Item, rarityOf } from '../game/items';
  * name; what this adds is the colour, which is the thing anybody actually
  * scans a list for, and the marks for what is worn and what is kept back.
  */
-export function nameCell(item: Item, opts: { worn?: boolean } = {}): HTMLSpanElement {
+export function nameCell(item: Item, opts: { worn?: boolean; occupant?: string } = {}): HTMLSpanElement {
   const name = document.createElement('span');
   name.className = 'inv-name';
   const worn = opts.worn ?? false;
-  const marks = [worn ? 'worn' : '', item.locked ? 'kept' : ''].filter(Boolean);
+  // A creature crate says who is in it.
+  const marks = [worn ? 'worn' : '', item.locked ? 'kept' : '', opts.occupant ? `${opts.occupant} inside` : ''].filter(Boolean);
   const full = (item.count > 1 ? `${itemName(item)} (${item.count})` : itemName(item))
     + (marks.length ? ` · ${marks.join(' · ')}` : '');
   name.textContent = full;

@@ -29,6 +29,7 @@ import type { Item } from './items';
 import { Game, type Deed } from './game';
 import type { GuestSave } from './actor';
 import type { Stats } from './player';
+import { crateTheKept } from './creaturecrate';
 
 const KEY = 'wurm-iso-save';
 /**
@@ -594,6 +595,11 @@ function finish(world: World, m: SaveMeta): Game {
   for (const pile of game.ground.values()) restake(pile);
   for (const crate of game.crates.values()) restake(crate.items);
   if (game.deed && !game.deedCrate()) game.placeDeedCrate();
+  // Nothing is kept at the token any more: what was, is put in creature crates.
+  const crated = crateTheKept(game);
+  if (crated) {
+    game.logMsg(`Wildermon are no longer kept at the token. ${crated === 1 ? 'The one you kept there is' : `The ${crated} you kept there are`} each in a creature crate now${game.deed ? `, set down near the token of ${game.deed.name} where there was room and otherwise in your pack` : ', in your pack'}. Open a crate to have one follow you or work the deed.`, 'system');
+  }
   /*
    * And the settings, only if this browser has never put any away.
    *

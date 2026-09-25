@@ -399,6 +399,10 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   larder: { name: 'Larder', category: 'misc', weight: 48, decay: 4, description: 'A deep cool cupboard for a kitchen. Holds 250 things: food, drink, and the flour, dough and cornmeal a kitchen bakes from.' },
   crate_shelf: { name: 'Crate shelf', category: 'misc', weight: 64, decay: 4, description: 'A decked rack two spots across and four deep. It holds nothing itself: eight plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' },
   barrel: { name: 'Barrel', category: 'misc', weight: 14, decay: 4, description: 'Staves and hoops. Holds 80 litres of one liquid, and nothing solid.' },
+  creature_crate: {
+    name: 'Creature crate', category: 'misc', weight: 10, decay: 0,
+    description: 'Holds one wildermon. With a wildermon already following you, one more is tamed only into an empty crate in your pack. Set down, it shows who is inside; open it to have them follow you or work the deed. It does not rot.',
+  },
   lectern: { name: 'Lectern', category: 'misc', weight: 12, decay: 4, description: 'A slanted stand to read from.' },
   coat_rack: { name: 'Coat rack', category: 'misc', weight: 6, decay: 4, description: 'Pegs on a post, by the door.' },
   planter: { name: 'Planter', category: 'misc', weight: 12, decay: 4, description: 'A box of earth with something green in it.' },
@@ -539,6 +543,12 @@ export interface Item {
    * itself, and the anvil beats it true. The island keeps the same column.
    */
   piece?: string;
+  /**
+   * The wildermon shut in it, for a creature crate, by its id. Absent on an
+   * empty crate and on everything else. See `creaturecrate.ts`; the island
+   * keeps the same column.
+   */
+  creature?: number;
 }
 
 /**
@@ -861,9 +871,9 @@ export class Inventory {
     return this.addItem(item);
   }
 
-  /** Whether anything may quietly take this: a craft, a hook, a hungry beast. */
+  /** Whether anything may quietly take this: a craft, a hook, a hungry beast. Never a crate with a wildermon in it. */
   loose(item: Item): boolean {
-    return !item.locked;
+    return !item.locked && item.creature === undefined;
   }
 
   /** Put an existing item into the inventory, merging it into a matching stack. */
@@ -885,6 +895,8 @@ export class Inventory {
     const idx = this.items.findIndex((it) => it.uid === uid);
     if (idx < 0) return null;
     const item = this.items[idx];
+    // A crate with a wildermon in it goes nowhere but down on the ground, which is `remove`.
+    if (item.creature !== undefined) return null;
     if (count >= item.count) {
       this.items.splice(idx, 1);
       this.onChange?.();

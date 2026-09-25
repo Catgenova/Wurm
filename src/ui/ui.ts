@@ -21,6 +21,7 @@ import {
   type Side,
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
+import { crateLine, crateOf, CREATURE_CRATE, CREATURE_CRATE_ACTION_BY_ID, occupiedRefusal } from '../game/creaturecrate';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
 import { itemDef, itemName, storedLine, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
@@ -391,6 +392,11 @@ export class UI {
     if (!held) return;
     if (g.isEquipped(held.uid)) {
       g.logMsg(`Take the ${p.name.toLowerCase()} off first.`, 'error');
+      return;
+    }
+    const occupied = occupiedRefusal(g, 'store_in_furniture', { kind: 'item', uid: held.uid });
+    if (occupied) {
+      g.logMsg(occupied, 'error');
       return;
     }
     const refused = store.refuses(held);
@@ -799,7 +805,9 @@ export class UI {
     if (smelter) return { title: `Smelter (${smelterState(smelter)})`, entries: this.smelterEntries(smelter) };
     const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
     if (piece) {
-      const state = rackSpots(piece) ? `${furnitureState(piece)} · ${this.rackLine(piece)}` : furnitureState(piece);
+      const state = rackSpots(piece) ? `${furnitureState(piece)} · ${this.rackLine(piece)}`
+        : piece.kind === CREATURE_CRATE ? `${furnitureState(piece)} · ${crateLine(this.game, piece)}`
+        : furnitureState(piece);
       return { title: `${furnitureName(piece)} (${state})`, entries: [...this.furnitureEntries(piece), ...this.nameEntry({ kind: 'furniture', id: piece.id })] };
     }
     const kilnHere = pick.kiln !== undefined ? this.game.kilns.get(pick.kiln) : undefined;
@@ -1469,11 +1477,11 @@ export class UI {
         }),
       });
     }
-    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'leave_vehicle', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'pick_up_furniture']) {
+    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'leave_vehicle', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'crate_follow', 'crate_work', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
       const reason = def.check?.(ft, g) ?? null;
-      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
+      entries.push({ label: def.labelFor?.(ft, g) ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
     }
     return entries;
   }
@@ -1733,14 +1741,14 @@ export class UI {
     const g = this.game;
     const d = g.deed!;
     const level = g.deedLevel;
-    const kept = [...g.creatures.list.values()].filter((c) => c.mode === 'stored' || c.mode === 'deed');
+    const kept = [...g.creatures.list.values()].filter((c) => c.mode === 'deed');
     const children: MenuItem[] = [];
-    const workers = g.creatures.workers().length;
+    const workers = g.creatures.workers(g.time).length;
     children.push({
       label: `Wildermon (${workers} of ${g.workerCap} working)`,
       disabled: !kept.length,
-      hint: kept.length ? undefined : 'None kept here yet.',
-      children: kept.length ? kept.map((c) => ({ label: `${c.name} (${g.creatures.describe(c)})`, children: this.creatureEntries(c.id) })) : undefined,
+      hint: kept.length ? undefined : 'None working here yet.',
+      children: kept.length ? kept.map((c) => ({ label: `${c.name} (${g.creatures.describe(c, g.time)})`, children: this.creatureEntries(c.id) })) : undefined,
     });
     const upgrade = DEED_ACTION_BY_ID.get('upgrade_deed');
     if (upgrade) {
@@ -1784,16 +1792,26 @@ export class UI {
     const target: Target = { kind: 'creature', id };
     const entries: MenuItem[] = [];
     const item = (actionId: string, t: Target = target, label?: string): MenuItem | null => {
-      const def = CREATURE_ACTION_BY_ID.get(actionId);
+      const def = CREATURE_ACTION_BY_ID.get(actionId) ?? CREATURE_CRATE_ACTION_BY_ID.get(actionId);
       if (!def || !def.applies(t, g)) return null;
       const reason = def.check?.(t, g) ?? null;
-      return { label: label ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, t) };
+      return { label: label ?? def.labelFor?.(t, g) ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, t) };
     };
     const push = (m: MenuItem | null): void => {
       if (m) entries.push(m);
     };
     push(item('examine_creature'));
     push(item('tame', target, `Tame (uses ${baitHint(c)})`));
+    // One in a crate is let out by opening the crate it is in, standing or carried.
+    if (c.mode === 'stored') {
+      const h = crateOf(g, c.id);
+      const at: Target | null = h && 'piece' in h ? { kind: 'furniture', id: h.piece.id }
+        : h?.carried ? { kind: 'item', uid: h.item.uid } : null;
+      if (at) {
+        push(item('crate_follow', at));
+        push(item('crate_work', at));
+      }
+    }
     if (c.mode === 'active') {
       entries.push({
         label: `Stance: ${STANCE_NAMES[c.stance]}`,
@@ -1847,7 +1865,7 @@ export class UI {
       }
     }
     push(item('take_creature'));
-    push(item('store_creature'));
+    push(item('crate_creature'));
     push(item('rename_creature'));
     push(item('release_creature'));
     push(item('cull_creature'));

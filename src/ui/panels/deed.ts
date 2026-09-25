@@ -1,7 +1,7 @@
 import { DEED_RADIUS_PER_LEVEL, MAX_DEED_LEVEL, deedWorkersAt, rankAtLeast, type Deed, type Game } from '../../game/game';
 import { DEED_ACTION_BY_ID, standingWord, upgradeProgress, upgradeReason } from '../../game/deed';
 import { furnitureDef, furnitureName } from '../../game/furniture';
-import { STANCES, STANCE_NAMES } from '../../game/creatures';
+import { ageDef, STANCES, STANCE_NAMES } from '../../game/creatures';
 import { ACTION_BY_ID } from '../../game/actions';
 import { crateName } from '../../game/crates';
 import { trapName } from '../../game/traps';
@@ -95,8 +95,9 @@ export class DeedPanel {
       return;
     }
     const level = g.deedLevel;
-    const workers = g.creatures.workers().length;
-    const kept = [...g.creatures.list.values()].filter((c) => c.mode === 'stored' || c.mode === 'deed');
+    const workers = g.creatures.workers(g.time).length;
+    const young = [...g.creatures.list.values()].filter((c) => c.mode === 'deed' && c.post === null && !ageDef(c, g.time).works).length;
+    const crated = g.creatures.stored().length;
     const side = d.radius * 2 + 1;
     this.body.append(this.head(d.name));
     /*
@@ -124,8 +125,9 @@ export class DeedPanel {
     }
     this.body.append(this.row('Level', `${level} of ${MAX_DEED_LEVEL}`));
     this.body.append(this.row('Border', `${d.radius} tiles out · ${side} × ${side}`, `From the token at (${d.x}, ${d.y}).`));
-    this.body.append(this.row('Working', `${workers} of ${g.workerCap}`, 'Wildermon set to work the deed; the rest are kept but idle.'));
-    this.body.append(this.row('Kept here', String(kept.length)));
+    this.body.append(this.row('Working', `${workers} of ${g.workerCap}`, 'Grown wildermon set to work the deed. A young one takes no place until it is grown.'));
+    this.body.append(this.row('Young of the herd', String(young), 'Not put to work, and taking no place, until grown.'));
+    this.body.append(this.row('In creature crates', String(crated), 'Yours, shut in creature crates: neither working nor following you.'));
     this.body.append(this.row('Orders', STANCE_NAMES[g.deedStance()], 'What every wildermon on the deed does when something walks in.'));
     this.body.append(this.place('The token', d.x, d.y));
 

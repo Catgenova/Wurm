@@ -1,10 +1,19 @@
 import { MINE_COLLAPSE } from '../../game/actions';
-import { RARITIES, RARITY_ROOM } from '../../game/items';
+import { CREATURE_CRATE } from '../../game/creaturecrate';
+import { furnitureDef } from '../../game/furniture';
+import { itemDef, RARITIES, RARITY_ROOM } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
 import { QL_LOW, QL_SPAN } from '../../game/game';
 import type { UIWindow } from '../windows';
 
+/** What a creature crate is built of, read off its bill: "8 × plank, 4 × nails and 2 × metal ribbon". */
+const crateBill = (): string => {
+  const parts = furnitureDef(CREATURE_CRATE).bill.map(([id, n]) => `<b>${n} × ${itemDef(id).name.toLowerCase()}</b>`);
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+};
+
 function helpText(): string {
+  const CRATE_BILL = crateBill();
   return `
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
@@ -591,8 +600,9 @@ function helpText(): string {
     <p>Nothing holds a post up and it <b>rots where it stands</b>: about <b>half an hour</b> for the
     roughest and <b>three hours</b> for the best that can be made, leaning further as it goes, with one
     word of warning near the end. When it falls over, whoever was working out of it <b>comes back to
-    you</b> if you are walking alone, and <b>goes to the token</b> if you already have a companion at
-    your side. You can also pull a post up before it goes, and what comes up is as worn as it had
+    you</b> if you are walking alone; otherwise it <b>goes back to work on your settlement</b>, or into
+    an empty <b>creature crate</b> in your pack if you have no settlement, and off into the wild if you
+    have neither. You can also pull a post up before it goes, and what comes up is as worn as it had
     become.</p>
     <p>A wildermon on a post is <b>not</b> on the settlement's books, so it costs none of the working
     slots your deed level allows. That, and the fact you can put one down anywhere, is what a post is
@@ -701,8 +711,7 @@ function helpText(): string {
     80 nails. It holds <b>10000 things</b> and will not stir until <b>all four yokes</b> have a
     wildermon in them.</p>
     <p>Set one down, stand beside it and <b>hitch</b> a tamed wildermon from its menu &mdash; one you
-    have with you, a deed worker, or one fetched straight out of the token if you are standing on your
-    own deed. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
+    have with you or a deed worker; one in a creature crate is let out of it first. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
     else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
     drags its feet, so feed the team before it goes in. A Seavic pair will outrun you at a walk; four
     Quarra will not, but they will shift ten thousand bricks.</p>
@@ -715,8 +724,8 @@ function helpText(): string {
     cannot pick a vehicle up with anything on it or anything in the yokes.</p>
     <p>A beast in the traces <b>stays hitched until somebody takes it out</b> &mdash; one at a time from
     its own menu, or the whole team from the vehicle's. Until then it stands at the vehicle and goes
-    where the vehicle goes. It does not follow you, work, answer the bell or wander; it cannot be sent
-    to the token, set to a post, released or culled; <b>it does not get hungry</b>, though feeding it
+    where the vehicle goes. It does not follow you, work, answer the bell or wander; it cannot be put
+    in a crate, set to a post, released or culled; <b>it does not get hungry</b>, though feeding it
     still fills it; and <b>nothing picks it as a target</b>.</p>
     <p>A vehicle is <b>anybody's to use</b>. Whoever built it and whosever ground it stands on, anyone
     standing at it may take the reins, take hold of a cart, hitch to it, take a beast out of it, load it,
@@ -1318,13 +1327,26 @@ function helpText(): string {
     10 levels of its task skill, so a seasoned one works a wide stretch of country. Its card in the
     Wildermon window shows the range it has now and how much skill the next step needs.</p>
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
-    or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
-    drops what it finds in the settlement's storage. Extra tamed wildermon are kept at the token,
-    whose menu lists them. Feed them from your pack; deed workers help themselves from storage.
+    or Aggressive), is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
+    drops what it finds in the settlement's storage, or is shut in a <b>creature crate</b>. Feed them
+    from your pack; deed workers help themselves from storage.
     The <b>Wildermon</b> window (<kbd>P</kbd>) shows the condition, level and skills of every creature
     you own; wild ones keep theirs to themselves. Deed workers learn from their work, gaining skill at
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
+    <p><b>Creature crates.</b> A creature crate holds <b>one</b> wildermon. A fine carpenter builds it
+    with a mallet from ${CRATE_BILL}; it weighs <b>${itemDef(CREATURE_CRATE).weight} kg</b> and does not rot.
+    The first wildermon you tame follows you; <b>every one after that goes into an empty crate in your
+    pack</b>, and without one you cannot tame it. A catch taken out of a trap is the same. Put the one
+    following you, or a deed worker, into an empty crate you carry from its menu. Set a crate down on
+    any spot of a tile and the wildermon is drawn inside it with its name over it. Open a crate
+    &mdash; standing beside it, or from your pack &mdash; to <b>let it out to follow you</b>, when the
+    one following you goes into the crate in its place, or to <b>set it to work the deed</b>, which
+    takes a working slot once it is grown. A wildermon in a crate does not get hungry. A crate with a
+    wildermon in it can be carried, set down or opened, and <b>nothing else</b>: it cannot be dropped,
+    bagged, stored, sold, posted or traded. <b>Take with you</b> on a deed worker, with a companion
+    already following you, leaves that companion on the deed in its place, or puts it in an empty
+    crate you carry when the deed has no room for it.</p>
     <p>Every tile is a 4 by 4 grid of spots for placing things. Build a <b>log crate</b> from three
     logs &mdash; notched and lashed, not a nail in it &mdash; or a <b>plank crate</b> from six planks
     and twelve nails (with a mallet), then right-click the spot on a tile
@@ -1456,7 +1478,10 @@ function helpText(): string {
     of being left alone, so it is a thing you keep up rather than do once.</p>
     <p>To breed, stand a <b>male</b> and a <b>female</b> of one sort within four tiles of each other,
     both <b>grown</b>, both <b>fed</b>, and neither put to a mate in the last twenty minutes, then
-    choose <b>Put it to a mate</b>. You need a settlement: the young one goes to the token. If it takes,
+    choose <b>Put it to a mate</b>. The young one joins your settlement's herd and is not put to work,
+    and takes no working slot, until it is grown; without a settlement it follows you when nothing else
+    does, goes into an empty creature crate you carry when something does, and otherwise goes off into
+    the wild. If it takes,
     the female carries for about twelve minutes and then drops a young one, and what it is born with was
     settled at that moment &mdash; a sire sold, released or eaten in between has already had his say.</p>
     <p>Three slots are filled one at a time. Each is drawn from what the pair carry between them, and

@@ -1,6 +1,7 @@
 import { CARRY_STOP, type Game } from '../../game/game';
 import { itemDef, itemName, type Item, type ItemCategory, itemWeight, bagRoom, bagUnits, isBag } from '../../game/items';
 import { damageCell, nameCell, qualityCell } from '../itemcells';
+import { occupantOf } from '../../game/creaturecrate';
 import type { ContextMenu, MenuItem } from '../contextmenu';
 import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
@@ -146,7 +147,7 @@ export class InventoryPanel {
   private row(item: Item): HTMLDivElement {
     const row = document.createElement('div');
     row.className = 'inv-row' + (item.uid === this.selected ? ' selected' : '');
-    const name = nameCell(item, { worn: this.game.isEquipped(item.uid) });
+    const name = nameCell(item, { worn: this.game.isEquipped(item.uid), occupant: occupantOf(this.game, item) });
     const ql = qualityCell(this.game, item);
     const dmg = damageCell(item);
     const wt = document.createElement('span');

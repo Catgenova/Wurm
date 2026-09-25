@@ -12,7 +12,7 @@ import type { UIWindow } from '../windows';
 const GROUPS: Array<[Creature['mode'], string]> = [
   ['active', 'Travelling with you'],
   ['deed', 'Working the deed'],
-  ['stored', 'Kept at the token'],
+  ['stored', 'In creature crates'],
 ];
 
 /** How a herd may be put in order. */

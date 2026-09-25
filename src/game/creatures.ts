@@ -19,6 +19,7 @@ import type { WoundKind } from './wounds';
 import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel } from './traits';
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
+import { emptyCrate, shutIn } from './creaturecrate';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -2480,6 +2481,7 @@ export class Creatures {
     return undefined;
   }
 
+  /** The ones shut in creature crates. */
   stored(): Creature[] {
     return [...this.list.values()].filter((c) => c.mode === 'stored');
   }
@@ -2487,10 +2489,11 @@ export class Creatures {
   /**
    * The wildermon working the settlement itself. One set to a work post is at
    * work too, but not on the deed's books: it costs no settlement slot, which
-   * is most of what a post is for.
+   * is most of what a post is for. Nor is a young one of the herd, which is
+   * not put to work until it is grown and takes no place until then.
    */
-  workers(): Creature[] {
-    return [...this.list.values()].filter((c) => c.mode === 'deed' && c.post === null);
+  workers(now: number): Creature[] {
+    return [...this.list.values()].filter((c) => c.mode === 'deed' && c.post === null && ageDef(c, now).works);
   }
 
   /** Everything at work anywhere, posts included. */
@@ -4023,16 +4026,43 @@ export class Creatures {
     dam.due = 0;
     if (!coming) return null;
     const def = this.species(dam);
-    // Born where the dam is if she is out in the world, and at the token if she
-    // is not. Either way it goes to the herd: nothing that young is put to work.
-    const at = game.deed && dam.mode === 'stored' ? [game.deed.x + 0.5, game.deed.y + 1.5] : [dam.x, dam.y];
-    const c = this.spawn(dam.species, at[0], at[1], 'stored', game.rand, game.time);
+    /*
+     * Where it goes, now that nothing is kept at the token. A dam let go before
+     * her hour drops a wild one. Otherwise it joins the herd of your
+     * settlement, beside its dam when she is out and at the token when she is
+     * shut in a crate, and is not put to work until it is grown. Without a
+     * settlement it follows you when nothing else does, and goes into an empty
+     * creature crate you carry when something does. With none of those it
+     * goes off into the wild.
+     */
+    const crate = dam.mode !== 'wild' && !game.deed && this.active() ? emptyCrate(game) : undefined;
+    let mode: CreatureMode = 'wild';
+    let at: [number, number] = [dam.x, dam.y];
+    let where = '';
+    if (dam.mode === 'wild') {
+      // Hers, and she is nobody's.
+    } else if (game.deed) {
+      mode = 'deed';
+      if (dam.mode === 'stored') at = [game.deed.x + 0.5, game.deed.y + 1.5];
+      where = ` It joins the herd of ${game.deed.name}, and is put to work when it is grown.`;
+    } else if (!this.active()) {
+      mode = 'active';
+      at = [game.player.x, game.player.y];
+      where = ' It follows you.';
+    } else if (crate) {
+      mode = 'stored';
+      where = ' It goes into the creature crate in your pack.';
+    } else {
+      where = ' You have no settlement, something already follows you and you carry no empty creature crate, so it goes off into the wild.';
+    }
+    const c = this.spawn(dam.species, at[0], at[1], mode, game.rand, game.time);
     c.traits = coming.traits;
     c.sex = coming.sex;
     c.hunger = 0.9;
     c.care = 0.5;
     c.health = maxHealth(c, def);
-    game.logMsg(`${dam.name} drops a young ${def.name.toLowerCase()} (${SEX_NAMES[c.sex]}): ${traitList(c.traits)}. It is at the token until it is grown.`, 'event');
+    if (crate) shutIn(game, c, crate);
+    game.logMsg(`${dam.name} drops a young ${def.name.toLowerCase()} (${SEX_NAMES[c.sex]}): ${traitList(c.traits)}.${where}`, 'event');
     game.note('bred');
     if (c.traits.some((t) => traitTier(t) === 'supreme' || traitTier(t) === 'fantastic')) game.note('goodblood');
     game.events.emit('creature');
@@ -4280,7 +4310,8 @@ export class Creatures {
     }
     if (this.comeWhenCalled(c, dt, game)) return;
     const def = this.species(c);
-    const kind = c.trade ?? def.gathers;
+    // Nothing that young is put to work: it keeps about the settlement until it is grown.
+    const kind = ageDef(c, game.time).works ? c.trade ?? def.gathers : undefined;
     // Standing orders come before any job: an intruder is everyone's business.
     if (this.defendDeed(game, c, dt, deed)) return;
     if (kind === 'guard') {
@@ -4591,7 +4622,7 @@ export class Creatures {
     else if (killer && killer.mode !== 'wild') game.logMsg(`${killer.name} killed a wild ${def.name.toLowerCase()}.`, 'fight');
   }
 
-  describe(c: Creature): string {
+  describe(c: Creature, now?: number): string {
     const job = c.trade ?? this.species(c).gathers;
     const verb = job ? GATHER_VERB[job] : 'busy';
     if (c.ridden) return 'under the saddle';
@@ -4600,11 +4631,12 @@ export class Creatures {
       case 'active':
         return `your companion · ${STANCE_NAMES[c.stance].toLowerCase()}`;
       case 'deed':
+        if (now !== undefined && !ageDef(c, now).works) return 'of the herd · not grown';
         if (c.carrying) return `deed worker · carrying ${itemDef(c.carrying.id).name.toLowerCase()}`;
         if (c.state === 'forage') return `deed worker · ${job === 'farm' && c.job ? `${c.job}ing a field` : verb}`;
         return 'deed worker';
       case 'stored':
-        return 'kept at the token';
+        return 'in a creature crate';
       default:
         return c.state === 'forage' ? `wild · ${verb}` : c.state === 'flee' ? 'wild · fleeing' : 'wild';
     }

@@ -793,6 +793,7 @@ insert into item_def values ('bookshelf', 'Bookshelf', 'misc', 30, false, 4, nul
 insert into item_def values ('larder', 'Larder', 'misc', 48, false, 4, null);
 insert into item_def values ('crate_shelf', 'Crate shelf', 'misc', 64, false, 4, null);
 insert into item_def values ('barrel', 'Barrel', 'misc', 14, false, 4, null);
+insert into item_def values ('creature_crate', 'Creature crate', 'misc', 10, false, 0, null);
 insert into item_def values ('lectern', 'Lectern', 'misc', 12, false, 4, null);
 insert into item_def values ('coat_rack', 'Coat rack', 'misc', 6, false, 4, null);
 insert into item_def values ('planter', 'Planter', 'misc', 12, false, 4, null);
@@ -1078,7 +1079,6 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('set_stance', 'Stance', 'instructing', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('assign_deed', 'Assign to deed', 'assigning', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_creature', 'Take with you', 'calling', null, null, false, null, 0, 0, null, true, false);
-insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('store_creature', 'Keep at token', 'sending it home', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('attack_creature', 'Attack', 'fighting', 'fighting', null, false, null, 0.07, 2.5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('shoot_creature', 'Shoot', 'drawing the bow', 'archery', null, false, 13, 0.05, 2.6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('rename_creature', 'Rename', 'renaming', null, null, false, null, 0, 0, null, true, false);
@@ -1092,6 +1092,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('unhitch_creature', 'Take out of the traces', 'unhitching it', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cull_creature', 'Cull', 'culling it', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('release_creature', 'Release', 'releasing', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('crate_creature', 'Put in a crate', 'crating it', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('crate_follow', 'Let it out to follow you', 'opening the crate', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('crate_work', 'Set it to work the deed', 'opening the crate', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('groom', 'Brush it down', 'brushing it down', 'animal_husbandry', null, false, null, 0.03, 7, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pair_creature', 'Put it to a mate', 'putting them together', 'animal_husbandry', null, false, null, 0.04, 9, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('read_blood', 'Look it over', 'looking it over', null, null, false, null, 0, 0, null, true, false);
@@ -1350,6 +1353,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_barrel', 'Build barrel', 'building a barrel', 'fine_carpentry', 'mallet', false, null, 0.05, 10, 18, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_stall', 'Build market stall', 'building a market stall', 'fine_carpentry', 'mallet', false, null, 0.05, 18, 22, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_mailbox', 'Build mailbox', 'building a mailbox', 'fine_carpentry', 'mallet', false, null, 0.05, 10, 18, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_creature_crate', 'Build creature crate', 'building a creature crate', 'fine_carpentry', 'mallet', false, null, 0.05, 10, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_lectern', 'Build lectern', 'building a lectern', 'fine_carpentry', 'mallet', false, null, 0.05, 9, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_coat_rack', 'Build coat rack', 'building a coat rack', 'fine_carpentry', 'mallet', false, null, 0.05, 6, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_planter', 'Build planter', 'building a planter', 'fine_carpentry', 'mallet', false, null, 0.05, 7, 10, false, true);
@@ -1993,6 +1997,7 @@ insert into improvable_def values ('bookshelf', 'wood', 'fine_carpentry');
 insert into improvable_def values ('larder', 'wood', 'fine_carpentry');
 insert into improvable_def values ('crate_shelf', 'wood', 'fine_carpentry');
 insert into improvable_def values ('barrel', 'wood', 'fine_carpentry');
+insert into improvable_def values ('creature_crate', 'wood', 'fine_carpentry');
 insert into improvable_def values ('lectern', 'wood', 'carpentry');
 insert into improvable_def values ('coat_rack', 'wood', 'fine_carpentry');
 insert into improvable_def values ('planter', 'wood', 'fine_carpentry');
@@ -2285,6 +2290,7 @@ update item_def set description = 'Shelves with a back and a cornice. Holds 90 t
 update item_def set description = 'A deep cool cupboard for a kitchen. Holds 250 things: food, drink, and the flour, dough and cornmeal a kitchen bakes from.' where id = 'larder';
 update item_def set description = 'A decked rack two spots across and four deep. It holds nothing itself: eight plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' where id = 'crate_shelf';
 update item_def set description = 'Staves and hoops. Holds 80 litres of one liquid, and nothing solid.' where id = 'barrel';
+update item_def set description = 'Holds one wildermon. With a wildermon already following you, one more is tamed only into an empty crate in your pack. Set down, it shows who is inside; open it to have them follow you or work the deed. It does not rot.' where id = 'creature_crate';
 update item_def set description = 'A slanted stand to read from.' where id = 'lectern';
 update item_def set description = 'Pegs on a post, by the door.' where id = 'coat_rack';
 update item_def set description = 'A box of earth with something green in it.' where id = 'planter';
@@ -4025,6 +4031,7 @@ insert into furniture_def values ('stall', 'Market stall', 3, 2, 60, false, fals
 update furniture_def set stall = true where id = 'stall';
 insert into furniture_def values ('mailbox', 'Mailbox', 1, 1, 30, false, false);
 update furniture_def set post = true where id = 'mailbox';
+insert into furniture_def values ('creature_crate', 'Creature crate', 2, 2, null, false, false);
 insert into furniture_def values ('lectern', 'Lectern', 1, 1, null, false, false);
 insert into furniture_def values ('coat_rack', 'Coat rack', 1, 1, null, false, false);
 insert into furniture_def values ('planter', 'Planter', 2, 1, null, false, false);
@@ -5057,6 +5064,10 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_mailbox', 0, 'plank', 4);
 insert into recipe_input values ('make_mailbox', 1, 'ribbon', 2);
 insert into recipe_input values ('make_mailbox', 2, 'nail', 8);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_creature_crate', 'creature_crate', 1, 'mallet', null, 'fine_carpentry', 'Build creature crate', 'building a creature crate', 10, 0.05, 16, false, false, 'wood', null, null, 'You nail up a creature crate. It holds one wildermon. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the creature crate apart again.');
+insert into recipe_input values ('make_creature_crate', 0, 'plank', 8);
+insert into recipe_input values ('make_creature_crate', 1, 'nail', 4);
+insert into recipe_input values ('make_creature_crate', 2, 'ribbon', 2);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_lectern', 'lectern', 1, 'mallet', null, 'fine_carpentry', 'Build lectern', 'building a lectern', 9, 0.05, 16, false, false, 'wood', null, null, 'You nail up a lectern with a good slant on it. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the lectern apart again.');
 insert into recipe_input values ('make_lectern', 0, 'plank', 4);
 insert into recipe_input values ('make_lectern', 1, 'shaft', 2);

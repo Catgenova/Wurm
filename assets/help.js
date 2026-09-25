@@ -1,4 +1,4 @@
-import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){return`
+import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./creatures.js";var c=()=>{let e=n(o).bill.map(([e,t])=>`<b>${t} × ${a(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`};function l(){let n=c();return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -307,7 +307,7 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     <p>Two settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
     <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
     <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
-    ${n.slice(1,-1).map(e=>e.name).join(`, `)} or ${n[n.length-1].name} stack by itself; one you point it at is still
+    ${i.slice(1,-1).map(e=>e.name).join(`, `)} or ${i[i.length-1].name} stack by itself; one you point it at is still
     used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
     On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
@@ -484,9 +484,9 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
     Every carcass you butcher raises the Butchering skill, and the skill sets the <b>QL</b> of everything
     that comes off it. With a knife of QL <i>n</i> it comes off at your Butchering <i>n</i>% of the time,
-    and otherwise at the knife's QL times ${e.toFixed(1)} to ${(e+i).toFixed(1)}, never above
+    and otherwise at the knife's QL times ${e.toFixed(1)} to ${(e+s).toFixed(1)}, never above
     your Butchering; with bare hands it comes off at your Butchering times ${e.toFixed(1)} to
-    ${(e+i).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
+    ${(e+s).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
     A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
@@ -584,8 +584,9 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     <p>Nothing holds a post up and it <b>rots where it stands</b>: about <b>half an hour</b> for the
     roughest and <b>three hours</b> for the best that can be made, leaning further as it goes, with one
     word of warning near the end. When it falls over, whoever was working out of it <b>comes back to
-    you</b> if you are walking alone, and <b>goes to the token</b> if you already have a companion at
-    your side. You can also pull a post up before it goes, and what comes up is as worn as it had
+    you</b> if you are walking alone; otherwise it <b>goes back to work on your settlement</b>, or into
+    an empty <b>creature crate</b> in your pack if you have no settlement, and off into the wild if you
+    have neither. You can also pull a post up before it goes, and what comes up is as worn as it had
     become.</p>
     <p>A wildermon on a post is <b>not</b> on the settlement's books, so it costs none of the working
     slots your deed level allows. That, and the fact you can put one down anywhere, is what a post is
@@ -694,8 +695,7 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     80 nails. It holds <b>10000 things</b> and will not stir until <b>all four yokes</b> have a
     wildermon in them.</p>
     <p>Set one down, stand beside it and <b>hitch</b> a tamed wildermon from its menu &mdash; one you
-    have with you, a deed worker, or one fetched straight out of the token if you are standing on your
-    own deed. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
+    have with you or a deed worker; one in a creature crate is let out of it first. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
     else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
     drags its feet, so feed the team before it goes in. A Seavic pair will outrun you at a walk; four
     Quarra will not, but they will shift ten thousand bricks.</p>
@@ -708,8 +708,8 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     cannot pick a vehicle up with anything on it or anything in the yokes.</p>
     <p>A beast in the traces <b>stays hitched until somebody takes it out</b> &mdash; one at a time from
     its own menu, or the whole team from the vehicle's. Until then it stands at the vehicle and goes
-    where the vehicle goes. It does not follow you, work, answer the bell or wander; it cannot be sent
-    to the token, set to a post, released or culled; <b>it does not get hungry</b>, though feeding it
+    where the vehicle goes. It does not follow you, work, answer the bell or wander; it cannot be put
+    in a crate, set to a post, released or culled; <b>it does not get hungry</b>, though feeding it
     still fills it; and <b>nothing picks it as a target</b>.</p>
     <p>A vehicle is <b>anybody's to use</b>. Whoever built it and whosever ground it stands on, anyone
     standing at it may take the reins, take hold of a cart, hitch to it, take a beast out of it, load it,
@@ -1311,13 +1311,26 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     10 levels of its task skill, so a seasoned one works a wide stretch of country. Its card in the
     Wildermon window shows the range it has now and how much skill the next step needs.</p>
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
-    or Aggressive) or is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
-    drops what it finds in the settlement's storage. Extra tamed wildermon are kept at the token,
-    whose menu lists them. Feed them from your pack; deed workers help themselves from storage.
+    or Aggressive), is <b>assigned to your deed</b>, where a Rabba forages around the settlement and
+    drops what it finds in the settlement's storage, or is shut in a <b>creature crate</b>. Feed them
+    from your pack; deed workers help themselves from storage.
     The <b>Wildermon</b> window (<kbd>P</kbd>) shows the condition, level and skills of every creature
     you own; wild ones keep theirs to themselves. Deed workers learn from their work, gaining skill at
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
+    <p><b>Creature crates.</b> A creature crate holds <b>one</b> wildermon. A fine carpenter builds it
+    with a mallet from ${n}; it weighs <b>${a(o).weight} kg</b> and does not rot.
+    The first wildermon you tame follows you; <b>every one after that goes into an empty crate in your
+    pack</b>, and without one you cannot tame it. A catch taken out of a trap is the same. Put the one
+    following you, or a deed worker, into an empty crate you carry from its menu. Set a crate down on
+    any spot of a tile and the wildermon is drawn inside it with its name over it. Open a crate
+    &mdash; standing beside it, or from your pack &mdash; to <b>let it out to follow you</b>, when the
+    one following you goes into the crate in its place, or to <b>set it to work the deed</b>, which
+    takes a working slot once it is grown. A wildermon in a crate does not get hungry. A crate with a
+    wildermon in it can be carried, set down or opened, and <b>nothing else</b>: it cannot be dropped,
+    bagged, stored, sold, posted or traded. <b>Take with you</b> on a deed worker, with a companion
+    already following you, leaves that companion on the deed in its place, or puts it in an empty
+    crate you carry when the deed has no room for it.</p>
     <p>Every tile is a 4 by 4 grid of spots for placing things. Build a <b>log crate</b> from three
     logs &mdash; notched and lashed, not a nail in it &mdash; or a <b>plank crate</b> from six planks
     and twelve nails (with a mallet), then right-click the spot on a tile
@@ -1449,7 +1462,10 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     of being left alone, so it is a thing you keep up rather than do once.</p>
     <p>To breed, stand a <b>male</b> and a <b>female</b> of one sort within four tiles of each other,
     both <b>grown</b>, both <b>fed</b>, and neither put to a mate in the last twenty minutes, then
-    choose <b>Put it to a mate</b>. You need a settlement: the young one goes to the token. If it takes,
+    choose <b>Put it to a mate</b>. The young one joins your settlement's herd and is not put to work,
+    and takes no working slot, until it is grown; without a settlement it follows you when nothing else
+    does, goes into an empty creature crate you carry when something does, and otherwise goes off into
+    the wild. If it takes,
     the female carries for about twelve minutes and then drops a young one, and what it is born with was
     settled at that moment &mdash; a sire sold, released or eaten in between has already had his say.</p>
     <p>Three slots are filled one at a time. Each is drawn from what the pair carry between them, and
@@ -1530,4 +1546,4 @@ import{A as e,Et as t,Ni as n,Pi as r,j as i}from"./creatures.js";function a(){r
     goes for the first point of a skill, a hundred and forty for the ninetieth, and something like
     <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
     a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
-  `}function o(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=a();let n=[],r=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){r=document.createElement(`section`),r.className=`help-sec`,r.id=`help-${n.length}`,r.append(e),n.push({title:e.textContent??``,el:r});continue}r?r.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let i=document.createElement(`input`);i.type=`search`,i.className=`panel-search help-search`,i.placeholder=`Search the help…`;let o=document.createElement(`nav`);o.className=`help-contents`;let s=document.createElement(`div`);s.className=`help-pages`;let c=document.createElement(`div`);c.className=`help-count`,c.hidden=!0;let l=n.map(({title:e,el:t},r)=>{let a=document.createElement(`button`);return a.type=`button`,a.className=`help-link`,a.textContent=e,a.addEventListener(`click`,()=>{i.value&&(i.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),a.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,a});o.append(...l);let u=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,l[e].hidden=!o,o&&(r+=1)}c.hidden=!t,c.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,s.scrollTop=0};i.addEventListener(`input`,()=>u(i.value)),i.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(i.value=``,u(``))}),s.append(...n.map(e=>e.el)),e.body.replaceChildren(i,o,c,s)}export{o as buildHelp};
+  `}function u(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=l();let n=[],r=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){r=document.createElement(`section`),r.className=`help-sec`,r.id=`help-${n.length}`,r.append(e),n.push({title:e.textContent??``,el:r});continue}r?r.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let i=document.createElement(`input`);i.type=`search`,i.className=`panel-search help-search`,i.placeholder=`Search the help…`;let a=document.createElement(`nav`);a.className=`help-contents`;let o=document.createElement(`div`);o.className=`help-pages`;let s=document.createElement(`div`);s.className=`help-count`,s.hidden=!0;let c=n.map(({title:e,el:t},r)=>{let a=document.createElement(`button`);return a.type=`button`,a.className=`help-link`,a.textContent=e,a.addEventListener(`click`,()=>{i.value&&(i.value=``,u(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),a.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,a});a.append(...c);let u=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,c[e].hidden=!o,o&&(r+=1)}s.hidden=!t,s.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,o.scrollTop=0};i.addEventListener(`input`,()=>u(i.value)),i.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(i.value=``,u(``))}),o.append(...n.map(e=>e.el)),e.body.replaceChildren(i,a,s,o)}export{u as buildHelp};
