@@ -7,7 +7,8 @@ import { RECIPE_BY_ID } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { numberWord } from '../../game/words';
+import { numberWord, spanWords } from '../../game/words';
+import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
@@ -100,6 +101,14 @@ export const NEWS: News[] = [
       `Buy orders, in the Market window at a settlement token or a mailbox: name a thing, the least quality that will do, how many and the silver for each, and the whole price is held out of your purse. Anybody else there can fill some or all of it from their pack and is paid at once; what they bring comes to you by the post. Take an order back whenever you like; one left open for ${ORDER_LIFE / 86400} days takes itself back, with what it still holds.`,
       `The Field guide (${defaultKey('win_guide')}): a page for each of the ${guidePages().length} kinds of creature, marking whether you have seen, tamed and bred it, where it lives and what it gives.`,
       'What\'s new: this window, opened as you come ashore when something has changed since you last read it, and from the UI Menu at any time.',
+    ],
+  },
+  {
+    n: 5,
+    day: '2026-09-25',
+    lines: () => [
+      `Dying: your pack, what is in your hands, your toolbelt and every bag with what is in it go into a grave where you fell, or on the nearest dry ground within ${GRAVE_REACH} tiles if you fell in deep water. Only you can open it or take from it, and ${spanWords(GRAVE_KEEPS)} after you fell it crumbles with whatever is still in it. What you wear stays on you, and so does a crate with a wildermon in it.`,
+      'Two payments out of one purse at the same moment no longer both go through: the second waits for the first, and is refused if what is left will not cover it.',
     ],
   },
 ];
