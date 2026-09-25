@@ -233,7 +233,14 @@ function taming(def: SpeciesDef): string[] {
 }
 
 /** What one is for once it is yours: its trade, what it gives, what it carries and pulls, and what it sees. */
-function keeping(def: SpeciesDef): string[] {
+/**
+ * What a kept one is for. Three of these rules run only in a game of your
+ * own -- an island fills no hive from one, reads no panniers and has no temper
+ * on it -- and a page read on an island says so rather than promising them.
+ */
+const SOLO_ONLY = 'In a game of your own only: ';
+function keeping(def: SpeciesDef, onIsland = false): string[] {
+  const solo = onIsland ? SOLO_ONLY : '';
   const lines: string[] = [];
   if (def.gathers) {
     const skill = skillName(GATHER_SKILL[def.gathers]);
@@ -254,7 +261,7 @@ function keeping(def: SpeciesDef): string[] {
     const what = def.milk ? `${capital(grown)} and milk come` : `Its ${grown} ${grown.endsWith('s') ? 'come' : 'comes'}`;
     lines.push(`${what} back in full in ${spanWords(1 / def.fleece)} on a grown one`);
   }
-  if (def.hives) lines.push(`Kept on your settlement, it fills a hive standing there with ${itemName('honey')} and ${itemName('wax')}`);
+  if (def.hives) lines.push(`${solo}${solo ? 'kept' : 'Kept'} on your settlement, it fills a hive standing there with ${itemName('honey')} and ${itemName('wax')}`);
   if (def.mount) lines.push(`Carries a rider once it wears ${listed(TACK.map((id) => `${article(itemName(id))} ${itemName(id)}`))}`);
   if (def.pitch) lines.push(`Under a rider, what its climbing adds to the steepest step it takes counts ${times(def.pitch)}`);
   if (def.swims) lines.push('Carries a rider across deep water');
@@ -262,9 +269,9 @@ function keeping(def: SpeciesDef): string[] {
     lines.push(`In the traces it adds ${percent(def.pull ?? PULL_DEFAULT)} to a team's pull`
       + `${def.pull !== undefined && def.pull !== PULL_DEFAULT ? `, where most add ${percent(PULL_DEFAULT)}` : ''}, and learns climbing as it pulls`);
   }
-  if (def.pannier) lines.push(`Carries ${def.pannier} things in panniers on its own back`);
+  if (def.pannier) lines.push(`${solo}${solo ? 'carries' : 'Carries'} ${def.pannier} things in panniers on its own back`);
   if (def.sight) lines.push(`Sees ${def.sight} tiles for you, where most see ${KEPT_EYES}`);
-  if (def.unruly) lines.push(`Rounds on whoever stands beside it: ${percent(def.unruly)} odds every ${spanWords(NIP_EVERY)}`);
+  if (def.unruly) lines.push(`${solo}${solo ? 'rounds' : 'Rounds'} on whoever stands beside it: ${percent(def.unruly)} odds every ${spanWords(NIP_EVERY)}`);
   return lines;
 }
 
@@ -301,7 +308,7 @@ export function guidePage(def: SpeciesDef, onIsland = false): GuideSection[] {
   return [
     { head: 'Where it lives', lines: whereItLives(def, onIsland) },
     { head: def.monster ? 'Not a wildermon' : 'Taming', lines: taming(def) },
-    ...(def.monster ? [] : [{ head: 'Kept', lines: keeping(def) }]),
+    ...(def.monster ? [] : [{ head: 'Kept', lines: keeping(def, onIsland) }]),
     { head: 'Meeting one', lines: fighting(def) },
     { head: 'Butchered', lines: carcass(def) },
   ].filter((s) => s.lines.length);

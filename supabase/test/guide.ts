@@ -147,6 +147,24 @@ for (const d of KINDS) {
 check('what a kind is for, and what it is like to meet, is what its definition says, number for number',
   !kept.length, kept.slice(0, 6).join('; '));
 
+/*
+ * And the three kept rules an island does not run -- a hive filled from a
+ * kept one, panniers, a temper -- say on an island page that they are for a
+ * game of your own, and say nothing of the sort in one.
+ */
+const soloOnly: string[] = [];
+for (const d of KINDS) {
+  const island = guidePage(d, true).flatMap((sec) => sec.lines);
+  const alone = guidePage(d).flatMap((sec) => sec.lines);
+  for (const [what, has, bit] of [['a hive', !!d.hives, 'fills a hive'], ['panniers', !!d.pannier, 'things in panniers'],
+    ['its temper', !!d.unruly, 'odds every']] as Array<[string, boolean, string]>) {
+    if (!has) continue;
+    if (!island.find((l) => l.includes(bit))?.startsWith('In a game of your own only: ')) soloOnly.push(`${d.id}: ${what} unmarked on an island`);
+    if (alone.find((l) => l.includes(bit))?.startsWith('In a game')) soloOnly.push(`${d.id}: ${what} marked in a game of your own`);
+  }
+}
+check('on an island, a hive, panniers and a temper are said to be for a game of your own only', !soloOnly.length, soloOnly.slice(0, 4).join('; '));
+
 /* ---- the browser ------------------------------------------------------------ */
 console.log('--- the browser');
 const game = Game.create(4242);
