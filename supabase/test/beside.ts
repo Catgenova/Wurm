@@ -40,6 +40,7 @@ import { Game } from '../../src/game/game';
 import { furnitureName } from '../../src/game/furniture';
 import type { Item } from '../../src/game/items';
 import { CRAFT_REACH } from '../../src/game/recipes';
+import { MOULD_BY_ID } from '../../src/game/metal';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -93,6 +94,9 @@ const pack = game.inventory;
 const USED = ['iron_lump', 'iron_ore', 'log', 'shovel_head_mould', 'anvil_mould', 'casting', 'silver_lump', 'coin_die',
   'file', 'whetstone', 'hatchet', 'apple', 'unfired_clay_bowl', 'shovel', 'coin', 'plank', 'shaft', 'thatch', 'peat', 'coal', 'timber'];
 for (const it of [...pack.items]) if (USED.includes(it.id) || it.inside) pack.remove(it.uid, it.count);
+/* The lumps in the wagon: what an anvil takes off its mould, and ten over for the rest of it. */
+const ANVIL_LUMPS = MOULD_BY_ID.get('anvil_mould')?.lumps ?? 0;
+const LUMPS = ANVIL_LUMPS + 10;
 const stack = (id: string, count: number, ql: number, extra?: string, piece?: string): Item => ({
   uid: pack.nextUid++, id, ql, dmg: 0, count, ...(extra ? { extra } : {}), ...(piece ? { piece } : {}),
 });
@@ -109,7 +113,7 @@ barrel.liquid = 'water';
 barrel.litres = 20;
 
 const wagon = game.addFurniture('wagon', px + 2, py, 0, 0, 40, [
-  stack('iron_lump', 30, 45, 'Iron'), stack('iron_ore', 5, 35), stack('shovel', 1, 30, 'Iron'),
+  stack('iron_lump', LUMPS, 45, 'Iron'), stack('iron_ore', 5, 35), stack('shovel', 1, 30, 'Iron'),
   stack('casting', 2, 50, 'Iron', 'shovel_head'), stack('silver_lump', 2, 40, 'Silver'),
   stack('unfired_clay_bowl', 3, 30), stack('apple', 20, 30),
 ], 'Pine');
@@ -143,8 +147,8 @@ const go = (id: string, t: Target): string => {
 };
 
 console.log('--- the browser');
-check('at hand: the thirty lumps in the wagon, and none of the chest\'s, the padlocked wagon\'s or the far wagon\'s',
-  game.stockCount('iron_lump') === 30, `${game.stockCount('iron_lump')}`);
+check(`at hand: the ${LUMPS} lumps in the wagon, and none of the chest's, the padlocked wagon's or the far wagon's`,
+  game.stockCount('iron_lump') === LUMPS, `${game.stockCount('iron_lump')}`);
 const lumpEntry = game.stockOf((it) => it.id === 'iron_lump')[0];
 check('and a stack in the wagon says which store it is in', !lumpEntry?.carried && lumpEntry?.store === furnitureName(wagon),
   `${lumpEntry?.store}`);
@@ -152,7 +156,7 @@ check('and a stack in the wagon says which store it is in', !lumpEntry?.carried 
 const st = { kind: 'smelter', id: smelter.id } as const;
 check('a mould is poured out of the wagon',
   go('pour_mould', { ...st, mouldUid: mould.uid, itemUid: first(wagon.items, 'iron_lump').uid } as Target) === 'done'
-  && count(wagon.items, 'iron_lump') === 29 && smelter.jobs.length === 1 && smelter.jobs[0].piece === 'shovel_head',
+  && count(wagon.items, 'iron_lump') === LUMPS - 1 && smelter.jobs.length === 1 && smelter.jobs[0].piece === 'shovel_head',
   `${count(wagon.items, 'iron_lump')} lumps left in the wagon, ${smelter.jobs.length} in the furnace`);
 check('an anvil is cast out of it',
   go('cast_anvil', { ...st, itemUid: first(wagon.items, 'iron_lump').uid } as Target) === 'done'
@@ -262,7 +266,7 @@ begin
   insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, material, made_by)
     values (w, 'furniture', 'wagon', v_x + 2, v_y, 0, 0, v_x + 2.5, v_y + 0.5, 40, 'Pine', them) returning id into v_wagon;
   insert into item (world_id, holder, placed, def, ql, count, extra, piece) values
-    (w, 'furniture', v_wagon, 'iron_lump', 45, 30, 'Iron', null),
+    (w, 'furniture', v_wagon, 'iron_lump', 45, ${LUMPS}, 'Iron', null),
     (w, 'furniture', v_wagon, 'iron_ore', 35, 5, null, null),
     (w, 'furniture', v_wagon, 'shovel', 30, 1, 'Iron', null),
     (w, 'furniture', v_wagon, 'casting', 50, 2, 'Iron', 'shovel_head'),
@@ -398,9 +402,9 @@ const said = (key: string): string =>
   isle.split('\n').find((l) => l.startsWith(`${key}|`))?.slice(key.length + 1) ?? 'MISSING';
 
 console.log('--- the island');
-check('at hand: the thirty lumps in the wagon, and none of the chest\'s, the padlocked wagon\'s or the far wagon\'s',
-  said('AT') === '30', said('AT'));
-check('a mould is poured out of the wagon', said('POUR?') === 'none' && said('POUR') === '29,1,shovel_head', `${said('POUR?')}; ${said('POUR')}`);
+check(`at hand: the ${LUMPS} lumps in the wagon, and none of the chest's, the padlocked wagon's or the far wagon's`,
+  said('AT') === String(LUMPS), said('AT'));
+check('a mould is poured out of the wagon', said('POUR?') === 'none' && said('POUR') === `${LUMPS - 1},1,shovel_head`, `${said('POUR?')}; ${said('POUR')}`);
 check('an anvil is cast out of it', said('CAST?') === 'none' && said('CAST') === '9,0,2', `${said('CAST?')}; ${said('CAST')}`);
 check('ore is charged out of it', said('ORE?') === 'none' && said('ORE') === '0,7', `${said('ORE?')}; ${said('ORE')}`);
 check('and scrap melted down out of it', said('MELT?') === 'none' && said('MELT') === '0,true', `${said('MELT?')}; ${said('MELT')}`);

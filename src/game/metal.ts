@@ -126,7 +126,7 @@ export interface MouldDef {
 }
 
 export const MOULDS: MouldDef[] = [
-  { id: 'anvil_mould', name: 'Anvil mould', makes: 'anvil', skill: 'blacksmithing', sand: 4, difficulty: 10, lumps: 20 },
+  { id: 'anvil_mould', name: 'Anvil mould', makes: 'anvil', skill: 'blacksmithing', sand: 4, difficulty: 10, lumps: 80 },
   { id: 'pan_mould', name: 'Pan mould', makes: 'frying_pan', skill: 'blacksmithing', sand: 2, difficulty: 8, lumps: 1 },
   { id: 'rake_head_mould', name: 'Rake head mould', makes: 'rake_head', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },
   { id: 'shovel_head_mould', name: 'Shovel head mould', makes: 'shovel_head', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },

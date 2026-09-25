@@ -1593,9 +1593,10 @@ delete from event where uid = :'ivar';
 select '249. pouring an anvil with no mould: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'iron_lump' limit 1) || '}')::jsonb), 'allowed');
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'anvil_mould', 45, 1);
 insert into item (world_id, holder, holder_uid, def, ql, count) values (:'world2', 'player', :'ivar', 'copper_lump', 50, 2);
-select '250. with two lumps where it takes twenty: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
-update item set count = 22 where holder_uid = :'ivar' and def = 'copper_lump';
-select '251. and with twenty-two: ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
+select '250. with two lumps where it takes ' || mould_lumps('anvil_mould', 'copper') || ': ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
+-- What the mould takes, off the mould's own table, and two over.
+update item set count = mould_lumps('anvil_mould', 'copper') + 2 where holder_uid = :'ivar' and def = 'copper_lump';
+select '251. and with ' || mould_lumps('anvil_mould', 'copper') + 2 || ': ' || coalesce(act_refusal(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb), 'allowed');
 select act_perform(:'world2', :'ivar', 'cast_anvil', ('{"kind":"smelter","id":' || :'furnace' || ',"itemUid":' || (select id from item where holder_uid = :'ivar' and def = 'copper_lump' limit 1) || '}')::jsonb) \g /dev/null
 select '252. ' || (select text from event where uid = :'ivar' order by n desc limit 1)
      || ' — lumps left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'copper_lump')

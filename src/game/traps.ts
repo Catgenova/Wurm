@@ -58,7 +58,7 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
   snare: {
     id: 'snare',
     name: 'Snare',
-    bill: [['rope', 1], ['shaft', 2]],
+    bill: [['rope', 4], ['shaft', 8]],
     difficulty: 8,
     time: 6,
     holds: 20,
@@ -71,7 +71,7 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
   creel: {
     id: 'creel',
     name: 'Creel',
-    bill: [['reed', 14], ['rope', 1]],
+    bill: [['reed', 56], ['rope', 4]],
     difficulty: 16,
     time: 16,
     holds: 0,
@@ -86,7 +86,7 @@ export const TRAPS: Record<TrapKind, TrapDef> = {
   deadfall: {
     id: 'deadfall',
     name: 'Deadfall',
-    bill: [['plank', 3], ['shaft', 2], ['rope', 2], ['nail', 6]],
+    bill: [['plank', 12], ['shaft', 8], ['rope', 8], ['nail', 12]],
     difficulty: 26,
     time: 14,
     holds: 60,
