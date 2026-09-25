@@ -1,4 +1,4 @@
-import { uiBox } from './screen';
+import { uiBox, uiPoint } from './screen';
 
 export interface MenuItem {
   label: string;
@@ -142,6 +142,17 @@ export class ContextMenu {
     return !this.el.hidden;
   }
 
+  /**
+   * Open at a point on the screen: a pointer's `clientX` and `clientY`, or a
+   * corner of something's `getBoundingClientRect()`.
+   *
+   * Turned into the interface's own coordinates here rather than by every
+   * caller, because the interface is a scaled box over the screen -- on a
+   * phone, and at any text and window size but 100% -- and all but one caller
+   * was handing its screen point straight to `left` and `top`, which puts the
+   * menu somewhere else than where it was asked for as soon as the scale is
+   * anything but one.
+   */
   show(x: number, y: number, title: string, items: MenuItem[], facts?: string[]): void {
     this.el.replaceChildren();
     const head = document.createElement('div');
@@ -165,7 +176,7 @@ export class ContextMenu {
     }
     this.el.append(...buildMenuRows(items, 0, { changed: () => this.fit(), chose: () => this.hide() }));
     this.el.hidden = false;
-    this.anchor = { x, y };
+    this.anchor = uiPoint({ clientX: x, clientY: y });
     this.fit();
   }
 
@@ -175,9 +186,10 @@ export class ContextMenu {
   private fit(): void {
     this.el.style.left = '0px';
     this.el.style.top = '0px';
-    const rect = this.el.getBoundingClientRect();
-    const left = Math.min(this.anchor.x, uiBox().w - rect.width - 4);
-    const top = Math.min(this.anchor.y, uiBox().h - rect.height - 4);
+    // Its own size in the interface's pixels, which is what `uiBox` is in; a
+    // bounding rectangle is in the screen's, and is the scale times bigger.
+    const left = Math.min(this.anchor.x, uiBox().w - this.el.offsetWidth - 4);
+    const top = Math.min(this.anchor.y, uiBox().h - this.el.offsetHeight - 4);
     this.el.style.left = `${Math.max(0, left)}px`;
     this.el.style.top = `${Math.max(0, top)}px`;
   }

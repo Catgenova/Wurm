@@ -53,6 +53,13 @@ export const SETTING_DEFAULTS = {
    */
   volume: 0.55,
   /**
+   * How big every window, menu and bar is drawn, and the writing in them, as
+   * a share of the size the screen would give them anyway (`setUiSize` in
+   * `src/ui/screen.ts`). A fact about somebody's eyes and their screen, which
+   * is as far from being about the island as anything here.
+   */
+  uiSize: 1,
+  /**
    * Whether the first-steps card is shown.
    *
    * It stands down on its own once the first chapter of the journal is

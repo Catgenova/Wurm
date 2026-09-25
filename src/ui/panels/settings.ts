@@ -4,6 +4,7 @@ import { whoAmI } from '../../net/accounts';
 import { RARITIES } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
 import type { UIWindow } from '../windows';
+import { setUiSize, UI_SIZE_MAX, UI_SIZE_MIN, uiSizeShown } from '../screen';
 
 interface Toggle {
   input: HTMLInputElement;
@@ -99,6 +100,43 @@ export class SettingsPanel {
       say();
       input.addEventListener('input', () => {
         game.settings.volume = Number(input.value) / 100;
+        say();
+      });
+      row.append(input, text);
+      display.append(row);
+    }
+    /*
+     * How big the interface is drawn: "Text and window size. There's no
+     * setting for it, and that matters on a phone."
+     *
+     * Put on when the slider is let go rather than while it moves, because
+     * this window is part of what it scales: resized under the pointer, the
+     * slider would slide out from under the drag that is setting it. The
+     * number in the caption follows the drag, so you can see where you are.
+     */
+    {
+      const row = document.createElement('label');
+      row.className = 'setting-row';
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(Math.round(UI_SIZE_MIN * 100));
+      input.max = String(Math.round(UI_SIZE_MAX * 100));
+      input.step = '10';
+      input.value = String(Math.round(game.settings.uiSize * 100));
+      const text = document.createElement('span');
+      const say = (): void => {
+        const asked = Number(input.value);
+        const put = Math.round(game.settings.uiSize * 100);
+        const shown = Math.round(uiSizeShown() * 100);
+        // Only once it has been put on, and only if the screen held it back.
+        const held = asked === put && shown < put ? ` This screen has room for ${shown}%.` : '';
+        text.innerHTML = `<b>Text and window size &mdash; ${asked}%</b><small>Every window, menu and bar, and the writing in them, at ${asked}% of their size on this screen. The island itself is not scaled: zoom that with the mouse wheel or a pinch.${held}</small>`;
+      };
+      say();
+      input.addEventListener('input', say);
+      input.addEventListener('change', () => {
+        game.settings.uiSize = Number(input.value) / 100;
+        setUiSize(game.settings.uiSize);
         say();
       });
       row.append(input, text);

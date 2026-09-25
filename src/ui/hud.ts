@@ -14,7 +14,6 @@ import { ACTION_BY_ID } from '../game/actions';
 import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
 import { ashore, JOURNAL, nextGoals } from '../game/journal';
-import { uiPoint } from './screen';
 import { VERSION } from '../version';
 
 export interface HudCallbacks {
@@ -267,9 +266,9 @@ export class Hud {
      *
      * Anchored under itself rather than at the pointer, because the point of
      * this is a finger: the list wants to open where the thumb already is and
-     * stay there, not follow a cursor that a phone does not have. Measured
-     * through `uiPoint` because the interface is a scaled box over the screen
-     * and a client coordinate is not one of its own.
+     * stay there, not follow a cursor that a phone does not have. Handed
+     * over as a point on the screen, which the menu measures into the
+     * interface's own pixels itself.
      */
     const windows = document.createElement('button');
     windows.type = 'button';
@@ -279,8 +278,7 @@ export class Hud {
     windows.addEventListener('click', (e) => {
       e.stopPropagation();
       const r = windows.getBoundingClientRect();
-      const at = uiPoint({ clientX: r.left, clientY: r.bottom + 2 });
-      cb.windows(at.x, at.y);
+      cb.windows(r.left, r.bottom + 2);
     });
     toolbar.append(windows);
     for (const b of BUTTONS) {

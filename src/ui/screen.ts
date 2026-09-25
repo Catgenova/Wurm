@@ -38,6 +38,47 @@ const MAX_SCALE = 2.6;
 export const NARROW = 720;
 
 /**
+ * The size somebody asked for, on top of whatever the screen needed.
+ *
+ * Asked for as a text and window size setting, which "matters on a phone":
+ * there the interface is either laid out at about four hundred of its own
+ * pixels and scaled up to the glass, or not scaled at all where the phone lays
+ * the page out its own width, and neither of those is anybody's choice of how
+ * big the writing should be. `fitScreen` multiplies its own scale by this.
+ */
+export const UI_SIZE_MIN = 0.8;
+export const UI_SIZE_MAX = 1.5;
+let chosen = 1;
+
+/**
+ * The least room a size may leave the interface along the screen's shorter
+ * side, in its own pixels.
+ *
+ * A window is at least a hundred and sixty wide and the status panel wants two
+ * columns of bars; past this, a bigger size stops making anything easier to
+ * read and starts putting windows on top of each other with nowhere to go.
+ */
+const MIN_UI_SIDE = 280;
+
+/** The fit `followScreen` keeps running, so that a new size is put on at once. */
+let refit: (() => void) | null = null;
+
+/** Set the size asked for, clamped to what is offered, and put it on the screen. */
+export function setUiSize(size: number): void {
+  chosen = Math.min(UI_SIZE_MAX, Math.max(UI_SIZE_MIN, Number.isFinite(size) ? size : 1));
+  refit?.();
+}
+
+/**
+ * The size actually shown, as a share of the screen's own fit.
+ *
+ * The same as the size asked for except where the screen has no room for it,
+ * which is said beside the setting rather than left for somebody to wonder why
+ * their 150% looks like 120.
+ */
+export const uiSizeShown = (): number => box.scale / (box.fit || 1);
+
+/**
  * The interface's own box and scale, as `fitScreen` last left them.
  *
  * Everything that positions itself in the interface has to measure against
@@ -45,7 +86,7 @@ export const NARROW = 720;
  * anchored to the right of `window.innerWidth` lands off the side of a screen
  * that is only four hundred of the interface's own pixels wide.
  */
-let box = { w: 0, h: 0, scale: 1, left: 0, top: 0 };
+let box = { w: 0, h: 0, scale: 1, left: 0, top: 0, fit: 1 };
 
 /** How much room the interface has, in its own coordinates. */
 export const uiBox = (): { w: number; h: number } =>
@@ -107,14 +148,18 @@ export function fitScreen(ui: HTMLElement): number {
    * a desktop, and a desktop wants its own pixels.
    */
   const touch = matchMedia('(pointer: coarse)').matches;
-  const scale = touch && w > NARROW ? Math.min(MAX_SCALE, w / TOUCH_UI_WIDTH) : 1;
+  const fit = touch && w > NARROW ? Math.min(MAX_SCALE, w / TOUCH_UI_WIDTH) : 1;
+  // Then the size asked for, as far as the screen leaves room for it. Smaller
+  // is never refused: it only ever gives the interface more room.
+  let scale = fit * chosen;
+  if (chosen > 1) scale = Math.min(scale, Math.max(fit, Math.min(w, h) / MIN_UI_SIDE));
 
   ui.style.transformOrigin = '0 0';
   ui.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
   ui.style.width = `${w / scale}px`;
   ui.style.height = `${h / scale}px`;
   ui.classList.toggle('narrow', w / scale <= NARROW);
-  box = { w: w / scale, h: h / scale, scale, left, top };
+  box = { w: w / scale, h: h / scale, scale, left, top, fit };
   return scale;
 }
 
@@ -135,6 +180,7 @@ export function followScreen(ui: HTMLElement, onChange?: (scale: number) => void
   vv?.addEventListener('scroll', fit);
   window.addEventListener('resize', fit);
   window.addEventListener('orientationchange', fit);
+  refit = fit;
   fit();
 }
 

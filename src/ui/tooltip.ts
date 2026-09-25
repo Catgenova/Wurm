@@ -1,4 +1,4 @@
-import { uiBox } from './screen';
+import { uiBox, uiPoint } from './screen';
 
 export class Tooltip {
   readonly el: HTMLDivElement;
@@ -35,11 +35,15 @@ export class Tooltip {
       return div;
     }));
     this.el.hidden = false;
-    const rect = this.el.getBoundingClientRect();
-    let left = x + 16;
-    let top = y + 20;
-    if (left + rect.width > uiBox().w - 4) left = x - rect.width - 8;
-    if (top + rect.height > uiBox().h - 4) top = y - rect.height - 8;
+    // `x` and `y` are a point on the screen, like the menu's, and are measured
+    // into the interface's own pixels the same way; so is the tooltip's size.
+    const at = uiPoint({ clientX: x, clientY: y });
+    const w = this.el.offsetWidth;
+    const h = this.el.offsetHeight;
+    let left = at.x + 16;
+    let top = at.y + 20;
+    if (left + w > uiBox().w - 4) left = at.x - w - 8;
+    if (top + h > uiBox().h - 4) top = at.y - h - 8;
     this.el.style.left = `${left}px`;
     this.el.style.top = `${top}px`;
   }

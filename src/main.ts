@@ -73,7 +73,7 @@ import { TORCH_BURN } from './game/light';
 import { findPath } from './world/pathfinding';
 import { WATER_PALETTE, waterRgb } from './render/water';
 import { drawHeadshot, drawPortrait } from './render/sprites';
-import { followScreen, pageZoom, unzoomPage } from './ui/screen';
+import { followScreen, pageZoom, setUiSize, unzoomPage } from './ui/screen';
 
 const canvasEl = document.getElementById('game') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLElement;
@@ -471,6 +471,8 @@ zoomOut.title = 'Put the page back to its own size';
 zoomOut.hidden = true;
 zoomOut.addEventListener('click', () => unzoomPage());
 uiRoot.append(zoomOut);
+// At the size asked for, from the first fit, rather than at 100% for a frame.
+setUiSize(game.settings.uiSize);
 followScreen(uiRoot, () => {
   zoomOut.hidden = pageZoom() <= 1.02;
   // The box the windows live in has just changed, and `resize` did not fire:
