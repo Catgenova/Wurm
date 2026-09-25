@@ -409,6 +409,32 @@ export interface Stall {
   goods: Good[];
 }
 
+/**
+ * A buy order on the board: a kind of thing somebody wants, the least quality
+ * that will do, how many and the silver paid for each, and where it was put
+ * up. `mine` is whether it is yours to take back rather than somebody else's
+ * to fill.
+ */
+export interface Order {
+  n: number;
+  def: string;
+  /** The least quality that will do; nought for anything of the kind. */
+  ql: number;
+  /** How many were asked for, and how many have been brought so far. */
+  want: number;
+  got: number;
+  /** Silver paid for each one brought. */
+  price: number;
+  who: string;
+  mine: boolean;
+  /** The tile it was put up from, and the settlement that is on, if any. */
+  x: number;
+  y: number;
+  deed: string | null;
+  /** Seconds before it lapses by itself, counted by the island. */
+  left: number;
+}
+
 /** A thing waiting in the post, and who sent it. */
 export interface Parcel {
   id: number;
@@ -2438,11 +2464,12 @@ export class Island {
 
   /** One conversation, oldest first — and read, by the reading of it. */
   /**
-   * The nine doors goods change hands through.
+   * The doors goods change hands through.
    *
-   * Three shapes, because they answer three different questions: a deal is
-   * two people standing together, a stall is for when you are not there, and
-   * a parcel is for when neither of you is.
+   * Four shapes, because they answer four different questions: a deal is two
+   * people standing together, a stall is for when you are not there, a parcel
+   * is for when neither of you is, and a buy order is for something nobody
+   * has put out.
    */
   async offer(uid: string, items: number[], want = 0, give = 0): Promise<string | null> {
     return this.asked('rpc_deal', { p_uid: uid, p_items: items, p_want: want, p_give: give });
@@ -2498,6 +2525,33 @@ export class Island {
 
   async collect(): Promise<string | null> {
     return this.asked('rpc_collect', {});
+  }
+
+  /**
+   * Buy orders: every open one on the island when you stand at a settlement
+   * token or a mailbox, and your own wherever you are.
+   */
+  async orders(): Promise<{ board: boolean; orders: Order[] }> {
+    if (!this.info) return { board: false, orders: [] };
+    const { data, error } = await supabase().rpc('rpc_orders', { p_world: this.info.id });
+    if (error || !data) return { board: false, orders: [] };
+    const got = data as { board?: boolean; orders?: unknown };
+    return { board: !!got.board, orders: rowsIn<Order>(got.orders) };
+  }
+
+  /** Put an order up: the whole price comes out of your purse now and is held against it. */
+  async order(def: string, count: number, price: number, ql: number): Promise<string | null> {
+    return this.asked('rpc_order', { p_def: def, p_count: count, p_price: price, p_ql: ql });
+  }
+
+  /** Bring some or all of what an order wants out of your pack, and be paid for it. */
+  async fillOrder(n: number, count: number): Promise<string | null> {
+    return this.asked('rpc_order_fill', { p_n: n, p_count: count });
+  }
+
+  /** Take one of your own orders back, and what it still holds with it. */
+  async cancelOrder(n: number): Promise<string | null> {
+    return this.asked('rpc_order_cancel', { p_n: n });
   }
 
   /**

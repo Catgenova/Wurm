@@ -44,6 +44,7 @@ import { MATERIAL_BY_ID, type MaterialDef } from '../../game/materials';
 import { CHOOSE_AT, PATH_LIST, SIT_REST, SIT_WORTH } from '../../game/meditation';
 import { COIN_METALS, METALS, MOULDS, NAILS_PER_LUMP, RARE_METALS } from '../../game/metal';
 import { COIN_WORTH } from '../../game/money';
+import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
 import { OVEN_CAPACITY } from '../../game/placeables';
 import { BASE_SPEED, CARRY_CRAWL } from '../../game/player';
@@ -400,9 +401,9 @@ export function helpText(): string {
     ${awayAfter()}, the island counts you as gone, and from then until you come back it keeps count for
     you: every load your workers put into the stores, by item; every young one born to your wildermon,
     and any that went off into the wild because something already followed you and there was no empty
-    creature crate for it; everything your stalls sold and the silver it went for; and every parcel
-    posted to you, by who sent it. When you come back a window lists all of it, and the same lines go
-    into the event log.</p>
+    creature crate for it; everything your stalls sold and the silver it went for; everything brought
+    to your buy orders and the silver it cost; and every parcel posted to you, by who sent it. When you
+    come back a window lists all of it, and the same lines go into the event log.</p>
     <h3>Leaderboards</h3>
     <p>The <b>Leaderboards</b> window (<kbd>F2</kbd>) ranks everybody on an island, and asks the island again
     every ${BOARD_REFRESH} seconds while it is open. <b>Skills:</b> ${BOARD_RULES.skills}
@@ -1089,14 +1090,14 @@ export function helpText(): string {
     everything you do teach you <b>${share(TABLE_BEST)} more</b> &mdash; but that one reads off whichever of them
     is <b>shortest</b>, so every one of them full but one empty is worth nothing at all. Bread and nothing
     else buys you nothing; it is the spread that pays.</p>
-    <h3>Money, and three ways to spend it</h3>
+    <h3>Money, and four ways to spend it</h3>
     <p>Coins have been struck on this island since there was an anvil to strike them on, and until
     now they have bought nothing at all. One number settles it: <b>a gold coin is worth ${numberWord(GOLD)}
     silver</b>, every price is named in silver, and change comes back in silver. Paying takes your
     largest coins first, so ${numberWord(GOLD + 1)} silver out of a gold and ${numberWord(POCKET)} leaves you the ${numberWord(POCKET - 1)} rather than
     breaking the small change.</p>
     <p>Goods change hands in the ways below, each the answer to a different question, and a board
-    finds what is for sale. The <b>Market</b> window (<kbd>U</kbd>) holds all of them.</p>
+    finds what is for sale and what is wanted. The <b>Market</b> window (<kbd>U</kbd>) holds all of them.</p>
     <p><b>The market board</b> is read at a settlement token or a mailbox: every stall on the island,
     where it stands, whose it is, what is for sale on it and at what price, nearest first. Buying is
     done at the stall: stand at its counter and press <b>Buy</b>, and the price comes out of your
@@ -1113,6 +1114,17 @@ export function helpText(): string {
     the whole reason coins are worth striking. What is on it comes back off it for its owner alone;
     anybody else buys it. A thing taken back off the counter is not for sale again until it is
     priced again.</p>
+    <p><b>A buy order</b> is for what nobody has put out. At a settlement token or a mailbox, on the
+    <b>Orders</b> tab, name a kind of thing, the lowest quality that will do (nought takes any), how many,
+    and the silver you will pay for each: the whole price comes out of your purse there and then and is
+    held against the order, which goes on the board after the stalls with your name and where you put it
+    up. Anybody else at a token or a mailbox can fill it, all of it or some, and is paid out of what it
+    holds at once. The island chooses what goes out of their pack: anything of that kind, whatever it is
+    made of, at that quality or better, the poorest first &mdash; never anything locked, worn or in hand,
+    held out in a deal, or with something inside it. What they bring comes to you by the post and waits
+    at any mailbox, and you are told. Take an order back whenever you like, from anywhere, and what it
+    still holds comes back to your purse; one left open for <b>${spanWords(ORDER_LIFE)}</b> lapses and gives
+    it back by itself. Nobody fills their own.</p>
     <p><b>A parcel</b> is for when neither of you is there. A letter has carried ${numberWord(LETTER_MAX)}
     characters and nothing else; it carries things now, posted at a <b>mailbox</b> and drawn out at
     any other. Both ends want a box — without one you may still write, and nothing but words will

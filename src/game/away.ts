@@ -6,9 +6,10 @@ import { priceWords } from './money';
  * While you were away.
  *
  * The island counts, for somebody who is not there, what their workers bring
- * home, the young born to their wildermon, what their stalls sell and the
- * parcels posted to them, and hands the counts over when they come back
- * (`rpc_join`, `away_tally`). This turns them into the lines they are shown.
+ * home, the young born to their wildermon, what their stalls sell, what is
+ * brought to their buy orders and the parcels posted to them, and hands the
+ * counts over when they come back (`rpc_join`, `away_tally`). This turns them
+ * into the lines they are shown.
  */
 
 /** One count the island kept for you while you were away. */
@@ -16,13 +17,14 @@ export interface AwayRow {
   /**
    * haul: a worker's load put into a store. born: a young one that stayed
    * yours. strayed: a young one that went off into the wild. sold: a thing
-   * bought off your stall. parcel: a parcel posted to you.
+   * bought off your stall. bought: a thing brought to one of your buy orders.
+   * parcel: a parcel posted to you.
    */
-  what: 'haul' | 'born' | 'strayed' | 'sold' | 'parcel';
+  what: 'haul' | 'born' | 'strayed' | 'sold' | 'bought' | 'parcel';
   /** The item, the species, or the name of whoever sent the parcel. */
   def: string;
   n: number;
-  /** Silver taken for it, for a sale. */
+  /** Silver taken for it, for a sale; paid for it out of an order, for a thing bought. */
   silver: number;
 }
 
@@ -59,7 +61,7 @@ const itemCount = (r: AwayRow): string => `${r.n} × ${itemDef(r.def).name.toLow
 const speciesCount = (r: AwayRow): string => `${r.n} ${(SPECIES[r.def]?.name ?? r.def).toLowerCase()}`;
 const sum = (rows: AwayRow[], of: (r: AwayRow) => number): number => rows.reduce((t, r) => t + of(r), 0);
 
-/** The lines, most first within each, in the order: loads, young, sales, parcels. Empty when nothing happened. */
+/** The lines, most first within each, in the order: loads, young, sales, orders, parcels. Empty when nothing happened. */
 export function awayLines(away: Away): string[] {
   const of = (what: AwayRow['what']): AwayRow[] =>
     away.tally.filter((r) => r.what === what && r.n > 0).sort((a, b) => b.n - a.n || a.def.localeCompare(b.def));
@@ -76,6 +78,11 @@ export function awayLines(away: Away): string[] {
   const sold = of('sold');
   if (sold.length) {
     lines.push(`Your stalls sold ${listed(sold.map(itemCount))} for ${priceWords(sum(sold, (r) => r.silver))}. It is in their tills.`);
+  }
+  const bought = of('bought');
+  if (bought.length) {
+    lines.push(`Brought to your buy orders: ${listed(bought.map(itemCount))}, paid for with `
+      + `${priceWords(sum(bought, (r) => r.silver))} of what they held. It waits for you at any mailbox.`);
   }
   const parcels = of('parcel');
   const posted = sum(parcels, (r) => r.n);

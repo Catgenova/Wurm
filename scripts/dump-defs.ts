@@ -56,6 +56,7 @@ import { SLAB_VARIANTS } from '../src/world/tiles';
 import { DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
 import { MELT_HEAT, MELT_KEEP, MELT_SHARE, METAL_CONTENT } from '../src/game/melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR } from '../src/game/metal';
+import { ORDER_LIFE } from '../src/game/orders';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
@@ -1166,6 +1167,8 @@ for (const [fn, v] of [
   ['melt_share', MELT_SHARE], ['melt_keep', MELT_KEEP], ['melt_heat', MELT_HEAT],
   /* Coins: how many a lump strikes, what a strike costs the die, and how hard a strike is. */
   ['coins_per_lump', COINS_PER_LUMP], ['die_wear', DIE_WEAR], ['coin_difficulty', COIN_DIFFICULTY],
+  /* And how long a buy order stands before it lapses and gives back what it still holds. */
+  ['order_life', ORDER_LIFE],
   /* Horseshoes: four to a mount, a week on, a share quicker on stone and a step higher. */
   ['shoes_per_mount', SHOES_PER_MOUNT], ['shoe_days', SHOE_DAYS], ['shoe_pace', SHOE_PACE], ['shoe_step', SHOE_STEP],
   /* The hour, UTC, at which the woods turn over — six in the morning at UTC-7 — and what a tree leaves. */

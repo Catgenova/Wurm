@@ -3656,6 +3656,7 @@ create or replace function melt_heat() returns double precision language sql imm
 create or replace function coins_per_lump() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function die_wear() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function coin_difficulty() returns double precision language sql immutable as $fn$ select 12::double precision $fn$;
+create or replace function order_life() returns double precision language sql immutable as $fn$ select 604800::double precision $fn$;
 create or replace function shoes_per_mount() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
 create or replace function shoe_days() returns double precision language sql immutable as $fn$ select 7::double precision $fn$;
 create or replace function shoe_pace() returns double precision language sql immutable as $fn$ select 1.15::double precision $fn$;

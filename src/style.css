@@ -818,6 +818,33 @@ kbd {
   line-height: 1.45;
 }
 
+/* A row of several lines with a box or a button beside it: they sit in the middle rather than stretch down it. */
+.market-row {
+  align-items: center;
+  gap: 6px;
+}
+
+/* A buy order being written: what, on a line of its own, then how good, how many and for how much. */
+.market-order {
+  flex-wrap: wrap;
+}
+
+.market-kind {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.market-field {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.market-count {
+  width: 52px;
+}
+
 /* A place on a leaderboard: its number in a column of its own, and yours picked out. */
 .board-rank {
   min-width: 2.2em;

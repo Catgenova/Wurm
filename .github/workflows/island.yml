@@ -1376,6 +1376,21 @@ jobs:
             --outfile=node_modules/.cache/errors.mjs --log-level=error
           node node_modules/.cache/errors.mjs
 
+      - name: Buy orders on the board
+        run: |
+          # What somebody wants, with the whole price held against it, filled
+          # out of anybody else's pack and sent by the post. Through the doors
+          # on Hoarding: put up only at a token or a mailbox and only with the
+          # coins, change and all; listed with who and where; not filled by its
+          # owner, past what it wants, or with the wrong kind or quality, a
+          # stack put by, a pick in the hand or a bag with a rope in it; the
+          # poorest that will do first, paid there and then, counted for an
+          # owner who is away; taken back, or lapsed after a week, for what it
+          # still holds; and two people filling it at once, one after the other.
+          npx esbuild supabase/test/wanted.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/wanted.mjs --log-level=error
+          node node_modules/.cache/wanted.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

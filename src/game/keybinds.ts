@@ -71,7 +71,7 @@ export const BINDS: BindDef[] = [
   { id: 'win_map', label: 'Map', hint: 'The island as far as you have seen it.', group: 'Windows', keys: ['KeyM'] },
   { id: 'win_wildermon', label: 'Wildermon', hint: 'Your tamed creatures, what they carry and what they are set to.', group: 'Windows', keys: ['KeyP'] },
   { id: 'win_deed', label: 'Settlement', hint: 'Your deed at a glance.', group: 'Windows', keys: ['KeyN'] },
-  { id: 'win_market', label: 'Market', hint: 'Deals offered and taken, what your stall has sold, and parcels waiting in the post.', group: 'Windows', keys: ['KeyU'] },
+  { id: 'win_market', label: 'Market', hint: 'Every stall and buy order on the board, your own orders, deals offered and taken, what your stall has sold, and parcels waiting in the post.', group: 'Windows', keys: ['KeyU'] },
   { id: 'win_social', label: 'Social', hint: 'Who is waiting on you, who you know and where they are, and what has been written to you.', group: 'Windows', keys: ['KeyY'] },
   // Every letter is spoken for, and no browser takes F2 for itself.
   { id: 'win_boards', label: 'Leaderboards', hint: 'Who holds each skill highest on the island, its best-bred wildermon and its biggest settlements.', group: 'Windows', keys: ['F2'] },

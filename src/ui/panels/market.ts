@@ -1,9 +1,12 @@
-import { LETTER_MAX, type Deal, type Good, type Island, type Occupant, type Parcel, type Stall } from '../../net/island';
+import { LETTER_MAX, type Deal, type Good, type Island, type Occupant, type Order, type Parcel, type Stall } from '../../net/island';
 import type { Game } from '../../game/game';
-import { billWords, itemName, type Item } from '../../game/items';
+import { billWords, ITEM_DEFS, itemName, type Item } from '../../game/items';
 import { furnitureDef } from '../../game/furniture';
 import { SPECIES } from '../../game/creatures';
 import { priceWords, purse } from '../../game/money';
+import { couldBring, ORDER_LIFE, orderWords } from '../../game/orders';
+import { awayFor } from '../../game/away';
+import { spanWords } from '../../game/words';
 import type { UIWindow } from '../windows';
 
 /** How often the window asks again while it is open. */
@@ -14,13 +17,18 @@ const REFRESH = 5;
  *
  * Coins have existed since there was an anvil to strike them on and have
  * never bought anything, because there was nothing to buy them with and
- * nobody to buy from. Four tabs, because they answer four different
+ * nobody to buy from. Five tabs, because they answer five different
  * questions:
  *
- *   **Board** — what is for sale anywhere on the island. Every stall, where it
- *   stands, what is on it and for how much, read at a settlement token or a
- *   mailbox; and a Buy for each, which goes through when you stand at that
- *   stall's counter.
+ *   **Board** — what is for sale anywhere on the island, and what is wanted.
+ *   Every stall, where it stands, what is on it and for how much, read at a
+ *   settlement token or a mailbox, and a Buy for each, which goes through
+ *   when you stand at that stall's counter; and every buy order, with a Fill
+ *   for each, which goes through there and then.
+ *
+ *   **Orders** — what you want and nobody has put out. Your own buy orders,
+ *   wherever you are, to take back; and putting one up, at a token or a
+ *   mailbox.
  *
  *   **Deals** — two people standing together. An offer with its terms written
  *   down, held out of the offerer's pack while it stands, taken or turned
@@ -41,7 +49,7 @@ const REFRESH = 5;
  * A creature crate with a wildermon in it goes everywhere the rest do: into a
  * deal, onto a stall, into the post. Whoever it goes to keeps the wildermon.
  */
-type Tab = 'board' | 'deals' | 'stall' | 'post';
+type Tab = 'board' | 'orders' | 'deals' | 'stall' | 'post';
 export class MarketPanel {
   private readonly bar: HTMLDivElement;
   private readonly page: HTMLDivElement;
@@ -49,6 +57,11 @@ export class MarketPanel {
   private tab: Tab = 'board';
   private deals: Deal[] = [];
   private market: { board: boolean; stalls: Stall[] } = { board: false, stalls: [] };
+  private orders: { board: boolean; orders: Order[] } = { board: false, orders: [] };
+  /** The order being written: the name of what is wanted, the least quality, how many and the silver for each. */
+  private wanted = { name: '', ql: 0, count: 1, price: 1 };
+  /** How many somebody has typed that they will bring to an order, by the order's number. */
+  private readonly bringing = new Map<number, number>();
   /** What is ticked to go in a parcel, by item uid, and the note that goes with it. */
   private readonly posting = new Set<number>();
   private note = '';
@@ -70,7 +83,8 @@ export class MarketPanel {
     this.bar = document.createElement('div');
     this.bar.className = 'log-tabs';
     for (const [id, label, title] of [
-      ['board', 'Board', 'Every stall on the island, read at a settlement token or a mailbox'],
+      ['board', 'Board', 'Every stall and buy order on the island, read at a settlement token or a mailbox'],
+      ['orders', 'Orders', 'What you have asked for, and asking for something'],
       ['deals', 'Deals', 'Offers out and offers in'],
       ['stall', 'Stall', 'What you have laid out, and what it has taken'],
       ['post', 'Post', 'Parcels waiting at a mailbox'],
@@ -105,34 +119,48 @@ export class MarketPanel {
     void this.refresh();
   }
 
-  private async refresh(): Promise<void> {
+  /**
+   * Asked again, and drawn again -- but not over somebody typing. An order is
+   * four boxes filled in one after another, and a window that redrew itself
+   * every few seconds took the box away from under the hand typing into it.
+   * What was typed is kept either way; a press of a button draws regardless.
+   */
+  private async refresh(force = false): Promise<void> {
     if (!this.island || this.asking) return;
     this.asking = true;
     try {
       this.deals = await this.island.deals();
       this.waiting = await this.island.waiting();
       this.market = await this.island.market();
+      this.orders = await this.island.orders();
     } finally {
       this.asking = false;
     }
-    this.draw();
+    if (force || !this.typing()) this.draw();
+  }
+
+  /** Whether one of this window's boxes has somebody typing into it. */
+  private typing(): boolean {
+    const el = document.activeElement;
+    return el instanceof HTMLInputElement && (el.type === 'text' || el.type === 'number') && this.page.contains(el);
   }
 
   private async act(go: Promise<string | null>): Promise<void> {
     const why = await go;
     if (why) this.game.logMsg(why, 'error');
     this.clock = REFRESH;
-    await this.refresh();
+    await this.refresh(true);
   }
 
   private draw(): void {
     this.page.replaceChildren();
     if (!this.island) {
       this.say('There is one person on this island, and every one of these wants somebody else. '
-        + 'The board, deals, stalls and the post are for an island with other people on it.');
+        + 'The board, buy orders, deals, stalls and the post are for an island with other people on it.');
       return;
     }
     if (this.tab === 'board') this.drawBoard();
+    else if (this.tab === 'orders') this.drawOrders();
     else if (this.tab === 'deals') this.drawDeals();
     else if (this.tab === 'stall') this.drawStall();
     else this.drawPost();
@@ -280,13 +308,16 @@ export class MarketPanel {
   }
 
   /**
-   * Everything for sale on the island, stall by stall, nearest first. It is
-   * read at a settlement token or a mailbox; buying is done at the stall,
-   * whose counter you have to be standing at when you press Buy.
+   * Everything for sale on the island, stall by stall, nearest first, and
+   * then everything wanted, order by order, oldest first. It is read at a
+   * settlement token or a mailbox; buying is done at the stall, whose counter
+   * you have to be standing at when you press Buy, and filling an order is
+   * done where you stand.
    */
   private drawBoard(): void {
     if (!this.market.board) {
-      this.say('The market board is read at a settlement token or a mailbox. Stand at one to see every stall on the island.');
+      this.say('The market board is read at a settlement token or a mailbox. '
+        + 'Stand at one to see every stall and every buy order on the island.');
       return;
     }
     const me = this.game.player;
@@ -306,7 +337,133 @@ export class MarketPanel {
         this.page.append(row);
       }
     }
-    this.say(`You are carrying ${priceWords(purse(this.game.inventory.items))}. Your own stalls are on the Stall tab.`);
+    this.drawWanted();
+    this.say(`You are carrying ${priceWords(purse(this.game.inventory.items))}. `
+      + 'Your own stalls are on the Stall tab, and your own orders on the Orders tab.');
+  }
+
+  /**
+   * Everybody else's buy orders, and a Fill for each that you have something
+   * for: how many of yours will do is counted off your pack the way the
+   * island counts it, and the box starts at as many as it can take.
+   */
+  private drawWanted(): void {
+    this.head('Wanted');
+    const theirs = this.orders.orders.filter((o) => !o.mine);
+    if (!theirs.length) this.say('Nobody has put up an order.');
+    for (const o of theirs) {
+      const left = o.want - o.got;
+      const have = couldBring(this.game.inventory.items, o, (uid) => this.game.isEquipped(uid));
+      const row = document.createElement('div');
+      row.className = 'skill-row market-row';
+      const text = document.createElement('span');
+      text.textContent = `${o.who} wants ${orderWords(o.def, left, o.ql)} at ${priceWords(o.price)} each, `
+        + `put up at ${o.x},${o.y}${o.deed ? ` on ${o.deed}` : ''}. `
+        + (have ? `You have ${have} that will do.` : 'You have none that will do.');
+      row.append(text);
+      if (have) {
+        const most = Math.min(have, left);
+        const box = document.createElement('input');
+        box.type = 'number';
+        box.min = '1';
+        box.max = String(most);
+        box.className = 'panel-select market-count';
+        box.value = String(Math.min(this.bringing.get(o.n) ?? most, most));
+        box.title = 'How many to bring';
+        box.addEventListener('input', () => this.bringing.set(o.n, Math.max(1, Math.floor(Number(box.value) || 1))));
+        row.append(box, this.button('Fill',
+          `Paid ${priceWords(o.price)} for each out of what it holds, at once; what you bring goes to ${o.who} by the post`,
+          () => {
+            const n = Math.max(1, Math.floor(Number(box.value) || 1));
+            this.bringing.delete(o.n);
+            void this.act(this.island!.fillOrder(o.n, n));
+          }));
+      }
+      this.page.append(row);
+    }
+  }
+
+  /**
+   * Your own buy orders, wherever you are, each with what it still holds and
+   * how long it has left; and putting one up, which is done at a settlement
+   * token or a mailbox, where the board is read.
+   */
+  private drawOrders(): void {
+    this.head('Your orders');
+    const mine = this.orders.orders.filter((o) => o.mine);
+    if (!mine.length) this.say('Nothing asked for.');
+    for (const o of mine) {
+      const left = o.want - o.got;
+      const row = document.createElement('div');
+      row.className = 'skill-row market-row';
+      const text = document.createElement('span');
+      text.textContent = `${orderWords(o.def, left, o.ql)} at ${priceWords(o.price)} each`
+        + `${o.got ? `, ${o.got} of ${o.want} brought` : ''}: ${priceWords(left * o.price)} held, `
+        + `lapses in ${awayFor(o.left)}.`;
+      row.append(text, this.button('Take it back', `${priceWords(left * o.price)} comes back to your purse`,
+        () => void this.act(this.island!.cancelOrder(o.n))));
+      this.page.append(row);
+    }
+
+    this.head('Put up an order');
+    if (!this.orders.board) {
+      this.say('Stand at a settlement token or a mailbox to put one up.');
+      return;
+    }
+    // What it would hold, said under the boxes and said again as they change.
+    const held = document.createElement('div');
+    held.className = 'skill-note market-note';
+    held.textContent = this.holds();
+    const form = document.createElement('div');
+    form.className = 'panel-bar market-order';
+    const list = kindList();
+    const kind = document.createElement('input');
+    kind.type = 'text';
+    kind.className = 'panel-select market-kind';
+    kind.placeholder = 'What you want';
+    kind.title = 'Anything of this kind will do, whatever it is made of';
+    kind.setAttribute('list', list.id);
+    kind.value = this.wanted.name;
+    kind.addEventListener('input', () => (this.wanted.name = kind.value));
+    const box = (value: number, least: number, title: string, set: (n: number) => void): HTMLInputElement => {
+      const el = document.createElement('input');
+      el.type = 'number';
+      el.min = String(least);
+      el.className = 'panel-select market-count';
+      el.value = String(value);
+      el.title = title;
+      el.addEventListener('input', () => {
+        set(Math.max(least, Math.floor(Number(el.value) || least)));
+        held.textContent = this.holds();
+      });
+      return el;
+    };
+    const ql = box(this.wanted.ql, 0, 'The least quality that will do; nought takes any', (n) => (this.wanted.ql = Math.min(100, n)));
+    ql.max = '100';
+    const count = box(this.wanted.count, 1, 'How many you want', (n) => (this.wanted.count = n));
+    const price = box(this.wanted.price, 1, 'Silver for each one brought', (n) => (this.wanted.price = n));
+    form.append(kind, field('quality at least', ql), field('how many', count), field('silver each', price),
+      this.button('Put it up', 'The whole price comes out of your purse now', () => {
+        const def = kindNamed(this.wanted.name);
+        if (!def) {
+          this.game.logMsg('There is no such thing to ask for. Choose one off the list.', 'error');
+          return;
+        }
+        const { ql: least, count: n, price: each } = this.wanted;
+        void this.act(this.island!.order(def, n, each, least).then((why) => {
+          if (!why) this.wanted = { name: '', ql: 0, count: 1, price: 1 };
+          return why;
+        }));
+      }));
+    this.page.append(form, list, held);
+  }
+
+  /** What the order being written would hold, and for how long, against what you carry. */
+  private holds(): string {
+    const { count, price } = this.wanted;
+    return `It holds ${priceWords(count * price)} out of your purse until it is filled, until you take it back, `
+      + `or for ${spanWords(ORDER_LIFE)}, when it lapses and gives back what is left. `
+      + `You are carrying ${priceWords(purse(this.game.inventory.items))}.`;
   }
 
   /** A tick list of what is in your pack, to offer or to post. A crate with a wildermon in it is on it too. */
@@ -415,4 +572,39 @@ const nameOf = (t: { def: string; extra: string | null; ql: number; count: numbe
 /** A species as a sentence names it. */
 const speciesName = (id: string): string => (SPECIES[id]?.name ?? id).toLowerCase();
 const goodName = (g: Good): string => (g.count > 1 ? `${g.count} × ${nameOf(g)}` : nameOf(g));
+
+/**
+ * Every kind of thing an order may ask for, as the pack names it: all but
+ * coins, which are what an order pays with. Worked out the first time it is
+ * asked for rather than when this file loads, by which time every table that
+ * adds a kind of its own has added it.
+ */
+const orderable = (): Array<[string, string]> =>
+  Object.entries(ITEM_DEFS).filter(([id]) => id !== 'coin').map(([id, d]) => [id, d.name] as [string, string])
+    .sort((a, b) => a[1].localeCompare(b[1]));
+let kinds: Map<string, string> | null = null;
+/** The kind of thing typed into an order, by its name, whatever case it was typed in. */
+const kindNamed = (name: string): string | undefined =>
+  (kinds ??= new Map(orderable().map(([id, n]) => [n.toLowerCase(), id]))).get(name.trim().toLowerCase());
+let kindsOffered: HTMLDataListElement | null = null;
+/** The names offered as one is typed. */
+const kindList = (): HTMLDataListElement => {
+  if (kindsOffered) return kindsOffered;
+  kindsOffered = document.createElement('datalist');
+  kindsOffered.id = 'market-kinds';
+  for (const [, name] of orderable()) {
+    const o = document.createElement('option');
+    o.value = name;
+    kindsOffered.append(o);
+  }
+  return kindsOffered;
+};
+
+/** A box with what it is for written in front of it. */
+const field = (label: string, input: HTMLInputElement): HTMLLabelElement => {
+  const el = document.createElement('label');
+  el.className = 'market-field';
+  el.append(label, input);
+  return el;
+};
 
