@@ -10,6 +10,10 @@ import type { CraftStock } from './recipes';
 
 /** What one pass with a file teaches, whichever way it comes out. */
 export const IMPROVE_GAIN = 0.4;
+/** How far anybody may better a thing, however green: below this the skill is not the ceiling, this is. */
+export const IMPROVE_FLOOR = 10;
+/** Damage past which a thing is too knocked about to work on until it is repaired. */
+export const IMPROVE_DAMAGE = 10;
 
 /**
  * Improving: taking a finished thing and making it better than it was made.
@@ -90,7 +94,7 @@ export const canImprove = (id: string): boolean => !isMould(id) && improvable(id
  * little further than they could take an ordinary one.
  */
 export const improveCeiling = (g: Game, skill: string, item?: Item): number =>
-  Math.max(10, g.skills.get(skill)) + (item ? rarityOf(item).ceiling : 0);
+  Math.max(IMPROVE_FLOOR, g.skills.get(skill)) + (item ? rarityOf(item).ceiling : 0);
 
 /** How much a successful pass adds: a great deal at first, very little near the end. */
 export function improveStep(g: Game, item: Item, skill: string): number {
@@ -156,7 +160,7 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       const what = improvable(item.id);
       if (!what) return 'That is not something you can better.';
       if (item.issued) return 'That came ashore with you. There is nothing in it to better — make one of your own.';
-      if (item.dmg > 10) return 'It is too knocked about to work on. Repair it first.';
+      if (item.dmg > IMPROVE_DAMAGE) return 'It is too knocked about to work on. Repair it first.';
       const missing = missingTool(g, what.material);
       if (missing) return `You need ${what.material.tools.map((id) => itemDef(id).name.toLowerCase()).join(' and ')} to work ${what.material.name}.`;
       const made = madeOf(item);

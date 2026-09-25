@@ -27,6 +27,9 @@ export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
  * these lumps turn up together.
  */
 export { HOARD_METALS } from './items';
+/** Lumps in a hoard: this many, and up to this many more by how much of the carcass is kept. */
+export const HOARD_LUMPS = 4;
+export const HOARD_MORE = 6;
 
 /**
  * How much of a carcass is worth keeping. Bare hands manage about a third; a
@@ -91,7 +94,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
       const hoard = def.butcher.hoard ?? 0;
       if (hoard > 0) {
         const lumps: string[] = [];
-        for (let i = 0; i < Math.round(hoard * (4 + share * 6)); i++) {
+        for (let i = 0; i < Math.round(hoard * (HOARD_LUMPS + share * HOARD_MORE)); i++) {
           const id = HOARD_METALS[Math.floor(g.rand() * HOARD_METALS.length)];
           g.gather(id, { ql: Math.max(20, Math.min(100, 40 + g.rand() * 55)) });
           lumps.push(itemDef(id).name.toLowerCase());

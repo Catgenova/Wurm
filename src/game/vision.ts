@@ -3,6 +3,7 @@ import { isDone, WALL_TYPE_BY_ID } from './building';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
 import { heldReach } from './light';
+import { KEEN_SIGHT } from './meditation';
 
 /**
  * What can be seen from where you are standing.
@@ -29,10 +30,10 @@ export const VISIBLE = 2;
 export const AWARENESS = 'awareness';
 
 /** How far you can see on flat ground at noon, in tiles — at awareness 100. */
-const BASE_SIGHT = 15;
+export const BASE_SIGHT = 15;
 /** Every this many height units underfoot is worth another tile of range. */
 const HEIGHT_PER_TILE = 9;
-const MAX_SIGHT = 28;
+export const MAX_SIGHT = 28;
 /**
  * How much of your sight the dark takes.
  *
@@ -40,7 +41,9 @@ const MAX_SIGHT = 28;
  * an inconvenience; at three quarters it is a reason to stop walking, and a
  * reason for the torch to exist.
  */
-const NIGHT_LOSS = 0.75;
+export const NIGHT_LOSS = 0.75;
+/** How much of what the night took a light in your hand gives back. */
+export const LIGHT_GIVES_BACK = 0.75;
 /**
  * What awareness is worth.
  *
@@ -71,8 +74,9 @@ const EDGE = 2;
  * along a line and the view stops when they reach one. Three trees deep is as
  * far as anyone sees into a forest.
  */
+export const TREE_OPACITY = 0.34;
 const OPACITY: Partial<Record<number, number>> = {
-  [TileType.Tree]: 0.34,
+  [TileType.Tree]: TREE_OPACITY,
   [TileType.Bush]: 0.12,
   [TileType.Reed]: 0.18,
 };
@@ -168,14 +172,14 @@ export class Vision {
     const open = (BASE_SIGHT + up / HEIGHT_PER_TILE) * awarenessReach(g.skills.get(AWARENESS));
     /*
      * And what the dark takes off it. A light in your hand gives most of that
-     * back — three quarters of what the night took — and its own reach is a
+     * back — `LIGHT_GIVES_BACK` of what the night took — and its own reach is a
      * floor under your sight however black the hour: you can always see as far
      * as the thing you are carrying throws.
      */
     const lamp = g.heldLight();
-    const day = 1 - NIGHT_LOSS * g.darkness() * (lamp ? 0.25 : 1);
-    // The reader's path sees a quarter further than anybody else.
-    const keen = g.walks('knowledge', 5) ? 1.25 : 1;
+    const day = 1 - NIGHT_LOSS * g.darkness() * (lamp ? 1 - LIGHT_GIVES_BACK : 1);
+    // The reader's path sees further than anybody else.
+    const keen = g.walks('knowledge', 5) ? KEEN_SIGHT : 1;
     const seen = Math.max(3, Math.min(MAX_SIGHT * keen, open * day * keen));
     return lamp ? Math.max(seen, heldReach(lamp.id, lamp.ql)) : seen;
   }

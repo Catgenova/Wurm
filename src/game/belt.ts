@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemName, type Item } from './items';
+import { describeWith, itemName, type Item } from './items';
 
 /**
  * A loop on the belt. Either a job done to a kind of thing you carry — eat a
@@ -18,6 +18,7 @@ export interface BeltPin {
 export const BELT_MAX = 10;
 /** Points of quality per loop. */
 export const QL_PER_LOOP = 10;
+describeWith({ loopEvery: QL_PER_LOOP });
 
 /**
  * How many loops a belt of this quality has: one for every ten points of it, so

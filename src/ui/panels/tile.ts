@@ -21,7 +21,7 @@ const sign = (e: MenuItem): string =>
   `${e.label}\u0001${e.disabled ? 1 : 0}\u0001${e.hint ?? ''}\u0001${e.note ?? ''}\u0001${e.children ? e.children.map(sign).join('\u0002') : ''}`;
 
 /** The keys the list binds, in the order it hands them out. */
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+export const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 
 export class TilePanel {
   private head: HTMLDivElement;

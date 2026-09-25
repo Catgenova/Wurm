@@ -1,6 +1,7 @@
 import type { Deal, Island, Parcel } from '../../net/island';
 import type { Game } from '../../game/game';
-import { itemName, type Item } from '../../game/items';
+import { billWords, itemName, type Item } from '../../game/items';
+import { furnitureDef } from '../../game/furniture';
 import { priceWords, purse } from '../../game/money';
 import type { UIWindow } from '../windows';
 
@@ -111,7 +112,7 @@ export class MarketPanel {
   private draw(): void {
     this.page.replaceChildren();
     if (!this.island) {
-      this.say('There is one person on this island and all three of these want two. '
+      this.say('There is one person on this island, and every one of these wants somebody else. '
         + 'Deals, stalls and the post are for an island with other people on it.');
       return;
     }
@@ -246,8 +247,8 @@ export class MarketPanel {
      */
     const stalls = [...this.game.furniture.values()].filter((f) => f.kind === 'stall');
     if (!stalls.length) {
-      this.say('You have no stall. Nail one up — twelve planks, four timbers, four cloth and '
-        + 'twenty-six nails — and stand it somewhere people walk past.');
+      this.say(`You have no stall. Nail one up — ${billWords(furnitureDef('stall').bill)} — `
+        + 'and stand it somewhere people walk past.');
       return;
     }
     for (const f of stalls) {

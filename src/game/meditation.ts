@@ -1,6 +1,7 @@
 import type { ActionDef } from './actions';
 import type { Game } from './game';
 import { world } from './pace';
+import { NumberWord, numberWord, share, spanWords, times } from './words';
 
 /**
  * Meditation, and the three paths.
@@ -14,8 +15,8 @@ import { world } from './pace';
  * **Love** is the gardener's path: things grow for you, things trust you, and
  * what is hurt mends. **Knowledge** is the reader's: the work goes in faster,
  * you see further, and you can read what is in front of you. **Power** is the
- * plain one: you carry more, you hit harder, and less of what is aimed at you
- * lands.
+ * plain one: armour weighs less on you, you hit harder, and less of what is
+ * aimed at you lands.
  */
 
 export const MEDITATION = 'meditation';
@@ -38,17 +39,46 @@ export interface PathDef {
   steps: PathStep[];
 }
 
+/*
+ * What each step of a path is worth, where it is a number. The rule that
+ * reads one reads it from here, and so does the step's note, so the card and
+ * the game cannot say different things.
+ */
+/** Green thumb: what a stage of anything sown on your settlement takes, of its usual time. */
+export const GREEN_THUMB = 0.8;
+/** Gentle hand: what your chance to tame is multiplied by. */
+export const GENTLE_HAND = 1.25;
+/** Mend the flesh: the share of your health it gives back. */
+export const MEND_FLESH = 0.4;
+/** Abundance: what a harvest is multiplied by. */
+export const ABUNDANCE = 1.34;
+/** Attentive: what is added to what everything teaches you, as a share of an ordinary gain. */
+export const ATTENTIVE = 0.1;
+/** Sense the rock: how far out it reads the ground, in tiles. */
+export const SENSE_REACH = 15;
+/** Keen sight: what your sight is multiplied by. */
+export const KEEN_SIGHT = 1.25;
+/** Strong back: what armour and a load past your limit weigh on you, of what they would. */
+export const STRONG_BACK = 0.8;
+/** Hard hands: what everything you hit takes, over what it would. */
+export const HARD_HANDS = 1.16;
+/** Fury: how long it holds, in seconds, and what everything you hit takes while it does. */
+export const FURY_SECS = 30;
+export const FURY_MULT = 2;
+/** Ironhide: what the share of a blow your armour turns is multiplied by. */
+export const IRONHIDE = 1.1;
+
 export const PATHS: Record<PathId, PathDef> = {
   love: {
     id: 'love',
     name: 'Love',
     note: 'The gardener’s way. Things grow for you, things trust you, and what is hurt mends.',
     steps: [
-      { at: 3, name: 'Green thumb', note: 'Everything sown on your settlement comes on a fifth faster.' },
+      { at: 3, name: 'Green thumb', note: `A stage of anything sown on your settlement takes ${share(1 - GREEN_THUMB)} less time.` },
       { at: 12, name: 'Refresh', note: 'Hunger and thirst, both full, in a breath.', ability: { id: 'refresh', rest: 20 * 60, note: 'You are neither hungry nor thirsty.' } },
-      { at: 25, name: 'Gentle hand', note: 'A wild thing is a quarter readier to trust you.' },
-      { at: 45, name: 'Mend the flesh', note: 'Everything open on you closes and a good deal of the damage goes with it.', ability: { id: 'mendflesh', rest: 40 * 60, note: 'Wounds closed.' } },
-      { at: 70, name: 'Abundance', note: 'A harvest gives a third more than it did.' },
+      { at: 25, name: 'Gentle hand', note: `Your chance to tame anything is ${share(GENTLE_HAND - 1)} higher.` },
+      { at: 45, name: 'Mend the flesh', note: `Everything open on you closes, and ${share(MEND_FLESH)} of your health comes back.`, ability: { id: 'mendflesh', rest: 40 * 60, note: 'Wounds closed.' } },
+      { at: 70, name: 'Abundance', note: `A harvest gives ${share(ABUNDANCE - 1)} more than it did.` },
     ],
   },
   knowledge: {
@@ -56,11 +86,11 @@ export const PATHS: Record<PathId, PathDef> = {
     name: 'Knowledge',
     note: 'The reader’s way. The work goes in faster, you see further, and you can read what is in front of you.',
     steps: [
-      { at: 3, name: 'Attentive', note: 'Everything you do teaches you a tenth faster, for good.' },
-      { at: 12, name: 'Sense the rock', note: 'What metal is under the ground within fifteen tiles, all at once.', ability: { id: 'sense', rest: 15 * 60, note: 'The ground gives up what is in it.' } },
+      { at: 3, name: 'Attentive', note: `Everything you do teaches you ${share(ATTENTIVE)} more, for good.` },
+      { at: 12, name: 'Sense the rock', note: `What metal is under the ground within ${numberWord(SENSE_REACH)} tiles, all at once.`, ability: { id: 'sense', rest: 15 * 60, note: 'The ground gives up what is in it.' } },
       { at: 25, name: 'Reader', note: 'You read the blood of any wildermon at a glance, whatever your husbandry.' },
       { at: 45, name: 'Recall the way', note: 'You are standing at your own token, however far off you had got.', ability: { id: 'recall', rest: 40 * 60, note: 'Home.' } },
-      { at: 70, name: 'Keen sight', note: 'You see a quarter further than anybody else on the island.' },
+      { at: 70, name: 'Keen sight', note: `You see ${share(KEEN_SIGHT - 1)} further than anybody else on the island.` },
     ],
   },
   power: {
@@ -68,11 +98,11 @@ export const PATHS: Record<PathId, PathDef> = {
     name: 'Power',
     note: 'The plain way. You carry more, you hit harder, and less of what is aimed at you lands.',
     steps: [
-      { at: 3, name: 'Strong back', note: 'You carry a fifth more than your body says you should.' },
+      { at: 3, name: 'Strong back', note: `Armour, and a load past what your back will take, burden you ${share(1 - STRONG_BACK)} less.` },
       { at: 12, name: 'Second wind', note: 'Your wind comes back all at once.', ability: { id: 'secondwind', rest: 12 * 60, note: 'Wind back.' } },
-      { at: 25, name: 'Hard hands', note: 'You hit a sixth harder with anything, or with nothing.' },
-      { at: 45, name: 'Fury', note: 'For half a minute everything you hit takes twice what it would.', ability: { id: 'fury', rest: 40 * 60, note: 'Fury.' } },
-      { at: 70, name: 'Ironhide', note: 'What you are wearing turns a tenth more of every blow.' },
+      { at: 25, name: 'Hard hands', note: `You hit ${share(HARD_HANDS - 1)} harder with anything, or with nothing.` },
+      { at: 45, name: 'Fury', note: `For ${spanWords(FURY_SECS)} everything you hit takes ${times(FURY_MULT)} what it would.`, ability: { id: 'fury', rest: 40 * 60, note: 'Fury.' } },
+      { at: 70, name: 'Ironhide', note: `What you are wearing turns ${share(IRONHIDE - 1)} more of every blow.` },
     ],
   },
 };
@@ -105,6 +135,22 @@ export function abilitiesOf(path: PathId | null, meditation: number): PathStep[]
 }
 
 /**
+ * What where you sit multiplies a sitting by. The help reads these, so the
+ * rug and the page cannot say different things.
+ */
+export const SIT_WORTH = {
+  /** Your own yard, off everything else. */
+  yard: 0.7,
+  /** Ground above `highAt`, off a settlement; and above `thinAt`, anywhere. */
+  high: 1.25,
+  highAt: 25,
+  thin: 1.6,
+  thinAt: 60,
+  /** Your feet in the water. */
+  water: 1.3,
+};
+
+/**
  * What a sitting is worth. Somewhere quiet and out of the way is worth more
  * than the middle of your own yard: the island does not give up much to
  * somebody who has not gone looking.
@@ -116,20 +162,20 @@ export function sittingWorth(g: Game): { gain: number; where: string } {
   let where = 'You sit down and let the day go past.';
   const onDeed = g.onDeed(x, y);
   if (onDeed) {
-    quiet *= 0.7;
+    quiet *= SIT_WORTH.yard;
     where = 'You sit in your own yard. It is hard to empty your head where there is so much to do.';
   }
   // High, wild ground is what the paths are walked on.
   const h = g.world.centerHeight(x, y);
-  if (h > 60) {
-    quiet *= 1.6;
+  if (h > SIT_WORTH.thinAt) {
+    quiet *= SIT_WORTH.thin;
     where = 'You sit where the ground runs out and the air is thin, and the day goes past a long way below.';
-  } else if (h > 25 && !onDeed) {
-    quiet *= 1.25;
+  } else if (h > SIT_WORTH.highAt && !onDeed) {
+    quiet *= SIT_WORTH.high;
     where = 'You sit on the high ground with your back to a stone.';
   }
   if (g.world.hasWater(x, y)) {
-    quiet *= 1.3;
+    quiet *= SIT_WORTH.water;
     where = 'You sit with your feet in the water and let it go past.';
   }
   return { gain: 1.5 * quiet, where };
@@ -161,7 +207,7 @@ export const MEDITATION_ACTIONS: ActionDef[] = [
       const now = g.skills.get(MEDITATION);
       g.logMsg(where, 'event');
       if (!g.player.way && now >= CHOOSE_AT && before < CHOOSE_AT) {
-        g.logMsg('Something settles. Three ways of looking at all this have become clear, and you may walk exactly one of them. Choose from the rug.', 'system');
+        g.logMsg(`Something settles. ${NumberWord(PATH_LIST.length)} ways of looking at all this have become clear, and you may walk exactly one of them. Choose from the rug.`, 'system');
       }
       const path = g.player.way;
       if (path) {

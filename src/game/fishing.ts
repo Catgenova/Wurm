@@ -88,22 +88,35 @@ export function catchFish(g: Game, depth: number, rodQl: number, bait?: string |
   return pickFish(g, pool, b);
 }
 
+/** What a fish counts for in a pick, with whatever is on the hook counted in. */
+export const biteWeight = (f: FishDef, b?: BaitDef): number => {
+  if (!b) return f.weight;
+  const rank = b.favours.indexOf(f.id);
+  return rank < 0 ? f.weight * 0.35 : f.weight * (BAIT_PULL / (rank + 1));
+};
+
 /** One fish out of a pool, weighted, with whatever is on the hook counted in. */
 export function pickFish(g: Game, pool: FishDef[], b?: BaitDef): FishDef | null {
   if (!pool.length) return null;
-  const weightOf = (f: FishDef): number => {
-    if (!b) return f.weight;
-    const rank = b.favours.indexOf(f.id);
-    return rank < 0 ? f.weight * 0.35 : f.weight * (BAIT_PULL / (rank + 1));
-  };
   let total = 0;
-  for (const f of pool) total += weightOf(f);
+  for (const f of pool) total += biteWeight(f, b);
   let roll = g.rand() * total;
   for (const f of pool) {
-    roll -= weightOf(f);
+    roll -= biteWeight(f, b);
     if (roll <= 0) return f;
   }
   return pool[0];
+}
+
+/**
+ * The share of bites a fish is, in water that holds every fish, for a hand
+ * that can land them all: what the help says a bait is worth.
+ */
+export function biteShare(fish: string, bait?: string): number {
+  const b = bait ? BAIT_BY_ID.get(bait) : undefined;
+  const total = FISH.reduce((n, f) => n + biteWeight(f, b), 0);
+  const f = FISH_BY_ID.get(fish);
+  return f && total > 0 ? biteWeight(f, b) / total : 0;
 }
 
 /** The bait in the pack that is worth using here: the one favouring the best fish available. */
@@ -126,8 +139,11 @@ export function baitFor(g: Game, depth: number): { id: string; def: BaitDef } | 
   return best ? { id: best.id, def: best.def } : null;
 }
 
+/** How far a line is cast, in tiles each way. */
+export const LINE_REACH = 3;
+
 /** The best water within reach of where the player is standing. */
-export function bestWaterNear(g: Game, range = 3): { x: number; y: number; depth: number } | null {
+export function bestWaterNear(g: Game, range = LINE_REACH): { x: number; y: number; depth: number } | null {
   let best: { x: number; y: number; depth: number } | null = null;
   const px = g.player.tileX;
   const py = g.player.tileY;

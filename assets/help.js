@@ -1,4 +1,4 @@
-import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./creatures.js";var c=()=>{let e=n(o).bill.map(([e,t])=>`<b>${t} × ${a(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`};function l(){let n=c();return`
+import{A as e,Ai as t,bi as n,j as r,jr as i,wt as a,xi as o,zn as s}from"./creatures.js";var c=()=>{let e=i(s).bill.map(([e,n])=>`<b>${n} × ${t(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`};function l(){let i=c();return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -307,7 +307,7 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     <p>Two settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
     <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
     <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
-    ${i.slice(1,-1).map(e=>e.name).join(`, `)} or ${i[i.length-1].name} stack by itself; one you point it at is still
+    ${n.slice(1,-1).map(e=>e.name).join(`, `)} or ${n[n.length-1].name} stack by itself; one you point it at is still
     used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
     On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
@@ -484,9 +484,9 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
     Every carcass you butcher raises the Butchering skill, and the skill sets the <b>QL</b> of everything
     that comes off it. With a knife of QL <i>n</i> it comes off at your Butchering <i>n</i>% of the time,
-    and otherwise at the knife's QL times ${e.toFixed(1)} to ${(e+s).toFixed(1)}, never above
+    and otherwise at the knife's QL times ${e.toFixed(1)} to ${(e+r).toFixed(1)}, never above
     your Butchering; with bare hands it comes off at your Butchering times ${e.toFixed(1)} to
-    ${(e+s).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
+    ${(e+r).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
     A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
@@ -1013,7 +1013,7 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     skill</b> by 5, 12 or 25.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${(r*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(r*e*100).toFixed(0)}%</b>`).join(`, `)}
+    ${(o*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(o*e*100).toFixed(0)}%</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
     holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
     kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
@@ -1319,7 +1319,7 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
     <p><b>Creature crates.</b> A creature crate holds <b>one</b> wildermon. A fine carpenter builds it
-    with a mallet from ${n}; it weighs <b>${a(o).weight} kg</b> and does not rot.
+    with a mallet from ${i}; it weighs <b>${t(s).weight} kg</b> and does not rot.
     The first wildermon you tame follows you; <b>every one after that goes into an empty crate in your
     pack</b>, and without one you cannot tame it. A catch taken out of a trap is the same. Put the one
     following you, or a deed worker, into an empty crate you carry from its menu. Set a crate down on
@@ -1517,7 +1517,7 @@ import{A as e,Et as t,Fr as n,Hi as r,Vi as i,Xi as a,Xn as o,j as s}from"./crea
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about <b>one swing in
-    ${Math.round(1/t)}</b> a slab comes away of its own accord and the corner drops a
+    ${Math.round(1/a)}</b> a slab comes away of its own accord and the corner drops a
     step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
     than working it, and it gives way about one attempt in four. What breaks away is yours either

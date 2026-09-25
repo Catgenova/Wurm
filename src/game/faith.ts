@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture';
 import { itemName, type Item } from './items';
 import { world, worldRate } from './pace';
+import { capital, spanWords, times } from './words';
 
 /**
  * An altar, and what it is worth to have one.
@@ -40,14 +41,23 @@ export const FAVOUR_CEILING = 120;
 /** How much favour this much faith will carry at once. */
 export const favourCap = (faith: number): number => Math.min(FAVOUR_CEILING, 25 + faith * 0.95);
 
-/** An altar is worth more the better it was built, and dawn is worth more than noon. */
-export const prayerWorth = (altarQl: number, hour: number, faith: number): number => {
-  // The hour before the sun is properly up, and the one as it goes: those two.
-  const dawn = Math.max(0, 1 - Math.abs(hour - 6) / 3);
-  const dusk = Math.max(0, 1 - Math.abs(hour - 20) / 3);
-  const hourly = 0.55 + Math.max(dawn, dusk) * 0.75;
-  return PRAYER_FAVOUR * hourly * (0.6 + altarQl / 200) * (0.7 + faith / 220);
-};
+/**
+ * The two hours of the clock a prayer is worth most at, how many hours either
+ * side it tapers over, what it is worth well away from both, and what the
+ * best of them adds. The island's `pray` keeps the same two hours.
+ */
+export const PRAYER_PEAKS = [6, 20] as const;
+export const PRAYER_TAPER = 3;
+export const PRAYER_BASE = 0.55;
+export const PRAYER_LIFT = 0.75;
+
+/** What the hour does to a prayer. */
+export const prayerHour = (hour: number): number =>
+  PRAYER_BASE + Math.max(...PRAYER_PEAKS.map((p) => Math.max(0, 1 - Math.abs(hour - p) / PRAYER_TAPER))) * PRAYER_LIFT;
+
+/** An altar is worth more the better it was built, and those two hours are worth more than noon. */
+export const prayerWorth = (altarQl: number, hour: number, faith: number): number =>
+  PRAYER_FAVOUR * prayerHour(hour) * (0.6 + altarQl / 200) * (0.7 + faith / 220);
 
 export interface CastDef {
   id: string;
@@ -60,6 +70,13 @@ export interface CastDef {
   on: 'item' | 'self';
   note: string;
 }
+
+/** The most times one tool will take the circle. */
+export const BLESS_CAP = 3;
+/** What each blessing is worth to the working quality of a tool, in per cent. */
+export const BLESS_STEP = 9;
+/** How long a fair wind holds behind you, in seconds of the clock. */
+export const FAIR_WIND = 6 * 60;
 
 export const CASTS: CastDef[] = [
   {
@@ -92,7 +109,7 @@ export const CASTS: CastDef[] = [
     cost: 34,
     level: 24,
     on: 'item',
-    note: 'A tool comes out of it working better than it was ever made to, and stays that way. Three times is as far as anything will take it.',
+    note: `A tool comes out of it working ${BLESS_STEP}% better than it was ever made to, and stays that way. ${capital(times(BLESS_CAP))} is as far as anything will take it.`,
   },
   {
     id: 'fairwind',
@@ -100,7 +117,7 @@ export const CASTS: CastDef[] = [
     cost: 30,
     level: 30,
     on: 'self',
-    note: 'The wind comes round behind wherever you are pointed and holds there for a while.',
+    note: `The wind comes round behind wherever you are pointed and holds there ${spanWords(FAIR_WIND)}.`,
   },
   {
     id: 'bounty',
@@ -113,10 +130,6 @@ export const CASTS: CastDef[] = [
 ];
 export const CAST_BY_ID = new Map(CASTS.map((c) => [c.id, c]));
 
-/** The most times one tool will take the circle. */
-export const BLESS_CAP = 3;
-/** What each blessing is worth to the working quality of a tool. */
-export const BLESS_STEP = 9;
 /** What the blessings on a thing are worth, as a multiplier on what it is worth working. */
 export const blessBonus = (n: number | undefined): number => 1 + Math.min(BLESS_CAP, n ?? 0) * (BLESS_STEP / 100);
 
@@ -190,7 +203,7 @@ export function doCast(g: Game, def: CastDef, item?: Item): string {
       return `The ${itemName(item).toLowerCase()} comes out of it working ${Math.round((blessBonus(item.bless) - 1) * 100)}% better than it was made. (${item.bless} of ${BLESS_CAP})`;
     }
     case 'fairwind': {
-      g.favourWind = g.time + 6 * 60;
+      g.favourWind = g.time + FAIR_WIND;
       return 'The wind comes round behind you and settles there.';
     }
     case 'bounty': {

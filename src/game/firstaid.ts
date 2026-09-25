@@ -18,6 +18,9 @@ export const CLEAN_GAIN = 0.8;
 
 /** Fraction of a life a single dressing puts back, by the hand and the cloth. */
 export const healAmount = (skill: number, ql: number): number => 0.06 + (skill / 100) * 0.24 + (ql / 100) * 0.1;
+/** What a dressing puts back is multiplied by this under the herb that suits the wound, and by this under any other. */
+export const SUITS_HEAL = 1.5;
+export const HERB_HEAL = 1.1;
 
 /** The soundest bandage carried: the good cloth is what you want on a wound. */
 const bestBandage = (g: Game) =>
@@ -72,7 +75,7 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       const suits = use.herb === WOUND_KINDS[w.kind].herb;
       const clean = g.skillCheck('first_aid', w.infected ? 30 : 10, use.item.ql, g.mindEase());
       // Cloth holds a dressing on. The right herb closes the wound.
-      const healed = healAmount(g.skills.get('first_aid'), use.item.ql) * (clean ? 1 : 0.35) * (suits ? 1.5 : use.herb ? 1.1 : 1);
+      const healed = healAmount(g.skills.get('first_aid'), use.item.ql) * (clean ? 1 : 0.35) * (suits ? SUITS_HEAL : use.herb ? HERB_HEAL : 1);
       g.player.stats.health = Math.min(1, g.player.stats.health + healed);
       w.severity = Math.max(0, w.severity - healed);
       w.dressing = clean ? use.herb : w.dressing;

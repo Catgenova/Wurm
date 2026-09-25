@@ -95,6 +95,9 @@ export const findChance = (skill: number, toolQl: number): number => Math.min(0.
 /** The relics a given archaeologist would recognise if they turned one up. */
 export const relicsWithin = (skill: number): RelicDef[] => RELICS.filter((r) => r.difficulty <= skill + 14);
 
+/** What studying at a lectern is worth over holding the book in one hand. */
+export const LECTERN_GAIN = 2;
+
 export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
   {
     id: 'investigate',
@@ -216,9 +219,9 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return;
       const item = g.inventory.get(t.uid);
       if (!item || item.id !== 'book') return;
-      // A lectern holds the pages open at the right angle, and you get twice as much out of the hour.
+      // A lectern holds the pages open at the right angle, and you get `LECTERN_GAIN` times as much out of the go.
       const lectern = g.furnitureNear('lectern') !== undefined;
-      const gain = g.gainSkill('mind_logic', (0.5 + item.ql / 90) * (lectern ? 2 : 1));
+      const gain = g.gainSkill('mind_logic', (0.5 + item.ql / 90) * (lectern ? LECTERN_GAIN : 1));
       g.damageItem(item, 2 + g.rand() * 3);
       const where = lectern ? ' The lectern holds it open at the right angle and you make good use of the hour.' : ' Held in one hand, it is hard going. A lectern would be better.';
       g.logMsg(`You work through the ${itemName(item).toLowerCase()}.${where}${gain > 0.0005 ? '' : ' There is nothing left in it you do not already know.'}`, 'event');

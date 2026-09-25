@@ -1,5 +1,7 @@
 import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
+import { defaultKey } from './keybinds';
+import { numberWord, share, spanWords } from './words';
 import { brazierBurn } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
@@ -18,17 +20,17 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint } from './furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { cropDef, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
-import { BASE_SPEED, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot, SLOTS } from './gear';
@@ -37,7 +39,7 @@ import { cleanSaid } from './chat';
 import { ALL_GOALS } from './journal';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
-import { catchChance, CHECK_EVERY, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
+import { catchChance, CHECK_EVERY, CREEL_BAIT_LOSS, creelOdds, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
 import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
@@ -49,7 +51,7 @@ import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
-import { hasStep, MEDITATION, type PathId } from './meditation';
+import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
@@ -148,6 +150,8 @@ export type DeedRole = 'founder' | 'mayor' | 'builder' | 'guest';
  */
 export const QL_LOW = 0.6;
 export const QL_SPAN = 0.8;
+/** And what bare hands add on top of it, so a first go at anything is never nothing. */
+export const QL_BARE = 1;
 
 /**
  * The lowest and highest quality `productQl` can give at a skill, with a tool
@@ -155,7 +159,7 @@ export const QL_SPAN = 0.8;
  */
 export function productQlRange(skill: number, toolQl = 0): [number, number] {
   const s = Math.min(100, Math.max(1, skill));
-  if (toolQl <= 0) return [Math.min(100, s * QL_LOW + 1), Math.min(100, s * (QL_LOW + QL_SPAN) + 1)];
+  if (toolQl <= 0) return [Math.min(100, s * QL_LOW + QL_BARE), Math.min(100, s * (QL_LOW + QL_SPAN) + QL_BARE)];
   return [Math.min(s, Math.max(1, toolQl * QL_LOW)), s];
 }
 
@@ -167,6 +171,8 @@ export const rankAtLeast = (have: DeedRole | undefined, want: DeedRole): boolean
   DEED_RANKS.indexOf(have ?? 'founder') >= DEED_RANKS.indexOf(want);
 
 export const DEED_RADIUS = 5;
+// A deed stake says how much land it claims: the token and this far each way.
+describeWith({ deedAcross: DEED_RADIUS * 2 + 1 });
 /** Every upgrade pushes the border out this far and takes on one more worker. */
 export const DEED_RADIUS_PER_LEVEL = 2;
 export const DEED_WORKERS_AT_LEVEL_ONE = 1;
@@ -282,9 +288,11 @@ export interface GameInit {
 }
 
 /** Actions you can hold in your head before any mind logic is earned. */
-const BASE_QUEUE = 3;
+export const BASE_QUEUE = 3;
 /** Where every characteristic starts, and so what counts as a point gained. */
-const CHAR_START = 20;
+export const CHAR_START = 20;
+/** And one job more for every this much mind logic past it. */
+export const QUEUE_PER_MIND = 10;
 /**
  * How many jobs a given mind logic will hold, which is the whole of what mind
  * logic is for and the only reason to tell anybody it went up.
@@ -293,11 +301,19 @@ const CHAR_START = 20;
  * about it is asked twice — what it holds now against what it held before the
  * go — and the second of those is a value nobody has any more.
  */
-export const queueCapAt = (mind: number): number => BASE_QUEUE + Math.floor(Math.max(0, mind - CHAR_START) / 10);
+export const queueCapAt = (mind: number): number => BASE_QUEUE + Math.floor(Math.max(0, mind - CHAR_START) / QUEUE_PER_MIND);
 /** Ashes left per second of burning: a log's worth of fire leaves about five. */
-const ASH_RATE = 1 / 120;
-/** Damage at which a tool starts warning you, and every five points after. */
-const DAMAGE_WARN = 75;
+export const ASH_RATE = 1 / 120;
+/** Damage at which a tool starts warning you, and every `DAMAGE_WARN_STEP` points after. */
+export const DAMAGE_WARN = 75;
+export const DAMAGE_WARN_STEP = 5;
+/** Damage a thing goes to pieces at. */
+export const DAMAGE_MAX = 100;
+/**
+ * Damage one use puts on a tool of this quality, before what it is made of
+ * and its rarity: a poor tool goes to pieces far faster than a good one.
+ */
+export const wearPerUse = (ql: number): number => 0.06 + 3 / (10 + ql);
 /** No team takes a vehicle faster than this, whatever is in the traces. */
 const MAX_VEHICLE_SPEED = 4;
 /** How far ahead of the shafts a hitched team walks. */
@@ -309,9 +325,9 @@ const VEHICLE_STEP = MAX_STEP / 2;
 /** Height units of extra slope every point of a beast's climbing is worth. */
 const CLIMB_PITCH = 0.16;
 /** No mount carries a rider faster than this. */
-const MAX_MOUNT_SPEED = 5;
-/** What practice on bad ground is worth: nothing at all to half again. */
-const footing = (climb: number): number => 0.9 + climb / 140;
+export const MAX_MOUNT_SPEED = 5;
+/** What practice on bad ground is worth to a beast's pace, from its climbing. */
+export const footing = (climb: number): number => 0.9 + climb / 140;
 /** Tiles to a side of a new island. */
 export const WORLD_SIZE = 1024;
 /**
@@ -376,6 +392,10 @@ export const DAY_SECONDS = world(1440);
  */
 export const DAWN = 3;
 export const DUSK = 21;
+/** Game hours either side of sundown and of sunrise that the light takes to go, and to come back. */
+export const TWILIGHT = 1;
+/** Game hours after sunrise that somebody asleep wakes up. */
+export const WAKE_AFTER_DAWN = 0.5;
 const FORAGE_COOLDOWN = world(180);
 /**
  * How dark it has to be before a fight teaches you anything about noticing.
@@ -417,6 +437,65 @@ export const CARRY_PER_STRENGTH = 5;
  * line: enough to get somewhere, not enough to make carrying it worth doing.
  */
 export const CARRY_STOP = 1.5;
+
+/** What an ordinary go teaches, before the curve and everything that multiplies it. */
+export const ORDINARY_GAIN = 0.45;
+
+/**
+ * How long a go takes, off the weight it is written at (see `pace.ts`), the
+ * skill and tool behind it and the body doing it. `Game.duration` asks it of
+ * whoever is acting, and the help asks it of somebody new to the work.
+ */
+export const goSeconds = (baseTime: number, skill = 50, toolQl = 0, control = 1): number =>
+  Math.max(ACTION_FLOOR, baseTime * ACTION_PACE * (1 - skill / 140) * (1 - toolQl / 400) * control);
+
+/**
+ * What you wash ashore with: each tool, the quality it comes at and what its
+ * head or handle is. Everything here is marked as issued: rough gear off the
+ * beach, good enough to get a first tool made with and not worth working on.
+ * Copper heads on pine handles, which is the poorest of everything: the first
+ * bronze tool you cast for yourself is already better than any of it.
+ */
+export const STARTER_KIT: ReadonlyArray<readonly [string, number, string]> = [
+  ['hatchet', 20, 'Copper'],
+  ['shovel', 20, 'Copper'],
+  ['pickaxe', 20, 'Copper'],
+  ['carving_knife', 20, 'Copper'],
+  ['chisel', 15, 'Copper'],
+  ['mallet', 20, 'Pine'],
+  ['trowel', 20, 'Copper'],
+  ['saw', 20, 'Copper'],
+  ['butchering_knife', 20, 'Copper'],
+  ['rake', 20, 'Copper'],
+  ['water_skin', 30, ''],
+];
+/** The quality a tool in the kit comes ashore at, for the text that says why to better it. */
+export const kitQl = (id: string): number => STARTER_KIT.find(([k]) => k === id)?.[1] ?? 0;
+
+/**
+ * What carrying past your limit costs, as burden: the share of your limit you
+ * are over, times `OVER_DRAG`, and never more than `OVER_DRAG_CAP` — so twice
+ * your limit is not twice as bad, it is worse, and then it stops getting worse.
+ */
+export const OVER_DRAG = 1.1;
+export const OVER_DRAG_CAP = 1.2;
+export const overDrag = (over: number, limit: number): number =>
+  over > 0 && limit > 0 ? Math.min(OVER_DRAG_CAP, (over / limit) * OVER_DRAG) : 0;
+
+/** What a hold loaded to her marks costs a hull: this much slower than one running empty. */
+export const BOAT_LOAD_DRAG = 0.33;
+/**
+ * How fast a hull goes, in tiles a second, off everything that decides it:
+ * the build, the body behind it (control under sail, strength at the oars),
+ * the weather she is taking (1 for oars) and how full her hold is, 0 to 1.
+ * `boatSpeed` asks it of the boat you are in and the help asks it of an
+ * example, so the two cannot disagree.
+ */
+export function hullSpeed(def: BoatDef, ql: number, body: number, weather: number, load: number): number {
+  const hands = def.sail ? 0.9 + body / 320 : 0.6 + body / 150;
+  const hull = 0.75 + ql / 220;
+  return def.speed * hands * hull * weather * (1 - load * BOAT_LOAD_DRAG);
+}
 
 export class Game {
   readonly seed: number;
@@ -758,7 +837,7 @@ export class Game {
     // body on the first streaming pass, and the rest waits to be walked to.
     game.creatures.stockIsland(game);
     game.logMsg('Welcome to Wildermon. You wash ashore on an untouched island with a few tools and your wits.', 'system');
-    game.logMsg('Left-click to walk — it is the only thing that moves you. Right-click a tile for actions. WASD or the arrows push the view about, scroll to zoom. Settings (O) has a Keys tab if you would rather they did something else. Press F1 for help.', 'system');
+    game.logMsg(`Left-click to walk — it is the only thing that moves you. Right-click a tile for actions. WASD or the arrows push the view about, scroll to zoom. Settings (O) has a Keys tab if you would rather they did something else. Press ${defaultKey('win_help')} for help.`, 'system');
     return game;
   }
 
@@ -896,25 +975,7 @@ export class Game {
   }
 
   giveStarterKit(): void {
-    // Everything here is marked as issued: rough gear off the beach, good
-    // enough to get a first tool made with and not worth working on. Copper
-    // heads on pine handles, which is the poorest of everything: the first
-    // bronze tool you cast for yourself is already better than any of it.
-    for (const [id, ql, made] of [
-      ['hatchet', 20, 'Copper'],
-      ['shovel', 20, 'Copper'],
-      ['pickaxe', 20, 'Copper'],
-      ['carving_knife', 20, 'Copper'],
-      ['chisel', 15, 'Copper'],
-      ['mallet', 20, 'Pine'],
-      ['trowel', 20, 'Copper'],
-      ['saw', 20, 'Copper'],
-      ['butchering_knife', 20, 'Copper'],
-      ['rake', 20, 'Copper'],
-      ['water_skin', 30, ''],
-    ] as Array<[string, number, string]>) {
-      this.inventory.add(id, { ql, issued: true, extra: made || undefined });
-    }
+    for (const [id, ql, made] of STARTER_KIT) this.inventory.add(id, { ql, issued: true, extra: made || undefined });
     this.inventory.add('deed_stake', { ql: 50, extra: 'Pine' });
   }
 
@@ -1048,15 +1109,14 @@ export class Game {
     if (!def) return 0;
     // Oars are worked by the body; a sail is worked by the weather, and the
     // best you can do is hold the angle that suits her.
-    const body = def.sail ? 0.9 + this.skills.get('body_control') / 320 : 0.6 + this.skills.get('body_strength') / 150;
-    const hull = 0.75 + f.ql / 220;
+    const body = this.skills.get(def.sail ? 'body_control' : 'body_strength');
     const weather = def.sail ? sailFactor(this.heading(), this.wind()) : 1;
     // What is in the hold rides on the hull, and the hull feels it: a boat
-    // loaded to her marks is a third slower than one running empty.
+    // loaded to her marks is `BOAT_LOAD_DRAG` slower than one running empty.
     const heft = furnitureHeft(f);
     const cap = furnitureCapacity(f);
     const load = heft ? Math.min(1, furnitureKg(f) / heft) : cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
-    return def.speed * body * hull * weather * (1 - load * 0.33);
+    return hullSpeed(def, f.ql, body, weather, load);
   }
 
   /**
@@ -1078,12 +1138,12 @@ export class Game {
       case 'mendflesh': {
         const n = p.wounds.length;
         p.wounds = [];
-        p.stats.health = Math.min(1, p.stats.health + 0.4);
+        p.stats.health = Math.min(1, p.stats.health + MEND_FLESH);
         return n === 1 ? 'The wound closes and the ache goes with it.' : n ? `All ${n} of them close and the ache goes with them.` : 'There was nothing to mend, and you feel better anyway.';
       }
       case 'sense': {
-        const found = this.senseRock(15);
-        return found ? `The ground gives up what is in it: ${found} seams within fifteen tiles, marked.` : 'There is nothing under this ground but rock.';
+        const found = this.senseRock(SENSE_REACH);
+        return found ? `The ground gives up what is in it: ${found} seams within ${numberWord(SENSE_REACH)} tiles, marked.` : 'There is nothing under this ground but rock.';
       }
       case 'recall': {
         if (!this.deed) return 'You have nowhere to be recalled to.';
@@ -1097,8 +1157,8 @@ export class Game {
         p.stats.stamina = 1;
         return 'Your wind comes back all at once.';
       case 'fury':
-        this.furyUntil = this.time + 30;
-        return 'For half a minute nothing you swing at is going to enjoy it.';
+        this.furyUntil = this.time + FURY_SECS;
+        return `For ${spanWords(FURY_SECS)} nothing you swing at is going to enjoy it.`;
       default:
         return 'Nothing happens.';
     }
@@ -1108,7 +1168,7 @@ export class Game {
   furyUntil = -1e9;
   /** What everything you hit takes, over what it would take. */
   furyMult(): number {
-    return this.time < this.furyUntil ? 2 : 1;
+    return this.time < this.furyUntil ? FURY_MULT : 1;
   }
 
   /** Mark every seam within a radius as read, as a prospector would. */
@@ -1756,10 +1816,9 @@ export class Game {
     if (sh) sum += sh.burden;
     // Everything past what your back will take is carried at a price, and the
     // price climbs: twice your limit is not twice as bad, it is worse.
-    const over = this.overloaded();
-    if (over > 0) sum += Math.min(1.2, (over / this.carryLimit()) * 1.1);
+    sum += overDrag(this.overloaded(), this.carryLimit());
     // A strong back carries the same steel, and the same load, for a fifth less.
-    return this.walks('power', 1) ? sum * 0.8 : sum;
+    return this.walks('power', 1) ? sum * STRONG_BACK : sum;
   }
 
   /**
@@ -1805,7 +1864,7 @@ export class Game {
       this.logMsg(`Your ${itemName(item).toLowerCase()} is beaten to pieces and falls away.`, 'fight');
     }
     this.events.emit('inventory');
-    const hide = this.walks('power', 5) ? 1.1 : 1;
+    const hide = this.walks('power', 5) ? IRONHIDE : 1;
     return { taken: raw * (1 - Math.min(0.92, soak * hide)), part, worn: item, blocked: false };
   }
 
@@ -2042,9 +2101,10 @@ export class Game {
    */
   darkness(): number {
     const h = this.hourOfDay();
-    if (h >= DAWN + 1 && h <= DUSK - 1) return 0;
-    if (h >= DUSK + 1 || h <= DAWN - 1) return 1;
-    return h > 12 ? Math.min(1, Math.max(0, (h - (DUSK - 1)) / 2)) : Math.min(1, Math.max(0, (DAWN + 1 - h) / 2));
+    if (h >= DAWN + TWILIGHT && h <= DUSK - TWILIGHT) return 0;
+    if (h >= DUSK + TWILIGHT || h <= DAWN - TWILIGHT) return 1;
+    const ramp = 2 * TWILIGHT;
+    return h > 12 ? Math.min(1, Math.max(0, (h - (DUSK - TWILIGHT)) / ramp)) : Math.min(1, Math.max(0, (DAWN + TWILIGHT - h) / ramp));
   }
 
   isNight(): boolean {
@@ -2057,7 +2117,8 @@ export class Game {
    */
   sleepUntilMorning(rest: number, what: string): void {
     const h = this.hourOfDay();
-    const hours = h < DAWN + 0.5 ? DAWN + 0.5 - h : 24 - h + DAWN + 0.5;
+    const wake = DAWN + WAKE_AFTER_DAWN;
+    const hours = h < wake ? wake - h : 24 - h + wake;
     const seconds = (hours / 24) * DAY_SECONDS;
     /*
      * On an island the night belongs to everybody standing in it.
@@ -2128,7 +2189,7 @@ export class Game {
     // And the stone you wear, worth a knack on the one trade it favours.
     if (gemOf(this.worn('jewel'))?.skill === id) mult += JEWEL_BONUS;
     // And the reader's path is a tenth on everything, for good.
-    if (this.walks('knowledge', 1)) mult += 0.1;
+    if (this.walks('knowledge', 1)) mult += ATTENTIVE;
     // A table with all four things on it is worth a fifth more on everything.
     // It reads off the worst of the four, so bread alone buys nothing.
     mult *= tableMul(this.player.nutrition);
@@ -2263,7 +2324,7 @@ export class Game {
     return this.player.rested - before;
   }
 
-  gainSkill(id: string, base = 0.45): number {
+  gainSkill(id: string, base = ORDINARY_GAIN): number {
     const def = SKILL_DEFS.find((d) => d.id === id);
     const before = this.skills.get(id);
     const gain = this.skills.gain(id, base * this.skillMult(id), this.rand);
@@ -2524,7 +2585,7 @@ export class Game {
     const stuck = this.stalled();
     if (stuck !== p.stalled) {
       p.stalled = stuck;
-      if (stuck) this.logMsg(`You can barely move under ${this.inventory.totalWeight().toFixed(0)} kg. Your back takes ${this.carryLimit().toFixed(0)}; anything over ${(this.carryLimit() * CARRY_STOP).toFixed(0)} leaves you a twentieth of your pace.`, 'error');
+      if (stuck) this.logMsg(`You can barely move under ${this.inventory.totalWeight().toFixed(0)} kg. Your back takes ${this.carryLimit().toFixed(0)}; anything over ${(this.carryLimit() * CARRY_STOP).toFixed(0)} leaves you ${share(CARRY_CRAWL)} of your pace.`, 'error');
       else this.logMsg('You can walk properly again.', 'event');
     }
     p.maxStep = this.climbStep();
@@ -2705,7 +2766,7 @@ export class Game {
    * long as one in a field, which is the reason anybody puts a roof on.
    */
   decayMultiplier(x: number, y: number): number {
-    const out = this.onDeed(x, y) ? 0.1 : 1;
+    const out = this.onDeed(x, y) ? DEED_DECAY : 1;
     return this.buildings.indoors(0, x, y) ? out * INDOORS_DECAY : out;
   }
 
@@ -3507,8 +3568,7 @@ export class Game {
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
     const toolQl = def.tool ? this.toolQl(def.tool) : 0;
-    return Math.max(ACTION_FLOOR,
-      def.baseTime * ACTION_PACE * (1 - skill / 140) * (1 - toolQl / 400) * this.controlSpeed());
+    return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed());
   }
 
   /**
@@ -3541,7 +3601,7 @@ export class Game {
   wearTool(id: string, multiplier = 1): void {
     const tool = this.inventory.tool(id);
     if (!tool) return;
-    this.damageItem(tool, (0.06 + 3 / (10 + tool.ql)) * multiplier);
+    this.damageItem(tool, wearPerUse(tool.ql) * multiplier);
   }
 
   /**
@@ -3552,9 +3612,9 @@ export class Game {
     if (amount <= 0) return;
     const before = item.dmg;
     // Oak takes a third of what pine takes; seryll barely marks at all.
-    item.dmg = Math.min(100, item.dmg + amount * matOf(item.extra).wear * rarityOf(item).keep);
-    const step = (v: number): number => Math.floor((v - DAMAGE_WARN) / 5);
-    if (item.dmg >= 100) {
+    item.dmg = Math.min(DAMAGE_MAX, item.dmg + amount * matOf(item.extra).wear * rarityOf(item).keep);
+    const step = (v: number): number => Math.floor((v - DAMAGE_WARN) / DAMAGE_WARN_STEP);
+    if (item.dmg >= DAMAGE_MAX) {
       this.inventory.remove(item.uid, 1);
       for (const [slot, uid] of Object.entries(this.player.equipped)) if (uid === item.uid) this.player.equipped[slot] = null;
       this.logMsg(`Your ${itemName(item).toLowerCase()} finally goes to pieces and is gone.`, 'error');
@@ -3589,7 +3649,7 @@ export class Game {
    */
   productQl(skill: string, toolQl = 0): number {
     const s = Math.min(100, Math.max(1, this.skills.get(skill)));
-    if (toolQl <= 0) return Math.min(100, Math.max(1, s * (QL_LOW + this.rand() * QL_SPAN) + 1));
+    if (toolQl <= 0) return Math.min(100, Math.max(1, s * (QL_LOW + this.rand() * QL_SPAN) + QL_BARE));
     /*
      * And what a go that did not come off is worth.
      *
@@ -3973,7 +4033,7 @@ export class Game {
     const depth = waterDepth(this, t.x, t.y);
     const pool = fishHere(depth, this.skills.get('fishing'));
     if (!pool.length) return;
-    if (this.rand() >= def.odds * (0.6 + Math.max(1, Math.min(100, t.ql)) / 250)) return;
+    if (this.rand() >= creelOdds(t.ql)) return;
     const bait = t.bait ? BAIT_BY_ID.get(t.bait.id) : undefined;
     const got = pickFish(this, pool, bait);
     if (!got) return;
@@ -3985,7 +4045,7 @@ export class Game {
       stack.count += 1;
     } else t.fish.push({ uid: this.inventory.nextUid++, id: got.id, ql, dmg: 0, count: 1 });
     // Every so often the bait is worked out of it and the creel goes on empty.
-    if (this.rand() < 0.14 && t.bait) {
+    if (this.rand() < CREEL_BAIT_LOSS && t.bait) {
       t.bait = null;
       this.logMsg(`The bait is gone out of a creel. It will take nothing more until it is baited again.`, 'system');
     }
@@ -4760,7 +4820,7 @@ export class Game {
     const mean = sum / team.length;
     // Every beast adds its own share of the pull; the ones bred for it add more.
     let pull = 0.75;
-    for (const c of team) pull += (this.creatures.species(c).pull ?? 0.25) * ageDef(c, this.time).pull * bloodMul(c, 'haul');
+    for (const c of team) pull += (this.creatures.species(c).pull ?? PULL_DEFAULT) * ageDef(c, this.time).pull * bloodMul(c, 'haul');
     // A body of light wood rolls a shade easier than one of oak, which is the
     // price oak charges for holding more and lasting longer.
     return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material));
@@ -6137,7 +6197,7 @@ export class Game {
     for (const c of this.crops.values()) {
       if (c.stage >= RIPE) continue;
       // The gardener's path hurries everything that is in your own ground.
-      const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? 0.8 : 1;
+      const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? GREEN_THUMB : 1;
       const per = cropDef(c.id).stageSeconds * green;
       let moved = false;
       while (c.stage < RIPE && this.time - c.stageAt >= per) {
@@ -6175,7 +6235,7 @@ export class Game {
 
   /** Remove one item (by uid) or everything (null) from a tile. */
   /** How far a sweep of the ground reaches: the tile you are on and its neighbours. */
-  private static readonly SWEEP = 1;
+  static readonly SWEEP = 1;
 
   /** How many loose things are lying within reach of a spot. */
   sweepable(x: number, y: number): number {
@@ -6449,7 +6509,7 @@ export class Game {
         break;
       case 'help':
         this.logMsg(`Commands: /name <name>, /where, ${EMOTES.map((e) => `/${e.id}`).join(', ')}, /help.`
-          + ' Press F1 for controls.', 'system');
+          + ` Press ${defaultKey('win_help')} for controls.`, 'system');
         break;
       default:
         // An emote is its own command, so /wave reads the way anybody would

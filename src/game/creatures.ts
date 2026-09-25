@@ -9,7 +9,8 @@ import { MINE_COLLAPSE, MINE_DEPTH } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { fishable, fishHere, waterDepth } from './fishing';
-import { itemDef, type Item } from './items';
+import { describeWith, itemDef, type Item } from './items';
+import { fill } from './words';
 import { groundStep, standsOn } from './player';
 import { skillGain } from './skills';
 import { keyX, keyY, tileKey } from './tileindex';
@@ -284,7 +285,7 @@ export interface SpeciesDef {
   pitch?: number;
   /** Crosses deep water with a rider on its back. */
   swims?: boolean;
-  /** Its share of a team's pull; a quarter unless it was bred for the traces. */
+  /** Its share of a team's pull; `PULL_DEFAULT` unless it was bred for the traces. */
   pull?: number;
   /** Things it carries on its own back, for the ones that take panniers. */
   pannier?: number;
@@ -364,7 +365,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   bevere: {
     id: 'bevere',
     name: 'Bevere',
-    description: 'A broad, flat-tailed gnawer with orange teeth and oiled fur. It never strays far from water, and it fells a tree faster than a man with a hatchet.',
+    description: 'A broad, flat-tailed gnawer with orange teeth and oiled fur. It never strays far from water, and it fells trees for whoever keeps it.',
     health: 26,
     attack: 3,
     speed: 1.8,
@@ -392,7 +393,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     id: 'crawler',
     wound: 'cut',
     name: 'Crawler',
-    description: 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws faster than a man with a spade, and it has never once been sorry for pinching anybody.',
+    description: 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws, and it has never once been sorry for pinching anybody.',
     health: 24,
     attack: 5,
     speed: 1.6,
@@ -921,7 +922,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   cobbe: {
     id: 'cobbe',
     name: 'Cobbe',
-    description: 'A squat, hard-headed hauler with shoulders like a wall itself. It carries brick and mortar to whatever you have planned and fits it, one piece at a time, without being asked twice.',
+    description: 'A squat, hard-headed hauler with shoulders like a wall itself. It carries brick and mortar to whatever you have planned and fits it, one piece at a time, unasked.',
     health: 40,
     attack: 5,
     speed: 1.5,
@@ -996,7 +997,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     id: 'bura',
     wound: 'crush',
     name: 'Bura',
-    description: 'A broad, slow, endlessly patient creature that was clearly made to have things strapped to it. Two hundred things ride on its back, and it neither hurries nor complains.',
+    description: 'A broad, slow, endlessly patient creature that was clearly made to have things strapped to it. {pannier:W} things ride on its back, and it neither hurries nor complains.',
     health: 55,
     attack: 6,
     speed: 1.5,
@@ -1083,7 +1084,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     id: 'shaggan',
     wound: 'crush',
     name: 'Shaggan',
-    description: 'A mountain of hair on four legs, slower than anything else that pulls and stronger than all of them. One in the traces is a waste of a Shaggan; four of them will move a loaded wagon as though it were empty.',
+    description: 'A mountain of hair, slower than anything else that pulls and stronger than all of them: in the traces it adds {pull:pct} to its team\'s pace, where most beasts add {pullDefault:pct}.',
     health: 90,
     attack: 12,
     speed: 1,
@@ -1245,7 +1246,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     id: 'lume',
     wound: 'burn',
     name: 'Lume',
-    description: 'A pale slow drifter that is only ever out after dark, and glows with a light that has nothing to do with fire. Keep one and the night stops being half blind.',
+    description: 'A pale slow drifter that is only ever out after dark, and glows with a light that has nothing to do with fire. Keep one and it lights {glow:w} tiles round itself however dark the night.',
     health: 10,
     attack: 1,
     speed: 1.3,
@@ -1339,7 +1340,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     notice: 12,
     wound: 'crush',
     name: 'Ogre',
-    description: 'Three times your weight and most of it shoulder, with a tree in one fist and very little behind the eyes. It is slow, it is stupid, and if it gets a hand on you none of that matters.',
+    description: 'A hill of shoulder with a tree in one fist and very little behind the eyes. It is slow, it is stupid, and if it gets a hand on you none of that matters.',
     health: 170,
     attack: 34,
     speed: 1.8,
@@ -1395,6 +1396,11 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
 };
 
+/** A beast's share of a team's pull when it was not bred for the traces. */
+export const PULL_DEFAULT = 0.25;
+// A species says what it carries and pulls off its own row.
+for (const s of Object.values(SPECIES)) s.description = fill(s.description, { ...s, pullDefault: PULL_DEFAULT });
+
 /** Which species roam wild, by weight. */
 /**
  * The bad things, and how often one of the wild's slots turns out to be one.
@@ -1410,6 +1416,8 @@ export const MONSTERS: Array<[string, number]> = [
 export const MONSTER_SHARE = 0.022;
 /** How many of each may be walking about at once, across the whole island. */
 export const MONSTER_CAP: Record<string, number> = { goblin: 6, orc: 3, ogre: 2, dragon: 1 };
+/** How far from a settlement's token each keeps, in tiles: the bigger the thing, the further out. */
+export const MONSTER_KEEP_OFF: Record<string, number> = { goblin: 26, orc: 40, ogre: 55, dragon: 90 };
 
 export const WILD_SPECIES: Array<[string, number]> = [
   ['rabba', 27],
@@ -1451,7 +1459,7 @@ export const WILD_SPECIES: Array<[string, number]> = [
 ];
 
 /** How far off a hunter picks up your scent, and how far you must get to lose it. */
-const HUNT_SIGHT = 7;
+export const HUNT_SIGHT = 7;
 const HUNT_GIVE_UP = 13;
 
 /**
@@ -1681,6 +1689,8 @@ export const maxHealth = (c: Creature, species: SpeciesDef): number =>
   Math.round(species.health * bloodMul(c, 'hardy'));
 /** What its attack lands for. */
 export const attackOf = (c: Creature, species: SpeciesDef): number => species.attack * bloodMul(c, 'tough');
+/** What a creature's attack takes off a player it lands on, as a share of a life, before armour. */
+export const BLOW_SHARE = 0.012;
 
 /** What a set of traits is worth, written out for a log line. */
 export const TRAIT_COUNT = TRAIT_SLOTS;
@@ -1689,6 +1699,8 @@ export const TRAIT_COUNT = TRAIT_SLOTS;
 export const HAUL_SKILL = 'climbing';
 /** What a hunter trains, which decides how hard it hits and how far it ranges. */
 export const FIGHT_SKILL = 'fighting';
+/** A hunter hits harder the more hunting it has done: half again at mastery. */
+export const trainedHit = (fighting: number): number => 1 + fighting / 200;
 
 /**
  * What a fight may pick as its quarry: something wild, and nothing in the
@@ -1964,6 +1976,7 @@ export const SHOES_PER_MOUNT = 4;
 export const SHOE_DAYS = 7;
 export const SHOE_PACE = 1.15;
 export const SHOE_STEP = 8;
+describeWith({ shoes: { perMount: SHOES_PER_MOUNT, days: SHOE_DAYS, quicker: SHOE_PACE - 1, step: SHOE_STEP } });
 /** Whether the shoes are still on: a week from the fitting, in the clock that fitted them. */
 export const isShod = (now: number, c: { shodAt: number }): boolean => now - c.shodAt < SHOE_DAYS * DAY_SECONDS;
 /** How close it comes before standing still, well inside arm's reach. */
@@ -2866,8 +2879,7 @@ export class Creatures {
     // thing, the further out it wants to be.
     const deed = game.deed;
     if (deed) {
-      const want = id === 'dragon' ? 90 : id === 'ogre' ? 55 : id === 'orc' ? 40 : 26;
-      if (Math.hypot(x - deed.x, y - deed.y) < want) return null;
+      if (Math.hypot(x - deed.x, y - deed.y) < (MONSTER_KEEP_OFF[id] ?? 0)) return null;
     }
     return id;
   }
@@ -2952,7 +2964,7 @@ export class Creatures {
     if (Math.hypot(p.x - c.x, p.y - c.y) > 2 || game.rand() >= (def.unruly ?? 0)) return;
     p.attackedBy = c.id;
     p.attackedAt = game.time;
-    game.hurtPlayer(attackOf(c, def) * 0.012, `${c.name} rounds on you and gets a claw in`, def.wound ?? 'bite');
+    game.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `${c.name} rounds on you and gets a claw in`, def.wound ?? 'bite');
   }
 
   private stepToward(game: Game, c: Creature, tx: number, ty: number, dt: number, speedMul = 1): MoveResult {
@@ -4188,7 +4200,7 @@ export class Creatures {
         c.cooldown = 1.4 / this.mul(c, 'haste');
         p.attackedBy = c.id;
         p.attackedAt = game.time;
-        game.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} is on you`, def.wound ?? 'bite');
+        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `The ${def.name.toLowerCase()} is on you`, def.wound ?? 'bite');
       }
       return true;
     }
@@ -4544,8 +4556,7 @@ export class Creatures {
   }
 
   attack(game: Game, a: Creature, t: Creature): void {
-    // A hunter hits harder the more hunting it has done: half again at mastery.
-    const trained = 1 + (a.skills[FIGHT_SKILL] ?? 0) / 200;
+    const trained = trainedHit(a.skills[FIGHT_SKILL] ?? 0);
     // Its blood has a say in what it lands for, as it does in what it bites you for.
     const dmg = this.species(a).attack * this.mul(a, 'tough') * trained * (0.7 + game.rand() * 0.6);
     this.hurt(game, t, dmg, a);

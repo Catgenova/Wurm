@@ -64,8 +64,8 @@ export function windWord(force: number): string {
 /** Half the width of the no-go zone: you cannot sail this close to the wind. */
 export const NO_GO = Math.PI / 5;
 /** Where close-hauled gives way to a reach, and a reach to a run. */
-const CLOSE = (70 * Math.PI) / 180;
-const RUN = (150 * Math.PI) / 180;
+export const CLOSE = (70 * Math.PI) / 180;
+export const RUN = (150 * Math.PI) / 180;
 
 /**
  * The angle off the wind's eye: zero is pointed straight into it, pi is dead
@@ -89,6 +89,11 @@ export function offWind(heading: number, w: Wind): number {
 export function pointOfSail(heading: number, w: Wind): number {
   const upwind = offWind(heading, w);
   if (Number.isNaN(upwind)) return 0.85;
+  return pointAt(upwind);
+}
+
+/** The same, off the angle to the wind's eye itself: zero is straight into it, pi dead before it. */
+export function pointAt(upwind: number): number {
   // In irons: the sail shakes and she will not go.
   if (upwind < NO_GO) return 0.12 + (upwind / NO_GO) * 0.18;
   // Close-hauled: hard work, and the only way to get anywhere upwind.
@@ -101,9 +106,11 @@ export function pointOfSail(heading: number, w: Wind): number {
 
 /** The whole of what the weather is worth to a sail, this heading, this hour. */
 export function sailFactor(heading: number, w: Wind): number {
-  // Even a flat calm leaves steerage way; a gale is worth half again.
-  return (0.35 + w.force * 1.1) * pointOfSail(heading, w);
+  return windWorth(w.force) * pointOfSail(heading, w);
 }
+
+/** What a wind of this strength is worth to a sail: even a flat calm leaves steerage way. */
+export const windWorth = (force: number): number => 0.35 + force * 1.1;
 
 /**
  * Which side the wind is on and how full the sail is: negative to port,

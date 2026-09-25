@@ -2,6 +2,9 @@ import type { Folk, Island, Letter, MyDeed, Social } from '../../net/island';
 import type { Game } from '../../game/game';
 import type { UIWindow } from '../windows';
 
+/** The most a letter carries, in characters: the island holds it to the same (`letter_length`). */
+export const LETTER_MAX = 400;
+
 /** How often the window asks again while it is open. */
 const REFRESH = 6;
 
@@ -478,7 +481,7 @@ export class SocialPanel {
     box.type = 'text';
     box.id = 'social-draft';
     box.className = 'log-search';
-    box.maxLength = 400;
+    box.maxLength = LETTER_MAX;
     box.placeholder = `Write to ${who.name}…`;
     box.value = this.draft;
     box.addEventListener('input', () => {

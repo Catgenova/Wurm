@@ -39,7 +39,9 @@ export function numberWord(n: number): string {
   if (!Number.isInteger(n) || n < 0 || n >= 1_000_000) return String(n);
   if (n < 1000) return hundreds(n);
   // Twelve hundred and fifteen hundred, as a carter would say them.
-  if (n < 10000 && n % 100 === 0 && n % 1000 !== 0) return `${small(n / 100)} hundred`;
+  if (n < 10000 && Math.floor(n / 100) % 10 !== 0) {
+    return `${small(Math.floor(n / 100))} hundred${n % 100 ? ` and ${small(n % 100)}` : ''}`;
+  }
   const k = Math.floor(n / 1000);
   const rest = n % 1000;
   const head = k === 1 ? 'a thousand' : `${hundreds(k)} thousand`;
@@ -73,7 +75,8 @@ const PARTS: Record<number, [string, string]> = {
 export function share(x: number): string {
   for (const d of Object.keys(PARTS).map(Number)) {
     const n = Math.round(x * d);
-    if (n < 1 || n >= d || Math.abs(x * d - n) > 1e-6) continue;
+    // Three twentieths is nobody's way of saying fifteen per cent.
+    if (n < 1 || n >= d || (n > 1 && d > 10) || Math.abs(x * d - n) > 1e-6) continue;
     if (d === 2) return 'half';
     const [one, many] = PARTS[d];
     return n === 1 ? `${article(one)} ${one}` : `${numberWord(n)} ${many}`;
@@ -95,9 +98,10 @@ export const percent = (x: number): string => {
  */
 export function times(m: number): string {
   if (Math.abs(m - 2) < 1e-9) return 'twice';
-  if (Number.isInteger(m) && m > 2) return `${numberWord(m)} times`;
+  const whole = Math.round(m);
+  if (whole > 2 && Math.abs(m - whole) < 1e-9) return `${numberWord(whole)} times`;
   if (m > 1 && m < 2) return `${share(m - 1)} again`;
-  return `${m} times`;
+  return `${Number(m.toFixed(1))} times`;
 }
 
 /** Minutes in words, with the quarters of an hour said the way they are said. */
@@ -110,14 +114,16 @@ const minutes = (m: number): string => {
 
 /**
  * A stretch of time in words, from the seconds a rule is written in: 720 is
- * "twelve minutes", 1800 "half an hour", 4500 "an hour and a quarter", 10800
- * "three hours". To the nearest minute past a minute and a half, and to the
- * nearest quarter of an hour past two hours, which is as close as anybody
- * would say it.
+ * "twelve minutes", 150 "two and a half minutes", 1800 "half an hour", 4500
+ * "an hour and a quarter", 10800 "three hours". To the half minute under ten
+ * minutes, the nearest minute past that, and the nearest quarter of an hour
+ * past two hours, which is as close as anybody would say it.
  */
 export function spanWords(seconds: number): string {
   const s = Math.round(seconds);
   if (s < 90) return `${numberWord(s)} second${s === 1 ? '' : 's'}`;
+  // Under ten minutes a half minute is worth saying: "two and a half minutes".
+  if (s < 600 && s % 60 === 30) return s === 90 ? 'a minute and a half' : `${numberWord((s - 30) / 60)} and a half minutes`;
   const m = Math.round(s / 60);
   if (m < 60) return minutes(m);
   if (m % 60 === 0 || m >= 120) {
@@ -133,7 +139,7 @@ export function spanWords(seconds: number): string {
   // Between one and two hours, to the minute where it is not a quarter.
   const past = m - 60;
   if (past % 15 === 0) return `an hour and ${past === 30 ? 'a half' : past === 15 ? 'a quarter' : 'three quarters'}`;
-  return `${numberWord(m)} minutes`;
+  return `an hour and ${minutes(past)}`;
 }
 
 /** "a, b and c", for a list somebody reads rather than parses. */
@@ -147,7 +153,8 @@ export const listed = (xs: readonly string[]): string =>
  * own fields, so its text names them instead and this fills them in once the
  * definition is whole: `{holds}` is the field as it stands, `{holds:w}` the
  * same in words, `{holds:W}` in words at the start of a sentence,
- * `{shelter:share}` as a part of a whole and `{trash:times}` as a multiplier.
+ * `{shelter:share}` as a part of a whole, `{food:pct}` as a percentage,
+ * `{trash:times}` as a multiplier and `{time:span}` as a stretch of time.
  * A dotted key reaches into the thing (`{vehicle.yokes:w}`).
  *
  * A key the thing does not have is left where it is, for whichever module
@@ -163,7 +170,9 @@ export function fill(text: string, from: object): string {
       case 'w': return numberWord(v);
       case 'W': return NumberWord(v);
       case 'share': return share(v);
+      case 'pct': return percent(v);
       case 'times': return times(v);
+      case 'span': return spanWords(v);
       default: return String(v);
     }
   });

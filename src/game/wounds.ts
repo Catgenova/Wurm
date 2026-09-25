@@ -86,13 +86,28 @@ export function woundDrain(w: Wound): number {
   return rate;
 }
 
+/**
+ * How fast a wound closes by what is on it: nothing closes slowly, cloth is
+ * better, the wrong herb better again and the herb that suits it best. A
+ * cover's text says what it is worth over cloth off these two.
+ */
+export const CLOSE_BARE = 0.25;
+export const CLOSE_CLOTH = 0.7;
+export const CLOSE_WRONG = 0.9;
+export const CLOSE_RIGHT = 1.6;
+/** How fast any wound closes at no chirurgy, and what each point of it adds. */
+export const CLOSE_PACE = 0.0006;
+export const CLOSE_PER_SKILL = 0.00002;
+/** How much of an open wound's chance of going bad is left under cloth, and under the wrong herb. */
+export const FESTER_CLOTH = 0.12;
+export const FESTER_WRONG = 0.05;
+
 /** How fast a wound closes, given what is on it. */
 export function woundClose(w: Wound, chirurgy: number): number {
   if (w.infected) return 0;
   const k = WOUND_KINDS[w.kind];
-  // Nothing on it closes slowly; cloth is better; the right herb is better again.
-  const dressed = w.dressing === null ? 0.25 : w.dressing === '' ? 0.7 : w.dressing === k.herb ? 1.6 : 0.9;
-  return w.severity * dressed * (0.0006 + chirurgy * 0.00002);
+  const dressed = w.dressing === null ? CLOSE_BARE : w.dressing === '' ? CLOSE_CLOTH : w.dressing === k.herb ? CLOSE_RIGHT : CLOSE_WRONG;
+  return w.severity * dressed * (CLOSE_PACE + chirurgy * CLOSE_PER_SKILL);
 }
 
 /**
@@ -103,7 +118,7 @@ export function woundClose(w: Wound, chirurgy: number): number {
 export function festerChance(w: Wound): number {
   if (w.infected || w.dressing === WOUND_KINDS[w.kind].herb) return 0;
   const k = WOUND_KINDS[w.kind];
-  const guard = w.dressing === null ? 1 : w.dressing === '' ? 0.12 : 0.05;
+  const guard = w.dressing === null ? 1 : w.dressing === '' ? FESTER_CLOTH : FESTER_WRONG;
   return k.fester * guard * (0.3 + w.severity * 2) / 60;
 }
 

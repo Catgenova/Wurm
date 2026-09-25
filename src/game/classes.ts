@@ -50,15 +50,22 @@ export interface ClassDef {
   id: string;
   kind: ClassKind;
   name: string;
-  /** What the trade is, in the words somebody would use for it. */
+  /** Which skills the trade's nodes tell on, said from `skills`: see the loop under the trees. */
   note: string;
   /** The skill it is named for. Its card leads with this one. */
   main: string;
   /** Every skill it covers. Fifty in any one of them opens the card. */
   skills: string[];
-  /** What its nodes are about, so the card says something before a tree exists. */
+  /** What the whole tree is worth bought out, said from `STEP`: see the loop under the trees. */
   lever: string;
 }
+
+/**
+ * A trade as it is written: everything but the two lines said about it, which
+ * are worked out from its skills and its tree once both exist, so nothing
+ * here can say something the rules do not.
+ */
+type ClassSeed = Omit<ClassDef, 'note' | 'lever'>;
 
 /**
  * The fourteen craft trades.
@@ -68,92 +75,64 @@ export interface ClassDef {
  * A wide class is easier to open -- fifty in any of six -- and its nodes are
  * spread over six trades to pay for it.
  */
-export const CRAFT_CLASSES: ClassDef[] = [
+export const CRAFT_CLASSES = ([
   {
     id: 'terraformer', kind: 'craft', name: 'Terraformer', main: 'digging',
-    note: 'Moves the ground. Dirt out of a bank, a slope made walkable, a road laid over it.',
     skills: ['digging', 'paving'],
-    lever: 'Ground comes away in bigger bites, and slopes the island would refuse are yours to shift.',
   },
   {
     id: 'miner', kind: 'craft', name: 'Miner', main: 'mining',
-    note: 'Works the rock. Ore out of a seam, a tunnel through the hill, and what is buried in it.',
     skills: ['mining', 'prospecting', 'archaeology'],
-    lever: 'More out of a vein, a seam found further off, and a face too deep to stand on worked anyway.',
   },
   {
     id: 'mason', kind: 'craft', name: 'Mason', main: 'masonry',
-    note: 'Cuts and lays stone. Bricks, slabs, cobble and the walls that go up out of them.',
     skills: ['masonry', 'stonecutting'],
-    lever: 'Stone goes further: fewer shards to the brick, fewer bricks to the wall.',
   },
   {
     id: 'carpenter', kind: 'craft', name: 'Carpenter', main: 'carpentry',
-    note: 'Works wood, from a plank to a storey. The bench, the frame and the bow.',
     skills: ['carpentry', 'fine_carpentry', 'bowyery', 'fletching'],
-    lever: 'Builds higher, wastes less timber, and the fine joinery comes off the bench better.',
   },
   {
     id: 'smith', kind: 'craft', name: 'Smith', main: 'blacksmithing',
-    note: 'The forge and the anvil. Lumps out of the smelter, and everything beaten out of them.',
     skills: ['blacksmithing', 'smelting', 'weaponsmithing', 'armorsmithing', 'platesmithing', 'chainsmithing'],
-    lever: 'Quality on the anvil, less fuel at the forge, and less ash for the same lump.',
   },
   {
     id: 'forester', kind: 'craft', name: 'Forester', main: 'woodcutting',
-    note: 'Keeps the woods. Felling, planting, and an orchard that bears.',
     skills: ['woodcutting', 'forestry'],
-    lever: 'Fells faster, takes more from a tree, and the orchard carries a heavier crop.',
   },
   {
     id: 'farmer', kind: 'craft', name: 'Farmer', main: 'farming',
-    note: 'Works the field. Sowing, tending, harvest and the mill after it.',
     skills: ['farming', 'milling'],
-    lever: 'A heavier crop and more seed back from it; a field goes longer between tends.',
   },
   {
     id: 'cook', kind: 'craft', name: 'Cook', main: 'cooking',
-    note: 'Feeds the settlement. The carcass, the pot and the barrel.',
     skills: ['cooking', 'butchering', 'brewing'],
-    lever: 'Food that feeds more and keeps longer, which nothing else on this island touches.',
   },
   {
     id: 'tailor', kind: 'craft', name: 'Tailor', main: 'tailoring',
-    note: 'Cloth, hide and rope. What is worn, what is slept under and what holds a sail up.',
     skills: ['tailoring', 'leatherworking', 'ropemaking'],
-    lever: 'Cloth and hide go further, dye takes deeper, and rigging holds longer.',
   },
   {
     id: 'herdsman', kind: 'craft', name: 'Herdsman', main: 'animal_husbandry',
-    note: 'Raises and works wildermon. Taming, breeding, and a deed full of them earning their keep.',
     skills: ['animal_husbandry', 'taming'],
-    lever: 'Better foals, more workers to a settlement, and workers that work faster.',
   },
   {
     id: 'naturalist', kind: 'craft', name: 'Naturalist', main: 'foraging',
-    note: 'Reads the wild. What can be picked, what it is good for, and what it mends.',
     skills: ['foraging', 'botanizing', 'alchemy', 'first_aid'],
-    lever: 'Finds more and finds rarer, and herbs and covers do more when they are used.',
   },
   {
     id: 'fisher', kind: 'craft', name: 'Fisher', main: 'fishing',
-    note: 'Takes from the water. Rod, net, trap and bait.',
     skills: ['fishing'],
-    lever: 'Nets and traps pull heavier, bait lasts, and water others cannot work is workable.',
   },
   {
     id: 'mender', kind: 'craft', name: 'Mender', main: 'repair',
-    note: 'Keeps things alive. Damage off, quality on, and nothing thrown away that could be saved.',
     skills: ['repair', 'restoration'],
-    lever: 'Damage comes off faster and improvement sticks -- on anybody’s things, not only your own.',
   },
   {
     id: 'artisan', kind: 'craft', name: 'Artisan', main: 'jewellery',
-    note: 'The fine work. A stone set in a band, a pot off the wheel, a sheet of papyrus.',
     skills: ['jewellery', 'pottery', 'papyrusmaking'],
-    lever: 'Rarity comes up oftener on fine work, and a worn stone favours its trade harder.',
   },
-];
+] satisfies ClassSeed[]) as ClassDef[];
 
 /**
  * The seven trades that are not magic.
@@ -174,50 +153,36 @@ export const CRAFT_CLASSES: ClassDef[] = [
  * The three magic trades land beside these and are drawn from stones rather
  * than from skills anybody already has.
  */
-export const COMBAT_CLASSES: ClassDef[] = [
+export const COMBAT_CLASSES = ([
   {
     id: 'blade', kind: 'combat', name: 'Sworn Blade', main: 'swords',
-    note: 'The disciplined line: a sword, a shield and mail. A blow turned is a blow you may answer.',
     skills: ['swords', 'shields', 'chain_armour'],
-    lever: 'Turns more of what is aimed at you, and answers it harder.',
   },
   {
     id: 'berserker', kind: 'combat', name: 'Berserker', main: 'axes',
-    note: 'Two hands on something heavy, and no thought at all for what comes back.',
     skills: ['axes', 'mauls'],
-    lever: 'Hits harder than anything else on this island, faster, and for longer.',
   },
   {
     id: 'pikeman', kind: 'combat', name: 'Pikeman', main: 'polearms',
-    note: 'A long haft and a wall of plate. Nothing gets past you and nothing gets near.',
     skills: ['polearms', 'plate_armour'],
-    lever: 'Strikes first from a rank back, and stands in what would flatten anybody else.',
   },
   {
     id: 'archer', kind: 'combat', name: 'Archer', main: 'archery',
-    note: 'The first blow of any fight, from further off than the thing can answer.',
     skills: ['archery', 'awareness', 'leather_armour'],
-    lever: 'Hits harder and truer at range, and holds a full draw for nothing.',
   },
   {
     id: 'skirmisher', kind: 'combat', name: 'Skirmisher', main: 'throwing',
-    note: 'Comes from where nobody was looking, opens something up, and is not there afterwards.',
     skills: ['throwing', 'knives', 'climbing'],
-    lever: 'Throws hard and true, and is quick over ground nobody else will cross.',
   },
   {
     id: 'chirurgeon', kind: 'combat', name: 'Chirurgeon', main: 'chirurgy',
-    note: 'Closes what is open, on a field, on somebody who is still being shot at.',
     skills: ['chirurgy', 'cloth_armour'],
-    lever: 'What you dress closes at a pace nothing else on the island comes near.',
   },
   {
     id: 'beastmaster', kind: 'combat', name: 'Beastmaster', main: 'soul_strength',
-    note: 'Fights with what fights beside it. The hand on the animal, not the blade.',
     skills: ['soul_strength'],
-    lever: 'What travels with you does more of the fighting, and bites far harder doing it.',
   },
-];
+] satisfies ClassSeed[]) as ClassDef[];
 
 /**
  * And the three schools of the one art.
@@ -232,26 +197,20 @@ export const COMBAT_CLASSES: ClassDef[] = [
  * which. `force`, `reach` and `thrift` are what *any* of them can get better
  * at, and the scope key keeps a kindler's thrift out of a warder's topaz.
  */
-export const MAGIC_CLASSES: ClassDef[] = [
+export const MAGIC_CLASSES = ([
   {
     id: 'kindler', kind: 'combat', name: 'Kindler', main: 'kindling',
-    note: 'Heat, out of the warm stones. What it touches burns, and goes on burning.',
     skills: ['kindling'],
-    lever: 'Burns hotter, further, and for less of the stone.',
   },
   {
     id: 'binder', kind: 'combat', name: 'Binder', main: 'binding',
-    note: 'Stillness, out of the clear stones. What it touches stops where it stands.',
     skills: ['binding'],
-    lever: 'Holds longer, over more ground, and for less of the stone.',
   },
   {
     id: 'warder', kind: 'combat', name: 'Warder', main: 'warding',
-    note: 'A skin, out of the soft stones, standing between a blow and whoever it was meant for.',
     skills: ['warding'],
-    lever: 'A thicker skin over more people, and a stone that lasts twice as long.',
   },
-];
+] satisfies ClassSeed[]) as ClassDef[];
 
 /** Every class there is: fourteen trades, seven ways to fight, three schools. */
 export const CLASSES: ClassDef[] = [...CRAFT_CLASSES, ...COMBAT_CLASSES, ...MAGIC_CLASSES];
@@ -652,6 +611,9 @@ export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
   })));
 
 export const nodeDef = (id: string): NodeDef | undefined => CLASS_NODES.find((n) => n.id === id);
+
+/** How many nodes a trade's tree holds: every trade's the same, three columns of three. */
+export const NODES_PER_TRADE = CLASS_NODES.filter((n) => n.class === CLASSES[0].id).length;
 
 /** What a set of taken nodes comes to, channel by channel. */
 export function foldNodes(taken: readonly string[]): Record<string, number> {

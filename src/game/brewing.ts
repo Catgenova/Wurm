@@ -2,13 +2,13 @@ import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { furnitureName, holdsLiquid, litresIn, type LiquidKind, type PlacedFurniture } from './furniture';
 import type { Game } from './game';
-import { itemDef } from './items';
+import { describeWith, itemDef } from './items';
 import { world } from './pace';
 
 /**
  * Brewing. Fill a barrel with water, tip in what you have grown or gathered,
- * and leave it alone. It works for as long as it works — a quarter of an hour
- * for ale, three quarters for wine — and nothing can hurry it. What comes out
+ * and leave it alone. It works for as long as its `time` says -- from ale,
+ * the quickest, to wine, the slowest -- and nothing can hurry it. What comes out
  * is drawn off into a bucket like any other liquid and drunk from that, and
  * every one of them favours a trade far harder than any food does.
  */
@@ -39,6 +39,8 @@ export const BREWS: BrewDef[] = [
 ];
 
 export const BREW_BY_ID = new Map(BREWS.map((b) => [b.id, b]));
+// How long a brew works, for a drink's text to say: `{brew.wine.time:span}`.
+describeWith({ brew: Object.fromEntries(BREWS.map((b) => [b.id, b])) });
 export const isBrew = (liquid: LiquidKind | undefined): boolean => !!liquid && BREW_BY_ID.has(liquid);
 /** Still working, and not to be drawn off until it has stopped. */
 export const isWorking = (f: PlacedFurniture): boolean => (f.ferment ?? 0) > 0;

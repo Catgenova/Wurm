@@ -3,6 +3,7 @@
  * walls that sit on tile borders, and stacked floors. Walls and floors are
  * planned first, then built by feeding them materials one unit at a time.
  */
+import { fill } from './words';
 
 export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate';
 
@@ -309,12 +310,14 @@ export interface RoofShapeDef {
 }
 export const ROOF_SHAPES: RoofShapeDef[] = [
   { id: 'gable', name: 'Gabled', rise: 1, factor: 0.3, walkable: false,
-    note: 'One ridge down the length of it, falling to the eaves on two sides. The ends are wall carried up in a triangle rather than roof, so there are two slopes to cover instead of four and it is much the cheapest of the three.' },
+    note: 'One ridge down the length of it, falling to the eaves on the long sides; the ends are wall carried up in a triangle rather than roof. A tile of it takes {factor:share} of what a solid wall of the same stuff does.' },
   { id: 'hip', name: 'Hipped', rise: 1, factor: 0.5, walkable: false,
-    note: 'Falling away on all four sides. More covering than a gable and no gable ends to raise, and it sheds weather off every wall.' },
+    note: 'Falling away on every side, with no gable ends to raise, and it sheds weather off every wall. A tile of it takes {factor:share} of what a solid wall of the same stuff does.' },
   { id: 'flat', name: 'Flat', rise: 0, factor: 0.85, walkable: true,
-    note: 'A deck rather than a roof: laid heavy enough to walk out onto. It costs most and what you get for it is a terrace.' },
+    note: 'A deck rather than a roof: laid heavy enough to walk out onto, and what you get for it is a terrace. A tile of it takes {factor:share} of what a solid wall of the same stuff does.' },
 ];
+// What a roof costs is said off its own `factor`, so the three can be weighed against each other.
+for (const r of ROOF_SHAPES) r.note = fill(r.note, r);
 export const ROOF_SHAPE_BY_ID = new Map(ROOF_SHAPES.map((r) => [r.id, r]));
 /** A building's roof shape; hipped is what every building had before there was a choice. */
 export const roofShapeOf = (b: Building | undefined): RoofShape => b?.roof ?? 'hip';
