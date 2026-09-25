@@ -5,6 +5,11 @@ import { itemDef, RARITIES, RARITY_ROOM } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
 import { QL_LOW, QL_SPAN } from '../../game/game';
 import type { UIWindow } from '../windows';
+import { IDLE_LOGOUT } from '../../game/keep';
+import { awayFor } from '../../game/away';
+
+/** How long a quiet browser is still counted as there: `idle_logout()` on the island. */
+const awayAfter = (): string => (IDLE_LOGOUT % 60 ? `${+(IDLE_LOGOUT / 60).toFixed(1)} minutes` : awayFor(IDLE_LOGOUT));
 
 /** What a creature crate is built of, read off its bill: "8 × plank, 4 × nails and 2 × metal ribbon". */
 const crateBill = (): string => {
@@ -102,6 +107,13 @@ function helpText(): string {
     other is &mdash; but only while they are actually at the keyboard. A friend who has gone shows as
     away and nothing more. <b>Letters</b> are kept: one reaches an open tab the moment it is written and
     is still waiting the next time somebody looks, however long that takes.</p>
+    <p><b>While you were away.</b> Once your browser has said nothing to the island for
+    ${awayAfter()}, the island counts you as gone, and from then until you come back it keeps count for
+    you: every load your workers put into the stores, by item; every young one born to your wildermon,
+    and any that went off into the wild because something already followed you and there was no empty
+    creature crate for it; everything your stalls sold and the silver it went for; and every parcel
+    posted to you, by who sent it. When you come back a window lists all of it, and the same lines go
+    into the event log.</p>
 
     <h3>The settlement window</h3>
     <p><kbd>N</kbd> opens the settlement at a glance: its level and how far the border runs, how many

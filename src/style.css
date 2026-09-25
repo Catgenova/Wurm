@@ -333,6 +333,17 @@ kbd {
   scrollbar-color: #5a4a30 transparent;
 }
 
+/* While you were away: a line a count, and the first says for how long. */
+.away-line {
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.away-line:first-child {
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
 /* HUD ------------------------------------------------------------------ */
 
 .hud-status {

@@ -8,6 +8,7 @@ import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
 import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import { packFog, unpackFog } from './fogpack';
+import type { Away } from '../game/away';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -625,6 +626,8 @@ export class Island {
   world: World | null = null;
   info: WorldRow | null = null;
   me: PlayerRow | null = null;
+  /** What the island counted for you while you were away, handed over as you came back; null when you were not away. */
+  away: Away | null = null;
   uid = '';
   readonly people = new Map<string, PlayerRow>();
   private channel: RealtimeChannel | null = null;
@@ -851,6 +854,7 @@ export class Island {
     // light rather than in whatever this browser last believed.
     this.pinClock((got as { time?: unknown }).time);
     this.me = got.you;
+    this.away = (got as { away?: Away | null }).away ?? null;
 
     const size = got.world.size;
     const seed = got.world.seed;

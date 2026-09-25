@@ -1307,6 +1307,18 @@ jobs:
             --outfile=node_modules/.cache/market.mjs --log-level=error
           node node_modules/.cache/market.mjs
 
+      - name: While you were away
+        run: |
+          # The island counts, for somebody who has gone, the loads their
+          # workers put away, the young born to their wildermon, what their
+          # stalls sell and the parcels posted to them, and hands the counts
+          # over on the way back in. Driven through the real sale, parcel,
+          # birth and worker paths, with a sale made while the owner is there
+          # not counted, and the browser's lines made of the island's answer.
+          npx esbuild supabase/test/away.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/away.mjs --log-level=error
+          node node_modules/.cache/away.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

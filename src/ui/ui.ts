@@ -77,6 +77,7 @@ import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
 import { WindowManager } from './windows';
 import type { Island } from '../net/island';
+import { awayLines } from '../game/away';
 import { uiBox } from './screen';
 
 export interface UICallbacks {
@@ -268,6 +269,26 @@ export class UI {
       built = true;
       void import('./panels/help').then((m) => m.buildHelp(help));
     };
+
+    /*
+     * While you were away: what the island counted for you, shown once as you
+     * come back, and written into the event log so it is still there once the
+     * window is shut. Made only when there is something to say.
+     */
+    const away = this.island?.away ? awayLines(this.island.away) : [];
+    if (away.length) {
+      const awayWin = this.windows.create({ id: 'away', title: 'While you were away', x: 0, y: 0, width: 380, height: 240, open: true });
+      awayWin.el.style.left = `${Math.max(0, (uiBox().w - 380) / 2)}px`;
+      awayWin.el.style.top = `${Math.max(0, uiBox().h / 4)}px`;
+      for (const line of away) {
+        const p = document.createElement('p');
+        p.className = 'away-line';
+        p.textContent = line;
+        awayWin.body.append(p);
+        game.write(line, 'system');
+      }
+      awayWin.open();
+    }
   }
 
   /**
