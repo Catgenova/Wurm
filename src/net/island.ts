@@ -192,6 +192,8 @@ export interface WorldRow {
   spawn_y: number;
   epoch: string;
   ready: boolean;
+  /** How far the island has let the land's history go: every change up to this one may be gone. */
+  changes_from?: number;
 }
 
 export interface PlayerRow {
@@ -716,6 +718,14 @@ export class Island {
   /** The highest tile change we have taken in, so catching up never doubles back. */
   private seenChange = 0;
   /**
+   * How far the island has let the land's history go, as it last said.
+   *
+   * Changes are kept for an hour (`change_keep`), not for ever. A place in the
+   * history further back than this is a place with a hole after it, so a
+   * browser there reads the land again rather than replaying: see `catchUp`.
+   */
+  private landFrom = 0;
+  /**
    * The timer that turns our own handle.
    *
    * Nothing on this island ticks: every job settles off a timestamp the next
@@ -904,6 +914,7 @@ export class Island {
     if (error) throw new Error(`The island would not have us: ${error.message}`);
     const got = data as { world: WorldRow; you: PlayerRow; new: boolean };
     this.info = got.world;
+    this.landFrom = Number(got.world.changes_from ?? 0) || 0;
     // The hour, straight away, so the first frame is drawn in the island's
     // light rather than in whatever this browser last believed.
     this.pinClock((got as { time?: unknown }).time);
@@ -994,13 +1005,22 @@ export class Island {
     let read = false;
     if (you) {
       this.hooks.progress?.(3, JOIN_STEPS, 'reading the land');
-      try {
-        const [bx0, by0, bx1, by1] = this.nearBox(you.x, you.y);
-        this.seenChange = await this.readLand(bx0, by0, bx1, by1);
-        read = true;
-      } catch {
-        this.seenChange = 0;
-        this.landCells.clear();
+      const [bx0, by0, bx1, by1] = this.nearBox(you.x, you.y);
+      // Twice, and then the old road -- but only on an island that still has
+      // all of its history. One that has let some go can only be read as it
+      // stands: replaying what is left would lay the last hour over the
+      // generator's guess, which is wrong ground that looks exactly like ground.
+      for (let go = 1; go <= 2 && !read; go++) {
+        try {
+          this.seenChange = await this.readLand(bx0, by0, bx1, by1);
+          read = true;
+        } catch (e) {
+          this.seenChange = 0;
+          this.landCells.clear();
+          if (go === 2 && this.landFrom > 0) {
+            throw new Error(`The island's land could not be read: ${(e as Error).message}`);
+          }
+        }
       }
     }
     // Whatever has happened since the island read that land — and everything
@@ -1187,6 +1207,9 @@ export class Island {
   private async catchUp(): Promise<void> {
     const info = this.info;
     if (!info) return;
+    // Further back than the island still keeps: the land again, as it stands,
+    // and the history from there.
+    if (this.seenChange < this.landFrom) await this.readLandAgain();
     this.seenChange = await layHistory(
       this.seenChange, CHANGE_PAGE,
       async (after, take) => {
@@ -1283,6 +1306,27 @@ export class Island {
     this.markLand(got.x0 ?? x0, got.y0 ?? y0, got.x1 ?? x1, got.y1 ?? y1);
     w.groundTouched = false;
     return Number(got.n ?? 0);
+  }
+
+  /**
+   * The land read again from the island's own copy, for a browser whose place
+   * in the history is further back than the island still keeps: a tab left
+   * asleep for longer than `change_keep`, most often.
+   *
+   * The square round the body first, whose cursor becomes ours, and then the
+   * rest of what this body has looked at, in the background, as on a join.
+   * Every square has to be read again, not only the near one: a change to a
+   * far tile in the part of the history that was let go of is in no history
+   * anybody could replay now.
+   */
+  private async readLandAgain(): Promise<void> {
+    const you = this.me;
+    if (!you) return;
+    this.landCells.clear();
+    const [bx0, by0, bx1, by1] = this.nearBox(you.x, you.y);
+    this.seenChange = await this.readLand(bx0, by0, bx1, by1);
+    this.hooks.ground(Math.floor(you.x), Math.floor(you.y));
+    void this.fillLand().catch(() => undefined);
   }
 
   /** The square read before anybody comes ashore: what the camera draws, and then some. */
@@ -1436,7 +1480,9 @@ export class Island {
         goes?: number | null; time?: number | null; night?: boolean | null;
         said?: Array<{ n: number; text: string; kind: string; at?: string }> | null;
         saidTo?: number | null;
+        land_from?: number;
       };
+      if (typeof said.land_from === 'number') this.landFrom = Math.max(this.landFrom, said.land_from);
       // The hour, on the beat every browser makes anyway. Nothing else has to
       // happen for the sun to move, and nothing can make it drift for long.
       /*

@@ -237,6 +237,46 @@ console.log(`  history: ${perSpadeful.toFixed(0)} bytes a spadeful, and a join r
 console.log(`  so at the ${LIVE.toLocaleString()} the live island is carrying: ${(LIVE * perSpadeful / 1048576).toFixed(1)} MB of history against ${(near / 1048576).toFixed(2)} MB of land`);
 console.log('  the land number does not move. The other one is what a morning of paving adds to.');
 
+/* ---- The history lets go, and says how far ------------------------------ */
+
+/*
+ * Changes are kept for `change_keep()` and then let go of, oldest first, with
+ * `world.changes_from` saying how far. Backdate the older half of the digging
+ * past the keep and sweep: that half has gone, `changes_from` is the last of
+ * it, and the newer half is all still there.
+ */
+const total = Number(psql(`select count(*) from tile_change where world_id = '${id}'`));
+const half = Number(psql(
+  `select n from tile_change where world_id = '${id}' order by n offset ${Math.floor(total / 2) - 1} limit 1`));
+psql(`update tile_change set at = now() - make_interval(secs => change_keep() + 60)
+        where world_id = '${id}' and n <= ${half}`);
+const letGo = Number(psql(`select compact_changes('${id}')`));
+const from = Number(psql(`select changes_from from world where id = '${id}'`));
+const kept = Number(psql(`select count(*) from tile_change where world_id = '${id}'`));
+const oldest = Number(psql(`select min(n) from tile_change where world_id = '${id}'`));
+check('an hour-old change is let go of, and the island says how far',
+  letGo === Math.floor(total / 2) && from === half && kept === total - letGo && oldest > from,
+  `${letGo} of ${total} let go, changes_from ${from} for the last of them at ${half}, ${kept} kept from ${oldest}`);
+
+/*
+ * A browser that has just read the land must never be taken to be behind, and
+ * once the whole history has gone there is no change left to take a cursor
+ * from: the window's cursor comes up to `changes_from` rather than falling to 0.
+ */
+psql(`update tile_change set at = now() - make_interval(secs => change_keep() + 60) where world_id = '${id}'`);
+psql(`select compact_changes('${id}')`);
+const none = Number(psql(`select count(*) from tile_change where world_id = '${id}'`));
+const fromAll = Number(psql(`select changes_from from world where id = '${id}'`));
+const cursor = Number((JSON.parse(psql(`select rpc_land_window('${id}', 0, 0, 8, 8)::text`)) as { n: number }).n);
+check('with all of it let go, a land read still starts at or past it',
+  none === 0 && fromAll > from && cursor >= fromAll,
+  `${none} rows left, changes_from ${fromAll}, the window's cursor ${cursor}`);
+
+// And a browser that is behind hears about it on the beat it makes anyway.
+const beat = JSON.parse(psql(`select rpc_settle(0, '${id}')::text`)) as { land_from?: number };
+check('the heartbeat says how far the history has gone', beat.land_from === fromAll,
+  `land_from ${beat.land_from} for changes_from ${fromAll}`);
+
 for (const line of [...ok, ...bad]) console.log(`  ${line}`);
 console.log(bad.length ? `\n${bad.length} of ${ok.length + bad.length} went wrong` : `\nall ${ok.length} the same on both roads`);
 process.exit(bad.length ? 1 : 0);

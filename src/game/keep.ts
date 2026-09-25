@@ -93,28 +93,24 @@ export const SNAP_GAP = 4;
 export const EVENT_KEEP = 24 * 3600;
 
 /**
- * How long the full history of a tile is kept before it is compacted.
+ * How long a change to the land is kept, in seconds.
  *
- * `tile_change` is what a client replays to catch up, so it cannot simply be
- * aged out — a row dropped is ground somebody never hears about. It can be
- * *compacted*, though, and losslessly: replaying diffs in order, only the last
- * one for a given tile decides where that tile ends up. So everything older
- * than this collapses to one row per tile, and a client replaying from any
- * cursor at all lands on exactly the same island as before.
+ * `tile_change` is what a browser replays to catch up from the moment it last
+ * read the land. It used to be compacted and never aged out — a row dropped was
+ * ground somebody never heard about — and compacted it settled at one row for
+ * every tile anybody had ever touched. On the live project that was 1.67
+ * million rows and 829 MB of a 1,131 MB database, in a table nothing reads from
+ * the beginning any more: a browser coming ashore reads the land as it stands,
+ * from `land_tile` and `land_corner`, and replays only what has happened since.
  *
- * It was a week, and a week turned out to be the whole life of an island.
+ * So a change is let go when it is this old, and the island writes down how far
+ * it has let go, as `world.changes_from`. A browser whose place in the history
+ * is further back than that — a tab left asleep over lunch — reads the land
+ * again rather than replaying a history with a hole in it. One that is keeping
+ * up never notices.
  *
- * Reported: a browser hung coming ashore. Nothing was broken by then — the
- * read had just been fixed to page properly — but an island played on all day
- * had every single change anybody had ever made still sitting in the table,
- * because not one of them was seven days old yet. A morning of levelling and
- * paving is a row per tile per spadeful, and the join was replaying every one
- * of them to arrive at a state that a fraction of them describes.
- *
- * An hour. Long enough that somebody who dropped off over lunch still gets
- * their own afternoon in the order it happened, short enough that the table
- * settles at roughly one row per tile anybody has ever touched — which is
- * what a join actually wants, and what it would have to download anyway.
+ * It was a week, which turned out to be the whole life of an island, and then
+ * an hour of full history over a floor of one row per tile.
  */
 export const CHANGE_KEEP = 3600;
 
