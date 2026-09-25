@@ -1438,6 +1438,14 @@ jobs:
         # under its limit. This waits for that, up to ten minutes, and if it
         # does not come fails the run in plain words, with the biggest things
         # in the database listed, rather than letting the first ALTER say it.
+        #
+        # And the warning is measured against the limit this project really
+        # has. It used to be 400 MB whatever the plan, on the Free Plan's 500,
+        # and it fired on every run once the database stood at 1,131 MB and
+        # still took writes: a warning that is always there says nothing. A
+        # project on a plan with a disk of its own is limited by that disk, and
+        # the Management API says how full it is (`config/disk/util`); only a
+        # project it says nothing about is held to the Free Plan's line.
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -1450,8 +1458,9 @@ jobs:
           # `transaction_read_only` is the mode of the transaction asking, so
           # it is what an ALTER from the same place would run into.
           #
-          # And whether it is past 400 MB: a Free Plan project goes read-only
-          # at 500, and 400 is early enough to delete something first.
+          # And whether it is past 400 MB, which is the line that matters to a
+          # Free Plan project: it goes read-only at 500, and 400 is early enough
+          # to delete something first. See `disk` below for every other plan.
           MODE=$(cat <<'EOSQL'
           select case when current_setting('transaction_read_only') = 'on' then 'READ-ONLY' else 'writable' end as mode,
                  current_user as as_role,
@@ -1481,7 +1490,20 @@ jobs:
             || { echo "$now"; echo "::warning::Could not measure the database; pushing without."; exit 0; }
           echo "$now"
           ask "$BIGGEST" || echo "::warning::Could not list the biggest things in the database."
-          if printf '%s' "$now" | grep -q 'PAST-400-MB'; then
+          # How full the project's own disk is, when it has one. Warned about at
+          # four fifths: the disk grows by itself on a plan that lets it, and
+          # this is the point to know that it is growing and what is growing it.
+          disk=$(curl -sf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+                   "https://api.supabase.com/v1/projects/$PROJECT_REF/config/disk/util" \
+                 | jq -r '.metrics | select(.fs_size_bytes > 0) | "\(.fs_used_bytes) \(.fs_size_bytes)"' 2>/dev/null || true)
+          if [ -n "$disk" ]; then
+            read -r used size <<< "$disk"
+            full=$(( used * 100 / size ))
+            echo "The project's disk: $(( used / 1048576 )) MB used of $(( size / 1048576 )) MB, ${full}% full."
+            if [ "$full" -ge 80 ]; then
+              echo "::warning::The project's disk is ${full}% full: $(( used / 1048576 )) MB of $(( size / 1048576 )) MB. A project whose disk fills goes read-only, and then nothing on the island can be saved. The biggest tables are listed above."
+            fi
+          elif printf '%s' "$now" | grep -q 'PAST-400-MB'; then
             echo "::warning::The database is past 400 MB. A Free Plan project goes read-only at 500 MB, and then nothing on the island can be saved. The biggest tables are listed above."
           fi
           printf '%s' "$now" | grep -q 'READ-ONLY' || exit 0
