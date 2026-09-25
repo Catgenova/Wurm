@@ -24,17 +24,18 @@
  *
  *   **The source, read.** Every fixed piece of text in the fields a player
  *   reads -- `description`, `note`, `lever`, `done`, `fail`, `hint`, `how`,
- *   `said`, what goes to `logMsg` and `say`, a piece's `done`, a setting's
- *   hint and the whole of the help -- is scanned for a figure, a number
+ *   `said`, whether written in or worked out by a getter, what goes to
+ *   `logMsg` and `say`, a piece's `done`, a dye's note, a setting's hint
+ *   and the whole of the help -- is scanned for a figure, a number
  *   word from two up, and a multiplier ("twice", "half again", "a fifth").
  *   Keys in `<kbd>`, headings, entities, ordinals and `{placeholders}` are
  *   taken out first, and "one", "once" and a bare "half" are left alone.
  *
  * What is left over and is genuinely not a rule's number -- the name of a
- * double door, a pair of hands on a two-handed weapon -- is in `NOT_A_RULE`
- * below with the reason, keyed by a snippet of the text or by the id of the
- * definition. An entry that no longer matches anything fails too, so the list
- * cannot quietly outgrow what it excuses.
+ * double door, a double-click, a pair of hands on a two-handed weapon -- is
+ * in `NOT_A_RULE` below with the reason, keyed by a snippet of the text or by
+ * the id of the definition. An entry that no longer matches anything fails
+ * too, so the list cannot quietly outgrow what it excuses.
  *
  * Needs no database. Run from the repository root:
  *
@@ -66,6 +67,9 @@ const check = (what: string, passed: boolean, detail = ''): void => {
  * hit in the one definition.
  */
 const NOT_A_RULE: Array<{ at: string; why: string }> = [
+  { at: 'Two hands', why: 'a two-handed weapon, which `twoHanded` says; nothing counts the hands' },
+  { at: 'double door', why: 'the name of a wall, not a multiplier' },
+  { at: 'double-click', why: 'a way of clicking, not a multiplier' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -77,7 +81,8 @@ const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => {
   const p = join(dir, f);
   return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
 });
-const FILES = walk('src').sort();
+// `src/render` draws and says nothing: its one `note` is the colour a floater is written in.
+const FILES = walk('src').filter((f) => !f.startsWith(join('src', 'render'))).sort();
 const SOURCES = FILES.map((f) => ({ file: f, sf: ts.createSourceFile(f, readFileSync(f, 'utf8'), ts.ScriptTarget.Latest, true) }));
 
 /** Every fixed piece of text anywhere in the source: string literals and the fixed parts of templates. */
@@ -274,12 +279,10 @@ function scan(file: string, sf: ts.SourceFile, node: ts.Expression | undefined, 
         context: text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40).replace(/\s+/g, ' ').trim(),
       };
       for (const e of NOT_A_RULE) {
-        if (e.at.startsWith('id:') ? e.at.slice(3) === id : (() => {
-          for (let i = text.indexOf(e.at); i >= 0; i = text.indexOf(e.at, i + 1)) {
-            if (i <= m.index && m.index + m[0].length <= i + e.at.length) return true;
-          }
-          return false;
-        })()) {
+        // A snippet matches across a line break in the source as readily as across a space.
+        const at = new RegExp(e.at.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+'), 'g');
+        if (e.at.startsWith('id:') ? e.at.slice(3) === id
+          : [...text.matchAll(at)].some((x) => x.index <= m.index && m.index + m[0].length <= x.index + x[0].length)) {
           hit.excused = e.at;
           used.add(e.at);
           break;
@@ -301,12 +304,18 @@ for (const { file, sf } of SOURCES) {
   const visit = (node: ts.Node): void => {
     if (ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name))
       && FIELDS.has(node.name.text)) scan(file, sf, node.initializer, node.name.text);
+    // A field worked out when it is read is the same text: `get how() { return `...`; }`.
+    if (ts.isGetAccessorDeclaration(node) && ts.isIdentifier(node.name) && FIELDS.has(node.name.text) && node.body) {
+      for (const st of node.body.statements) if (ts.isReturnStatement(st)) scan(file, sf, st.expression, node.name.text);
+    }
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
       const name = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : '';
       if (SAYERS.has(name)) scan(file, sf, node.arguments[0], name);
       // A piece's `done` is the eighth thing handed to `piece`, and a setting's hint the second to `add`.
       if (name === 'piece' && file.endsWith('furniture.ts')) scan(file, sf, node.arguments[7], 'done');
+      // And a dye's note, which is the last thing handed to `dye` and goes into its recipe's `done`.
+      if (name === 'dye' && file.endsWith('dyestuffs.ts')) scan(file, sf, node.arguments[8], 'note');
       if (name === 'add' && file.endsWith('settings.ts')) scan(file, sf, node.arguments[1], 'hint');
       if (SPEAKERS.has(name) && node.arguments[0] && literalNumber(node.arguments[0])) {
         smuggled.push(`${file}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${node.getText(sf)}`);
