@@ -29,8 +29,12 @@
  *   * Keep at token is gone;
  *   * a worker taken off the deed leaves your companion on the deed in its
  *     place;
- *   * a young one is born into the herd with its keeper's name on it and takes
- *     no place on the deed's books until it is grown;
+ *   * a young one goes where a tamed one goes and then into a crate standing
+ *     on the settlement -- asked for as "Else goes into an empty crate placed
+ *     on deed": it follows you when nothing does, goes into an empty crate in
+ *     your pack when something does, into an empty one of yours standing on
+ *     your settlement when you carry none, and into the wild with none of
+ *     those, with its keeper's name on it;
  *   * on the island your own in crates come down with the wildlife wherever
  *     they are, and a wildermon out of its crate by any road is out of it;
  *   * and in the browser, a wildermon kept at the token in an old save is put
@@ -41,7 +45,7 @@ import { Game } from '../../src/game/game';
 import { ACTION_BY_ID, type Target } from '../../src/game/actions';
 import { RECIPES } from '../../src/game/recipes';
 import { itemDef, groundDecayRate } from '../../src/game/items';
-import { ageDef, type Creature } from '../../src/game/creatures';
+import type { Creature } from '../../src/game/creatures';
 import { CREATURE_CRATE, crateTheKept, emptyCrate, occupiedRefusal } from '../../src/game/creaturecrate';
 
 const psql = (sql: string): string =>
@@ -142,14 +146,38 @@ check('the one following you goes into an empty crate you carry', (act('crate_cr
 act('crate_creature').perform(at(first), game);
 check('and is in it', first.mode === 'stored' && emptyCrate(game) === undefined, first.mode);
 
-// Born into the herd, and not on the books until grown.
-const workers = game.creatures.workers(game.time).length;
-second.unborn = { traits: [], sex: 'female' };
-second.due = game.time;
-const young = game.creatures.giveBirth(game, second);
-check('a young one is born into the herd of the settlement', young?.mode === 'deed', young?.mode);
-check('and takes no place until it is grown', young !== null && !ageDef(young, game.time).works && game.creatures.workers(game.time).length === workers,
-  `${game.creatures.workers(game.time).length} working`);
+// Where a young one goes: where a tamed one goes, and then a crate standing on the settlement.
+const born = (): { c: Creature | null; said: string } => {
+  const seen = game.log.length;
+  second.unborn = { traits: [], sex: 'female' };
+  second.due = game.time;
+  const c = game.creatures.giveBirth(game, second);
+  return { c, said: game.log.slice(seen).map((l) => l.text).find((t) => t.includes('drops a young')) ?? '' };
+};
+const alone = born();
+check('a young one follows you when nothing does', alone.c?.mode === 'active' && alone.said.endsWith('It follows you.'), `${alone.c?.mode}; ${alone.said}`);
+const nursery = game.inventory.add(CREATURE_CRATE, { ql: 30 });
+let standingSpot: Target | null = null;
+for (let dy = -1; dy <= 1 && !standingSpot; dy++) {
+  for (let dx = -1; dx <= 1 && !standingSpot; dx++) {
+    const t: Target = { kind: 'tile', x: game.player.tileX + dx, y: game.player.tileY + dy, sx: 2, sy: 2, itemUid: nursery.uid, facing: 's' } as Target;
+    if (!act('place_furniture').check?.(t, game)) standingSpot = t;
+  }
+}
+act('place_furniture').perform(standingSpot!, game);
+const onDeed = [...game.furniture.values()].find((f) => f.kind === CREATURE_CRATE && f.creature === undefined);
+const crated2 = born();
+check('with one following you and no empty crate in the pack, it goes into an empty crate standing on the settlement',
+  crated2.c?.mode === 'stored' && onDeed?.creature === crated2.c.id
+  && crated2.said.endsWith(`It goes into the empty creature crate at (${onDeed.x}, ${onDeed.y}) on Hearth.`), `${crated2.c?.mode}; ${crated2.said}`);
+const spare = game.inventory.add(CREATURE_CRATE, { ql: 30 });
+const packed2 = born();
+check('an empty crate in the pack comes before one standing on the settlement', packed2.c?.mode === 'stored' && spare.creature === packed2.c.id,
+  `${packed2.c?.mode}; ${packed2.said}`);
+const lost = born();
+check('and with none of those, it goes off into the wild', lost.c?.mode === 'wild'
+  && lost.said.endsWith('Something already follows you and there is no empty creature crate in your pack or standing on your settlement, so it goes off into the wild.'),
+  `${lost.c?.mode}; ${lost.said}`);
 
 // An old save's wildermon kept at the token.
 const kept = beside();
@@ -166,7 +194,7 @@ begin;
 create temp table said (k text);
 do $b$
 declare w uuid; me uuid; v_x double precision; v_y double precision; v_first int; v_second int; v_third int;
-        v_crate bigint; v_placed bigint; v_tries int; v_spot record; v_workers int; v_young int; v_seen jsonb;
+        v_crate bigint; v_placed bigint; v_tries int; v_spot record; v_young int; v_seen jsonb;
 begin
   select id into w from world where name = 'Hoarding';
   select uid into me from player where world_id = w and name = 'Dane';
@@ -257,15 +285,32 @@ begin
   update creature set mode = 'wild', keeper = null where world_id = w and id = v_first;
   insert into said values ('LEFT|' || ((select creature from item where id = v_crate) is null));
 
-  -- Born into the herd, and off the books until grown.
-  v_workers := workers_on_deed(w, me);
+  -- Where a young one goes: nothing follows him now, so the first follows him.
   update creature set unborn = jsonb_build_object('traits', '[]'::jsonb, 'sex', 'female'), due = now() - interval '1 second'
     where world_id = w and id = v_third;
   v_young := give_birth(w, v_third);
-  insert into said values ('BORN|' || (select mode || ',' || (keeper = me) from creature where world_id = w and id = v_young)
-    || ',' || (workers_on_deed(w, me) = v_workers));
+  insert into said values ('BORN|' || (select mode || ',' || (keeper = me) from creature where world_id = w and id = v_young));
   insert into said values ('BORNSAID|' || coalesce((select e.text from event e where e.world_id = w and e.uid = me
     and e.text like '%drops a young%' order by e.n desc limit 1), 'nothing'));
+  -- Then, with that one following him and his only crate set down on his settlement, into the crate.
+  select * into v_spot from crate_spot_near(w, (my_deed(w, me)).x, (my_deed(w, me)).y, (my_deed(w, me)).radius);
+  perform act_perform(w, me, 'place_furniture', jsonb_build_object('kind', 'tile',
+    'x', v_spot.x, 'y', v_spot.y, 'sx', v_spot.sx, 'sy', v_spot.sy, 'itemUid', v_crate, 'facing', 's'));
+  select id into v_placed from placed where world_id = w and sub = 'creature_crate' and made_by = me and creature is null
+    order by id desc limit 1;
+  update creature set unborn = jsonb_build_object('traits', '[]'::jsonb, 'sex', 'male'), due = now() - interval '1 second'
+    where world_id = w and id = v_third;
+  v_young := give_birth(w, v_third);
+  insert into said values ('NURSERY|' || (select mode from creature where world_id = w and id = v_young)
+    || ',' || coalesce((select creature from placed where id = v_placed) = v_young, false));
+  insert into said values ('NURSERYSAID|' || coalesce((select e.text from event e where e.world_id = w and e.uid = me
+    and e.text like '%drops a young%' order by e.n desc limit 1), 'nothing')
+    || '|' || v_spot.x || ',' || v_spot.y);
+  -- And with no crate anywhere, into the wild.
+  update creature set unborn = jsonb_build_object('traits', '[]'::jsonb, 'sex', 'male'), due = now() - interval '1 second'
+    where world_id = w and id = v_third;
+  v_young := give_birth(w, v_third);
+  insert into said values ('WILD|' || (select mode || ',' || (keeper is null) from creature where world_id = w and id = v_young));
 end $b$;
 select string_agg(k, E'\\n') from said;
 rollback;
@@ -291,8 +336,13 @@ check('a worker taken to follow you leaves your companion on the deed in its pla
 check('the one following you goes into an empty crate you carry', said('CRATEOK') === 'allowed', said('CRATEOK'));
 check('your own in a crate come down with the wildlife wherever they are', said('FAR') === 'stored', said('FAR'));
 check('out of its crate by any road, the crate forgets it', said('LEFT') === 'true', said('LEFT'));
-check('a young one is born into the herd with its keeper\'s name, and takes no place', said('BORN') === 'deed,true,true', said('BORN'));
-check('and its keeper is told where it went', said('BORNSAID').endsWith(`It joins the herd of ${said('DEED')}, and is put to work when it is grown.`), said('BORNSAID'));
+check('a young one follows its keeper when nothing does, with the keeper\'s name on it', said('BORN') === 'active,true', said('BORN'));
+check('and its keeper is told where it went', said('BORNSAID').endsWith('It follows you.'), said('BORNSAID'));
+const [nurserySaid, nurseryAt] = said('NURSERYSAID').split('|');
+const [nx, ny] = (nurseryAt ?? ',').split(',');
+check('with one following and no empty crate in the pack, it goes into an empty crate standing on the settlement', said('NURSERY') === 'stored,true', said('NURSERY'));
+check('in the browser\'s words', nurserySaid.endsWith(`It goes into the empty creature crate at (${nx}, ${ny}) on ${said('DEED')}.`), nurserySaid);
+check('and with none of those, it goes off into the wild, nobody\'s', said('WILD') === 'wild,true', said('WILD'));
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

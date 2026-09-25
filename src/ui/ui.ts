@@ -1743,12 +1743,12 @@ export class UI {
     const level = g.deedLevel;
     const kept = [...g.creatures.list.values()].filter((c) => c.mode === 'deed');
     const children: MenuItem[] = [];
-    const workers = g.creatures.workers(g.time).length;
+    const workers = g.creatures.workers().length;
     children.push({
       label: `Wildermon (${workers} of ${g.workerCap} working)`,
       disabled: !kept.length,
       hint: kept.length ? undefined : 'None working here yet.',
-      children: kept.length ? kept.map((c) => ({ label: `${c.name} (${g.creatures.describe(c, g.time)})`, children: this.creatureEntries(c.id) })) : undefined,
+      children: kept.length ? kept.map((c) => ({ label: `${c.name} (${g.creatures.describe(c)})`, children: this.creatureEntries(c.id) })) : undefined,
     });
     const upgrade = DEED_ACTION_BY_ID.get('upgrade_deed');
     if (upgrade) {

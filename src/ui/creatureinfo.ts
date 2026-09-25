@@ -1,6 +1,5 @@
 import { clockLeft } from '../game/boons';
 import {
-  ageDef,
   ageOf,
   attackOf,
   careWord,
@@ -81,8 +80,6 @@ export function creatureLines(g: Game, c: Creature): string[] {
     const h = crateOf(g, c.id);
     const where = h && 'piece' in h ? ` at (${h.piece.x}, ${h.piece.y})` : h?.carried ? ' in your pack' : '';
     lines.push(`In a creature crate${where} · does not get hungry in there`);
-  } else if (c.mode === 'deed' && !ageDef(c, g.time).works) {
-    lines.push('Of the herd · not put to work, and taking no place, until grown');
   } else if (c.mode === 'deed') {
     // A reach means nothing to something with no trade to range out and do.
     if (def.gathers) lines.push(`Deed worker · ${GATHER_VERB[def.gathers]} at ${taskSkill(c, def).toFixed(1)} · reaches ${workRangeOf(c, def)} tiles`);

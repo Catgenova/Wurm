@@ -1342,7 +1342,8 @@ function helpText(): string {
     any spot of a tile and the wildermon is drawn inside it with its name over it. Open a crate
     &mdash; standing beside it, or from your pack &mdash; to <b>let it out to follow you</b>, when the
     one following you goes into the crate in its place, or to <b>set it to work the deed</b>, which
-    takes a working slot once it is grown. A wildermon in a crate does not get hungry. A crate with a
+    takes one of its working slots. A wildermon in a crate does not get hungry. A young one born while
+    something follows you goes into a crate too: see breeding. A crate with a
     wildermon in it can be carried, set down or opened, and <b>nothing else</b>: it cannot be dropped,
     bagged, stored, sold, posted or traded. <b>Take with you</b> on a deed worker, with a companion
     already following you, leaves that companion on the deed in its place, or puts it in an empty
@@ -1478,10 +1479,10 @@ function helpText(): string {
     of being left alone, so it is a thing you keep up rather than do once.</p>
     <p>To breed, stand a <b>male</b> and a <b>female</b> of one sort within four tiles of each other,
     both <b>grown</b>, both <b>fed</b>, and neither put to a mate in the last twenty minutes, then
-    choose <b>Put it to a mate</b>. The young one joins your settlement's herd and is not put to work,
-    and takes no working slot, until it is grown; without a settlement it follows you when nothing else
-    does, goes into an empty creature crate you carry when something does, and otherwise goes off into
-    the wild. If it takes,
+    choose <b>Put it to a mate</b>. The young one goes where a tamed one goes: it <b>follows you</b> when
+    nothing else does, and goes into an <b>empty creature crate in your pack</b> when something does. Carrying
+    none, it goes into an <b>empty creature crate of yours standing on your settlement</b>, the nearest the
+    mother; and with none of those it goes off into the wild. If it takes,
     the female carries for about twelve minutes and then drops a young one, and what it is born with was
     settled at that moment &mdash; a sire sold, released or eaten in between has already had his say.</p>
     <p>Three slots are filled one at a time. Each is drawn from what the pair carry between them, and

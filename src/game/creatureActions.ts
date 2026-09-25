@@ -93,9 +93,8 @@ export function companionSwap(g: Game, taking: Creature): { current: Creature; t
   if (current.hitchedTo !== null) return { current, refused: `${current.name} is in the traces. Take it out first.` };
   if (current.ridden) return { current, refused: `Get down off ${current.name} first.` };
   // What the deed counts once the one being taken is off it and this one is on it.
-  const freed = taking.mode === 'deed' && taking.post === null && ageDef(taking, g.time).works ? 1 : 0;
-  const adds = ageDef(current, g.time).works ? 1 : 0;
-  if (g.deed && g.creatures.workers(g.time).length - freed + adds <= g.workerCap) return { current, to: 'deed' };
+  const freed = taking.mode === 'deed' && taking.post === null ? 1 : 0;
+  if (g.deed && g.creatures.workers().length - freed + 1 <= g.workerCap) return { current, to: 'deed' };
   if (emptyCrate(g)) return { current, to: 'crate' };
   return {
     current,
@@ -321,10 +320,9 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (!g.deed) return 'You have no settlement to assign it to.';
       const c = creatureOf(g, t);
-      // Only a grown one works, and so only a grown one takes a place -- one
-      // off a post as much as one off the road, since a post costs none.
-      const working = g.creatures.workers(g.time).length;
-      if (c && ageDef(c, g.time).works && (c.mode !== 'deed' || c.post !== null) && working >= g.workerCap) {
+      // One off a post takes a place as much as one off the road, since a post costs none.
+      const working = g.creatures.workers().length;
+      if (c && (c.mode !== 'deed' || c.post !== null) && working >= g.workerCap) {
         return `${g.deed.name} has work for ${g.workerCap} wildermon at level ${g.deedLevel}. Upgrade the settlement to take on more.`;
       }
       // A trade it was asked for by name has to be one of its own.
@@ -349,9 +347,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.enemy = null;
       c.state = 'idle';
       c.until = g.time;
-      g.logMsg(ageDef(c, g.time).works
-        ? `${c.name} will ${deedJobLine(c)}.`
-        : `${c.name} is not grown, and stays about ${d.name} until it is. Then it will ${deedJobLine(c)}.`, 'system');
+      g.logMsg(`${c.name} will ${deedJobLine(c)}.`, 'system');
     },
   },
   {
@@ -393,9 +389,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         was.enemy = null;
         was.state = 'idle';
         was.until = g.time;
-        g.logMsg(ageDef(was, g.time).works
-          ? `${was.name} stays behind in its place, and will ${deedJobLine(was)}.`
-          : `${was.name} stays behind in its place. It is not grown, and stays about the settlement until it is.`, 'info');
+        g.logMsg(`${was.name} stays behind in its place, and will ${deedJobLine(was)}.`, 'info');
       } else if (swap) {
         const into = emptyCrate(g);
         if (into) {

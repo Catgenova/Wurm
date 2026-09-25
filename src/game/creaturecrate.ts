@@ -43,6 +43,22 @@ const ageOfWord = (c: Creature, now: number): string => (ageDef(c, now).name ===
 export const emptyCrate = (g: Game): Item | undefined =>
   g.inventory.items.find((it) => it.id === CREATURE_CRATE && it.creature === undefined);
 
+/** An empty creature crate of yours standing on your settlement, the nearest to (x, y) there is. */
+export function standingCrate(g: Game, x: number, y: number): PlacedFurniture | undefined {
+  let best: PlacedFurniture | undefined;
+  let bestD = Infinity;
+  for (const f of g.furniture.values()) {
+    if (f.kind !== CREATURE_CRATE || f.creature !== undefined || f.mine === false || !g.onDeed(f.x, f.y)) continue;
+    const [cx, cy] = furnitureCentre(f);
+    const d = Math.hypot(cx - x, cy - y);
+    if (d < bestD) {
+      bestD = d;
+      best = f;
+    }
+  }
+  return best;
+}
+
 /**
  * What may be done with a crate that has a wildermon in it: carry it, set it
  * down, open it, look at it, put it by and name it. Nothing else -- it is not
@@ -263,8 +279,7 @@ export const CREATURE_CRATE_ACTIONS: ActionDef[] = [
       if (!g.deed) return 'You have no settlement to set it to work on.';
       const def = at.c ? SPECIES[at.c.species] : undefined;
       if (def && !def.gathers) return `A ${def.name.toLowerCase()} has no trade to be set to.`;
-      // Only a grown one works, and so only a grown one takes a place.
-      if (at.c && ageDef(at.c, g.time).works && g.creatures.workers(g.time).length >= g.workerCap) {
+      if (g.creatures.workers().length >= g.workerCap) {
         return `${g.deed.name} has work for ${g.workerCap} wildermon at level ${g.deedLevel}. Upgrade the settlement to take on more.`;
       }
       return null;
@@ -277,9 +292,7 @@ export const CREATURE_CRATE_ACTIONS: ActionDef[] = [
       c.mode = 'deed';
       c.trade = null;
       c.enemy = null;
-      g.logMsg(ageDef(c, g.time).works
-        ? `${c.name} comes out of the crate and will ${deedJobLine(c)}.`
-        : `${c.name} comes out of the crate. It is not grown, and stays about the settlement until it is.`, 'system');
+      g.logMsg(`${c.name} comes out of the crate and will ${deedJobLine(c)}.`, 'system');
     },
   },
 ];
