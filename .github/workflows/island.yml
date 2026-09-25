@@ -1293,6 +1293,91 @@ jobs:
           echo "::warning::supabase/setup-cli failed; installing from npm instead."
           npm i -g supabase
           supabase --version
+      - name: Room on the database
+        # Run 652 could not push the creature crates: the project refused the
+        # first ALTER with "cannot execute ALTER TABLE in a read-only
+        # transaction", and nothing in the run said why. A Free Plan project
+        # goes read-only when its database passes 500 MB ("Understanding
+        # Database and Disk Size", in Supabase's guides), and every push after
+        # that fails the same way until something is deleted.
+        #
+        # So, before anything is pushed: how big the database is, and the
+        # biggest things in it, which is how the next one of these gets found
+        # in one run rather than three. And when the database is read-only,
+        # what that guide says to do about it -- turn the one session
+        # read-write and delete -- to the one thing that is safe to delete
+        # without asking: pg_cron's log of its own runs, which is what filled
+        # it the first time and which nothing reads more than six hours of
+        # (20260925134000 has the whole story, and keeps it trimmed from then
+        # on). It is emptied rather than deleted from: a delete writes every
+        # row it takes out to the WAL, onto a disk that is already full.
+        #
+        # The platform turns writes back on by itself once the database is
+        # under its limit. This waits for that, up to ten minutes, and if it
+        # does not come fails the run in plain words, with the biggest things
+        # in the database listed, rather than letting the first ALTER say it.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'glebtboagnafcgwjjvfy' }}
+        run: |
+          # "Link and push" says what is missing, and is the step that fails for it.
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || exit 0
+          supabase link --project-ref "$PROJECT_REF" \
+            || { echo "::warning::Could not link to measure the database; pushing without."; exit 0; }
+          # `transaction_read_only` is the mode of the transaction asking, so
+          # it is what an ALTER from the same place would run into.
+          MODE=$(cat <<'EOSQL'
+          select case when current_setting('transaction_read_only') = 'on' then 'READ-ONLY' else 'writable' end as mode,
+                 current_user as as_role,
+                 pg_size_pretty(pg_database_size(current_database())) as database;
+          EOSQL
+          )
+          BIGGEST=$(cat <<'EOSQL'
+          select n.nspname || '.' || c.relname as relation,
+                 pg_size_pretty(pg_total_relation_size(c.oid)) as total,
+                 pg_size_pretty(pg_indexes_size(c.oid)) as indexes,
+                 c.reltuples::bigint as rows,
+                 coalesce(s.n_dead_tup, 0) as dead
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            left join pg_stat_all_tables s on s.relid = c.oid
+           where c.relkind in ('r', 'm')
+           order by pg_total_relation_size(c.oid) desc
+           limit 20;
+          EOSQL
+          )
+          # The same pattern as the readout below: `db query` sends the SQL to
+          # the project's Management API, which runs it as the SQL editor does.
+          ask() { supabase db query --linked "$1"; }
+          now=$(ask "$MODE" 2>&1) \
+            || { echo "$now"; echo "::warning::Could not measure the database; pushing without."; exit 0; }
+          echo "$now"
+          ask "$BIGGEST" || echo "::warning::Could not list the biggest things in the database."
+          printf '%s' "$now" | grep -q 'READ-ONLY' || exit 0
+
+          echo "::warning::The database is read-only. Emptying pg_cron's run log to bring it back under its limit."
+          # `begin read write` rather than the guide's `set session
+          # characteristics`: every statement in one request runs in one
+          # transaction, and that one only changes the transactions after it.
+          if ! ask "begin read write; set local lock_timeout = '5s'; truncate cron.job_run_details; commit;"; then
+            echo "::error::The database is read-only, and pg_cron's run log could not be emptied: the error is above. Nothing can be pushed until the database is back under the plan's limit."
+            exit 1
+          fi
+          ask "$MODE" || true
+          for i in $(seq 1 20); do
+            sleep 30
+            now=$(ask "$MODE" 2>&1) || true
+            if ! printf '%s' "$now" | grep -q 'READ-ONLY'; then
+              echo "$now"
+              echo "Writes are back on, $((i * 30)) seconds after the log was emptied."
+              exit 0
+            fi
+          done
+          echo "$now"
+          ask "$BIGGEST" || true
+          echo "::error::The database is still read-only ten minutes after pg_cron's run log was emptied. Its size is above, with the twenty biggest things in it. Nothing can be pushed until it is back under the plan's limit: something else has to be deleted, or the plan raised."
+          exit 1
       - name: Link and push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
