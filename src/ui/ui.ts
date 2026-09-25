@@ -22,6 +22,7 @@ import {
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { crateLine, crateOf, CREATURE_CRATE, CREATURE_CRATE_ACTION_BY_ID, occupiedRefusal } from '../game/creaturecrate';
+import { graveLine, graveName, graveSays, graveUnits, isGrave } from '../game/graves';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
 import { itemDef, itemName, storedLine, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
@@ -670,6 +671,10 @@ export class UI {
       return;
     }
     const fu = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
+    if (fu && isGrave(fu)) {
+      this.tooltip.show(sx, sy, [graveName(this.game, fu), graveLine(this.game, fu)]);
+      return;
+    }
     if (fu) {
       lines.push(furnitureName(fu));
       lines.push(furnitureState(fu));
@@ -859,6 +864,7 @@ export class UI {
     const smelter = pick.smelter !== undefined ? this.game.smelters.get(pick.smelter) : undefined;
     if (smelter) return { title: `Smelter (${smelterState(smelter)})`, entries: this.smelterEntries(smelter) };
     const piece = pick.furniture !== undefined ? this.game.furniture.get(pick.furniture) : undefined;
+    if (piece && isGrave(piece)) return { title: `${graveName(this.game, piece)} (${graveLine(this.game, piece)})`, entries: this.graveEntries(piece) };
     if (piece) {
       const state = rackSpots(piece) ? `${furnitureState(piece)} · ${this.rackLine(piece)}`
         : piece.kind === CREATURE_CRATE ? `${furnitureState(piece)} · ${crateLine(this.game, piece)}`
@@ -1404,6 +1410,31 @@ export class UI {
     const load = this.game.rackLoad(f);
     if (!load.crates) return `no crates on it · room for ${load.spots}`;
     return `${load.crates} of ${load.spots} spots · ${load.units} / ${load.capacity} things`;
+  }
+
+  /**
+   * A grave: opened and emptied by whoever lies under it, and by nobody else.
+   * Picking it up is listed for the one reason it is refused, which says so
+   * plainly, as does every entry to somebody whose grave it is not.
+   */
+  private graveEntries(f: PlacedFurniture): MenuItem[] {
+    const g = this.game;
+    const ft: Target = { kind: 'furniture', id: f.id };
+    const shut = graveSays(g, f, 'furniture_take_all');
+    const entries: MenuItem[] = [{
+      label: 'Open',
+      note: shut ? undefined : `${graveUnits(f)} things`,
+      hint: shut ?? undefined,
+      disabled: !!shut,
+      onSelect: () => this.cratePanel.openFurniture(f.id),
+    }];
+    for (const id of ['furniture_take_all', 'pick_up_furniture']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def) continue;
+      const reason = graveSays(g, f, id) ?? def.check?.(ft, g) ?? null;
+      entries.push({ label: def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
+    }
+    return entries;
   }
 
   /** Opening, emptying and lifting a piece of furniture. */

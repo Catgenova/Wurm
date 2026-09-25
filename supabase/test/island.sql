@@ -1170,12 +1170,27 @@ update player set wounds = '[{"kind":"cut","part":"chest","severity":0.4,"bleedi
     stats = jsonb_set(jsonb_set(stats, '{health}', '0.3'), '{hurtSettled}', to_jsonb(now() - interval '600 seconds')),
     x = 3.5, y = 3.5 where uid = :'ivar';
 delete from event where uid = :'ivar';
+select equipped as ivar_wore from player where world_id = :'world2' and uid = :'ivar' \gset
 select wounds_settle(:'world2', :'ivar') \g /dev/null
 select '183. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'error')
      || ' — health ' || (select round(((stats->>'health')::numeric), 2) from player where uid = :'ivar')
      || ', wounds ' || (select jsonb_array_length(wounds) from player where uid = :'ivar')
      || ', standing at ' || (select round(x::numeric, 1) || ',' || round(y::numeric, 1) from player where uid = :'ivar')
      || ' which is where the island put him ashore';
+/*
+ * And what he was carrying is where he bled out, in a grave only he may open
+ * until it crumbles. He takes it all back and puts back on what was in his
+ * hands, since everything below is done with his things, and the grave goes.
+ */
+select id as ivar_grave from placed where world_id = :'world2' and made_by = :'ivar' and crumbles_at is not null
+ order by id desc limit 1 \gset
+select '183b. what he was carrying is in a grave at ' || (select x || ',' || y from placed where id = :'ivar_grave')
+     || ', ' || (select sum(count) from item where placed = :'ivar_grave' and holder = 'furniture')
+     || ' things, his alone for ' || grave_keeps_said() || '; still on him: '
+     || (select count(*) from item where world_id = :'world2' and holder = 'player' and holder_uid = :'ivar');
+select act_perform(:'world2', :'ivar', 'furniture_take_all', ('{"kind":"furniture","id":' || :'ivar_grave' || '}')::jsonb) \g /dev/null
+update player set equipped = :'ivar_wore'::jsonb where world_id = :'world2' and uid = :'ivar';
+delete from placed where id = :'ivar_grave';
 
 \echo ''
 -- A body rests between one subject and the next. This suite runs hundreds of

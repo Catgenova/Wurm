@@ -358,6 +358,8 @@ export function spoilFrom(g: Game, want: string[], uid?: number): { id: string; 
       if (it) return { id, take: () => one(it, () => !!g.crateTake(c, it.uid)) };
     }
     for (const f of g.furniture.values()) {
+      // Not out of a grave, whoever's it is: what is in one is taken out through its own doors or not at all.
+      if (f.grave) continue;
       const it = near(furnitureCentre(f)) ? f.items.find((o) => o.id === id) : undefined;
       if (it) return { id, take: () => one(it, () => !!g.furnitureTake(f, it.uid)) };
     }

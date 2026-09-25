@@ -117,6 +117,12 @@ export interface FurnitureDef {
    * on it survives the rack being a browser's idea rather than an island's.
    */
   crates?: number;
+  /**
+   * Dug where somebody died rather than built: it holds what they were
+   * carrying, only they may empty it, and it crumbles on its own. Nobody
+   * makes one, so it has no recipe. See `graves.ts`.
+   */
+  grave?: boolean;
 }
 
 /**
@@ -330,6 +336,13 @@ export const FURNITURE: FurnitureDef[] = [
   // the world where anyone walking past can read it.
   piece('sign', 'Sign', 1, 1, [['plank', 8], ['shaft', 2], ['nail', 12]], 10, 7, 'You nail a board across {bill.shaft:w} posts and set it up straight.', undefined, { sign: true }),
   piece('great_sign', 'Signboard', 2, 1, [['plank', 20], ['timber', 4], ['shaft', 2], ['nail', 24]], 18, 12, 'You nail up a board wide enough to write a sentence on.', undefined, { sign: true }),
+  /*
+   * And the one nobody builds: a mound of earth with a marker at its head,
+   * dug where somebody fell and holding what they were carrying. It is a
+   * piece so that it opens in the same window and is emptied by the same
+   * two doors as a chest; `graves.ts` says who may and for how long.
+   */
+  piece('grave', 'Grave', 1, 2, [], 0, 0, '', undefined, { grave: true }),
 ];
 
 export const FURNITURE_BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
@@ -432,6 +445,15 @@ export interface PlacedFurniture {
   till?: number;
   /** The wildermon shut in it, for a creature crate standing on the ground. It is drawn inside. */
   creature?: number;
+  /**
+   * For a grave: who lies under it, what they were called, and the moment it
+   * crumbles, in real seconds. On an island `mine` says whether it is yours
+   * and `who` is left out, and `units` is how many things are in it, to its
+   * owner, however far off -- `items` comes only from within reach. On this
+   * machine `who` is the body that died, by the name its machine keeps for it
+   * (`Actor.who`). See `graves.ts`.
+   */
+  grave?: { who?: string; name: string; crumbles: number; units?: number };
 }
 
 /** The two liquids worth keeping a barrel for. */

@@ -22,6 +22,7 @@ import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { ACROSS_OF, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
+import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropDef, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
@@ -3153,10 +3154,13 @@ export class Game {
   /** Actions that apply to a target, with the reason each may be unavailable. */
   actionsFor(target: Target): Array<{ def: ActionDef; reason: string | null }> {
     const out: Array<{ def: ActionDef; reason: string | null }> = [];
+    const grave = graveAt(this, target);
     for (const def of ACTIONS) {
       if (def.hidden || !def.applies(target, this)) continue;
       // Nothing is offered for a crate with a wildermon in it that would be refused.
       if (occupiedRefusal(this, def.id, target)) continue;
+      // Nor at a grave, where there is only taking out and only for its owner.
+      if (grave && graveSays(this, grave, def.id)) continue;
       out.push({ def, reason: def.check?.(target, this) ?? null });
     }
     return out;
@@ -3283,6 +3287,13 @@ export class Game {
     const held = occupiedRefusal(this, def.id, target);
     if (held) {
       this.logMsg(held, 'error');
+      return;
+    }
+    // A grave opens for whoever lies under it, and only to be emptied. The
+    // island asks the same of the same two, in `grave_refusal`.
+    const buried = graveRefusal(this, def.id, target);
+    if (buried) {
+      this.logMsg(buried, 'error');
       return;
     }
     /*
@@ -4765,13 +4776,18 @@ export class Game {
 
   /**
    * Everything placed that works by itself: ovens burning down, wells filling,
-   * rubbish rotting where it was thrown, and a cart following you about.
+   * rubbish rotting where it was thrown, a cart following you about, and a
+   * grave whose hour is up crumbling.
    */
   private runPlaceables(dt: number): void {
     // Counted the first time a hive with room in it asks, and not at all
     // when there is no hive on the deed.
     let swarms = -1;
+    // Graves keep real time, like the woods; an island crumbles its own.
+    const now = Date.now() / 1000;
+    const crumbled: PlacedFurniture[] = [];
     for (const f of this.furniture.values()) {
+      if (f.grave && f.grave.crumbles <= now && !this.packFromIsland) crumbled.push(f);
       const def = furnitureDef(f.kind);
       if (def.hearth && f.lit) {
         f.ash = (f.ash ?? 0) + Math.min(f.fuel ?? 0, dt) * ASH_RATE;
@@ -4819,6 +4835,7 @@ export class Game {
       if (def.vehicle && teamOf(f).length) this.haulVehicle(f, dt, this.actors.get(f.driverId ?? this.local.id)?.stepped ?? 0);
       if (def.boat && f.driven) this.floatBoat(f);
     }
+    if (crumbled.length) crumble(this, crumbled);
   }
 
   /**
@@ -5696,6 +5713,15 @@ export class Game {
            */
           ...(me !== null && r.driver && r.driver !== me ? (r.helm_open ? { helmAway: r.driver } : { helm: r.driver }) : {}),
           ...(Array.isArray(r.riders) && r.riders.length ? { riders: r.riders.map((x) => ({ who: x.uid, seat: x.seat })) } : {}),
+          /*
+           * A grave: whose it is, for what anybody else is told, and how long
+           * it has, counted from now on this machine's clock rather than the
+           * island's. What is in it came with `things` above, and only to the
+           * one who may take it.
+           */
+          ...(r.grave ? {
+            grave: { name: r.grave.name ?? 'Somebody', crumbles: Date.now() / 1000 + r.grave.left, units: r.grave.units ?? undefined },
+          } : {}),
         });
       }
     }
@@ -5787,6 +5813,8 @@ export class Game {
     // same as saying nothing: a deed you do not belong to is not in `myDeeds`.
     if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds.map((d) => ({ ...d, role: d.role ?? undefined }));
     if (ground.folk !== undefined) this.folkAshore = ground.folk;
+    // Your graves wherever they are, on the slow half, for the marks on your map.
+    if (ground.graves !== undefined) this.markGraves(ground.graves);
     if (ground.deed !== undefined) {
       const d = ground.deed;
       const was = this.deed;
@@ -6665,6 +6693,20 @@ export class Game {
 
   private die(): void {
     const p = this.player;
+    // Off any deck she has, as the island's `player_die` takes a body off hers:
+    // a place kept aboard would put the body back on her the next frame.
+    const ship = this.aboardShip();
+    if (ship) ship.riders = (ship.riders ?? []).filter((r) => r.who !== this.riderId());
+    p.aboard = null;
+    p.seat = 0;
+    /*
+     * What you were carrying goes into a grave where you fell, before the body
+     * is anywhere else: where it fell is where the grave goes. On an island the
+     * island digs it, in `player_die`, and says so in its own line; saying it
+     * here as well would say it twice, and a death drawn a moment ahead of the
+     * island's would say it about a grave that is not there yet.
+     */
+    const said = this.packFromIsland ? null : bury(this);
     p.stats = { health: 1, stamina: 0.5, hunger: 0.6, thirst: 0.6 };
     p.stop();
     p.x = this.spawn.x + 0.5;
@@ -6678,9 +6720,47 @@ export class Game {
     p.attackedAt = -1e9;
     this.player.boons = this.player.boons.filter((b) => b.until > this.time);
     this.cancelAction(true);
-    this.logMsg('You have died. You wake up, shivering, where you first came ashore.', 'error');
+    if (said) this.logMsg(said, 'error');
     this.events.emit('inventory');
   }
+
+  /**
+   * Your graves on your map, each a mark that goes when the grave goes.
+   *
+   * Handed every grave of yours there is: on an island the slow half of the
+   * ground read lists them wherever they are, and on this machine they are
+   * all in `furniture` (`markOwnGraves`). One not seen before gets a mark; a
+   * mark whose grave is no longer listed comes off. A mark you rub off
+   * yourself stays off for as long as the page is open.
+   */
+  markGraves(graves: ReadonlyArray<{ id: number; x: number; y: number }>): void {
+    for (const gr of graves) {
+      if (this.graveMarks.has(gr.id)) continue;
+      this.graveMarks.add(gr.id);
+      if (this.marks.some((m) => m.grave === gr.id)) continue;
+      this.marks.push({ id: this.nextMarkId++, name: GRAVE_MARK, x: gr.x, y: gr.y, colour: MARK_COLOURS[0].id, grave: gr.id });
+      while (this.marks.length > MARK_CAP) this.marks.shift();
+      this.events.emit('world', gr.x, gr.y);
+    }
+    const kept = new Set(graves.map((gr) => gr.id));
+    for (let i = this.marks.length - 1; i >= 0; i--) {
+      const m = this.marks[i];
+      if (m.grave === undefined || kept.has(m.grave)) continue;
+      this.marks.splice(i, 1);
+      this.events.emit('world', m.x, m.y);
+    }
+  }
+
+  /** The graves on this machine that are the player's at this screen, to the map. A guest's are not on the host's. */
+  markOwnGraves(): void {
+    if (this.packFromIsland) return;
+    const own: Array<{ id: number; x: number; y: number }> = [];
+    for (const f of this.furniture.values()) if (f.grave && f.grave.who === this.local.who) own.push(f);
+    this.markGraves(own);
+  }
+
+  /** Graves this page has put on the map, so a mark rubbed off is not put back. */
+  private readonly graveMarks = new Set<number>();
 
   /**
    * Somewhere for a line to go when there is an island listening.
@@ -6883,6 +6963,12 @@ export interface IslandPlaced {
    * chests is not worth a phone's second.
    */
   things?: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null }>;
+  /**
+   * For a grave: whose it is, by name, and the seconds it has left before it
+   * crumbles. What is in it rides in `things`, to its owner only and from
+   * within reach; `units`, how many things that is, to its owner from anywhere.
+   */
+  grave?: { name: string | null; left: number; units?: number | null };
 }
 
 /** A crate, likewise. */
@@ -6980,6 +7066,12 @@ export interface IslandGround {
    * `CROWD_HIDES`.
    */
   folk?: Array<{ uid: string; name: string; online: boolean; x?: number; y?: number }>;
+  /**
+   * Every grave of yours on the island, however far off, on the slow half:
+   * what the marks on your map are put down and taken up by. `placed` has
+   * only the ones in range, and you wake a long way from where you fell.
+   */
+  graves?: Array<{ id: number; x: number; y: number }>;
   /**
    * What is standing, and what is half built.
    *

@@ -1415,6 +1415,23 @@ jobs:
             --outfile=node_modules/.cache/purse.mjs --log-level=error
           node node_modules/.cache/purse.mjs
 
+      - name: A grave where you fell
+        run: |
+          # On both sides, on dry ground with deep water off it: a death buries
+          # the pack, the hands, the toolbelt and every bag with what is in it
+          # where the body fell, and says so with the hour put in from the rule;
+          # what is worn stays on, and so do a crate with a wildermon in it and
+          # what is held in a deal; in deep water the grave is on the nearest
+          # dry ground in reach; a second death digs beside the first and one
+          # carrying nothing digs none; only its owner opens it or takes from
+          # it, anybody else is told whose it is and shown nothing in it, and
+          # nobody takes a spadeful out of it; its hour up the sweep takes it
+          # off an index of when graves crumble, and it is marked on its
+          # owner's map and survives a save.
+          npx esbuild supabase/test/graves.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/graves.mjs --log-level=error
+          node node_modules/.cache/graves.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

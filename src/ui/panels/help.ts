@@ -26,6 +26,7 @@ import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { biteShare, FISH, LINE_REACH } from '../../game/fishing';
 import { PER_ROLL, rollsAt } from '../../game/forage';
 import { BUCKET_LITRES, FURNITURE, furnitureDef, teamSaid } from '../../game/furniture';
+import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import {
   ASH_RATE, BASE_QUEUE, BOAT_LOAD_DRAG, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP, CHAR_START, DAMAGE_MAX, DAMAGE_WARN,
   DAMAGE_WARN_STEP, DAWN, DAY_SECONDS, DEED_RADIUS, DEED_RADIUS_PER_LEVEL, DEED_RANKS, DEEDS_JOINED, deedWorkersAt, DUSK,
@@ -1369,6 +1370,20 @@ export function helpText(): string {
     a fight and choose <b>Treat its wounds</b>: it takes a bandage and puts back the same share of its
     whole health, which is far more forgiving than waiting for it to mend itself. A wild creature will
     not stand still for you.</p>
+    <h3>Dying, and your grave</h3>
+    <p>When your health runs out you <b>die</b>, and wake on the shore you first came in on with every
+    wound closed. <b>What you were carrying stays where you fell</b>, in a <b>grave</b> dug on that spot:
+    the pack, whatever was in your hands, the toolbelt, and every bag with what is in it. What you wear
+    stays on you &mdash; clothing, armour and a jewel &mdash; and so do a crate with a wildermon in it and
+    anything you have offered in a deal. Go down in water too deep to stand in and the grave is on the
+    nearest dry ground within <b>${numberWord(GRAVE_REACH)} tiles</b>, or where you fell if there is none.
+    Carrying nothing, you leave no grave.</p>
+    <p>For <b>${spanWords(GRAVE_KEEPS)}</b> of real time, whether or not you are playing, it is yours and
+    nobody else's: only you can open it or take anything out of it, and nobody can pick it up or break
+    it &mdash; anybody who tries is told whose it is. Open it the way you open a chest and take things out
+    one at a time, or choose <b>Take everything</b>; nothing goes back in. When the time is up it
+    <b>crumbles</b>, and whatever is still in it goes with it. Every death digs a grave of its own, and
+    each is marked on your map until it crumbles.</p>
     <h3>What quality is worth</h3>
     <p><b>Your skill is the ceiling and your tool is the chance of reaching it.</b> The quality of the
     tool in your hand is the percentage chance that a piece of work comes out at your skill in that

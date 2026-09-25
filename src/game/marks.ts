@@ -12,6 +12,11 @@ export interface Marker {
   y: number;
   /** Which of the colours below it is drawn in. */
   colour: string;
+  /**
+   * The grave this mark stands on, by its id, when it is one of yours: the
+   * mark is put there when the grave is dug and comes off when it goes.
+   */
+  grave?: number;
 }
 
 /** The colours a mark can be drawn in, and what each is usually for. */

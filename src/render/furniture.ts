@@ -1001,6 +1001,87 @@ function plant(g: CanvasRenderingContext2D, x: number, y: number, kind: number, 
   }
 }
 
+/**
+ * A heap of turned earth, long and low: half an ellipsoid `rx` across, `ry`
+ * along and `h` high, standing on the floor at (`cx`, `cy`).
+ *
+ * Built the way a turned solid is -- bands of faces up it, the ones that look
+ * at you laid far to near, each in the light it catches -- except that a
+ * lathe is round and a heap is not, so it is a part of its own. It is inked
+ * wherever a face you can see meets one you cannot or meets the ground, which
+ * is its outline from any side. `clods` are flecks of darker and paler earth
+ * on the faces you can see, as a spade leaves them.
+ */
+function mound(sc: Scene, cx: number, cy: number, rx: number, ry: number, h: number, p: Paint, clods: Paint[] = []): void {
+  const n = 20;
+  // The rings up it, as shares of the quarter turn from its foot to its top: close together where it rounds over.
+  const rise = [0, 0.3, 0.56, 0.78, 0.93, 1];
+  const at = (a: number, t: number): V3 => {
+    const up = (t * Math.PI) / 2;
+    return [cx + Math.cos(a) * rx * Math.cos(up), cy + Math.sin(a) * ry * Math.cos(up), h * Math.sin(up)];
+  };
+  // Square to the surface of an ellipsoid, which is not the way out from its middle.
+  const normal = (q: V3): V3 => {
+    const nx = (q[0] - cx) / (rx * rx), ny = (q[1] - cy) / (ry * ry), nz = q[2] / (h * h);
+    const l = Math.hypot(nx, ny, nz) || 1;
+    return [nx / l, ny / l, nz / l];
+  };
+  sc.part(cx - rx, cx + rx, cy - ry, cy + ry, 0, h, () => {
+    const g = sc.g;
+    const bands = rise.slice(0, -1).map((t0, i) => Array.from({ length: n }, (_, j) => {
+      const a0 = (j / n) * TAU, a1 = ((j + 1) / n) * TAU;
+      const pts = [at(a0, t0), at(a1, t0), at(a1, rise[i + 1]), at(a0, rise[i + 1])];
+      const mid: V3 = [0, 1, 2].map((k) => pts.reduce((s, q) => s + q[k], 0) / 4) as unknown as V3;
+      const nn = normal(mid);
+      return { pts, n: nn, seen: sc.faces(nn[0], nn[1], nn[2]), d: sc.depth(mid[0], mid[1], mid[2]) };
+    }));
+    const shown = bands.flatMap((band, i) => band.map((q, j) => ({ ...q, i, j }))).filter((q) => q.seen).sort((a, b) => a.d - b.d);
+    for (const q of shown) {
+      const k = sc.light(q.n[0], q.n[1], q.n[2]);
+      sc.poly(q.pts.map((v) => sc.P(v[0], v[1], v[2])));
+      g.fillStyle = rgb(p.body, k);
+      g.fill();
+      g.strokeStyle = rgb(p.body, k);
+      g.lineWidth = 0.6;
+      g.stroke();
+    }
+    // The flecks, where a face that looks at you has them.
+    clods.forEach((c, m) => {
+      for (let s = 0; s < 7; s++) {
+        const a = ((s * 2.39 + m * 1.1) % TAU), t = 0.18 + ((s * 0.37 + m * 0.21) % 0.7);
+        const q = at(a, t), nn = normal(q);
+        if (!sc.faces(nn[0], nn[1], nn[2])) continue;
+        const [x, y] = sc.P(q[0], q[1], q[2]);
+        g.fillStyle = rgb(c.body, sc.light(nn[0], nn[1], nn[2]));
+        g.beginPath();
+        g.ellipse(x, y, 0.55, 0.35, 0, 0, TAU);
+        g.fill();
+      }
+    });
+    // The outline: an edge of a face you see, where the face over it is one you do not, or the ground is.
+    g.strokeStyle = rgb(p.ink);
+    g.lineWidth = sc.ink;
+    g.lineJoin = 'round';
+    g.beginPath();
+    for (const q of shown) {
+      const { i, j } = q;
+      const rims: Array<[V3, V3, boolean]> = [
+        [q.pts[0], q.pts[1], i === 0 || !bands[i - 1][j].seen],
+        [q.pts[3], q.pts[2], i + 1 < bands.length && !bands[i + 1][j].seen],
+        [q.pts[0], q.pts[3], !bands[i][(j + n - 1) % n].seen],
+        [q.pts[1], q.pts[2], !bands[i][(j + 1) % n].seen],
+      ];
+      for (const [a, b, rim] of rims) {
+        if (!rim) continue;
+        const A = sc.P(a[0], a[1], a[2]), B = sc.P(b[0], b[1], b[2]);
+        g.moveTo(A[0], A[1]);
+        g.lineTo(B[0], B[1]);
+      }
+    }
+    g.stroke();
+  });
+}
+
 /** Where a circle of radius `r` on a face falls, as a polygon: a log end, a knot, a sun. */
 const circleOn = (F: FaceAt, s: number, t: number, r: number, n = 12): Pt[] =>
   Array.from({ length: n }, (_, i) => F(s + Math.cos((i / n) * TAU) * r, t + Math.sin((i / n) * TAU) * r));
@@ -2855,6 +2936,23 @@ const MODELS: Record<string, Model> = {
     };
     sc.box(-x, x, 0.55, 1.15, 7, 13.2, BOARD, { front: face, back: boardsOn(sc, BOARD, 4, false) });
     gable(sc, -x - 0.6, x + 0.6, -1.3, 2.9, 13.6, 14.9, SHINGLE(wood), 'x', undefined, 0, 2);
+  },
+
+  /*
+   * A grave: a long low mound of turned earth, flecked darker and paler where
+   * the spade left it, and a plain wooden cross at its head -- the end away
+   * from its front, so the mound runs the way a body lies. The cross is three
+   * boxes rather than two crossed ones, so from every side the bar is laid
+   * between the two halves of the post and nothing is drawn through anything.
+   */
+  grave: ({ sc, wood, hd }) => {
+    const EARTH = paintOf(hex('#7a5a40'));
+    sc.shadows = [[-4.2, 4.2, -hd + 0.6, hd - 0.2]];
+    mound(sc, 0, 1.2, 3.7, hd - 2, 2.6, EARTH, [paintOf(hex('#5b4636')), paintOf(hex('#9c7c5d'))]);
+    const y = -hd + 1.6, t = 0.42, bar = 6.8;
+    sc.box(-t, t, y - t, y + t, 0, bar, wood, { front: grain(sc, wood, 1, false) });
+    sc.box(-2.5, 2.5, y - t, y + t, bar, bar + 0.9, wood, { front: grain(sc, wood, 1) });
+    sc.box(-t, t, y - t, y + t, bar + 0.9, bar + 3.4, wood);
   },
 };
 

@@ -94,6 +94,8 @@ import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, GUIDE_BA
 import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
+import { GRAVE_KEEPS, GRAVE_REACH } from '../src/game/graves';
+import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 
 const q = (v: unknown): string => {
@@ -1348,6 +1350,15 @@ ${FUELS.map((f) => `    when ${q(f.id)} then ${q(f.secs)}`).join('\n')}
   end::double precision
 $fn$;`);
 out.push(`create or replace function fuel_said() returns text language sql immutable as $fn$ select ${q(FUEL_SAID)} $fn$;`);
+/*
+ * A grave: how long it keeps what you carried for you, how far from deep
+ * water it looks for dry ground, and the words the first is said in -- the
+ * death line on the island tells you when it crumbles in the words the
+ * browser's does, because both are the one number put into words once.
+ */
+out.push(`create or replace function grave_keeps() returns double precision language sql immutable as $fn$ select ${q(GRAVE_KEEPS)}::double precision $fn$;`);
+out.push(`create or replace function grave_reach() returns int language sql immutable as $fn$ select ${q(GRAVE_REACH)}::int $fn$;`);
+out.push(`create or replace function grave_keeps_said() returns text language sql immutable as $fn$ select ${q(spanWords(GRAVE_KEEPS))} $fn$;`);
 
 /* What a brazier is: how much it holds, and how fast it goes by how well it was built. */
 for (const [fn, v] of [

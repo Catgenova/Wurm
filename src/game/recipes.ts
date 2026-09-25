@@ -376,8 +376,8 @@ const PRESS_RECIPES: Recipe[] = [
 
 RECIPES.push(...MOULD_RECIPES, ...SMELTER_RECIPES, ...PRESS_RECIPES);
 
-/** The twenty pieces of furniture, each nailed together by a fine carpenter. */
-const FURNITURE_RECIPES: Recipe[] = FURNITURE.map((f) => ({
+/** The twenty pieces of furniture, each nailed together by a fine carpenter; a grave is dug by dying, not built. */
+const FURNITURE_RECIPES: Recipe[] = FURNITURE.filter((f) => !f.grave).map((f) => ({
   id: `make_${f.id}`,
   category: 'Furniture' as RecipeCategory,
   result: f.id,

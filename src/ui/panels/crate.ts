@@ -1,5 +1,6 @@
 import { crateCentre, crateName, crateCapacity, crateSpare, STORE_REACH } from '../../game/crates';
-import { furnitureCapacity, furnitureCentre, furnitureHeft, furnitureName, furnitureRefuses, furnitureRoom } from '../../game/furniture';
+import { furnitureCapacity, furnitureCentre, furnitureHeft, furnitureName, furnitureRefuses, furnitureRoom, furnitureUnits } from '../../game/furniture';
+import { graveLine, graveName, graveSays, isGrave } from '../../game/graves';
 import { bloodMul } from '../../game/creatures';
 import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
 import type { Game } from '../../game/game';
@@ -63,6 +64,11 @@ export interface Store {
    */
   fits: (item: Item) => number;
   add: (item: Item) => boolean;
+  /**
+   * For a grave, what it says under its contents: how much is in it and when
+   * it crumbles. Nothing is put into a grave, so its window offers no way in.
+   */
+  grave?: string;
 }
 
 /** Contents of one placed container, with a Take button per item. */
@@ -77,6 +83,8 @@ export class CratePanel {
   private search: HTMLInputElement;
   private query = '';
   private sort: SortKey = 'name';
+  /** The two buttons that put things in, which a grave does not offer. */
+  private waysIn: HTMLButtonElement[] = [];
 
   constructor(
     private readonly win: UIWindow,
@@ -119,6 +127,7 @@ export class CratePanel {
     putKind.textContent = 'Put in what it holds';
     putKind.title = 'Put in only the kinds already in it — top the store up without emptying your pack';
     putKind.addEventListener('click', () => this.putAll(true));
+    this.waysIn = [putAll, putKind];
     this.bar.append(takeAll, putAll, putKind, sortSelect('How to order what is inside', (key) => {
       this.sort = key;
       this.render();
@@ -232,6 +241,25 @@ export class CratePanel {
       };
     }
     const piece = this.furnitureId !== null ? this.game.furniture.get(this.furnitureId) : undefined;
+    if (piece && isGrave(piece)) {
+      // A grave is emptied through this window and nothing goes back in:
+      // whatever is dragged at it is told why, in the words the island uses.
+      const shut = (): string | null => graveSays(this.game, piece, 'store_in_furniture');
+      return {
+        title: graveName(this.game, piece),
+        id: piece.id,
+        items: piece.items,
+        capacity: furnitureUnits(piece),
+        centre: furnitureCentre(piece),
+        what: furnitureName(piece).toLowerCase(),
+        kind: 'furniture',
+        take: (uid) => this.game.furnitureTake(piece, uid),
+        refuses: shut,
+        fits: () => 0,
+        add: () => false,
+        grave: graveLine(this.game, piece),
+      };
+    }
     if (piece) {
       return {
         title: `${furnitureName(piece)} (QL ${piece.ql.toFixed(0)})`,
@@ -393,6 +421,7 @@ export class CratePanel {
     this.win.titleText.textContent = store.title + (!store.lock?.lock ? ''
       : shut ? ' \u2014 locked' : ' \u2014 unlocked');
     this.bar.hidden = false;
+    for (const b of this.waysIn) b.hidden = store.grave !== undefined;
     if (!store.items.length || !store.items.some((it) => this.matches(it))) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
@@ -452,9 +481,11 @@ export class CratePanel {
     }
     const weight = store.items.reduce((s, it) => s + itemDef(it.id).weight * it.count, 0);
     const used = store.items.reduce((n, it) => n + it.count, 0);
-    this.footer.textContent = store.heft
-      ? `${weight.toFixed(1)} / ${store.heft} kg · ${used} things`
-      : `${used} / ${store.capacity} things · ${weight.toFixed(1)} kg`;
+    this.footer.textContent = store.grave !== undefined
+      ? `${store.grave} · ${weight.toFixed(1)} kg`
+      : store.heft
+        ? `${weight.toFixed(1)} / ${store.heft} kg · ${used} things`
+        : `${used} / ${store.capacity} things · ${weight.toFixed(1)} kg`;
   }
 
   /**
@@ -503,6 +534,13 @@ export class CratePanel {
   }
 
   openFurniture(id: number): void {
+    // A grave opens for whoever lies under it and nobody else, whichever way the window was asked for.
+    const piece = this.game.furniture.get(id);
+    const shut = piece && isGrave(piece) ? graveSays(this.game, piece, 'furniture_take_all') : null;
+    if (shut) {
+      this.game.logMsg(shut, 'error');
+      return;
+    }
     this.furnitureId = id;
     this.crateId = null;
     this.creatureId = null;
