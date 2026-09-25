@@ -4,6 +4,7 @@ import { furnitureDef } from '../../game/furniture';
 import { itemDef, RARITIES, RARITY_ROOM } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
 import { QL_LOW, QL_SPAN } from '../../game/game';
+import { BOARD_RULES, REFRESH as BOARD_REFRESH } from './boards';
 import type { UIWindow } from '../windows';
 import { IDLE_LOGOUT } from '../../game/keep';
 import { awayFor } from '../../game/away';
@@ -114,6 +115,12 @@ function helpText(): string {
     creature crate for it; everything your stalls sold and the silver it went for; and every parcel
     posted to you, by who sent it. When you come back a window lists all of it, and the same lines go
     into the event log.</p>
+    <h3>Leaderboards</h3>
+    <p>The <b>Leaderboards</b> window (<kbd>F2</kbd>) ranks everybody on an island, and asks the island again
+    every ${BOARD_REFRESH} seconds while it is open. <b>Skills:</b> ${BOARD_RULES.skills}
+    <b>Wildermon:</b> ${BOARD_RULES.wildermon} <b>Settlements:</b> ${BOARD_RULES.settlements}
+    In a game of your own there is nobody to rank against, so it shows your best skill (characteristics not
+    counted), your best-bred wildermon and your settlement instead, each measured the way its board measures.</p>
 
     <h3>The settlement window</h3>
     <p><kbd>N</kbd> opens the settlement at a glance: its level and how far the border runs, how many

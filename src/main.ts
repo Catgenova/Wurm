@@ -324,6 +324,9 @@ const PRESSES: Record<string, () => void> = {
   win_stores: () => ui.toggleWindow('stores'),
   win_journal: () => ui.toggleWindow('journal'),
   win_market: () => ui.toggleWindow('market'),
+  // Bound to Y and listed under Windows since the Social window came, and never pressed here.
+  win_social: () => ui.toggleWindow('social'),
+  win_boards: () => ui.toggleWindow('boards'),
   win_settings: () => ui.toggleWindow('settings'),
   win_help: () => ui.toggleWindow('help'),
   walk_home: () => game.walkHome(),

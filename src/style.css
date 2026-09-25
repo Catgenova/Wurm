@@ -818,6 +818,17 @@ kbd {
   line-height: 1.45;
 }
 
+/* A place on a leaderboard: its number in a column of its own, and yours picked out. */
+.board-rank {
+  min-width: 2.2em;
+  color: var(--ui-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.board-row.board-mine {
+  color: var(--ui-accent);
+}
+
 .goal-next-how {
   margin-top: 2px;
   color: var(--ui-dim);
