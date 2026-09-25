@@ -366,6 +366,19 @@ export const TICK_PLAYERS = 200;
 export const STIR_SLACK = 8;
 export const STIR_COARSE_EVERY = 10;
 /**
+ * How long a worker with nothing to do waits before it looks for work again,
+ * in seconds: `WORKER_REST_FIRST` at first, a second more for every
+ * `WORKER_REST_EVERY` it has stood idle, and never more than
+ * `WORKER_REST_MOST`. A worker's look is every tile of its ground, ring by
+ * ring, and a trade that has run dry was walked every four seconds for as
+ * long as it stayed dry, which on the live island was most of the world
+ * clock's round. The island reads these as `worker_rest_first()`,
+ * `worker_rest_every()` and `worker_rest_most()` (`worker_rest`).
+ */
+export const WORKER_REST_FIRST = 4;
+export const WORKER_REST_EVERY = 10;
+export const WORKER_REST_MOST = 30;
+/**
  * How often a creature in a crate is settled. It was every round, like a
  * companion, though a crated one never walks: its hunger and care are
  * counted from the time that passed, whenever it is next looked at.
