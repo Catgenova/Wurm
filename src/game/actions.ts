@@ -38,7 +38,7 @@ import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
 import type { FloorKind, RoofShape, Side, WallType } from './building';
-import { DEED_RADIUS, type Game } from './game';
+import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf } from './boons';
 import { SKILL_DEFS } from './skills';
@@ -2012,7 +2012,17 @@ export const ACTIONS: ActionDef[] = [
       if (near) {
         return `${near.name}${near.holder ? `, which is ${near.holder}'s,` : ''} already reaches there. Found yours further out.`;
       }
-      if (g.deed) return 'You already hold a settlement. Disband it first.';
+      /*
+       * Only a settlement you founded stands in the way, which is the island's
+       * rule (`deed_refusal` asks `founded_by`). On an island `g.deed` is the
+       * first of yours, and with none of your own it is one you were asked
+       * onto -- so this refused a citizen of somebody else's settlement as if
+       * it were their own. Reported: "i disbanded my settlement so i could
+       * make a new one but it's still telling me i can't because i already
+       * have a deed ... i think it must be because i'm a citizen of
+       * oceanport". No rank at all is the solo game, where the deed is yours.
+       */
+      if (g.deed && rankAtLeast(g.deed.role, 'founder')) return 'You already hold a settlement. Disband it first.';
       const w = g.world;
       if (x - DEED_RADIUS < 0 || y - DEED_RADIUS < 0 || x + DEED_RADIUS >= w.w || y + DEED_RADIUS >= w.h) return 'Too close to the edge of the world.';
       // A poured slab is dry, level ground standing above whatever is under

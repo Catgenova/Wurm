@@ -1094,6 +1094,22 @@ jobs:
             --outfile=node_modules/.cache/spadeful.mjs --log-level=error
           node node_modules/.cache/spadeful.mjs
 
+      - name: A citizen of somebody else's settlement may found their own
+        run: |
+          # "i disbanded my settlement so i could make a new one but it's still
+          # telling me i can't because i already have a deed ... i think it
+          # must be because i'm a citizen of oceanport". The island refuses a
+          # stake only to a founder; the browser refused anybody it held a
+          # settlement for, and with none of your own that is one you were
+          # asked onto. This asks both sides that a settlement of your own
+          # still refuses a second in the same words, that a mayor, builder
+          # or guest of another is offered the stake, that the border is the
+          # one refusal left, and that a builder founds their own on the
+          # island and stays a builder of the other.
+          npx esbuild supabase/test/citizen.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/citizen.mjs --log-level=error
+          node node_modules/.cache/citizen.mjs
+
       - name: A new look, worn on an island
         run: |
           # "allow players to change their appearance back through the
