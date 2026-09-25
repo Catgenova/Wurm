@@ -95,7 +95,8 @@ export function creatureLines(g: Game, c: Creature): string[] {
     if (!t) return null;
     if (husbandry < 1 + TIER_LEVEL[t.tier]) return 'something unread';
     // Nearly everything is common, so only what is better than common says so.
-    return t.tier === 'common' ? t.name : `${t.name} (${t.tier})`;
+    // A fighting trait's grade is already in its name: "fanged (rare)".
+    return t.tier === 'common' || t.family ? t.name : `${t.name} (${t.tier})`;
   }).filter(Boolean);
   if (traits.length) lines.push(`Traits: ${traits.join(', ')}`);
   // Who it was bred from; anything not bred says nothing about it.
