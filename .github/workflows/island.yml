@@ -1330,6 +1330,20 @@ jobs:
             --outfile=node_modules/.cache/boards.mjs --log-level=error
           node node_modules/.cache/boards.mjs
 
+      - name: A young one knows its dam, its sire and where each trait came from
+        run: |
+          # "A pedigree on the creature window. Show the dam, the sire and
+          # which traits came from which, so breeding can be planned." Both
+          # sides breed the same pair five hundred times and are asked that
+          # every young one names its dam and sire, that each trait says the
+          # dam, the sire, both, a fresh roll or bred up in the same five words
+          # and only where that is true, and that a covering from before has no
+          # pedigree. The browser's goes through a save; the island sends
+          # somebody else's only as far as they can read the traits.
+          npx esbuild supabase/test/pedigree.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pedigree.mjs --log-level=error
+          node node_modules/.cache/pedigree.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live

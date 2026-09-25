@@ -10021,8 +10021,12 @@ select '1004. three thousand animals out of the wild: ' || (select count(*) from
            select o.tier, o.ord, count(*) as n from blood_rolls r cross join unnest(r.t) u
            join trait_def d on d.id = u join tier_odds o on o.tier = d.tier where d.family is not null group by o.tier, o.ord) g)
      || ' — the wild odds being ' || (select string_agg(tier || ' ' || weight, ', ' order by ord) from tier_odds);
--- A thousand foals, and what a line does.
-create temp table blood_foals as select breed_traits('{fanged_rare,thick_hided,fleet}', '{fanged_supreme,plated,swift}', 100, 1) as t from generate_series(1, 1000);
+-- A thousand foals, and what a line does. `breed_traits` hands back where each
+-- trait came from beside the traits; these want the traits.
+create temp table blood_foals as
+  select array(select jsonb_array_elements_text(b.bred->'traits')) as t
+    from (select breed_traits('{fanged_rare,thick_hided,fleet}', '{fanged_supreme,plated,swift}', 100, 1) as bred
+            from generate_series(1, 1000)) b;
 select '1005. a thousand foals of a fanged (rare) sire and a fanged (supreme) dam at husbandry 100, well brushed: '
      || (select count(*) from blood_foals where array_length(t, 1) = 3) || ' with three traits, '
      || (select count(*) from blood_foals f where (select count(distinct trait_family(u)) from unnest(f.t) u) < 3) || ' carrying a name twice, '

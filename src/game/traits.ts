@@ -440,10 +440,40 @@ export const upgradeChance = (husbandry: number, care: number): number =>
 export const nextTier = (t: TraitTier): TraitTier | null => TIERS[TIERS.indexOf(t) + 1] ?? null;
 
 /**
+ * Where one of a young one's traits came from, settled at the covering and
+ * kept for good as its pedigree. The island stores the same five words.
+ */
+export type TraitSource = 'dam' | 'sire' | 'both' | 'roll' | 'up';
+
+/** What a card calls each of them, and what each means in the rules. */
+export const TRAIT_SOURCES: Record<TraitSource, { label: string; means: string }> = {
+  dam: { label: 'from the dam', means: 'drawn from a trait the dam carries and the sire does not' },
+  sire: { label: 'from the sire', means: 'drawn from a trait the sire carries and the dam does not' },
+  both: { label: 'from both', means: 'drawn from a trait the dam and the sire both carry' },
+  roll: { label: 'fresh roll', means: 'rolled off the wild table, tilted towards the better tiers by the breeder’s husbandry' },
+  up: { label: 'bred up', means: 'one tier above what its slot drew, as a grade up its own name for fighting blood and a trait of the tier above for the rest' },
+};
+
+/** What a pairing throws: the traits, and where each of them came from. */
+export interface Bred {
+  traits: string[];
+  /** By trait id. */
+  from: Record<string, TraitSource>;
+}
+
+/**
  * What a pairing throws. Three slots, and for each of them the blood of the
  * parents is drawn on first — weighted, as husbandry rises, towards the best
  * of what the two of them carry — and then given its chance to come through
  * better than either of them had it.
+ *
+ * And where each trait came from, which the young one keeps as its pedigree.
+ * One drawn from the pair is the dam's, the sire's or both of theirs by which
+ * of them carries that very trait, grade and all: to the draw two grades of
+ * one name are one name, but a fanged (rare) young one of a fanged sire and a
+ * fanged (rare) dam had its grade from her. A slot the wild filled, or a
+ * short draw topped up, is a fresh roll; and one that came through a tier
+ * better is bred up, whatever it was drawn from.
  */
 export function breedTraits(
   sire: string[],
@@ -451,16 +481,18 @@ export function breedTraits(
   husbandry: number,
   care: number,
   rand: () => number,
-): string[] {
+): Bred {
   const pool = [...new Set([...sire, ...dam])];
   const keep = inheritChance(husbandry, care);
   const up = upgradeChance(husbandry, care);
   const lift = Math.max(0, Math.min(100, husbandry)) / 100;
   const out: string[] = [];
+  const from: Record<string, TraitSource> = {};
   for (let slot = 0; slot < TRAIT_SLOTS; slot++) {
     // What the pair carry that the foal does not, by name: two grades of one name are one name.
     const left = pool.filter((id) => !holds(out, id));
     let id: string | null = null;
+    let source: TraitSource = 'roll';
     if (left.length && rand() < keep) {
       // A good keeper's eye falls on the best of what the pair carry.
       const weights = left.map((t) => 1 + TIERS.indexOf(traitTier(t)) * lift * 2.4);
@@ -473,6 +505,7 @@ export function breedTraits(
           break;
         }
       }
+      source = dam.includes(id) ? (sire.includes(id) ? 'both' : 'dam') : 'sire';
     } else {
       id = rollTrait(rand, out, husbandry);
     }
@@ -482,19 +515,28 @@ export function breedTraits(
     if (rand() < up) {
       const above = nextTier(traitTier(id));
       const fam = TRAIT_BY_ID.get(id)?.family;
-      if (above && fam) id = gradeId(fam, above);
-      else {
+      if (above && fam) {
+        id = gradeId(fam, above);
+        source = 'up';
+      } else {
         const room = above ? BY_TIER[above].filter((t) => !holds(out, t.id)) : [];
-        if (room.length) id = pick(room, rand).id;
+        if (room.length) {
+          id = pick(room, rand).id;
+          source = 'up';
+        }
       }
     }
-    if (!holds(out, id)) out.push(id);
+    if (!holds(out, id)) {
+      out.push(id);
+      from[id] = source;
+    }
   }
   // A short straw in the draw never leaves a foal with fewer than three.
   while (out.length < TRAIT_SLOTS) {
     const id = rollTrait(rand, out, husbandry);
     if (!id) break;
     out.push(id);
+    from[id] = 'roll';
   }
-  return out;
+  return { traits: out, from };
 }

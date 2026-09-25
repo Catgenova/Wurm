@@ -1,4 +1,4 @@
-import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from"./away.js";var l=()=>`${+(450/60).toFixed(1)} minutes`,u=()=>{let e=n(o).bill.map(([e,t])=>`<b>${t} × ${a(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`};function d(){let n=u();return`
+import{$i as e,B as t,It as n,Kr as r,Qi as i,V as a,nr as o,r as s,sa as c,sr as l}from"./away.js";var u=()=>`${+(450/60).toFixed(1)} minutes`,d=()=>{let e=r(l).bill.map(([e,t])=>`<b>${t} × ${c(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`},f=()=>{let e=Object.values(o).map(e=>`<b>${e.label}</b> (${e.means})`);return`${e.slice(0,-1).join(`, `)} or ${e[e.length-1]}`};function p(){let r=d(),o=f();return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -87,7 +87,7 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     away and nothing more. <b>Letters</b> are kept: one reaches an open tab the moment it is written and
     is still waiting the next time somebody looks, however long that takes.</p>
     <p><b>While you were away.</b> Once your browser has said nothing to the island for
-    ${l()}, the island counts you as gone, and from then until you come back it keeps count for
+    ${u()}, the island counts you as gone, and from then until you come back it keeps count for
     you: every load your workers put into the stores, by item; every young one born to your wildermon,
     and any that went off into the wild because something already followed you and there was no empty
     creature crate for it; everything your stalls sold and the silver it went for; and every parcel
@@ -320,7 +320,7 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     <p>Two settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
     <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
     <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
-    ${r.slice(1,-1).map(e=>e.name).join(`, `)} or ${r[r.length-1].name} stack by itself; one you point it at is still
+    ${i.slice(1,-1).map(e=>e.name).join(`, `)} or ${i[i.length-1].name} stack by itself; one you point it at is still
     used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
     On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
@@ -497,9 +497,9 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
     Every carcass you butcher raises the Butchering skill, and the skill sets the <b>QL</b> of everything
     that comes off it. With a knife of QL <i>n</i> it comes off at your Butchering <i>n</i>% of the time,
-    and otherwise at the knife's QL times ${c.toFixed(1)} to ${(c+e).toFixed(1)}, never above
-    your Butchering; with bare hands it comes off at your Butchering times ${c.toFixed(1)} to
-    ${(c+e).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
+    and otherwise at the knife's QL times ${t.toFixed(1)} to ${(t+a).toFixed(1)}, never above
+    your Butchering; with bare hands it comes off at your Butchering times ${t.toFixed(1)} to
+    ${(t+a).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
     A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
@@ -1037,7 +1037,7 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     skill</b> by 5, 12 or 25.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${(i*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(e=>`<b>${(i*e*100).toFixed(0)}%</b>`).join(`, `)}
+    ${(e*100).toFixed(0)}% a step &mdash; ${[1,2,3].map(t=>`<b>${(e*t*100).toFixed(0)}%</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b> &mdash; a kiln
     holds sixteen, and a twentieth of sixteen rounds to nothing, so without that floor a supreme
     kiln and a fantastic one would be the same kiln. A rare thing keeps the room when you set it
@@ -1343,7 +1343,7 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
     <p><b>Creature crates.</b> A creature crate holds <b>one</b> wildermon. A fine carpenter builds it
-    with a mallet from ${n}; it weighs <b>${a(o).weight} kg</b> and does not rot.
+    with a mallet from ${r}; it weighs <b>${c(l).weight} kg</b> and does not rot.
     The first wildermon you tame follows you; <b>every one after that goes into an empty crate in your
     pack</b>, and without one you cannot tame it. A catch taken out of a trap is the same. Put the one
     following you, or a deed worker, into an empty crate you carry from its menu. Set a crate down on
@@ -1504,6 +1504,9 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     enough to recognise: common blood is plain to anybody, rare takes 16, supreme 36, and old blood
     takes 61 to know when it is standing in front of you. Until then the card shows only that there is
     <i>something</i> there. Only a <b>female</b> is in milk, and nothing young or past it will breed.</p>
+    <p>A young one's <b>pedigree</b> names its <b>dam</b> and <b>sire</b> on its card in the Wildermon
+    window and when you point at it, and on the card each of its traits you can read says where it came
+    from &mdash; ${o}.</p>
     <h3>Terraforming</h3>
     <p>Every corner of the map has soil sitting on bedrock. <b>Digging</b> lowers the corner nearest to
     where you click (the small marker) and takes a spadeful of that soil; when the last of it is gone
@@ -1541,7 +1544,7 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about <b>one swing in
-    ${Math.round(1/t)}</b> a slab comes away of its own accord and the corner drops a
+    ${Math.round(1/n)}</b> a slab comes away of its own accord and the corner drops a
     step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
     than working it, and it gives way about one attempt in four. What breaks away is yours either
@@ -1571,4 +1574,4 @@ import{B as e,Ft as t,Wr as n,Xi as r,Zi as i,aa as a,ar as o,r as s,z as c}from
     goes for the first point of a skill, a hundred and forty for the ninetieth, and something like
     <b>ten thousand</b> for the hundredth. Nobody finishes a skill in passing; the last point of one is
     a thing to go after on purpose, and the log shows it moving in ten-thousandths while you do.</p>
-  `}function f(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=d();let n=[],r=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){r=document.createElement(`section`),r.className=`help-sec`,r.id=`help-${n.length}`,r.append(e),n.push({title:e.textContent??``,el:r});continue}r?r.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let i=document.createElement(`input`);i.type=`search`,i.className=`panel-search help-search`,i.placeholder=`Search the help…`;let a=document.createElement(`nav`);a.className=`help-contents`;let o=document.createElement(`div`);o.className=`help-pages`;let s=document.createElement(`div`);s.className=`help-count`,s.hidden=!0;let c=n.map(({title:e,el:t},r)=>{let a=document.createElement(`button`);return a.type=`button`,a.className=`help-link`,a.textContent=e,a.addEventListener(`click`,()=>{i.value&&(i.value=``,l(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),a.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,a});a.append(...c);let l=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,c[e].hidden=!o,o&&(r+=1)}s.hidden=!t,s.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,o.scrollTop=0};i.addEventListener(`input`,()=>l(i.value)),i.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(i.value=``,l(``))}),o.append(...n.map(e=>e.el)),e.body.replaceChildren(i,a,s,o)}export{f as buildHelp};
+  `}function m(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=p();let n=[],r=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){r=document.createElement(`section`),r.className=`help-sec`,r.id=`help-${n.length}`,r.append(e),n.push({title:e.textContent??``,el:r});continue}r?r.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let i=document.createElement(`input`);i.type=`search`,i.className=`panel-search help-search`,i.placeholder=`Search the help…`;let a=document.createElement(`nav`);a.className=`help-contents`;let o=document.createElement(`div`);o.className=`help-pages`;let s=document.createElement(`div`);s.className=`help-count`,s.hidden=!0;let c=n.map(({title:e,el:t},r)=>{let a=document.createElement(`button`);return a.type=`button`,a.className=`help-link`,a.textContent=e,a.addEventListener(`click`,()=>{i.value&&(i.value=``,l(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),a.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,a});a.append(...c);let l=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,c[e].hidden=!o,o&&(r+=1)}s.hidden=!t,s.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,o.scrollTop=0};i.addEventListener(`input`,()=>l(i.value)),i.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(i.value=``,l(``))}),o.append(...n.map(e=>e.el)),e.body.replaceChildren(i,a,s,o)}export{m as buildHelp};

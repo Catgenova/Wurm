@@ -5,6 +5,7 @@ import { itemDef, RARITIES, RARITY_ROOM } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
 import { QL_LOW, QL_SPAN } from '../../game/game';
 import { BOARD_RULES, REFRESH as BOARD_REFRESH } from './boards';
+import { TRAIT_SOURCES } from '../../game/traits';
 import type { UIWindow } from '../windows';
 import { IDLE_LOGOUT } from '../../game/keep';
 import { awayFor } from '../../game/away';
@@ -18,8 +19,15 @@ const crateBill = (): string => {
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 };
 
+/** Where a bred one's trait can have come from, in the words its card uses: "<b>from the dam</b> (drawn from …), …". */
+const pedigreeSources = (): string => {
+  const parts = Object.values(TRAIT_SOURCES).map((s) => `<b>${s.label}</b> (${s.means})`);
+  return `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}`;
+};
+
 function helpText(): string {
   const CRATE_BILL = crateBill();
+  const PEDIGREE_SOURCES = pedigreeSources();
   return `
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
@@ -1526,6 +1534,9 @@ function helpText(): string {
     enough to recognise: common blood is plain to anybody, rare takes 16, supreme 36, and old blood
     takes 61 to know when it is standing in front of you. Until then the card shows only that there is
     <i>something</i> there. Only a <b>female</b> is in milk, and nothing young or past it will breed.</p>
+    <p>A young one's <b>pedigree</b> names its <b>dam</b> and <b>sire</b> on its card in the Wildermon
+    window and when you point at it, and on the card each of its traits you can read says where it came
+    from &mdash; ${PEDIGREE_SOURCES}.</p>
     <h3>Terraforming</h3>
     <p>Every corner of the map has soil sitting on bedrock. <b>Digging</b> lowers the corner nearest to
     where you click (the small marker) and takes a spadeful of that soil; when the last of it is gone
