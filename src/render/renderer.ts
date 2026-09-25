@@ -1814,7 +1814,10 @@ export class Renderer {
         const [vx, vy] = drivenBy ? furnitureCentre(drivenBy) : [player.x, player.y];
         // A rider sits where their mount stands, which is where they stand.
         const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, drivenBy ? this.pieceBase(drivenBy, vx, vy) : world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
-        this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null).lift = this.driverSeat() * zoom;
+        const pe = this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null);
+        pe.lift = this.driverSeat() * zoom;
+        // At a helm on a deck of its own the driver stands there, not in her middle.
+        if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
       }
       if (grain) {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
@@ -1851,32 +1854,36 @@ export class Renderer {
   /**
    * The people on a hull: whoever else has her helm and whoever is aboard as a
    * passenger, us among them. Each sorts a hair after her, so her deck is never
-   * drawn over them, and is drawn at their own place on it, lifted to it.
+   * drawn over them, and is drawn at their own place on it, lifted to it: the
+   * helm to `seat`, sat in her middle or on their feet on a deck of its own,
+   * and the passengers on their feet at her waist.
    */
   private readonly seated = new Set<string>();
   private takeAboard(f: PlacedFurniture, x: number, y: number, sx: number, sy: number, zoom: number): void {
     const boat = furnitureDef(f.kind).boat;
     if (!boat) return;
-    const cam = this.camera;
+    const waist = boat.waist ?? boat.seat;
     let k = 1;
-    const put = (e: Entity, wx: number, wy: number, standing: boolean): void => {
-      e.drawDx = cam.worldToScreenX(wx, wy) - sx;
-      e.drawDy = cam.worldToScreenY(wx, wy, this.pieceBase(f, wx, wy)) - sy;
-      e.lift = boat.seat * zoom;
-      e.standing = standing;
-    };
-    const aboard = (uid: string, standing: boolean): void => {
+    const aboard = (uid: string, at: (peer: Peer) => [number, number], deck: number, standing: boolean): void => {
       const peer = this.game.roster.list().find((p) => p.uid === uid);
       if (!peer) return;
-      const [px, py] = this.game.roster.drawnAt(peer);
       const e = this.take('peer', x, y, sx, sy + 0.01 * k++, null);
       e.peer = peer;
-      put(e, px, py, standing);
+      this.onDeck(e, f, at(peer), deck * zoom, standing);
     };
-    if (f.helm) aboard(f.helm, false);
+    if (f.helm) aboard(f.helm, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
     const me = this.game.player;
-    if (me.aboard === f.id) put(this.take('player', x, y, sx, sy + 0.01 * k++, null), me.x, me.y, true);
-    for (const r of f.riders ?? []) aboard(r.who, true);
+    if (me.aboard === f.id) this.onDeck(this.take('player', x, y, sx, sy + 0.01 * k++, null), f, [me.x, me.y], waist * zoom, true);
+    for (const r of f.riders ?? []) aboard(r.who, (peer) => this.game.roster.drawnAt(peer), waist, true);
+  }
+
+  /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
+  private onDeck(e: Entity, f: PlacedFurniture, [wx, wy]: [number, number], lift: number, standing: boolean): void {
+    const cam = this.camera;
+    e.drawDx = cam.worldToScreenX(wx, wy) - e.sx;
+    e.drawDy = cam.worldToScreenY(wx, wy, this.pieceBase(f, wx, wy)) - e.sy;
+    e.lift = lift;
+    e.standing = standing;
   }
 
   private pieceBase(f: { kind: string }, wx: number, wy: number): number {
@@ -2015,7 +2022,8 @@ export class Renderer {
           drawPlayer(g, px, py, zoom, {
             id: 'player',
             phase: player.moving ? player.walkPhase : this.time * 6,
-            moving: player.moving,
+            // On a deck it is the hull that is going somewhere, not the feet.
+            moving: player.moving && !ent.standing,
             gait: this.gaits.of('player', player.x, player.y, this.frameDt),
             facing: this.playerFacing,
             swimming: player.swimming,
@@ -2052,7 +2060,7 @@ export class Renderer {
           drawPlayer(g, px, py, zoom, {
             id: 'o' + peer.id,
             phase: peer.moving ? peer.walkPhase : this.time * 6,
-            moving: peer.moving,
+            moving: peer.moving && !ent.standing,
             gait: this.gaits.of('o' + peer.id, peer.x, peer.y, this.frameDt),
             facing: peer.facing,
             swimming: peer.swimming,

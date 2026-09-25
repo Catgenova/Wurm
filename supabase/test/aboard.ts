@@ -25,7 +25,7 @@
 import { execFileSync } from 'node:child_process';
 import { ACTION_BY_ID, type Target } from '../../src/game/actions';
 import { Game } from '../../src/game/game';
-import { furnitureDef, furnitureFootprint, passengerPlaces, ridersOf } from '../../src/game/furniture';
+import { furnitureCentre, furnitureDef, furnitureFootprint, passengerPlaces, ridersOf } from '../../src/game/furniture';
 import { RECIPES } from '../../src/game/recipes';
 import { TileType } from '../../src/world/tiles';
 
@@ -106,6 +106,16 @@ const [px, py] = game.passengerSpot(ship, 1);
 game.update(0.1);
 check('stands at that place, and is not in the water', Math.hypot(game.player.x - px, game.player.y - py) < 1e-6 && !game.player.swimming,
   `${game.player.x.toFixed(2)},${game.player.y.toFixed(2)} for ${px.toFixed(2)},${py.toFixed(2)}`);
+// How far toward her bow a place on her is, from her middle.
+const along = ([x, y]: [number, number]): number => {
+  const [cx, cy] = furnitureCentre(ship);
+  const a = game.shipHeading(ship);
+  return (x - cx) * Math.cos(a) + (y - cy) * Math.sin(a);
+};
+const places = [1, 2, 3].map((n) => along(game.passengerSpot(ship, n)));
+check('her helm stands aft of all three places, on a deck above theirs',
+  along(game.helmSpot(ship)) < Math.min(...places) && (SHIP.boat?.seat ?? 0) > (SHIP.boat?.waist ?? Infinity),
+  `helm ${along(game.helmSpot(ship)).toFixed(2)} at ${SHIP.boat?.seat}, places ${places.map((n) => n.toFixed(2)).join(' ')} at ${SHIP.boat?.waist}`);
 game.log.length = 0;
 const walked = game.moveTo(W0 - 4, WY);
 check('and goes nowhere on their own feet', !walked && game.log.some((l) => l.text === 'You are aboard as a passenger. Step ashore first.'),

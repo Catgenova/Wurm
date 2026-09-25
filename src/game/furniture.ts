@@ -150,6 +150,15 @@ export interface BoatDef {
   draught: number;
   /** How high the deck sits, for drawing whoever is in it. */
   seat: number;
+  /**
+   * Where whoever has the helm stands, in tiles from her middle along her
+   * toward the bow and across her toward starboard, when her helm is on a
+   * deck of its own rather than a seat in her middle. They are drawn on their
+   * feet there, `seat` up.
+   */
+  helm?: [number, number];
+  /** How high the deck her passengers stand on sits; `seat` when left out. */
+  waist?: number;
   /** True when the wind does the work, so the body behind it matters less. */
   sail?: boolean;
   /**
@@ -313,7 +322,7 @@ export const FURNITURE: FurnitureDef[] = [
    * boat's, she takes the whole of a tile, she wants deeper water under her,
    * and she is the one hull that carries anybody besides whoever is steering.
    */
-  piece('caravel', 'Caravel', 4, 4, [['plank', 1500], ['timber', 520], ['shaft', 18], ['cloth', 220], ['rope', 80], ['thick_rope', 20], ['ribbon', 80], ['nail', 1300]], 60, 180, 'You lay her keel, raise the frames, plank her up to a castle at either end and step her masts.', 5000, { skill: 'carpentry', boat: { speed: 4, draught: 5, seat: 18, sail: true, passengers: 3, deck: [[-0.2, -0.14], [0.12, 0.14], [0.42, 0]] } }),
+  piece('caravel', 'Caravel', 4, 4, [['plank', 1500], ['timber', 520], ['shaft', 18], ['cloth', 220], ['rope', 80], ['thick_rope', 20], ['ribbon', 80], ['nail', 1300]], 60, 180, 'You lay her keel, raise the frames, plank her up to a castle at either end and step her masts.', 5000, { skill: 'carpentry', boat: { speed: 4, draught: 5, seat: 33, helm: [-0.65, 0], waist: 18, sail: true, passengers: 3, deck: [[-0.3, 0], [-0.05, 0], [0.3, 0]] } }),
   // Barrels hold liquid and nothing else, in three sizes.
   piece('small_barrel', 'Small barrel', 1, 1, [['plank', 12], ['shaft', 1], ['nail', 12]], 12, 7, 'You raise a small barrel and hoop it tight.', undefined, { liquid: 30 }),
   piece('large_barrel', 'Large barrel', 2, 2, [['plank', 56], ['shaft', 4], ['nail', 52]], 26, 20, 'You raise a great barrel, as tall as you are.', undefined, { liquid: 250 }),

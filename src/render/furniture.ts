@@ -482,13 +482,27 @@ class Scene {
     this.part(Math.min(a[0], b[0]) - r, Math.max(a[0], b[0]) + r, Math.min(a[1], b[1]) - r, Math.max(a[1], b[1]) + r, Math.min(a[2], b[2]) - flat, Math.max(a[2], b[2]) + flat, () => this.drawRod(a, b, r, p));
   }
 
-  drawRod(a: V3, b: V3, r: number, p: Paint): void {
+  /**
+   * `square`, when it is set, cuts the rod off square at `a` rather than
+   * rounding it: a rod that runs on out of another drawn before it -- a mast
+   * out of the stump of it in the hull -- then goes on from it without a seam.
+   */
+  drawRod(a: V3, b: V3, r: number, p: Paint, square = false): void {
     const g = this.g;
     const A = this.P(a[0], a[1], a[2]), B = this.P(b[0], b[1], b[2]);
     const w = Math.max(0.9, r * 2 * 1.34);
-    g.lineCap = 'round';
+    g.lineCap = square ? 'butt' : 'round';
+    const end = (rr: number, style: string): void => {
+      if (!square) return;
+      g.fillStyle = style;
+      g.beginPath();
+      g.arc(B[0], B[1], rr, 0, TAU);
+      g.fill();
+    };
     this.line(A, B, rgb(p.ink), w + this.ink * 2);
+    end(w / 2 + this.ink, rgb(p.ink));
     this.line(A, B, rgb(p.body, 0.92), w);
+    end(w / 2, rgb(p.body, 0.92));
     if (w > 1.6) {
       const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy) || 1;
       const ox = (-dy / l) * w * 0.22, oy = (dx / l) * w * 0.22;
@@ -1152,6 +1166,62 @@ function hull(sc: Scene, wood: Paint, xs: number, xb: number, B: number, S: numb
     if (bowNear) stem();
     above?.draw();
   });
+}
+
+/**
+ * A ship's breadth at her wale as a share of her greatest, `t` running from
+ * the transom to the stem: square across the tuck, fullest a little aft of
+ * amidships, and a full, round bow that only comes in hard at the stem.
+ */
+const shipBreadth = (t: number): number =>
+  (t < 0.45 ? 0.72 + 0.28 * Math.sin((t / 0.45) * (Math.PI / 2)) : Math.cos(((t - 0.45) / 0.55) * (Math.PI / 2)) ** 0.6);
+
+/** One thing in a ship's rig -- a panel of sail, a spar, a rope -- with how near it is, to be laid in order with the rest. */
+type RigItem = { d: number; draw: () => void };
+
+/**
+ * A sail from a grid of points on it, rows down it from its head and columns
+ * across it: a panel of cloth between each four, lit by the way it is turned
+ * and handed back unlaid, so the mast and the spars it is bent to can go
+ * between its panels where they stand. Each panel inks the sail's edge where
+ * it has one and a faint seam down either side, so the sail is outlined once
+ * whatever comes between its panels. A panel is laid by how near it stands
+ * on the level, as a mast is: whether an upright is in front of the cloth or
+ * behind it is a matter of where each stands, not of how high.
+ */
+function sailCloth(sc: Scene, grid: V3[][], p: Paint): RigItem[] {
+  const rows = grid.length - 1, cols = grid[0].length - 1;
+  const S = (v: V3): Pt => sc.P(v[0], v[1], v[2]);
+  const out: RigItem[] = [];
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const q: V3[] = [grid[i][j], grid[i][j + 1], grid[i + 1][j + 1], grid[i + 1][j]];
+      // Turned by its diagonals, which holds where two of its corners meet at the point of a sail.
+      const e1 = [q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2]], e2 = [q[3][0] - q[1][0], q[3][1] - q[1][1], q[3][2] - q[1][2]];
+      let n: V3 = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      if (!sc.faces(n[0], n[1], n[2])) n = [-n[0], -n[1], -n[2]];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1;
+      const k = sc.light(n[0] / l, n[1] / l, n[2] / l);
+      out.push({ d: sc.depth((q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4), draw: () => {
+        const g = sc.g, P = q.map(S);
+        sc.poly(P);
+        g.fillStyle = rgb(p.body, k);
+        g.fill();
+        g.strokeStyle = rgb(p.body, k);
+        g.lineWidth = 0.5;
+        g.stroke();
+        if (j > 0) sc.line(P[0], P[3], rgb(p.ink, 1, 0.28), sc.ink * 0.6);
+        if (j < cols - 1) sc.line(P[1], P[2], rgb(p.ink, 1, 0.28), sc.ink * 0.6);
+        g.lineCap = 'round';
+        if (i === 0) sc.line(P[0], P[1], rgb(p.ink), sc.ink);
+        if (i === rows - 1) sc.line(P[3], P[2], rgb(p.ink), sc.ink);
+        if (j === 0) sc.line(P[0], P[3], rgb(p.ink), sc.ink);
+        if (j === cols - 1) sc.line(P[1], P[2], rgb(p.ink), sc.ink);
+        g.lineCap = 'butt';
+      } });
+    }
+  }
+  return out;
 }
 
 /* ---- the pieces --------------------------------------------------------------- */
@@ -2352,6 +2422,375 @@ const MODELS: Record<string, Model> = {
     } });
     // The rudder, hung off the transom.
     sc.box(xs - 0.9, xs - 0.3, -0.35, 0.35, 0, sheer(0) + 0.8, wood);
+  },
+
+  /*
+   * And the ship: a caravel of three masts, square sails on the fore and the
+   * main and a lateen on the mizzen, a sterncastle over her after quarter and
+   * a forecastle over her bow. She is longer than the tile she is built on
+   * and lies out over the water at either end of it.
+   *
+   * Her hull is built in three lengths -- the sterncastle, the waist and the
+   * forecastle -- each a part of its own, so that whichever end of her is
+   * nearer is laid over the waist. Each length is drawn as a hull is seen:
+   * the inside of her far side above its deck, the deck and what stands on
+   * it, then her near side over the lot, flaring out from the waterline to
+   * the wale and leaning in above it. Each mast is a part of its own too,
+   * standing on top of the length it comes up out of, with its sails, spars,
+   * shrouds and stays. The sails swing to leeward and fill as far as `trim`
+   * says, as the sailing boat's does: the square yards are braced round, the
+   * lee arm aft, and the lateen is swung out over the lee quarter.
+   */
+  caravel: ({ sc, wood, trim, tint }) => {
+    sc.shadows = [];
+    // Her lines, which are her own rather than her footprint's: transom and stem, half her beam, and how far her sides lean in for each unit they rise above the wale.
+    const xs = -31, xb = 33, L = xb - xs, B = 14, LEAN = 0.015;
+    /*
+     * Her three decks -- the waist, the sterncastle and the forecastle -- each
+     * a whole number of pixels up, so that whoever is lifted onto one by that
+     * many stands on it; and where each castle ends.
+     */
+    const D = 18 / HEIGHT_SCALE, Dc = 33 / HEIGHT_SCALE, Df = 27 / HEIGHT_SCALE, xc = -14, xf = 20;
+    const tc = (xc - xs) / L, tf = (xf - xs) / L;
+    const wale = (t: number): number => D + 0.5 * (2 * t - 1) ** 2 + 0.8 * t ** 6;
+    const castleRail = (t: number): number => Dc + 3 + 0.9 * (1 - t / tc) ** 2;
+    const waistRail = (t: number): number => wale(t) + 3;
+    const foreRail = (t: number): number => Df + 2.8 + 1.5 * ((t - tf) / (1 - tf)) ** 2;
+    type Stn = { t: number; x: number; w: number; b: number; zw: number; top: number; rake: number };
+    const stn = (t: number, top: (t: number) => number): Stn => {
+      const b = B * shipBreadth(t);
+      return { t, x: xs + L * t, w: b * (0.8 - 0.3 * Math.max(0, 1 - t / 0.25) ** 2), b, zw: wale(t), top: top(t), rake: 5 * Math.max(0, (t - tf) / (1 - tf)) ** 2 };
+    };
+    /** Her side at height `z` on side `sg`: out from the waterline to the wale, in again above it, and the stem raked back to the waterline. */
+    const on = (s: Stn, sg: number, z: number): V3 => [
+      s.x - s.rake * (1 - z / s.top),
+      sg * (z <= s.zw ? s.w + ((s.b - s.w) * Math.max(0, z)) / s.zw : s.b * (1 - LEAN * (z - s.zw))),
+      z,
+    ];
+    const lerp = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const S = (v: V3): Pt => sc.P(v[0], v[1], v[2]);
+    /** The way a face of her side on side `sg` looks out of her. */
+    const outward = (q: V3[], sg: number): V3 => {
+      const e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]], e2 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+      const n: V3 = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const l = (Math.hypot(n[0], n[1], n[2]) || 1) * (n[1] * sg < 0 ? -1 : 1);
+      return [n[0] / l, n[1] / l, n[2] / l];
+    };
+
+    /*
+     * One length of her, from station `t0` to `t1`, with its deck at `dz`
+     * and its rail at `top`, standing in the box that ends at `x1` and rises
+     * to `z1`. `things` stand on the deck; a `bulkhead` is the end of a castle
+     * facing into the waist, the way it faces; `step` is the station where her
+     * side comes down to the waist's rail, which is inked from there up; and a
+     * `sprit` stands out over the stem, under what is on the deck when the bow
+     * is turned from you and over her near side when it is turned to you.
+     */
+    type Thing = { at: V3; draw: () => void };
+    const length = (t0: number, t1: number, n: number, dz: number, top: (t: number) => number, x1: number, z1: number, things: Thing[],
+      o: { transom?: boolean; bulkhead?: number; step?: number; stem?: boolean; sprit?: () => void } = {}): void => {
+      const stepFrom = o.step === undefined ? 0 : waistRail(t0 + ((t1 - t0) * o.step) / n);
+      const st = Array.from({ length: n + 1 }, (_, i) => stn(t0 + ((t1 - t0) * i) / n, top));
+      sc.part(st[0].x, x1, -B, B, 0, z1, () => {
+        const g = sc.g;
+        type Face = { q: V3[]; n: V3; d: number; high: boolean; i: number; sg: number };
+        const inner: Face[] = [], outer: Face[] = [];
+        const face = (q: V3[], nn: V3, high: boolean, i: number, sg: number): Face => ({ q, n: nn, high, i, sg, d: sc.depth((q[0][0] + q[2][0]) / 2, (q[0][1] + q[2][1]) / 2, (q[0][2] + q[2][2]) / 2) });
+        for (const sg of [-1, 1]) {
+          for (let i = 0; i < n; i++) {
+            const a = st[i], c = st[i + 1];
+            const low: V3[] = [on(a, sg, 0), on(c, sg, 0), on(c, sg, c.zw), on(a, sg, a.zw)];
+            const high: V3[] = [on(a, sg, a.zw), on(c, sg, c.zw), on(c, sg, c.top), on(a, sg, a.top)];
+            const nl = outward(low, sg), nh = outward(high, sg);
+            // Below the deck the inside of her is out of sight; above it the far side shows its inside.
+            if (sc.faces(nl[0], nl[1], nl[2])) outer.push(face(low, nl, false, i, sg));
+            if (sc.faces(nh[0], nh[1], nh[2])) outer.push(face(high, nh, true, i, sg));
+            else inner.push(face([on(a, sg, dz), on(c, sg, dz), on(c, sg, c.top), on(a, sg, a.top)], [-nh[0], -nh[1], -nh[2]], true, i, sg));
+          }
+        }
+        // The transom: all of it from astern, and from forward the inside of it above the deck.
+        const s0 = st[0];
+        const transomNear = o.transom && sc.faces(-1, 0, 0);
+        if (o.transom && !transomNear) inner.push(face([on(s0, -1, dz), on(s0, 1, dz), on(s0, 1, s0.top), on(s0, -1, s0.top)], [1, 0, 0], true, -1, 0));
+        inner.sort((p, q) => p.d - q.d);
+        outer.sort((p, q) => p.d - q.d);
+        const fill = (P: Pt[], k: number): void => {
+          sc.poly(P);
+          g.fillStyle = rgb(wood.body, k);
+          g.fill();
+          g.strokeStyle = rgb(wood.body, k);
+          g.lineWidth = 0.5;
+          g.stroke();
+        };
+        const rail = (a: Pt, b: Pt): void => {
+          sc.line(a, b, rgb(wood.ink), sc.ink * 2.2);
+          sc.line(a, b, rgb(wood.body, 1.14), sc.ink * 1.1);
+        };
+        const stemLine = (): void => {
+          const s = st[n];
+          sc.line(S(on(s, 1, 0)), S(on(s, 1, s.top + 0.5)), rgb(wood.ink), sc.ink * 1.8);
+        };
+        const bowNear = sc.faces(1, 0, 0);
+        if (o.stem && !bowNear) stemLine();
+        // The inside of her far side, darker, with its rail along the top.
+        for (const f of inner) {
+          const P = f.q.map(S);
+          fill(P, sc.light(f.n[0], f.n[1], f.n[2]) * 0.8);
+          g.strokeStyle = rgb(wood.ink, 1, 0.3);
+          g.lineWidth = sc.ink * 0.6;
+          g.beginPath();
+          for (const k of [0.35, 0.7]) { const [a, b] = [S(lerp(f.q[0], f.q[3], k)), S(lerp(f.q[1], f.q[2], k))]; g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+          g.stroke();
+          rail(P[3], P[2]);
+          if (f.i === o.step || f.i + 1 === o.step) sc.line(f.i === o.step ? P[0] : P[1], f.i === o.step ? P[3] : P[2], rgb(wood.ink), sc.ink);
+        }
+        // The deck, planked fore and aft.
+        const edge = (sg: number): V3[] => st.map((s) => { const p = on(s, sg, dz); return [p[0], sg * Math.max(0, Math.abs(p[1]) - 0.25), dz]; });
+        const deck = [...edge(-1), ...edge(1).reverse()].map(S);
+        sc.fillInk(deck, rgb(wood.body, 1.02), wood.ink);
+        g.save();
+        sc.poly(deck);
+        g.clip();
+        g.strokeStyle = rgb(wood.ink, 1, 0.3);
+        g.lineWidth = sc.ink * 0.6;
+        g.beginPath();
+        for (let y = -B + 1.8; y < B; y += 1.8) { const a = sc.P(st[0].x, y, dz), b = sc.P(x1, y, dz); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+        g.stroke();
+        g.restore();
+        // The end of a castle, where it stands up out of the waist: boarded, with a door in it.
+        if (o.bulkhead !== undefined && sc.faces(o.bulkhead, 0, 0)) {
+          const s = o.bulkhead > 0 ? st[n] : st[0];
+          sc.drawPanel([on(s, -1, D), on(s, 1, D), on(s, 1, dz), on(s, -1, dz)], wood, (F, k) => {
+            g.strokeStyle = rgb(wood.ink, 1, 0.4);
+            g.lineWidth = sc.ink * 0.6;
+            g.beginPath();
+            for (let i = 1; i < 9; i++) { const [a, b] = [F(i / 9, 0), F(i / 9, 1)]; g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+            g.stroke();
+            sc.fillInk([F(0.42, 0), F(0.58, 0), F(0.58, 0.8), F(0.42, 0.8)], rgb(wood.body, k * 0.72), wood.ink);
+          });
+        }
+        if (!bowNear) o.sprit?.();
+        [...things].sort((p, q) => sc.depth(p.at[0], p.at[1]) - sc.depth(q.at[0], q.at[1])).forEach((th) => th.draw());
+        // Her near side: planked, dark where it is wet, the wale along the knuckle and the rail on top.
+        for (const f of outer) {
+          const P = f.q.map(S);
+          fill(P, sc.light(f.n[0], f.n[1], f.n[2]));
+          g.strokeStyle = rgb(wood.ink, 1, 0.42);
+          g.lineWidth = sc.ink * 0.6;
+          g.beginPath();
+          if (f.high) {
+            const a = st[f.i], c = st[f.i + 1];
+            for (let z = 1.7; a.zw + z < a.top - 0.6 && c.zw + z < c.top - 0.6; z += 1.7) {
+              const [p, q] = [S(on(a, f.sg, a.zw + z)), S(on(c, f.sg, c.zw + z))];
+              g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]);
+            }
+          } else {
+            for (const k of [0.3, 0.55, 0.78]) { const [p, q] = [S(lerp(f.q[0], f.q[3], k)), S(lerp(f.q[1], f.q[2], k))]; g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); }
+          }
+          g.stroke();
+          if (!f.high) {
+            sc.poly([P[0], P[1], S(lerp(f.q[1], f.q[2], 0.1)), S(lerp(f.q[0], f.q[3], 0.1))]);
+            g.fillStyle = 'rgba(40, 60, 70, 0.3)';
+            g.fill();
+          }
+        }
+        if (transomNear) {
+          const P = [on(s0, -1, 0), on(s0, 1, 0), on(s0, 1, s0.zw), on(s0, 1, s0.top), on(s0, -1, s0.top), on(s0, -1, s0.zw)];
+          sc.fillInk(P.map(S), rgb(wood.body, sc.light(-1, 0, 0)), wood.ink);
+          g.strokeStyle = rgb(wood.ink, 1, 0.42);
+          g.lineWidth = sc.ink * 0.6;
+          g.beginPath();
+          for (let z = 1.7; z < s0.top - 0.6; z += 1.7) { const [a, b] = [S(on(s0, -1, z)), S(on(s0, 1, z))]; g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+          g.stroke();
+          // A pair of lights into the great cabin under the castle deck.
+          for (const y of [-0.3, 0.3]) {
+            const [a, b] = [on(s0, 1, Dc - 3.4), on(s0, 1, Dc - 1.2)];
+            const w = a[1] * y, v = b[1] * y;
+            sc.fillInk([S([xs, w - 1, a[2]]), S([xs, w + 1, a[2]]), S([xs, v + 1, b[2]]), S([xs, v - 1, b[2]])], rgb(hex('#5a4a44')), wood.ink);
+          }
+          sc.line(S(on(s0, -1, s0.zw)), S(on(s0, 1, s0.zw)), rgb(wood.ink), sc.ink * 2.6);
+          rail(S(on(s0, -1, s0.top)), S(on(s0, 1, s0.top)));
+        }
+        for (const f of outer) {
+          const P = f.q.map(S);
+          if (f.high) {
+            // The wale, and the rail.
+            sc.line(P[0], P[1], rgb(wood.ink), sc.ink * 2.8);
+            sc.line(P[0], P[1], rgb(wood.body, 0.72), sc.ink * 1.1);
+            rail(P[3], P[2]);
+            if (f.i === o.step || f.i + 1 === o.step) {
+              const s = st[f.i === o.step ? f.i : f.i + 1];
+              sc.line(S(on(s, f.sg, stepFrom)), S(on(s, f.sg, s.top)), rgb(wood.ink), sc.ink);
+            }
+          } else sc.line(P[0], P[1], rgb(wood.ink), sc.ink);
+          // Where her side turns the corner onto the transom.
+          if (o.transom && f.i === 0) sc.line(P[0], P[3], rgb(wood.ink), sc.ink);
+        }
+        if (o.stem && bowNear) stemLine();
+        if (bowNear) o.sprit?.();
+      });
+    };
+
+    // What stands on the decks: the mizzen, the main and the fore, the hatch, and the whipstaff the helmsman steers by from just aft of it.
+    const xz = -21.5, xm = 2, xfm = 24.5, rz = 0.7, rm = 0.95, rf = 0.8, hx = -6, xh = -24.4;
+    // The bowsprit, out over the stem head and cocked up.
+    const heel: V3 = [xb - 0.8, 0, foreRail(1) + 0.2], tip: V3 = [xb + 9, 0, foreRail(1) + 3];
+    // The tops of the three lengths, which the masts stand on: the castle's rail is highest at the transom, the waist's at one end or the other, and the forecastle's at the stem, unless the bowsprit stands higher.
+    const aftTop = castleRail(0), waistTop = Math.max(waistRail(tc), waistRail(tf)), foreTop = Math.max(foreRail(1), tip[2] + 0.55);
+    // A rail across the deck where a castle ends: a row of turned posts under a capping rail.
+    const balustrade = (t: number, rail: (t: number) => number, dz: number, x: number) => (): void => {
+      const s = stn(t, rail), z = rail(t), r = on(s, 1, z)[1] - 0.3;
+      const ys = Array.from({ length: 7 }, (_, i) => -r + (2 * r * i) / 6).sort((a, b) => sc.depth(x, a) - sc.depth(x, b));
+      for (const y of ys) sc.drawRod([x, y, dz], [x, y, z], 0.22, wood);
+      sc.drawRod([x, -r, z], [x, r, z], 0.32, wood);
+    };
+    // The foot of a mast, from its deck to the top of the length it stands in, where the rest of it goes on up from.
+    const mastFoot = (x: number, dz: number, z: number, r: number): Thing => ({ at: [x, 0, dz], draw: () => sc.drawRod([x, 0, dz], [x, 0, z], r, wood) });
+    const grating = (F: FaceAt, w: number, h: number): void => {
+      rectOn(sc, F, 0.4, 0.4, w - 0.4, h - 0.4, rgb(wood.body, 0.5), wood.ink, 0.6);
+      sc.g.strokeStyle = rgb(wood.body, 0.95);
+      sc.g.lineWidth = sc.ink * 0.9;
+      sc.g.beginPath();
+      for (let s = 1.1; s < w - 0.5; s += 0.9) { const [a, b] = [F(s, 0.4), F(s, h - 0.4)]; sc.g.moveTo(a[0], a[1]); sc.g.lineTo(b[0], b[1]); }
+      for (let u = 1.1; u < h - 0.5; u += 0.9) { const [a, b] = [F(0.4, u), F(w - 0.4, u)]; sc.g.moveTo(a[0], a[1]); sc.g.lineTo(b[0], b[1]); }
+      sc.g.stroke();
+    };
+
+    length(0, tc, 6, Dc, castleRail, xc, aftTop, [
+      mastFoot(xz, Dc, aftTop, rz),
+      { at: [xc - 0.35, 0, Dc], draw: balustrade(tc, castleRail, Dc, xc - 0.35) },
+      { at: [xh, 0, Dc], draw: () => { sc.drawRod([xh, 0, Dc], [xh - 0.3, 0, Dc + 3.2], 0.26, wood); sc.drawLathe(xh - 0.3, 0, [[Dc + 3.1, 0.2], [Dc + 3.3, 0.42], [Dc + 3.7, 0.1]], BRASS, 10, {}); } },
+    ], { transom: true, bulkhead: 1, step: 6 });
+    length(tc, tf, 12, D, waistRail, xf, waistTop, [
+      mastFoot(xm, D, waistTop, rm),
+      { at: [hx, 0, D], draw: () => sc.drawBox(hx - 2.6, hx + 2.6, -3.2, 3.2, D, D + 1.1, wood, { top: grating }) },
+    ]);
+    length(tf, 1, 8, Df, foreRail, tip[0] + 0.6, foreTop, [
+      mastFoot(xfm, Df, foreTop, rf),
+      { at: [xf + 0.35, 0, Df], draw: balustrade(tf, foreRail, Df, xf + 0.35) },
+    ], { bulkhead: -1, step: 0, stem: true, sprit: () => sc.drawRod(heel, tip, 0.55, wood) });
+
+    // The rudder, hung on the sternpost, iron-strapped.
+    const straps = (F: FaceAt, w: number, h: number): void => { for (const t of [h * 0.3, h * 0.72]) rectOn(sc, F, 0, t - 0.3, w, t + 0.3, rgb(IRON.body), IRON.ink, 0.8); };
+    sc.box(xs - 3, xs - 0.1, -0.45, 0.45, 0, 5.5, wood, { left: straps, right: straps });
+    sc.box(xs - 1.3, xs - 0.1, -0.45, 0.45, 5.5, 12, wood, { left: straps, right: straps });
+
+    /*
+     * The rig. The wind's side is the sign of the trim and the sails go out
+     * on the other; the square yards are braced round, the lee arm aft, and
+     * their cloth bellies forward and to leeward; the lateen is swung out and
+     * fills to leeward.
+     *
+     * Each mast is laid in three lots. Its cloth, its spars and the mast
+     * itself go down in order of how near each is. The ropes on the side of
+     * the sail the wind comes from -- the shrouds, the sheets, a stay led aft
+     * -- go under all of that when the side you see is the one the sail fills
+     * toward, and over it when you see the other; the ropes on the far side of
+     * the cloth, the other way about. A yard braced round presses its sail on
+     * the lee shrouds, and a rope laid only by where it is would weave in and
+     * out of the cloth there.
+     */
+    const set = trim ?? 0.25;
+    const lee = set < 0 ? 1 : -1;
+    const pull = Math.abs(set);
+    const SAIL = tint ? paintOf(hex(tint.colour), 0.55) : paintOf(hex('#f1e8d2'));
+    const brace = 0.15 + pull * 0.45;
+    const ax = Math.sin(brace), ay = -lee * Math.cos(brace), nx = Math.cos(brace), ny = lee * Math.sin(brace);
+    /** A square sail on the mast at `x`, its head on the yard at `zh` and `off` forward of the mast, `yh` each way at the head and `yf` at the foot. */
+    const square = (x: number, off: number, zh: number, zf: number, yh: number, yf: number, full: number): V3[][] =>
+      Array.from({ length: 4 }, (_, i) => {
+        const v = i / 3;
+        return Array.from({ length: 7 }, (_, j) => {
+          const u = j / 6, s = (2 * u - 1) * (yh + (yf - yh) * v), f = off + full * 4 * u * (1 - u) * Math.sin(v * Math.PI * 0.65);
+          return [x + s * ax + f * nx, s * ay + f * ny, zh + (zf - zh) * v] as V3;
+        });
+      });
+    const onYard = (x: number, off: number, z: number, s: number): V3 => [x + s * ax + off * nx, s * ay + off * ny, z];
+    /** A mast from the top of the stump drawn in the hull under it, squared off at the foot so it runs on out of it. */
+    const mast = (x: number, z0: number, z1: number, r: number): RigItem => ({ d: sc.depth(x, 0), draw: () => sc.drawRod([x, 0, z0], [x, 0, z1], r, wood, true) });
+    /** A spar, laid over the cloth bent to it and otherwise as near as it is where it crosses its mast, `at`. */
+    const spar = (a: V3, b: V3, r: number, cloth: RigItem[], at: V3 = lerp(a, b, 0.5)): RigItem => ({ d: Math.max(sc.depth(at[0], at[1]), ...cloth.map((c) => c.d)) + 1e-3, draw: () => sc.drawRod(a, b, r, wood) });
+    /** A rope from `a` to `b`, as fine as the sailing boat's stays. */
+    const rope = (a: V3, b: V3, alpha = 0.55) => (): void => sc.line(S(a), S(b), rgb(ROPE.ink, 1, alpha), sc.ink * 0.5);
+    /** A short rope from one corner of the rig to another, laid among the cloth and spars by where it is. */
+    const tie = (a: V3, b: V3): RigItem => ({ d: sc.depth((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), draw: rope(a, b, 0.7) });
+    /** Where a shroud or a sheet comes down to her rail, at `x` on side `sg`. */
+    const railAt = (x: number, sg: number, rail: (t: number) => number): V3 => { const s = stn((x - xs) / L, rail); return on(s, sg, s.top); };
+    /**
+     * A mast and what is set on it, as one part standing on the length under
+     * it from `z0` up, in the box `pts` make. `fills` is the way its cloth
+     * fills; `aft` are the ropes on the wind's side of the cloth and `fore`
+     * those on the other.
+     */
+    const rig = (core: RigItem[], aft: Array<() => void>, fore: Array<() => void>, fills: V3, pts: V3[], z0: number): void => {
+      const X = pts.map((p) => p[0]), Y = pts.map((p) => p[1]), Z = pts.map((p) => p[2]);
+      sc.part(Math.min(...X), Math.max(...X), Math.min(...Y), Math.max(...Y), z0, Math.max(...Z), () => {
+        const full = sc.faces(fills[0], fills[1], fills[2]);
+        core.sort((a, b) => a.d - b.d);
+        for (const r of full ? aft : fore) r();
+        for (const it of core) it.draw();
+        for (const r of full ? fore : aft) r();
+      });
+    };
+
+    // The main: a course and a topsail over it, a top between them, shrouds down to the waist's rail.
+    {
+      const head = 58, off = rm + 0.45, toff = rm * 0.7 + 0.35;
+      const course = square(xm, off, 41, 17, 13, 15.5, 0.8 + pull * 2.6), topsail = square(xm, toff, 54.5, 46.5, 6.5, 9.5, 0.5 + pull * 1.5);
+      const low = sailCloth(sc, course, SAIL), high = sailCloth(sc, topsail, SAIL);
+      const yard = [onYard(xm, off, 41.3, -14), onYard(xm, off, 41.3, 14)], tyard = [onYard(xm, toff, 54.8, -7.4), onYard(xm, toff, 54.8, 7.4)];
+      const top: RigItem = { d: sc.depth(xm, 0) + 1e-3, draw: () => sc.drawLathe(xm, 0, [[43, 1.1], [43.6, 2.3], [45.6, 2.5]], wood, 16, { bands: [[45.2, wood, 0.35]] }) };
+      const shrouds = [-1, 1].flatMap((sg) => [0, 1, 2].map((k) => railAt(xm - 1.3 - 1.7 * k, sg, waistRail)));
+      // The sheet aft from the lee clew and the tack forward from the weather one.
+      const sheet = railAt(xm - 8, lee, waistRail), tack = railAt(xm + 7, -lee, waistRail);
+      const aft = [
+        ...shrouds.map((e) => rope([xm, 0, 42.9], e)),
+        ...[-1, 1].flatMap((sg) => [0, 1].map((k) => rope([xm, 0, head - 1], [xm - 0.6 - 0.8 * k, sg * 2.2, 45.6], 0.45))),
+        rope(course[3][0], sheet, 0.7),
+      ];
+      // The topsail sheeted home to the arms of the course's yard.
+      const home = [tie(topsail[3][0], yard[0]), tie(topsail[3][6], yard[1])];
+      rig([...low, ...high, mast(xm, waistTop, head, rm), top, spar(yard[0], yard[1], 0.5, low.slice(0, 6)), spar(tyard[0], tyard[1], 0.36, high.slice(0, 6)), ...home],
+        aft, [rope(course[3][6], tack, 0.7)], [nx, ny, 0], [...course.flat(), ...topsail.flat(), ...yard, ...tyard, ...shrouds, sheet, tack, [xm, 0, head]], waistTop);
+    }
+    // The fore: a course, shrouds down to the forecastle's rail, the forestay out to the bowsprit and the main stay back to the main top.
+    {
+      const head = 40.5, off = rf + 0.4;
+      const course = square(xfm, off, 35.5, foreTop + 1.6, 10, 12, 0.7 + pull * 2);
+      const cloth = sailCloth(sc, course, SAIL);
+      const yard = [onYard(xfm, off, 35.8, -11), onYard(xfm, off, 35.8, 11)];
+      const shrouds = [-1, 1].flatMap((sg) => [0, 1].map((k) => railAt(xfm - 1.2 - 1.6 * k, sg, foreRail)));
+      const sheet = railAt(xf + 1.2, lee, foreRail), tack = railAt(xb - 5, -lee, foreRail);
+      const aft = [...shrouds.map((e) => rope([xfm, 0, 37], e)), rope(course[3][0], sheet, 0.7), rope([xfm - rf, 0, 37.6], [xm + rm, 0, 44.4])];
+      rig([...cloth, mast(xfm, foreTop, head, rf), spar(yard[0], yard[1], 0.42, cloth.slice(0, 6))],
+        aft, [rope(course[3][6], tack, 0.7), rope([xfm, 0, head - 1], tip)], [nx, ny, 0], [...course.flat(), ...yard, ...shrouds, sheet, tack, [xfm, 0, head]], foreTop);
+    }
+    // The mizzen: a lateen, its yard slung to leeward of the mast, shrouds to windward and a stay forward to the main.
+    {
+      const head = 37, sw = 0.12 + pull * 0.7, full = 0.5 + pull * 1.8;
+      const out: V3 = [Math.sin(sw), lee * Math.cos(sw), 0];
+      // A point `a` aft of the mast and `z` up, swung out with the sail and stood `o` off it to leeward.
+      const mz = (a: number, z: number, o: number): V3 => [xz - Math.cos(sw) * a + out[0] * o, lee * Math.sin(sw) * a + out[1] * o, z];
+      // Its tack, peak and clew, each as far aft of the mast and as high.
+      const T = [-8, 20.2], P = [17, 46], C = [11.5, 20.8], off = rz + 0.5;
+      const grid = Array.from({ length: 4 }, (_, i) => {
+        const v = i / 3;
+        return Array.from({ length: 6 }, (_, j) => {
+          const u = j / 5, fa = T[0] + (C[0] - T[0]) * u, fz = T[1] + (C[1] - T[1]) * u, ha = T[0] + (P[0] - T[0]) * u, hz = T[1] + (P[1] - T[1]) * u;
+          return mz(fa + (ha - fa) * v, fz + (hz - fz) * v, off + full * 4 * u * (1 - u) * Math.sin(Math.PI * (1 - v) * 0.7));
+        });
+      });
+      const cloth = sailCloth(sc, grid, SAIL);
+      const rise = (P[1] - T[1]) / (P[0] - T[0]);
+      const yard = [mz(T[0] - 1.5, T[1] - 1.5 * rise, off), mz(P[0] + 1, P[1] + rise, off)];
+      const shrouds = [0, 1].map((k) => railAt(xz - 1.5 - 2 * k, -lee, castleRail));
+      const sheet = railAt(xs + 1.5, lee, castleRail);
+      // The tack made fast to the rail across the front of the castle.
+      const tack = tie(grid[0][0], [xc - 0.35, 0, castleRail(tc)]);
+      rig([...cloth, mast(xz, aftTop, head, rz), spar(yard[0], yard[1], 0.36, cloth.slice(10), mz(0, T[1] - T[0] * rise, off)), tack],
+        [...shrouds.map((e) => rope([xz, 0, head - 1.5], e)), rope([xz, 0, head - 0.5], [xm - rm, 0, 30])], [rope(grid[0][5], sheet, 0.7)], out,
+        [...grid.flat(), ...yard, ...shrouds, sheet, [xz, 0, head]], aftTop);
+    }
   },
 
   /*

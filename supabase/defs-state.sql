@@ -2403,7 +2403,7 @@ update item_def set description = 'A pair of shafts on wheels. Take hold of it a
 update item_def set description = 'A cart on two large wheels, with a box body and a seat over the axle. It holds 1000 things of any weight, and nothing under a hitched wildermon will move it.' where id = 'large_cart';
 update item_def set description = 'Four wheels, two axles and a bed you could sleep a family on. It holds 10000 things of any weight, and it does not roll until all four yokes have a wildermon in them.' where id = 'wagon';
 update item_def set description = 'A clinker hull with a pair of oars in her. Launch her into two deep of water, climb aboard and row. Carries 300 things and you.' where id = 'rowing_boat';
-update item_def set description = 'A three-masted ship with a castle at either end. Five deep of water under her, 5000 things in her hold, and three passengers besides whoever has the helm.' where id = 'caravel';
+update item_def set description = 'A ship on a whole tile, wanting five deep of water under her. Holds 5000 things and carries three passengers besides whoever has the helm.' where id = 'caravel';
 update item_def set description = 'A decked hull with a mast, a sail and a rudder. Four deep of water under her, and she goes where the coast goes. Carries 1500 things.' where id = 'sailing_boat';
 update item_def set description = 'Holds 30 litres of one liquid, and nothing solid at all.' where id = 'small_barrel';
 update item_def set description = 'Holds 250 litres of one liquid. It takes a while to fill and longer to empty.' where id = 'large_barrel';
@@ -4101,7 +4101,7 @@ insert into boat_def (id, speed, draught, seat, sail, passengers) values ('rowin
 insert into furniture_def values ('sailing_boat', 'Sailing boat', 4, 3, 1500, false, false);
 insert into boat_def (id, speed, draught, seat, sail, passengers) values ('sailing_boat', 3.4, 4, 13, true, 0);
 insert into furniture_def values ('caravel', 'Caravel', 4, 4, 5000, false, false);
-insert into boat_def (id, speed, draught, seat, sail, passengers) values ('caravel', 4, 5, 18, true, 3);
+insert into boat_def (id, speed, draught, seat, sail, passengers) values ('caravel', 4, 5, 33, true, 3);
 insert into furniture_def values ('small_barrel', 'Small barrel', 1, 1, null, false, false);
 update furniture_def set liquid = 30 where id = 'small_barrel';
 insert into furniture_def values ('large_barrel', 'Large barrel', 2, 2, null, false, false);
@@ -5212,7 +5212,7 @@ insert into recipe_input values ('make_sailing_boat', 4, 'rope', 24);
 insert into recipe_input values ('make_sailing_boat', 5, 'thick_rope', 6);
 insert into recipe_input values ('make_sailing_boat', 6, 'ribbon', 24);
 insert into recipe_input values ('make_sailing_boat', 7, 'nail', 420);
-insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_caravel', 'caravel', 1, 'mallet', null, 'carpentry', 'Build caravel', 'building a caravel', 180, 0.05, 60, false, false, 'wood', null, null, 'You lay her keel, raise the frames, plank her up to a castle at either end and step three masts. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the caravel apart again.');
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_caravel', 'caravel', 1, 'mallet', null, 'carpentry', 'Build caravel', 'building a caravel', 180, 0.05, 60, false, false, 'wood', null, null, 'You lay her keel, raise the frames, plank her up to a castle at either end and step her masts. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the caravel apart again.');
 insert into recipe_input values ('make_caravel', 0, 'plank', 1500);
 insert into recipe_input values ('make_caravel', 1, 'timber', 520);
 insert into recipe_input values ('make_caravel', 2, 'shaft', 18);

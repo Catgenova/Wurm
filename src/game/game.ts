@@ -4800,9 +4800,18 @@ export class Game {
 
   /** The place on deck where the passenger in `seat` stands, in the world. */
   passengerSpot(f: PlacedFurniture, seat: number): [number, number] {
+    return this.onDeck(f, deckSpot(f.kind, seat));
+  }
+
+  /** Where whoever has her helm is drawn: at her middle, or on the deck her helm stands on. */
+  helmSpot(f: PlacedFurniture): [number, number] {
+    return this.onDeck(f, furnitureDef(f.kind).boat?.helm ?? [0, 0]);
+  }
+
+  /** A place on her deck, `along` her toward the bow and `across` her toward starboard, in the world. */
+  private onDeck(f: PlacedFurniture, [along, across]: [number, number]): [number, number] {
     const [cx, cy] = this.hullCentre(f);
     const a = this.shipHeading(f);
-    const [along, across] = deckSpot(f.kind, seat);
     return [cx + Math.cos(a) * along - Math.sin(a) * across, cy + Math.sin(a) * along + Math.cos(a) * across];
   }
 
