@@ -812,6 +812,10 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
+      // Locked, it stays where it is: lifting a ship or a cart and setting it
+      // down somewhere else is taking it, padlock and all.
+      const shut = g.lockRefusal(f);
+      if (shut) return shut;
       if (f.items.length) return 'Empty it first.';
       // A rack holds nothing of its own, so `items` is empty however loaded it
       // is: what stands on it are eight crates of somebody else's, and lifting

@@ -98,6 +98,18 @@ onShore();
 game.player.x = W0 - 0.5;
 check('afloat where the water is deep enough', game.launchSpot('caravel', SX, WY));
 
+// A padlock on her keeps her helm, her deck and her where she is to whoever has its key.
+ship.lock = 424242;
+check('locked, she is not boarded, steered or lifted without the key, in the hold\'s words',
+  say('board_passenger') === 'It is locked, and you have no key to it.' && say('board_vehicle') === 'It is locked, and you have no key to it.'
+    && say('pick_up_furniture') === 'It is locked, and you have no key to it.',
+  `${say('board_passenger')} | ${say('board_vehicle')} | ${say('pick_up_furniture')}`);
+const key = game.inventory.add('key', { ql: 40 });
+key.keyed = 424242;
+check('and with it, she is', say('board_passenger') === 'ALLOWED' && say('board_vehicle') === 'ALLOWED',
+  `${say('board_passenger')} | ${say('board_vehicle')}`);
+game.inventory.remove(key.uid, 1);
+ship.lock = undefined;
 check('a passenger may come aboard from beside her', does('board_passenger') && say('board_passenger') === 'ALLOWED', say('board_passenger'));
 act('board_passenger');
 check('and has the first place on her deck', game.player.aboard === ship.id && game.player.seat === 1
@@ -202,6 +214,16 @@ begin
     jsonb_build_object('kind', 'furniture', 'id', v_ship)), 'ALLOWED'));
   update player set x = 53.6, y = 58.5 where world_id = w and uid in ('${ANNA}', '${BRAN}', '${COLL}', '${DUNN}');
   update player set x = 53.6, y = 58.5 where world_id = w and uid = dane;
+  -- A padlock on her: nobody without its key takes her helm, comes aboard or lifts her.
+  update placed set lock = 424242 where id = v_ship;
+  insert into said values ('LOCKED', coalesce(act_refusal(w, '${ANNA}', 'board_vehicle', t), 'ALLOWED') || '|'
+    || coalesce(act_refusal(w, '${ANNA}', 'board_passenger', t), 'ALLOWED') || '|'
+    || coalesce(act_refusal(w, '${ANNA}', 'pick_up_furniture', t), 'ALLOWED'));
+  insert into item (world_id, holder, holder_uid, def, ql, count, keyed) values (w, 'player', '${ANNA}', 'key', 40, 1, 424242);
+  insert into said values ('KEYED', coalesce(act_refusal(w, '${ANNA}', 'board_vehicle', t), 'ALLOWED') || '|'
+    || coalesce(act_refusal(w, '${ANNA}', 'board_passenger', t), 'ALLOWED'));
+  delete from item where world_id = w and holder_uid = '${ANNA}' and def = 'key';
+  update placed set lock = null where id = v_ship;
   insert into said values ('ASK', coalesce(act_refusal(w, '${ANNA}', 'board_passenger', t), 'ALLOWED'));
   perform act_perform(w, '${ANNA}', 'board_passenger', t);
   insert into said values ('SAID', (select text from event where world_id = w and uid = '${ANNA}' order by n desc limit 1));
@@ -264,6 +286,10 @@ const said = (key: string): string =>
   isle.split('\n').find((l) => l.startsWith(`${key}|`))?.slice(key.length + 1) ?? 'MISSING';
 
 check('too far off to come aboard, in the same words', said('FAR') === 'Stand beside her first.', said('FAR'));
+check('locked, nobody without the key takes her helm, comes aboard or lifts her, in the hold\'s words',
+  said('LOCKED') === 'It is locked, and you have no key to it.|It is locked, and you have no key to it.|It is locked, and you have no key to it.',
+  said('LOCKED'));
+check('and with the key, both are open', said('KEYED') === 'ALLOWED|ALLOWED', said('KEYED'));
 check('beside her, a passenger may come aboard', said('ASK') === 'ALLOWED', said('ASK'));
 check('and is told where they are', said('SAID') === 'You climb aboard the caravel and find a place on deck. 1 of 3 places are taken.', said('SAID'));
 check('in the first place, where she is', said('ANNA') === 'true,1,55.5,58.5', said('ANNA'));

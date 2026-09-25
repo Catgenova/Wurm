@@ -1144,6 +1144,9 @@ export function helpText(): string {
     piece of storage furniture and it closes and cuts <b>one key</b> to itself, there and then. A key
     is an ordinary item: hand it over and you have handed over what it opens, and there is no list
     anywhere saying you did. Take the padlock off and the key goes with it.</p>
+    <p>On a <b>ship, a wagon or a cart</b> a padlock locks more than the hold: without its key
+    nobody takes the helm or the reins, takes hold of the shafts, comes aboard as a passenger or
+    picks it up to carry it off. Stepping ashore and getting down are never refused.</p>
     <p>One way back in, because losing a small item should not cost you a building: the
     <b>founder</b> of the settlement a store stands on may open anything on their own land. So a
     padlock is worth a great deal on somebody else's deed and rather less on your own.</p>

@@ -269,6 +269,8 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
       if (!nearPiece(g, f)) return 'Stand beside the shafts.';
+      const shut = g.lockRefusal(f);
+      if (shut) return shut;
       for (const other of g.furniture.values()) if (other.hitched && other.id !== f.id) return 'You already have a cart behind you.';
       return null;
     },
@@ -323,6 +325,9 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (f.helmAway && isBoat(f) && !here) return 'Somebody else has the helm.';
       if (!here && !nearPiece(g, f)) return 'Stand beside it first.';
       if (g.driving()) return 'You are already driving something.';
+      // A padlock on her keeps her helm, or the reins, to whoever has its key.
+      const shut = g.lockRefusal(f);
+      if (shut) return shut;
       // A hull asks nothing but that she is still floating.
       if (isBoat(f)) return g.launchSpot(f.kind, f.x, f.y) ? null : 'She is aground. Push her off first.';
       const v = vehicleOf(f);
@@ -419,6 +424,8 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (g.driving()) return 'You are already driving something.';
       if (g.mounted()) return 'Get down off your mount first.';
       if (!nearPiece(g, f)) return 'Stand beside her first.';
+      const shut = g.lockRefusal(f);
+      if (shut) return shut;
       if (!g.launchSpot(f.kind, f.x, f.y)) return 'She is aground. Push her off first.';
       if (freeSeat(f) === null) return `Every one of her ${places} places is taken.`;
       return null;
