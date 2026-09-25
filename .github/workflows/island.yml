@@ -1518,6 +1518,17 @@ jobs:
           # The whole list is four hundred and more lines, printed twice, and
           # it pushed everything above it out of reach of a log's tail.
           supabase migration list --linked | tail -12
+          # 20260925200618 was a snapshot of the definitions taken from work in
+          # progress. It reached the project from a push to a branch other than
+          # main, outside this workflow, and never went into main:
+          # 20260925205047 carries the whole rulebook in its place. The CLI
+          # refuses to push while the project's history names a version the
+          # repository does not have, so it comes off that history here. It is
+          # a no-op once it has run.
+          if [ ! -e supabase/migrations/20260925200618_defs.sql ] \
+             && supabase migration list --linked | grep -q 20260925200618; then
+            supabase migration repair --status reverted 20260925200618 --linked --yes
+          fi
           # `--include-all` because a migration can be *added* out of order
           # even though none is ever edited or renamed: the generated
           # definitions are stamped with the wall clock and the hand-written
