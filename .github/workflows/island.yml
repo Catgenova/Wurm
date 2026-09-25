@@ -1370,6 +1370,12 @@ jobs:
             --outfile=node_modules/.cache/aboard.mjs --log-level=error
           node node_modules/.cache/aboard.mjs
 
+      - name: What goes wrong in a browser is written down on the island
+        run: |
+          npx esbuild supabase/test/errors.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/errors.mjs --log-level=error
+          node node_modules/.cache/errors.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where
@@ -1777,6 +1783,26 @@ jobs:
                  "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
                  -c "$FAULTS" \
             || echo "::notice::No faults listed — private.tick_fault could not be read."
+          # What has gone wrong in players' browsers over the last day, as they
+          # reported it (src/net/errors.ts): each message once, with how often,
+          # to how many people, and the newest build it happened in. A deploy is
+          # the moment somebody is looking, and the moment to see whether the
+          # last one broke something nobody mentioned.
+          ERRORS=$(cat <<'EOSQL'
+          select count(*) as times,
+                 count(distinct uid) as people,
+                 max(build) as build,
+                 to_char(max(at), 'MM-DD HH24:MI') as last,
+                 left(message, 140) as message
+            from client_error
+           where at > now() - interval '1 day'
+           group by left(message, 140)
+           order by count(*) desc
+           limit 15;
+          EOSQL
+          )
+          supabase db query --linked "$ERRORS" \
+            || echo "::notice::Could not read what went wrong in browsers."
           # And the room, last, where the tail of a log reaches it: how big the
           # database is after the push, and the ten biggest things in it.
           ROOM=$(cat <<'EOSQL'

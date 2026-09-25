@@ -1,4 +1,5 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { ErrorReport } from './errors';
 import { CHUNK, World } from '../world/world';
 import { blankWorld, layChange, layHistory, layRows, rowsOf, type LandRow, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
@@ -2360,6 +2361,18 @@ export class Island {
    * has not heard of the settings yet goes on as it always did, with the
    * stores in and the rare not spared, and that is not worth a line in red.
    */
+  /**
+   * Something that went wrong in this browser, for the island to write down
+   * (`errors.ts`). Nothing waits on it and nothing is said if it does not
+   * arrive: a report about a failure that fails is not worth a second report.
+   */
+  reportError(r: ErrorReport): void {
+    void supabase().rpc('rpc_report_error', {
+      p_build: r.build, p_message: r.message, p_stack: r.stack ?? null,
+      p_place: r.place ?? null, p_world: this.info?.id ?? null,
+    }).then(() => undefined, () => undefined);
+  }
+
   async craftPrefs(fromStores: boolean, spareRare: boolean, quiet = false): Promise<void> {
     if (!this.info) return;
     const { error } = await supabase().rpc('rpc_craft_prefs', {

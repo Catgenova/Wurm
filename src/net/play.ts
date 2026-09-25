@@ -9,6 +9,7 @@ import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { saidWords } from '../game/roster';
 import { skillRises, tookOff } from './felt';
 import { packAll } from './packed';
+import { reportErrorsTo } from './errors';
 
 /**
  * Starting on an island that lives in Postgres rather than in this tab.
@@ -540,6 +541,9 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   );
   await island.refreshPack();
   await island.refreshPeople();
+  // Joined: what goes wrong in this browser from now on, and anything that
+  // already has, goes to the island to be written down.
+  reportErrorsTo((r) => island.reportError(r));
   return { game, island, id };
 }
 

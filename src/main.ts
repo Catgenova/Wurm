@@ -62,6 +62,7 @@ import { smeltSeconds } from './game/metal';
 import { needsIron } from './world/ore';
 import { tileUses } from './ui/tileinfo';
 import { startIsland } from './net/play';
+import { watchErrors } from './net/errors';
 import { mountSavingBanner } from './ui/saving';
 import type { Island } from './net/island';
 import { LOOK_TABLES, cleanLook, randomLook } from './game/look';
@@ -148,6 +149,8 @@ const boot = ((): { say: (text: string, at?: number, of?: number) => void; stop:
     },
   };
 })();
+// Before anything that could throw: what goes wrong from here on is written down (see `errors.ts`).
+watchErrors();
 const tellBoot = (text: string, done?: number, total?: number): void => boot.say(text, done, total);
 let started = null;
 let why = '';
