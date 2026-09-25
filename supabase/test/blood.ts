@@ -109,7 +109,7 @@ let fangedCommon = 0;
 let climbedPlain = 0;
 const topPlain = new Set(BY_TIER.fantastic.map((t) => t.id));
 for (let i = 0; i < foals; i++) {
-  const t = breedTraits(sire, dam, 100, 1, rand);
+  const t = breedTraits(sire, dam, 100, 1, rand).traits;
   if (t.length !== 3) bredShort++;
   if (new Set(t.map(familyOf)).size !== t.length) bredTwice++;
   if (t.includes('fanged_fantastic')) fangedTop++;

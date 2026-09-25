@@ -8,6 +8,7 @@ import {
   GATHER_VERB,
   growsAt,
   maxHealth,
+  pedigreeLine,
   SEX_NAMES,
   SPECIES,
   STANCE_NAMES,
@@ -97,6 +98,8 @@ export function creatureLines(g: Game, c: Creature): string[] {
     return t.tier === 'common' ? t.name : `${t.name} (${t.tier})`;
   }).filter(Boolean);
   if (traits.length) lines.push(`Traits: ${traits.join(', ')}`);
+  // Who it was bred from; anything not bred says nothing about it.
+  if (c.pedigree) lines.push(pedigreeLine(c.pedigree));
   if (c.due > 0) lines.push(`In calf · due in ${clockLeft(c.due - g.time)}`);
   return lines;
 }

@@ -16,7 +16,7 @@ import { keyX, keyY, tileKey } from './tileindex';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
 import type { WoundKind } from './wounds';
-import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel } from './traits';
+import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel, type TraitSource } from './traits';
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
@@ -31,6 +31,40 @@ export type CreatureMode = 'wild' | 'active' | 'deed' | 'stored';
 export type Sex = 'male' | 'female';
 export const SEX_NAMES: Record<Sex, string> = { male: 'male', female: 'female' };
 export const SEX_MARK: Record<Sex, string> = { male: '\u2642', female: '\u2640' };
+
+/** One of a young one's parents: its id, and its name as it was then, the sire's at the covering and the dam's at the birth. */
+export interface Parent {
+  id: number;
+  name: string;
+}
+
+/**
+ * A young one's pedigree: its dam, its sire, and where each trait it was born
+ * with came from. Only something bred has one; anything caught out of the
+ * wild, or born before pedigrees were kept, has none.
+ *
+ * Names as well as ids, because an island hands a dead creature's id to the
+ * next thing born there.
+ */
+export interface Pedigree {
+  dam: Parent;
+  sire: Parent;
+  /** Where each trait came from, by trait id. */
+  from: Record<string, TraitSource>;
+}
+
+/** What is coming, settled at the covering so no sire need survive to the birth. */
+export interface Unborn {
+  traits: string[];
+  sex: Sex;
+  /** The sire and where each trait came from; a covering made before pedigrees were kept has neither. */
+  sire?: Parent;
+  from?: Record<string, TraitSource>;
+}
+
+/** What a card and a tooltip say of a pedigree: "Dam Snow · sire Horn". */
+export const pedigreeLine = (p: Pedigree): string => `Dam ${p.dam.name} · sire ${p.sire.name}`;
+
 export type Stance = 'passive' | 'defensive' | 'aggressive';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
 export type GatherKind =
@@ -1755,6 +1789,12 @@ export interface IslandCreature {
   /** What the island says it is up to: `idle`, `out`, `work`, `home`, and the rest. */
   phase?: string;
   carrying?: { def: string; count?: number; ql?: number } | null;
+  /**
+   * Its dam, its sire and where each trait came from, for anything bred and
+   * for nothing else. Somebody else's says where a trait came from only for
+   * the traits you can read.
+   */
+  pedigree?: Pedigree;
 }
 
 /**
@@ -1800,7 +1840,9 @@ export interface Creature {
   /** Game time a carried young is due, or 0 for one that is not in calf. */
   due: number;
   /** What is coming, settled at the covering so no sire need survive to the birth. */
-  unborn: { traits: string[]; sex: Sex } | null;
+  unborn: Unborn | null;
+  /** Its dam, its sire and where each trait came from, if it was bred. */
+  pedigree: Pedigree | null;
   // Runtime state below; not saved.
   /**
    * The leg the island last said it was on, when the island is the one
@@ -1921,7 +1963,8 @@ export interface CreatureJSON {
   care?: number;
   bredAt?: number;
   due?: number;
-  unborn?: { traits: string[]; sex: Sex } | null;
+  unborn?: Unborn | null;
+  pedigree?: Pedigree | null;
   trade?: GatherKind | null;
   /**
    * The middle of its own ground. Saved, because a herd that scattered every
@@ -2222,6 +2265,7 @@ export class Creatures {
       bredAt: -1e9,
       due: 0,
       unborn: null,
+      pedigree: null,
       legFromX: x,
       legFromY: y,
       legToX: x,
@@ -2318,6 +2362,8 @@ export class Creatures {
       c.hunger = r.hunger ?? c.hunger;
       c.sex = (r.sex as Sex) ?? c.sex;
       c.traits = r.traits ?? c.traits;
+      // The island sends a pedigree with anything bred and with nothing else.
+      c.pedigree = r.pedigree ?? null;
       c.enemy = r.hunting ? 0 : null;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
@@ -4008,11 +4054,13 @@ export class Creatures {
   /**
    * Put two together. What the pairing throws is settled here and now, at the
    * covering, and carried by the dam: a sire that is sold, released or eaten
-   * before the hour comes has already had his say.
+   * before the hour comes has already had his say. So is his name, and where
+   * each trait came from, which the young one is born with as its pedigree.
    */
   pair(game: Game, dam: Creature, sire: Creature, husbandry: number): void {
     const care = (dam.care + sire.care) / 2;
-    dam.unborn = { traits: breedTraits(sire.traits, dam.traits, husbandry, care, game.rand), sex: game.rand() < 0.5 ? 'male' : 'female' };
+    const bred = breedTraits(sire.traits, dam.traits, husbandry, care, game.rand);
+    dam.unborn = { traits: bred.traits, sex: game.rand() < 0.5 ? 'male' : 'female', sire: { id: sire.id, name: sire.name }, from: bred.from };
     dam.due = game.time + GESTATION;
     dam.bredAt = game.time;
     sire.bredAt = game.time;
@@ -4056,6 +4104,13 @@ export class Creatures {
     const c = this.spawn(dam.species, at[0], at[1], mode, game.rand, game.time);
     c.traits = coming.traits;
     c.sex = coming.sex;
+    /*
+     * And its pedigree, for good: the dam as she is now, and the sire and
+     * where each trait came from as the covering wrote them down. A young one
+     * of a covering made before pedigrees were kept has none, rather than
+     * half of one.
+     */
+    c.pedigree = coming.sire ? { dam: { id: dam.id, name: dam.name }, sire: coming.sire, from: coming.from ?? {} } : null;
     c.hunger = 0.9;
     c.care = 0.5;
     c.health = maxHealth(c, def);
@@ -4669,6 +4724,7 @@ export class Creatures {
         bredAt: c.bredAt,
         due: c.due,
         unborn: c.unborn,
+        pedigree: c.pedigree,
         homeX: c.homeX,
         homeY: c.homeY,
         trade: c.trade,
@@ -4684,7 +4740,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, pedigree: j.pedigree ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

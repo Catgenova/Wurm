@@ -1,7 +1,7 @@
 import { clockLeft } from '../../game/boons';
 import { DAY_SECONDS } from '../../game/game';
-import { isShod, SHOE_DAYS, ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
-import { CHANNELS, isGain, pct, TIER_COLOUR, traitOf, type TraitChannel } from '../../game/traits';
+import { isShod, SHOE_DAYS, ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, pedigreeLine, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { CHANNELS, isGain, pct, TIER_COLOUR, TRAIT_SOURCES, traitOf, type TraitChannel } from '../../game/traits';
 import { TIER_LEVEL } from '../../game/husbandry';
 
 import type { Game } from '../../game/game';
@@ -353,13 +353,15 @@ export class WildermonPanel {
     const health = bar('Health', 'bar-health');
     const hunger = bar('Hunger', 'bar-hunger');
     const care = bar('Care', 'bar-care');
+    const pedigree = document.createElement('div');
+    pedigree.className = 'pal-pedigree';
     const bloodBox = document.createElement('div');
     bloodBox.className = 'pal-traits';
     const worthBox = document.createElement('div');
     worthBox.className = 'pal-worth';
     const info = document.createElement('div');
     info.className = 'pal-info';
-    card.append(health.row, hunger.row, care.row, bloodBox, worthBox, info);
+    card.append(health.row, hunger.row, care.row, pedigree, bloodBox, worthBox, info);
 
     const set = (el: { textContent: string | null; title: string }, text: string, title: string): void => {
       if (el.textContent !== text) el.textContent = text;
@@ -409,6 +411,11 @@ export class WildermonPanel {
       // as “a quarter”, which was a number written in prose and never checked.
       care.row.title = `${careWord(c.care)} \u2014 work and learning \u00d7${careMul(c).toFixed(2)} at this much care, up to \u00d7${(1 + CARE_BONUS).toFixed(2)} brushed to a shine, and it throws better young`;
 
+      // Who it was bred from, over the traits it had from them. Nothing at all
+      // for anything that was not bred, or was born before pedigrees were kept.
+      const bred = c.pedigree ? pedigreeLine(c.pedigree) : '';
+      if (pedigree.textContent !== bred) pedigree.textContent = bred;
+      pedigree.hidden = !bred;
       bloodBox.replaceChildren(...this.blood(c).childNodes);
       const w = this.worth(c);
       worthBox.replaceChildren(...(w ? [...w.childNodes] : []));
@@ -449,6 +456,10 @@ export class WildermonPanel {
    * read — it was in `effects` from the day the trait was written and the card
    * printed the prose and threw the number away, which is what made a page of
    * real multipliers read as flair.
+   *
+   * And on anything bred, where each came from: the dam, the sire, both, a
+   * fresh roll or bred up. Only on a trait you can read, by the same rule as
+   * its name, since where an unread trait came from is a clue to what it is.
    */
   private blood(c: Creature): HTMLDivElement {
     const row = document.createElement('div');
@@ -474,8 +485,17 @@ export class WildermonPanel {
           fig.textContent = `${pct(v)} ${ch.label}`;
           chip.append(' ', fig);
         }
+        const src = c.pedigree?.from?.[id];
+        const came = src && Object.hasOwn(TRAIT_SOURCES, src) ? TRAIT_SOURCES[src] : undefined;
+        if (came) {
+          const from = document.createElement('span');
+          from.className = 'trait-from';
+          from.textContent = came.label;
+          chip.append(' ', from);
+        }
         const says = CHANNELS.filter((ch) => t.effects[ch.id] !== undefined)
           .map((ch) => `${pct(t.effects[ch.id] as number)} ${ch.label}: ${ch.note}`);
+        if (came) says.push(`${came.label[0].toUpperCase()}${came.label.slice(1)}: ${came.means}.`);
         chip.title = `${t.tier}${t.aura ? ', communal: what it lifts, it lifts for every wildermon on the same deed or post, itself included' : ''}`
           + ` — ${t.note}\n${says.join('\n')}`;
       } else {
