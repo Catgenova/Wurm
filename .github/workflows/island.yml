@@ -1284,6 +1284,16 @@ jobs:
           npx esbuild supabase/test/reap.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/reap.mjs --log-level=error
           node node_modules/.cache/reap.mjs
+      - name: A cheaper stir
+        run: |
+          # The stir was 94% of a round on the live island: every round walked
+          # whatever was heading within 104 tiles of a body, against the 40 a
+          # browser is shown. Now a wild creature ten tiles off is walked every
+          # round and one seventy tiles off stands until somebody comes near;
+          # the tame there are still settled, every ten seconds.
+          npx esbuild supabase/test/stir.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/stir.mjs --log-level=error
+          node node_modules/.cache/stir.mjs
 
   migrate:
     name: Push the migrations to the project

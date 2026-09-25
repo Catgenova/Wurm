@@ -341,6 +341,31 @@ export const TICK_WORLDS = 20;
 export const TICK_PLAYERS = 200;
 
 /**
+ * How far past what a browser is shown the clock moves creatures every round.
+ *
+ * Each round sweeps a box round every body on an island, by where the
+ * creatures in it are heading. It was the box a browser reads plus
+ * LEG_SLACK -- 104 tiles each way against the 40 anybody is shown, six and
+ * a half times the ground -- and that was 94% of a round on the live island:
+ * 104.6 of 110.9 ms on average, 556 at the 95th percentile, on a clock that
+ * comes round every second. Now the box is what is shown plus this, every
+ * round. A wild creature further off than that from everybody stands where it
+ * is until somebody comes near, and then catches up in the legs it is owed:
+ * nothing that hunts notices anybody from further than its `notice`, twenty
+ * tiles at the most. Tame ones in the old box -- a settlement's workers, whose
+ * work counts whoever is watching, and crated ones -- are still settled, every
+ * STIR_COARSE_EVERY seconds.
+ */
+export const STIR_SLACK = 8;
+export const STIR_COARSE_EVERY = 10;
+/**
+ * How often a creature in a crate is settled. It was every round, like a
+ * companion, though a crated one never walks: its hunger and care are
+ * counted from the time that passed, whenever it is next looked at.
+ */
+export const STORED_SETTLE = 10;
+
+/**
  * Calls one person may make in a minute before the island stops listening.
  *
  * It has to carry the polls above with room to spare, and they moved. What one

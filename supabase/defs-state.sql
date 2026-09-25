@@ -3666,6 +3666,9 @@ create or replace function island_unvisited_keep() returns double precision lang
 create or replace function tick_worlds() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function tick_players() returns double precision language sql immutable as $fn$ select 200::double precision $fn$;
 create or replace function calls_a_minute() returns double precision language sql immutable as $fn$ select 480::double precision $fn$;
+create or replace function stir_slack() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function stir_coarse_every() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
+create or replace function stored_settle() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function walk_samples() returns double precision language sql immutable as $fn$ select 64::double precision $fn$;
 create or replace function sweep_every() returns double precision language sql immutable as $fn$ select 300::double precision $fn$;
 create or replace function sweep_rows() returns double precision language sql immutable as $fn$ select 50000::double precision $fn$;
