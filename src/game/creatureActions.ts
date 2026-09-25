@@ -1,6 +1,8 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { numberWord } from './words';
+import { GENTLE_HAND } from './meditation';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
@@ -59,7 +61,7 @@ export function tameChance(g: Game, c: Creature): number {
   if (!def || def.monster) return 0;
   const skill = g.skills.get('taming');
   const raw = def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coaxBonus(c, g.time) + g.soulBonus();
-  return Math.max(0, Math.min(0.95, raw * ageDef(c, g.time).tame * (g.walks('love', 3) ? 1.25 : 1)));
+  return Math.max(0, Math.min(0.95, raw * ageDef(c, g.time).tame * (g.walks('love', 3) ? GENTLE_HAND : 1)));
 }
 
 function nearPlayer(g: Game, c: Creature): boolean {
@@ -451,7 +453,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (def.defensive || g.rand() < 0.35) {
         g.player.attackedBy = c.id;
         g.player.attackedAt = g.time;
-        g.hurtPlayer(attackOf(c, def) * 0.012, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`, def.wound ?? 'bite');
+        g.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`, def.wound ?? 'bite');
       }
       // Keep swinging while it is still within reach.
       return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= meleeReach(g);
@@ -619,7 +621,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!SPECIES[c.species].mount) return 'Only a mount takes shoes.';
       if (!nearPlayer(g, c)) return `Stand next to ${c.name}.`;
       if (!ageDef(c, g.time).works) return `${c.name} is not grown. Nothing that young takes a shoe.`;
-      if (g.inventory.count('horseshoe') < SHOES_PER_MOUNT || !g.inventory.has('mallet')) return 'You need four horseshoes and a mallet.';
+      if (g.inventory.count('horseshoe') < SHOES_PER_MOUNT || !g.inventory.has('mallet')) return `You need ${numberWord(SHOES_PER_MOUNT)} horseshoes and a mallet.`;
       return null;
     },
     perform: (t, g) => {
@@ -628,7 +630,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const shoes = g.inventory.find('horseshoe');
       if (!shoes || !g.inventory.remove(shoes.uid, SHOES_PER_MOUNT)) return;
       c.shodAt = g.time;
-      g.logMsg(`You nail four shoes onto ${c.name}'s hooves. They will hold a week: quicker on stone, and up what it would have baulked at.`, 'event');
+      g.logMsg(`You nail ${numberWord(SHOES_PER_MOUNT)} shoes onto ${c.name}'s hooves. They will hold a week: quicker on stone, and up what it would have baulked at.`, 'event');
     },
   },
   {

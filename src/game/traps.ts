@@ -139,6 +139,11 @@ export const trapName = (t: PlacedTrap): string =>
 /** How often a set trap is rolled, in seconds. */
 export const CHECK_EVERY = 45;
 
+/** The chance a roll of a creel takes a fish, by how well it was woven. */
+export const creelOdds = (ql: number): number => TRAPS.creel.odds * (0.6 + Math.max(1, Math.min(100, ql)) / 250);
+/** And the chance, with each fish it takes, that the bait is worked out of it. */
+export const CREEL_BAIT_LOSS = 0.14;
+
 /** What it will hold, once the build quality is counted in. */
 export const trapHolds = (t: PlacedTrap): number => Math.round(trapDef(t).holds * (0.6 + clampQl(t.ql) / 250));
 
@@ -148,13 +153,17 @@ export const trapHolds = (t: PlacedTrap): number => Math.round(trapDef(t).holds 
  * which is the very thing you cannot walk up to, is the easiest of all to
  * take this way.
  */
+/** What a timid thing's chance of walking into a trap is multiplied by, and a hunter's. */
+export const TIMID_TRAPPED = 1.5;
+export const HUNTER_TRAPPED = 0.6;
+
 export function catchChance(t: PlacedTrap, c: Creature): number {
   const def = TRAPS[t.kind] ?? TRAPS.snare;
   const s = SPECIES[c.species];
   if (!s) return 0;
   const quality = 0.5 + clampQl(t.ql) / 140;
   const wary = Math.max(0.15, 1 - s.tameLevel / (trapHolds(t) * 1.8));
-  const timid = s.timid ? 1.5 : s.hunter ? 0.6 : 1;
+  const timid = s.timid ? TIMID_TRAPPED : s.hunter ? HUNTER_TRAPPED : 1;
   return Math.min(0.9, def.odds * quality * wary * timid);
 }
 

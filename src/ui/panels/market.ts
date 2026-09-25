@@ -1,6 +1,6 @@
 import { LETTER_MAX, type Deal, type Good, type Island, type Occupant, type Parcel, type Stall } from '../../net/island';
 import type { Game } from '../../game/game';
-import { itemDef, itemName, type Item } from '../../game/items';
+import { billWords, itemName, type Item } from '../../game/items';
 import { furnitureDef } from '../../game/furniture';
 import { SPECIES } from '../../game/creatures';
 import { priceWords, purse } from '../../game/money';
@@ -128,7 +128,7 @@ export class MarketPanel {
   private draw(): void {
     this.page.replaceChildren();
     if (!this.island) {
-      this.say('There is one person on this island, and every one of these wants two. '
+      this.say('There is one person on this island, and every one of these wants somebody else. '
         + 'The board, deals, stalls and the post are for an island with other people on it.');
       return;
     }
@@ -247,7 +247,8 @@ export class MarketPanel {
      */
     const stalls = this.market.stalls.filter((st) => st.mine);
     if (!stalls.length) {
-      this.say(`You have no stall. Nail one up — ${billOf('stall')} — and stand it somewhere people walk past.`);
+      this.say(`You have no stall. Nail one up — ${billWords(furnitureDef('stall').bill)} — `
+        + 'and stand it somewhere people walk past.');
       return;
     }
     for (const st of stalls) {
@@ -415,8 +416,3 @@ const nameOf = (t: { def: string; extra: string | null; ql: number; count: numbe
 const speciesName = (id: string): string => (SPECIES[id]?.name ?? id).toLowerCase();
 const goodName = (g: Good): string => (g.count > 1 ? `${g.count} × ${nameOf(g)}` : nameOf(g));
 
-/** What a piece is built of, read off its bill: "12 × plank, 4 × timber, 4 × cloth and 26 × nails". */
-const billOf = (id: string): string => {
-  const parts = furnitureDef(id).bill.map(([item, n]) => `${n} × ${itemDef(item).name.toLowerCase()}`);
-  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] ?? 'nothing';
-};

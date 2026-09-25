@@ -84,12 +84,8 @@ export interface TitleDef {
 /** Every title there is: four to a trade, in the order they come. */
 export const TITLES: TitleDef[] = SKILL_DEFS.filter((d) => NAMES[d.id]).flatMap((d) => {
   const [lesser, greater] = NAMES[d.id];
-  return [
-    { id: `${d.id}:50`, skill: d.id, at: 50, name: lesser },
-    { id: `${d.id}:70`, skill: d.id, at: 70, name: greater },
-    { id: `${d.id}:90`, skill: d.id, at: 90, name: `Master ${greater}` },
-    { id: `${d.id}:99`, skill: d.id, at: 99, name: `Legendary ${greater}` },
-  ];
+  const names = [lesser, greater, `Master ${greater}`, `Legendary ${greater}`];
+  return TITLE_STEPS.map((at, i) => ({ id: `${d.id}:${at}`, skill: d.id, at, name: names[i] }));
 });
 export const TITLE_BY_ID = new Map(TITLES.map((t) => [t.id, t]));
 /** The titles a given skill can earn, lowest first. */

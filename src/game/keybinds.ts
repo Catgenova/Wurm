@@ -18,6 +18,15 @@
  * made on one layout still lands under the same finger on another.
  */
 
+import { SIDE_NAMES } from './building';
+import { NODES_PER_TRADE } from './classes';
+import { TURNS } from '../render/view';
+import { capital, numberWord, share } from './words';
+
+/** What a turn key turns by: the view one of its viewpoints, a piece being set down one of its sides. */
+const VIEW_TURN = share(1 / TURNS);
+const PIECE_TURN = share(1 / Object.keys(SIDE_NAMES).length);
+
 /** What a key can be set to do. */
 export interface BindDef {
   id: string;
@@ -43,8 +52,8 @@ export const BINDS: BindDef[] = [
   { id: 'pan_left', label: 'Push the view left', hint: 'As above.', group: 'Moving the view', keys: ['KeyA', 'ArrowLeft'] },
   { id: 'pan_right', label: 'Push the view right', hint: 'As above.', group: 'Moving the view', keys: ['KeyD', 'ArrowRight'] },
   { id: 'centre', label: 'Centre on yourself', hint: 'Bring the view back to your own feet and have it follow again.', group: 'Moving the view', keys: ['KeyC'] },
-  { id: 'turn_left', label: 'Turn the view left', hint: 'A quarter turn. The compass shows where north went. While something is being set down, it turns that instead.', group: 'Moving the view', keys: ['KeyQ'] },
-  { id: 'turn_right', label: 'Turn the view right', hint: 'A quarter turn the other way, of the view or of what is being set down.', group: 'Moving the view', keys: ['KeyE'] },
+  { id: 'turn_left', label: 'Turn the view left', hint: `${capital(VIEW_TURN)} of a turn. The compass shows where north went. While something is being set down, it turns that instead, ${PIECE_TURN} of a turn at a time.`, group: 'Moving the view', keys: ['KeyQ'] },
+  { id: 'turn_right', label: 'Turn the view right', hint: 'The same the other way, of the view or of what is being set down.', group: 'Moving the view', keys: ['KeyE'] },
   { id: 'zoom_in', label: 'Zoom in', hint: 'The same as scrolling up, for a hand that is not on the mouse.', group: 'Moving the view', keys: ['Equal', 'NumpadAdd'] },
   { id: 'zoom_out', label: 'Zoom out', hint: 'The same as scrolling down.', group: 'Moving the view', keys: ['Minus', 'NumpadSubtract'] },
   { id: 'storey_up', label: 'Look at the storey above', hint: 'Inside a building with more than one floor.', group: 'Moving the view', keys: ['PageUp'] },
@@ -56,7 +65,7 @@ export const BINDS: BindDef[] = [
   { id: 'win_craft', label: 'Crafting', hint: 'Everything you could make with what you have.', group: 'Windows', keys: ['KeyR'] },
   { id: 'win_tile', label: 'Tile', hint: 'Everything you could do to whatever you last clicked.', group: 'Windows', keys: ['KeyT'] },
   { id: 'win_skills', label: 'Skills', hint: 'What you know and how well.', group: 'Windows', keys: ['KeyK'] },
-  { id: 'win_trades', label: 'Trades', hint: 'The trade you have taken up, the nine nodes behind it, and its rite.', group: 'Windows', keys: ['KeyF'] },
+  { id: 'win_trades', label: 'Trades', hint: `The trade you have taken up, the ${numberWord(NODES_PER_TRADE)} nodes behind it, and its rite.`, group: 'Windows', keys: ['KeyF'] },
   { id: 'win_tracker', label: 'Tracker', hint: 'The few trades you are watching today, with a bar apiece.', group: 'Windows', keys: ['KeyV'] },
   { id: 'win_events', label: 'Event log', hint: 'What has been happening, and the box you talk in.', group: 'Windows', keys: ['KeyL'] },
   { id: 'win_map', label: 'Map', hint: 'The island as far as you have seen it.', group: 'Windows', keys: ['KeyM'] },
@@ -85,6 +94,8 @@ export const BINDS: BindDef[] = [
 ];
 
 export const BIND_BY_ID = new Map(BINDS.map((b) => [b.id, b]));
+/** The key a thing answers to out of the box, for a line said before anybody could have changed it. */
+export const defaultKey = (id: string): string => keyName(BIND_BY_ID.get(id)?.keys[0] ?? '');
 /** The most keys any one thing answers to. */
 export const MAX_KEYS = 2;
 

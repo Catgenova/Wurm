@@ -68,6 +68,12 @@ const ORE_LADDER: Array<[yields: string, upTo: number]> = [
   ['iron_ore', 0.16],
 ];
 
+/** The share of every seam on the island that gives up this. */
+export const seamShare = (yields: string): number => {
+  const i = ORE_LADDER.findIndex(([y]) => y === yields);
+  return i < 0 ? 0 : (ORE_LADDER[i][1] - (i ? ORE_LADDER[i - 1][1] : 0)) / ORE_LADDER[ORE_LADDER.length - 1][1];
+};
+
 /** Keyed by what the seam gives up, so inserting a metal cannot shuffle the ladder. */
 const ORE_CHANCE: Array<[kind: number, upTo: number]> = ORE_LADDER.map(([yields, upTo]) => [ROCK_VARIANTS.findIndex((r) => r.yields === yields), upTo]);
 

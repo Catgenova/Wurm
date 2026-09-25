@@ -88,7 +88,7 @@ export const TIER_COLOUR: Record<TraitTier, string> = {
 const PLAIN_TRAITS: TraitDef[] = [
   // ---- Common: a few percent apiece, and most of what the wild holds. ----
   { id: 'light_footed', name: 'light-footed', tier: 'common', effects: { speed: 1.08 }, note: 'It picks its way quickly.' },
-  { id: 'willing', name: 'willing', tier: 'common', effects: { work: 1.08 }, note: 'It sets to work without being asked twice.' },
+  { id: 'willing', name: 'willing', tier: 'common', effects: { work: 1.08 }, note: 'It gets on with the work.' },
   { id: 'curious', name: 'curious', tier: 'common', effects: { learn: 1.12 }, note: 'It watches what it is doing and takes something from it.' },
   { id: 'broad_backed', name: 'broad-backed', tier: 'common', effects: { haul: 1.12 }, note: 'It carries and pulls more than its size says.' },
   { id: 'thrifty', name: 'thrifty', tier: 'common', effects: { appetite: 0.92 }, note: 'A cheap thing to keep.' },
@@ -116,7 +116,7 @@ const PLAIN_TRAITS: TraitDef[] = [
   { id: 'quick_witted', name: 'quick-witted', tier: 'supreme', effects: { learn: 1.6 }, note: 'Show it once.' },
   { id: 'lead_beast', name: 'lead beast', tier: 'supreme', effects: { work: 1.16 }, aura: true, note: 'The whole herd works to its pace.' },
   { id: 'strong_shouldered', name: 'strong-shouldered', tier: 'supreme', effects: { haul: 1.6, tough: 1.2 }, note: 'Put it in front of anything.' },
-  { id: 'fine_fleeced', name: 'fine-fleeced', tier: 'supreme', effects: { grow: 1.9, yield: 1.2 }, note: 'What comes off it is worth twice what comes off the rest.' },
+  { id: 'fine_fleeced', name: 'fine-fleeced', tier: 'supreme', effects: { grow: 1.9, yield: 1.2 }, note: 'Its fleece comes back quickly, and there is more of it.' },
 
   // ---- Fantastic: half again and better. A herd may hold one. ----
   { id: 'windborn', name: 'windborn', tier: 'fantastic', effects: { speed: 1.65, range: 1.2 }, note: 'It moves like weather.' },
@@ -180,13 +180,13 @@ export const FIGHTING: FightingTraitDef[] = [
   { id: 'low_slung', name: 'low-slung', gains: { evade: 0.1 }, note: 'It goes under what was meant for it.' },
   { id: 'sharp_eyed', name: 'sharp-eyed', gains: { evade: 0.09 }, note: 'Nothing gets to it unseen.' },
   // How quickly its blows come.
-  { id: 'quick_jawed', name: 'quick-jawed', gains: { haste: 0.1 }, note: 'It bites twice where another bites once.' },
+  { id: 'quick_jawed', name: 'quick-jawed', gains: { haste: 0.1 }, note: 'Its blows come quicker than another\'s.' },
   { id: 'snappish', name: 'snappish', gains: { haste: 0.11 }, note: 'It does not wait to be sure.' },
   { id: 'twitchy', name: 'twitchy', gains: { haste: 0.08, evade: 0.03 }, note: 'Never still, and never where it was.' },
   { id: 'sudden', name: 'sudden', gains: { haste: 0.1 }, note: 'It is on you before you have decided about it.' },
   { id: 'wild_eyed', name: 'wild-eyed', gains: { haste: 0.09, tough: 0.03 }, note: 'Something in it does not know when to stop.' },
   // How fast its wounds close.
-  { id: 'quick_healing', name: 'quick-healing', gains: { mend: 0.12 }, note: 'It closes in a day what would lay another up for a week.' },
+  { id: 'quick_healing', name: 'quick-healing', gains: { mend: 0.12 }, note: 'Its wounds close quicker than another\'s.' },
   { id: 'clean_blooded', name: 'clean-blooded', gains: { mend: 0.1 }, note: 'Its wounds do not go bad.' },
   { id: 'hard_to_kill', name: 'hard to kill', gains: { mend: 0.08, hardy: 0.04 }, note: 'It has been left for dead before.' },
   // And two that fight for the herd.

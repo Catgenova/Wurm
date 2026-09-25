@@ -33,8 +33,8 @@ const SORTS: Array<[SortKey, string]> = [
  * the cards never said which ones they were, so the count sent you looking
  * through the herd by eye. One definition, read by both, so they cannot drift.
  */
-const HURT_AT = 0.6;
-const HUNGRY_AT = 0.3;
+export const HURT_AT = 0.6;
+export const HUNGRY_AT = 0.3;
 
 /** Your tamed wildermon with their condition, progress and actions. Wild ones are not listed. */
 export class WildermonPanel {

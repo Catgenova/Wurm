@@ -44,6 +44,7 @@ import { materialOfItem } from './materials';
 import { boonOf } from './boons';
 import { SKILL_DEFS } from './skills';
 import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine } from './items';
+import { numberWord } from './words';
 import { knackable, RECIPE_ACTIONS } from './recipes';
 
 /**
@@ -386,6 +387,24 @@ export function needsFlattening(g: Game, x: number, y: number): boolean {
  */
 export const MINE_COLLAPSE = 1 / 30;
 
+/** Bundles of mixed grass a cut gives. */
+export const GRASS_PER_CUT = 2;
+
+/** Quality nothing is repaired below: a thing mended often enough is finished in the end. */
+export const REPAIR_FLOOR = 1;
+/**
+ * One go of repair at this skill: the damage it takes out, and the quality
+ * it costs for every point of damage taken out.
+ */
+export const repairGo = (skill: number): { healed: number; cost: number } => ({
+  healed: 1.2 + skill * 0.1,
+  cost: Math.max(0.004, 0.03 - skill * 0.00026),
+});
+
+/** Fruit a picking takes off a tree in bearing and off an old one, at middling forestry. */
+export const FRUIT_MATURE = 3;
+export const FRUIT_OLD = 5;
+
 /**
  * How deep the water over a face may be and still be worked, in height units.
  *
@@ -427,7 +446,9 @@ export const CHIP_CHANCE = 0.25;
 
 
 /** How far a prospector reads the ground: one tile further every ten levels. */
-export const prospectRadius = (skill: number): number => 3 + Math.floor(skill / 10);
+export const PROSPECT_REACH = 3;
+export const PROSPECT_STEP = 10;
+export const prospectRadius = (skill: number): number => PROSPECT_REACH + Math.floor(skill / PROSPECT_STEP);
 
 function maxDigSlope(g: Game): number {
   return Math.max(40, Math.floor(g.skills.get('digging') * 3));
@@ -1307,7 +1328,7 @@ export const ACTIONS: ActionDef[] = [
       // very old one as much as an old one.
       const old = treeVariant(data) === 2 || treeVariant(data) === 4;
       const skill = g.skills.get('forestry');
-      const count = Math.max(1, Math.round((old ? 5 : 3) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
+      const count = Math.max(1, Math.round((old ? FRUIT_OLD : FRUIT_MATURE) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
       const made = g.gather(def.fruit, { count, ql: g.productQl('forestry'), });
       g.markForaged(t.x, t.y, 'forage');
       g.gainSkill('forestry', 0.35);
@@ -1736,7 +1757,7 @@ export const ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.uid);
       if (!item) return 'It is gone.';
       if (item.dmg <= 0) return 'There is nothing wrong with it.';
-      if (item.ql <= 1) return 'It is worn away to nothing and will not take another repair.';
+      if (item.ql <= REPAIR_FLOOR) return 'It is worn away to nothing and will not take another repair.';
       return null;
     },
     perform: (t, g) => {
@@ -1745,11 +1766,10 @@ export const ACTIONS: ActionDef[] = [
       if (!item || item.dmg <= 0) return;
       // A second's work: some of the damage comes out, and a little of the quality
       // with it — a little, not much, so mending a thing is not the end of it.
-      const skill = g.skills.get('repair');
-      const healed = Math.min(item.dmg, 1.2 + skill * 0.1);
-      const lost = healed * Math.max(0.004, 0.03 - skill * 0.00026);
+      const go = repairGo(g.skills.get('repair'));
+      const healed = Math.min(item.dmg, go.healed);
       item.dmg = Math.max(0, item.dmg - healed);
-      item.ql = Math.max(1, item.ql - lost);
+      item.ql = Math.max(REPAIR_FLOOR, item.ql - healed * go.cost);
       g.events.emit('inventory');
       g.gainSkill('repair', 0.25);
       if (item.dmg <= 0) {
@@ -2132,17 +2152,17 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'grass');
-      g.gather('mixed_grass', { count: 2, ql: g.productQl('foraging') });
+      g.gather('mixed_grass', { count: GRASS_PER_CUT, ql: g.productQl('foraging') });
       // Grass kept cut on a deed becomes lawn: the tile counts the days.
       const w = g.world;
       if (w.getTile(t.x, t.y) === TileType.Grass && g.onDeed(t.x, t.y)) {
         const days = mownDays(w.getData(t.x, t.y));
         w.setTile(t.x, t.y, TileType.Grass, days | MOWN_TODAY);
         const left = LAWN_AFTER - days - 1;
-        g.logMsg(`You cut two bundles of mixed grass.${left > 0 ? ` Kept cut, this will be lawn in ${left} more day${left === 1 ? '' : 's'}.` : ' Kept cut, this will be lawn tomorrow.'}`, 'event');
+        g.logMsg(`You cut ${numberWord(GRASS_PER_CUT)} bundles of mixed grass.${left > 0 ? ` Kept cut, this will be lawn in ${left} more day${left === 1 ? '' : 's'}.` : ' Kept cut, this will be lawn tomorrow.'}`, 'event');
         return;
       }
-      g.logMsg('You cut two bundles of mixed grass.', 'event');
+      g.logMsg(`You cut ${numberWord(GRASS_PER_CUT)} bundles of mixed grass.`, 'event');
     },
   },
   {

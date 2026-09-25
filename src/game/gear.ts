@@ -1,8 +1,9 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { JEWEL_PIECES } from './gems';
-import { itemDef, rarityOf, type Item } from './items';
+import { describeFrom, itemDef, rarityOf, type Item } from './items';
 import { matOf } from './materials';
+import { HARD_HANDS } from './meditation';
 
 /**
  * What you wear and what you swing. Armour is worn a piece to a slot and only
@@ -169,6 +170,8 @@ export const WEAPONS: WeaponDef[] = [
 ];
 
 export const WEAPON_BY_ID = new Map(WEAPONS.map((w) => [w.id, w]));
+// A bow says how far it reaches, what it hits for and how often, off the bow.
+for (const w of WEAPONS) describeFrom(w.id, w);
 export const isWeapon = (id: string): boolean => WEAPON_BY_ID.has(id);
 export const isBow = (id: string): boolean => !!WEAPON_BY_ID.get(id)?.ammo;
 export const isThrown = (id: string): boolean => !!WEAPON_BY_ID.get(id)?.thrown;
@@ -225,8 +228,8 @@ export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number
   const wear = item ? Math.max(0.4, 1 - item.dmg / 150) : 1;
   const body = 0.7 + g.skills.get('body_strength') / 90;
   const edge = item ? matOf(item.extra).edge * rarityOf(item).boost : 1;
-  // The plain path hits a sixth harder, and a fury twice as hard again.
-  const might = (g.walks('power', 3) ? 1.16 : 1) * g.furyMult();
+  // The plain path hits harder, and a fury harder again.
+  const might = (g.walks('power', 3) ? HARD_HANDS : 1) * g.furyMult();
   return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might;
 }
 

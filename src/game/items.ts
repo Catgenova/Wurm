@@ -1,6 +1,10 @@
 import { matOfItem, workingQl } from './materials';
-import { MOULDS } from './metal';
+import { COINS_PER_LUMP, MOULDS, RARE_LUMP_FACTOR } from './metal';
 import { dyeWord } from './dyestuffs';
+import { WALL_TYPES } from './building';
+import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
+import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
+import { article, fill, listed, numberWord } from './words';
 
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
 
@@ -76,6 +80,8 @@ export const isWorked = (id: string): boolean => {
 
 /** Ground decay per hour by category: food rots in about half an hour, tools last most of a day. */
 export const CATEGORY_DECAY: Record<ItemCategory, number> = { food: 200, plant: 100, material: 25, tool: 12, misc: 12 };
+/** What a settlement does to the rot of everything lying on its land: a tenth of the pace in the wild. */
+export const DEED_DECAY = 0.1;
 
 export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel: { name: 'Shovel', category: 'tool', weight: 3, description: 'A shovel for digging, flattening and packing dirt.' },
@@ -84,33 +90,33 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   sickle: { name: 'Sickle', category: 'tool', weight: 1.5, description: 'A curved blade on a short handle. The forester\'s own: it prunes a tree back a stage and cuts what a bush has on it.' },
   carving_knife: { name: 'Carving knife', category: 'tool', weight: 0.5, description: 'A knife for carving wood.' },
   chisel: { name: 'Stone chisel', category: 'tool', weight: 1, description: 'A chisel for shaping stone.' },
-  quern: { name: 'Quern', category: 'tool', weight: 9, description: 'Two dressed millstones, one turning on the other. Grinds grain into flour and nothing else.' },
+  quern: { name: 'Quern', category: 'tool', weight: 9, description: 'Dressed millstones, one turning on the other. Grinds wheat into flour and corn into cornmeal, and presses olives into oil and fruit into juice or cider.' },
   whetstone: { name: 'Whetstone', category: 'tool', weight: 1.2, description: 'A shaped block of stone. Takes the burr off metal and puts an edge back on it; needed to improve anything metal or stone.' },
   file: { name: 'File', category: 'tool', weight: 0.8, description: 'Cast at an anvil and cut with teeth. Needed to improve anything metal or wooden.' },
-  hinge: { name: 'Hinges', category: 'material', weight: 0.5, stackable: true, decay: 1, description: 'Two to a lump. Nothing swings without them: a door takes two, a double door four, a gate two.' },
-  bracket: { name: 'Brackets', category: 'material', weight: 0.25, stackable: true, decay: 1, description: 'Four to a lump. Bind a gate in them and it holds against everything that is not a person.' },
-  hinge_mould: { name: 'Hinge mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, two hinges to a filling. It wears a little every time it is filled, and no mould can be mended.' },
-  bracket_mould: { name: 'Bracket mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, four brackets to a filling. It wears a little every time it is filled, and no mould can be mended.' },
+  hinge: { name: 'Hinges', category: 'material', weight: 0.5, stackable: true, decay: 1, description: '{per:W} to a lump. Nothing swings without them: a door takes {wall.door.hinge:w}, a double door {wall.double_door.hinge:w}, a gate {wall.fence_gate.hinge:w}.' },
+  bracket: { name: 'Brackets', category: 'material', weight: 0.25, stackable: true, decay: 1, description: '{per:W} to a lump. Bind a gate in {wall.iron_gate.bracket:w} of them and it holds against everything that is not a person.' },
+  hinge_mould: { name: 'Hinge mould', category: 'tool', weight: 1.2, decay: 1 },
+  bracket_mould: { name: 'Bracket mould', category: 'tool', weight: 1.2, decay: 1 },
   gem: { name: 'Gem', category: 'material', weight: 0.05, stackable: true, raw: true, description: 'A stone out of the rock, worth cutting. A jeweller sets it in a ring or a pendant, and worn it favours one trade in the wearer.' },
-  ring: { name: 'Ring', category: 'material', weight: 0.05, stackable: true, decay: 1, description: 'A plain band, two to a lump. It wants a stone.' },
-  pendant: { name: 'Pendant', category: 'material', weight: 0.1, stackable: true, decay: 1, description: 'A plain drop on a loop, two to a lump. It wants a stone.' },
-  ring_mould: { name: 'Ring mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, two rings to a filling. It wears a little every time it is filled, and no mould can be mended.' },
-  pendant_mould: { name: 'Pendant mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, two pendants to a filling. It wears a little every time it is filled, and no mould can be mended.' },
+  ring: { name: 'Ring', category: 'material', weight: 0.05, stackable: true, decay: 1, description: 'A plain band, {per:w} to a lump. It wants a stone.' },
+  pendant: { name: 'Pendant', category: 'material', weight: 0.1, stackable: true, decay: 1, description: 'A plain drop on a loop, {per:w} to a lump. It wants a stone.' },
+  ring_mould: { name: 'Ring mould', category: 'tool', weight: 1.2, decay: 1 },
+  pendant_mould: { name: 'Pendant mould', category: 'tool', weight: 1.2, decay: 1 },
   focus: { name: 'Focus', category: 'tool', weight: 0.3, description: 'A cut stone in a silver claw. A spell is cast out of it, and casting wears it away; when it is gone it is gone.' },
   jewelled_ring: { name: 'Jewelled ring', category: 'misc', weight: 0.06, decay: 1, description: 'A band with a stone set in it. Worn, the stone favours its trade in you, a knack\'s worth, for as long as it is on your hand.' },
   jewelled_pendant: { name: 'Jewelled pendant', category: 'misc', weight: 0.12, decay: 1, description: 'A drop with a stone set in it, on a loop. Worn, the stone favours its trade in you, a knack\'s worth, for as long as it hangs there.' },
-  horseshoe: { name: 'Horseshoes', category: 'material', weight: 0.25, stackable: true, decay: 1, description: 'Four to a lump. Nailed onto a mount by a farrier with a mallet, they hold a week of riding: quicker on stone, and up what it would have baulked at.' },
-  horseshoe_mould: { name: 'Horseshoe mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould, four shoes to a filling. It wears a little every time it is filled, and no mould can be mended.' },
-  coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is twenty coins. It wears with every strike.' },
-  coin_die_mould: { name: 'Coin die mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
+  horseshoe: { name: 'Horseshoes', category: 'material', weight: 0.25, stackable: true, decay: 1, description: '{per:W} to a lump and {shoes.perMount:w} to a mount, nailed on by a farrier with a mallet. They hold for {shoes.days:w} days: {shoes.quicker:share} quicker on laid stone, and a step {shoes.step} height units steeper.' },
+  horseshoe_mould: { name: 'Horseshoe mould', category: 'tool', weight: 1.2, decay: 1 },
+  coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is {coinsPerLump:w} coins. It wears with every strike.' },
+  coin_die_mould: { name: 'Coin die mould', category: 'tool', weight: 1.2, decay: 1 },
   // What a poured mould cools into, named for its piece by `itemName` and
   // stacked by it: a shovel head casting is not a hatchet head casting.
   casting: { name: 'Casting', category: 'material', weight: 1, stackable: true, decay: 3, description: 'Metal poured into a mould at a smelter and cooled: the rough shape of a piece, wanting an anvil to beat it true.' },
-  bell_casting: { name: 'Bell casting', category: 'misc', weight: 16, description: 'A bell cast whole, tongue and all, wanting a frame to hang in. Eight lumps went into it.' },
+  bell_casting: { name: 'Bell casting', category: 'misc', weight: 16, description: 'A bell cast whole, tongue and all, wanting a frame to hang in. {lumps:W} lumps went into it.' },
   statue_casting: { name: 'Statue casting', category: 'misc', weight: 24, description: 'A figure cast whole in a big mould. Set it on a slab and it stands.' },
   bell_mould: { name: 'Bell mould', category: 'tool', weight: 3, decay: 1, description: 'A sand mould, big enough for a bell. It wears a little every time it is filled, and no mould can be mended.' },
   statue_mould: { name: 'Statue mould', category: 'tool', weight: 4, decay: 1, description: 'A sand mould the size of a person. It wears a little every time it is filled, and no mould can be mended.' },
-  coin: { name: 'Coins', category: 'misc', weight: 0.005, stackable: true, description: 'Struck from a lump of silver or gold under a die, twenty to the lump. Metal that goes in a pocket, and comes back out of the fire as a lump.' },
+  coin: { name: 'Coins', category: 'misc', weight: 0.005, stackable: true, description: 'Struck from a lump of silver or gold under a die, {coinsPerLump:w} to the lump. Metal that goes in a pocket, and comes back out of the fire as a lump.' },
   needle: { name: 'Needle', category: 'tool', weight: 0.05, description: 'Carved from bone. Needed to improve cloth and leather.' },
   awl: { name: 'Awl', category: 'tool', weight: 0.2, description: 'A bone spike for punching holes in hide. Needed to improve leather.' },
   mallet: { name: 'Mallet', category: 'tool', weight: 1.5, description: 'Plans buildings and drives wooden walls together.' },
@@ -128,9 +134,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   club: { name: 'Club', category: 'tool', weight: 2.5, description: 'A shaped length of oak. The first weapon anybody makes.' },
   maul: { name: 'Maul', category: 'tool', weight: 5, description: 'A block of metal on a long shaft. Chain and plate care very little; ribs care a great deal.' },
   spear: { name: 'Spear', category: 'tool', weight: 2.2, description: 'Reaches a tile further than anything else in the hand.' },
-  short_bow: { name: 'Short bow', category: 'tool', weight: 1, description: 'Six tiles, and quick to draw.' },
-  medium_bow: { name: 'Medium bow', category: 'tool', weight: 1.4, description: 'Nine tiles. The bow most people settle on.' },
-  long_bow: { name: 'Long bow', category: 'tool', weight: 1.8, description: 'Thirteen tiles and a heavy draw. Takes an age to pull and ends most things at the end of it.' },
+  short_bow: { name: 'Short bow', category: 'tool', weight: 1, description: '{range:W} tiles, {damage} damage before skill and quality, and a shot every {swing} seconds.' },
+  medium_bow: { name: 'Medium bow', category: 'tool', weight: 1.4, description: '{range:W} tiles, {damage} damage before skill and quality, and a shot every {swing} seconds.' },
+  long_bow: { name: 'Long bow', category: 'tool', weight: 1.8, description: '{range:W} tiles, {damage} damage before skill and quality, and a shot every {swing} seconds.' },
   helm: { name: 'Helm', category: 'tool', weight: 3, description: 'Turns aside much of what a cornered animal can do to you.' },
   wool_cap: { name: 'Wool cap', category: 'tool', weight: 0.4, description: 'A thick felted cap. Not a helm, but far better than a bare head.' },
   // Cloth armour: light, quiet and better than nothing.
@@ -163,9 +169,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   clay_bowl: { name: 'Clay bowl', category: 'tool', weight: 0.6, description: 'A fired bowl. Stews and compotes are cooked in it over a campfire.' },
   clay_pot: { name: 'Clay pot', category: 'tool', weight: 1.2, description: 'A deep fired pot. A pottage simmers in it over a campfire and feeds you for half a day.' },
   clay_jar: { name: 'Clay jar', category: 'tool', weight: 0.8, description: 'A fired jar with a close lid. Fruit put up in one keeps far longer than fruit that is not.' },
-  deed_stake: { name: 'Deed stake', category: 'misc', weight: 1, decay: 4, description: 'A shaft whittled to a point and notched for a claim. Plant it to found a settlement where you stand: 11 by 11 tiles around a token. You may hold one deed at a time.' },
-  crate_log: { name: 'Log crate', category: 'misc', weight: 30, decay: 6, description: 'A rough crate that holds 30 things. Place it on any spot of a tile.' },
-  crate_plank: { name: 'Plank crate', category: 'misc', weight: 15, decay: 6, description: 'A neat crate that holds 60 things. Place it on any spot of a tile.' },
+  deed_stake: { name: 'Deed stake', category: 'misc', weight: 1, decay: 4, description: 'A shaft whittled to a point and notched for a claim. Plant it to found a settlement where you stand: {deedAcross} by {deedAcross} tiles around a token. You may hold one deed at a time.' },
+  crate_log: { name: 'Log crate', category: 'misc', weight: 30, decay: 6, description: 'A rough crate that holds {capacity} things. Place it on any spot of a tile.' },
+  crate_plank: { name: 'Plank crate', category: 'misc', weight: 15, decay: 6, description: 'A neat crate that holds {capacity} things. Place it on any spot of a tile.' },
   water_skin: { name: 'Water skin', category: 'misc', weight: 0.5, drink: 0.35, charges: 5, description: 'Holds water for the road. Fill it at any shore.' },
   bucket: { name: 'Bucket', category: 'tool', weight: 1.6, decay: 8, description: 'A wooden bucket. Fill it at any shore; ashes and water make lye in it.' },
   water_bucket: { name: 'Bucket of water', category: 'tool', weight: 6, decay: 8, description: 'Water enough to leach ashes into lye.' },
@@ -221,8 +227,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lead_lump: { name: 'Lead lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   silver_lump: { name: 'Silver lump', category: 'material', weight: 0.1, stackable: true, decay: 1 },
   gold_lump: { name: 'Gold lump', category: 'material', weight: 0.1, stackable: true, decay: 1 },
-  adamantine_lump: { name: 'Adamantine lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5, description: 'A blue-grey metal that turns a hatchet edge. Twenty kilograms of ore give a tenth of this.' },
-  glimmersteel_lump: { name: 'Glimmersteel lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5, description: 'Pale metal that holds a light of its own. Twenty kilograms of ore give a tenth of this.' },
+  adamantine_lump: { name: 'Adamantine lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5, description: 'A blue-grey metal that turns a hatchet edge. A lump weighs {grams:w} grams, so a mould takes {rareLumps:times} the lumps it takes of iron.' },
+  glimmersteel_lump: { name: 'Glimmersteel lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5, description: 'Pale metal that holds a light of its own. A lump weighs {grams:w} grams, so a mould takes {rareLumps:times} the lumps it takes of iron.' },
   mithril_lump: { name: 'Mithril lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5 },
   seryll_lump: { name: 'Seryll lump', category: 'material', weight: 0.1, stackable: true, decay: 0.5, description: 'The rarest metal in the rock, and the hardest won.' },
   // Alloys, mixed in a smelter.
@@ -232,25 +238,25 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   pewter_lump: { name: 'Pewter lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   electrum_lump: { name: 'Electrum lump', category: 'material', weight: 1, stackable: true, decay: 1 },
   // Moulds, fired from sand, and the pieces beaten out of them.
-  anvil_mould: { name: 'Anvil mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  nail_mould: { name: 'Nail mould', category: 'tool', weight: 1.2, decay: 1, description: 'A gang mould with five channels in it. One lump of metal runs out as five nails. It wears like any mould and cannot be mended.' },
-  pan_mould: { name: 'Pan mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  rake_head_mould: { name: 'Rake head mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  shovel_head_mould: { name: 'Shovel head mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  hatchet_head_mould: { name: 'Hatchet head mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  sickle_blade_mould: { name: 'Sickle blade mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  pickaxe_head_mould: { name: 'Pickaxe head mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  knife_blade_mould: { name: 'Knife blade mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  sword_blade_mould: { name: 'Sword blade mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
-  helm_mould: { name: 'Helm mould', category: 'tool', weight: 1.2, decay: 1, description: 'A sand mould. It wears a little every time it is filled, and no mould can be mended.' },
+  anvil_mould: { name: 'Anvil mould', category: 'tool', weight: 1.2, decay: 1 },
+  nail_mould: { name: 'Nail mould', category: 'tool', weight: 1.2, decay: 1, description: 'A gang mould with {per:w} channels in it: a filling runs out as {per:w} nails. It wears like any mould and cannot be mended.' },
+  pan_mould: { name: 'Pan mould', category: 'tool', weight: 1.2, decay: 1 },
+  rake_head_mould: { name: 'Rake head mould', category: 'tool', weight: 1.2, decay: 1 },
+  shovel_head_mould: { name: 'Shovel head mould', category: 'tool', weight: 1.2, decay: 1 },
+  hatchet_head_mould: { name: 'Hatchet head mould', category: 'tool', weight: 1.2, decay: 1 },
+  sickle_blade_mould: { name: 'Sickle blade mould', category: 'tool', weight: 1.2, decay: 1 },
+  pickaxe_head_mould: { name: 'Pickaxe head mould', category: 'tool', weight: 1.2, decay: 1 },
+  knife_blade_mould: { name: 'Knife blade mould', category: 'tool', weight: 1.2, decay: 1 },
+  sword_blade_mould: { name: 'Sword blade mould', category: 'tool', weight: 1.2, decay: 1 },
+  helm_mould: { name: 'Helm mould', category: 'tool', weight: 1.2, decay: 1 },
   axle_mould: { name: 'Axle mould', category: 'tool', weight: 1.4, decay: 1, description: 'A long sand mould for a wagon axle. It wears a little every time it is filled, and no mould can be mended.' },
   ribbon_mould: { name: 'Ribbon mould', category: 'tool', weight: 1.2, decay: 1, description: 'A mould that runs one lump out as a single metal ribbon. It wears like any mould and cannot be mended.' },
-  nail: { name: 'Nails', category: 'material', weight: 0.01, stackable: true, decay: 1, description: 'Ten grams of metal apiece. Nothing is nailed together without them.' },
+  nail: { name: 'Nails', category: 'material', weight: 0.01, stackable: true, decay: 1, description: '{grams:W} grams of metal apiece. Nothing is nailed together without them.' },
   padlock: { name: 'Padlock', category: 'tool', weight: 0.6, description: 'A shackle, a body and a mechanism, and no key until it is fitted to something. Fit it to a crate, a cupboard, a cart or a chest and it cuts a key to itself as it closes.' },
   key: { name: 'Key', category: 'tool', weight: 0.02, description: 'Cut to one lock and no other. Hand it over and you have handed over what it opens; lose it and the settlement\u2019s founder is the only way back in.' },
   arrow: { name: 'Arrows', category: 'material', weight: 0.05, stackable: true, decay: 3, description: 'Shaft, head and feather. A bow spends one with every shot.' },
   arrow_head: { name: 'Arrow heads', category: 'material', weight: 0.02, stackable: true, decay: 1 },
-  feather: { name: 'Feathers', category: 'material', weight: 0.01, stackable: true, raw: true, decay: 20, description: 'Three to an arrow, and only a bird carries them.' },
+  feather: { name: 'Feathers', category: 'material', weight: 0.01, stackable: true, raw: true, decay: 20, description: 'Fletching for arrows, and only a bird carries them.' },
   bow_string: { name: 'Bowstring', category: 'material', weight: 0.05, stackable: true, decay: 8 },
   yarn: { name: 'Yarn', category: 'material', weight: 0.15, stackable: true, decay: 12, description: 'Spun on a spindle. Woven on a loom it becomes cloth.' },
   long_sword_blade: { name: 'Long sword blade', category: 'material', weight: 2, stackable: true, decay: 1 },
@@ -283,15 +289,15 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   gland: { name: 'Gland', category: 'material', weight: 0.2, stackable: true, raw: true, decay: 90, description: 'A small scent gland. Rare, and prized by alchemists.' },
   shaft: { name: 'Shaft', category: 'material', weight: 1, stackable: true, decay: 20, description: 'A straight length of wood, carved from a log. Handles for tools and rails for fences.' },
   ribbon: { name: 'Metal ribbon', category: 'material', weight: 0.4, stackable: true, decay: 1, description: 'Flat bands of metal, one lump beaten out to a ribbon. Everything that has to hold together under a load is banded with them.' },
-  big_axle: { name: 'Big axle', category: 'material', weight: 8, stackable: true, decay: 1, description: 'A cast axle as long as a cart is wide. Two wheels turn on one.' },
-  large_wheel: { name: 'Large wheel', category: 'material', weight: 12, stackable: true, decay: 10, description: 'Spokes, felloes and a metal tyre shrunk on hot. A cart takes two and a wagon four.' },
+  big_axle: { name: 'Big axle', category: 'material', weight: 8, stackable: true, decay: 1, description: 'A cast axle as long as a cart is wide. A large cart takes {recipe.make_large_cart.big_axle:w} and a wagon {recipe.make_wagon.big_axle:w}.' },
+  large_wheel: { name: 'Large wheel', category: 'material', weight: 12, stackable: true, decay: 10, description: 'Spokes, felloes and a metal tyre shrunk on hot. A large cart takes {recipe.make_large_cart.large_wheel:w} and a wagon {recipe.make_wagon.large_wheel:w}.' },
   yoke: { name: 'Yoke', category: 'material', weight: 4, stackable: true, decay: 10, description: 'A shaped bar and a leather harness. A wildermon is hitched into one to pull.' },
-  milk_bucket: { name: 'Bucket of milk', category: 'food', weight: 6, decay: 30, drink: 0.3, charges: 5, description: 'Five litres of milk, still warm. Drink it, or work it into cheese while it is fresh.', feeds: { fat: 0.1, flesh: 0.08 } },
+  milk_bucket: { name: 'Bucket of milk', category: 'food', weight: 6, decay: 30, drink: 0.3, charges: 5, description: '{bucketLitres:W} litres of milk, still warm. Drink it, or work it into cheese while it is fresh.', feeds: { fat: 0.1, flesh: 0.08 } },
   cheese: { name: 'Cheese', category: 'food', weight: 0.4, stackable: true, food: 0.3, decay: 4, description: 'Milk pressed and left to itself for a while. It keeps far better than what it was made of.', feeds: { fat: 0.12, flesh: 0.1 } },
   honey: { name: 'Honey', category: 'food', weight: 0.3, stackable: true, food: 0.22, decay: 0.4, description: 'Comb honey out of a hive. It keeps almost forever and everything on the island wants it.', feeds: { starch: 0.1, fat: 0.03 } },
   wax: { name: 'Beeswax', category: 'material', weight: 0.2, stackable: true, decay: 1, description: 'Comb rendered down. It is what a candle is, and what a waxed thread is drawn through.' },
-  lantern: { name: 'Lantern', category: 'tool', weight: 1.4, decay: 3, description: 'Four ribbons of iron, two panes of oiled cloth and a handle. Put a candle in it, strike it, and the night stops being a wall.' },
-  torch: { name: 'Torch', category: 'tool', weight: 0.8, decay: 4, description: 'A shaft with oiled cloth wound round the head of it. Touch it to a fire and it burns for a few minutes and throws a small circle — long enough to get somewhere, not long enough to work by.' },
+  lantern: { name: 'Lantern', category: 'tool', weight: 1.4, decay: 3, description: 'Ribbons of metal, oiled cloth and a handle. With a candle in it and lit at a fire it throws {light.lanternNear:w} tiles of light at the roughest and {light.lanternFar:w} at the best, and a candle lasts {light.candleShort:span} in a rough one and {light.candleLong:span} in a fine one.' },
+  torch: { name: 'Torch', category: 'tool', weight: 0.8, decay: 4, description: 'A shaft with oiled cloth wound round the head of it. Touch it to a fire and it burns {light.torchShort:span} to {light.torchLong:span} by how well it was wound, throwing {light.torchNear:w} to {light.torchFar:w} tiles of light.' },
   candle: { name: 'Candle', category: 'misc', weight: 0.2, stackable: true, decay: 2, description: 'Wax drawn round a wick. Set one in a lantern and it will show you the ground on the blackest night.' },
   compost: { name: 'Compost', category: 'material', weight: 1.2, stackable: true, raw: true, decay: 2, description: 'What a Middun leaves behind, which is the best thing that ever happened to a field. Spread it on tilled ground.' },
   saddle: { name: 'Saddle', category: 'material', weight: 7, stackable: true, decay: 8, description: 'A tree of wood under stitched leather, girthed and stirruped. Fit one to an Orse and you can ride it.' },
@@ -304,7 +310,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lingonberry: { name: 'Lingonberries', category: 'food', weight: 0.1, stackable: true, food: 0.06, feeds: { greens: 0.04 } },
   acorn: { name: 'Acorn', category: 'food', weight: 0.05, stackable: true, food: 0.02, feeds: { fat: 0.02 } },
   nuts: { name: 'Nuts', category: 'food', weight: 0.1, stackable: true, food: 0.05, feeds: { fat: 0.05 } },
-  meat: { name: 'Meat', category: 'food', weight: 0.5, stackable: true, food: 0.18, decay: 160, description: 'Raw meat from a butchered wildermon. Cook it at a campfire and it feeds you twice over.', feeds: { flesh: 0.09 } },
+  meat: { name: 'Meat', category: 'food', weight: 0.5, stackable: true, food: 0.18, decay: 160, description: 'Raw meat from a butchered wildermon. Raw, it fills {food:pct} of the food bar; cooked at a campfire, {item.cooked_meat.food:pct}.', feeds: { flesh: 0.09 } },
   cooked_meat: { name: 'Cooked meat', category: 'food', weight: 0.4, stackable: true, food: 0.35, decay: 90, feeds: { flesh: 0.22, fat: 0.05 } },
   baked_potato: { name: 'Baked potato', category: 'food', weight: 0.2, stackable: true, food: 0.22, decay: 90, feeds: { starch: 0.18, greens: 0.03 } },
   roast_onion: { name: 'Roast onion', category: 'food', weight: 0.15, stackable: true, food: 0.16, decay: 90, feeds: { greens: 0.12, fat: 0.02 } },
@@ -315,7 +321,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   bread: { name: 'Bread', category: 'food', weight: 0.35, stackable: true, food: 0.42, decay: 70, description: 'A baked loaf. The first food that keeps and travels.', feeds: { starch: 0.3, fat: 0.04 } },
   porridge: { name: 'Porridge', category: 'food', weight: 0.4, stackable: true, food: 0.32, decay: 80, description: 'Cornmeal boiled thick in a bowl.', feeds: { starch: 0.24, fat: 0.08, greens: 0.05 } },
   preserves: { name: 'Preserves', category: 'food', weight: 0.3, stackable: true, food: 0.28, decay: 12, description: 'Berries put up in a sealed jar. They keep for a very long time.', feeds: { greens: 0.18, starch: 0.1 } },
-  flour: { name: 'Flour', category: 'material', weight: 0.1, stackable: true, decay: 30, larder: true, description: 'Wheat ground between two stones. Wet it and it becomes dough. Keeps in a larder or a craft material bin.' },
+  flour: { name: 'Flour', category: 'material', weight: 0.1, stackable: true, decay: 30, larder: true, description: 'Wheat ground on a quern. Wet it and it becomes dough. Keeps in a larder or a craft material bin.' },
   cornmeal: { name: 'Cornmeal', category: 'material', weight: 0.12, stackable: true, decay: 30, larder: true, description: 'Corn ground coarse. Boiled up it makes porridge. Keeps in a larder or a craft material bin.' },
   dough: { name: 'Dough', category: 'material', weight: 0.3, stackable: true, decay: 150, larder: true, description: 'Flour and water worked together. It wants a fire under it. Keeps in a larder or a craft material bin.' },
   bandage: { name: 'Bandage', category: 'misc', weight: 0.05, stackable: true, decay: 10, description: 'A strip of cloth for binding a wound. One strip, one wound.' },
@@ -356,9 +362,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   corn: { name: 'Corn', category: 'food', weight: 0.2, stackable: true, food: 0.11, feeds: { starch: 0.06 } },
   cotton: { name: 'Cotton', category: 'material', weight: 0.1, stackable: true, raw: true, decay: 30 },
   wemp: { name: 'Wemp fibre', category: 'material', weight: 0.1, stackable: true, raw: true, decay: 30 },
-  toolbelt: { name: 'Toolbelt', category: 'tool', weight: 1.1, decay: 3, description: 'A belt of loops and pouches. Wear it and it carries the jobs you do most, ready to hand: one loop for every ten points of how well it was made.' },
+  toolbelt: { name: 'Toolbelt', category: 'tool', weight: 1.1, decay: 3, description: 'A belt of loops and pouches. Wear it and it carries the jobs you do most, ready to hand: one loop for every {loopEvery:w} points of how well it was made.' },
   rug: { name: 'Rug', category: 'tool', weight: 2.2, decay: 6, description: 'Woven wide enough to sit on cross-legged. Lay it down somewhere quiet and think about nothing.' },
-  composite_bow: { name: 'Composite bow', category: 'tool', weight: 2, description: 'Tusk laid along the belly, sinew glued along the back, both off something that was trying to kill you. It throws an arrow seventeen tiles.' },
+  composite_bow: { name: 'Composite bow', category: 'tool', weight: 2, description: 'Tusk laid along the belly, sinew glued along the back, both off something that was trying to kill you. {range:W} tiles, {damage} damage before skill and quality, and a shot every {swing} seconds.' },
   scale_helm: { name: 'Scale helm', category: 'tool', weight: 1.6, description: 'Dragon scale riveted to a leather cap.' },
   scale_cuirass: { name: 'Scale cuirass', category: 'tool', weight: 5, description: 'Dragon scale laid in courses over a leather body. It turns more than plate and weighs less than chain.' },
   scale_sleeves: { name: 'Scale sleeves', category: 'tool', weight: 3, description: 'Dragon scale on the outside of the arm.' },
@@ -372,33 +378,33 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   creel: { name: 'Creel', category: 'misc', weight: 3, decay: 4, description: 'A woven basket trap with a throat it is easy to swim into and hard to swim out of. Set it in water, bait it, and leave it.' },
   snare: { name: 'Snare', category: 'misc', weight: 1.2, decay: 5, description: 'A noose of rope on a bent shaft. Set it out in the country, bait it, and come back to whatever came to the bait.' },
   deadfall: { name: 'Deadfall', category: 'misc', weight: 12, decay: 4, description: 'A weighted board on a trigger. It holds very nearly anything that walks, and it is a great deal of work to build.' },
-  cover: { name: 'Healing cover', category: 'tool', weight: 0.2, stackable: true, decay: 12, description: 'Herbs worked into cotton. Laid on the wound it suits, it stops the bleeding, keeps the dirt out and closes it twice as fast as cloth.' },
+  cover: { name: 'Healing cover', category: 'tool', weight: 0.2, stackable: true, decay: 12, description: 'Herbs worked into cotton. Laid on the wound it suits, it stops the bleeding, keeps the dirt out and closes it {cover.overCloth} times as fast as cloth.' },
   dye: { name: 'Dye', category: 'material', weight: 0.8, stackable: true, decay: 5, description: 'A pot of colour, struck with lye so it bites and holds. One pot does one thing.' },
   banner: { name: 'Banner', category: 'misc', weight: 4, decay: 5, description: 'Cloth on a staff. Plant it on the deed and fly your colour over it.' },
-  rope: { name: 'Rope', category: 'material', weight: 0.6, stackable: true, decay: 6, description: 'Wemp laid up into three strands on a rope tool. Everything that has to hold, hold fast or haul is roped.' },
-  thick_rope: { name: 'Thick rope', category: 'material', weight: 2.4, stackable: true, decay: 4, description: 'Three ropes laid up again into a hawser. It moors a hull, hangs a bucket down a shaft and carries a span of bridge.' },
+  rope: { name: 'Rope', category: 'material', weight: 0.6, stackable: true, decay: 6, description: '{recipe.make_rope.wemp:W} wemp fibres laid up on a rope tool. Everything that has to hold, hold fast or haul is roped.' },
+  thick_rope: { name: 'Thick rope', category: 'material', weight: 2.4, stackable: true, decay: 4, description: '{recipe.make_thick_rope.rope:W} ropes laid up again into a hawser. It moors a hull, hangs a bucket down a shaft and carries a span of bridge.' },
   onion: { name: 'Onion', category: 'food', weight: 0.15, stackable: true, food: 0.06, feeds: { greens: 0.04 } },
   corpse: { name: 'Corpse', category: 'misc', weight: 12, decay: 90, description: 'Something dead. Butcher it before it rots: meat, fur, leather, bone and glands off a wildermon, and off one of the bad things, tusk, sinew and worse.' },
   // Furniture, carried flat-packed and set down on the subtile grid.
-  stool: { name: 'Stool', category: 'misc', weight: 4, decay: 4, description: 'Three legs and a seat. Set it down anywhere.' },
-  sign: { name: 'Sign', category: 'misc', weight: 5, decay: 5, description: 'A board across two posts, made to be written on. Set it up and give it a name, and the name stands there for anyone walking past.' },
+  stool: { name: 'Stool', category: 'misc', weight: 4, decay: 4, description: '{recipe.make_stool.shaft:W} legs and a seat. Set it down anywhere.' },
+  sign: { name: 'Sign', category: 'misc', weight: 5, decay: 5, description: 'A board across {recipe.make_sign.shaft:w} posts, made to be written on. Set it up and give it a name, and the name stands there for anyone walking past.' },
   great_sign: { name: 'Signboard', category: 'misc', weight: 11, decay: 5, description: 'A board wide enough to write a sentence on. Set it up where a road forks and nobody need guess again.' },
   chair: { name: 'Chair', category: 'misc', weight: 7, decay: 4, description: 'A chair with a proper back to it. Set it down anywhere.' },
-  bench: { name: 'Bench', category: 'misc', weight: 12, decay: 4, description: 'Seats two at a pinch, three in a good mood.' },
-  table: { name: 'Table', category: 'misc', weight: 18, decay: 4, description: 'A square table on four legs.' },
+  bench: { name: 'Bench', category: 'misc', weight: 12, decay: 4, description: 'A long plank seat on legs. Set it down anywhere.' },
+  table: { name: 'Table', category: 'misc', weight: 18, decay: 4, description: 'A square table on {recipe.make_table.shaft:w} legs.' },
   long_table: { name: 'Long table', category: 'misc', weight: 34, decay: 4, description: 'The table a hall is built around.' },
-  desk: { name: 'Writing desk', category: 'misc', weight: 24, decay: 4, description: 'A desk with drawers under the top. Holds 20 things.' },
+  desk: { name: 'Writing desk', category: 'misc', weight: 24, decay: 4, description: 'A desk with drawers under the top. Holds {capacity} things.' },
   bed: { name: 'Bed', category: 'misc', weight: 30, decay: 5, description: 'A bed with a stuffed mattress on it.' },
   cot: { name: 'Cot', category: 'misc', weight: 16, decay: 5, description: 'A narrow bed for a narrow room.' },
-  chest: { name: 'Chest', category: 'misc', weight: 26, decay: 4, description: 'A banded chest. Holds 60 things.' },
-  coffer: { name: 'Coffer', category: 'misc', weight: 10, decay: 4, description: 'A small strongbox. Holds 25 things.' },
-  cupboard: { name: 'Cupboard', category: 'misc', weight: 30, decay: 4, description: 'A cupboard with doors on it. Holds 80 things.' },
-  wardrobe: { name: 'Wardrobe', category: 'misc', weight: 42, decay: 4, description: 'Tall enough to hang a cloak full length. Holds 100 things.' },
-  shelves: { name: 'Shelves', category: 'misc', weight: 34, decay: 4, description: 'A long open rack of shelves. Holds 120 things.' },
-  bookshelf: { name: 'Bookshelf', category: 'misc', weight: 30, decay: 4, description: 'Shelves with a back and a cornice. Holds 90 things.' },
-  larder: { name: 'Larder', category: 'misc', weight: 48, decay: 4, description: 'A deep cool cupboard for a kitchen. Holds 250 things: food, drink, and the flour, dough and cornmeal a kitchen bakes from.' },
-  crate_shelf: { name: 'Crate shelf', category: 'misc', weight: 64, decay: 4, description: 'A decked rack two spots across and four deep. It holds nothing itself: eight plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' },
-  barrel: { name: 'Barrel', category: 'misc', weight: 14, decay: 4, description: 'Staves and hoops. Holds 80 litres of one liquid, and nothing solid.' },
+  chest: { name: 'Chest', category: 'misc', weight: 26, decay: 4, description: 'A banded chest. Holds {capacity} things.' },
+  coffer: { name: 'Coffer', category: 'misc', weight: 10, decay: 4, description: 'A small strongbox. Holds {capacity} things.' },
+  cupboard: { name: 'Cupboard', category: 'misc', weight: 30, decay: 4, description: 'A cupboard with doors on it. Holds {capacity} things.' },
+  wardrobe: { name: 'Wardrobe', category: 'misc', weight: 42, decay: 4, description: 'Tall enough to hang a cloak full length. Holds {capacity} things.' },
+  shelves: { name: 'Shelves', category: 'misc', weight: 34, decay: 4, description: 'A long open rack of shelves. Holds {capacity} things.' },
+  bookshelf: { name: 'Bookshelf', category: 'misc', weight: 30, decay: 4, description: 'Shelves with a back and a cornice. Holds {capacity} things.' },
+  larder: { name: 'Larder', category: 'misc', weight: 48, decay: 4, description: 'A deep cool cupboard for a kitchen. Holds {capacity} things: food, drink, and the flour, dough and cornmeal a kitchen bakes from.' },
+  crate_shelf: { name: 'Crate shelf', category: 'misc', weight: 64, decay: 4, description: 'A decked rack {w:w} spots across and {h:w} deep. It holds nothing itself: {crates:w} plank crates stand on it, each its own crate, and you can see across a warehouse how many are full.' },
+  barrel: { name: 'Barrel', category: 'misc', weight: 14, decay: 4, description: 'Staves and hoops. Holds {liquid} litres of one liquid, and nothing solid.' },
   creature_crate: {
     name: 'Creature crate', category: 'misc', weight: 10, decay: 0,
     description: 'Holds one wildermon. With a wildermon already following you, one more is tamed only into an empty crate in your pack. Set down, it shows who is inside; open it to have them follow you or work the deed. It does not rot.',
@@ -406,13 +412,13 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lectern: { name: 'Lectern', category: 'misc', weight: 12, decay: 4, description: 'A slanted stand to read from.' },
   coat_rack: { name: 'Coat rack', category: 'misc', weight: 6, decay: 4, description: 'Pegs on a post, by the door.' },
   planter: { name: 'Planter', category: 'misc', weight: 12, decay: 4, description: 'A box of earth with something green in it.' },
-  firewood_rack: { name: 'Firewood rack', category: 'misc', weight: 14, decay: 4, description: 'Keeps the wood off the wet ground. Holds 40 things.' },
+  firewood_rack: { name: 'Firewood rack', category: 'misc', weight: 14, decay: 4, description: 'Keeps the wood off the wet ground. Holds {capacity} things.' },
   ale_bucket: { name: 'Bucket of ale', category: 'food', weight: 6, decay: 2, drink: 0.4, charges: 5, description: 'Thin, sour and honest. Drink it and the work goes easier for a good while.', feeds: { starch: 0.12 } },
   cider_bucket: { name: 'Bucket of cider', category: 'food', weight: 6, decay: 2, drink: 0.45, charges: 5, description: 'Pressed apples gone dangerous. A trade comes easier after it.', feeds: { greens: 0.1 } },
   juice_bucket: { name: 'Bucket of juice', category: 'food', weight: 6, decay: 6, drink: 0.5, charges: 5, description: 'Fruit pressed under a quern, sweet and cloudy, with nothing dangerous in it. Drink it while it is fresh.', feeds: { greens: 0.1 } },
   mead_bucket: { name: 'Bucket of mead', category: 'food', weight: 6, decay: 1.5, drink: 0.5, charges: 5, description: 'Honey and time. The best thing to come out of a hive after the honey itself.', feeds: { starch: 0.12, greens: 0.04 } },
-  wine_bucket: { name: 'Bucket of wine', category: 'food', weight: 6, decay: 1, drink: 0.5, charges: 5, description: 'Cherries, water and three quarters of an hour of patience.', feeds: { greens: 0.1 } },
-  fishing_rod: { name: 'Fishing rod', category: 'tool', weight: 1.4, decay: 3, description: 'Two shafts spliced, a waxed line and a strip of metal bent into a hook. Stand at water and fish.' },
+  wine_bucket: { name: 'Bucket of wine', category: 'food', weight: 6, decay: 1, drink: 0.5, charges: 5, description: 'Cherries, water and {brew.wine.time:span} of patience.', feeds: { greens: 0.1 } },
+  fishing_rod: { name: 'Fishing rod', category: 'tool', weight: 1.4, decay: 3, description: '{recipe.make_fishing_rod.shaft:W} shafts spliced, a waxed line and a strip of metal bent into a hook. Stand at water and fish.' },
   minnow: { name: 'Minnow', category: 'food', weight: 0.1, stackable: true, food: 0.06, decay: 9, description: 'A finger of silver. Bait, if you are honest about it.', feeds: { flesh: 0.04 } },
   perch: { name: 'Perch', category: 'food', weight: 0.5, stackable: true, food: 0.2, decay: 8, description: 'Striped and spiny and everywhere there is water with a foot of depth.', feeds: { flesh: 0.09 } },
   trout: { name: 'Trout', category: 'food', weight: 1.2, stackable: true, food: 0.34, decay: 8, description: 'Runs where the water is properly deep. Worth cooking properly.', feeds: { flesh: 0.13 } },
@@ -433,11 +439,11 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   quince: { name: 'Quince', category: 'food', weight: 0.25, stackable: true, food: 0.1, decay: 1.2, description: 'Hard, yellow and sour raw; it wants cooking. Grows on the Crescent beside the pear.', feeds: { greens: 0.05 } },
   olive_oil: { name: 'Olive oil', category: 'food', weight: 0.4, stackable: true, food: 0.3, decay: 0.6, description: 'Pressed from olives under a quern. Keeps almost indefinitely and makes anything cooked in it better.', feeds: { fat: 0.18 } },
   apple_pie: { name: 'Apple pie', category: 'food', weight: 0.9, stackable: true, food: 0.62, decay: 3, description: 'Pastry over stewed apple, baked in an oven. As good as food gets on this island.', feeds: { starch: 0.22, greens: 0.2, fat: 0.1 } },
-  sack: { name: 'Sack', category: 'misc', weight: 0.4, decay: 8, holds: 40, shelter: 0.8, description: 'A cloth sack. Holds 40 things, and keeps a little of the weather off them if it is left out.' },
-  satchel: { name: 'Satchel', category: 'misc', weight: 1.2, decay: 4, holds: 25, shelter: 0.5, description: 'A stitched leather satchel with a flap. Holds 25 things, and what is in it rots at half the rate if you leave it lying about.' },
-  backpack: { name: 'Backpack', category: 'misc', weight: 2.4, decay: 4, holds: 60, shelter: 0.4, description: 'A deep leather pack on ribbon straps. Holds 60 things and sheds most of the weather. Drop a full one at a work post and it keeps.' },
-  work_post: { name: 'Work post', category: 'misc', weight: 5, decay: 4, description: 'A stake, a crossbar and a strip of metal for a marker. Driven into open ground off your deed, it stands half an hour to three hours by its quality, and one wildermon will work out of it as it would out of a settlement. When it goes over, the creature comes back to you.' },
-  hive: { name: 'Hive', category: 'misc', weight: 10, decay: 4, description: 'A stack of shallow boxes for a swarm to live in. Set it down on your deed and keep a Vesp there, and it fills itself with honey and beeswax. Holds 40 of them.' },
+  sack: { name: 'Sack', category: 'misc', weight: 0.4, decay: 8, holds: 40, shelter: 0.8, description: 'A cloth sack. Holds {holds} things, and what is in it rots at {shelter:share} the rate if it is left on the ground.' },
+  satchel: { name: 'Satchel', category: 'misc', weight: 1.2, decay: 4, holds: 25, shelter: 0.5, description: 'A stitched leather satchel with a flap. Holds {holds} things, and what is in it rots at {shelter:share} the rate if you leave it lying about.' },
+  backpack: { name: 'Backpack', category: 'misc', weight: 2.4, decay: 4, holds: 60, shelter: 0.4, description: 'A deep leather pack on ribbon straps. Holds {holds} things, and what is in it rots at {shelter:share} the rate if it is left on the ground. Drop a full one at a work post and it keeps.' },
+  work_post: { name: 'Work post', category: 'misc', weight: 5, decay: 4, description: 'A stake, a crossbar and a strip of metal for a marker. Driven into open ground off your deed, it stands {post.shortest:span} to {post.longest:span} by its quality, and one wildermon will work out of it as it would out of a settlement. When it goes over, the creature comes back to you.' },
+  hive: { name: 'Hive', category: 'misc', weight: 10, decay: 4, description: 'A stack of shallow boxes for a swarm to live in. Set it down on your deed and keep a Vesp there, and it fills itself with honey and beeswax. Holds {hive} of them.' },
   rope_tool: { name: 'Rope tool', category: 'tool', weight: 1.2, description: 'A grooved block the strands are laid round and twisted against. Nothing is roped without one.' },
   spindle: { name: 'Spindle', category: 'misc', weight: 5, decay: 4, description: 'Spins wool, cotton and wemp into yarn. Stand at it to work.' },
   loom: { name: 'Loom', category: 'misc', weight: 30, decay: 4, description: 'Weaves yarn into cloth. Stand at it to work.' },
@@ -445,19 +451,19 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   smelter: { name: 'Smelter', category: 'misc', weight: 52, decay: 3, description: 'A stone smelter, built flat-packed and bedded in where you set it down. Turns ore into lumps, and mixes alloys. It stands on your own deed.' },
   kiln: { name: 'Kiln', category: 'misc', weight: 34, decay: 3, description: 'A brick kiln for firing clay. Set it down anywhere dry and flat; take it up again when it is cold and empty.' },
   oven: { name: 'Oven', category: 'misc', weight: 46, decay: 3, description: 'A bread oven of brick and mortar. Feed it wood, light it, and cook at it as you would a fire — only it does not burn the dinner.' },
-  well: { name: 'Well', category: 'misc', weight: 58, decay: 3, description: 'A lined shaft with a windlass over it. It draws its own water, faster the better it was sunk, and holds 50 litres.' },
-  bulk_bin: { name: 'Raw material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for raw materials: ore, logs, dirt, shards, hides. Holds 400, and nothing a bench has touched.' },
-  craft_bin: { name: 'Craft material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for worked materials: planks, nails, ribbons, hinges, lumps, bricks. It does not count what is in it — it weighs it, and holds 2500 kg of whatever a bench has turned out.' },
-  seed_bin: { name: 'Seed bin', category: 'misc', weight: 14, decay: 4, description: 'A bin with a tight lid for seed. It weighs what is in it rather than counting it: 100 kg, which is 5000 wheat seeds or 1000 seed potatoes.' },
-  sprout_bin: { name: 'Sprout bin', category: 'misc', weight: 14, decay: 4, description: 'A bin with a damp cloth under the lid, for sprouts. It weighs what is in it rather than counting it: 100 kg, which is 1000 sprouts.' },
-  trash_crate: { name: 'Trash crate', category: 'misc', weight: 6, decay: 4, description: 'An open crate with a rotten bottom. Anything put in it rots thirty times faster than it would in the rain.' },
-  cart: { name: 'Small cart', category: 'misc', weight: 26, decay: 4, description: 'Two wheels and a pair of shafts. Take hold of it and it follows you about, carrying 100 things you do not have to.' },
-  large_cart: { name: 'Large cart', category: 'misc', weight: 180, decay: 4, description: 'A two-wheeled cart with a box body and a seat over the axle. It holds 1000 things of any weight, and nothing under a hitched wildermon will move it.' },
-  wagon: { name: 'Wagon', category: 'misc', weight: 420, decay: 4, description: 'Four wheels, two axles and a bed you could sleep a family on. It holds 10000 things of any weight, and it does not roll until all four yokes have a wildermon in them.' },
-  rowing_boat: { name: 'Rowing boat', category: 'misc', weight: 210, decay: 4, description: 'A clinker hull with a pair of oars in her. Launch her into two deep of water, climb aboard and row. Carries 300 things and you.' },
-  sailing_boat: { name: 'Sailing boat', category: 'misc', weight: 620, decay: 4, description: 'A decked hull with a mast, a sail and a rudder. Four deep of water under her, and she goes where the coast goes. Carries 1500 things.' },
-  small_barrel: { name: 'Small barrel', category: 'misc', weight: 7, decay: 4, description: 'Holds 30 litres of one liquid, and nothing solid at all.' },
-  large_barrel: { name: 'Large barrel', category: 'misc', weight: 34, decay: 4, description: 'Holds 250 litres of one liquid. It takes a while to fill and longer to empty.' },
+  well: { name: 'Well', category: 'misc', weight: 58, decay: 3, description: 'A lined shaft with a windlass over it. It draws its own water, faster the better it was sunk, and holds {well} litres.' },
+  bulk_bin: { name: 'Raw material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for raw materials: ore, logs, dirt, shards, hides. Holds {capacity}, and nothing a bench has touched.' },
+  craft_bin: { name: 'Craft material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for worked materials: planks, nails, ribbons, hinges, lumps, bricks. It does not count what is in it — it weighs it, and holds {heft} kg of whatever a bench has turned out.' },
+  seed_bin: { name: 'Seed bin', category: 'misc', weight: 14, decay: 4, description: 'A bin with a tight lid for seed. It weighs what is in it rather than counting it: {heft} kg, which is {fits.wheat_seed} wheat seeds or {fits.potato_seed} seed potatoes.' },
+  sprout_bin: { name: 'Sprout bin', category: 'misc', weight: 14, decay: 4, description: 'A bin with a damp cloth under the lid, for sprouts. It weighs what is in it rather than counting it: {heft} kg, which is {fits.sprout} sprouts.' },
+  trash_crate: { name: 'Trash crate', category: 'misc', weight: 6, decay: 4, description: 'An open crate with a rotten bottom. Anything put in it rots {trash:times} faster than it would in the rain.' },
+  cart: { name: 'Small cart', category: 'misc', weight: 26, decay: 4, description: 'A pair of shafts on wheels. Take hold of it and it follows you about, carrying {capacity} things you do not have to.' },
+  large_cart: { name: 'Large cart', category: 'misc', weight: 180, decay: 4, description: 'A cart on {bill.large_wheel:w} large wheels, with a box body and a seat over the axle. It holds {capacity} things of any weight, and nothing under a hitched wildermon will move it.' },
+  wagon: { name: 'Wagon', category: 'misc', weight: 420, decay: 4, description: '{bill.large_wheel:W} wheels, {bill.big_axle:w} axles and a bed you could sleep a family on. It holds {capacity} things of any weight, and it does not roll until {team} yokes have a wildermon in them.' },
+  rowing_boat: { name: 'Rowing boat', category: 'misc', weight: 210, decay: 4, description: 'A clinker hull with a pair of oars in her. Launch her into {boat.draught:w} deep of water, climb aboard and row. Carries {capacity} things and you.' },
+  sailing_boat: { name: 'Sailing boat', category: 'misc', weight: 620, decay: 4, description: 'A decked hull with a mast, a sail and a rudder. {boat.draught:W} deep of water under her, and she goes where the coast goes. Carries {capacity} things.' },
+  small_barrel: { name: 'Small barrel', category: 'misc', weight: 7, decay: 4, description: 'Holds {liquid} litres of one liquid, and nothing solid at all.' },
+  large_barrel: { name: 'Large barrel', category: 'misc', weight: 34, decay: 4, description: 'Holds {liquid} litres of one liquid. It takes a while to fill and longer to empty.' },
 };
 
 /*
@@ -469,12 +475,59 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
  * ones written out above keep their own words; the rest are filled in here
  * from the mould table, so a mould added there is named here, and on the
  * island, which reads this list, without a second entry to forget.
+ *
+ * A mould says how many pieces a filling casts, and the piece says how many
+ * come of a lump and how many lumps went into it, both off the mould's own
+ * row: `{per}` and `{lumps}` in their text.
  */
+const piecesOf = (id: string): string => {
+  const name = (ITEM_DEFS[id]?.name ?? id).toLowerCase();
+  return name.endsWith('s') ? name : `${name}s`;
+};
 for (const m of MOULDS) {
-  ITEM_DEFS[m.id] ??= {
-    name: m.name, category: 'tool', weight: 1.2, decay: 1,
-    description: `A sand mould${m.per && m.per > 1 ? `, ${m.per} to a filling` : ''}. It wears a little every time it is filled, and no mould can be mended.`,
-  };
+  const d = (ITEM_DEFS[m.id] ??= { name: m.name, category: 'tool', weight: 1.2, decay: 1 });
+  d.description = fill(d.description ?? `A sand mould${(m.per ?? 1) > 1 ? `, {per:w} ${piecesOf(m.makes)} to a filling` : ''}. `
+    + 'It wears a little every time it is filled, and no mould can be mended.', m);
+  const piece = ITEM_DEFS[m.makes];
+  if (piece?.description) piece.description = fill(piece.description, m);
+}
+
+/**
+ * Put numbers into every item's text from the module that holds them.
+ *
+ * An item is written as one object literal, which cannot name its own fields
+ * or anybody else's, so its text names them -- `{capacity}`, `{range:W}`,
+ * `{recipe.make_rope.wemp:w}` -- and the module that owns each number fills
+ * it in when it loads: furniture, crates, weapons, recipes, brews, posts and
+ * the rest. What the rule says is what the text says. `benefit.ts` checks that
+ * nothing is left unfilled, here and in what the island is handed.
+ */
+export function describeWith(values: object): void {
+  for (const d of Object.values(ITEM_DEFS)) if (d.description?.includes('{')) d.description = fill(d.description, values);
+}
+/** The same, for one item, from the definition that holds its numbers. */
+export function describeFrom(id: string, values: object): void {
+  const d = ITEM_DEFS[id];
+  if (d?.description?.includes('{')) d.description = fill(d.description, values);
+}
+
+// And the numbers this module can see: each item's own fields, its weight in
+// grams, the other items, and the few rules below it in the graph.
+for (const d of Object.values(ITEM_DEFS)) {
+  if (!d.description?.includes('{')) continue;
+  d.description = fill(d.description, {
+    ...d,
+    grams: Math.round(d.weight * 1000),
+    item: ITEM_DEFS,
+    coinsPerLump: COINS_PER_LUMP,
+    rareLumps: RARE_LUMP_FACTOR,
+    wall: Object.fromEntries(WALL_TYPES.map((w) => [w.id, Object.fromEntries(w.fittings ?? [])])),
+    light: {
+      lanternNear: lanternReach(1), lanternFar: lanternReach(100), candleShort: candleBurn(1), candleLong: candleBurn(100),
+      torchNear: torchReach(1), torchFar: torchReach(100), torchShort: torchBurn(1), torchLong: torchBurn(100),
+    },
+    cover: { overCloth: (CLOSE_RIGHT / CLOSE_CLOTH).toFixed(1) },
+  });
 }
 
 /**
@@ -688,6 +741,24 @@ export function rollRarity(rand: () => number): number {
 export function itemDef(id: string): ItemDef {
   return ITEM_DEFS[id] ?? { name: id, category: 'misc', weight: 1 };
 }
+
+/** What is counted by the lot rather than one by one: four cloth, not four cloths. */
+const BY_THE_LOT = new Set(['cloth', 'wool', 'leather', 'mortar', 'yarn', 'wax', 'sand', 'clay', 'dirt', 'thatch', 'peat', 'tar', 'coal', 'concrete', 'cotton', 'wemp', 'mixed_grass', 'sinew', 'honey', 'flour', 'cornmeal', 'dough', 'wheat', 'corn', 'thyme', 'basil', 'mint', 'sage', 'rosemary', 'lavender']);
+
+/**
+ * So many of a thing, as it is said: "twelve planks", "four cloth", "a
+ * timber". In words unless `figures`, which a long bill reads better in.
+ */
+export function countOf(id: string, n: number, figures = false): string {
+  const name = itemDef(id).name.toLowerCase();
+  if (n === 1) return `${article(name)} ${name}`;
+  const many = BY_THE_LOT.has(id) || name.endsWith('s') ? name : /[^aeiou]y$/.test(name) ? `${name.slice(0, -1)}ies` : `${name}s`;
+  return `${figures ? n : numberWord(n)} ${many}`;
+}
+
+/** A bill of materials as it is read: "twelve planks, four timbers, four cloth and twenty-six nails". */
+export const billWords = (bill: ReadonlyArray<readonly [string, number]>, figures = false): string =>
+  listed(bill.map(([id, n]) => countOf(id, n, figures)));
 
 /**
  * Damage per real hour for an item lying on the ground; better quality holds

@@ -5,14 +5,15 @@ import { matOf } from './materials';
 import { SPECIES, workRangeOf, GATHER_DO, type Creature } from './creatures';
 import { letOut } from './creaturecrate';
 import { world } from './pace';
+import { describeWith } from './items';
 
 /**
  * A work post: a stake driven into open ground with a crossbar nailed to it
  * and a strip of metal tacked on for a marker. One wildermon may be set to
  * work out of it exactly as it would out of a settlement — only a post is not
  * a settlement. It stands in the weather with nothing holding it up, and it
- * rots where it stands: half an hour for a rough one, three hours for the
- * best that can be made. When it goes over, whoever was working out of it
+ * rots where it stands: `POST_LIFE_MIN` for a rough one, `POST_LIFE_MAX` for
+ * the best that can be made. When it goes over, whoever was working out of it
  * comes back to you.
  */
 export interface PlacedPost {
@@ -33,9 +34,14 @@ export interface PlacedPost {
   material?: string;
 }
 
-/** Half an hour at the roughest, three hours at the finest. */
+/**
+ * How long a post stands, at the roughest and at the finest. The shortest is
+ * a world duration and the longest is not, so the two are what the text says:
+ * `{post.shortest:span}` and `{post.longest:span}`.
+ */
 export const POST_LIFE_MIN = world(30 * 60);
 export const POST_LIFE_MAX = 3 * 60 * 60;
+describeWith({ post: { shortest: POST_LIFE_MIN, longest: POST_LIFE_MAX } });
 const clampQl = (ql: number): number => Math.max(1, Math.min(100, ql));
 
 /** How long a post of this quality stands, in seconds. */

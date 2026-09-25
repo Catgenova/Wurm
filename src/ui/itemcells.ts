@@ -1,4 +1,7 @@
-import type { Game } from '../game/game';
+import { DAMAGE_WARN, type Game } from '../game/game';
+
+/** Damage past which the pack calls a thing about to go to pieces. */
+export const DAMAGE_BREAKING = 90;
 import { itemDef, itemName, type Item, rarityOf } from '../game/items';
 
 /**
@@ -68,10 +71,10 @@ export function qualityCell(game: Game, item: Item): HTMLSpanElement {
 export function damageCell(item: Item): HTMLSpanElement {
   const dmg = document.createElement('span');
   dmg.textContent = item.dmg.toFixed(1);
-  if (item.dmg >= 90) {
+  if (item.dmg >= DAMAGE_BREAKING) {
     dmg.classList.add('inv-breaking');
     dmg.title = 'About to go to pieces. Repair it now.';
-  } else if (item.dmg >= 75) {
+  } else if (item.dmg >= DAMAGE_WARN) {
     dmg.classList.add('inv-worn-out');
     dmg.title = 'Getting badly worn. Repair it before it breaks.';
   }

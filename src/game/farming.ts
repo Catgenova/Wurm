@@ -3,6 +3,7 @@ import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { itemDef, itemName } from './items';
 import { world } from './pace';
+import { ABUNDANCE } from './meditation';
 
 /**
  * Farming: rake a field out of grass or dirt, sow a seed, tend it through
@@ -219,8 +220,8 @@ export const FARM_ACTIONS: ActionDef[] = [
       const y = cropYield(c.tended);
       // The field's own quality, lifted by the farmer's skill at harvest.
       const ql = Math.max(1, Math.min(100, (c.ql + g.productQl('farming')) / 2));
-      // The gardener's path takes a third more out of the same ground.
-      const more = g.walks('love', 5) ? 1.34 : 1;
+      // The gardener's path takes more out of the same ground.
+      const more = g.walks('love', 5) ? ABUNDANCE : 1;
       const got = Math.max(1, Math.round(y.produce * more));
       const produce = g.gather(def.produce, { count: got, ql });
       g.gather(def.seed, { count: y.seeds, ql });

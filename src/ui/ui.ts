@@ -33,7 +33,7 @@ import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, t
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { foundationState } from '../game/foundations';
-import { CASTS, FAITH, favourCap } from '../game/faith';
+import { BLESS_CAP, CASTS, FAITH, favourCap } from '../game/faith';
 import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sittingWorth } from '../game/meditation';
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
@@ -1416,7 +1416,7 @@ export class UI {
                     const reason = cast.check?.(t, g) ?? null;
                     return {
                       label: itemName(it),
-                      note: it.bless ? `already ${it.bless} of 3` : it.dmg > 0 ? `damage ${it.dmg.toFixed(1)}` : undefined,
+                      note: it.bless ? `already ${it.bless} of ${BLESS_CAP}` : it.dmg > 0 ? `damage ${it.dmg.toFixed(1)}` : undefined,
                       hint: reason ?? undefined,
                       disabled: !!reason,
                       onSelect: () => g.requestAction(cast, t),

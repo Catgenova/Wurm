@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemName, rarityOf, roomFor, storedLine, type Item } from './items';
+import { describeFrom, itemName, rarityOf, roomFor, storedLine, type Item } from './items';
 import { matOf } from './materials';
 import { furnitureDef } from './furniture';
 
@@ -71,6 +71,8 @@ export const CRATE_DEFS: Record<CrateKind, CrateDef> = {
   log: { name: 'Log crate', item: 'crate_log', capacity: 30 },
   plank: { name: 'Plank crate', item: 'crate_plank', capacity: 60 },
 };
+// What a crate holds is said off the crate: `{capacity}` in its item's text.
+for (const c of Object.values(CRATE_DEFS)) describeFrom(c.item, c);
 
 export const SUBTILES = 4;
 

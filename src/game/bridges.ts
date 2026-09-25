@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { isDone, progressOf, type Bill } from './building';
 import type { Game } from './game';
 import { itemDef } from './items';
+import { fill } from './words';
 
 /**
  * Bridges.
@@ -46,7 +47,7 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
     skill: 'carpentry',
     difficulty: 18,
     carts: false,
-    note: 'Two hawsers and a plank walkway. It goes a long way for very little and it sways the whole time; nothing with a wheel on it is crossing.',
+    note: '{bill.thick_rope:W} hawsers and a plank walkway. It goes a long way for very little and it sways the whole time; nothing with a wheel on it is crossing.',
   },
   wood: {
     id: 'wood',
@@ -71,6 +72,9 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
     note: 'Voussoirs turned over a centring and a slab road laid on the fill. It is the work of a season and it will outlast everybody who used it.',
   },
 };
+
+// A bridge's note counts what it is made of off its own bill: `{bill.thick_rope:W}`.
+for (const b of Object.values(BRIDGES)) b.note = fill(b.note, { ...b, bill: Object.fromEntries(b.bill) });
 
 export interface BridgeSpan extends Bill {
   x: number;

@@ -1357,6 +1357,18 @@ jobs:
             --outfile=node_modules/.cache/sent.mjs --log-level=error
           node node_modules/.cache/sent.mjs
 
+      - name: The exact benefit, and where its number comes from
+        run: |
+          # Text the player reads says what changes and by how much, and where
+          # the rule has the number the text takes it from the rule (CLAUDE.md).
+          # This holds texts against the fields they restate, reads every fixed
+          # piece of player text in the source for a number written out, and
+          # renders the help. It reads the source with the TypeScript compiler,
+          # which stays out of the bundle. No database.
+          npx esbuild supabase/test/benefit.ts --bundle --platform=node --format=esm \
+            --external:typescript --outfile=node_modules/.cache/benefit.mjs --log-level=error
+          node node_modules/.cache/benefit.mjs
+
   migrate:
     name: Push the migrations to the project
     if: github.event_name == 'workflow_dispatch' && inputs.live
