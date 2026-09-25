@@ -162,6 +162,15 @@ interface Entity {
    * over the top of its own driver.
    */
   lift?: number;
+  /**
+   * Where a body on a hull's deck is drawn, in pixels from where it sorts.
+   * Everybody aboard sorts with the hull, a hair after it, so the deck is never
+   * drawn over them; each is drawn at their own place on it.
+   */
+  drawDx?: number;
+  drawDy?: number;
+  /** On a deck on their feet rather than sat at a helm or on a seat. */
+  standing?: boolean;
 }
 
 interface HitRect {
@@ -510,6 +519,9 @@ export class Renderer {
     e.trap = undefined;
     e.deck = undefined;
     e.lift = undefined;
+    e.drawDx = undefined;
+    e.drawDy = undefined;
+    e.standing = undefined;
     e.rare = undefined;
     this.ents.push(e);
     return e;
@@ -1470,6 +1482,12 @@ export class Renderer {
     // Close enough to be picking things up rather than looking at the country.
     const player = this.game.player;
     const playerDepth = depthOf(V, player.tileX, player.tileY);
+    // Everybody at the helm of a hull somebody else is steering, or aboard one, is drawn with her; see `takeAboard`.
+    this.seated.clear();
+    for (const f of this.game.furniture.values()) {
+      if (f.helm) this.seated.add(f.helm);
+      for (const r of f.riders ?? []) this.seated.add(r.who);
+    }
     const hw = stepW * zoom;
     const hh = stepH * zoom;
     const hs = HEIGHT_SCALE * zoom;
@@ -1719,10 +1737,13 @@ export class Renderer {
             if (kl.rare) ke.rare = kl.rare;
           }
           for (const fu of this.game.furnitureOnTile(x, y)) {
-            const [wx, wy] = furnitureCentre(fu);
+            // A hull somebody else is steering is where their hands are, which is read a dozen times a second; where
+            // she was set down is read once.
+            const [wx, wy] = fu.helm ? this.game.hullCentre(fu) : furnitureCentre(fu);
             const fe = this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.pieceBase(fu, wx, wy)), null);
             fe.piece = fu;
             if (fu.rare) fe.rare = fu.rare;
+            if (fu.helm || fu.riders?.length || player.aboard === fu.id) this.takeAboard(fu, x, y, fe.sx, fe.sy, zoom);
           }
           for (const an of this.game.anvilsOnTile(x, y)) {
             const [wx, wy] = anvilCentre(an);
@@ -1756,6 +1777,7 @@ export class Renderer {
         // Other people on the island stand on tiles like anything else does.
         if (this.game.roster.size) {
           for (const peer of this.game.roster.atTile(x, y)) {
+            if (peer.uid && this.seated.has(peer.uid)) continue;
             const [px, py] = this.game.roster.drawnAt(peer);
             this.take('peer', x, y, cam.worldToScreenX(px, py),
               cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), -4) + peer.level * WALL_HEIGHT), null).peer = peer;
@@ -1775,7 +1797,7 @@ export class Renderer {
         if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
       }
 
-      if (d === playerDepth) {
+      if (d === playerDepth && player.aboard === null) {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
         const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
@@ -1792,7 +1814,10 @@ export class Renderer {
         const [vx, vy] = drivenBy ? furnitureCentre(drivenBy) : [player.x, player.y];
         // A rider sits where their mount stands, which is where they stand.
         const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, drivenBy ? this.pieceBase(drivenBy, vx, vy) : world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
-        this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null).lift = this.driverSeat() * zoom;
+        const pe = this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null);
+        pe.lift = this.driverSeat() * zoom;
+        // At a helm on a deck of its own the driver stands there, not in her middle.
+        if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
       }
       if (grain) {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
@@ -1826,6 +1851,41 @@ export class Renderer {
    * water she floats on. A boat is drawn from her waterline up, so she sits
    * on the surface however deep it is under her rather than on the bottom.
    */
+  /**
+   * The people on a hull: whoever else has her helm and whoever is aboard as a
+   * passenger, us among them. Each sorts a hair after her, so her deck is never
+   * drawn over them, and is drawn at their own place on it, lifted to it: the
+   * helm to `seat`, sat in her middle or on their feet on a deck of its own,
+   * and the passengers on their feet at her waist.
+   */
+  private readonly seated = new Set<string>();
+  private takeAboard(f: PlacedFurniture, x: number, y: number, sx: number, sy: number, zoom: number): void {
+    const boat = furnitureDef(f.kind).boat;
+    if (!boat) return;
+    const waist = boat.waist ?? boat.seat;
+    let k = 1;
+    const aboard = (uid: string, at: (peer: Peer) => [number, number], deck: number, standing: boolean): void => {
+      const peer = this.game.roster.list().find((p) => p.uid === uid);
+      if (!peer) return;
+      const e = this.take('peer', x, y, sx, sy + 0.01 * k++, null);
+      e.peer = peer;
+      this.onDeck(e, f, at(peer), deck * zoom, standing);
+    };
+    if (f.helm) aboard(f.helm, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
+    const me = this.game.player;
+    if (me.aboard === f.id) this.onDeck(this.take('player', x, y, sx, sy + 0.01 * k++, null), f, [me.x, me.y], waist * zoom, true);
+    for (const r of f.riders ?? []) aboard(r.who, (peer) => this.game.roster.drawnAt(peer), waist, true);
+  }
+
+  /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
+  private onDeck(e: Entity, f: PlacedFurniture, [wx, wy]: [number, number], lift: number, standing: boolean): void {
+    const cam = this.camera;
+    e.drawDx = cam.worldToScreenX(wx, wy) - e.sx;
+    e.drawDy = cam.worldToScreenY(wx, wy, this.pieceBase(f, wx, wy)) - e.sy;
+    e.lift = lift;
+    e.standing = standing;
+  }
+
   private pieceBase(f: { kind: string }, wx: number, wy: number): number {
     const h = this.game.world.heightAt(wx, wy);
     return furnitureDef(f.kind).boat ? Math.max(h, 0) : h;
@@ -1957,16 +2017,18 @@ export class Renderer {
       const hovering = this.isHovered(ent);
       if (ent.kind === 'player') {
         const struck = this.flashOf(player.attackedAt);
-        this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ent.sx, ent.sy - (ent.lift ?? 0), (g, px, py) =>
+        const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0);
+        this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ex, ey - (ent.lift ?? 0), (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'player',
             phase: player.moving ? player.walkPhase : this.time * 6,
-            moving: player.moving,
+            // On a deck it is the hull that is going somewhere, not the feet.
+            moving: player.moving && !ent.standing,
             gait: this.gaits.of('player', player.x, player.y, this.frameDt),
             facing: this.playerFacing,
             swimming: player.swimming,
             working: this.game.action?.state === 'performing',
-            driving: (ent.lift ?? 0) > 0,
+            driving: (ent.lift ?? 0) > 0 && !ent.standing,
             // Dyed cloth or leather on the chest and legs is worn where it shows.
             tunic: dyeOf(this.game.worn('chest'))?.colour,
             trousers: dyeOf(this.game.worn('legs'))?.colour,
@@ -1980,28 +2042,30 @@ export class Renderer {
         // What this body last said, over its own head. No name drawn under it,
         // so the bubble sits where a peer's name would be.
         const mine = this.game.saidAloud;
-        if (mine) this.speechBubble(ctx, zoom, ent.sx, ent.sy - FIGURE_TOP * zoom, mine.text, mine.at);
+        if (mine) this.speechBubble(ctx, zoom, ex, ey - (ent.lift ?? 0) - FIGURE_TOP * zoom, mine.text, mine.at);
         continue;
       }
       if (ent.kind === 'peer' && ent.peer) {
         const peer = ent.peer;
+        // Somebody on a deck is drawn at their place on it, lifted to it; see `takeAboard`.
+        const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0) - (ent.lift ?? 0);
         // The same box a creature catches clicks with, because it is the same
         // figure at the same size. Without one, the only thing you could ever
         // do to another person was walk to the tile they were standing on.
         if (peer.uid) {
-          this.peerHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - (FIGURE_TOP - 2) * zoom, w: 20 * zoom, h: FIGURE_TOP * zoom, peer: peer.uid });
+          this.peerHits.push({ x: ent.x, y: ent.y, left: ex - 10 * zoom, top: ey - (FIGURE_TOP - 2) * zoom, w: 20 * zoom, h: FIGURE_TOP * zoom, peer: peer.uid });
         }
         peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) =>
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ex, ey, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'o' + peer.id,
             phase: peer.moving ? peer.walkPhase : this.time * 6,
-            moving: peer.moving,
+            moving: peer.moving && !ent.standing,
             gait: this.gaits.of('o' + peer.id, peer.x, peer.y, this.frameDt),
             facing: peer.facing,
             swimming: peer.swimming,
             working: peer.working,
-            driving: false,
+            driving: (ent.lift ?? 0) > 0 && !ent.standing,
             tunic: peer.tunic,
             trousers: peer.trousers,
             look: peer.look,
@@ -2013,13 +2077,13 @@ export class Renderer {
         if (zoom >= 0.5) {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'alphabetic';
-          const ty = ent.sy - (FIGURE_TOP + 1) * zoom;
+          const ty = ey - (FIGURE_TOP + 1) * zoom;
           ctx.strokeStyle = 'rgba(10,10,12,0.85)';
           ctx.lineWidth = 3;
           ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
-          ctx.strokeText(peer.name, ent.sx, ty);
+          ctx.strokeText(peer.name, ex, ty);
           ctx.fillStyle = '#cfe6ff';
-          ctx.fillText(peer.name, ent.sx, ty);
+          ctx.fillText(peer.name, ex, ty);
           /*
            * And what they are at, over the name.
            *
@@ -2036,9 +2100,9 @@ export class Renderer {
           const doing = peer.act ? ACTION_BY_ID.get(peer.act)?.verb : undefined;
           if (doing) {
             ctx.font = `${Math.round(9 * zoom)}px system-ui, sans-serif`;
-            ctx.strokeText(doing, ent.sx, ty - 11 * zoom);
+            ctx.strokeText(doing, ex, ty - 11 * zoom);
             ctx.fillStyle = 'rgba(207,230,255,0.72)';
-            ctx.fillText(doing, ent.sx, ty - 11 * zoom);
+            ctx.fillText(doing, ex, ty - 11 * zoom);
           }
           ctx.lineWidth = 1;
           ctx.textAlign = 'left';
@@ -2046,7 +2110,7 @@ export class Renderer {
         // Over the name and over whatever they are at, so a person talking
         // while they dig reads top to bottom: what they said, what they are
         // doing, who they are.
-        if (peer.said) this.speechBubble(ctx, zoom, ent.sx, ent.sy - (FIGURE_TOP + 17) * zoom, peer.said, peer.saidAt ?? 0);
+        if (peer.said) this.speechBubble(ctx, zoom, ex, ey - (FIGURE_TOP + 17) * zoom, peer.said, peer.saidAt ?? 0);
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {
@@ -2087,6 +2151,12 @@ export class Renderer {
         if ((piece.driven || piece.hitched) && this.game.player.moving) {
           const step = (Math.PI * 2) / 64;
           this.pieceHeadings.set(piece.id, Math.round(this.game.heading() / step) * step);
+        }
+        // A hull somebody else is steering, or with people on her deck, points the way the game has her
+        // pointing, which is the way they are stood along her.
+        if (piece.helm || piece.riders?.length) {
+          const step = (Math.PI * 2) / 64;
+          this.pieceHeadings.set(piece.id, Math.round(this.game.shipHeading(piece) / step) * step);
         }
         const heading = this.pieceHeadings.get(piece.id);
         const view = heading !== undefined ? headingView(heading, cam.rotation) : pieceView(pieceFacing(piece), cam.rotation);

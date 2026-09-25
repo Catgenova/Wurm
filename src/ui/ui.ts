@@ -1508,7 +1508,7 @@ export class UI {
         }),
       });
     }
-    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'leave_vehicle', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'crate_follow', 'crate_work', 'pick_up_furniture']) {
+    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'board_passenger', 'leave_vehicle', 'leave_passenger', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'crate_follow', 'crate_work', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
       const reason = def.check?.(ft, g) ?? null;

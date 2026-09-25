@@ -381,6 +381,8 @@ out.push(`create table if not exists boat_def (
   id text primary key, speed real not null, draught real not null, seat real not null,
   sail boolean not null default false
 );`);
+/* And the people a hull carries besides whoever has her helm. */
+out.push(`alter table boat_def add column if not exists passengers int not null default 0;`);
 /* What has to be fitted before anything can be ridden. */
 out.push(`create table if not exists tack_def (ord int primary key, item text not null);`);
 /* A run of deck between two banks, and what one tile of it takes. */
@@ -1449,7 +1451,7 @@ for (const f of FURNITURE as unknown as A[]) {
   const v = f.vehicle as A | undefined;
   if (v) out.push(`insert into vehicle_def values (${q(f.id)}, ${q(v.yokes)}, ${q(v.needs)}, ${q(v.seat)});`);
   const b = f.boat as A | undefined;
-  if (b) out.push(`insert into boat_def values (${q(f.id)}, ${q(b.speed)}, ${q(b.draught)}, ${q(b.seat)}, ${q(!!b.sail)});`);
+  if (b) out.push(`insert into boat_def (id, speed, draught, seat, sail, passengers) values (${q(f.id)}, ${q(b.speed)}, ${q(b.draught)}, ${q(b.seat)}, ${q(!!b.sail)}, ${q(b.passengers ?? 0)});`);
 }
 TACK.forEach((id, ord) => out.push(`insert into tack_def values (${q(ord)}, ${q(id)});`));
 for (const c of CASTS) {
