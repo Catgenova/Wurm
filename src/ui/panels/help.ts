@@ -12,7 +12,7 @@ const crateBill = (): string => {
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 };
 
-function helpText(): string {
+export function helpText(): string {
   const CRATE_BILL = crateBill();
   return `
     <h3>Getting around</h3>
