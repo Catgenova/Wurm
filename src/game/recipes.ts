@@ -3,6 +3,7 @@ import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { describeWith, itemDef, rollRarity, RARITY_WORD, type Item } from './items';
 import { QL_PER_LOOP } from './belt';
+import { describeGoals } from './journal';
 import { fill, numberWord } from './words';
 import { FURNITURE } from './furniture';
 import { castWhole, MOULDS } from './metal';
@@ -506,9 +507,10 @@ RECIPES.push(...TRAP_RECIPES);
 /*
  * A recipe's lines say how many it makes and how many of a thing go in off
  * the recipe itself -- `{count:w}`, `{inputs.rope:w}` -- so "three planks"
- * is the three the saw gives. And every item's text may name a recipe's
- * numbers the same way: a thick rope is `{recipe.make_thick_rope.rope:W}`
- * ropes laid up again, whatever the bill says that is.
+ * is the three the saw gives. And every item's text and journal line may
+ * name a recipe's numbers the same way: a thick rope is
+ * `{recipe.make_thick_rope.rope:W}` ropes laid up again, whatever the bill
+ * says that is.
  */
 const inputsOf = (r: Recipe): Record<string, number> => Object.fromEntries(r.inputs.map((i) => [i.item, i.count ?? 1]));
 for (const r of RECIPES) {
@@ -516,7 +518,9 @@ for (const r of RECIPES) {
   r.done = fill(r.done, said);
   if (r.fail) r.fail = fill(r.fail, said);
 }
-describeWith({ recipe: Object.fromEntries(RECIPES.map((r) => [r.id, { count: r.count ?? 1, ...inputsOf(r) }])) });
+const RECIPE_SAID = { recipe: Object.fromEntries(RECIPES.map((r) => [r.id, { count: r.count ?? 1, ...inputsOf(r) }])) };
+describeWith(RECIPE_SAID);
+describeGoals(RECIPE_SAID);
 
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];

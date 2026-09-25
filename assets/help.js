@@ -1,4 +1,4 @@
-import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs as l,Di as ee,Dn as te,Do as ne,Ds as u,Ea as re,Es as d,Fn as ie,Fo as ae,Fs as oe,Ft as se,G as f,Gi as ce,Go as le,Gt as ue,H as de,Ha as p,Hi as fe,Hr as pe,Ii as me,In as he,Io as ge,Ja as _e,Ji as ve,Js as ye,Jt as be,Ko as xe,L as Se,Li as Ce,Ln as we,Lo as Te,Lr as Ee,Lt as De,M as Oe,Mn as ke,Mo as Ae,Ms as je,Mt as Me,N as Ne,Nn as Pe,No as Fe,Ns as Ie,Nt as Le,Oa as m,Oi as Re,On as ze,Or as Be,Os as h,Ot as Ve,P as He,Pn as Ue,Po as We,Pt as Ge,Qo as Ke,Qr as qe,R as Je,Ri as Ye,Rn as Xe,Ro as Ze,Rr as Qe,Rs as $e,Rt as et,Sa as tt,Si as nt,So as g,Sr as rt,St as it,Ta as at,Ts as _,U as ot,Ui as st,Un as ct,Uo as lt,Ut as ut,V as dt,Va as ft,Vi as pt,Vo as mt,W as ht,Wo as gt,Wt as _t,Xi as vt,Xs as yt,Y as bt,Ya as v,Yn as xt,Zn as St,Zt as Ct,_s as wt,_t as Tt,a as Et,an as Dt,at as Ot,bt as kt,cn as At,ct as jt,do as Mt,dt as Nt,ei as Pt,eo as Ft,f as It,fo as Lt,ft as Rt,gi as zt,gr as Bt,gt as Vt,hi as Ht,hr as Ut,hs as Wt,ht as Gt,ii as Kt,io as qt,ir as Jt,is as Yt,it as Xt,j as Zt,jn as Qt,jo as $t,js as y,ko as en,kr as b,ks as x,kt as tn,l as nn,la as S,ln as rn,lt as an,mo as on,mt as sn,ni as cn,no as ln,nr as un,nt as dn,oi as fn,on as pn,oo as mn,ot as hn,pn as gn,po as C,pt as w,qa as T,qs as _n,ra as E,ri as vn,rr as yn,rt as bn,so as D,st as xn,t as Sn,ti as O,to as Cn,ts as wn,tt as Tn,u as En,un as Dn,uo as On,ut as k,vt as kn,wn as An,wo as A,ws as jn,xo as Mn,xs as Nn,xt as Pn,z as j,za as Fn,zi as In,zo as Ln,zr as Rn,zt as zn}from"./money.js";import{A as Bn,B as M,F as Vn,L as Hn,N as Un,W as Wn}from"./iso.js";var N=e=>{let t=b.get(e);if(!t)throw Error(`The help names a recipe there is not: ${e}`);return t},P=(e,t=!1)=>Mn(N(e).inputs.map(e=>[e.item,e.count??1]),t),F=(e,t)=>{let n=N(e).inputs.find(e=>e.item===t);if(!n)throw Error(`The help says ${e} takes ${t}, and it does not.`);return n.count??1},I=e=>N(e).count??1,Gn=e=>{let t=N(e);return`${(ye.get(t.skill)?.name??t.skill).toLowerCase()} ${t.difficulty??0}`},L=e=>{let t=Nn.get(e);if(!t)throw Error(`The help names a material there is not: ${e}`);return t},R=e=>Vn[e],z=e=>1-Wn(R(e).roll,1),B=(e,t)=>A(e).feeds?.[t]??0,V=100,H=1,Kn=3600,U=e=>`${String(Math.floor(e)).padStart(2,`0`)}:${String(Math.round(e%1*60)).padStart(2,`0`)}`,qn=Object.values(f).filter(e=>e.glow),Jn=Object.values(f).filter(e=>e.wound===`burn`),Yn=18/24,W=e=>ye.get(e)?.start??1,G=100,Xn=100,K=o.plate.burden*L(`iron`).weight,Zn=e=>Math.round(100/(kt(e)*L(`copper`).wear)/10)*10,Qn=80,$n=90,er=e=>Math.ceil(Qn/Qt(e).healed),tr=e=>`${+(Qn*Qt(e).cost).toFixed(1)} points`,nr=Object.values(Ln),rr=`${k} to ${+(k+Nt).toFixed(2)} times`,q=C.map((e,t)=>t).slice(1),ir=mn.get(`study_book`)?.baseTime??0,ar=[...wt].sort((e,t)=>e.difficulty-t.difficulty),or=[...new Set(Fn.map(e=>e.slot))],sr=Object.values(o).filter(e=>!Fn.some(t=>t.cls===e.id&&b.get(`make_${t.id}`)?.inputs.some(e=>e.item===`dragon_scale`))),cr=[...new Set(p.map(e=>e.kind))],lr=p.filter(e=>e.ammo&&b.get(`make_${e.id}`)?.inputs.some(e=>e.item===`bow_string`)),ur=Object.values(f).filter(e=>e.butcher?.feather||e.shearYield===`feather`),J=D[D.length-1],dr=e=>Ie.find(t=>t.id===e)?.level??0,fr=f.orse.speed*sn(0),pr=Math.min(5,f.orse.speed*sn(G)),mr=d(Object.entries(St).map(([e,t],n)=>`level ${e} ${n===0?`wants `:``}${d(t.map(e=>`${e.label[0].toLowerCase()}${e.label.slice(1)}`))}`)),hr=[...new Set(Object.values(f).filter(e=>!e.monster).map(e=>e.workRange))].sort((e,t)=>e-t),gr=(()=>{let e=new Map;for(let t of Object.values(f))t.rangePerStep&&t.rangePerStep!==10&&e.set(t.rangePerStep,[...e.get(t.rangePerStep)??[],`a ${t.name}`]);return d([...e.entries()].sort((e,t)=>e[0]-t[0]).map(([e,t])=>`${d(t).replace(/ and ([^,]*)$/,` or $1`)} ${e}`))})(),_r=d([0,20,40,G].map((e,t)=>t===0?`${u(vt(e))} pass below ${u(20)}`:`${u(vt(e))} at ${u(e)}`)),vr=e=>e&&`${e[0].toLowerCase()}${e.slice(1)}`,yr=Object.values(f).filter(e=>e.monster),br=yr.map(e=>e.notice??7).sort((e,t)=>e-t),xr=j.reduce((e,[,t])=>e+t,0),Sr=Mt.filter(e=>!je.some(t=>e===`${t}_lump`)),Cr=p.find(e=>e.id===`composite_bow`)??p[0],wr=[...lr].sort((e,t)=>(t.range??0)-(e.range??0))[0]??p[0],Tr=Fn.filter(e=>e.cls===`scale`).reduce((e,t)=>e+F(`make_${t.id}`,`dragon_scale`),0),Er=Object.fromEntries(O.map(e=>{let t=cn.filter(t=>t.tier===e).map(e=>Math.max(...Object.values(e.effects).map(e=>Math.abs((e??1)-1))));return[e,[Math.min(...t),Math.max(...t)]]})),Y=Bn.filter(e=>e.level).sort((e,t)=>(e.level??0)-(t.level??0)),Dr=e=>e.replace(/ (vein|seam)$/,``).toLowerCase(),Or=[1,50,90,99],kr=e=>yt(e,an,1),Ar=e=>String(Number(kr(e).toPrecision(kr(e)>=.1?2:1))),jr=()=>{let e=S(fn).bill.map(([e,t])=>`<b>${t} × ${A(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`},Mr=Ye[Ce[0].id].length,Nr=s/Mr,Pr=e=>In.find(t=>t.rank===e)?.cost??0,Fr=e=>Pr(e)===1?`a point`:`${u(Pr(e))} points`,Ir=(e,t)=>In.find(n=>n.channel===e&&n.rank===t)?.note??``,Lr=[...new Set(pt.map(e=>Object.keys(e.muls).length))].sort((e,t)=>e-t),Rr=e=>Object.entries(st(e)?.muls??{}).map(([e,t])=>`${me[e].note.toLowerCase()} ${fe(t)}`).join(`, `),X=ye.get(`awareness`)?.start??20,zr=Object.keys(Lt).filter(e=>Lt[e].holds),Br=E.filter(e=>b.get(`make_${e.id}`)?.skill===`fine_carpentry`),Vr=Br.filter(e=>e.capacity&&!e.liquid).sort((e,t)=>(e.capacity??0)-(t.capacity??0)),Hr=Object.keys(wn).length,Ur=E.filter(e=>e.boat),Wr=S(`rowing_boat`),Z=S(`sailing_boat`),Gr=S(`large_cart`),Q=S(`wagon`),Kr=E.filter(e=>e.liquid).sort((e,t)=>(e.liquid??0)-(t.liquid??0)),qr=S(`craft_bin`).heft??0,Jr=S(`seed_bin`).heft??0,Yr=S(`sprout_bin`).heft??0,Xr=11,Zr=(Sn.Gold??0)/(Sn.Silver??1),Qr=5,$r=[...$e].filter(e=>!je.includes(e)),ei=40,ti=70,ni=Re.get(`cider`)??ee[0],ri=Hn.filter(e=>e.fruit),ii=Ft.flatMap(e=>[qt(e,1),qt(e,V)]),ai=Math.min(...ii),oi=Math.max(...ii),si=e=>{let t=oe.find(t=>t.id===e);if(!t)throw Error(`The help names a mould there is not: ${e}`);return`poured at the smelter and beaten out on an anvil, ${t.lumps===1?`a lump of metal`:`${u(t.lumps)} lumps of metal`} ${t.per?`to ${u(t.per)}`:`to each`}`},ci=e=>{let t=e=>e.speed*Wn(e.roll,1);return 60*t(R(M.Slabs))/t(R(e))},$={ql:50,force:.6},li=d([Math.PI/2,Math.PI,Pn,0].map(e=>(Z.boat?Vt(Z.boat,$.ql,20,tn($.force)*it(e),0):0).toFixed(1)));function ui(){let p=jr();return`
+import{$a as e,$n as t,$r as n,A as r,Aa as i,Ar as a,As as o,B as s,Ba as c,Bi as l,Cs as u,Di as ee,Do as te,Ds as d,Ea as ne,En as re,Es as f,Fn as ie,Fo as ae,Fs as oe,Ft as se,G as p,Gi as ce,Go as le,Gr as ue,Gt as de,H as fe,Ha as m,Hi as pe,Ii as me,Io as he,Ja as ge,Ji as _e,Jr as ve,Js as ye,Jt as be,Kn as xe,Ko as Se,Kr as Ce,L as we,Li as Te,Lo as Ee,Lr as De,M as Oe,Mo as ke,Ms as Ae,Mt as je,N as Me,Nn as Ne,No as Pe,Ns as Fe,Nt as Ie,Oa as h,Oi as Le,On as Re,Os as g,Ot as ze,P as Be,Pn as Ve,Po as He,Pt as Ue,Qo as We,Qr as Ge,Qt as Ke,R as qe,Ri as Je,Ro as Ye,Rr as Xe,Rs as Ze,Sa as Qe,Si as $e,So as _,St as et,Ta as tt,Ts as v,U as nt,Ui as rt,Uo as it,Ur as at,V as ot,Va as st,Vi as ct,Vo as lt,W as ut,Wo as dt,Wr as ft,Wt as pt,Xi as mt,Xs as ht,Y as gt,Ya as y,Yr as _t,Yt as vt,Zr as yt,_r as b,_s as bt,_t as x,a as xt,ai as St,ar as Ct,at as wt,bn as Tt,bt as Et,ci as Dt,ct as Ot,di as kt,do as At,dt as jt,eo as Mt,f as Nt,fi as Pt,fn as Ft,fo as It,ft as Lt,gi as Rt,gn as zt,gr as Bt,gt as Vt,hi as S,hr as Ht,hs as Ut,ht as Wt,io as Gt,is as Kt,it as qt,j as Jt,jo as Yt,js as C,ko as Xt,ks as w,kt as Zt,l as Qt,la as T,li as E,ln as $t,lt as en,mo as tn,mr as nn,mt as rn,ni as an,no as on,nt as sn,oi as cn,oo as ln,or as D,ot as un,pn as dn,po as O,pt as k,qa as A,qn as fn,qr as pn,qs as mn,qt as hn,ra as j,rt as gn,si as _n,so as M,st as vn,t as yn,to as bn,ts as xn,tt as Sn,u as Cn,ui as wn,uo as Tn,ut as N,vt as En,wo as P,ws as Dn,xo as On,xs as kn,xt as An,yr as jn,z as F,za as Mn,zi as Nn,zo as Pn,zr as Fn}from"./money.js";import{A as In,B as I,F as Ln,L as Rn,N as zn,W as Bn}from"./iso.js";var L=e=>{let t=D.get(e);if(!t)throw Error(`The help names a recipe there is not: ${e}`);return t},R=(e,t=!1)=>On(L(e).inputs.map(e=>[e.item,e.count??1]),t),z=(e,t)=>{let n=L(e).inputs.find(e=>e.item===t);if(!n)throw Error(`The help says ${e} takes ${t}, and it does not.`);return n.count??1},B=e=>L(e).count??1,Vn=e=>{let t=L(e);return`${(ye.get(t.skill)?.name??t.skill).toLowerCase()} ${t.difficulty??0}`},V=e=>{let t=kn.get(e);if(!t)throw Error(`The help names a material there is not: ${e}`);return t},H=e=>Ln[e],U=e=>1-Bn(H(e).roll,1),W=(e,t)=>P(e).feeds?.[t]??0,G=100,K=1,Hn=3600,Un=e=>`${String(Math.floor(e)).padStart(2,`0`)}:${String(Math.round(e%1*60)).padStart(2,`0`)}`,Wn=Object.values(p).filter(e=>e.glow),Gn=Object.values(p).filter(e=>e.wound===`burn`),Kn=18/24,q=e=>ye.get(e)?.start??1,J=100,qn=100,Jn=c.plate.burden*V(`iron`).weight,Yn=e=>Math.round(100/(Et(e)*V(`copper`).wear)/10)*10,Xn=80,Zn=90,Qn=e=>Math.ceil(Xn/zt(e).healed),$n=e=>`${+(Xn*zt(e).cost).toFixed(1)} points`,er=Object.values(Pn),tr=`${N} to ${+(N+jt).toFixed(2)} times`,Y=O.map((e,t)=>t).slice(1),nr=ln.get(`study_book`)?.baseTime??0,rr=[...bt].sort((e,t)=>e.difficulty-t.difficulty),ir=[...new Set(Mn.map(e=>e.slot))],ar=Object.values(c).filter(e=>!Mn.some(t=>t.cls===e.id&&D.get(`make_${t.id}`)?.inputs.some(e=>e.item===`dragon_scale`))),or=[...new Set(m.map(e=>e.kind))],sr=m.filter(e=>e.ammo&&D.get(`make_${e.id}`)?.inputs.some(e=>e.item===`bow_string`)),cr=Object.values(p).filter(e=>e.butcher?.feather||e.shearYield===`feather`),X=M[M.length-1],lr=e=>Fe.find(t=>t.id===e)?.level??0,ur=p.orse.speed*rn(0),dr=Math.min(5,p.orse.speed*rn(J)),fr=f(Object.entries(Re).map(([e,t],n)=>`level ${e} ${n===0?`wants `:``}${f(t.map(e=>`${e.label[0].toLowerCase()}${e.label.slice(1)}`))}`)),pr=[...new Set(Object.values(p).filter(e=>!e.monster).map(e=>e.workRange))].sort((e,t)=>e-t),mr=(()=>{let e=new Map;for(let t of Object.values(p))t.rangePerStep&&t.rangePerStep!==10&&e.set(t.rangePerStep,[...e.get(t.rangePerStep)??[],`a ${t.name}`]);return f([...e.entries()].sort((e,t)=>e[0]-t[0]).map(([e,t])=>`${f(t).replace(/ and ([^,]*)$/,` or $1`)} ${e}`))})(),hr=f([0,20,40,J].map((e,t)=>t===0?`${d(mt(e))} pass below ${d(20)}`:`${d(mt(e))} at ${d(e)}`)),gr=e=>e&&`${e[0].toLowerCase()}${e.slice(1)}`,_r=Object.values(p).filter(e=>e.monster),vr=_r.map(e=>e.notice??7).sort((e,t)=>e-t),yr=F.reduce((e,[,t])=>e+t,0),br=At.filter(e=>!Ae.some(t=>e===`${t}_lump`)),xr=m.find(e=>e.id===`composite_bow`)??m[0],Sr=[...sr].sort((e,t)=>(t.range??0)-(e.range??0))[0]??m[0],Cr=Mn.filter(e=>e.cls===`scale`).reduce((e,t)=>e+z(`make_${t.id}`,`dragon_scale`),0),wr=Object.fromEntries(E.map(e=>{let t=wn.filter(t=>t.tier===e).map(e=>Math.max(...Object.values(e.effects).map(e=>Math.abs((e??1)-1))));return[e,[Math.min(...t),Math.max(...t)]]})),Z=In.filter(e=>e.level).sort((e,t)=>(e.level??0)-(t.level??0)),Tr=e=>e.replace(/ (vein|seam)$/,``).toLowerCase(),Er=[1,50,90,99],Dr=e=>ht(e,en,1),Or=e=>String(Number(Dr(e).toPrecision(Dr(e)>=.1?2:1))),kr=()=>{let e=T(a).bill.map(([e,t])=>`<b>${t} × ${P(e).name.toLowerCase()}</b>`);return`${e.slice(0,-1).join(`, `)} and ${e[e.length-1]}`},Ar=Je[Te[0].id].length,jr=l/Ar,Mr=e=>Nn.find(t=>t.rank===e)?.cost??0,Nr=e=>Mr(e)===1?`a point`:`${d(Mr(e))} points`,Pr=(e,t)=>Nn.find(n=>n.channel===e&&n.rank===t)?.note??``,Fr=[...new Set(ct.map(e=>Object.keys(e.muls).length))].sort((e,t)=>e-t),Ir=e=>Object.entries(rt(e)?.muls??{}).map(([e,t])=>`${me[e].note.toLowerCase()} ${pe(t)}`).join(`, `),Lr=ye.get(`awareness`)?.start??20,Rr=Object.keys(It).filter(e=>It[e].holds),zr=j.filter(e=>D.get(`make_${e.id}`)?.skill===`fine_carpentry`),Br=zr.filter(e=>e.capacity&&!e.liquid).sort((e,t)=>(e.capacity??0)-(t.capacity??0)),Vr=Object.keys(xn).length,Hr=j.filter(e=>e.boat),Ur=T(`rowing_boat`),Q=T(`sailing_boat`),Wr=T(`large_cart`),$=T(`wagon`),Gr=j.filter(e=>e.liquid).sort((e,t)=>(e.liquid??0)-(t.liquid??0)),Kr=T(`craft_bin`).heft??0,qr=T(`seed_bin`).heft??0,Jr=T(`sprout_bin`).heft??0,Yr=11,Xr=(yn.Gold??0)/(yn.Silver??1),Zr=5,Qr=[...Ze].filter(e=>!Ae.includes(e)),$r=40,ei=70,ti=Le.get(`cider`)??ee[0],ni=Rn.filter(e=>e.fruit),ri=Mt.flatMap(e=>[Gt(e,1),Gt(e,G)]),ii=Math.min(...ri),ai=Math.max(...ri),oi=e=>{let t=oe.find(t=>t.id===e);if(!t)throw Error(`The help names a mould there is not: ${e}`);return`poured at the smelter and beaten out on an anvil, ${t.lumps===1?`a lump of metal`:`${d(t.lumps)} lumps of metal`} ${t.per?`to ${d(t.per)}`:`to each`}`},si=e=>{let t=e=>e.speed*Bn(e.roll,1);return 60*t(H(I.Slabs))/t(H(e))},ci={ql:50,force:.6},li=f([Math.PI/2,Math.PI,An,0].map(e=>(Q.boat?Vt(Q.boat,ci.ql,20,Zt(ci.force)*et(e),0):0).toFixed(1)));function ui(){let m=kr();return`
     <h3>Getting around</h3>
     <p><b>You walk by clicking.</b> Nothing on the keyboard moves you: the keys move the
     <i>view</i>, which is a different thing and used far more often. Click where you want to be
@@ -9,7 +9,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
       <tr><td><kbd>Drag</kbd></td><td>The same, with the mouse</td></tr>
       <tr><td><kbd>Scroll</kbd> / <kbd>+</kbd> <kbd>-</kbd></td><td>Zoom</td></tr>
       <tr><td><kbd>C</kbd></td><td>Centre the camera on yourself, and have it follow again</td></tr>
-      <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Turn the view ${x(1/8)} of a turn; the compass shows north</td></tr>
+      <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Turn the view ${w(1/8)} of a turn; the compass shows north</td></tr>
     </table>
     <p>Every key here can be changed: <b>Settings</b> (<kbd>O</kbd>) has a <b>Keys</b> tab with the
     whole list in it. Click a key, press the one you would rather have, and it is set — a key that
@@ -42,7 +42,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     same with a colour chosen up front. Marks are drawn as pins with their names beside them, listed
     under the map nearest first, and each has a <b>Go</b> button that walks you to it. Click a pin's
     dot in the list to cycle its colour, click its name to rename it, and × rubs it off. The map holds
-    ${u(64)} of them; past that the oldest is pushed off.</p>
+    ${d(64)} of them; past that the oldest is pushed off.</p>
     <p><kbd>Home</kbd>, or the <b>Walk home</b> button on the map, sets off for your settlement token
     &mdash; or, before you have founded anything, for the shore you came in on or the last bed you
     woke in.</p>
@@ -60,7 +60,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     and "hungry" is answered by the footer, which counts the herd and says how many are hungry or
     hurt. Grouped lists them by where they are; Flat runs the whole herd together.</p>
     <p>Any one of them that wants something says so on its own card: a <b>hurt</b> tag on anything
-    under ${h(En)} of the health it can carry, a <b>hungry</b> one on anything under ${h(nn)} fed, and the card
+    under ${g(Cn)} of the health it can carry, a <b>hungry</b> one on anything under ${g(Qt)} fed, and the card
     itself outlined so it is found by scrolling rather than by reading. The counts in the footer are
     buttons &mdash; click one and the herd is laid out flat, worst first, with nothing filtered out,
     so a count of what is wrong takes you to it.</p>
@@ -73,7 +73,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p>A <b>citizen</b> of a settlement may build on its land, use its crates and stores, and draw from
     its water, exactly as the founder does. Disbanding, upgrading, renaming and setting wildermon to
     work stay with whoever planted the stake.</p>
-    <p>You may found <b>one</b> settlement of your own and be a citizen of <b>${u(3)}</b> others, whether
+    <p>You may found <b>one</b> settlement of your own and be a citizen of <b>${d(3)}</b> others, whether
     or not you hold one. A border you may work inside is drawn at the same weight as your own, so land
     you were asked onto does not look like a stranger's. Leaving a roll frees the place at once, and an
     invitation you had no room for is left standing until you do.</p>
@@ -100,7 +100,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <h3>The number keys</h3>
     <p>The number keys mean different things depending on what is in front of you. With something
     <b>selected</b> in the Tile window (<kbd>T</kbd>) &mdash; a tile, a tree, a wildermon, a crate
-    &mdash; <kbd>1</kbd> to <kbd>9</kbd> and <kbd>0</kbd> do the <b>first ${u(It.length)} things that can actually
+    &mdash; <kbd>1</kbd> to <kbd>9</kbd> and <kbd>0</kbd> do the <b>first ${d(Nt.length)} things that can actually
     be done to it</b>, in the order the window lists them, and each row shows its key. A row that only
     opens onto more choices takes no key, and neither does one that is greyed out with a reason, so a
     number never does nothing. With <b>nothing selected</b>, or the window shut, the same keys press
@@ -118,12 +118,12 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     that it cannot be tamed.</p>
     <h3>The belt, and doing a thing many times</h3>
     <p>A job that runs on and on &mdash; digging, mining, chopping, making bricks &mdash; is offered by
-    the handful as well as one at a time: <b>once</b>, ${Et.map(u).join(`, `)}, or <b>until you
+    the handful as well as one at a time: <b>once</b>, ${xt.map(d).join(`, `)}, or <b>until you
     stop</b>. Pick a number and it counts itself down and puts the work away when it is done, and the
     action bar says how far through it is, so a run of bricks is one right-click rather than one
     each.</p>
-    <p>Stitch a <b>toolbelt</b> (${P(`make_toolbelt`)}, on an awl) and wear it, and it carries the
-    jobs you do most. It has <b>one loop for every ${u(10)} points</b> of how well it was made, to a full ${u(10)}
+    <p>Stitch a <b>toolbelt</b> (${R(`make_toolbelt`)}, on an awl) and wear it, and it carries the
+    jobs you do most. It has <b>one loop for every ${d(10)} points</b> of how well it was made, to a full ${d(10)}
     loops on a perfect one, and every loop answers to a number key &mdash; <kbd>1</kbd> to <kbd>9</kbd>,
     and <kbd>0</kbd> for the tenth. Hang a job on a loop from any menu, by the entry
     <i>Hang a job on your belt</i>. A job hung from your pack remembers the <b>kind</b> of thing rather
@@ -133,8 +133,8 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     loops go with it, but nothing on them is forgotten.</p>
     <p>Ask for a second job while the first is still going and it <b>lines up behind it</b> rather than
     pushing it aside: it starts the moment the one in hand is done, walking you over if it needs to. The
-    bar above the action shows what is waiting. You can keep <b>${u(3)}</b> jobs in your head to begin
-    with, and one more for every ${u(10)} points of <b>mind logic</b>, which is earned by crafting. Walking
+    bar above the action shows what is waiting. You can keep <b>${d(3)}</b> jobs in your head to begin
+    with, and one more for every ${d(10)} points of <b>mind logic</b>, which is earned by crafting. Walking
     off, stopping with <kbd>Esc</kbd> or clicking somewhere else forgets the lot.</p>
     <h3>What the characteristics are for</h3>
     <p><b>Work, and only work.</b> Eating, drinking, and carrying things in and out of crates, bags and
@@ -173,10 +173,10 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <h4>Awareness, and how far that circle reaches</h4>
     <p><b>Awareness</b> is a characteristic like body strength, and it is the whole of how far you
     see. Everybody washes ashore with a body and a mind half grown and nobody washes ashore able to
-    read a dark hillside, so it <b>starts at ${X}</b> where the others start at 20 &mdash; and the
-    ${u(15)} tiles on the flat that this island used to give everybody is what it gives somebody at the
-    top of it. At ${X} you see ${h(se(X))} of that &mdash; ${u(Math.round(15*se(X)))}
-    tiles on the flat against ${u(15)}. What it is worth goes as the square root of the level, so the
+    read a dark hillside, so it <b>starts at ${Lr}</b> where the others start at 20 &mdash; and the
+    ${d(15)} tiles on the flat that this island used to give everybody is what it gives somebody at the
+    top of it. At ${Lr} you see ${g(se(Lr))} of that &mdash; ${d(Math.round(15*se(Lr)))}
+    tiles on the flat against ${d(15)}. What it is worth goes as the square root of the level, so the
     early levels are worth the most, and a few tiles more is the difference between being walked into
     and seeing it coming.</p>
     <p>It is learned in exactly one place: <b>fighting in the dark</b>. Nothing else on this island
@@ -184,7 +184,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     of the night at them &mdash; and it is weighted by how dark it actually is, so a scuffle at dusk is
     worth a fraction of one at the dead of night. Taking a blow teaches more than landing one.</p>
     <p>On top of that: <b>height is worth real distance</b>, a ridge hides the hollow behind it, a wood
-    is ${u(Math.ceil(1/Ge))} trees deep to the eye, and the <b>dark takes ${x(Le)} of everything</b>. Your
+    is ${d(Math.ceil(1/Ue))} trees deep to the eye, and the <b>dark takes ${w(Ie)} of everything</b>. Your
     settlement is watched while you hold it, and your own wildermon are eyes of their own wherever they
     are working.</p>
     <p>Of a building's walls, only a <b>solid</b> one stops the eye. A window, a bay, a door, a double
@@ -223,17 +223,17 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p>A trade is the thing you are, on top of the things you know. Take one to <b>50</b> in any skill it
     covers and it opens; you may hold <b>one craft trade and one fighting trade</b> at once, and the
     <b>Trades</b> window (<kbd>F</kbd>) is where you take them up and spend what they earn.</p>
-    <p>Each trade earns <b>points</b> off the best skill it covers, and its tree is <b>${u(Mr)} columns of
-    ${u(Nr)}</b>. A column is one <b>channel</b>: one number in the rules, and every card names it and says
-    exactly what that node does to it &mdash; ${[`hands`,`aim`,`knit`].map((e,t)=>`<i>${Ir(e,[1,1,Nr][t])}</i>`).join(`, `)}.
-    The lower nodes cost ${Fr(1)} each, the one above them costs ${u(Pr(Nr))}, and the lower must be
-    bought first. A few channels are better lower &mdash; ${d(Object.values(me).filter(e=>e.lower).map(e=>e.note.toLowerCase()))}
+    <p>Each trade earns <b>points</b> off the best skill it covers, and its tree is <b>${d(Ar)} columns of
+    ${d(jr)}</b>. A column is one <b>channel</b>: one number in the rules, and every card names it and says
+    exactly what that node does to it &mdash; ${[`hands`,`aim`,`knit`].map((e,t)=>`<i>${Pr(e,[1,1,jr][t])}</i>`).join(`, `)}.
+    The lower nodes cost ${Nr(1)} each, the one above them costs ${d(Mr(jr))}, and the lower must be
+    bought first. A few channels are better lower &mdash; ${f(Object.values(me).filter(e=>e.lower).map(e=>e.note.toLowerCase()))}
     &mdash; and the sign on the card is the change to the number, so those read as a minus.</p>
-    <p>A <b>rite</b> is the one thing a trade may ask for out loud: ${d(Lr.map(u)).replace(` and `,` or `)} channels pushed much
+    <p>A <b>rite</b> is the one thing a trade may ask for out loud: ${f(Fr.map(d)).replace(` and `,` or `)} channels pushed much
     harder for a fixed number of seconds, paid out of the same <b>favour</b> a prayer is paid from, and
     then a rest before you may ask again. The card gives each of those figures. Some trade one channel away
-    for another &mdash; ${st(`redhour`)?.name} is <i>${Rr(`redhour`)}</i> &mdash; so read both halves before you call one.
-    Only the <b>fighting</b> trades have a rite; a craft trade has its ${u(s)} nodes and none. It sits at
+    for another &mdash; ${rt(`redhour`)?.name} is <i>${Ir(`redhour`)}</i> &mdash; so read both halves before you call one.
+    Only the <b>fighting</b> trades have a rite; a craft trade has its ${d(l)} nodes and none. It sits at
     the head of its trade's tree, with the reason underneath when you cannot call it.</p>
     <p>Everything on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
     what you have spent, what is in your purse, whether the altar will hear you &mdash; so when a button
@@ -268,7 +268,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     The inventory searches what you are carrying by name and kind; the recipe book searches on
     everything in a row at once &mdash; what it makes, the trade it takes, where it has to be worked and
     what goes into it &mdash; so <i>leather</i> finds every leather thing, <i>mason</i> finds the oven
-    and the well, and <i>nail</i> finds all ${u(Be.filter(e=>e.inputs.some(e=>e.item===`nail`)).length)} recipes that want nails. The count at the foot
+    and the well, and <i>nail</i> finds all ${d(Ct.filter(e=>e.inputs.some(e=>e.item===`nail`)).length)} recipes that want nails. The count at the foot
     tells you how many matched. <kbd>Esc</kbd> in the box clears it.</p>
     <h3>The ledger</h3>
     <p>Everything that has ever come off your bench, your anvil or your oven is written down in the
@@ -280,8 +280,8 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     actually keeps.</p>
     <h3>The journal</h3>
     <p>There is a great deal to do on this island and nothing anywhere that says so. The <b>journal</b>
-    (<kbd>J</kbd>) is that list: ${u(De.length)} goals in ${u(et.length)} chapters, from felling your first tree to
-    taking a trade to ${zn}. Nothing is required and nothing is rewarded &mdash; a goal is only something
+    (<kbd>J</kbd>) is that list: ${d(De.length)} goals in ${d(Xe.length)} chapters, from felling your first tree to
+    taking a trade to ${Fn}. Nothing is required and nothing is rewarded &mdash; a goal is only something
     somebody thought worth doing. Each ticks itself off the moment you have done it, says so in the
     events, and stays ticked for good afterwards whatever becomes of the thing that did it.</p>
     <h3>Crafting</h3>
@@ -304,7 +304,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p>The settings under <b>Crafting</b> in Settings (<kbd>O</kbd>) narrow that.
     <i>Use stores within reach</i>, unticked, keeps it to your pack and the bags on your back.
     <i>Keep rare materials out of crafting</i> stops a craft or a station picking a
-    ${C.slice(1,-1).map(e=>e.name).join(`, `)} or ${C[C.length-1].name} stack by itself; one you point it at is still
+    ${O.slice(1,-1).map(e=>e.name).join(`, `)} or ${O[O.length-1].name} stack by itself; one you point it at is still
     used &mdash; the stack you right-click to make something, or one you choose off a station's menu.
     On an island the island keeps both with your body, and a job it finishes later goes by them.</p>
     <h3>What a thing is made of</h3>
@@ -321,53 +321,53 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     uses that one instead. Nails and the like are exempt
     &mdash; they are whatever metal they are. <b>Improving</b> is the same rule: an oak chest wants more
     oak, and a bronze blade will not take copper.</p>
-    <p><b>The ${u(Hn.filter(e=>!e.fruit).length)} woods that bear nothing.</b> <b>Pine</b> is soft, light and quick to work, and rots as fast as it grew.
+    <p><b>The ${d(Rn.filter(e=>!e.fruit).length)} woods that bear nothing.</b> <b>Pine</b> is soft, light and quick to work, and rots as fast as it grew.
     <b>Willow</b> and <b>birch</b> are light and springy. <b>Maple</b> is even-tempered. <b>Oak</b> is
-    hard going and worth it: an oak thing takes ${h(L(`oak`).wear/L(`pine`).wear)} of the knocks a pine one does, holds more
+    hard going and worth it: an oak thing takes ${g(V(`oak`).wear/V(`pine`).wear)} of the knocks a pine one does, holds more
     and swings harder, at the price of weight. <b>Cedar</b> barely rots at all &mdash; whatever you mean
     to leave standing in the rain, build it of cedar. A <b>bow</b> is the fussiest thing on the island:
     a short bow is tillered from <b>willow</b>, a medium bow from <b>birch</b> and a long bow from
     <b>oak</b>, and nothing else will do.</p>
-    <p><b>The ${u(Ie.length)} metals.</b> <b>Copper</b> is what everything starts in and is soft with it.
+    <p><b>The ${d(Fe.length)} metals.</b> <b>Copper</b> is what everything starts in and is soft with it.
     <b>Tin</b>, <b>zinc</b>, <b>lead</b> and <b>pewter</b> are stock for alloys and nothing you would
     want to swing. <b>Iron</b> is the working metal of the island: harder than copper at everything,
     and the one thing it asks in return is that you do not leave it out in the rain. <b>Steel</b>,
-    which is iron with coal beaten through it, keeps an edge ${y(L(`copper`).wear/L(`steel`).wear)} as long as copper and does not
+    which is iron with coal beaten through it, keeps an edge ${C(V(`copper`).wear/V(`steel`).wear)} as long as copper and does not
     mind the weather. <b>Bronze</b> and <b>brass</b> are the first alloys worth a crucible. <b>Silver</b> hardly
-    tarnishes and bites anything that carries its own light ${y(ft)} as hard, which is what a
-    <b>Lume</b> or an <b>Embra</b> is. <b>Gold</b> rots at ${h(L(`gold`).decay/L(`copper`).decay)} of copper's pace, weighs
-    ${y(L(`gold`).weight/L(`copper`).weight)} what copper does and is good for nothing else. The ${u($r.length)} out of the deep seams are what a
+    tarnishes and bites anything that carries its own light ${C(st)} as hard, which is what a
+    <b>Lume</b> or an <b>Embra</b> is. <b>Gold</b> rots at ${g(V(`gold`).decay/V(`copper`).decay)} of copper's pace, weighs
+    ${C(V(`gold`).weight/V(`copper`).weight)} what copper does and is good for nothing else. The ${d(Qr.length)} out of the deep seams are what a
     lifetime of mining is for: <b>adamantine</b> takes the keenest edge, <b>glimmersteel</b> is light and turns
-    aside ${h(L(`glimmersteel`).soak/L(`copper`).soak-1)} more than copper does, <b>mithril</b> is lighter than the wood it is hafted to, and
+    aside ${g(V(`glimmersteel`).soak/V(`copper`).soak-1)} more than copper does, <b>mithril</b> is lighter than the wood it is hafted to, and
     <b>seryll</b> scarcely takes a mark at all. A tool's metal decides how fast and how true it works, so a
-    bronze hatchet at ${ei} works as well as a copper one at ${Math.round(ei*L(`bronze`).bite/L(`copper`).bite)}; a weapon's metal decides
+    bronze hatchet at ${$r} works as well as a copper one at ${Math.round($r*V(`bronze`).bite/V(`copper`).bite)}; a weapon's metal decides
     what it does; armour's metal decides both what it stops and what it costs you to carry.</p>
     <h3>Brewing</h3>
-    <p>Fill a barrel from a well or the shore, stand at it and <b>set a brew going</b>. ${l(ee.length)} of them:
-    ${d(ee.map(e=>`<b>${e.name.toLowerCase()}</b> from ${g(e.input,e.count,!0)} and ${e.litres} litres of water in ${i(e.time)}`))}.
+    <p>Fill a barrel from a well or the shore, stand at it and <b>set a brew going</b>. ${u(ee.length)} of them:
+    ${f(ee.map(e=>`<b>${e.name.toLowerCase()}</b> from ${_(e.input,e.count,!0)} and ${e.litres} litres of water in ${o(e.time)}`))}.
     Each gives back as many litres of drink as it took of water.</p>
-    <p>A <b>quern</b> presses fruit too: ${u(F(`press_apple_juice`,`apple`))} of any fruit into a <b>bucket of juice</b>, sweet and with
-    nothing dangerous in it, and ${u(F(`press_apple_cider`,`apple`))} apples or pears straight into a <b>bucket of cider</b> with no
-    barrel and no waiting &mdash; one bucket, where the barrel would have made ${u(ni.litres/5)} from ${g(ni.input,ni.count)}
-    and ${u(ni.litres)} litres of water.</p>
+    <p>A <b>quern</b> presses fruit too: ${d(z(`press_apple_juice`,`apple`))} of any fruit into a <b>bucket of juice</b>, sweet and with
+    nothing dangerous in it, and ${d(z(`press_apple_cider`,`apple`))} apples or pears straight into a <b>bucket of cider</b> with no
+    barrel and no waiting &mdash; one bucket, where the barrel would have made ${d(ti.litres/5)} from ${_(ti.input,ti.count)}
+    and ${d(ti.litres)} litres of water.</p>
     <p>While it is working the barrel says so and nothing can be drawn off it &mdash; and nothing hurries
     it. When it stops, draw it into a bucket like any other liquid and drink from that. The quality of
     what comes out is half what went in and half your <b>brewing</b>, and a brew that will not take
     sours the whole barrel.</p>
     <p>What brewing is <i>for</i> is the knack. Anything drunk leaves one the way a cooked dish does,
-    and a brew carries it far longer than food &mdash; at quality ${ti}, a baked potato's lasts
-    ${i(qt(`baked_potato`,ti))} and a bucket of wine's ${i(qt(`wine_bucket`,ti))}. A barrel of the right thing
+    and a brew carries it far longer than food &mdash; at quality ${ei}, a baked potato's lasts
+    ${o(Gt(`baked_potato`,ei))} and a bucket of wine's ${o(Gt(`wine_bucket`,ei))}. A barrel of the right thing
     before a long afternoon at the anvil is the single best use of an orchard.</p>
     <h3>Fishing</h3>
-    <p>Splice a <b>fishing rod</b> from ${P(`make_fishing_rod`)}, the ribbon bent into a hook, stand at
-    water and fish. The line reaches ${u(3)} tiles, and it goes into whatever water within a cast is
+    <p>Splice a <b>fishing rod</b> from ${R(`make_fishing_rod`)}, the ribbon bent into a hook, stand at
+    water and fish. The line reaches ${d(3)} tiles, and it goes into whatever water within a cast is
     deepest &mdash; so where you stand is the whole trade. Standing inland catches nothing at all.</p>
-    <p>${l(Ht.length)} fish run at ${u(new Set(Ht.map(e=>e.depth)).size)} depths, and each wants a hand to match:
-    ${d(Ht.map(e=>`<b>${e.name.toLowerCase()}</b> ${e.depth>0?`from ${u(e.depth)} deep`:`anywhere there is water`}${e.level>Ht[0].level?` with fishing ${e.level}`:``}`))}.
+    <p>${u(S.length)} fish run at ${d(new Set(S.map(e=>e.depth)).size)} depths, and each wants a hand to match:
+    ${f(S.map(e=>`<b>${e.name.toLowerCase()}</b> ${e.depth>0?`from ${d(e.depth)} deep`:`anywhere there is water`}${e.level>S[0].level?` with fishing ${e.level}`:``}`))}.
     A gently shelving beach will never give you more than perch however good you get; a
     sheer bank with deep water right off the edge will give you everything. Each goes over a fire, and
-    what comes off it follows the size of the fish &mdash; a pike is ${u(I(`cook_pike`))} helpings and a sturgeon
-    ${u(I(`cook_sturgeon`))}.</p>
+    what comes off it follows the size of the fish &mdash; a pike is ${d(B(`cook_pike`))} helpings and a sturgeon
+    ${d(B(`cook_sturgeon`))}.</p>
     <p><b>Bait</b> decides what bites. A bare hook catches whatever is passing, which mostly means
     minnows. Put something on it and you are fishing for a particular thing, and it is a ladder every
     rung of which is something you caught on the rung below: <b>worms</b> (turned out of damp dirt with
@@ -375,20 +375,20 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <b>meat</b> brings up a <b>pike</b>; a whole <b>perch</b> on the hook is what brings a
     <b>sturgeon</b> up. Corn does at a pinch. Anything worth using is taken out of your pack and put on
     the hook by itself, and the menu says which. In water deep enough for everything, with the hand for
-    all of it, a sturgeon is ${h(zt(`sturgeon`))} of what takes a bare hook and ${h(zt(`sturgeon`,`perch`))} of what
+    all of it, a sturgeon is ${g(Rt(`sturgeon`))} of what takes a bare hook and ${g(Rt(`sturgeon`,`perch`))} of what
     takes a perch.</p>
-    <p>A net and a creel fish without a rod. A <b>net</b> &mdash; ${P(`make_net`)}, knotted with a
+    <p>A net and a creel fish without a rod. A <b>net</b> &mdash; ${R(`make_net`)}, knotted with a
     needle &mdash; is <b>dragged</b> through water you can wade to: it takes several small fish at a
     haul and lets the big ones through, so it is how you feed a settlement rather than how you land a
-    sturgeon. A <b>creel</b> &mdash; ${P(`make_creel`)} &mdash; is a basket with the throat turned
+    sturgeon. A <b>creel</b> &mdash; ${R(`make_creel`)} &mdash; is a basket with the throat turned
     inward. <b>Sink it in water</b> off a bank, bait it, and walk away: it fishes on its own while you
-    are elsewhere, holds ${u(c.creel.hold??0)}, and gives about <b>${u(Math.round(1/Ee))} fish to a baiting</b> before the bait is
+    are elsewhere, holds ${d(b.creel.hold??0)}, and gives about <b>${d(Math.round(1/nn))} fish to a baiting</b> before the bait is
     worked out of it. Empty it from the bank. Kept baited and emptied, the best one that can be woven is
-    worth around ${u(Math.round(Kn/45*pe(V)))} fish an hour for no work at all.</p>
+    worth around ${d(Math.round(Hn/45*jn(G)))} fish an hour for no work at all.</p>
     <p>The <b>Wadd</b>, being the one thing on the island that swims, now fishes: set one to a deed or a
     work post and it works the banks in its range and carries the catch home.</p>
     <h3>Fruit trees</h3>
-    <p>${l(ri.length)} of the ${u(Hn.length)} trees bear. <b>Apple</b> and <b>olive</b> grow wild here and there in
+    <p>${u(ni.length)} of the ${d(Rn.length)} trees bear. <b>Apple</b> and <b>olive</b> grow wild here and there in
     the warm low country of any island, and the rest are each held to one island of the chart, where they
     grow among the apples and olives: <b>cherry</b> on East Isle,
     <b>pear</b> and <b>quince</b> on the Crescent, <b>pomegranate</b> and <b>apricot</b> on the Northwest
@@ -398,11 +398,11 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     with forestry and plant it, and you have the beginnings of an orchard, wherever the sprout came
     from. A <b>plucka</b> set to work on a deed picks what the bearing trees have on them and carries
     it to the crate.</p>
-    <p>A sapling bears nothing; leave it to grow. A mature tree gives about ${u(3)} of its fruit to a
-    picking and an old one about ${u(5)}, more as your forestry rises, and a picked tree needs a few
-    minutes before there is anything on it again. ${_(g(`apple`,F(`make_apple_pie`,`apple`)))} and a dough bake into ${u(I(`make_apple_pie`))} <b>apple
-    pies</b>, the best food on the island; ${g(`cherry`,F(`make_cherry_preserves`,`cherry`))} boil down into ${u(I(`make_cherry_preserves`))} jars of <b>preserves</b>;
-    and ${g(`olive`,F(`press_olives`,`olive`))} crushed under a <b>quern</b> give ${u(I(`press_olives`))} measures of <b>olive oil</b>, which keeps almost
+    <p>A sapling bears nothing; leave it to grow. A mature tree gives about ${d(3)} of its fruit to a
+    picking and an old one about ${d(5)}, more as your forestry rises, and a picked tree needs a few
+    minutes before there is anything on it again. ${v(_(`apple`,z(`make_apple_pie`,`apple`)))} and a dough bake into ${d(B(`make_apple_pie`))} <b>apple
+    pies</b>, the best food on the island; ${_(`cherry`,z(`make_cherry_preserves`,`cherry`))} boil down into ${d(B(`make_cherry_preserves`))} jars of <b>preserves</b>;
+    and ${_(`olive`,z(`press_olives`,`olive`))} crushed under a <b>quern</b> give ${d(B(`press_olives`))} measures of <b>olive oil</b>, which keeps almost
     for ever.</p>
     <p>All of them are also <b>woods</b>, and good ones: apple is as hard-wearing as oak and takes a finer
     edge, cherry is the best handle wood on the island, and olive is murder to work and outlasts
@@ -410,22 +410,22 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <h3>Farming</h3>
     <p>With a <b>rake</b> in your pack, <b>Till</b> any grass or dirt to rake it into a field. Seeds turn
     up while foraging and botanizing &mdash; vegetables and starches in the one, spices and fibres in the
-    other &mdash; and a field's menu offers to <b>Sow</b> whichever you carry. A crop goes through ${u(re.length)}
-    stages: ${d(re)}, each drawn differently, and every crop takes its own time
+    other &mdash; and a field's menu offers to <b>Sow</b> whichever you carry. A crop goes through ${d(ne.length)}
+    stages: ${f(ne)}, each drawn differently, and every crop takes its own time
     per stage, from quick mint to slow corn.</p>
     <p>Each stage can be <b>Tended</b> once, and tending is what makes a field pay: an untended crop
-    gives ${m(0).produce} crop and ${m(0).seeds} seed, while one tended at every stage gives <b>${m(3).produce} crops and ${m(3).seeds} seeds</b>. Tending
+    gives ${h(0).produce} crop and ${h(0).seeds} seed, while one tended at every stage gives <b>${h(3).produce} crops and ${h(3).seeds} seeds</b>. Tending
     and tilling both train <b>Farming</b>, and your farming skill sets the quality of what you harvest.
     Harvesting leaves the ground still tilled, so a field can be sown again without raking it afresh
     &mdash; which is what lets a Seavic keep one running on its own.</p>
     <h3>Campfires and cooking</h3>
-    <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from ${u(2)} shafts; it
-    fills a ${u(2)} by ${u(2)} block of the tile's spots. Feed it anything that burns &mdash; thatch, shafts,
+    <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from ${d(2)} shafts; it
+    fills a ${d(2)} by ${d(2)} block of the tile's spots. Feed it anything that burns &mdash; thatch, shafts,
     planks, peat, timbers, logs or coal &mdash; and each is worth so many minutes of burning, then
     <b>Light</b> it. Peat is dug off a peat bed with a shovel and costs nothing but the digging, which
     makes it the first fuel worth stacking. A burning
-    fire is the place to <b>Cook</b>: raw meat becomes cooked meat that fills ${h(A(`cooked_meat`).food??0)} of the food bar where
-    raw fills ${h(A(`meat`).food??0)}, potatoes bake
+    fire is the place to <b>Cook</b>: raw meat becomes cooked meat that fills ${g(P(`cooked_meat`).food??0)} of the food bar where
+    raw fills ${g(P(`meat`).food??0)}, potatoes bake
     in the embers, onions and nuts roast, and with a <b>clay bowl</b> you can stew berries into compote
     or simmer meat and vegetables into a proper stew. Cooking recipes sit in the crafting window with
     everything else and unlock when you stand by a lit fire; burning a dish costs you the ingredients,
@@ -433,39 +433,39 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     runs out, and an unlit one can be taken apart to get the wood back.</p>
     <h3>Grain, the quern and bread</h3>
     <p>Wheat and corn are not food until they have been through a <b>quern</b>: stones dressed flat,
-    grooved and pierced, chiselled out of ${P(`make_quern`)} by a stonecutter. Turning it is the
-    <b>Milling</b> skill. ${_(g(`wheat`,F(`make_flour`,`wheat`)))} grind down to a lot of <b>flour</b>, ${g(`corn`,F(`make_cornmeal`,`corn`))} to <b>cornmeal</b>,
+    grooved and pierced, chiselled out of ${R(`make_quern`)} by a stonecutter. Turning it is the
+    <b>Milling</b> skill. ${v(_(`wheat`,z(`make_flour`,`wheat`)))} grind down to a lot of <b>flour</b>, ${_(`corn`,z(`make_cornmeal`,`corn`))} to <b>cornmeal</b>,
     and a badly ground batch is nothing but grit.</p>
-    <p>Flour and a bucket of water are worked into <b>dough</b> &mdash; ${u(I(`make_dough`))} rounds at a time, and the
+    <p>Flour and a bucket of water are worked into <b>dough</b> &mdash; ${d(B(`make_dough`))} rounds at a time, and the
     bucket comes back empty &mdash; and a round of dough baked on a hot stone at a lit fire is
     <b>bread</b>, which is the first food that keeps and travels. Cornmeal boiled in a clay bowl makes
-    ${u(I(`make_porridge`))} bowls of <b>porridge</b>. Both are cooking rather than milling: the mill only makes the meal.</p>
+    ${d(B(`make_porridge`))} bowls of <b>porridge</b>. Both are cooking rather than milling: the mill only makes the meal.</p>
     <h3>The oven</h3>
     <p>A campfire will cook, but it burns as much as it bakes. An <b>oven</b> is laid by a
-    <b>mason</b> from ${P(`make_oven`)} with a trowel, set down on a block of
-    ${u(S(`oven`).w*S(`oven`).h)} spots. Feed it anything a fire takes, peat and coal included &mdash; it holds ${i(nt)} of
+    <b>mason</b> from ${R(`make_oven`)} with a trowel, set down on a block of
+    ${d(T(`oven`).w*T(`oven`).h)} spots. Feed it anything a fire takes, peat and coal included &mdash; it holds ${o($e)} of
     it &mdash; and light it. A lit oven is a cooking fire for every purpose: everything on the Cook menu
     is there, and anything that would have burnt over an open flame comes out right, and better, because
     the bricks hold their heat evenly. It leaves ashes like any other fire, and they rake out the same
     way.</p>
     <h3>Metal</h3>
     <p>Mining a seam brings up <b>ore</b>, not finished metal. A <b>stone smelter</b> is laid up by a
-    mason from ${P(`make_smelter`,!0)} with a trowel &mdash; it is built in the crafting window like
-    anything else, carried, and <b>set down</b> on ${u(6)} spots of a tile on your own deed. Take it up again
+    mason from ${R(`make_smelter`,!0)} with a trowel &mdash; it is built in the crafting window like
+    anything else, carried, and <b>set down</b> on ${d(6)} spots of a tile on your own deed. Take it up again
     whole when it is cold, empty and raked out. It turns ore into lumps.
     Feed it the same fuel a campfire takes (coal burns longest), light it, and charge it with ore: each
     piece takes its own time to run, longer for fine ore and stubborn metal, shorter in a better
     smelter. Draw the lumps off when they are done.</p>
     <p>Lumps of the same metal gather into one larger lump whose quality is the average of what went in,
     weighted by size, so a poor lump drags a good stack down. At a hot smelter you can also mix
-    <b>alloys</b> &mdash; bronze, brass, pewter, electrum and <b>steel</b>, which is ${P(`make_steel`)}
+    <b>alloys</b> &mdash; bronze, brass, pewter, electrum and <b>steel</b>, which is ${R(`make_steel`)}
     &mdash; and their quality comes from the
     metal you put in rather than from your hands; skill only decides how little is lost in the pouring.</p>
     <p>Sand fired in a smelter makes <b>moulds</b>: an anvil mould, a pan mould, heads for rakes,
     shovels, hatchets, pickaxes and knives, a sword blade and a helm. A mould wears every time it is
     filled and <b>cannot be mended</b>; a fine one is simply good for more fillings before it cracks
     through. Pour metal into an <b>anvil mould</b> at the smelter and it cools into an anvil of that
-    metal, which you set down on ${u(4)} spots of a tile.</p>
+    metal, which you set down on ${d(4)} spots of a tile.</p>
     <p>Every other mould is <b>poured at the smelter</b> too, with the metal of your choosing, and cools
     into a <b>casting</b> of the piece &mdash; a shovel head casting, a nail casting &mdash; that comes out
     with the lumps. A casting is carried to an <b>anvil</b> and beaten true there, using
@@ -482,9 +482,9 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     how much of the carcass is worth keeping: bare hands waste most of it. Corpses rot, so do it soon.
     Every carcass you butcher raises the Butchering skill, and the skill sets the <b>QL</b> of everything
     that comes off it. With a knife of QL <i>n</i> it comes off at your Butchering <i>n</i>% of the time,
-    and otherwise at the knife's QL times ${k.toFixed(1)} to ${(k+Nt).toFixed(1)}, never above
-    your Butchering; with bare hands it comes off at your Butchering times ${k.toFixed(1)} to
-    ${(k+Nt).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
+    and otherwise at the knife's QL times ${N.toFixed(1)} to ${(N+jt).toFixed(1)}, never above
+    your Butchering; with bare hands it comes off at your Butchering times ${N.toFixed(1)} to
+    ${(N+jt).toFixed(1)}, plus 1. The menu's <b>Butcher</b> line says the range for the knife you carry.
     A hide off a carcass is <b>raw</b> and no use for anything until it has been through lye.</p>
     <h3>Looking inside a building</h3>
     <p>Once anything is built, a small strip of arrows appears at the right-hand edge. It picks the
@@ -498,23 +498,23 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     floor of a tall building from outside it.</p>
     <h3>Settling and building</h3>
     <p>Carve a <b>deed stake</b> from a shaft with a carving knife, then use it where you stand to
-    found a settlement: ${Xr} by ${Xr} tiles
+    found a settlement: ${Yr} by ${Yr} tiles
     around a stone token. You may hold one settlement at a time, and building is only allowed
-    on its land. Things left outside on deed land rot ${y(1/On)} slower.</p>
+    on its land. Things left outside on deed land rot ${C(1/Tn)} slower.</p>
     <p>To build, flatten and pack a tile, then with a mallet choose <b>Plan building</b> on it and
     <b>Add to building</b> on neighbouring flat packed tiles. Point at a tile's edge and <b>Plan wall</b>
     there: solid, window, bay window, door or double door, in log, plank, timbercraft, cobblestone,
     slate, marble, sandstone, stone brick, clay adobe, clay bricks, ornate silver or ornate gold. Then
     <b>Build wall</b> feeds it materials one at a time. Floors are planned the same way and laid with
-    the paving skill. Another storey can only be planned once every wall of the storey below is built, up to ${u(10)} in all.
+    the paving skill. Another storey can only be planned once every wall of the storey below is built, up to ${d(10)} in all.
     On an upper storey, plan a <b>staircase</b> or <b>ladder</b> instead of a plain floor to climb up:
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
     join into ridges and hips.</p>
     <p><b>Fences, gates and half walls</b> are the same work at a fraction of the cost, and they do not
     need a building around them: point at the edge of any tile &mdash; on your deed or a mile from it,
-    on packed ground or in the long grass &mdash; and choose <b>Plan fence</b>. A log fence is ${u(Wt(`log`,`fence`).needed.log)} logs
-    where a log wall is ${u(Wt(`log`,`solid`).needed.log)}; a half wall is ${x(Yt.get(`half_wall`)?.factor??0)} of one. Both stop anything alive at that border,
+    on packed ground or in the long grass &mdash; and choose <b>Plan fence</b>. A log fence is ${d(Ut(`log`,`fence`).needed.log)} logs
+    where a log wall is ${d(Ut(`log`,`solid`).needed.log)}; a half wall is ${w(Kt.get(`half_wall`)?.factor??0)} of one. Both stop anything alive at that border,
     yourself included, which is how a paddock holds a Roxxen; a <b>fence gate</b> is the one kind you
     can walk through. Feed them materials with <b>Build fence</b> exactly as you would a wall, and take
     them down again from the same menu. Nothing rests on waist-high work: a storey cannot be planned
@@ -523,20 +523,20 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Nails, furniture and storage</h3>
     <p>Anything that is nailed together needs <b>nails</b>, and nails need metal. Fire a <b>nail mould</b>
-    from sand at a smelter: it is a gang mould with ${u(5)} channels in it, so one lump of metal
-    poured into it there and beaten out on an anvil gives ${u(5)} nails at ${u(Math.round(A(`nail`).weight*1e3))} grams apiece. Crates, tool heads fitted to their
+    from sand at a smelter: it is a gang mould with ${d(5)} channels in it, so one lump of metal
+    poured into it there and beaten out on an anvil gives ${d(5)} nails at ${d(Math.round(P(`nail`).weight*1e3))} grams apiece. Crates, tool heads fitted to their
     shafts and every piece of furniture take them; sawing planks, carving shafts and bundling thatch do
     not, so the early game needs no smith.</p>
     <p><b>Fine carpentry</b> is the furniture hand, separate from the carpentry that cuts the wood. With
-    a mallet, planks, timbers, shafts and nails it builds ${u(Br.length)} pieces &mdash;
-    ${d(Br.map(e=>e.name.toLowerCase()))}. Each is carried like a crate and
+    a mallet, planks, timbers, shafts and nails it builds ${d(zr.length)} pieces &mdash;
+    ${f(zr.map(e=>e.name.toLowerCase()))}. Each is carried like a crate and
     <b>set down</b> on a block of subtiles: right-click a tile and choose <b>Set furniture down</b>, and
-    the piece follows the cursor until you click it down &mdash; <b>Q</b> and <b>E</b> turn it ${x(1/Hr)}, Escape
+    the piece follows the cursor until you click it down &mdash; <b>Q</b> and <b>E</b> turn it ${w(1/Vr)}, Escape
     keeps it. A piece stands the way it was set however the view is turned, and <b>Turn it</b> on a standing
-    piece turns it ${x(1/Hr)} round. Staircases and ladders are planned the same way, Q and E
+    piece turns it ${w(1/Vr)} round. Staircases and ladders are planned the same way, Q and E
     choosing the side you climb from.</p>
-    <p>${l(Vr.length)} of them hold things: ${d(Vr.map((e,t)=>`${e.name.endsWith(`s`)?``:`a `}${e.name.toLowerCase()} ${t===0?`takes `:``}${e.capacity}`))},
-    where a plank crate takes ${r.plank.capacity}. The <b>larder</b> is the only one of them that is fussy: it takes food and drink, raw
+    <p>${u(Br.length)} of them hold things: ${f(Br.map((e,t)=>`${e.name.endsWith(`s`)?``:`a `}${e.name.toLowerCase()} ${t===0?`takes `:``}${e.capacity}`))},
+    where a plank crate takes ${i.plank.capacity}. The <b>larder</b> is the only one of them that is fussy: it takes food and drink, raw
     or cooked, and the flour, dough and cornmeal a kitchen bakes from &mdash; and nothing else.
     Right-click one and <b>Open</b> it to see inside, or
     stand beside it and choose <b>Put away</b> on anything you are carrying. Nothing can be picked up
@@ -551,34 +551,34 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     it is called <b>everywhere</b> &mdash; in the Stores window, in the settlement window, in its own
     menu, and when you point at it. Answering with nothing takes the name off again. It is the
     difference between hunting through the lot and walking to the one marked Planks.</p>
-    <p>A <b>sign</b> (${P(`make_sign`,!0)}) and a wider <b>signboard</b> (${P(`make_great_sign`,!0)})
+    <p>A <b>sign</b> (${R(`make_sign`,!0)}) and a wider <b>signboard</b> (${R(`make_great_sign`,!0)})
     are boards made to be written on. Set one up, give it a name, and the name stands
     in the world above the board where anyone walking past can read it &mdash; which is what a fork in
     a road wants.</p>
     <h3>Bags</h3>
-    <p>${l(zr.length)} things hold other things and are carried in your pack:
-    ${d(zr.map(e=>`a <b>${A(e).name.toLowerCase()}</b> of ${P(`make_${e}`,!0)} (${A(e).holds} things)`))}.
+    <p>${u(Rr.length)} things hold other things and are carried in your pack:
+    ${f(Rr.map(e=>`a <b>${P(e).name.toLowerCase()}</b> of ${R(`make_${e}`,!0)} (${P(e).holds} things)`))}.
     Open one from its entry in your pack, or use <i>Put it in a bag</i> on anything you are
     carrying; <i>Empty it out</i> turns the whole thing back into your pack.</p>
     <p>What is in a bag is <b>out of reach</b> until it comes out again &mdash; no recipe will draw on it
     &mdash; and one bag will not go inside another. What a bag is for is that it <b>sheds the
     weather</b>: drop a full one on the ground and what is inside rots at
-    ${d(zr.map((e,t)=>`${x(A(e).shelter??1)}${t===0?` the rate`:``} in a ${A(e).name.toLowerCase()}`))}.
+    ${f(Rr.map((e,t)=>`${w(P(e).shelter??1)}${t===0?` the rate`:``} in a ${P(e).name.toLowerCase()}`))}.
     A backpack of food and tools left at a work post keeps far better than the same things thrown down beside it.</p>
     <h3>Work posts</h3>
-    <p>A <b>work post</b> is a settlement's worth of orders on a stake. Build one from <b>${P(`make_work_post`,!0)}</b>
+    <p>A <b>work post</b> is a settlement's worth of orders on a stake. Build one from <b>${R(`make_work_post`,!0)}</b>
     with a mallet, then right-click a spot on any tile
     <b>outside your own borders</b> and drive it in &mdash; inside them the token already gives the
     orders, so it refuses.</p>
     <p>Set <b>one</b> wildermon to it from the post's own menu and it works out of the post exactly as it
     would work out of a settlement: the same job, the same wage of skill, only measured from the post
     instead of the token. A post is a work site rather than a settlement, so it holds its creature on a
-    short rein &mdash; <b>${rt(1)} tiles round a rough post and ${rt(V)} round the best</b>, however much the creature
+    short rein &mdash; <b>${t(1)} tiles round a rough post and ${t(G)} round the best</b>, however much the creature
     itself has learned. Anything with room in it standing inside that circle is where the loads go, so a
     crate beside the post makes a camp that keeps itself; leave the post bare and everything is carried
     all the way home.</p>
-    <p>Nothing holds a post up and it <b>rots where it stands</b>: <b>${i(Bt)}</b> for the
-    roughest and <b>${i(Ut)}</b> for the best that can be made, leaning further as it goes, with one
+    <p>Nothing holds a post up and it <b>rots where it stands</b>: <b>${o(fn)}</b> for the
+    roughest and <b>${o(xe)}</b> for the best that can be made, leaning further as it goes, with one
     word of warning near the end. When it falls over, whoever was working out of it <b>comes back to
     you</b> if you are walking alone; otherwise it <b>goes back to work on your settlement</b>, or into
     an empty <b>creature crate</b> in your pack if you have no settlement, and off into the wild if you
@@ -590,7 +590,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     &mdash; for as long as a stake in wet ground lasts.</p>
     <h3>Raw materials, worked materials, seed, sprouts, rubbish, and something to pull it in</h3>
     <p>More things to put things in, each for a job a chest does badly.</p>
-    <p>A <b>raw material bin</b> holds <b>${S(`bulk_bin`).capacity}</b> of what comes out of the ground, off a tree, out of a
+    <p>A <b>raw material bin</b> holds <b>${T(`bulk_bin`).capacity}</b> of what comes out of the ground, off a tree, out of a
     vein or off a beast unworked &mdash; ore, logs, dirt, sand, clay, shards, wool, hides &mdash; and
     refuses everything a bench, a kiln or a smelter has touched: no bricks, planks or lumps, and no
     food. It is where a mine's output goes.</p>
@@ -598,20 +598,20 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     exactly what the other one refuses: planks, nails, ribbons, hinges, lumps, bricks, cloth, arrows
     &mdash; every material a bench, a kiln or a smelter has turned out, and nothing else. Between them
     the bins take every material in the game, and neither takes a tool, a crop or a meal.</p>
-    <p>It is the first of the ${u(E.filter(e=>e.heft).length)} stores that <b>do not count what is in them</b>. It weighs it:
-    <b>${qr} kg</b>, which is ${u(Math.round(qr/A(`nail`).weight))} nails or ${u(Math.round(qr/A(`plank`).weight))} planks, and there is no
+    <p>It is the first of the ${d(j.filter(e=>e.heft).length)} stores that <b>do not count what is in them</b>. It weighs it:
+    <b>${Kr} kg</b>, which is ${d(Math.round(Kr/P(`nail`).weight))} nails or ${d(Math.round(Kr/P(`plank`).weight))} planks, and there is no
     limit on the number of things at all. Built of a stronger wood it holds proportionally more, the way
     every other store does. It is where a forge's and a carpenter's output goes.</p>
-    <p>A <b>seed bin</b> and a <b>sprout bin</b> are the small pair, ${u(S(`seed_bin`).w*S(`seed_bin`).h)} subtile each, ${P(`make_seed_bin`)}
-    apiece. Both weigh what is in them rather than counting it: the seed bin <b>${Jr} kg</b>, which is
-    ${Math.round(Jr/A(`wheat_seed`).weight)} wheat seeds or ${Math.round(Jr/A(`potato_seed`).weight)} seed potatoes, and the sprout bin <b>${Yr} kg</b>, which is
-    ${Math.round(Yr/A(`sprout`).weight)} sprouts. The seed bin takes the
-    ${u(at.size)} sowable seeds and nothing else; the sprout bin takes sprouts and nothing else.</p>
-    <p>A <b>trash crate</b> is built with a rotten bottom on purpose: anything put in it rots <b>${y(S(`trash_crate`).trash??1)}
+    <p>A <b>seed bin</b> and a <b>sprout bin</b> are the small pair, ${d(T(`seed_bin`).w*T(`seed_bin`).h)} subtile each, ${R(`make_seed_bin`)}
+    apiece. Both weigh what is in them rather than counting it: the seed bin <b>${qr} kg</b>, which is
+    ${Math.round(qr/P(`wheat_seed`).weight)} wheat seeds or ${Math.round(qr/P(`potato_seed`).weight)} seed potatoes, and the sprout bin <b>${Jr} kg</b>, which is
+    ${Math.round(Jr/P(`sprout`).weight)} sprouts. The seed bin takes the
+    ${d(tt.size)} sowable seeds and nothing else; the sprout bin takes sprouts and nothing else.</p>
+    <p>A <b>trash crate</b> is built with a rotten bottom on purpose: anything put in it rots <b>${C(T(`trash_crate`).trash??1)}
     faster</b> than it would out in the rain, and is gone in minutes. <b>Put away</b> never picks
     it, whatever you are standing beside; you have to choose <b>Throw it in the trash</b> on the thing
     itself, so nothing goes in by accident.</p>
-    <p>A <b>small cart</b> holds ${S(`cart`).capacity} things and, once you <b>take hold of it</b>, follows you wherever
+    <p>A <b>small cart</b> holds ${T(`cart`).capacity} things and, once you <b>take hold of it</b>, follows you wherever
     you go until you <b>let go</b>. Load it at the mine and walk home. Only one cart at a time, and it
     will not follow you into water or up anything it cannot roll over.</p>
     <h3>Bridges</h3>
@@ -621,17 +621,17 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     made of you drive a cart over it.</p>
     <p>Stand on one bank and right-click the other: <b>Throw a bridge across from here</b>. It must run
     straight (north, south, east or west), both ends must be dry ground you can stand in the middle of,
-    the ends must be within ${u(12)} height units of each other, and everything between must be at
-    least ${u(3)} units below the deck &mdash; a gap, not a slope. ${l(Object.keys(ct).length)} kinds:
-    ${d(Object.values(ct).map(e=>`a <b>${e.name.toLowerCase()}</b> (${Mn(e.bill)} a span${e.tool===`trowel`?`, with a trowel`:``}) goes <b>${u(e.span)}</b> tiles and ${e.carts?`carries a cart`:`takes foot traffic only`}`))}.</p>
+    the ends must be within ${d(12)} height units of each other, and everything between must be at
+    least ${d(3)} units below the deck &mdash; a gap, not a slope. ${u(Object.keys(Tt).length)} kinds:
+    ${f(Object.values(Tt).map(e=>`a <b>${e.name.toLowerCase()}</b> (${On(e.bill)} a span${e.tool===`trowel`?`, with a trowel`:``}) goes <b>${d(e.span)}</b> tiles and ${e.carts?`carries a cart`:`takes foot traffic only`}`))}.</p>
     <p>A planned bridge is built a span at a time, exactly as a wall is: stand by the open part and feed
     it what it wants, one unit a go. Until the last span is decked nothing crosses. Pulling one down
     again gives you half of what went into it. A boat passes underneath.</p>
     <h3>Boats</h3>
-    <p>${l(Ur.length)} hulls, both a carpenter's work. A <b>rowing boat</b> is ${P(`make_rowing_boat`,!0)};
-    she carries <b>${Wr.capacity} things</b>, wants <b>${u(Wr.boat?.draught??0)} deep</b> of water under her and is rowed, so your
-    <b>body strength</b> is the engine. A <b>sailing boat</b> is ${P(`make_sailing_boat`,!0)};
-    she carries <b>${Z.capacity}</b>, wants <b>${u(Z.boat?.draught??0)} deep</b>, and the wind
+    <p>${u(Hr.length)} hulls, both a carpenter's work. A <b>rowing boat</b> is ${R(`make_rowing_boat`,!0)};
+    she carries <b>${Ur.capacity} things</b>, wants <b>${d(Ur.boat?.draught??0)} deep</b> of water under her and is rowed, so your
+    <b>body strength</b> is the engine. A <b>sailing boat</b> is ${R(`make_sailing_boat`,!0)};
+    she carries <b>${Q.capacity}</b>, wants <b>${d(Q.boat?.draught??0)} deep</b>, and the wind
     does the work, so it is <b>body control</b> that decides how much of it you waste.</p>
     <p><b>Launch</b> her by setting her down on water deep enough while you stand on the bank &mdash; she
     will not go on land and will not go in a puddle. <b>Climb aboard</b> from the shore and she moves
@@ -648,25 +648,25 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     different island.</p>
     <p>A <b>rowing boat</b> ignores all of it: oars are oars. A <b>sailing boat</b> lives on it, and far
     more on the <b>angle</b> you hold than on the strength. Across the wind is fastest; before it is
-    steady and slower; hard up into it is hard work; and inside the last ${u(Math.round(Pn*180/Math.PI))} degrees she is
+    steady and slower; hard up into it is hard work; and inside the last ${d(Math.round(An*180/Math.PI))} degrees she is
     <b>in irons</b> &mdash; the sail shakes, she makes almost no way at all, and the only way to get
     somewhere upwind is to <b>tack</b>: sail as close as she will lie on one side of it, then bear away
-    and do the same on the other. A sailing boat of quality ${$.ql} with body control 20 at the tiller, in
-    ${Ve($.force)}, makes ${li} tiles a second on a beam reach, running, close-hauled and in irons.</p>
+    and do the same on the other. A sailing boat of quality ${ci.ql} with body control 20 at the tiller, in
+    ${ze(ci.force)}, makes ${li} tiles a second on a beam reach, running, close-hauled and in irons.</p>
     <p>The bars show the wind whenever you are under sail: an arrow flying with it, what it is called,
     where it is out of, and what point of sail you are on. The sail on the boat goes out on whichever
     side the wind is and empties when you point into it.</p>
-    <p>A sailing boat <b>holds ${u(Z.capacity??0)} things</b>, crates included, and that is what she is for
-    &mdash; but a hull loaded to her marks is ${h(Xt)} slower than one running empty.</p>
+    <p>A sailing boat <b>holds ${d(Q.capacity??0)} things</b>, crates included, and that is what she is for
+    &mdash; but a hull loaded to her marks is ${g(qt)} slower than one running empty.</p>
     <h3>Why a road is worth its stone</h3>
-    <p>Feet hardly care what is under them: sand is walked at ${h(R(M.Sand).speed)} of the pace of grass and laid
-    stone at ${h(R(M.Slabs).speed)}, and only a bog really tells, at ${h(R(M.Marsh).speed)}. A <b>laden wheel</b> cares about very
+    <p>Feet hardly care what is under them: sand is walked at ${g(H(I.Sand).speed)} of the pace of grass and laid
+    stone at ${g(H(I.Slabs).speed)}, and only a bog really tells, at ${g(H(I.Marsh).speed)}. A <b>laden wheel</b> cares about very
     little else. An empty cart rolls over anything at its own pace; a full one is held to what the ground
     will take, and between empty and full it is a straight blend, so a half-loaded cart pays half.</p>
-    <p>Stone slabs and cobble cost a full wagon <b>nothing</b>. Packed dirt costs ${x(z(M.PackedDirt))}, bare
-    grass ${x(z(M.Grass))}, sand ${x(z(M.Sand))}, a tilled field ${x(z(M.Field))}, and a <b>bog ${x(z(M.Marsh))}</b>. What a full
-    wagon crosses in a minute on a paved road takes it <b>${i(ci(M.Grass))} over grass and
-    ${i(ci(M.Marsh))} through marsh</b> &mdash; which is the whole argument for paving, and why the stone is
+    <p>Stone slabs and cobble cost a full wagon <b>nothing</b>. Packed dirt costs ${w(U(I.PackedDirt))}, bare
+    grass ${w(U(I.Grass))}, sand ${w(U(I.Sand))}, a tilled field ${w(U(I.Field))}, and a <b>bog ${w(U(I.Marsh))}</b>. What a full
+    wagon crosses in a minute on a paved road takes it <b>${o(si(I.Grass))} over grass and
+    ${o(si(I.Marsh))} through marsh</b> &mdash; which is the whole argument for paving, and why the stone is
     worth cutting.</p>
     <p>Walking somewhere with a load routes you the way a carter would take it: round the bog and along
     the stone, even when the stone is the longer way about. An empty cart still cuts straight through.
@@ -677,20 +677,20 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     wheels are concerned.</p>
     <p>Both are <b>rough carpentry</b> rather than fine, and both are built out of parts:</p>
     <ul>
-      <li><b>Large wheel</b> &mdash; ${P(`make_large_wheel`,!0)}, with a mallet.</li>
-      <li><b>Big axle</b> &mdash; an <b>axle mould</b> ${si(`axle_mould`)}.</li>
-      <li><b>Metal ribbon</b> &mdash; a <b>ribbon mould</b> ${si(`ribbon_mould`)}.</li>
-      <li><b>Yoke</b> &mdash; ${P(`make_yoke`)}, stitched with an awl. One per hitch.</li>
+      <li><b>Large wheel</b> &mdash; ${R(`make_large_wheel`,!0)}, with a mallet.</li>
+      <li><b>Big axle</b> &mdash; an <b>axle mould</b> ${oi(`axle_mould`)}.</li>
+      <li><b>Metal ribbon</b> &mdash; a <b>ribbon mould</b> ${oi(`ribbon_mould`)}.</li>
+      <li><b>Yoke</b> &mdash; ${R(`make_yoke`)}, stitched with an awl. One per hitch.</li>
     </ul>
-    <p>A <b>large cart</b> takes ${P(`make_large_cart`,!0)}. It holds <b>${Gr.capacity} things of any weight</b> and has ${u(Gr.vehicle?.yokes??0)} yokes:
-    ${u(Gr.vehicle?.needs??0)} wildermon will move it, ${u(Gr.vehicle?.yokes??0)} move it faster.</p>
-    <p>A <b>wagon</b> takes ${P(`make_wagon`,!0)}. It holds <b>${Q.capacity} things</b> and will not stir until
-    <b>${Q.vehicle?tt(Q.vehicle):``} yokes</b> have a wildermon in them.</p>
+    <p>A <b>large cart</b> takes ${R(`make_large_cart`,!0)}. It holds <b>${Wr.capacity} things of any weight</b> and has ${d(Wr.vehicle?.yokes??0)} yokes:
+    ${d(Wr.vehicle?.needs??0)} wildermon will move it, ${d(Wr.vehicle?.yokes??0)} move it faster.</p>
+    <p>A <b>wagon</b> takes ${R(`make_wagon`,!0)}. It holds <b>${$.capacity} things</b> and will not stir until
+    <b>${$.vehicle?Qe($.vehicle):``} yokes</b> have a wildermon in them.</p>
     <p>Set one down, stand beside it and <b>hitch</b> a tamed wildermon from its menu &mdash; one you
     have with you or a deed worker; one in a creature crate is let out of it first. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
     else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
-    drags its feet, so feed the team before it goes in. A Seavic pair will outrun you at a walk; ${u(Q.vehicle?.needs??0)}
-    Quarra will not, but they will shift ${u(Q.capacity??0)} bricks.</p>
+    drags its feet, so feed the team before it goes in. A Seavic pair will outrun you at a walk; ${d($.vehicle?.needs??0)}
+    Quarra will not, but they will shift ${d($.capacity??0)} bricks.</p>
     <p>The team is not only the pace but the pitch: a draught beast trains <b>climbing</b> by hauling
     over bad ground, and what the team knows between them decides both how fast the wheels turn and how
     steep a step they will take. A green pair balks at a bank a worked pair goes straight up.</p>
@@ -712,55 +712,55 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     far as it has room, and what does not fit goes in your pack, with one line to say the cart is full. A
     boat is not a cart: what you gather in one goes in your pack.</p>
     <h3>Water: the well and the barrels</h3>
-    <p>Until now water meant walking to the shore. A <b>well</b> is a mason's job &mdash; ${P(`make_well`)}
+    <p>Until now water meant walking to the shore. A <b>well</b> is a mason's job &mdash; ${R(`make_well`)}
     &mdash; and once it is sunk it <b>draws its own water</b>, a little
-    at a time, up to <b>${S(`well`).well} litres</b>. How fast depends entirely on how well it was built: a poor shaft
+    at a time, up to <b>${T(`well`).well} litres</b>. How fast depends entirely on how well it was built: a poor shaft
     trickles, a fine one keeps up with a settlement. Fill a bucket or a waterskin at it exactly as you
     would at a shore, or <b>drink from it</b> where you stand.</p>
-    <p><b>Barrels</b> hold liquid and nothing else, in ${u(Kr.length)} sizes:
-    ${d(Kr.map((e,t)=>`<b>${e.name.toLowerCase()}</b> (${e.liquid}${t===0?` litres`:``})`))}. One barrel holds one liquid &mdash; water or lye, not
+    <p><b>Barrels</b> hold liquid and nothing else, in ${d(Gr.length)} sizes:
+    ${f(Gr.map((e,t)=>`<b>${e.name.toLowerCase()}</b> (${e.liquid}${t===0?` litres`:``})`))}. One barrel holds one liquid &mdash; water or lye, not
     both. <b>Pour</b> a full bucket in and you get the empty bucket back; point at a stack of them and
     the whole lot goes in one after another. Filling a bucket beside a barrel draws out of the barrel,
     so a large barrel of lye is a tannery's worth of work waiting to be done.</p>
     <h3>Rest, and what the cooking is for</h3>
-    <p>Sleeping in a bed banks <b>rest</b> &mdash; ${x(ln)} the night at a perfect bed and less in a poorer one,
-    up to ${i(Cn)} of it held at a time. Rest burns only while you are actually working, and everything you
-    do while it burns <b>teaches you ${y(2)} as much</b>. The hud shows how much you have left.</p>
+    <p>Sleeping in a bed banks <b>rest</b> &mdash; ${w(on)} the night at a perfect bed and less in a poorer one,
+    up to ${o(bn)} of it held at a time. Rest burns only while you are actually working, and everything you
+    do while it burns <b>teaches you ${C(2)} as much</b>. The hud shows how much you have left.</p>
     <p>Every cooked dish <b>favours one trade</b>, and eating it leaves a <b>knack</b> for that trade
-    for a while &mdash; ${y(1+e)} as much, for anything from ${i(ai)} to ${i(oi)} by how
+    for a while &mdash; ${C(1+e)} as much, for anything from ${o(ii)} to ${o(ai)} by how
     filling the dish was and how well it was made. It is the same kind of thing a long day at a trade
     leaves behind, with the one difference that a knack off the table wears off and a knack earned at
     the work never does. Which dish favours which trade is settled when the island is
     raised and never changes on it, and every island settles it differently, so <b>examine</b> a dish to see what it is
     good for. A second helping of the same thing puts the clock back rather than stacking. That is what
     the stews and the bread and the cheese are for: not the food bar, which a raw potato would fill, but
-    an afternoon of carpentry that teaches you ${y(1+e)} as much.</p>
+    an afternoon of carpentry that teaches you ${C(1+e)} as much.</p>
     <h3>What is actually in a meal</h3>
-    <p>Filling the food bar takes a raw potato. Eating <i>well</i> is a different question. ${l(rn.length)} things
+    <p>Filling the food bar takes a raw potato. Eating <i>well</i> is a different question. ${u(be.length)} things
     a body wants are kept separately under the food bar, each fed by different food and each falling
-    away on its own over <b>${i(Dn)}</b>:</p>
+    away on its own over <b>${o(vt)}</b>:</p>
     <table>
       <tr><td><b>Starch</b></td><td>bread, porridge, roots and grain</td></tr>
-      <tr><td><b>Flesh</b></td><td>meat and fish &mdash; cooked, meat is worth ${y(B(`cooked_meat`,`flesh`)/B(`meat`,`flesh`))} raw</td></tr>
+      <tr><td><b>Flesh</b></td><td>meat and fish &mdash; cooked, meat is worth ${C(W(`cooked_meat`,`flesh`)/W(`meat`,`flesh`))} raw</td></tr>
       <tr><td><b>Fat</b></td><td>oil, nuts, cheese and what is fried in them</td></tr>
       <tr><td><b>Greens</b></td><td>vegetables, fruit and berries</td></tr>
     </table>
-    <p>Raw food feeds one of them a little: a potato is ${h(B(`potato`,`starch`))} starch, a piece of
-    meat ${h(B(`meat`,`flesh`))} flesh. A <b>cooked dish feeds several, and feeds them properly</b> &mdash; bread is
-    ${h(B(`bread`,`starch`))} starch, cooked fish ${h(B(`cooked_fish`,`flesh`))} flesh and ${h(B(`cooked_fish`,`fat`))} fat, and a <b>stew</b> is the only thing on
-    the island that feeds all ${u(rn.length)} at once. Better cooking fills them fuller, so quality tells here as
+    <p>Raw food feeds one of them a little: a potato is ${g(W(`potato`,`starch`))} starch, a piece of
+    meat ${g(W(`meat`,`flesh`))} flesh. A <b>cooked dish feeds several, and feeds them properly</b> &mdash; bread is
+    ${g(W(`bread`,`starch`))} starch, cooked fish ${g(W(`cooked_fish`,`flesh`))} flesh and ${g(W(`cooked_fish`,`fat`))} fat, and a <b>stew</b> is the only thing on
+    the island that feeds all ${d(be.length)} at once. Better cooking fills them fuller, so quality tells here as
     everywhere.</p>
     <p>What comes of it: anything in you at all <b>holds hunger and thirst off</b>. On a full board
-    they fall at <b>${x(1-At)}</b> of their ordinary pace, which is ${i(.5/(An*(1-At)))} rather
-    than ${i(.5/An)} before the hunger bar is down to half. And a board with <b>all of them</b> full makes
-    everything you do teach you <b>${x(gn)} more</b> &mdash; but that one reads off whichever of them
+    they fall at <b>${w(1-hn)}</b> of their ordinary pace, which is ${o(.5/($t*(1-hn)))} rather
+    than ${o(.5/$t)} before the hunger bar is down to half. And a board with <b>all of them</b> full makes
+    everything you do teach you <b>${w(Ke)} more</b> &mdash; but that one reads off whichever of them
     is <b>shortest</b>, so every one of them full but one empty is worth nothing at all. Bread and nothing
     else buys you nothing; it is the spread that pays.</p>
     <h3>Money, and three ways to spend it</h3>
     <p>Coins have been struck on this island since there was an anvil to strike them on, and until
-    now they have bought nothing at all. One number settles it: <b>a gold coin is worth ${u(Zr)}
+    now they have bought nothing at all. One number settles it: <b>a gold coin is worth ${d(Xr)}
     silver</b>, every price is named in silver, and change comes back in silver. Paying takes your
-    largest coins first, so ${u(Zr+1)} silver out of a gold and ${u(Qr)} leaves you the ${u(4)} rather than
+    largest coins first, so ${d(Xr+1)} silver out of a gold and ${d(Zr)} leaves you the ${d(4)} rather than
     breaking the small change.</p>
     <p>Goods change hands in the ways below, each the answer to a different question. The
     <b>Market</b> window (<kbd>U</kbd>) holds all of them.</p>
@@ -774,13 +774,13 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     price on each, and it sells while you are asleep: the coins go into its till and wait for you.
     It is the only thing on this island that does anything for you while you are away, and it is
     the whole reason coins are worth striking.</p>
-    <p><b>A parcel</b> is for when neither of you is there. A letter has carried ${u(400)}
+    <p><b>A parcel</b> is for when neither of you is there. A letter has carried ${d(400)}
     characters and nothing else; it carries things now, posted at a <b>mailbox</b> and drawn out at
     any other. Both ends want a box — without one you may still write, and nothing but words will
     cross the island.</p>
     <h3>Who may do what on a settlement</h3>
     <p>Being asked onto somebody's land used to be all or nothing: everybody on the roll could dig
-    up the gardens, empty the stores and pull the walls down. There are ${u(xn.length)} standings now.</p>
+    up the gardens, empty the stores and pull the walls down. There are ${d(vn.length)} standings now.</p>
     <table>
       <tr><td><b>Founder</b></td><td>Planted the stake. Everything, and the master key to every lock on their own land.</td></tr>
       <tr><td><b>Mayor</b></td><td>Everything but founding: builds, and asks people in and out.</td></tr>
@@ -823,8 +823,8 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p><b>Your skill is the ceiling; your tool decides how often you reach it.</b> Nothing you make
     is ever better than your hands. A go rolls against the quality of the tool: land it and the
     piece comes out at your skill, miss it and the piece comes out at roughly what the tool is
-    worth. The copper chisel you washed ashore with is quality ${u(Tt(`chisel`))}, so it reaches your ceiling
-    about one go in ${u(Math.round(100/Tt(`chisel`)))}. That is the whole reason to better a tool, and every recipe row in
+    worth. The copper chisel you washed ashore with is quality ${d(x(`chisel`))}, so it reaches your ceiling
+    about one go in ${d(Math.round(100/x(`chisel`)))}. That is the whole reason to better a tool, and every recipe row in
     <b>Crafting</b> (<kbd>R</kbd>) now says what it would come out at and marks the ones where the
     tool rather than your hands is the thing in the way.</p>
     <p><b>A job that costs no wind and takes no time teaches your body nothing.</b> Examining a
@@ -833,8 +833,8 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p><b>A cart needs an opening it fits through.</b> A person turns sideways through a single
     door; wheels do not. A double door, an archway or a gate is what a cart, a wagon or a team
     needs, and a fence with no way through it is a cart trap.</p>
-    <p><b>Everything rots where it lies.</b> A deed slows that to ${x(On)}, a roof over a closed
-    room slows it to ${x(Ke)} again, and a crate or a sack slows it further still. A pile of planks
+    <p><b>Everything rots where it lies.</b> A deed slows that to ${w(Tn)}, a roof over a closed
+    room slows it to ${w(We)} again, and a crate or a sack slows it further still. A pile of planks
     left in a field is a pile of planks you are going to lose.</p>
     <p><b>A refusal is information.</b> Nothing here fails silently: when a job will not go, the
     line in <b>Trouble</b> says which tool, which material, which skill or which distance is
@@ -865,7 +865,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <h3>Finding things in a store</h3>
     <p>A crate, a cupboard, a cart and a bag all have a <b>search box</b> and the same
     <b>ordering</b> the pack has: by name, quality, weight, damage or how many. A deed crate holds
-    ${r.plank.capacity} things of every sort the deed turns up, so it is the store that needed it most.</p>
+    ${i.plank.capacity} things of every sort the deed turns up, so it is the store that needed it most.</p>
     <h3>What you can hear</h3>
     <p>The island makes a noise now, and what the noise is depends on what is being hit.
     <b>Footfalls</b> take their sound from the ground: grass is a brush with no edge on it, sand
@@ -884,40 +884,40 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <b>Settings</b> (<kbd>O</kbd>) has the volume at the top of the Display tab; sliding it to
     nothing turns the island off entirely.</p>
     <h3>Light after dark</h3>
-    <p>Night takes <b>${x(Le)}</b> of your sight, which is enough to be a reason to stop walking.
-    ${l(mt.length)} things go in your hand against it.</p>
-    <p>A <b>torch</b> is ${g(`cloth`,F(`make_torch`,`cloth`))} wound round the head of ${g(`shaft`,F(`make_torch`,`shaft`))} (${Gn(`make_torch`)}) and is
-    the poor relation in every way that matters: <b>${u(xe(H))} to ${u(xe(V))} tiles</b> of light
-    for <b>${i(le(H))} to ${i(le(V))}</b>, by how well it was wound, and when it is
+    <p>Night takes <b>${w(Ie)}</b> of your sight, which is enough to be a reason to stop walking.
+    ${u(lt.length)} things go in your hand against it.</p>
+    <p>A <b>torch</b> is ${_(`cloth`,z(`make_torch`,`cloth`))} wound round the head of ${_(`shaft`,z(`make_torch`,`shaft`))} (${Vn(`make_torch`)}) and is
+    the poor relation in every way that matters: <b>${d(Se(K))} to ${d(Se(G))} tiles</b> of light
+    for <b>${o(le(K))} to ${o(le(G))}</b>, by how well it was wound, and when it is
     done it is gone &mdash; there is nothing left to refill. What it has over a lantern is that anybody
     can wind one in the first hour of a new island, which is exactly when the dark is worst.</p>
-    <p>A <b>lantern</b> (${P(`make_lantern`)} &mdash; ${Gn(`make_lantern`)}) takes a <b>candle</b>
+    <p>A <b>lantern</b> (${R(`make_lantern`)} &mdash; ${Vn(`make_lantern`)}) takes a <b>candle</b>
     drawn from beeswax and yarn. A better one keeps the draught off the flame and throws further:
-    <b>${u(gt(H))} tiles and ${i(lt(H))}</b> to a candle at the roughest,
-    <b>${u(gt(V))} tiles and ${i(lt(V))}</b> at the best.</p>
+    <b>${d(dt(K))} tiles and ${o(it(K))}</b> to a candle at the roughest,
+    <b>${d(dt(G))} tiles and ${o(it(G))}</b> at the best.</p>
     <p>Either is <b>lit at a fire</b> &mdash; a campfire, a kiln, a smelter or an oven you are standing
     at, or off something already alight in your own hand. Both burn <b>only while lit</b>, so carrying a
     dark lantern costs nothing but its weight, and both say so when they go out.</p>
-    <p>Carrying one lit gives back <b>${x(Me)}</b> of what the dark takes from your sight, and its
+    <p>Carrying one lit gives back <b>${w(je)}</b> of what the dark takes from your sight, and its
     own reach is a <b>floor</b> under your sight however black it gets: you can always see as far as the
     thing in your hand throws.</p>
-    <p>Everything else that burns casts a circle too: a <b>lit campfire</b> ${u(5)} tiles, an
-    <b>oven, kiln or smelter</b> in blast ${u(4)}, and the ${u(qn.length)} creatures that carry a
-    light of their own as far as it reaches &mdash; ${d(qn.map(e=>`a ${e.name.toLowerCase()} ${u(e.glow??0)}`))}.
+    <p>Everything else that burns casts a circle too: a <b>lit campfire</b> ${d(5)} tiles, an
+    <b>oven, kiln or smelter</b> in blast ${d(4)}, and the ${d(Wn.length)} creatures that carry a
+    light of their own as far as it reaches &mdash; ${f(Wn.map(e=>`a ${e.name.toLowerCase()} ${d(e.glow??0)}`))}.
     Each one burns a soft-edged hole in the night with a little firelight in it. None of this is worked
     out at all while the sun is up.</p>
     <h3>Night, and a bed to wake in</h3>
     <p>The island keeps a clock, shown beside your position: a full day and night passes in
-    <b>${i(hn)}</b> of real time, ${i(hn/24)} to the game hour. The sun goes down at
-    <b>${U(21)}</b> and comes up at <b>${U(3)}</b>, so <b>${x(Yn)} of it is day and
-    ${x(1-Yn)} night</b> &mdash; ${i(hn*(1-Yn))} of real time dark in every day
-    &mdash; and the light goes over the ${u(2)} game hours around sundown and comes back over the
-    ${u(2)} around sunrise.</p>
+    <b>${o(un)}</b> of real time, ${o(un/24)} to the game hour. The sun goes down at
+    <b>${Un(21)}</b> and comes up at <b>${Un(3)}</b>, so <b>${w(Kn)} of it is day and
+    ${w(1-Kn)} night</b> &mdash; ${o(un*(1-Kn))} of real time dark in every day
+    &mdash; and the light goes over the ${d(2)} game hours around sundown and comes back over the
+    ${d(2)} around sunrise.</p>
     <p>A <b>bed</b> or a <b>cot</b> is worth more than the corner it stands in. Choose <b>Make this your
     home</b> and it becomes the place you wake up &mdash; whatever happens to you, wherever it happens.
     Choose <b>Sleep until morning</b> after dark and you wake with your wind back and some of your hurt
     mended; a well-made bed is a better night than a thin cot. Playing on your own you wake at
-    <b>${U(3+Rt)}</b>, and the world has not waited for you: fires burn down, crops come on,
+    <b>${Un(3+Lt)}</b>, and the world has not waited for you: fires burn down, crops come on,
     kilns finish and everything left outside ages by however long you were under. On an island the
     night is everybody's and one sleeper cannot skip it, so you wake rested with the clock where it was.
     You wake up hungry and thirsty, too.</p>
@@ -933,7 +933,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <b>kept back</b> and nothing worn moves either way.</p>
     <p>The <b>inventory</b> can be ordered by name, quality, weight, damage or how many, and grouped by
     kind or run together in one flat list.</p>
-    <p><b>Pick up everything here</b> sweeps the tile you are standing on and the ${u((2*jt.SWEEP+1)**2-1)} around it in
+    <p><b>Pick up everything here</b> sweeps the tile you are standing on and the ${d((2*Ot.SWEEP+1)**2-1)} around it in
     one go, nearest pile first, rather than one entry per pile.</p>
     <h3>Keeping something back</h3>
     <p>Right-click anything in the pack and choose <b>Keep this back</b>. A kept thing is never spent: no
@@ -942,12 +942,12 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     quietly eating it &mdash; and <b>Put it back in the pack</b> undoes it. Kept things read
     <i>kept back</i> in the list.</p>
     <h3>What your back will take</h3>
-    <p>You carry <b>120 kilos</b> plus <b>${u(5)} kilos</b> for every point of <b>body
-    strength</b>, so 220 at the start and ${120+G*5} at ${u(G)}. Going over it costs, and
+    <p>You carry <b>120 kilos</b> plus <b>${d(5)} kilos</b> for every point of <b>body
+    strength</b>, so 220 at the start and ${120+J*5} at ${d(J)}. Going over it costs, and
     the cost climbs with how far over you are: everything past the mark slows you and every action
-    takes more wind, as armour does &mdash; ${u(Xn)} kilos past a starting back drags on you like about
-    ${u(Math.round(kn(Xn,220)/K))} full suits of iron plate. Past <b>${y(Ot)}</b> your limit you are down to
-    <b>${x(pn)} of your pace</b>. The inventory footer turns red and says by how much, and the bars
+    takes more wind, as armour does &mdash; ${d(qn)} kilos past a starting back drags on you like about
+    ${d(Math.round(En(qn,220)/Jn))} full suits of iron plate. Past <b>${C(wt)}</b> your limit you are down to
+    <b>${w(de)} of your pace</b>. The inventory footer turns red and says by how much, and the bars
     say so too.</p>
     <p>The damage column turns <b>amber past 75</b> and <b>red past 90</b>, so a tool about to go to
     pieces says so where you are looking rather than only in the log.</p>
@@ -957,14 +957,14 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     good food stays in your pack. Both are there to save hunting through the inventory.</p>
     <p><b>Tools wear out</b>, slowly. Every use puts a little damage on whatever tool the work called
     for, and a poor tool goes to pieces far faster than a good one &mdash; which is most of what quality
-    is for: a copper tool is good for about ${u(Zn(H))} jobs at quality ${H} and ${u(Zn(V))} at
-    ${u(V)}, and what it is made of stretches or shortens that. Damage also makes a tool work as though it
+    is for: a copper tool is good for about ${d(Yn(K))} jobs at quality ${K} and ${d(Yn(G))} at
+    ${d(G)}, and what it is made of stretches or shortens that. Damage also makes a tool work as though it
     were poorer than it is. Past <b>75 damage</b> it warns you in red, and again at every
-    ${u(5)} points after; at 100 it breaks and is gone.</p>
+    ${d(5)} points after; at 100 it breaks and is gone.</p>
     <p>Right-click anything damaged and choose <b>Repair</b>. It is its own skill: the work goes on a go
     at a time, taking damage out and a little quality with it, and you can stop whenever you like.
-    Taking ${u(Qn)} damage out of a tool is ${u(er(W(`repair`)))} goes at repair ${W(`repair`)} and costs it
-    ${tr(W(`repair`))} of quality; at repair ${$n} it is ${u(er($n))} goes for ${tr($n)}.
+    Taking ${d(Xn)} damage out of a tool is ${d(Qn(q(`repair`)))} goes at repair ${q(`repair`)} and costs it
+    ${$n(q(`repair`))} of quality; at repair ${Zn} it is ${d(Qn(Zn))} goes for ${$n(Zn)}.
     Nothing is repaired once it is down to quality 1, so a thing mended often enough is finished in the
     end &mdash; but that is a long way off, and a good tool kept mended will outlast most of what you
     build with it.</p>
@@ -973,21 +973,21 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     a kind, in whichever place it landed, and that wound has its own life: it <b>bleeds</b> until it is
     dressed, it goes <b>bad</b> if it never is, and nothing on you knits at all while something is still
     open. The bars panel lists what you are carrying, worst first, and says what each one wants.</p>
-    <p>${l(nr.length)} kinds, and each has a herb that suits it:
-    ${d(nr.map((e,t)=>`a <b>${e.name}</b> ${t===0?`wants `:``}<b>${e.herb}</b>`))}. What leaves which
+    <p>${u(er.length)} kinds, and each has a herb that suits it:
+    ${f(er.map((e,t)=>`a <b>${e.name}</b> ${t===0?`wants `:``}<b>${e.herb}</b>`))}. What leaves which
     is what hit you &mdash; a hoof bruises, a claw opens, a sting goes deep and narrow, and
-    ${d(Jn.map(e=>`the ${e.name.toLowerCase()}`))} burn.</p>
-    <p>A wound is dressed with a bandage or a cover. A <b>bandage</b> is cloth cut ${u(I(`make_bandage`))} to a length with a knife; a
-    <b>healing cover</b> is the herb itself, bruised into cotton, ${u(I(`make_cover_${nr[0].herb}`))} to a batch on the
-    <b>first aid</b> skill. Put on cleanly, either stops the bleeding and puts back between ${h(Jt(W(`first_aid`),H))} and
-    ${h(Jt(G,V))} of your health at once, by your first aid and its quality. Right-click either
+    ${f(Gn.map(e=>`the ${e.name.toLowerCase()}`))} burn.</p>
+    <p>A wound is dressed with a bandage or a cover. A <b>bandage</b> is cloth cut ${d(B(`make_bandage`))} to a length with a knife; a
+    <b>healing cover</b> is the herb itself, bruised into cotton, ${d(B(`make_cover_${er[0].herb}`))} to a batch on the
+    <b>first aid</b> skill. Put on cleanly, either stops the bleeding and puts back between ${g(ie(q(`first_aid`),K))} and
+    ${g(ie(J,G))} of your health at once, by your first aid and its quality. Right-click either
     and it goes on the worst thing open.</p>
     <p>What is on a wound decides how fast it closes and whether it turns. Under cloth it closes
-    ${y(Ae/$t)} as fast as with nothing on it. The <b>right herb</b> puts back
-    ${y(yn)} as much at once, closes it ${y(ae/Ae)} as fast as cloth, and it <b>never
-    turns</b>; the wrong herb puts back ${y(un)} as much and closes it ${h(ge/Ae-1)} faster than cloth.
-    Cloth leaves ${h(Te)} of an open wound's chance of going bad, the wrong herb ${h(Ze)}.
-    And every ${u(Math.round(Fe/We))} points of <b>chirurgy</b> closes every wound on you as fast again as
+    ${C(ke/Yt)} as fast as with nothing on it. The <b>right herb</b> puts back
+    ${C(Ve)} as much at once, closes it ${C(ae/ke)} as fast as cloth, and it <b>never
+    turns</b>; the wrong herb puts back ${C(Ne)} as much and closes it ${g(he/ke-1)} faster than cloth.
+    Cloth leaves ${g(Ee)} of an open wound's chance of going bad, the wrong herb ${g(Ye)}.
+    And every ${d(Math.round(Pe/He))} points of <b>chirurgy</b> closes every wound on you as fast again as
     it closed at none.</p>
     <p>A wound that has <b>gone bad</b> is a different problem: it drains rather than closes and no
     dressing will hold on it. Scour it out with a bucket of <b>lye</b> first &mdash; a hard piece of
@@ -999,27 +999,27 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <h3>What quality is worth</h3>
     <p><b>Your skill is the ceiling and your tool is the chance of reaching it.</b> The quality of the
     tool in your hand is the percentage chance that a piece of work comes out at your skill in that
-    trade. Every other go comes out at what the tool itself is worth &mdash; ${rr} its quality,
-    and never above your skill. The hatchet you washed ashore with is quality ${Tt(`hatchet`)}, so
-    ${x(Tt(`hatchet`)/V)} of your logs come out at your skill. Nothing you make is ever finer than
+    trade. Every other go comes out at what the tool itself is worth &mdash; ${tr} its quality,
+    and never above your skill. The hatchet you washed ashore with is quality ${x(`hatchet`)}, so
+    ${w(x(`hatchet`)/G)} of your logs come out at your skill. Nothing you make is ever finer than
     the hands that made it, so a fine tool in a beginner's hands still only makes beginner's work
     &mdash; it just stops wasting the material.</p>
     <p>Work done with no tool at all &mdash; picking berries, tending a field &mdash; has nothing to
-    roll against and comes out at ${rr} your skill, plus 1.</p>
+    roll against and comes out at ${tr} your skill, plus 1.</p>
     <h3>Rare things</h3>
     <p>Now and again a thing comes off the bench better than the hands that made it had any right to
-    produce. About ${d(q.map((e,t)=>`<b>one thing in ${u(Math.round(1/ne(e)))}</b> ${t===0?`is `:``}<b>${C[e].name}</b>`))}.
+    produce. About ${f(Y.map((e,t)=>`<b>one thing in ${d(Math.round(1/te(e)))}</b> ${t===0?`is `:``}<b>${O[e].name}</b>`))}.
     Nothing brings it on &mdash; not skill, not tools, not the metal &mdash; and nothing you do can make
-    it more likely; you make ${u(Math.round(1/ne(C.length-1)))} ordinary things and find that you have one.</p>
-    <p>A rare thing is <b>better at whatever it was for</b> by ${d(q.map(e=>x(C[e].boost-1))).replace(/ and ([^,]*)$/,` or $1`)}
+    it more likely; you make ${d(Math.round(1/te(O.length-1)))} ordinary things and find that you have one.</p>
+    <p>A rare thing is <b>better at whatever it was for</b> by ${f(Y.map(e=>w(O[e].boost-1))).replace(/ and ([^,]*)$/,` or $1`)}
     &mdash; an edge that bites, armour that turns aside more, a tool that works truer &mdash; <b>wears and rots
-    at ${d(q.map(e=>h(C[e].keep)))}</b> of an ordinary one's pace, and can be <b>improved past the
-    ceiling of your own skill</b> by ${d(q.map(e=>String(C[e].ceiling))).replace(/ and ([^,]*)$/,` or $1`)}.</p>
+    at ${f(Y.map(e=>g(O[e].keep)))}</b> of an ordinary one's pace, and can be <b>improved past the
+    ceiling of your own skill</b> by ${f(Y.map(e=>String(O[e].ceiling))).replace(/ and ([^,]*)$/,` or $1`)}.</p>
     <p>Anything that <b>holds things</b> holds more of them: a bag, a crate, a cupboard, a weight
     bin, the charge a smelter will take and the load a kiln will fire all go up by
-    ${h(on)} a step &mdash; ${q.map(e=>`<b>${h(on*e)}</b>`).join(`, `)}
+    ${g(tn)} a step &mdash; ${Y.map(e=>`<b>${g(tn*e)}</b>`).join(`, `)}
     for rare, supreme and fantastic, and never less than <b>one more unit a step</b>, so a kiln's
-    ${u(16)} becomes ${d(q.map(e=>u(en(16,{rare:e}))))}. A rare thing keeps
+    ${d(16)} becomes ${f(Y.map(e=>d(Xt(16,{rare:e}))))}. A rare thing keeps
     the room when you set it down, and keeps it again when you pick it back up.</p>
     <p>They are written in their own colour in your pack, and on the ground they <b>shine</b> in it:
     a few slow motes for a rare thing, more over a bloom for a supreme one, and a gold bloom under a
@@ -1041,7 +1041,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
       <tr><td><b>Leather</b></td><td>An <b>awl</b> and a <b>needle</b>, and a piece of tanned leather</td></tr>
       <tr><td><b>Stone</b></td><td>A <b>chisel</b> and a <b>whetstone</b>, and shards</td></tr>
     </table>
-    <p>A <b>whetstone</b> is chiselled from ${P(`make_whetstone`)}, and a <b>needle</b> and an <b>awl</b> are
+    <p>A <b>whetstone</b> is chiselled from ${R(`make_whetstone`)}, and a <b>needle</b> and an <b>awl</b> are
     carved from bone with a knife, so cloth, leather, wood and stone can all be bettered long before you
     have a forge. A <b>file</b> is poured from its own mould at the smelter and beaten out at an anvil,
     which is what gates metal.</p>
@@ -1053,10 +1053,10 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <h3>Ashes, lye and tanning</h3>
     <p>Nothing burns away to nothing. Any fire that has been alight a while &mdash; a <b>campfire</b>, a
     <b>smelter</b> or a <b>kiln</b> &mdash; leaves <b>ashes</b> under it, one lot for every
-    ${i(1/bn)} it burns, and you can <b>Take ashes</b> from it whether it is lit or cold. They pile up
+    ${o(1/gn)} it burns, and you can <b>Take ashes</b> from it whether it is lit or cold. They pile up
     while you work, so a smelter you have been running all morning is worth raking out.</p>
-    <p>A <b>bucket</b> is ${P(`make_bucket`)} with a mallet. Stand at any shore and <b>Fill</b>
-    it; on dry land it will not fill. ${_(u(F(`make_lye`,`ash`)))} lots of ashes leached into a bucket of water make a
+    <p>A <b>bucket</b> is ${R(`make_bucket`)} with a mallet. Stand at any shore and <b>Fill</b>
+    it; on dry land it will not fill. ${v(d(z(`make_lye`,`ash`)))} lots of ashes leached into a bucket of water make a
     <b>bucket of lye</b> &mdash; that is the <b>Alchemy</b> skill. Lye is sharp stuff and one bucket does
     one skin. <b>Empty</b> a bucket at any time to get the plain bucket back.</p>
     <p><b>Tanning</b> is leatherworking: a raw <b>hide</b>, a bucket of lye and a carving knife. The lye
@@ -1067,74 +1067,74 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     manage it.</p>
     <h3>Reeds, papyrus and books</h3>
     <p>The <b>reed beds</b> along the shallows are worth cutting. Take a knife to one and you get
-    reeds; cut it again too soon and there is nothing left to take. ${_(g(`reed`,F(`make_papyrus`,`reed`)))} soaked in a bucket of
-    water, split, laid crosswise and pressed give ${u(I(`make_papyrus`))} sheets of <b>papyrus</b>, which is the
+    reeds; cut it again too soon and there is nothing left to take. ${v(_(`reed`,z(`make_papyrus`,`reed`)))} soaked in a bucket of
+    water, split, laid crosswise and pressed give ${d(B(`make_papyrus`))} sheets of <b>papyrus</b>, which is the
     <b>Papyrusmaking</b> skill.</p>
     <p><b>Ink</b> is the alchemist's part: a gland &mdash; the rare thing off a carcass &mdash; ground with
-    ${u(F(`make_ink`,`ash`))} lots of ashes into a bucket of water, for ${u(I(`make_ink`))} lots of ink.
-    ${_(u(F(`make_book`,`papyrus`)))} sheets, ${u(F(`make_book`,`leather`))} leather boards, a lot of ink and a needle bind into a <b>book</b>.</p>
-    <p>Right-click a book and <b>Study</b> it. Each go takes ${i(Gt(ir))}, raises <b>mind logic</b>, which is
+    ${d(z(`make_ink`,`ash`))} lots of ashes into a bucket of water, for ${d(B(`make_ink`))} lots of ink.
+    ${v(d(z(`make_book`,`papyrus`)))} sheets, ${d(z(`make_book`,`leather`))} leather boards, a lot of ink and a needle bind into a <b>book</b>.</p>
+    <p>Right-click a book and <b>Study</b> it. Each go takes ${o(Wt(nr))}, raises <b>mind logic</b>, which is
     what decides how many jobs you can keep in your head at once, and wears the pages a little. Held in
-    one hand it is hard going; at a <b>lectern</b> you get ${y(2)} as much out of the same go.</p>
+    one hand it is hard going; at a <b>lectern</b> you get ${C(2)} as much out of the same go.</p>
     <h3>Titles and knacks</h3>
     <p>A long climb leaves titles and knacks behind it, and neither is asked for. Every trade hands out a
-    <b>title</b> at ${d(be.map(String))} &mdash; ${Ct(`carpentry`).map(e=>e.name).join(`, `)}
+    <b>title</b> at ${f(an.map(String))} &mdash; ${St(`carpentry`).map(e=>e.name).join(`, `)}
     &mdash; and you wear <b>one at a time</b>, chosen in the Skills window (<kbd>K</kbd>) and shown
     beside your position. Click the one you are wearing to take it off again.</p>
-    <p>A <b>knack</b> comes of the work itself: <b>one go in ${u(ue)}</b>, at any trade and at any
-    level, leaves one behind. It lands on the trade you were working ${x(_t)} of the time, and
+    <p>A <b>knack</b> comes of the work itself: <b>one go in ${d(n)}</b>, at any trade and at any
+    level, leaves one behind. It lands on the trade you were working ${w(Ge)} of the time, and
     otherwise on one of the trades beside it &mdash; a long day of carpentry may leave you better at
-    bowyery, because it is the same hands and the same wood. A knack is worth ${x(ut)} more on
+    bowyery, because it is the same hands and the same wood. A knack is worth ${w(yt)} more on
     everything that trade teaches you from then on, it never wears off, and a trade holds
-    <b>${u(5)}</b> of them: ${y(1+5*ut)} on every gain, for good. They stack with a night's rest
+    <b>${d(5)}</b> of them: ${C(1+5*yt)} on every gain, for good. They stack with a night's rest
     and with what you have eaten, and the Skills window shows how many each trade has.</p>
     <p>Because it is luck rather than levels, a knack can land at any moment and the well never runs
     dry: the last hour at a trade is as likely to leave one as the first. Nothing is owed to
     you at a round number, and nothing stops coming once the early levels are behind you.</p>
-    <p>A cooked dish leaves a knack too, and a stronger one &mdash; ${y(1+e)} rather than
-    ${x(ut)} more &mdash; but it wears off, in ${i(ai)} to ${i(oi)}. One is earned and kept;
+    <p>A cooked dish leaves a knack too, and a stronger one &mdash; ${C(1+e)} rather than
+    ${w(yt)} more &mdash; but it wears off, in ${o(ii)} to ${o(ai)}. One is earned and kept;
     the other is eaten and spent. They stack, as does a night's rest.</p>
     <h3>Dye</h3>
     <p>Everything made here comes out the colour of what it was made from: cloth the grey-white of the
     wool, leather the brown of the hide. A <b>dye</b> changes that, and it is the first thing in the
     game that is yours rather than the island's.</p>
     <p>A dye is boiled out of something that grows with a bucket of <b>lye</b> to bite the colour in and
-    hold it &mdash; without the lye it washes straight out. ${l(wt.length)} of them, easiest first:
-    ${d(ar.map(e=>`<b>${e.name.toLowerCase()}</b> (${e.word}, from ${g(e.from,e.count)}, alchemy ${e.difficulty})`))}.
-    One boil gives ${u(I(`make_${wt[0].id}`))} pots and hands the bucket back.</p>
+    hold it &mdash; without the lye it washes straight out. ${u(bt.length)} of them, easiest first:
+    ${f(rr.map(e=>`<b>${e.name.toLowerCase()}</b> (${e.word}, from ${_(e.from,e.count)}, alchemy ${e.difficulty})`))}.
+    One boil gives ${d(B(`make_${bt[0].id}`))} pots and hands the bucket back.</p>
     <p>One pot colours one thing. Cloth and leather take dye and metal does not, so that is cloth and
     leather armour, cloth itself, sacks, satchels, backpacks, a saddle, a bridle, a <b>banner</b> and a
     <b>sailing boat</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
-    about in it. A banner is cloth on a staff &mdash; ${P(`make_banner`)} &mdash; planted
+    about in it. A banner is cloth on a staff &mdash; ${R(`make_banner`)} &mdash; planted
     anywhere, and it flies whatever colour you dyed it. Boil it out again in lye if you change your
     mind.</p>
     <h3>Rope</h3>
     <p>Wemp is grown in a field and cut for <b>fibre</b>, and the fibre is spun or laid up. Spun on a spindle it
-    is coarse yarn; laid up on a <b>rope tool</b> (${P(`make_rope_tool`)}, carved) it is <b>rope</b> &mdash;
-    ${u(F(`make_rope`,`wemp`))} fibres to a rope, on the <b>ropemaking</b> skill. ${_(g(`rope`,F(`make_thick_rope`,`rope`)))} laid up again make a <b>thick
+    is coarse yarn; laid up on a <b>rope tool</b> (${R(`make_rope_tool`)}, carved) it is <b>rope</b> &mdash;
+    ${d(z(`make_rope`,`wemp`))} fibres to a rope, on the <b>ropemaking</b> skill. ${v(_(`rope`,z(`make_thick_rope`,`rope`)))} laid up again make a <b>thick
     rope</b>, which is the hawser everything heavy hangs on.</p>
-    <p>Rope is not decoration. A <b>bridle</b> takes ${u(F(`make_bridle`,`rope`))} for the reins, a <b>rowing boat</b>
-    ${u(F(`make_rowing_boat`,`rope`))}, a <b>sailing boat</b> ${u(F(`make_sailing_boat`,`rope`))} and ${u(F(`make_sailing_boat`,`thick_rope`))} hawsers for her standing
-    rigging, and a <b>well</b> ${g(`thick_rope`,F(`make_well`,`thick_rope`))} to hang the bucket down the shaft. Keep a field of
+    <p>Rope is not decoration. A <b>bridle</b> takes ${d(z(`make_bridle`,`rope`))} for the reins, a <b>rowing boat</b>
+    ${d(z(`make_rowing_boat`,`rope`))}, a <b>sailing boat</b> ${d(z(`make_sailing_boat`,`rope`))} and ${d(z(`make_sailing_boat`,`thick_rope`))} hawsers for her standing
+    rigging, and a <b>well</b> ${_(`thick_rope`,z(`make_well`,`thick_rope`))} to hang the bucket down the shaft. Keep a field of
     wemp if you mean to build anything that floats.</p>
     <h3>Wool, cloth and the loom</h3>
     <p>Fibre becomes cloth at a spindle and then at a loom, and each is its own furniture. Build a <b>spindle</b> and a
     <b>loom</b> with fine carpentry, then stand at the spindle to spin wool, cotton or wemp into
-    <b>yarn</b>, and at the loom to weave ${u(F(`weave_cloth`,`yarn`))} yarn into a length of <b>cloth</b>. Cloth stuffs a
+    <b>yarn</b>, and at the loom to weave ${d(z(`weave_cloth`,`yarn`))} yarn into a length of <b>cloth</b>. Cloth stuffs a
     mattress, sews into clothing, and twisted into a <b>bowstring</b> it is the start of every bow.</p>
     <h3>Armour</h3>
-    <p>Armour is worn a piece at a time in ${u(or.length)} places &mdash; ${d(or)} &mdash;
+    <p>Armour is worn a piece at a time in ${d(ir.length)} places &mdash; ${f(ir)} &mdash;
     and only counts where the blow actually lands. Right-click anything wearable and choose
     <b>Wear or wield</b>; the inventory marks what is on you.</p>
-    <p>There are ${u(sr.length)} kinds anybody can make, each with a skill of its own that rises <b>by being
+    <p>There are ${d(ar.length)} kinds anybody can make, each with a skill of its own that rises <b>by being
     hit in it</b>, and each turns aside a share of a blow before its quality, its metal and that skill:
-    <b>cloth</b>, sewn by tailoring, ${h(o.cloth.soak)}; <b>leather</b>, cut from tanned hide with a knife
-    by leatherworking, ${h(o.leather.soak)}; <b>chain</b>, poured from moulds and riveted up at an anvil by
-    chain armoursmithing, ${h(o.chain.soak)}; and <b>plate</b>, beaten out whole by plate armoursmithing,
-    ${h(o.plate.soak)}. Quality and the skill behind it raise all of those, and damage lowers them: armour
+    <b>cloth</b>, sewn by tailoring, ${g(c.cloth.soak)}; <b>leather</b>, cut from tanned hide with a knife
+    by leatherworking, ${g(c.leather.soak)}; <b>chain</b>, poured from moulds and riveted up at an anvil by
+    chain armoursmithing, ${g(c.chain.soak)}; and <b>plate</b>, beaten out whole by plate armoursmithing,
+    ${g(c.plate.soak)}. Quality and the skill behind it raise all of those, and damage lowers them: armour
     wears where it is struck, and a piece beaten to nothing falls off you. Weight is the price &mdash; a full
-    suit of iron plate slows you by ${h(K/(1+K))} and makes every action cost ${h(K)} more
-    wind, where cloth costs ${h(o.cloth.burden)}.</p>
+    suit of iron plate slows you by ${g(Jn/(1+Jn))} and makes every action cost ${g(Jn)} more
+    wind, where cloth costs ${g(c.cloth.burden)}.</p>
     <p>A <b>shield</b> in the off hand is different: it does not soften a blow, it stops the whole of
     one outright, and the shields skill and its quality decide how often. A weapon that takes both
     hands leaves none for one.</p>
@@ -1142,34 +1142,34 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p>When something bites you, you <b>turn on it</b>: whatever you were doing goes to the front of the
     line and is picked up again after, and you keep swinging until it is dead, gone or out of reach.
     A swing you were already aiming at it is left alone, and nothing tame counts.</p>
-    <p>Every weapon belongs to a kind, and each kind is its own subskill: ${d(cr.map(e=>`<b>${e}</b>`))}.
+    <p>Every weapon belongs to a kind, and each kind is its own subskill: ${f(or.map(e=>`<b>${e}</b>`))}.
     Swinging trains the weapon's own subskill and the <b>fighting</b> skill behind it, and both decide
     whether a blow lands and how hard. A weapon's own numbers matter as much: a hunting knife is quick
     and light, a maul or a battle axe is slow and ends things, a spear reaches further than anything
     else held in the hand, and the ones that take both hands take the shield off your arm.</p>
     <p>Heads are poured from <b>moulds</b> at the smelter, beaten true at an anvil and fitted to shafts: short and long sword blades,
     axe and maul heads, spear heads, and a gang mould that turns one lump of metal into
-    ${u(oe.find(e=>e.id===`arrow_head_mould`)?.per??0)} <b>arrow heads</b>. A club is simply carved from a log, which is what most people start with.</p>
-    <p>Bows are tillered with <b>bowyery</b> from shafts and a bowstring, in ${u(lr.length)} sizes:
-    ${d(lr.map((e,t)=>`a <b>${A(e.id).name.toLowerCase()}</b> ${t===0?`reaches `:``}${u(e.range??0)}${t===0?` tiles`:``}`))},
+    ${d(oe.find(e=>e.id===`arrow_head_mould`)?.per??0)} <b>arrow heads</b>. A club is simply carved from a log, which is what most people start with.</p>
+    <p>Bows are tillered with <b>bowyery</b> from shafts and a bowstring, in ${d(sr.length)} sizes:
+    ${f(sr.map((e,t)=>`a <b>${P(e.id).name.toLowerCase()}</b> ${t===0?`reaches `:``}${d(e.range??0)}${t===0?` tiles`:``}`))},
     each slower to draw and heavier in the hit than the last. Arrows are made with <b>fletching</b> from
-    ${P(`make_arrows`)}, ${u(I(`make_arrows`))} to a go &mdash; and feathers come only off a bird:
-    ${d(ur.map(e=>`the ${e.name}`))}. With a bow in hand, <b>Shoot</b> appears on any wild creature
+    ${R(`make_arrows`)}, ${d(B(`make_arrows`))} to a go &mdash; and feathers come only off a bird:
+    ${f(cr.map(e=>`the ${e.name}`))}. With a bow in hand, <b>Shoot</b> appears on any wild creature
     in range; the far end of the range is a far harder shot than the near end, and every shot spends an
     arrow.</p>
     <h3>Stonecutting</h3>
     <p><b>Stonecutting</b> is the skill that turns what a pickaxe brings out of the rock into something
     square. With a chisel, rock, slate, marble and sandstone shards become <b>bricks</b> &mdash; what
-    walls, smelters and kilns are built from &mdash; or, ${u(F(`make_stone_slab`,`rock_shards`))} shards at a time, a <b>slab</b>. Slabs are
+    walls, smelters and kilns are built from &mdash; or, ${d(z(`make_stone_slab`,`rock_shards`))} shards at a time, a <b>slab</b>. Slabs are
     not for building: they are paving. Choose <b>Pave (slabs)</b> on any tile with a trowel in hand and
-    the slab goes down as a floor of that stone, and each of the ${u(Un.length)} looks quite different from the
+    the slab goes down as a floor of that stone, and each of the ${d(zn.length)} looks quite different from the
     others. Breaking paving up with a pickaxe usually lifts a slab out whole. Masonry still lays the
     stone; stonecutting is what cuts it.</p>
     <h3>Pottery and the kiln</h3>
     <p>Clay is dug from a clay pit with a shovel, and everything made of it is shaped cold and soft.
     <b>Pottery</b> shapes clay into <b>unfired</b> bricks, bowls, pots and jars, and green ware is no use
     to anybody: it will not hold a stew and it will not hold up a wall. Build a <b>kiln</b> from
-    ${P(`make_kiln`)} with a trowel, carry it, and set it down anywhere the ground is dry and
+    ${R(`make_kiln`)} with a trowel, carry it, and set it down anywhere the ground is dry and
     flat; take it up again when it is cold and empty. Feed it anything a fire takes, peat and coal
     included, pack the green ware in, and light it: each piece needs its own time at heat, and a
     well-built kiln works faster and keeps more of the potter's quality. Take the fired ware out and the
@@ -1180,9 +1180,9 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     through the topsoil carefully, and now and then it gives up a <b>fragment</b> of something old.
     Ground you have been over is no good again for a while, so keep walking.</p>
     <p>Nothing comes out of the ground whole or sound. A fragment names what it is a piece of and which
-    piece it is &mdash; <i>${J.name} ${J.parts-1}/${J.parts}</i> &mdash; and carries a good deal of damage, which
-    <b>Repair</b> takes out. There are ${u(D.length)} things under the island, from ${jn(D[0].name)} <b>${D[0].name}</b> in
-    ${u(D[0].parts)} pieces to ${jn(J.name)} <b>${J.name}</b> in ${u(J.parts)}, and a relic is only recognised once your archaeology has
+    piece it is &mdash; <i>${X.name} ${X.parts-1}/${X.parts}</i> &mdash; and carries a good deal of damage, which
+    <b>Repair</b> takes out. There are ${d(M.length)} things under the island, from ${Dn(M[0].name)} <b>${M[0].name}</b> in
+    ${d(M[0].parts)} pieces to ${Dn(X.name)} <b>${X.name}</b> in ${d(X.parts)}, and a relic is only recognised once your archaeology has
     come far enough to know what it is looking at. The commonplace turns up far more often than the
     rare, and the ground is kind enough to favour a piece you are still short of.</p>
     <p>With every piece in hand, right-click one and choose <b>Restore</b>. That is the
@@ -1206,10 +1206,10 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     working the seams for its deed: it takes the nearest ore no other Mola has claimed, and the quality
     of what it brings back is its own mining skill, up to whatever the seam holds, and it leaves alone
     any metal beyond its skill &mdash; so a fresh one takes copper and coal, and starts on iron the day
-    its mining reaches ${dr(`iron`)}. It works <b>${u(10)} units of water</b> deep, the same as you do, and a face it
+    its mining reaches ${lr(`iron`)}. It works <b>${d(10)} units of water</b> deep, the same as you do, and a face it
     cannot stand on it works from the bank beside it: a shore seam is a Mola's to cut, and so is a
     seabed under wading depth. The same goes for a <b>Quarra</b> and plain rock. Its range grows by
-    ${f.mola.rangePerStep??10} tiles every 10 levels rather than the usual 10. The <b>Crawler</b> is a broad crab that lives on the
+    ${p.mola.rangePerStep??10} tiles every 10 levels rather than the usual 10. The <b>Crawler</b> is a broad crab that lives on the
     sand, eats vegetables, and digs sand for its deed &mdash; a clawful at a time, taken from the highest
     corner of the tile and carried to the crate, which is where the sand for mortar and moulds comes from
     once nobody wants to dig it themselves. It is the first of the defensive sort: strike one and it
@@ -1223,10 +1223,10 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <b>Magga</b> is a magpie that clears a settlement of everything dropped and forgotten and puts it in
     the crate; wild ones do the reverse, so do not leave anything lying about near their trees. The
     <b>Woola</b> is a mild grazer that does no work at all: it grows a fleece, and once it has grown you
-    <b>shear</b> it with a knife for <b>wool</b>, which grows back in ${i(1/(f.woola.fleece??1))}. The
+    <b>shear</b> it with a knife for <b>wool</b>, which grows back in ${o(1/(p.woola.fleece??1))}. The
     <b>Ulva</b> is the first thing on this island that will come at you unprovoked: it hunts by scent
-    from ${u(f.ulva.notice??7)} tiles off and does not stop until you are well away or it is badly hurt. It takes taming
-    ${f.ulva.tameLevel} to try, and a tamed one keeps watch over the deed, going for anything wild that crosses the
+    from ${d(p.ulva.notice??7)} tiles off and does not stop until you are well away or it is badly hurt. It takes taming
+    ${p.ulva.tameLevel} to try, and a tamed one keeps watch over the deed, going for anything wild that crosses the
     border. The
     <b>Roxxen</b> is a slab-shouldered ox that will not start anything and will finish most things that
     start with it. It does no job on a deed; it is there to be hitched, and what it learns in the traces
@@ -1234,14 +1234,14 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     take. A green pair labours over ground a worked pair walks up. It also leaves the biggest carcass on
     the island by a long way. The <b>Orse</b> is long in the leg and learns the same skill, in the traces
     or under a rider: stitch a <b>saddle</b> and a <b>bridle</b>, fit both from its menu, and
-    <b>mount</b> it. A green one carries you at ${y(fr/Dt)} your own pace and over the same ground;
-    one whose climbing is worked right up is ${y(pr/fr)} as fast as a green one and goes up slopes you would
+    <b>mount</b> it. A green one carries you at ${C(ur/pt)} your own pace and over the same ground;
+    one whose climbing is worked right up is ${C(dr/ur)} as fast as a green one and goes up slopes you would
     have to walk round. The
-    <b>Rowl</b> hunts on sight in the wild &mdash; taming ${f.rowl.tameLevel}, and even then it is unruly &mdash; and
+    <b>Rowl</b> hunts on sight in the wild &mdash; taming ${p.rowl.tameLevel}, and even then it is unruly &mdash; and
     tamed on a deed it hunts <b>for</b> you: it works a circuit of the token, runs down anything wild
     inside it, and carries the carcasses back to storage for butchering. Its <b>fighting</b> skill is
-    both its bite and its beat: it hits ${y(dn(G))} as hard at mastery, and its circuit grows from
-    ${u(f.rowl.workRange)} tiles to ${u(f.rowl.workRange+Tn(G)*(f.rowl.rangePerStep??10))}. The <b>Noot</b> is a plump upright waddler that
+    both its bite and its beat: it hits ${C(sn(J))} as hard at mastery, and its circuit grows from
+    ${d(p.rowl.workRange)} tiles to ${d(p.rowl.workRange+Sn(J)*(p.rowl.rangePerStep??10))}. The <b>Noot</b> is a plump upright waddler that
     lives beside the clay pits, eats root vegetables, and digs <b>clay</b> with its bill for its deed,
     carrying it to the crate a load at a time &mdash; which is what keeps a potter in clay without
     walking the shore for it. Carry what the creature eats (a berry or vegetable for
@@ -1249,17 +1249,17 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     food is used up, success is uncommon at low taming skill, and none of them holds a failed attempt
     against you.</p>
     <p><b>Keep at it.</b> A wild thing that has taken food from your hand and refused you is a little
-    readier for the next offering: <b>${h(He)} on the chance</b> for every attempt in a row, with no
+    readier for the next offering: <b>${g(Be)} on the chance</b> for every attempt in a row, with no
     ceiling but the one on the whole chance. It is slight per go and it will not make a hard tame easy, but it
     means a long run of refusals is going somewhere. The run lapses if you leave it alone for
-    ${i(Ne)}, and <b>raising a hand to it ends the run outright</b> &mdash; nothing that has been hit
+    ${o(Me)}, and <b>raising a hand to it ends the run outright</b> &mdash; nothing that has been hit
     takes food from the hand that hit it. Examining a wild one says how far you have got with it.</p>
     <p><b>Age.</b> Everything alive was born at some hour and gets older from there. A <b>young</b> one is
-    ${h(n.young.scale)} the size, moves at ${h(n.young.speed)} of the pace, grows no fleece and gives no milk, and is no use in the
-    traces or under a saddle &mdash; but it has not learned to mistrust you, so it is ${y(n.young.tame)} as easy
-    to tame. It is <b>grown</b> after ${i(bt)}, and everything in the book describes it then. After
-    ${i(ot)} it is <b>old</b>: ${h(n.old.speed)} of the pace, ${h(n.old.pull)} of the pull in the traces and
-    ${h(n.old.growth)} of the pace growing a fleece back, but heavier, and an old carcass is worth ${h(n.old.yield-1)} more
+    ${g(r.young.scale)} the size, moves at ${g(r.young.speed)} of the pace, grows no fleece and gives no milk, and is no use in the
+    traces or under a saddle &mdash; but it has not learned to mistrust you, so it is ${C(r.young.tame)} as easy
+    to tame. It is <b>grown</b> after ${o(gt)}, and everything in the book describes it then. After
+    ${o(nt)} it is <b>old</b>: ${g(r.old.speed)} of the pace, ${g(r.old.pull)} of the pull in the traces and
+    ${g(r.old.growth)} of the pace growing a fleece back, but heavier, and an old carcass is worth ${g(r.old.yield-1)} more
     than a grown one. The Wildermon window says which
     it is and how long a yearling has left to grow. What was already walking about when the island was
     raised counts as grown.</p>
@@ -1278,37 +1278,37 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     carries the <b>hod</b>: brick, mortar and timber out of your stores and into whatever wall you have
     planned, one piece at a time. The <b>Tinka</b> <b>mends</b> the damaged gear in your stores. The
     <b>Middun</b> eats what is rotting on the ground and turns it into <b>compost</b>. The <b>Snout</b>
-    smells out <b>buried relics</b> and marks where to dig &mdash; taming ${f.snout.tameLevel}, and worth every point of
+    smells out <b>buried relics</b> and marks where to dig &mdash; taming ${p.snout.tameLevel}, and worth every point of
     it.</p>
-    <p><b>Backs and traces.</b> The <b>Bura</b> does no work but carries <b>${f.bura.pannier} things</b> in panniers on
+    <p><b>Backs and traces.</b> The <b>Bura</b> does no work but carries <b>${p.bura.pannier} things</b> in panniers on
     its own back; open them from its menu. The <b>Gorral</b> is a horned cliff-goat that takes a saddle
     and goes up ground an Orse turns away from. The <b>Wadd</b> is the one mount that will swim deep
     water with a rider on it. The <b>Shaggan</b> is slower in the traces than anything else and stronger
-    than all of them: each adds ${h(f.shaggan.pull??.25)} to a team's pull where most beasts add ${h(ht)}.</p>
-    <p><b>Eyes and produce.</b> The <b>Warda</b> is a watcher: keep one and it sees ${f.warda.sight} tiles for you
+    than all of them: each adds ${g(p.shaggan.pull??.25)} to a team's pull where most beasts add ${g(ut)}.</p>
+    <p><b>Eyes and produce.</b> The <b>Warda</b> is a watcher: keep one and it sees ${p.warda.sight} tiles for you
     wherever it stands. The <b>Quill</b> is a ground-bird you <b>pluck</b> rather than shear, for
     <b>feathers</b>, which is what keeps an archer in arrows. The <b>Cudda</b> is <b>milked</b> into an
-    empty bucket, and a bucket of milk presses into ${u(I(`make_cheese`))} <b>cheeses</b>. The <b>Vesp</b> is a swarm
-    rather than a creature: build a <b>hive</b> (${P(`make_hive`,!0)}), set it down
+    empty bucket, and a bucket of milk presses into ${d(B(`make_cheese`))} <b>cheeses</b>. The <b>Vesp</b> is a swarm
+    rather than a creature: build a <b>hive</b> (${R(`make_hive`,!0)}), set it down
     on your deed and keep a tamed Vesp there, and the swarm fills it with <b>honey</b> and
-    <b>beeswax</b> &mdash; and ${P(`make_candle`)} draw ${u(I(`make_candle`))} <b>candles</b>. The
+    <b>beeswax</b> &mdash; and ${R(`make_candle`)} draw ${d(B(`make_candle`))} <b>candles</b>. The
     <b>Lume</b> is only ever out after dark and carries its own light about with it: keep one and it
-    lights ${u(f.lume.glow??0)} tiles round itself however dark it is.</p>
+    lights ${d(p.lume.glow??0)} tiles round itself however dark it is.</p>
     <p>Right-click any tile of your settlement for the <b>deed menu</b>: it lists the wildermon kept
     there, sets their <b>orders</b>, offers to <b>upgrade</b> the settlement, and renames or disbands it.
     Orders apply to every wildermon on the deed at once and take effect the moment something wild
     crosses the border: <b>aggressive</b> and they break off work and go for it, <b>defensive</b> and
     they only answer what has already struck at them or at you, <b>passive</b> and they carry on working
     whatever walks in. Each upgrade pushes the
-    border out ${u(2)} tiles and lets ${w(2)-w(1)===1?`one`:u(w(2)-w(1))} more wildermon work the deed, and each is earned by building the
-    settlement out: ${mr}. Upgrades are
+    border out ${d(2)} tiles and lets ${k(2)-k(1)===1?`one`:d(k(2)-k(1))} more wildermon work the deed, and each is earned by building the
+    settlement out: ${fr}. Upgrades are
     taken in order, so each level only asks for the new thing. The menu ticks off what you have and names what is
     missing, and a settlement goes no higher than level 5.</p>
-    <p>A deed worker feeds itself: once its belly falls below ${x(Je)} it goes to whichever crate on
+    <p>A deed worker feeds itself: once its belly falls below ${w(qe)} it goes to whichever crate on
     the deed holds something it eats, helps itself, and goes back to work. Keep food in a crate and your
     workers will look after themselves.</p>
-    <p>A deed worker starts within ${u(hr[0])} to ${u(hr[hr.length-1])} tiles of the token, by its sort, and earns another
-    10 tiles of range for every 10 levels of its task skill &mdash; ${gr} &mdash; so a
+    <p>A deed worker starts within ${d(pr[0])} to ${d(pr[pr.length-1])} tiles of the token, by its sort, and earns another
+    10 tiles of range for every 10 levels of its task skill &mdash; ${mr} &mdash; so a
     seasoned one works a wide stretch of country. Its card in the Wildermon window shows the range it
     has now and how much skill the next step needs.</p>
     <p>A tamed wildermon either <b>travels with you</b> (one at a time; its stance is Passive, Defensive
@@ -1320,7 +1320,7 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     half a player's pace and working at half a player's speed, and better skill means better quality
     finds and quicker work.</p>
     <p><b>Creature crates.</b> A creature crate holds <b>one</b> wildermon. A fine carpenter builds it
-    with a mallet from ${p}; it weighs <b>${A(fn).weight} kg</b> and does not rot.
+    with a mallet from ${m}; it weighs <b>${P(a).weight} kg</b> and does not rot.
     The first wildermon you tame follows you; <b>every one after that goes into an empty crate in your
     pack</b>, and without one you cannot tame it. A catch taken out of a trap is the same. Put the one
     following you, or a deed worker, into an empty crate you carry from its menu. Set a crate down on
@@ -1334,9 +1334,9 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     already following you, leaves that companion on the deed in its place, or puts it in an empty
     crate you carry when the deed has no room for it.</p>
     <p>Every tile is a 4 by 4 grid of spots for placing things. Build a <b>log crate</b> from
-    ${P(`make_log_crate`)} &mdash; notched and lashed, not a nail in it &mdash; or a <b>plank crate</b> from
-    ${P(`make_plank_crate`)} (with a mallet), then right-click the spot on a tile
-    where you want it; it snaps to the grid. They hold ${r.log.capacity} and ${r.plank.capacity} things, can be opened, emptied and
+    ${R(`make_log_crate`)} &mdash; notched and lashed, not a nail in it &mdash; or a <b>plank crate</b> from
+    ${R(`make_plank_crate`)} (with a mallet), then right-click the spot on a tile
+    where you want it; it snaps to the grid. They hold ${i.log.capacity} and ${i.plank.capacity} things, can be opened, emptied and
     picked up again when empty. The deed crate beside the token is one of them.</p>
     <p><b>Where a worker puts things.</b> A deed worker fills the deed crate first, and when that is
     full it walks to the nearest other thing on the deed that will take what it is carrying &mdash;
@@ -1359,85 +1359,85 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     grass, steppe, tundra, moss, marsh and lawn &mdash; and sand, dirt and clay never do, having
     nothing to give.</p>
     <p><b>A practised eye goes over the same ground more than once.</b> Foraging and botanizing take
-    <b>one more pass over the tile for every ${u(20)} points</b> of the skill: ${_r}.
+    <b>one more pass over the tile for every ${d(20)} points</b> of the skill: ${hr}.
     Each pass is its own chance of a find and its own roll on the table, so a good forager comes off one
     tile with an armful where a beginner comes off it with a berry &mdash; and the menu says how many
     passes you are good for before you start. The tile is still picked clean for the same while
     afterwards, so every pass is a tile you did not have to walk to.</p>
     <h3>Meditation, and the three paths</h3>
     <p>Sitting still on a rug thinking about nothing is not obviously work, and it is the slowest thing
-    anybody does here. Make a <b>rug</b> (${P(`make_rug`)}, with a needle), stand where you mean to
-    sit, and choose <b>Sit and think about nothing</b>. You may sit once every ${i(_e)}, and
-    <b>where</b> you sit decides what it is worth: your own yard ${h(v.yard)} of a sitting anywhere else,
-    high ground off your settlement ${y(v.high)} as much, and where the ground runs out and the air is thin
-    <b>${y(v.thin)}</b> as much; and your feet in the water add ${h(v.water-1)} to wherever that is.</p>
-    <p>At ${u(5)} meditation ${u(T.length)} ways of looking at the island become clear and you may walk exactly
-    <b>one</b>, chosen at the rug and never changed. Each opens ${u(T[0].steps.length)} things as the sitting goes on:
-    ${u(T[0].steps.filter(e=>e.ability).length)} of them are abilities you call on with a rest between, and ${u(T[0].steps.filter(e=>!e.ability).length)} are simply true from then on.</p>
+    anybody does here. Make a <b>rug</b> (${R(`make_rug`)}, with a needle), stand where you mean to
+    sit, and choose <b>Sit and think about nothing</b>. You may sit once every ${o(ge)}, and
+    <b>where</b> you sit decides what it is worth: your own yard ${g(y.yard)} of a sitting anywhere else,
+    high ground off your settlement ${C(y.high)} as much, and where the ground runs out and the air is thin
+    <b>${C(y.thin)}</b> as much; and your feet in the water add ${g(y.water-1)} to wherever that is.</p>
+    <p>At ${d(5)} meditation ${d(A.length)} ways of looking at the island become clear and you may walk exactly
+    <b>one</b>, chosen at the rug and never changed. Each opens ${d(A[0].steps.length)} things as the sitting goes on:
+    ${d(A[0].steps.filter(e=>e.ability).length)} of them are abilities you call on with a rest between, and ${d(A[0].steps.filter(e=>!e.ability).length)} are simply true from then on.</p>
     <table>
-      ${T.map(e=>`<tr><td><b>${e.name}</b></td><td>${e.note} ${e.steps.map(e=>e.ability?`<b>${e.name}</b> (${e.at}, then ${i(e.ability.rest)} before it again): ${vr(e.note)}`:`<i>${e.name}</i> (${e.at}): ${vr(e.note)}`).join(` `)}</td></tr>`).join(`
+      ${A.map(e=>`<tr><td><b>${e.name}</b></td><td>${e.note} ${e.steps.map(e=>e.ability?`<b>${e.name}</b> (${e.at}, then ${o(e.ability.rest)} before it again): ${gr(e.note)}`:`<i>${e.name}</i> (${e.at}): ${gr(e.note)}`).join(` `)}</td></tr>`).join(`
       `)}
     </table>
     <h3>An altar, and what kneeling at one buys</h3>
     <p>There is no god on this island with a name and nobody here would claim to know one. There is a
     stone table, there are the hours the clock favours, and there is the plain fact that a thing knelt
     over then comes out better than a thing that was not.</p>
-    <p>An <b>altar</b> is masonry: ${P(`make_altar`)}, laid with a trowel. Kneel at it and you bank
-    <b>favour</b>, on the <b>prayer</b> skill. You may say what you have to say once every ${i(we)}, and it is
-    worth most at <b>${d(he.map(U))}</b> &mdash; ${y((Ue+ie)/Ue)} what it is worth
-    ${u(3)} hours or more from either &mdash; and less the further off you are. A good altar banks more
+    <p>An <b>altar</b> is masonry: ${R(`make_altar`)}, laid with a trowel. Kneel at it and you bank
+    <b>favour</b>, on the <b>prayer</b> skill. You may say what you have to say once every ${o(ve)}, and it is
+    worth most at <b>${f(pn.map(Un))}</b> &mdash; ${C((ue+Ce)/ue)} what it is worth
+    ${d(3)} hours or more from either &mdash; and less the further off you are. A good altar banks more
     than a rough one. Favour also trickles back on its own, slowly, up to whatever your faith carries
-    &mdash; ${Math.round(Xe(W(Pe)))} at the start and 120 at the very top.</p>
-    <p>${l(ke.length)} things it buys, and none of them can be had any other way:</p>
+    &mdash; ${Math.round(_t(q(ft)))} at the start and 120 at the very top.</p>
+    <p>${u(at.length)} things it buys, and none of them can be had any other way:</p>
     <table>
-      ${ke.map(e=>`<tr><td><b>${e.name}</b></td><td>${e.cost} favour, prayer ${e.level}. ${e.note}</td></tr>`).join(`
+      ${at.map(e=>`<tr><td><b>${e.name}</b></td><td>${e.cost} favour, prayer ${e.level}. ${e.note}</td></tr>`).join(`
       `)}
     </table>
     <h3>The things that are not wildermon</h3>
-    <p>Most of what walks this island can be tamed. ${l(yr.length)} things cannot. A <b>goblin</b> is knee-high and
+    <p>Most of what walks this island can be tamed. ${u(_r.length)} things cannot. A <b>goblin</b> is knee-high and
     entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>
     is mostly shoulder; and somewhere out there is the <b>dragon</b>.
-    They notice you from ${u(br[0])} to ${u(br[br.length-1])} tiles off, where anything else that hunts has your scent at
-    ${u(7)}; they come straight at you, and they do not give up easily.</p>
-    <p>They are <b>rare</b>: ${h(de)} of what stands up out in the country, and of those
-    ${d(j.map(([e,t])=>`${h(t/xr)} ${f[e].name.toLowerCase()}s`))}. Only so many of each are alive at once
-    (${d(j.map(([e])=>`${u(a[e]??1)} ${f[e].name.toLowerCase()}${(a[e]??1)===1?``:`s`}`))}), and the bigger the thing the further it keeps
-    from your token &mdash; ${d(j.map(([e])=>`${jn(f[e].name)} ${f[e].name.toLowerCase()} ${u(dt[e]??0)} tiles`))}. None of them can be tamed,
+    They notice you from ${d(vr[0])} to ${d(vr[vr.length-1])} tiles off, where anything else that hunts has your scent at
+    ${d(7)}; they come straight at you, and they do not give up easily.</p>
+    <p>They are <b>rare</b>: ${g(fe)} of what stands up out in the country, and of those
+    ${f(F.map(([e,t])=>`${g(t/yr)} ${p[e].name.toLowerCase()}s`))}. Only so many of each are alive at once
+    (${f(F.map(([e])=>`${d(s[e]??1)} ${p[e].name.toLowerCase()}${(s[e]??1)===1?``:`s`}`))}), and the bigger the thing the further it keeps
+    from your token &mdash; ${f(F.map(([e])=>`${Dn(p[e].name)} ${p[e].name.toLowerCase()} ${d(ot[e]??0)} tiles`))}. None of them can be tamed,
     trapped, bred or brushed. There is nothing to be done with one but kill it, and nothing to be gained
-    by meeting one in your shirt: ${d(j.map(([e],t)=>`${jn(f[e].name)} ${f[e].name.toLowerCase()}'s ${t===0?`blow takes `:``}${h(Math.round(f[e].attack*Zt*100)/100)}`))} of an unarmoured life.</p>
+    by meeting one in your shirt: ${f(F.map(([e],t)=>`${Dn(p[e].name)} ${p[e].name.toLowerCase()}'s ${t===0?`blow takes `:``}${g(Math.round(p[e].attack*Jt*100)/100)}`))} of an unarmoured life.</p>
     <p>What they are worth is on the other side of that. Butchering one gives what a wildermon gives and
-    then some: <b>tusk</b> and <b>sinew</b> off an orc or an ogre, and off a dragon ${u(f.dragon.butcher.scale??0)}
-    <b>dragon scales</b> and a <b>hoard</b> &mdash; ${u(4)} to ${u(10)} lumps, by how much of the carcass you keep,
-    of the ${u(Sr.length)} deep metals and the ${u(Mt.length-Sr.length)} precious ones, which is the only place on the
+    then some: <b>tusk</b> and <b>sinew</b> off an orc or an ogre, and off a dragon ${d(p.dragon.butcher.scale??0)}
+    <b>dragon scales</b> and a <b>hoard</b> &mdash; ${d(4)} to ${d(10)} lumps, by how much of the carcass you keep,
+    of the ${d(br.length)} deep metals and the ${d(At.length-br.length)} precious ones, which is the only place on the
     island they turn up together.</p>
-    <p>Tusk and sinew make a <b>composite bow</b>: ${P(`make_composite_bow`)}, at ${Gn(`make_composite_bow`)}. It
-    throws an arrow <b>${u(Cr.range??0)}</b> tiles for ${Cr.damage} damage, where the best wooden bow throws
-    ${u(wr.range??0)} for ${wr.damage}. Dragon scale riveted to leather makes <b>scale armour</b>, a class above
-    plate: it turns <b>${h(o.scale.soak)}</b> of a blow where plate turns ${h(o.plate.soak)}, and it burdens you
-    less than chain. A full suit takes ${u(Tr)} scales, where one dragon carries ${u(f.dragon.butcher.scale??0)}.</p>
+    <p>Tusk and sinew make a <b>composite bow</b>: ${R(`make_composite_bow`)}, at ${Vn(`make_composite_bow`)}. It
+    throws an arrow <b>${d(xr.range??0)}</b> tiles for ${xr.damage} damage, where the best wooden bow throws
+    ${d(Sr.range??0)} for ${Sr.damage}. Dragon scale riveted to leather makes <b>scale armour</b>, a class above
+    plate: it turns <b>${g(c.scale.soak)}</b> of a blow where plate turns ${g(c.plate.soak)}, and it burdens you
+    less than chain. A full suit takes ${d(Cr)} scales, where one dragon carries ${d(p.dragon.butcher.scale??0)}.</p>
     <h3>Traps</h3>
     <p>Everything taken so far has been taken by hand: you stand in front of a wild thing with a berry
     out and hope. A <b>trap</b> is the other way. Set it, bait it, walk away, and whatever came to the
     bait while you were somewhere else is waiting when you come back &mdash; <b>alive</b>, and with
     whatever blood it was born with still in it, which is the point now that blood is worth something.</p>
-    <p>A <b>snare</b> is a noose of rope on a bent shaft: ${Mn(c.snare.bill)}, and it holds anything
-    up to about <b>taming ${c.snare.holds}</b>. A <b>deadfall</b> is a weighted board on a trigger &mdash;
-    ${Mn(c.deadfall.bill)}, with a mallet &mdash; and it holds to about <b>taming ${c.deadfall.holds}</b>.
+    <p>A <b>snare</b> is a noose of rope on a bent shaft: ${On(b.snare.bill)}, and it holds anything
+    up to about <b>taming ${b.snare.holds}</b>. A <b>deadfall</b> is a weighted board on a trigger &mdash;
+    ${On(b.deadfall.bill)}, with a mallet &mdash; and it holds to about <b>taming ${b.deadfall.holds}</b>.
     Build quality moves both a little. Set one on any spot of a tile <b>outside your own
     borders</b> (nothing wild comes inside them), then <b>bait it</b> from your pack: the menu says
     which sorts would come to each thing you are carrying. Anything warier than the trap will hold
     simply takes the bait and goes.</p>
-    <p>A trap rots where it stands, ${i(c.snare.lifeMin)} to ${i(c.snare.lifeMax)} for a snare and up to
-    ${i(c.deadfall.lifeMax)} for a good deadfall, and whatever is in it walks away when it goes over. A <b>timid</b>
-    creature &mdash; the very thing you cannot walk up to &mdash; is ${y(Rn)} as likely to walk into
-    one, and a hunter ${h(Qe)} as likely. Getting the catch out is still <b>taming</b>: the skill wall stands
+    <p>A trap rots where it stands, ${o(b.snare.lifeMin)} to ${o(b.snare.lifeMax)} for a snare and up to
+    ${o(b.deadfall.lifeMax)} for a good deadfall, and whatever is in it walks away when it goes over. A <b>timid</b>
+    creature &mdash; the very thing you cannot walk up to &mdash; is ${C(Bt)} as likely to walk into
+    one, and a hunter ${g(Ht)} as likely. Getting the catch out is still <b>taming</b>: the skill wall stands
     whether the animal is held or not, and a beast that thrashes has to be tried again.</p>
     <h3>Blood, the brush and breeding</h3>
-    <p>Every wildermon is born <b>male</b> or <b>female</b> and carries <b>${u(3)} traits</b>, and the
-    traits are the whole difference between one Roxxen and the next. A trait sits in one of ${u(O.length)} tiers
-    &mdash; ${d(O.map(e=>`<b>${e}</b>`))} &mdash; and what it is worth
-    climbs steeply with the tier: a common trait moves its number by ${h(Er.common[0])} to ${h(Er.common[1])},
-    a fantastic one by ${h(Er.fantastic[0])} to ${h(Er.fantastic[1])}. Traits lift how fast it <b>moves</b>, how quickly it <b>works</b>, how fast what it does
+    <p>Every wildermon is born <b>male</b> or <b>female</b> and carries <b>${d(3)} traits</b>, and the
+    traits are the whole difference between one Roxxen and the next. A trait sits in one of ${d(E.length)} tiers
+    &mdash; ${f(E.map(e=>`<b>${e}</b>`))} &mdash; and what it is worth
+    climbs steeply with the tier: a common trait moves its number by ${g(wr.common[0])} to ${g(wr.common[1])},
+    a fantastic one by ${g(wr.fantastic[0])} to ${g(wr.fantastic[1])}. Traits lift how fast it <b>moves</b>, how quickly it <b>works</b>, how fast what it does
     goes into it as <b>skill</b>, what it can <b>carry and pull</b>, what it <b>brings back</b>, how
     little it <b>eats</b>, how much it can <b>take</b>, how hard it <b>hits</b>, how far it
     <b>sees</b>, how far it will <b>range</b>, how fast <b>fleece and milk</b> come back on it &mdash; and in a
@@ -1446,34 +1446,34 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p>A few traits are <b>communal</b> (marked &#9673;): what they lift, they lift for every wildermon
     working the same settlement or the same post, the bearer included. One <i>pack leader</i> standing
     in the field makes a whole deed quicker and brighter.</p>
-    <p>${l(qe.length)} of the traits are <b>fighting blood</b> &mdash; fanged, plated, slippery, quick-jawed,
+    <p>${u(cn.length)} of the traits are <b>fighting blood</b> &mdash; fanged, plated, slippery, quick-jawed,
     quick-healing and the rest &mdash; and those come in every tier under the one name. When one rolls,
     its <b>grade</b> is a roll of its own off the same odds, so a fanged animal may be fanged, fanged
-    (rare), fanged (supreme) or fanged (fantastic), each worth steeply more than the last &mdash; ${d(O.map(e=>y(Pt[e])).slice(1))} what
+    (rare), fanged (supreme) or fanged (fantastic), each worth steeply more than the last &mdash; ${f(E.map(e=>C(Dt[e])).slice(1))} what
     the common grade is &mdash; and a line is bred up a grade at a time under the same husbandry.
-    ${_(h(t))} of what the wild throws up is fighting blood, and no animal carries more than one grade of a name.</p>
+    ${v(g(_n))} of what the wild throws up is fighting blood, and no animal carries more than one grade of a name.</p>
     <p>What is walking about in the wild is almost all common. Better blood is <b>bred</b>, and that is
-    what <b>animal husbandry</b> is for. Make a <b>brush</b> (${P(`make_brush`)}, with a carving
+    what <b>animal husbandry</b> is for. Make a <b>brush</b> (${R(`make_brush`)}, with a carving
     knife) and <b>brush a wildermon down</b>: it puts <b>care</b> into the animal, and a cared-for beast
-    works quicker, learns faster and heals as you go over it. Care runs out again over ${i(3*Kn)}
+    works quicker, learns faster and heals as you go over it. Care runs out again over ${o(3*Hn)}
     of being left alone, so it is a thing you keep up rather than do once.</p>
-    <p>To breed, stand a <b>male</b> and a <b>female</b> of one sort within ${u(4)} tiles of each other,
-    both <b>grown</b>, both <b>fed</b>, and neither put to a mate in the last ${i(Oe)}, then
+    <p>To breed, stand a <b>male</b> and a <b>female</b> of one sort within ${d(4)} tiles of each other,
+    both <b>grown</b>, both <b>fed</b>, and neither put to a mate in the last ${o(Oe)}, then
     choose <b>Put it to a mate</b>. The young one goes where a tamed one goes: it <b>follows you</b> when
     nothing else does, and goes into an <b>empty creature crate in your pack</b> when something does. Carrying
     none, it goes into an <b>empty creature crate of yours standing on your settlement</b>, the nearest the
     mother; and with none of those it goes off into the wild. If it takes,
-    the female carries for ${i(Se)} and then drops a young one, and what it is born with was
+    the female carries for ${o(we)} and then drops a young one, and what it is born with was
     settled at that moment &mdash; a sire sold, released or eaten in between has already had his say.</p>
-    <p>${_(u(3))} slots are filled one at a time. Each is drawn from what the pair carry between them, and
+    <p>${v(d(3))} slots are filled one at a time. Each is drawn from what the pair carry between them, and
     husbandry decides <b>how often the parents' blood comes through</b> rather than whatever the wild throws up
-    (${x(vn(0,0))} at no skill, ${h(vn(G,1))} at ${u(G)} with a well-brushed pair), and <b>how often a
+    (${w(kt(0,0))} at no skill, ${g(kt(J,1))} at ${d(J)} with a well-brushed pair), and <b>how often a
     trait comes through one tier better than either parent had it</b> (never at no skill and with no care,
-    ${h(Kt(G,1))} at ${u(G)} with a well-brushed pair) &mdash; commons becoming rares, rares becoming supremes.
+    ${g(Pt(J,1))} at ${d(J)} with a well-brushed pair) &mdash; commons becoming rares, rares becoming supremes.
     That second chance is the whole of why husbandry is worth having: it is how a line climbs. A
     high-husbandry eye also falls on the best of what the pair carry rather than picking evenly.</p>
     <p>You cannot read what you do not know. <b>Look it over</b> names the traits your husbandry is good
-    enough to recognise: common blood is plain to anybody, ${d(O.slice(1).map((e,t)=>`${e} ${t===0?`takes `:``}${xt[e]+1}`))}
+    enough to recognise: common blood is plain to anybody, ${f(E.slice(1).map((e,t)=>`${e} ${t===0?`takes `:``}${re[e]+1}`))}
     to know when it is standing in front of you. Until then the card shows only that there is
     <i>something</i> there. Only a <b>female</b> is in milk, and nothing young or past it will breed.</p>
     <h3>Terraforming</h3>
@@ -1490,8 +1490,8 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     asked for at a bank stops the moment the bank is level, rather than when the run is done.
     The Tile window says how far the corner under the cursor stands from the mark. <b>Clear the
     level</b> puts it away.</p>
-    <p><b>A spadeful out of the cart.</b> Dirt, clay and sand weigh <b>${A(`dirt`).weight}kg</b> apiece, so a starting
-    back carries ${u(Math.floor(220/A(`dirt`).weight))} before it starts to drag, and moving a bank is a great many walks. Dropping dirt and the packing-in half
+    <p><b>A spadeful out of the cart.</b> Dirt, clay and sand weigh <b>${P(`dirt`).weight}kg</b> apiece, so a starting
+    back carries ${d(Math.floor(220/P(`dirt`).weight))} before it starts to drag, and moving a bank is a great many walks. Dropping dirt and the packing-in half
     of flattening will take a spadeful out of any <b>crate, cart or bin within reach</b> when you are
     carrying none yourself: park the cart where the work is and it feeds itself.</p>
     <p><b>Beds of sand, clay, peat and tar</b> are not dug like that unless you want them dug. Stand on
@@ -1505,27 +1505,27 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; both
     cobblestone and slabs want a hard, flat bed, and will not be laid on loose earth or on grass.
     Breaking paving up with a pickaxe leaves bare dirt, so repaving means packing it again.</p>
-    <p>${l(Y.length)} kinds of seam lie in the rock, and each needs a certain <b>mining</b> skill before it can be
-    worked at all: ${d(Y.filter(e=>e.level===Y[0].level).map(e=>Dr(e.name)))} from the very start, then
-    ${d(Y.filter(e=>e.level!==Y[0].level).map(e=>`${Dr(e.name)} at ${e.level}`))}. <b>Iron is
-    ${h(ve(`iron_ore`))} of every seam on the island</b> and everything else shares what
+    <p>${u(Z.length)} kinds of seam lie in the rock, and each needs a certain <b>mining</b> skill before it can be
+    worked at all: ${f(Z.filter(e=>e.level===Z[0].level).map(e=>Tr(e.name)))} from the very start, then
+    ${f(Z.filter(e=>e.level!==Z[0].level).map(e=>`${Tr(e.name)} at ${e.level}`))}. <b>Iron is
+    ${g(_e(`iron_ore`))} of every seam on the island</b> and everything else shares what
     is left, which is why iron is the metal you build with and the rest are the ones you hoard. Coal burns longer than a log, so a campfire
     will take it gladly.</p>
     <p><b>Mining</b> with a pickaxe works bare rock for what is in it. Every swing that bites gives you
     shards or metal and leaves the face standing where it was; about <b>one swing in
-    ${Math.round(1/ze)}</b> a slab comes away of its own accord and the corner drops a
+    ${Math.round(1/dn)}</b> a slab comes away of its own accord and the corner drops a
     step, whether the hand on the pick is yours or a mola's. If you want the rock <i>moved</i>, that
     is <b>Chip corner</b>: the same pick at the same corner, but you are cutting the face back rather
-    than working it, and it gives way about one attempt in ${u(Math.round(1/te))}. What breaks away is yours either
+    than working it, and it gives way about one attempt in ${d(Math.round(1/Ft))}. What breaks away is yours either
     way.</p>
     <p>Every tile in the world sits on a particular rock of a particular quality &mdash; under grass,
     under a forest, under the sea, everywhere &mdash; settled when the world was made and unchanged by
     anything you do to the ground above it. Metal is laid far more thickly under dry land than under
     the sea, so most of what an island holds can actually be reached: about one land tile in
-    ${u(Math.round(1/ce.land))} carries some seam, and one sea tile in ${u(Math.round(1/ce.water))}. <b>Prospecting</b> is how you read it. It marks every
+    ${d(Math.round(1/ce.land))} carries some seam, and one sea tile in ${d(Math.round(1/ce.water))}. <b>Prospecting</b> is how you read it. It marks every
     ore-bearing tile within range, buried or bare, and sampling where you stand names the rock, the
     mining skill any metal takes to work, the highest quality it will ever give up, and how deep it
-    lies. The range starts at ${u(3)} tiles and grows by one for every ${u(10)} levels of the skill. Metal found
+    lies. The range starts at ${d(3)} tiles and grows by one for every ${d(10)} levels of the skill. Metal found
     under a meadow has to be dug down to before a pickaxe is any use.</p>
     <p><b>Flatten</b> brings a tile level with the ground you are standing on, corner by corner:
     ground above you is scraped down and pocketed as dirt, ground below you is packed up and spends
@@ -1539,9 +1539,9 @@ import{$a as e,$r as t,A as n,Aa as r,As as i,B as a,Ba as o,Bi as s,Br as c,Cs 
     <p>Your skills rise with everything you do. Better skill means faster, more successful actions and
     the freedom to shape steeper slopes.</p>
     <p><b>What a gain is worth falls away as the skill fills.</b> An ordinary action gives about
-    ${d(Or.map((e,t)=>`<b>${Ar(e)}</b> at ${t===0?`level `:``}${e}`))} &mdash;
-    ${u(Math.round(1/kr(Or[0])))} goes for the first point of a skill, ${u(Math.round(1/kr(Or[2])))} for the point after
-    ${Or[2]}, and something like <b>${u(Math.round(1/_n))}</b> for the last. Nobody finishes a skill in passing; the last
+    ${f(Er.map((e,t)=>`<b>${Or(e)}</b> at ${t===0?`level `:``}${e}`))} &mdash;
+    ${d(Math.round(1/Dr(Er[0])))} goes for the first point of a skill, ${d(Math.round(1/Dr(Er[2])))} for the point after
+    ${Er[2]}, and something like <b>${d(Math.round(1/mn))}</b> for the last. Nobody finishes a skill in passing; the last
     point of one is a thing to go after on purpose, and the log shows it moving at the fourth place
     after the point while you do.</p>
   `}function di(e){e.body.classList.add(`help-body`);let t=document.createElement(`div`);t.innerHTML=ui();let n=[],r=null;for(let e of[...t.childNodes]){if(e instanceof HTMLHeadingElement&&e.tagName===`H3`){r=document.createElement(`section`),r.className=`help-sec`,r.id=`help-${n.length}`,r.append(e),n.push({title:e.textContent??``,el:r});continue}r?r.append(e):(e.nodeType!==Node.TEXT_NODE||(e.textContent??``).trim())&&t.removeChild(e)}let i=document.createElement(`input`);i.type=`search`,i.className=`panel-search help-search`,i.placeholder=`Search the help…`;let a=document.createElement(`nav`);a.className=`help-contents`;let o=document.createElement(`div`);o.className=`help-pages`;let s=document.createElement(`div`);s.className=`help-count`,s.hidden=!0;let c=n.map(({title:e,el:t},r)=>{let a=document.createElement(`button`);return a.type=`button`,a.className=`help-link`,a.textContent=e,a.addEventListener(`click`,()=>{i.value&&(i.value=``,l(``)),t.scrollIntoView({block:`start`}),t.classList.add(`help-found`),setTimeout(()=>t.classList.remove(`help-found`),1200)}),a.title=`Jump to “${e}” (section ${r+1} of ${n.length})`,a});a.append(...c);let l=e=>{let t=e.trim().toLowerCase(),r=0;for(let e=0;e<n.length;e+=1){let{title:i,el:a}=n[e],o=!t||`${i} ${a.textContent??``}`.toLowerCase().includes(t);a.hidden=!o,c[e].hidden=!o,o&&(r+=1)}s.hidden=!t,s.textContent=r?`${r} of ${n.length} sections`:`Nothing in the help answers to “${e.trim()}”.`,o.scrollTop=0};i.addEventListener(`input`,()=>l(i.value)),i.addEventListener(`keydown`,e=>{e.stopPropagation(),e.key===`Escape`&&(i.value=``,l(``))}),o.append(...n.map(e=>e.el)),e.body.replaceChildren(i,a,s,o)}export{di as buildHelp};

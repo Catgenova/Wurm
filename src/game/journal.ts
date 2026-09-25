@@ -8,11 +8,10 @@ import { traitTier } from './traits';
 import { FIRE_COST } from './campfire';
 import { DEED_DECAY, rarityChance } from './items';
 import { CHOOSE_AT, PATH_LIST } from './meditation';
-import { RECIPE_BY_ID } from './recipes';
 import { KNACK_CAP, KNACK_ODDS, TITLE_STEPS } from './titles';
 import { BLESS_CAP } from './faith';
 import { FURNITURE_BY_ID } from './furniture';
-import { capital, NumberWord, numberWord, times } from './words';
+import { fill, NumberWord, numberWord, times } from './words';
 
 /**
  * A journal of goals. There is a great deal to do on this island and nothing
@@ -49,14 +48,22 @@ const has = (item: string, n = 1) => (g: Game): boolean => g.inventory.count(ite
 const did = (key: string, n = 1) => (g: Game): boolean => (g.tally[key] ?? 0) >= n;
 
 /*
- * The recipe and piece tables are read when a line is read rather than when
- * this module is: they sit on the far side of an import cycle, and a script
- * that happens to load this module first (the definitions dump does) finds
- * them not yet there. So the lines that quote them are getters.
+ * A line that quotes a recipe names the number -- `{recipe.make_brush.wool:w}`
+ * -- and `recipes.ts` puts it in when its table is whole, as it does for an
+ * item's description. Importing the recipes here would start them from
+ * whichever script loads the journal first, ahead of the game they lean on.
+ * The piece table is read when a line is read, for the same reason.
  */
-/** How many of a thing a recipe takes, in words: the bill is the recipe's to say. */
-const takes = (recipe: string, item: string): string =>
-  numberWord(RECIPE_BY_ID.get(recipe)?.inputs.find((i) => i.item === item)?.count ?? 1);
+/** Put a table's numbers into every goal that names them. */
+export function describeGoals(values: object): void {
+  for (const c of JOURNAL) {
+    for (const g of c.goals) {
+      if (g.text.includes('{')) g.text = fill(g.text, values);
+      if (g.hint?.includes('{')) g.hint = fill(g.hint, values);
+      if (g.how?.includes('{')) g.how = fill(g.how, values);
+    }
+  }
+}
 /** The highest step of any path, which is where one is walked to its end. */
 const PATH_END = Math.max(...PATH_LIST.flatMap((p) => p.steps.map((s) => s.at)));
 /** The team a wagon will not roll without. */
@@ -81,14 +88,7 @@ export const JOURNAL: Chapter[] = [
       { id: 'plank', text: 'Saw a log into planks', how: 'A felled tree leaves logs on the ground. Right-click one and Pick up, then open Crafting (R) and look for Saw into planks. Crafting lists everything there is to make, with what each needs in green if you have it and red if you do not.', met: skill('carpentry', 1.2) },
       { id: 'fire', text: 'Light a campfire', hint: `${NumberWord(FIRE_COST)} shafts, placed and lit`, how: `Crafting (R) makes shafts from a log. With ${numberWord(FIRE_COST)} in your pack, right-click the ground and choose Build campfire, then right-click the fire and Light. Feed it wood to keep it in.`, met: did('fire') },
       { id: 'cook', text: 'Cook food on a campfire', how: 'Stand next to a lit fire with meat, a fish or a potato in your pack, and it will be among the things Crafting offers. A fire is a place as much as a thing: some recipes only appear when you are standing at one.', met: (g) => Object.keys(g.tally).some((k) => k.startsWith('made:cooked') || k === 'made:baked_potato' || k === 'made:roast_onion' || k === 'made:roast_nuts') },
-      {
-        id: 'crate',
-        text: 'Build a crate and place it',
-        get how() {
-          return `${capital(takes('make_log_crate', 'log'))} logs and a mallet make a log crate; ${takes('make_plank_crate', 'plank')} planks and ${takes('make_plank_crate', 'nail')} nails make a better one. Right-click the ground to place it. Everything on this island rots where it lies, and a crate slows that down a great deal.`;
-        },
-        met: did('crate'),
-      },
+      { id: 'crate', text: 'Build a crate and place it', how: '{recipe.make_log_crate.log:W} logs and a mallet make a log crate; {recipe.make_plank_crate.plank:w} planks and {recipe.make_plank_crate.nail:w} nails make a better one. Right-click the ground to place it. Everything on this island rots where it lies, and a crate slows that down a great deal.', met: did('crate') },
       { id: 'deed', text: 'Plant a stake to found a settlement', how: `You came ashore with a settlement stake. Stand where you want the middle of your land and right-click the ground: Found settlement. Inside its border, things rot ${times(1 / DEED_DECAY)} slower and nobody else may dig.`, met: (g) => !!g.deed },
     ],
   },
@@ -178,14 +178,7 @@ export const JOURNAL: Chapter[] = [
       { id: 'creeled', text: 'Empty a creel', hint: 'Weave one from reed, bait it and sink it in water', met: did('creeled') },
       { id: 'caught', text: 'Catch a wildermon in a trap', hint: 'A baited snare or deadfall in the wild', met: did('caught') },
       { id: 'trapped', text: 'Take a live wildermon out of a trap', met: did('trapped') },
-      {
-        id: 'groom',
-        text: 'Brush a wildermon',
-        get hint() {
-          return `A brush is a plank and ${takes('make_brush', 'wool')} wool`;
-        },
-        met: did('groom'),
-      },
+      { id: 'groom', text: 'Brush a wildermon', hint: 'A brush is a plank and {recipe.make_brush.wool:w} wool', met: did('groom') },
       { id: 'groomfull', text: 'Brush a wildermon until its care is full', hint: 'Several brushings', met: did('groomfull') },
       { id: 'bred', text: 'Breed two wildermon', hint: 'A grown male and female of one species, fed, side by side', met: did('bred') },
       { id: 'goodblood', text: 'Breed a wildermon with a supreme trait', met: did('goodblood') },

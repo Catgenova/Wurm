@@ -53,6 +53,7 @@ import { MOULDS } from '../../src/game/metal';
 import { CRATE_DEFS } from '../../src/game/crates';
 import { WEAPONS } from '../../src/game/gear';
 import { helpText } from '../../src/ui/panels/help';
+import { ALL_GOALS } from '../../src/game/journal';
 import { numberWord, share } from '../../src/game/words';
 
 const ok: string[] = [];
@@ -346,6 +347,10 @@ check('the help renders with nothing undefined in it', !/undefined|NaN|\[object/
   help.match(/.{0,40}(?:undefined|NaN|\[object).{0,40}/)?.[0] ?? '');
 const left = help.match(PLACEHOLDER);
 check('and no placeholder left in it', !left, left?.join(' ') ?? '');
+
+// The journal's lines are filled by the tables they quote, which load after it.
+const goalsLeft = ALL_GOALS.flatMap((g) => [g.text, g.hint ?? '', g.how ?? ''].flatMap((t) => t.match(PLACEHOLDER) ?? []));
+check('and none left in the journal', goalsLeft.length === 0, goalsLeft.join(' '));
 
 /*
  * What the island reads. The definitions dump carries every item's text into
