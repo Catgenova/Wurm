@@ -87,7 +87,7 @@ import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
-import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
+import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, PEACE_REACH, REGION, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES } from '../src/game/keep';
 import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
@@ -1163,6 +1163,8 @@ for (const [fn, v] of [
   ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
   ['change_keep', CHANGE_KEEP], ['island_keep', ISLAND_KEEP],
+  /* And the two shorter keeps: a founding that never opened, and an island nobody came ashore on. */
+  ['island_unopened_keep', ISLAND_UNOPENED_KEEP], ['island_unvisited_keep', ISLAND_UNVISITED_KEEP],
   ['tick_worlds', TICK_WORLDS], ['tick_players', TICK_PLAYERS], ['calls_a_minute', CALLS_A_MINUTE],
   ['walk_samples', WALK_SAMPLES], ['sweep_every', SWEEP_EVERY], ['sweep_rows', SWEEP_ROWS],
   ['region_size', REGION],

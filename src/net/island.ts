@@ -752,7 +752,7 @@ export class Island {
    * implementation in SQL would be two islands that have to agree forever.
    * So it is rolled here, handed over, and after that it is not ours.
    */
-  async found(world: World, name: string, spawn: { x: number; y: number }): Promise<string> {
+  async found(world: World, name: string, spawn: { x: number; y: number }, lasts?: number): Promise<string> {
     if (world.w > FOUND_MAX) {
       throw new Error(
         `An island of ${world.w} tiles is too big to hand over from a browser — that is ${Math.round((world.w + 1) * 33.7 / 1024)} MB of land and minutes of generation. `
@@ -761,8 +761,11 @@ export class Island {
     }
     this.uid = await signIn();
     const sb = supabase();
+    // `lasts`, in seconds, is how long the island is kept whoever is on it:
+    // the live test's is kept a day, in case the test dies before giving it up.
     const { data: id, error } = await sb.rpc('rpc_found', {
       p_name: name, p_seed: world.seed, p_size: world.w, p_spawn_x: spawn.x, p_spawn_y: spawn.y,
+      ...(lasts === undefined ? {} : { p_lasts: lasts }),
     });
     if (error || typeof id !== 'string') throw new Error(`The island could not be started: ${error?.message}`);
     const rows = world.h + 1;

@@ -314,6 +314,20 @@ export const PEACE_REACH = 24;
 
 /** An island nobody has stood on for a month goes back to the sea. */
 export const ISLAND_KEEP = 30 * 24 * 3600;
+/**
+ * A founding that never opened goes after a day. The land is handed over in
+ * batches and the island opens at the end; one that is still shut a day on
+ * was given up halfway, and nobody can have set foot on it.
+ */
+export const ISLAND_UNOPENED_KEEP = 24 * 3600;
+/** An island that opened and that nobody ever came ashore on goes after a week. */
+export const ISLAND_UNVISITED_KEEP = 7 * 24 * 3600;
+/**
+ * How long the island the live test founds is kept if the test dies before
+ * giving it up. It is given up at the end of every run that gets that far;
+ * seven of them did not, between 09-17 and 09-20, and stayed.
+ */
+export const TRIAL_ISLAND_LASTS = 24 * 3600;
 
 /**
  * What one round of the clock will touch.

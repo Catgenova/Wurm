@@ -1274,6 +1274,16 @@ jobs:
           npx esbuild supabase/test/saving.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/saving.mjs --log-level=error
           node node_modules/.cache/saving.mjs
+      - name: Islands that go
+        run: |
+          # Seven islands the live test founded between 09-17 and 09-20 were
+          # still on the project, and islands nobody played were kept a month.
+          # Now the test's island lasts a day, a founding that never opened
+          # goes after a day, an island nobody came ashore on after a week,
+          # the home island never -- and their letters and bridge spans go too.
+          npx esbuild supabase/test/reap.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/reap.mjs --log-level=error
+          node node_modules/.cache/reap.mjs
 
   migrate:
     name: Push the migrations to the project
@@ -1407,8 +1417,10 @@ jobs:
           fi
           supabase --version
           supabase link --project-ref "$PROJECT_REF"
-          # What is about to change, before it changes.
-          supabase migration list --linked
+          # What is about to change, before it changes: the newest rows only.
+          # The whole list is four hundred and more lines, printed twice, and
+          # it pushed everything above it out of reach of a log's tail.
+          supabase migration list --linked | tail -12
           # `--include-all` because a migration can be *added* out of order
           # even though none is ever edited or renamed: the generated
           # definitions are stamped with the wall clock and the hand-written
@@ -1417,7 +1429,7 @@ jobs:
           # commit that adds a migration sorting before one already in the
           # tree, so anything the CLI would slot in early has been checked.
           supabase db push --include-all
-          supabase migration list --linked
+          supabase migration list --linked | tail -12
       - name: What is alive on each island
         # Asked for: "what is the crescent island mob count currently?" — a
         # question nothing in the run could answer, because this is the only
@@ -1457,10 +1469,16 @@ jobs:
                  count(*) filter (where c.mode = 'wild') as wild,
                  count(*) filter (where c.mode is not null and c.mode <> 'wild') as kept,
                  (select count(*) from world_stocked s where s.world_id = w.id) as blocks,
-                 creature_target(w.id) as ceiling
+                 creature_target(w.id) as ceiling,
+                 -- And whether anybody plays it, and when it goes: the same
+                 -- `island_goes_at` that `reap_islands` takes them by.
+                 w.ready as open,
+                 (select count(*) from player p where p.world_id = w.id) as bodies,
+                 (select to_char(max(p.seen_at), 'MM-DD HH24:MI') from player p where p.world_id = w.id) as last_seen,
+                 coalesce(to_char(island_goes_at(w.id), 'MM-DD HH24:MI'), 'never') as goes
             from world w
             left join creature c on c.world_id = w.id
-           group by w.id, w.name, w.size, w.made_at
+           group by w.id, w.name, w.size, w.made_at, w.ready
            order by w.made_at, w.name;
           EOSQL
           )
@@ -1651,6 +1669,22 @@ jobs:
                  "postgresql://postgres:$SUPABASE_DB_PASSWORD@db.$PROJECT_REF.supabase.co:5432/postgres" \
                  -c "$FAULTS" \
             || echo "::notice::No faults listed — private.tick_fault could not be read."
+          # And the room, last, where the tail of a log reaches it: how big the
+          # database is after the push, and the ten biggest things in it.
+          ROOM=$(cat <<'EOSQL'
+          select n.nspname || '.' || c.relname as relation,
+                 pg_size_pretty(pg_total_relation_size(c.oid)) as total,
+                 c.reltuples::bigint as rows,
+                 pg_size_pretty(pg_database_size(current_database())) as database
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+           where c.relkind in ('r', 'm')
+           order by pg_total_relation_size(c.oid) desc
+           limit 10;
+          EOSQL
+          )
+          supabase db query --linked "$ROOM" \
+            || echo "::notice::Could not measure the database."
 
   found:
     name: Found an island on the project

@@ -21,6 +21,7 @@ import { readAtlas } from '../../tools/atlas-node';
 import { ACTION_PACE } from '../../src/game/pace';
 import { WILD_REST, WILD_REST_SPREAD } from '../../src/game/creatures';
 import { pathOptions } from '../../src/game/player';
+import { TRIAL_ISLAND_LASTS } from '../../src/game/keep';
 import { LIQUID_NAME, type LiquidKind } from '../../src/game/furniture';
 import { drinkable } from '../../src/game/brewing';
 import { findPath } from '../../src/world/pathfinding';
@@ -213,7 +214,7 @@ async function main(): Promise<void> {
   let id = '';
   try {
     const t0 = Date.now();
-    id = await island.found(gen.world, `CI ${new Date().toISOString().slice(0, 16)}`, gen.spawn);
+    id = await island.found(gen.world, `CI ${new Date().toISOString().slice(0, 16)}`, gen.spawn, TRIAL_ISLAND_LASTS);
     check('founded and the land handed over', !!id, `${((Date.now() - t0) / 1000).toFixed(1)}s, id ${id}`);
 
     const t1 = Date.now();
@@ -1102,9 +1103,20 @@ async function main(): Promise<void> {
     const { error: minted } = await supabase().from('item').insert({ world_id: id, holder: 'player', holder_uid: uid, def: 'gold_lump', ql: 100 });
     check('minting ourselves gold is refused', !!minted, minted?.message ?? 'IT WENT THROUGH');
   } finally {
-    await island.leave();
+    /*
+     * Giving it up survives the two things that used to stop it: leaving
+     * throwing first, and the give-up meeting the clock's round and being the
+     * one Postgres chose to kill. Seven islands were left on the project from
+     * runs that got this far and no further. One that is left anyway goes by
+     * itself, TRIAL_ISLAND_LASTS after it was founded.
+     */
+    await island.leave().catch((e: Error) => say(`  leaving threw: ${e.message}`));
     if (id) {
-      const { error } = await supabase().rpc('rpc_abandon', { p_world: id });
+      let { error } = await supabase().rpc('rpc_abandon', { p_world: id });
+      if (error && /deadlock|lock timeout|could not obtain lock/i.test(error.message)) {
+        await new Promise((done) => setTimeout(done, 2000));
+        ({ error } = await supabase().rpc('rpc_abandon', { p_world: id }));
+      }
       check('gave the island up again', !error, error?.message ?? 'nothing left of it');
     }
   }

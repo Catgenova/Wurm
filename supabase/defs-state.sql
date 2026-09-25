@@ -3661,6 +3661,8 @@ create or replace function idle_logout() returns double precision language sql i
 create or replace function event_keep() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
 create or replace function change_keep() returns double precision language sql immutable as $fn$ select 3600::double precision $fn$;
 create or replace function island_keep() returns double precision language sql immutable as $fn$ select 2592000::double precision $fn$;
+create or replace function island_unopened_keep() returns double precision language sql immutable as $fn$ select 86400::double precision $fn$;
+create or replace function island_unvisited_keep() returns double precision language sql immutable as $fn$ select 604800::double precision $fn$;
 create or replace function tick_worlds() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function tick_players() returns double precision language sql immutable as $fn$ select 200::double precision $fn$;
 create or replace function calls_a_minute() returns double precision language sql immutable as $fn$ select 480::double precision $fn$;
