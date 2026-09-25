@@ -1284,6 +1284,16 @@ jobs:
           npx esbuild supabase/test/reap.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/reap.mjs --log-level=error
           node node_modules/.cache/reap.mjs
+      - name: Island leaderboards
+        run: |
+          # Top skills, best-bred wildermon and biggest settlements, from one
+          # door. An island of three is ranked place by place: wild ones left
+          # out, no trait named anywhere in the answer, somebody off the island
+          # refused, and the window's lines held to the numbers the island
+          # ranks by.
+          npx esbuild supabase/test/boards.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/boards.mjs --log-level=error
+          node node_modules/.cache/boards.mjs
 
   migrate:
     name: Push the migrations to the project

@@ -300,6 +300,20 @@ export interface Social {
   here: Folk[];
 }
 
+/**
+ * The island's three leaderboards, each cut at `BOARD_TOP` places, from
+ * `rpc_boards`. `mine` marks a place that is yours: your own skill, a
+ * wildermon you keep, a settlement you founded or are on the roll of.
+ */
+export interface Boards {
+  /** Every skill anybody has raised, by skill id: who holds it, highest first. */
+  skills: Record<string, Array<{ name: string; value: number; mine: boolean }>>;
+  /** Tamed wildermon by their traits' grades added up. A score and never a trait. */
+  wildermon: Array<{ keeper: string; name: string; species: string; score: number; mine: boolean }>;
+  /** By level, then citizens (the founder and the roll), then age. */
+  settlements: Array<{ name: string; founder: string; level: number; citizens: number; mine: boolean }>;
+}
+
 /** One line of a conversation. */
 export interface Letter {
   n: number;
@@ -1932,6 +1946,23 @@ export class Island {
     const { data, error } = await supabase().rpc('rpc_social', { p_world: this.info.id });
     if (error || !data) return null;
     return data as Social;
+  }
+
+  /**
+   * Who leads the island: each skill's highest, the best-bred wildermon and
+   * the biggest settlements, in one answer. Null when the island did not
+   * answer, so the window can keep what it had rather than go blank.
+   */
+  async boards(): Promise<Boards | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_boards', { p_world: this.info.id });
+    if (error || !data || typeof data !== 'object') return null;
+    const got = data as Partial<Boards>;
+    return {
+      skills: got.skills && typeof got.skills === 'object' && !Array.isArray(got.skills) ? got.skills : {},
+      wildermon: rowsIn<Boards['wildermon'][number]>(got.wildermon),
+      settlements: rowsIn<Boards['settlements'][number]>(got.settlements),
+    };
   }
 
   /**

@@ -3589,6 +3589,15 @@ insert into tier_odds values ('fantastic', 3, 0.005);
 create or replace function monster_share() returns double precision language sql immutable as $fn$ select 0.022::double precision $fn$;
 create or replace function trait_slots() returns int language sql immutable as $fn$ select 3 $fn$;
 create or replace function fight_share() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
+create or replace function grade_step(p_tier text) returns double precision language sql immutable as $fn$
+  select case p_tier
+    when 'common' then 1
+    when 'rare' then 2.5
+    when 'supreme' then 4.5
+    when 'fantastic' then 7
+  end::double precision
+$fn$;
+create or replace function board_top() returns int language sql immutable as $fn$ select 10::int $fn$;
 create or replace function clearance() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function end_slop() returns double precision language sql immutable as $fn$ select 12::double precision $fn$;
 create or replace function pair_range() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;

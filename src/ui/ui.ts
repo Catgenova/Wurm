@@ -72,6 +72,7 @@ import { SkillsPanel } from './panels/skills';
 import { TradesPanel } from './panels/trades';
 import { SocialPanel } from './panels/social';
 import { MarketPanel } from './panels/market';
+import { BoardsPanel } from './panels/boards';
 import { HoardPanel } from './panels/hoard';
 import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
@@ -134,6 +135,7 @@ export class UI {
   private readonly tilePanel: TilePanel;
   private readonly social: SocialPanel;
   private readonly market: MarketPanel;
+  private readonly boards: BoardsPanel;
   private readonly hoard: HoardPanel;
   /** The island, for the one window that asks it things directly. */
   private readonly island: Island | null;
@@ -232,6 +234,13 @@ export class UI {
      */
     const marketWin = this.windows.create({ id: 'market', title: 'Market', x: 12, y: 56, width: 360, height: 440, anchor: 'tr', open: false });
     this.market = new MarketPanel(marketWin, game, this.island, () => this.social.folk());
+    /*
+     * Who leads the island: each skill's highest, the best-bred wildermon and
+     * the biggest settlements. Beside the other two windows about other people,
+     * and asked of the island only while it is open.
+     */
+    const boardsWin = this.windows.create({ id: 'boards', title: 'Leaderboards', x: 12, y: 56, width: 340, height: 420, anchor: 'tr', open: false });
+    this.boards = new BoardsPanel(boardsWin, game, this.island);
     /*
      * Not on the Menu, because it is not a window you open — it is a window a
      * particular map opens. Reading a second map while the first is up shows
@@ -445,6 +454,7 @@ export class UI {
     this.deedPanel.update(performance.now());
     this.social.update(performance.now() / 1000);
     this.market.update(1 / 60);
+    this.boards.update(performance.now() / 1000);
     this.hoard.update(performance.now() / 1000);
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());

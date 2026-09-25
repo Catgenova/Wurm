@@ -27,7 +27,8 @@ import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } fro
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
-import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS, FIGHT_SHARE } from '../src/game/traits';
+import { CHANNELS, TRAITS, WILD_ODDS, TRAIT_SLOTS, FIGHT_SHARE, GRADE_STEP, TIERS } from '../src/game/traits';
+import { BOARD_TOP } from '../src/game/boards';
 import { CRAFT_HEAD, CRAFT_REACH } from '../src/game/recipes';
 import { SMITH_GAIN } from '../src/game/anvil';
 import { BREW_GAIN } from '../src/game/brewing';
@@ -1056,6 +1057,19 @@ out.push(`create or replace function monster_share() returns double precision la
 out.push(`create or replace function trait_slots() returns int language sql immutable as $fn$ select ${q(TRAIT_SLOTS)} $fn$;`);
 /* And the share of a wild roll that is fighting blood, which then rolls its own grade. */
 out.push(`create or replace function fight_share() returns double precision language sql immutable as $fn$ select ${q(FIGHT_SHARE)}::double precision $fn$;`);
+/*
+ * What each grade of a trait counts for, which is what the best-bred board adds
+ * up. The browser multiplies a fighting trait's gain by these and the
+ * Leaderboards window prints them over the board, so the island ranks by the
+ * same four numbers rather than a copy of them.
+ */
+out.push(`create or replace function grade_step(p_tier text) returns double precision language sql immutable as $fn$
+  select case p_tier
+${TIERS.map((t) => `    when ${q(t)} then ${q(GRADE_STEP[t])}`).join('\n')}
+  end::double precision
+$fn$;`);
+/* And how many places each leaderboard has. */
+out.push(`create or replace function board_top() returns int language sql immutable as $fn$ select ${q(BOARD_TOP)}::int $fn$;`);
 /* A gap worth bridging, two banks that will carry one deck, and a pair that
  * will stand close enough to be put together. */
 for (const [fn, v] of [
