@@ -20,7 +20,8 @@ import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT } from '../src/game/building';
+import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS } from '../src/game/building';
+import { CONCRETE_PER_STEP } from '../src/game/foundations';
 import { COAX_LAPSE, COAX_STEP, HERD_REACH, HUNT_HOME, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_RANGE, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
          COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
 import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
@@ -1291,6 +1292,12 @@ for (const [fn, v] of [
  */
 for (const [fn, v] of [
   ['wild_per_region', PER_REGION], ['wild_floor', WILD_TARGET],
+  /*
+   * And what a ladder and a poured slab cost, which were literals down here —
+   * `'{"plank": 2}'` in `floor_bill` and a `select 5` in `concrete_per_step` —
+   * the same two numbers as the browser's, written down a second time.
+   */
+  ['ladder_planks', LADDER_PLANKS], ['concrete_per_step', CONCRETE_PER_STEP],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns int language sql immutable as $fn$ select ${q(v)}::int $fn$;`);
 }

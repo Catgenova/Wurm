@@ -122,7 +122,7 @@ const STAIRS: Record<string, StairStyle> = {
 export const stairStyle = (material: string): StairStyle => STAIRS[material] ?? STAIRS.plank;
 
 /**
- * A ladder, which is two planks whatever the house: sawn pine, its stiles a
+ * A ladder, which is planks whatever the house: sawn pine, its stiles a
  * step darker than its rungs, the light along the rounds of both.
  */
 export const LADDER = {

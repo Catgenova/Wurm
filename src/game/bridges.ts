@@ -41,7 +41,7 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
   rope: {
     id: 'rope',
     name: 'Rope bridge',
-    bill: [['thick_rope', 2], ['plank', 3], ['nail', 4]],
+    bill: [['thick_rope', 6], ['plank', 12], ['nail', 8]],
     span: 14,
     tool: 'mallet',
     skill: 'carpentry',
@@ -52,7 +52,7 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
   wood: {
     id: 'wood',
     name: 'Wooden bridge',
-    bill: [['timber', 4], ['plank', 6], ['nail', 12]],
+    bill: [['timber', 12], ['plank', 24], ['nail', 24]],
     span: 10,
     tool: 'mallet',
     skill: 'carpentry',
@@ -63,7 +63,7 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
   stone: {
     id: 'stone',
     name: 'Stone arch',
-    bill: [['stone_brick', 10], ['mortar', 6], ['stone_slab', 3]],
+    bill: [['stone_brick', 40], ['mortar', 20], ['stone_slab', 6]],
     span: 8,
     tool: 'trowel',
     skill: 'masonry',

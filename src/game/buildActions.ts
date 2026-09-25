@@ -42,12 +42,12 @@ const needsText = (bill: Bill): string => describeNeeds(bill, materialName);
 /**
  * The work site: a crate standing on the tile you are building on.
  *
- * A builder carried everything. Twenty-four logs for six walls, at what a log
- * weighs, is four trips from the woodpile to the corner of a house, and the
- * crate you tipped them all into is standing on the very tile you are working
- * — which is where a builder's materials have stood since anybody built
- * anything. So the bill draws from a crate on the tile first and from the pack
- * after: the pile on the site is the pile you are building out of.
+ * A builder carried everything. Six log walls, at what a log weighs, is trip
+ * after trip from the woodpile to the corner of a house, and the crate you
+ * tipped them all into is standing on the very tile you are working — which
+ * is where a builder's materials have stood since anybody built anything. So
+ * the bill draws from a crate on the tile first and from the pack after: the
+ * pile on the site is the pile you are building out of.
  *
  * On the tile, not within reach: a crate two tiles off is a store, and walking
  * to it is the point of it being over there.

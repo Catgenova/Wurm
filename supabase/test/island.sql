@@ -641,9 +641,15 @@ update player set act_started = act_started - interval '600 seconds', act_ends =
 select settle(:'world2', :'ivar') \g /dev/null
 select '93. one log and four goes at it: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind in ('event','info'));
 -- The one log went into the wall, row and all; a fresh stack, not a top-up.
-insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40, 100, 'Oak');
+-- As many as the six walls, the floor over them and the fence below take off
+-- their own bills, less the one already in, and seventy-three over.
+insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (:'world2', 'player', :'ivar', 'log', 40,
+  6 * (wall_bill('log', 'solid')->>'log')::int + (floor_bill('log')->>'log')::int
+    + (wall_bill('log', 'fence')->>'log')::int - 1 + 73, 'Oak');
 delete from event where uid = :'ivar';
-select rpc_act(:'world2', 'build_wall', '{"kind":"tile","x":6,"y":7,"side":"n"}', 4) \g /dev/null
+-- The goes the wall still owes, which finish it.
+select rpc_act(:'world2', 'build_wall', '{"kind":"tile","x":6,"y":7,"side":"n"}',
+  (select (needed->>'log')::int from wall where world_id = :'world2' and dir = 'h' and x = 6 and y = 7)) \g /dev/null
 update player set act_started = act_started - interval '600 seconds', act_ends = act_ends - interval '600 seconds' where uid = :'ivar';
 select settle(:'world2', :'ivar') \g /dev/null
 select '94. with a stack of oak: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
@@ -651,7 +657,9 @@ select '94. with a stack of oak: ' || (select string_agg(text, ' | ' order by n)
 
 -- Hands first, walls second: a storey over a log one wants carpentry ten, and
 -- being told that before you build the other five walls is the point of asking
--- in that order.
+-- in that order. A whole log wall teaches a beginner past that, so he is put
+-- back to one: the question is what somebody who has not got the hands is told.
+update skill set value = storey_skill() / 2 where uid = :'ivar' and id = 'carpentry';
 select '94b. raising a storey with the hands he has: '
      || coalesce(act_refusal(:'world2', :'ivar', 'add_floor', '{"kind":"tile","x":6,"y":7}'), 'allowed');
 update skill set value = 12 where uid = :'ivar' and id = 'carpentry';
@@ -667,14 +675,14 @@ begin
     if why is not null then raise exception 'plan % % %: %', job.x, job.y, job.side, why; end if;
     perform act_perform(w, me, 'plan_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,
       'side',job.side,'wallType','solid','material','log'));
-    for i in 1..4 loop
+    for i in 1..(wall_bill('log', 'solid')->>'log')::int loop
       why := act_refusal(w, me, 'build_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,'side',job.side));
       if why is not null then raise exception 'build % % % (%): %', job.x, job.y, job.side, i, why; end if;
       perform act_perform(w, me, 'build_wall', jsonb_build_object('kind','tile','x',job.x,'y',job.y,'side',job.side));
     end loop;
   end loop;
 end $$;
-select '96. six walls up, twenty-four logs in them: the ground floor is '
+select '96. six walls up, ' || 6 * (wall_bill('log', 'solid')->>'log')::int || ' logs in them: the ground floor is '
      || case when level_complete(:'world2', (select id from building where world_id = :'world2'), 0) then 'complete' else 'unfinished' end
      || ', logs left ' || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'log')
      || ', carpentry ' || to_char(skill_of(:'world2', :'ivar', 'carpentry'), 'FM990.00');
@@ -693,7 +701,7 @@ do $$
 declare w uuid := (select id from world limit 1); me uuid := '11111111-1111-1111-1111-111111111111';
         why text; i int;
 begin
-  for i in 1..2 loop
+  for i in 1..(floor_bill('log')->>'log')::int loop
     why := act_refusal(w, me, 'build_floor', '{"kind":"tile","x":6,"y":7}');
     if why is not null then raise exception 'build floor %: %', i, why; end if;
     perform act_perform(w, me, 'build_floor', '{"kind":"tile","x":6,"y":7}');
@@ -707,7 +715,7 @@ select '103. a ladder with no side to climb from: ' || coalesce(act_refusal(:'wo
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'plan_floor', '{"kind":"tile","x":7,"y":7,"material":"log","floorKind":"ladder","side":"w"}') \g /dev/null
 select '104. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event')
-     || ' — a ladder is two planks whatever it is nailed to, and there are '
+     || ' — a ladder is ' || ladder_planks() || ' planks whatever it is nailed to, and there are '
      || (select coalesce(sum(count),0) from item where holder_uid = :'ivar' and def = 'plank') || ' in the pack: '
      || coalesce(act_refusal(:'world2', :'ivar', 'build_floor', '{"kind":"tile","x":7,"y":7,"floorKind":"ladder"}'), 'allowed');
 select act_perform(:'world2', :'ivar', 'plan_wall', '{"kind":"tile","x":6,"y":7,"side":"n","wallType":"solid","material":"log"}') \g /dev/null
@@ -742,8 +750,9 @@ update player set x = 3.5, y = 4.5 where uid = :'ivar';
 select '111. down at the shore: ' || coalesce(act_refusal(:'world2', :'ivar', 'plan_fence', '{"kind":"tile","x":3,"y":3,"side":"n","wallType":"fence","material":"log"}'), 'allowed');
 update player set x = 3.5, y = 7.5 where uid = :'ivar';
 delete from event where uid = :'ivar';
-select act_perform(:'world2', :'ivar', 'build_wall', '{"kind":"tile","x":3,"y":7,"side":"n"}') \g /dev/null
-select act_perform(:'world2', :'ivar', 'build_wall', '{"kind":"tile","x":3,"y":7,"side":"n"}') \g /dev/null
+-- A go for every log the fence takes.
+select act_perform(:'world2', :'ivar', 'build_wall', '{"kind":"tile","x":3,"y":7,"side":"n"}')
+  from generate_series(1, (wall_bill('log', 'fence')->>'log')::int) \g /dev/null
 select '112. ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar' and kind = 'event');
 delete from event where uid = :'ivar';
 select rpc_act(:'world2', 'rename_building', '{"kind":"tile","x":3,"y":7,"name":"Nowhere"}') \g /dev/null
@@ -3890,6 +3899,10 @@ select give(:'world2', :'ivar', 'mallet', 1, 50) \g /dev/null
 select give(:'world2', :'ivar', 'timber', 40, 40) \g /dev/null
 select give(:'world2', :'ivar', 'plank', 60, 40) \g /dev/null
 select give(:'world2', :'ivar', 'nail', 120, 40) \g /dev/null
+-- And what the whole deck takes, span by span off its own bill, over that.
+select give(:'world2', :'ivar', b.item, b.count * (select count(*) from bridge_span sp
+         where sp.world_id = :'world2' and sp.bridge = :'span_bridge')::int, 40)
+  from bridge_bill b where b.kind = 'wood' \g /dev/null
 update player set x = 3.5, y = 13.5 where world_id = :'world2' and uid = :'ivar';
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'build_bridge',
@@ -3902,7 +3915,9 @@ declare w uuid := (select id from world where name <> 'Rockhaven' order by made_
         b bigint := (select id from bridge where world_id = w order by id desc limit 1);
         s record; i int;
 begin
-  for i in 1..200 loop
+  -- A go for every unit the deck still wants.
+  for i in 1..(select sum(value::int) from bridge_span sp, jsonb_each_text(sp.needed)
+                where sp.world_id = w and sp.bridge = b) loop
     select * into s from bridge_span sp where sp.world_id = w and sp.bridge = b
       and not span_done(sp.needed) order by sp.n limit 1;
     exit when not found;
@@ -9382,9 +9397,9 @@ update creature set rider = null where world_id = :'world2' and id = :'shodhorse
 /*
  * Iron fittings for building.
  *
- * A door takes two hinges, a double door four, a gate two, on top of the
- * wall's bill; and an iron-bound gate, four brackets over its hinges, swings
- * for a person and for nothing else.
+ * A door, a double door and a gate take hinges on top of the wall's bill;
+ * and an iron-bound gate, brackets over its hinges, swings for a person and
+ * for nothing else. How many of each is the wall's own fittings, below.
  */
 \echo ''
 \echo '--- iron fittings for building'

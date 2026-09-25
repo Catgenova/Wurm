@@ -53,7 +53,7 @@ export interface WallTypeDef {
 
 export const WALL_TYPES: WallTypeDef[] = [
   { id: 'solid', name: 'Solid', factor: 1, passable: false, opaque: true },
-  { id: 'window', name: 'Window', factor: 0.75, passable: false, fittings: [['glass', 2]] },
+  { id: 'window', name: 'Window', factor: 0.75, passable: false, fittings: [['glass', 6]] },
   /*
    * No `thick`. It used to carry 1.7 of it, which moved the whole section
    * that much nearer the camera and left a slice of ground showing at the
@@ -61,9 +61,9 @@ export const WALL_TYPES: WallTypeDef[] = [
    * the wall is. What a bay projects by, it projects by: the box stands out
    * in front of the face, which is where a bay actually is.
    */
-  { id: 'bay', name: 'Bay window', factor: 1.25, passable: false, fittings: [['glass', 4]] },
-  { id: 'door', name: 'Door', factor: 0.75, passable: true, fittings: [['hinge', 2]] },
-  { id: 'double_door', name: 'Double door', factor: 1, passable: true, wide: true, fittings: [['hinge', 4]] },
+  { id: 'bay', name: 'Bay window', factor: 1.25, passable: false, fittings: [['glass', 12]] },
+  { id: 'door', name: 'Door', factor: 0.75, passable: true, fittings: [['hinge', 4]] },
+  { id: 'double_door', name: 'Double door', factor: 1, passable: true, wide: true, fittings: [['hinge', 8]] },
   /*
    * A doorway with nothing hung in it.
    *
@@ -80,7 +80,7 @@ export const WALL_TYPES: WallTypeDef[] = [
   { id: 'fence', name: 'Fence', factor: 0.3, passable: false, height: 0.42, low: true, railed: true, standalone: true },
   { id: 'fence_gate', name: 'Fence gate', factor: 0.4, passable: true, wide: true, height: 0.42, low: true, railed: true, standalone: true, fittings: [['hinge', 2]] },
   // Bound in iron: it swings for a person and holds against everything else.
-  { id: 'iron_gate', name: 'Iron-bound gate', factor: 0.5, passable: true, wide: true, height: 0.6, low: true, railed: true, standalone: true, beastProof: true, fittings: [['hinge', 2], ['bracket', 4]] },
+  { id: 'iron_gate', name: 'Iron-bound gate', factor: 0.5, passable: true, wide: true, height: 0.6, low: true, railed: true, standalone: true, beastProof: true, fittings: [['hinge', 4], ['bracket', 8]] },
   { id: 'half_wall', name: 'Half wall', factor: 0.5, passable: false, height: 0.5, low: true, standalone: true, thick: 1.25 },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
@@ -143,18 +143,18 @@ export const STOREY_SKILL = 10;
 export const storeySkill = (levels: number): number => levels * STOREY_SKILL;
 
 export const MATERIALS: MaterialDef[] = [
-  { id: 'log', name: 'Log', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [139, 106, 62], trim: [92, 66, 38], floor: [150, 118, 74], courses: 3, bill: [['log', 4]], storeys: 3, heft: 1 },
-  { id: 'plank', name: 'Plank', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [178, 138, 84], trim: [112, 82, 46], floor: [186, 148, 96], courses: 4, bill: [['plank', 6]], storeys: 4, heft: 1 },
-  { id: 'timbercraft', name: 'Timbercraft', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [206, 184, 142], trim: [88, 62, 38], floor: [176, 140, 92], courses: 4, bill: [['plank', 2], ['thatch', 2], ['timber', 2]], storeys: 4, heft: 1 },
+  { id: 'log', name: 'Log', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [139, 106, 62], trim: [92, 66, 38], floor: [150, 118, 74], courses: 3, bill: [['log', 16]], storeys: 3, heft: 1 },
+  { id: 'plank', name: 'Plank', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [178, 138, 84], trim: [112, 82, 46], floor: [186, 148, 96], courses: 4, bill: [['plank', 24], ['timber', 4]], storeys: 4, heft: 1 },
+  { id: 'timbercraft', name: 'Timbercraft', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [206, 184, 142], trim: [88, 62, 38], floor: [176, 140, 92], courses: 4, bill: [['plank', 8], ['thatch', 8], ['timber', 8]], storeys: 4, heft: 1 },
   { id: 'cobblestone', name: 'Cobblestone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [140, 136, 128], trim: [92, 88, 82], floor: [126, 122, 116], courses: 4, bill: [['rock_shards', 20], ['mortar', 10]], storeys: 6, heft: 2 },
-  { id: 'slate', name: 'Slate', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [96, 104, 118], trim: [60, 66, 78], floor: [88, 96, 110], courses: 5, bill: [['slate_brick', 4], ['mortar', 4]], storeys: 8, heft: 3 },
-  { id: 'marble', name: 'Marble', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [228, 226, 220], trim: [170, 168, 160], floor: [216, 214, 208], courses: 2, bill: [['marble_brick', 4], ['mortar', 4]], storeys: 10, heft: 3 },
-  { id: 'sandstone', name: 'Sandstone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 184, 132], trim: [150, 122, 78], floor: [200, 172, 124], courses: 3, bill: [['sandstone_brick', 4], ['mortar', 4]], storeys: 7, heft: 3 },
-  { id: 'stone_brick', name: 'Stone brick', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [160, 154, 144], trim: [104, 98, 90], floor: [148, 142, 132], courses: 3, bill: [['stone_brick', 4], ['mortar', 4]], storeys: 10, heft: 3 },
-  { id: 'clay_adobe', name: 'Clay adobe', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [198, 154, 106], trim: [138, 100, 62], floor: [184, 142, 98], courses: 3, bill: [['adobe', 5]], storeys: 5, heft: 2 },
-  { id: 'clay_bricks', name: 'Clay bricks', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [176, 85, 60], trim: [110, 50, 36], floor: [164, 82, 60], courses: 5, bill: [['clay_brick', 4], ['mortar', 4]], storeys: 7, heft: 2 },
-  { id: 'ornate_silver', name: 'Ornate silver', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [200, 204, 212], trim: [120, 126, 140], floor: [190, 194, 202], courses: 3, bill: [['stone_brick', 3], ['mortar', 3], ['silver_lump', 2]], storeys: 10, heft: 3 },
-  { id: 'ornate_gold', name: 'Ornate gold', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [217, 180, 81], trim: [150, 112, 34], floor: [206, 172, 84], courses: 3, bill: [['stone_brick', 3], ['mortar', 3], ['gold_lump', 2]], storeys: 10, heft: 3 },
+  { id: 'slate', name: 'Slate', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [96, 104, 118], trim: [60, 66, 78], floor: [88, 96, 110], courses: 5, bill: [['slate_brick', 24], ['mortar', 12]], storeys: 8, heft: 3 },
+  { id: 'marble', name: 'Marble', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [228, 226, 220], trim: [170, 168, 160], floor: [216, 214, 208], courses: 2, bill: [['marble_brick', 32], ['mortar', 16]], storeys: 10, heft: 3 },
+  { id: 'sandstone', name: 'Sandstone', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 184, 132], trim: [150, 122, 78], floor: [200, 172, 124], courses: 3, bill: [['sandstone_brick', 24], ['mortar', 12]], storeys: 7, heft: 3 },
+  { id: 'stone_brick', name: 'Stone brick', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [160, 154, 144], trim: [104, 98, 90], floor: [148, 142, 132], courses: 3, bill: [['stone_brick', 24], ['mortar', 12]], storeys: 10, heft: 3 },
+  { id: 'clay_adobe', name: 'Clay adobe', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [198, 154, 106], trim: [138, 100, 62], floor: [184, 142, 98], courses: 3, bill: [['adobe', 10]], storeys: 5, heft: 2 },
+  { id: 'clay_bricks', name: 'Clay bricks', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [176, 85, 60], trim: [110, 50, 36], floor: [164, 82, 60], courses: 5, bill: [['clay_brick', 12], ['mortar', 6]], storeys: 7, heft: 2 },
+  { id: 'ornate_silver', name: 'Ornate silver', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [200, 204, 212], trim: [120, 126, 140], floor: [190, 194, 202], courses: 3, bill: [['stone_brick', 24], ['mortar', 12], ['silver_lump', 12]], storeys: 10, heft: 3 },
+  { id: 'ornate_gold', name: 'Ornate gold', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [217, 180, 81], trim: [150, 112, 34], floor: [206, 172, 84], courses: 3, bill: [['stone_brick', 24], ['mortar', 12], ['gold_lump', 12]], storeys: 10, heft: 3 },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 
@@ -413,14 +413,18 @@ export const wallBill = (material: string, type: WallType): Bill => {
   return bill;
 };
 
+/** Planks in a ladder, whatever the house it climbs is built of. */
+export const LADDER_PLANKS = 8;
+
 /**
  * Materials for a floor slot: a floor takes half a wall, stairs three
- * quarters, a ladder is two planks, and a roof is whatever its shape costs —
- * a gable least, because a gable end is wall rather than roof, and a flat deck
- * most, because a thing you walk on is built like a floor.
+ * quarters, a ladder `LADDER_PLANKS` planks whatever the house is of, and a
+ * roof whatever its shape costs — a gable least, because a gable end is wall
+ * rather than roof, and a flat deck most, because a thing you walk on is built
+ * like a floor.
  */
 export function floorBill(material: string, kind: FloorKind = 'floor', roof: RoofShape = 'hip'): Bill {
-  if (kind === 'ladder') return { needed: { plank: 2 }, total: { plank: 2 } };
+  if (kind === 'ladder') return { needed: { plank: LADDER_PLANKS }, total: { plank: LADDER_PLANKS } };
   if (kind === 'roof') return scaledBill(material, ROOF_SHAPE_BY_ID.get(roof)?.factor ?? 0.5);
   return scaledBill(material, kind === 'stairs' ? 0.75 : 0.5);
 }

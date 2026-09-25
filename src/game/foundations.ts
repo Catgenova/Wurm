@@ -21,11 +21,11 @@ import { TileType } from '../world/tiles';
  * to whatever is underneath. The hill keeps its shape and you get a square of
  * level ground standing in it.
  *
- * What it costs is the hole it fills. Five concrete for every step of every
- * corner it lifts, so a slab over a gentle tile is cheap, one over a cliff is
- * an undertaking, and one poured into deep water is the work of a season —
- * which is the point of the thing being material-intensive rather than
- * forbidden.
+ * What it costs is the hole it fills. `CONCRETE_PER_STEP` concrete for every
+ * step of every corner it lifts, so a slab over a gentle tile is cheap, one
+ * over a cliff is an undertaking, and one poured into deep water is the work
+ * of a season — which is the point of the thing being material-intensive
+ * rather than forbidden.
  *
  * What it asks of you is the deepest part of that pour. Three units of lift a
  * point of masonry: a beginner can square off a step, and a hillside needs
@@ -33,7 +33,7 @@ import { TileType } from '../world/tiles';
  */
 
 /** Concrete per step of one corner lifted. */
-export const CONCRETE_PER_STEP = 5;
+export const CONCRETE_PER_STEP = 10;
 /**
  * How much lift one point of masonry is worth.
  *

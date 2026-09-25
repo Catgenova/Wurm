@@ -18,7 +18,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { ACTION_BY_ID, ACTIONS } from '../../src/game/actions';
-import { wallBill, type Side } from '../../src/game/building';
+import { WALL_TYPE_BY_ID, wallBill, type Side } from '../../src/game/building';
 import { DYE_BY_ID } from '../../src/game/dyestuffs';
 import { Game } from '../../src/game/game';
 import { ITEM_DEFS } from '../../src/game/items';
@@ -58,11 +58,13 @@ check('sand is run flat into panes at a smelter, the same bill on both sides',
   `browser ${mine?.inputs.map((i) => `${i.item}x${i.count ?? 1}`).join(',')} → ${mine?.count} glass, island ${theirs}`);
 
 /* ---- and a window that costs it ------------------------------------------ */
-for (const [type, want] of [['window', 2], ['bay', 4]] as Array<[string, number]>) {
+for (const type of ['window', 'bay'] as const) {
+  // As many as the opening's own fittings say, which is the number the player is shown.
+  const want = WALL_TYPE_BY_ID.get(type)?.fittings?.find(([item]) => item === 'glass')?.[1] ?? 0;
   const minePanes = wallBill('log', type as never).total.glass ?? 0;
   const theirPanes = Number(psql(`select coalesce((wall_bill('log', '${type}')->>'glass')::int, 0);`));
   check(`a ${type === 'bay' ? 'bay window' : 'window'} takes ${want} panes, on both sides`,
-    minePanes === want && theirPanes === want, `browser ${minePanes}, island ${theirPanes}`);
+    want > 0 && minePanes === want && theirPanes === want, `browser ${minePanes}, island ${theirPanes}`);
 }
 check('while a solid wall takes none', (wallBill('log', 'solid').total.glass ?? 0) === 0, 'a wall is a wall');
 

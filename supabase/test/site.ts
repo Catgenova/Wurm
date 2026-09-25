@@ -1,11 +1,11 @@
 /**
  * The pile on the site, and a bridge that lands on a storey.
  *
- * A builder carried everything. Twenty-four logs for six walls, at what a log
- * weighs, is four trips from the woodpile to the corner of the house — and the
- * crate you tipped them into is standing on the very tile you are working. A
- * wall draws from a crate on its own tile now, and from the pack after. On the
- * tile, not within reach: a crate two tiles off is a store.
+ * A builder carried everything. Six log walls, at what a log weighs, is trip
+ * after trip from the woodpile to the corner of the house — and the crate you
+ * tipped them into is standing on the very tile you are working. A wall draws
+ * from a crate on its own tile now, and from the pack after. On the tile, not
+ * within reach: a crate two tiles off is a store.
  *
  * And a bridge may land on a storey. Its ends wanted a bank or a poured slab,
  * and both of those are ground, so two towers a tile apart were a staircase
@@ -47,8 +47,10 @@ const b = game.buildings.create('Store', 20, 20);
 game.player.x = 20.5;
 game.player.y = 20.5;
 const wall = game.buildings.setWall(b, 0, 20, 20, 'n', 'solid', 'log');
+/* What a log wall takes, off its own bill, and a crate holding that and four over. */
+const LOGS = wall.total.log;
 const crate = game.addCrate('log', 20, 20, 1, 1);
-crate.items.push({ uid: 9001, id: 'log', ql: 40, dmg: 0, count: 8 } as never);
+crate.items.push({ uid: 9001, id: 'log', ql: 40, dmg: 0, count: LOGS + 4 } as never);
 
 psql(`
 do $$
@@ -66,9 +68,9 @@ begin
   insert into building (world_id, id, name, levels, work_level, planned_by) values (w, 1, 'Store', 1, 0, u);
   insert into building_tile (world_id, building, x, y) values (w, 1, 20, 20);
   insert into wall (world_id, level, dir, x, y, building, type, material, needed, total)
-    values (w, 0, 'h', 20, 20, 1, 'solid', 'log', '{"log": 4}', '{"log": 4}');
+    values (w, 0, 'h', 20, 20, 1, 'solid', 'log', wall_bill('log', 'solid'), wall_bill('log', 'solid'));
   insert into crate (world_id, id, kind, x, y, sx, sy) values (w, 1, 'log', 20, 20, 1, 1);
-  insert into item (world_id, holder, crate, def, ql, count) values (w, 'crate', 1, 'log', 40, 8);
+  insert into item (world_id, holder, crate, def, ql, count) values (w, 'crate', 1, 'log', 40, ${LOGS + 4});
   update player set x = 20.5, y = 20.5 where world_id = w and uid = u;
 end $$;`);
 
@@ -82,23 +84,23 @@ check('a wall may be built out of the crate standing on its own tile, on both si
     && theirSay('build_wall', '{"x":20,"y":20,"side":"n"}') === 'ALLOWED',
   `browser "${mineSay('build_wall', { side: 'n' })}", island "${theirSay('build_wall', '{"x":20,"y":20,"side":"n"}')}"`);
 
-/* And four goes at it empty the crate rather than the pack, which is empty. */
+/* And a go for every log of it draws on the crate rather than the pack, which is empty. */
 const act = ACTION_BY_ID.get('build_wall');
-for (let i = 0; i < 4; i++) act?.perform?.({ kind: 'tile', x: 20, y: 20, cx: 20, cy: 20, side: 'n' } as never, game);
+for (let i = 0; i < LOGS; i++) act?.perform?.({ kind: 'tile', x: 20, y: 20, cx: 20, cy: 20, side: 'n' } as never, game);
 psql(`do $$
 declare w uuid; u uuid;
 begin
   select id into w from world where name = 'Hoarding';
   select uid into u from player where world_id = w and name = 'Dane';
-  for i in 1..4 loop perform perform_building(w, u, 'build_wall', '{"x":20,"y":20,"side":"n"}'::jsonb); end loop;
+  for i in 1..${LOGS} loop perform perform_building(w, u, 'build_wall', '{"x":20,"y":20,"side":"n"}'::jsonb); end loop;
 end $$;`);
 const theirLeft = Number(psql(`select coalesce(sum(count), 0) from item where world_id = ${W} and holder = 'crate';`));
 const mineLeft = crate.items.reduce((n, it) => n + it.count, 0);
-check('and four goes take four logs out of the crate, on both sides',
+check(`and ${LOGS} goes take ${LOGS} logs out of the crate, on both sides`,
   mineLeft === 4 && theirLeft === 4, `browser ${mineLeft} left, island ${theirLeft} left`);
 check('the wall is finished by them', Object.values(wall.needed).every((n) => n <= 0)
   && psql(`select bill_done(needed) from wall where world_id = ${W} and dir = 'h' and x = 20 and y = 20;`) === 't',
-  'four logs out of the pile on the site');
+  `${LOGS} logs out of the pile on the site`);
 
 /* A crate a tile away is a store, not a site. */
 const far = Game.create(4242);
