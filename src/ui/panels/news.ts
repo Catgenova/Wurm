@@ -16,7 +16,8 @@ import { MUTE_FOR, MUTE_SHUTS } from '../../game/keeper';
 import { awayFor } from '../../game/away';
 import { ARMOUR, SHIELDS, WEAPONS } from '../../game/gear';
 import { JEWEL_PIECES } from '../../game/gems';
-import { RARITIES } from '../../game/items';
+import { itemDef, RARITIES } from '../../game/items';
+import { weaponCarry } from '../../render/figure';
 import type { UIWindow } from '../windows';
 
 /**
@@ -134,8 +135,23 @@ export const NEWS: News[] = [
       const shine = RARITIES.slice(1).map((r) => r.name);
       return [
         `What you wear and hold is drawn on you, on everybody else and on you as they see you: each of the ${ARMOUR.length} pieces of armour, ${WEAPONS.length} weapons, ${Object.keys(SHIELDS).length} shields, the toolbelt and the ${JEWEL_PIECES.length} jewels is a model of its own, in the metal, wood or stone it was made of and the colour it was dyed, and any of them can be worn with any other.`,
-        'A weapon is held in the hand, a bow in the other and a shield on the arm; two-handed weapons, and everything while you work, swim or hold the reins, go across your back.',
+        'A weapon is held in the hand, a bow in the other and a shield on the arm.',
         `${either(shine).replace(/^./, (c) => c.toUpperCase())} things shine where they are worn, each in its own colour: a glint crosses everything of one rarity together, a ${shine[1]} one's colour comes and goes, and a ${shine[2]} one sparkles.`,
+      ];
+    },
+  },
+  {
+    n: 8,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      // The weapons each way, named as the figure draws them.
+      const held = (pick: (c: { carry: string; stow: string }) => boolean): string =>
+        either(WEAPONS.filter((w) => { const c = weaponCarry(w.id); return !!c && pick(c); }).map((w) => itemDef(w.id).name.toLowerCase()));
+      return [
+        `A ${held((c) => c.carry === 'shoulder')} is carried over your shoulder.`,
+        `While you work, swim, hold the reins, wave or hop, what you hold is put away: a ${held((c) => c.stow === 'hip')} into its scabbard at your left hip, a ${held((c) => c.stow === 'belt')} through your belt at the right, and anything else across your back on a strap, with a shield over it.`,
+        `A ${either(shine)} piece is edged in its colour on the side away from the light, and whatever is worn over it covers its shine as well as the piece.`,
       ];
     },
   },

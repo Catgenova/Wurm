@@ -1697,6 +1697,8 @@ interface Rig {
   plant?: [number, number];
   /** Each hand open rather than closed. */
   open: [boolean, boolean];
+  /** The hands wanted for something else -- work, the water, the reins, a wave or a hop -- and whatever they held put away. */
+  stowed: boolean;
 }
 
 function rest(): Rig {
@@ -1704,7 +1706,7 @@ function rest(): Rig {
     at: [0, 0, 0], pelvis: [0, 0, 0], spine: [0, 0, 0], chest: [0, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
     arm: [[4, 8, 0], [4, 8, 0]], elbow: [10, 10], hand: [[0, 0, 0], [0, 0, 0]],
     leg: [[0, 2, 0], [0, 2, 0]], knee: [3, 3], foot: [0, 0], flat: [true, true],
-    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false],
+    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false], stowed: false,
   };
 }
 
@@ -2103,6 +2105,12 @@ function rigOf(p: FigurePose, fr: Frame): Rig {
   else if (p.working) work(r, p.phase, fr, p.facing);
   else idle(r, p.phase / 6);
   if (p.emote && !p.swimming && !p.driving) emote(r, p.emote, p.emoteT ?? 0, p.facing);
+  r.stowed = r.tool || r.reins || r.sink > 0 || !!p.emote;
+  // Something too heavy to carry out in front, over the right shoulder.
+  const held = p.gear?.weapon && weaponOf(p.gear.weapon.id);
+  if (held && held.carry === 'shoulder' && !r.stowed) shoulder(r, fr, held);
+  // A blade or a club swung low at the side on the move, the elbow kept from coming up and pointing it at the sky.
+  if (held && held.carry === 'fist' && !r.stowed && p.moving) r.elbow[1] = Math.min(r.elbow[1], 24 + 0.25 * r.elbow[1]);
   return r;
 }
 
@@ -2123,7 +2131,7 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     arm: [e(a.arm[0], b.arm[0]), e(a.arm[1], b.arm[1])], elbow: [n(a.elbow[0], b.elbow[0]), n(a.elbow[1], b.elbow[1])], hand: [e(a.hand[0], b.hand[0]), e(a.hand[1], b.hand[1])],
     leg: [e(a.leg[0], b.leg[0]), e(a.leg[1], b.leg[1])], knee: [n(a.knee[0], b.knee[0]), n(a.knee[1], b.knee[1])], foot: [n(a.foot[0], b.foot[0]), n(a.foot[1], b.foot[1])],
     flat: b.flat, tail: e(a.tail, b.tail), lift: n(a.lift, b.lift), sink: n(a.sink, b.sink), blink: b.blink, reins: b.reins, tool: b.tool, lefty: b.lefty,
-    hover: b.hover && { ...b.hover, w: b.hover.w * w }, shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])], open: b.open,
+    hover: b.hover && { ...b.hover, w: b.hover.w * w }, shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])], open: b.open, stowed: b.stowed,
     plant: b.plant && [b.plant[0] * w, b.plant[1] * w],
   };
 }
@@ -2339,6 +2347,16 @@ function paletteOf(p: FigurePose, look: Look): Palette {
   };
 }
 
+/**
+ * The metals and scale of a piece of gear, whose dark side leans cool as well
+ * as going darker: a copper helm is a cooler brown in its shadow, not a
+ * deeper orange, and iron goes blue-grey.
+ */
+const COOLS = new Set<Mat>(['metal', 'metalDark', 'metalLit', 'mail', 'blade', 'rivet', 'fitting', 'scale', 'scaleDark']);
+const COOL_TINT: RGB = [118, 130, 160];
+const toneOf = (P: Palette, m: Mat, k: number, gear: boolean): string =>
+  (gear && k < 0.94 && COOLS.has(m) ? shade(mixRGB(P[m], COOL_TINT, Math.min(0.32, (0.94 - k) * 1.1)), k) : shade(P[m], k));
+
 /** The ink round a colour: a dark, warm shade of it, and never lighter than a little over half of it, so black hair is not outlined in brown. */
 const inkOf = (c: RGB): RGB => {
   const m = mixRGB(c, INK, 0.6);
@@ -2366,7 +2384,7 @@ export interface Part {
   xf: Xf;
   /** Its own colours, for a piece of gear: its metal, its wood, its dye. The body's otherwise. */
   pal?: Palette;
-  /** How rare the piece it belongs to is, 1 to 3, for the shine laid over it (`drawGearShine`); and where in its cycle. */
+  /** How rare the piece it belongs to is, 1 to 3, for the shine laid over it (`shineOn`); and where in its cycle. */
   rare?: number;
   seed?: number;
   /** Corners already bent, for a mesh that moves within itself. */
@@ -2449,8 +2467,8 @@ export const gearShines = (g?: GearLook): boolean => !!g && DRESSED.some((s) => 
  * iron.
  */
 const METAL_TONE: Record<string, RGB> = {
-  iron: [150, 151, 158], steel: [170, 178, 192], copper: [200, 132, 96], bronze: [190, 148, 92], brass: [210, 182, 110],
-  tin: [200, 202, 200], zinc: [178, 188, 194], lead: [128, 132, 146], silver: [216, 220, 226], gold: [230, 190, 98],
+  iron: [138, 147, 164], steel: [160, 170, 188], copper: [182, 134, 112], bronze: [180, 148, 106], brass: [200, 180, 120],
+  tin: [196, 200, 204], zinc: [176, 188, 198], lead: [124, 130, 148], silver: [212, 218, 228], gold: [222, 190, 112],
   electrum: [222, 204, 142], pewter: [164, 168, 172], adamantine: [104, 136, 166], glimmersteel: [210, 226, 240],
   mithril: [170, 198, 232], seryll: [214, 198, 152],
 };
@@ -2469,6 +2487,8 @@ const GEM_TONE: Record<string, RGB> = {
 const DRAGON: RGB = [98, 146, 128];
 /** What a metal's shadow and its light lean toward. */
 const COOL_SHADOW: RGB = [58, 64, 84];
+/** The grey a dye is chalked toward. */
+const CHALK: RGB = [176, 172, 164];
 const WARM_LIGHT: RGB = [255, 250, 238];
 /** The metals that are fittings in their own right, gilt rather than iron. */
 const YELLOW_METAL = new Set(['gold', 'brass', 'bronze', 'electrum', 'seryll']);
@@ -2486,7 +2506,8 @@ function gearPalette(base: Palette, p: GearPiece): Palette {
   const mat = (p.material ?? '').toLowerCase();
   const metal = METAL_TONE[mat] ?? METAL_TONE.iron;
   const wood = WOOD_GEAR[mat] ?? WOOD_GEAR.oak;
-  const dye = p.dye && /^#[0-9a-f]{6}$/i.test(p.dye) ? hex(p.dye) : undefined;
+  // A dye as the island's chalky range has it: a third of the way to its grey.
+  const dye = p.dye && /^#[0-9a-f]{6}$/i.test(p.dye) ? mixRGB(hex(p.dye), CHALK, 0.35) : undefined;
   const cloth = dye ?? GEAR_BASE.cloth;
   const leather = dye ? mixRGB(GEAR_BASE.leather, dye, 0.45) : GEAR_BASE.leather;
   pal = {
@@ -2637,42 +2658,128 @@ function slab(pts: Array<[number, number, number]>, m: Mat, edge?: Mat, edgeFrom
 interface Build { fr: Frame; sw: number; bust: number; arm: number }
 const buildOf = (fr: Frame): Build => ({ fr, sw: (fr.sh + fr.wa) / 2, bust: 1 + fr.fem * 0.13, arm: 0.9 + fr.sh * 0.1 });
 
-/** The chest, `g` times the body's own round: the shell of whatever is worn over it. */
-const chestShell = (b: Build, g: number, m: Mat | ((band: number, j: number) => Mat), top = 2.24): Mesh => rings([
+/** The chest's rings, `g` times the body's own round, bottom first. */
+const chestRings = (b: Build, g: number, top = 2.24): number[][] => [
   [-0.15, 1.58 * b.sw * g, 1.22 * g, 0, 0], [0.9, 1.9 * b.fr.sh * g, 1.34 * b.bust * g, 0, 0.05],
   [1.7, 2.06 * b.fr.sh * g, 1.22 * g, 0, -0.04], [top, 1.3 * b.fr.sh * g, 0.74 * g, 0, -0.08],
-], 8, m, { bottom: false });
+];
+/** The chest, `g` times the body's own round: the shell of whatever is worn over it. */
+const chestShell = (b: Build, g: number, m: Mat | ((band: number, j: number) => Mat), top = 2.24): Mesh => rings(chestRings(b, g, top), 8, m, { bottom: false });
 /** The waist, on the spine. */
-const waistShell = (b: Build, g: number, m: Mat): Mesh =>
-  rings([[-0.4, 1.45 * b.fr.wa * g, 1.16 * g], [1.98, 1.6 * b.sw * g, 1.22 * g]], 8, m, { top: false, bottom: false });
-/** What hangs from the hips to `hem`, flaring as it goes: a skirt of mail, of plate, of quilting. */
-const skirtShell = (b: Build, g: number, hem: number, m: Mat | ((band: number, j: number) => Mat)): Mesh => {
-  const flare = Math.max(0, -1.35 - hem) * 0.07;
-  return rings([
-    [hem, (1.92 + flare) * b.fr.hi * g, (1.55 + flare) * g], [Math.min(-1.08, hem + 0.5), 1.9 * b.fr.hi * g, 1.53 * g],
+const waistRings = (b: Build, g: number): number[][] => [[-0.4, 1.45 * b.fr.wa * g, 1.16 * g], [1.98, 1.6 * b.sw * g, 1.22 * g]];
+const waistShell = (b: Build, g: number, m: Mat): Mesh => rings(waistRings(b, g), 8, m, { top: false, bottom: false });
+/**
+ * What hangs from the hips to `hem`, bottom first: a skirt of mail, of plate,
+ * of quilting. It flares the longer it is, and by `bell` more again.
+ */
+const skirtRings = (b: Build, g: number, hem: number, bell = 1): number[][] => {
+  const flare = Math.max(0, -1.35 - hem) * 0.07 * bell;
+  return [
+    [hem, (1.92 + flare) * b.fr.hi * g, (1.55 + flare) * g], [Math.min(-1.08, hem + 0.5), (1.9 + flare * 0.3) * b.fr.hi * g, (1.53 + flare * 0.3) * g],
     [0.2, 1.74 * b.fr.hi * g, 1.36 * g], [1.25, 1.53 * b.fr.wa * g, 1.22 * g],
-  ], 8, m, { top: false, bottom: false });
+  ];
 };
+const skirtShell = (b: Build, g: number, hem: number, m: Mat | ((band: number, j: number) => Mat), bell = 1, n = 8): Mesh =>
+  rings(skirtRings(b, g, hem, bell), n, m, { top: false, bottom: false });
 /** A belt round the waist, `g` out, on the hips. */
 const beltRing = (b: Build, g: number, m: Mat, lo = 0.98, hi = 1.42): Mesh =>
   rings([[lo, 1.64 * b.fr.wa * g, 1.32 * g], [hi, 1.64 * b.fr.wa * g, 1.32 * g]], 8, m, { top: false, bottom: false });
-/** The upper arm, from the shoulder down to `to`. */
-const upperShell = (b: Build, g: number, to: number, m: Mat): Mesh => rings([
-  [0.5, 0.5 * g, 0.52 * g], [0.08, 0.82 * b.arm * g, 0.8 * g], [Math.max(to, -1.5), 0.74 * g, 0.72 * g], ...(to < -1.5 ? [[to, 0.66 * g, 0.64 * g]] : []),
-], 6, m, { top: false, bottom: false });
-/** The forearm, from the elbow down to the wrist. */
-const forearmShell = (g: number, m: Mat): Mesh => rings([[0.32, 0.66 * g, 0.62 * g], [-2.15, 0.5 * g, 0.47 * g]], 6, m, { top: false, bottom: false });
-/** The thigh, from the hip down to the knee. */
-const thighShell = (b: Build, g: number, m: Mat): Mesh => rings([[-0.9, 1.02 * b.fr.hi * g, 1.05 * g], [-3.42, 0.8 * g, 0.84 * g]], 6, m, { top: false, bottom: false });
-/** The shin, from the knee down to `to`. */
-const shinShell = (g: number, to: number, m: Mat | ((band: number, j: number) => Mat)): Mesh =>
-  rings([[0.22, 0.82 * g, 0.86 * g], [-1.4, 0.72 * g, 0.76 * g], [to, 0.64 * g, 0.68 * g]], 6, m, { top: false, bottom: false });
+/** The upper arm, from the shoulder down to `to`, bottom first. */
+const upperRings = (b: Build, g: number, to: number): number[][] => [
+  ...(to < -1.5 ? [[to, 0.68 * g, 0.66 * g]] : []), [Math.max(to, -1.5), 0.76 * g, 0.74 * g], [0.08, 0.84 * b.arm * g, 0.82 * g], [0.5, 0.52 * g, 0.54 * g],
+];
+const upperShell = (b: Build, g: number, to: number, m: Mat): Mesh => rings(upperRings(b, g, to), 6, m, { top: false, bottom: false });
+/** The forearm, from over the elbow down into the glove, bottom first. */
+const forearmRings = (g: number): number[][] => [[-2.46, 0.56 * g, 0.53 * g], [-1.2, 0.62 * g, 0.58 * g], [0.45, 0.7 * g, 0.66 * g]];
+const forearmShell = (g: number, m: Mat): Mesh => rings(forearmRings(g), 6, m, { top: false, bottom: false });
+/** The thigh, from the hip down to the knee, bottom first. */
+const thighRings = (b: Build, g: number): number[][] => [[-3.42, 0.82 * g, 0.86 * g], [-0.9, 1.04 * b.fr.hi * g, 1.07 * g]];
+const thighShell = (b: Build, g: number, m: Mat): Mesh => rings(thighRings(b, g), 6, m, { top: false, bottom: false });
+/** The shin, from the knee down to `to`, bottom first. */
+const shinRings = (g: number, to: number): number[][] => [[to, 0.66 * g, 0.7 * g], [-1.4, 0.74 * g, 0.78 * g], [0.3, 0.84 * g, 0.88 * g]];
+const shinShell = (g: number, to: number, m: Mat | ((band: number, j: number) => Mat)): Mesh => rings(shinRings(g, to), 6, m, { top: false, bottom: false });
+/** A ball over a joint as round as the shells either side of it, so a bent elbow or knee never opens a gap in what is worn over it. */
+const knuckle = (r: number, m: Mat, ry = r): Mesh => ball([0, 0, 0], [r, ry, r], 6, 4, m);
+
+/** A profile of rings, bottom first, at `t` of the way up it by height, every ring five numbers. */
+function profileAt(rs: number[][], t: number): number[] {
+  const full = rs.map((r) => [r[0], r[1], r[2], r[3] ?? 0, r[4] ?? 0]);
+  const z = full[0][0] + (full[full.length - 1][0] - full[0][0]) * t;
+  for (let k = 0; k < full.length - 1; k++) {
+    const a = full[k], c = full[k + 1];
+    if (z <= c[0] || k === full.length - 2) {
+      const u = (z - a[0]) / (c[0] - a[0] || 1);
+      return a.map((x, i) => (i === 0 ? z : x + (c[i] - x) * u));
+    }
+  }
+  return full[full.length - 1];
+}
+
+/**
+ * Overlapping courses up a profile of rings, bottom first: each course flares
+ * `lip` out at its foot over the top of the one below, which is what scales
+ * and lames are, and the step under every course is inked, which reads at
+ * any size where a pattern worked into the surface does not. Every other
+ * course in `b`.
+ */
+function shingled(rs: number[][], count: number, lip: number, a: Mat, b: Mat = a, n = 6): Mesh {
+  const out: number[][] = [];
+  for (let k = 0; k < count; k++) {
+    const lo = profileAt(rs, k / count), hi = profileAt(rs, (k + 1) / count);
+    out.push([lo[0], lo[1] + lip, lo[2] + lip, lo[3], lo[4]], [hi[0] - 0.002, hi[1], hi[2], hi[3], hi[4]]);
+  }
+  return rings(out, n, (band) => (band % 2 ? a : (band / 2) % 2 ? b : a), { top: false, bottom: false });
+}
+
+/** A mesh of rings with its bottom edge cut into `n / 2` tabs, `depth` deep: a hem of leather strips. */
+const dagged = (m: Mesh, n: number, depth: number): Mesh =>
+  ({ ...m, v: m.v.map((p, i): V3 => (i < n && i % 2 ? [p[0], p[1], p[2] + depth] : p)) });
 
 /** The skull in the head's own frame, `out` further out, at height `z`: a ring of it, for a helm to follow. */
 const skullRing = (fr: Frame, z: number, out: number, dy = 0): number[] => {
   const [rxx, ryy, cy] = skull(fr, z);
   return [z, rxx + out, ryy + out, 0, cy + dy];
 };
+
+/**
+ * A row of a hat: at `f` over the brow and `b` at the nape, `out` off the
+ * skull in front and `outB` behind, or `r` across where the skull has run
+ * out; `dy` forward.
+ */
+interface HatRow { f: number; b?: number; out?: number; outB?: number; r?: [number, number]; dy?: number }
+
+/**
+ * A hat, a helm or a hood, ring over ring up the skull and tipped as a hat is
+ * worn: up off the brow in front, so the eyes are never under it, and down
+ * over the nape behind. Wound as `rings` is, and capped on top unless told.
+ */
+function hat(fr: Frame, rows: HatRow[], n: number, mat: Mat | ((band: number, j: number) => Mat), top = true): Mesh {
+  const v: V3[] = [];
+  const f: Face[] = [];
+  const m = (band: number, j: number): Mat => (typeof mat === 'function' ? mat(band, j) : mat);
+  for (const row of rows) {
+    for (let j = 0; j < n; j++) {
+      const a = ((j + 0.5) / n) * TAU;
+      const front = (1 + Math.sin(a)) / 2;
+      const z = row.b === undefined ? row.f : row.b + (row.f - row.b) * front;
+      const out = (row.outB ?? row.out ?? 0) + ((row.out ?? 0) - (row.outB ?? row.out ?? 0)) * front;
+      const [sx, sy, cy] = row.r ? [row.r[0], row.r[1], 0] : skull(fr, z);
+      const rx = row.r ? sx : sx + out, ry = row.r ? sy : sy + out;
+      v.push([Math.cos(a) * rx, cy + (row.dy ?? 0) + Math.sin(a) * ry, z]);
+    }
+  }
+  for (let k = 0; k < rows.length - 1; k++) {
+    for (let j = 0; j < n; j++) {
+      const j2 = (j + 1) % n;
+      f.push({ i: [k * n + j, k * n + j2, (k + 1) * n + j2, (k + 1) * n + j], m: m(k, j) });
+    }
+  }
+  if (top) {
+    const last = (rows.length - 1) * n;
+    f.push({ i: Array.from({ length: n }, (_, j) => last + j), m: m(rows.length - 1, 0) });
+  }
+  return mesh(v, f);
+}
 
 /**
  * A ridge up the middle of the head from the brow over the crown to the
@@ -2691,13 +2798,23 @@ const HEAD_OVER: Covers[] = ['head', 'ears', 'nose', 'beard', 'fall', 'tails', '
 
 /* -- what is worn ---------------------------------------------------------------------- */
 
-/** How much bigger round the waist each chest piece is than the body, for what goes round it. */
-const CHEST_FIT: Record<string, number> = { cloth_tunic: 1.12, leather_jerkin: 1.09, chain_hauberk: 1.1, plate_breastplate: 1.16, scale_cuirass: 1.12 };
+/**
+ * How much bigger round the body each chest piece is, heavier further out:
+ * padding, hide, mail over its padding, scale and plate. What goes round the
+ * waist over it goes round this.
+ */
+const CHEST_FIT: Record<string, number> = { cloth_tunic: 1.17, leather_jerkin: 1.11, chain_hauberk: 1.13, plate_breastplate: 1.2, scale_cuirass: 1.16 };
 
 /**
  * Every piece, a model of its own, given the build of the body it is on, and
  * `fit`, how far out round the waist the chest piece under it comes, for a
  * belt to go round.
+ *
+ * Each class has an outline of its own, so the five tell apart with the
+ * colour taken away: cloth is padded out and rolled at its edges, leather
+ * fitted and cut into strips at the hem, mail hangs in a bell past the hips,
+ * scale lies in courses with a strip-cut skirt, and plate stands off the
+ * shoulders in pauldrons and off the hips in lames.
  */
 const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   /* Head */
@@ -2705,11 +2822,11 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 1,
     bits: [{
       bone: 'head', over: HEAD_OVER, bias: 0.03,
-      mesh: grown(join(
-        // The turned-up band round the brow, then the knitted crown slouching back over the top.
-        rings([skullRing(b.fr, 1.72, 0.26), skullRing(b.fr, 2.1, 0.28)], 8, 'clothDark', { top: false, bottom: false }),
-        worn(rings([skullRing(b.fr, 2.08, 0.22), skullRing(b.fr, 2.55, 0.2, -0.08), [CROWN + 0.02, 1.05, 1.1, 0, -0.35], [CROWN + 0.32, 0.42, 0.46, 0, -0.62]], 8, 'cloth', { bottom: false }), 'quilt'),
-      )),
+      mesh: grown(worn(hat(b.fr, [
+        // A rolled brim up on the brow and down at the nape, and the knitted crown slouching back over the top.
+        { f: 2.0, b: 1.6, out: 0.12, outB: 0.2 }, { f: 2.14, b: 1.74, out: 0.24, outB: 0.3 }, { f: 2.28, b: 1.9, out: 0.16, outB: 0.22 },
+        { f: 2.7, b: 2.46, out: 0.17, outB: 0.2, dy: -0.08 }, { f: CROWN + 0.04, r: [1.04, 1.1], dy: -0.4 }, { f: CROWN + 0.36, r: [0.42, 0.46], dy: -0.7 },
+      ], 8, (band) => (band < 2 ? 'clothDark' : 'cloth')), 'quilt', (f) => f.m === 'cloth')),
     }],
     hides: ['cap', 'top'],
   }),
@@ -2718,10 +2835,12 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     bits: [{
       bone: 'head', over: HEAD_OVER, bias: 0.03,
       mesh: grown(join(
-        // A round cap of hide to just over the brow, a darker band round its edge, and a button on the crown.
-        rings([skullRing(b.fr, 1.72, 0.2), skullRing(b.fr, 1.92, 0.19)], 8, 'leatherDark', { top: false, bottom: false }),
-        rings([skullRing(b.fr, 1.9, 0.16), skullRing(b.fr, 2.3, 0.16), skullRing(b.fr, 2.75, 0.13), [CROWN + 0.12, 0.34, 0.36, 0, 0]], 8, 'leather', { bottom: false }),
-        ball([0, skull(b.fr, CROWN - 0.1)[2], CROWN + 0.14], [0.2, 0.2, 0.12], 5, 3, 'leatherDark'),
+        // A round cap of hide to just over the brow, bound round its edge in the darker hide, with a button on the crown.
+        hat(b.fr, [
+          { f: 2.0, b: 1.62, out: 0.1, outB: 0.18 }, { f: 2.14, b: 1.76, out: 0.13, outB: 0.19 },
+          { f: 2.6, b: 2.34, out: 0.13 }, { f: 2.95, b: 2.86, out: 0.1 }, { f: CROWN + 0.12, r: [0.36, 0.38] },
+        ], 8, (band) => (band === 0 ? 'leatherDark' : 'leather')),
+        ball([0, skull(b.fr, CROWN - 0.1)[2], CROWN + 0.15], [0.2, 0.2, 0.12], 5, 3, 'leatherDark'),
         // Flaps down over the ears, curved round the head.
         ...[0, 180].map((c) => arcs([skullRing(b.fr, 0.95, 0.2), skullRing(b.fr, 1.35, 0.21), skullRing(b.fr, 1.8, 0.2)], 3, c - 34, c + 34, 'leather')),
         ...[0, 180].map((c) => arcs([skullRing(b.fr, 0.88, 0.2), skullRing(b.fr, 0.98, 0.2)], 3, c - 34, c + 34, 'leatherDark')),
@@ -2735,15 +2854,16 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       {
         bone: 'head', over: HEAD_OVER, bias: 0.035,
         mesh: grown(join(
-          worn(rings([skullRing(b.fr, 1.85, 0.3), skullRing(b.fr, 2.4, 0.28), skullRing(b.fr, 2.85, 0.24), [CROWN + 0.2, 0.52, 0.55, 0, 0]], 8, 'mail', { bottom: false }), 'mail'),
+          // Close over the head and down to the brow in front, the face left open below it.
+          worn(hat(b.fr, [{ f: 2.02, b: 1.3, out: 0.24, outB: 0.3 }, { f: 2.42, b: 2.1, out: 0.27 }, { f: 2.86, out: 0.24 }, { f: CROWN + 0.2, r: [0.54, 0.57] }], 8, 'mail'), 'mail'),
           // Round the face and down the throat, open in front from the brow to the chin.
-          worn(arcs([[-0.9, 1.3, 1.35, 0, -0.05], [0.25, 1.4, 1.35, 0, 0.1], [1.3, 1.72, 1.78, 0, 0.14], [1.9, 1.78, 1.86, 0, 0.06]], 7, 128, 412, 'mail'), 'mail'),
+          worn(arcs([[-0.9, 1.3, 1.35, 0, -0.05], [0.25, 1.4, 1.35, 0, 0.1], [1.3, 1.72, 1.78, 0, 0.14], [1.95, 1.78, 1.86, 0, 0.06]], 7, 128, 412, 'mail'), 'mail'),
         )),
       },
-      // The cape of it over the shoulders.
+      // The cape of it over the shoulders, standing a little off them.
       {
         bone: 'chest', over: ['chest', 'neck'], bias: 0.11,
-        mesh: worn(rings([[1.15, 2.2 * b.fr.sh, 1.46], [2.05, 1.62 * b.fr.sh, 1.08], [2.75, 0.98, 0.92, 0, -0.05]], 8, 'mail', { top: false, bottom: false }), 'mail'),
+        mesh: worn(rings([[1.08, 2.32 * b.fr.sh, 1.54], [2.05, 1.7 * b.fr.sh, 1.12], [2.75, 1.0, 0.94, 0, -0.05]], 8, 'mail', { top: false, bottom: false }), 'mail'),
       },
     ],
     hides: ['cap', 'top', 'fall', 'tails'],
@@ -2753,166 +2873,207 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     bits: [{
       bone: 'head', over: HEAD_OVER, bias: 0.04,
       mesh: grown(join(
-        // A round steel cap to a rim just over the brow, and a ridge from the brow over the crown.
-        rings([skullRing(b.fr, 1.62, 0.34), skullRing(b.fr, 1.78, 0.3), skullRing(b.fr, 2.3, 0.27), skullRing(b.fr, 2.8, 0.22), [CROWN + 0.26, 0.5, 0.52, 0, 0]], 8,
-          (band) => (band === 0 ? 'metalLit' : 'metal'), { bottom: false }),
+        // A round steel cap to a rolled rim just over the brow, deeper behind, and a comb from the brow over the crown.
+        hat(b.fr, [
+          { f: 1.98, b: 1.55, out: 0.32, outB: 0.38 }, { f: 2.1, b: 1.7, out: 0.3, outB: 0.34 }, { f: 2.5, b: 2.3, out: 0.27 },
+          { f: 2.85, out: 0.22 }, { f: CROWN + 0.26, r: [0.5, 0.52] },
+        ], 8, (band) => (band === 0 ? 'metalLit' : 'metal')),
         crestOf(b.fr, 0.3, 0.13, 'metalLit', CROWN + 0.36, 2.25),
         // The nasal down over the nose, and a cheek plate down each side of the face.
-        box([-0.13, 1.72, 0.92], [0.13, 1.98, 1.72], 'metal'),
+        box([-0.13, 1.72, 0.92], [0.13, 1.98, 2.02], 'metal'),
         box([1.34, -0.2, 0.62], [1.72, 1.2, 1.7], 'metal', 'metalLit'), box([-1.72, -0.2, 0.62], [-1.34, 1.2, 1.7], 'metal', 'metalLit'),
       )),
     }],
-    hides: ['cap', 'top', 'fall'],
+    hides: ['cap', 'top', 'fall', 'tails'],
   }),
   scale_helm: (b) => ({
     layer: 4,
     bits: [{
       bone: 'head', over: HEAD_OVER, bias: 0.04,
       mesh: grown(join(
-        worn(rings([skullRing(b.fr, 1.6, 0.32), skullRing(b.fr, 2.2, 0.3), skullRing(b.fr, 2.75, 0.24), [CROWN + 0.24, 0.5, 0.52, 0, 0]], 8,
-          (band) => (band === 0 ? 'scaleDark' : 'scale'), { bottom: false }), 'scale'),
-        // A row of scale-spines up the middle, tallest over the crown.
+        // Courses of scale up the skull from a rim over the brow, and a row of scale-spines up the middle, tallest over the crown.
+        worn(hat(b.fr, [
+          { f: 1.98, b: 1.5, out: 0.32, outB: 0.36 }, { f: 2.2, b: 1.9, out: 0.28 }, { f: 2.24, b: 1.94, out: 0.34 }, { f: 2.56, b: 2.36, out: 0.28 },
+          { f: 2.6, b: 2.4, out: 0.32 }, { f: 2.92, out: 0.24 }, { f: CROWN + 0.24, r: [0.5, 0.52] },
+        ], 8, (band) => (band === 0 ? 'scaleDark' : band % 2 ? 'scaleDark' : 'scale')), 'scale', (f) => f.m === 'scale'),
         ...[-1.15, -0.45, 0.25, 0.95].map((y, i) => slab([[y - 0.28, CROWN - 0.1 - Math.abs(y) * 0.3], [y + 0.24, CROWN - 0.1 - Math.abs(y) * 0.3], [y - 0.12, CROWN + 0.52 - Math.abs(i - 1.5) * 0.16]].map(([yy, z]): [number, number, number] => [yy, z, 0.07]), 'scaleDark')),
         box([1.32, -0.3, 0.7], [1.66, 1.05, 1.66], 'scale'), box([-1.66, -0.3, 0.7], [-1.32, 1.05, 1.66], 'scale'),
       )),
     }],
-    hides: ['cap', 'top', 'fall'],
+    hides: ['cap', 'top', 'fall', 'tails'],
   }),
 
   /* Chest */
-  cloth_tunic: (b) => ({
-    layer: 1,
-    bits: [
-      { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: worn(join(chestShell(b, 1.1, 'cloth'), rings([[2.15, 1.02, 0.86, 0, -0.1], [2.55, 0.86, 0.76, 0, -0.1]], 8, 'clothDark', { bottom: false, top: false })), 'quilt', (f) => f.m === 'cloth') },
-      { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: worn(waistShell(b, 1.1, 'cloth'), 'quilt') },
-      { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: worn(skirtShell(b, 1.08, -2.3, (band) => (band === 0 ? 'clothDark' : 'cloth')), 'quilt', (f) => f.m === 'cloth') },
-      { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, 1.1, 'belt') },
-    ],
-    hides: ['skirt', 'belt', 'chest', 'abdomen'],
-  }),
-  leather_jerkin: (b) => ({
-    layer: 2,
-    bits: [
-      {
-        bone: 'chest', over: ['chest'], bias: 0.02, convex: true,
-        mesh: join(chestShell(b, 1.07, 'leather', 2.18), rings([[2.08, 1.08, 0.86, 0, -0.1], [2.34, 0.92, 0.78, 0, -0.1]], 8, 'leatherDark', { top: false, bottom: false }), decals([
-          // Laced up the front: three crossings of the lace.
-          ...[0.35, 0.95, 1.5].map((z) => plate([0, 1.43 * b.bust, z], [0.32, 0, 0.18], [0.05, 0, -0.18], [0, 1, 0], 'lace')),
-        ])),
-      },
-      { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: waistShell(b, 1.07, 'leather') },
-      { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: skirtShell(b, 1.06, -1.6, (band) => (band === 0 ? 'leatherDark' : 'leather')) },
-      { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, 1.07, 'belt') },
-    ],
-    hides: ['skirt', 'belt', 'chest', 'abdomen'],
-  }),
-  chain_hauberk: (b) => ({
-    layer: 3,
-    bits: [
-      { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: worn(chestShell(b, 1.06, 'mail'), 'mail') },
-      { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: worn(waistShell(b, 1.06, 'mail'), 'mail') },
-      // To the middle of the thigh, with a band of brass rings round the hem.
-      { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: worn(skirtShell(b, 1.06, -2.6, 'mail'), 'mail') },
-      { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.18, skirt: true, mesh: rings([[-2.66, 2.14 * b.fr.hi * 1.07, 1.73 * 1.07], [-2.42, 2.11 * b.fr.hi * 1.07, 1.71 * 1.07]], 8, 'fitting', { top: false, bottom: false }) },
-      { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, 1.08, 'belt') },
-      // And short sleeves of it to halfway down the upper arm.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: worn(upperShell(b, 1.12, -1.35, 'mail'), 'mail') },
-    ],
-    hides: ['skirt', 'belt', 'chest', 'abdomen'],
-  }),
-  plate_breastplate: (b) => ({
-    layer: 5,
-    bits: [
-      {
-        bone: 'chest', over: ['chest'], bias: 0.03, convex: true,
-        mesh: join(chestShell(b, 1.12, 'metal'), rings([[2.18, 1.4 * b.fr.sh * 1.12, 0.8 * 1.12, 0, -0.08], [2.3, 1.3 * b.fr.sh * 1.12, 0.74 * 1.12, 0, -0.08]], 8, 'metalLit', { top: false, bottom: false })),
-      },
-      { bone: 'spine', over: ['abdomen'], bias: 0.03, convex: true, mesh: waistShell(b, 1.12, 'metal') },
-      // The faulds: lames of plate over the hips, overlapping down.
-      { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: worn(skirtShell(b, 1.12, -1.75, (band) => (band === 0 ? 'metalLit' : 'metal')), 'lames') },
-    ],
-    hides: ['skirt', 'belt', 'chest', 'abdomen'],
-  }),
-  scale_cuirass: (b) => ({
-    layer: 4,
-    bits: [
-      { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: worn(chestShell(b, 1.08, 'scale'), 'scale') },
-      { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: worn(waistShell(b, 1.08, 'scale'), 'scale') },
-      // A leather skirt, edged in dark scale.
-      { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: skirtShell(b, 1.08, -1.9, (band) => (band === 0 ? 'scaleDark' : 'leather')) },
-      { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, 1.09, 'belt') },
-      // Great scales capping the shoulders.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: worn(rings([[-0.75, 0.86, 0.86, 0.06], [0.2, 1.0, 0.98, 0.06], [0.72, 0.62, 0.62, 0.02]], 6, 'scale', { bottom: false }), 'scale') },
-    ],
-    hides: ['skirt', 'belt', 'chest', 'abdomen'],
-  }),
+  cloth_tunic: (b) => {
+    const g = CHEST_FIT.cloth_tunic;
+    return {
+      layer: 1,
+      bits: [
+        {
+          bone: 'chest', over: ['chest'], bias: 0.02, convex: true,
+          // Padded, quilted in channels, and a thick rolled collar standing round the neck.
+          mesh: worn(join(chestShell(b, g, 'cloth'), rings([[2.1, 1.22, 1.0, 0, -0.1], [2.32, 1.2, 0.98, 0, -0.1], [2.58, 0.92, 0.8, 0, -0.1]], 8, 'clothDark', { top: false, bottom: false })), 'quilt', (f) => f.m === 'cloth'),
+        },
+        { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: worn(waistShell(b, g, 'cloth'), 'quilt') },
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: worn(skirtShell(b, g - 0.02, -2.35, 'cloth', 1.2), 'quilt') },
+        // A thick roll round the hem.
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.17, skirt: true, mesh: rings(profileHem(skirtRings(b, g - 0.02, -2.35, 1.2), 0.16, 0.2), 8, 'clothDark', { top: false, bottom: false }) },
+        { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.01, 'belt') },
+      ],
+      hides: ['skirt', 'belt', 'chest', 'abdomen'],
+    };
+  },
+  leather_jerkin: (b) => {
+    const g = CHEST_FIT.leather_jerkin;
+    return {
+      layer: 2,
+      bits: [
+        {
+          bone: 'chest', over: ['chest'], bias: 0.02, convex: true,
+          mesh: join(chestShell(b, g, (band) => (band === 1 ? 'leatherDark' : 'leather'), 2.18),
+            rings([[2.08, 1.12, 0.9, 0, -0.1], [2.34, 0.96, 0.8, 0, -0.1]], 8, 'leatherDark', { top: false, bottom: false }),
+            decals([
+              // Laced up the front: three crossings of the lace, and stitching down each side.
+              ...[0.35, 0.95, 1.5].map((z) => plate([0, 1.43 * b.bust * g / 1.07, z], [0.32, 0, 0.18], [0.05, 0, -0.18], [0, 1, 0], 'lace')),
+            ])),
+        },
+        { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: waistShell(b, g, 'leather') },
+        // Cut into strips below the belt, each edged darker.
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: dagged(skirtShell(b, g - 0.03, -1.75, (band) => (band === 0 ? 'leatherDark' : 'leather'), 1, 16), 16, 0.3) },
+        { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: join(beltRing(b, g + 0.01, 'belt', 0.9, 1.5), decals([plate([0, 1.32 * (g + 0.01) * Math.cos(Math.PI / 8) + 0.01, 1.2], [0.24, 0, 0], [0, 0, 0.22], [0, 1, 0], 'fitting')])) },
+      ],
+      hides: ['skirt', 'belt', 'chest', 'abdomen'],
+    };
+  },
+  chain_hauberk: (b) => {
+    const g = CHEST_FIT.chain_hauberk;
+    const skirt = skirtRings(b, g - 0.02, -2.75, 2.2);
+    return {
+      layer: 3,
+      bits: [
+        { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: worn(join(chestShell(b, g, 'mail'), rings([[2.12, 1.1, 0.9, 0, -0.1], [2.42, 0.96, 0.82, 0, -0.1]], 8, 'mail', { top: false, bottom: false })), 'mail') },
+        { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: worn(waistShell(b, g, 'mail'), 'mail') },
+        // Hanging in a bell to the middle of the thigh, with a band of brass rings round the hem.
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: worn(rings(skirt, 8, 'mail', { top: false, bottom: false }), 'mail') },
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.18, skirt: true, mesh: rings(profileHem(skirt, 0.05, 0.26), 8, 'fitting', { top: false, bottom: false }) },
+        { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.02, 'belt') },
+        // And short sleeves of it to halfway down the upper arm.
+        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: worn(upperShell(b, 1.2, -1.45, 'mail'), 'mail') },
+      ],
+      hides: ['skirt', 'belt', 'chest', 'abdomen'],
+    };
+  },
+  plate_breastplate: (b) => {
+    const g = CHEST_FIT.plate_breastplate;
+    const front = 1.34 * b.bust * g * Math.cos(Math.PI / 8);
+    return {
+      layer: 5,
+      bits: [
+        {
+          bone: 'chest', over: ['chest'], bias: 0.03, convex: true,
+          mesh: join(chestShell(b, g, 'metal'),
+            // A rolled rim at the neck, and the ridge down the middle catching the light.
+            rings([[2.18, 1.4 * b.fr.sh * g, 0.8 * g, 0, -0.08], [2.32, 1.3 * b.fr.sh * g, 0.74 * g, 0, -0.08]], 8, 'metalLit', { top: false, bottom: false }),
+            decals([plate([0, front + 0.012, 0.95], [0, 0, 0.8], [0.07, 0, 0], [0, 1, 0], 'metalLit')])),
+        },
+        { bone: 'spine', over: ['abdomen'], bias: 0.03, convex: true, mesh: waistShell(b, g, 'metal') },
+        // The faulds: three lames over the hips, each over the one below, standing off them.
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: worn(shingled(skirtRings(b, g, -1.8, 2.4), 3, 0.12, 'metal', 'metal', 8), 'lames') },
+      ],
+      hides: ['skirt', 'belt', 'chest', 'abdomen'],
+    };
+  },
+  scale_cuirass: (b) => {
+    const g = CHEST_FIT.scale_cuirass;
+    return {
+      layer: 4,
+      bits: [
+        { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: join(worn(shingled(chestRings(b, g), 5, 0.1, 'scale', 'scale', 8), 'scale'), rings([[2.16, 1.36 * b.fr.sh * g, 0.78 * g, 0, -0.08], [2.3, 1.24 * b.fr.sh * g, 0.72 * g, 0, -0.08]], 8, 'scaleDark', { top: false, bottom: false })) },
+        { bone: 'spine', over: ['abdomen'], bias: 0.02, convex: true, mesh: worn(shingled(waistRings(b, g), 3, 0.08, 'scale', 'scale', 8), 'scale') },
+        // A skirt of hide strips, their tops bound in dark scale.
+        { bone: 'pelvis', over: ['skirt', 'thigh'], bias: 0.16, skirt: true, mesh: dagged(skirtShell(b, g - 0.02, -2.0, (band) => (band === 3 ? 'scaleDark' : 'leather'), 1.4, 16), 16, 0.34) },
+        { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.01, 'belt') },
+        // Great scales capping the shoulders.
+        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: worn(shingled([[-0.95, 1.02, 1.0, 0.1], [0.2, 1.14, 1.1, 0.1], [0.78, 0.66, 0.64, 0.04]], 3, 0.1, 'scale', 'scaleDark'), 'scale') },
+      ],
+      hides: ['skirt', 'belt', 'chest', 'abdomen'],
+    };
+  },
 
   /* Arms, hands and all */
   cloth_sleeves: (b) => ({
     layer: 1,
     bits: [
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.01, convex: true, mesh: worn(upperShell(b, 1.16, -2.95, 'cloth'), 'quilt') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.01, convex: true, mesh: join(worn(forearmShell(1.12, 'cloth'), 'quilt'), rings([[-1.7, 0.6, 0.57], [-2.2, 0.58, 0.55]], 6, 'clothDark', { top: false, bottom: false })) },
+      // Padded out, and rolled at the shoulder and the cuff.
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.01, convex: true, mesh: worn(upperShell(b, 1.26, -2.95, 'cloth'), 'quilt') },
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.012, convex: true, mesh: knuckle(0.78, 'cloth') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.015, convex: true, mesh: join(worn(forearmShell(1.2, 'cloth'), 'quilt'), rings([[-2.46, 0.72, 0.68], [-1.95, 0.74, 0.7]], 6, 'clothDark', { top: false, bottom: false })) },
     ],
-    hides: ['upper'],
+    hides: ['upper', 'lower'],
   }),
   leather_sleeves: (b) => ({
     layer: 2,
     bits: [
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: upperShell(b, 1.1, -2.95, 'leather') },
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: rings([[-0.9, 0.9, 0.88, 0.05], [-0.1, 1.0 * b.arm, 0.96, 0.05], [0.62, 0.6, 0.6, 0.02]], 6, 'leatherDark', { bottom: false }) },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: upperShell(b, 1.12, -2.95, 'leather') },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: rings([[-0.9, 0.92, 0.9, 0.05], [-0.1, 1.04 * b.arm, 1.0, 0.05], [0.62, 0.62, 0.62, 0.02]], 6, 'leatherDark', { bottom: false }) },
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.022, convex: true, mesh: knuckle(0.74, 'leatherDark') },
       {
-        bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02,
-        mesh: join(rings([[-0.35, 0.7, 0.66], [-2.1, 0.58, 0.55]], 6, 'leather', { top: false, bottom: false }),
-          decals([-0.8, -1.3, -1.8].map((z) => plate([0, 0.69, z], [0.2, 0, 0.1], [0, 0, 0.05], [0, 1, 0], 'lace')))),
+        bone: 'elbow', side: 'both', over: ['lower'], bias: 0.025,
+        // Bracers laced down the inside of the forearm.
+        mesh: join(forearmShell(1.08, 'leather'), decals([-0.7, -1.2, -1.7].map((z) => plate([0, 0.62 * 1.08 + 0.02, z], [0.2, 0, 0.1], [0, 0, 0.05], [0, 1, 0], 'lace')))),
       },
     ],
     glove: 'leather',
+    hides: ['upper', 'lower'],
   }),
   chain_sleeves: (b) => ({
     layer: 3,
     bits: [
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.1, -2.95, 'mail'), 'mail') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.015, convex: true, mesh: worn(forearmShell(1.08, 'mail'), 'mail') },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.12, -2.95, 'mail'), 'mail') },
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.017, convex: true, mesh: knuckle(0.74, 'mail') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: worn(forearmShell(1.1, 'mail'), 'mail') },
     ],
     glove: 'mail',
-    hides: ['upper'],
+    hides: ['upper', 'lower'],
   }),
   plate_arms: (b) => ({
     layer: 5,
     bits: [
-      // The rerebrace down the upper arm, and the pauldron over the shoulder: a dome of lames.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: rings([[0.05, 0.9 * b.arm, 0.86], [-2.75, 0.74, 0.72]], 6, 'metal', { top: false, bottom: false }) },
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: worn(rings([[-1.15, 1.02, 1.0, 0.14], [-0.35, 1.16, 1.12, 0.16], [0.4, 1.02, 1.0, 0.12], [0.86, 0.56, 0.56, 0.05]], 6, (band) => (band === 0 ? 'metalLit' : 'metal'), { bottom: false }), 'lames', (f) => f.m === 'metal') },
+      // The rerebrace down the upper arm, and the pauldron standing off the shoulder: a dome of lames.
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: rings([[-2.75, 0.8, 0.78], [0.05, 0.94 * b.arm, 0.9]], 6, 'metal', { top: false, bottom: false }) },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: worn(join(shingled([[-1.35, 1.34, 1.3, 0.3], [-0.4, 1.62, 1.56, 0.36], [0.5, 1.46, 1.4, 0.28]], 3, 0.1, 'metal'), rings([[0.5, 1.46, 1.4, 0.28], [1.0, 0.8, 0.78, 0.1]], 6, 'metalLit', { bottom: false })), 'lames', (f) => f.m === 'metal') },
       // The couter over the point of the elbow, and the vambrace down the forearm.
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: rings([[0.28, 0.68, 0.64], [-2.1, 0.54, 0.51]], 6, 'metal', { top: false, bottom: false }) },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.03, mesh: ball([0, -0.38, 0.1], [0.46, 0.36, 0.44], 6, 4, 'metal') },
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.022, convex: true, mesh: knuckle(0.8, 'metal') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.024, convex: true, mesh: rings(forearmRings(1.1), 6, 'metal', { top: false, bottom: false }) },
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.03, mesh: ball([0, -0.46, 0.05], [0.5, 0.36, 0.52], 6, 4, 'metalLit') },
       // The flared cuff of the gauntlet.
-      { bone: 'wrist', side: 'both', over: ['hand'], bias: 0.05, convex: true, mesh: rings([[0.35, 0.52, 0.48], [-0.2, 0.62, 0.58]], 6, 'metalLit', { top: false, bottom: false }) },
+      { bone: 'wrist', side: 'both', over: ['hand'], bias: 0.05, convex: true, mesh: rings([[-0.2, 0.66, 0.62], [0.35, 0.54, 0.5]], 6, 'metalLit', { top: false, bottom: false }) },
     ],
     glove: 'metal',
-    hides: ['upper'],
+    hides: ['upper', 'lower'],
   }),
   scale_sleeves: (b) => ({
     layer: 4,
     bits: [
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.12, -2.95, 'scale'), 'scale') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.015, convex: true, mesh: worn(forearmShell(1.1, 'scale'), 'scale') },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(shingled(upperRings(b, 1.14, -2.95), 4, 0.09, 'scale'), 'scale') },
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.017, convex: true, mesh: knuckle(0.76, 'scaleDark') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: worn(shingled(forearmRings(1.12), 3, 0.08, 'scale'), 'scale') },
       // A cuff of scale flaring over the back of the glove.
-      { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.03, convex: true, mesh: rings([[-1.75, 0.58, 0.55], [-2.3, 0.72, 0.68]], 6, 'scaleDark', { top: false, bottom: false }) },
+      { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.03, convex: true, mesh: rings([[-2.4, 0.76, 0.72], [-1.8, 0.62, 0.59]], 6, 'scaleDark', { top: false, bottom: false }) },
     ],
     glove: 'leatherDark',
-    hides: ['upper'],
+    hides: ['upper', 'lower'],
   }),
 
   /* Legs */
   cloth_trousers: (b) => ({
     layer: 1,
     bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.01, convex: true, mesh: worn(rings([[-0.9, 1.06 * b.fr.hi * 1.12, 1.1 * 1.12], [-2.4, 0.96 * 1.16, 1.0 * 1.16], [-3.42, 0.86 * 1.16, 0.9 * 1.16]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(rings([[0.3, 0.92 * 1.14, 0.96 * 1.14], [-0.8, 0.84 * 1.14, 0.88 * 1.14], [-1.5, 0.7 * 1.1, 0.74 * 1.1]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
-      // Bound in below the knee with a wrap of the darker cloth, as a soldier's legs are.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.035, convex: true, mesh: rings([[-1.35, 0.74, 0.78], [-2.1, 0.68, 0.72]], 6, (band, j) => (j % 2 ? 'clothDark' : 'lining'), { top: false, bottom: false }) },
+      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.01, convex: true, mesh: worn(rings([[-3.42, 0.86 * 1.18, 0.9 * 1.18], [-2.4, 0.98 * 1.18, 1.02 * 1.18], [-0.9, 1.06 * b.fr.hi * 1.14, 1.1 * 1.14]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
+      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.96, 'cloth', 1.0) },
+      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(rings([[-1.5, 0.78, 0.82], [-0.8, 0.94, 0.98], [0.3, 1.0, 1.04]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
+      // Bound in below the knee with a wrap of the darker cloth.
+      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.035, convex: true, mesh: rings([[-2.1, 0.72, 0.76], [-1.35, 0.78, 0.82]], 6, (band, j) => (j % 2 ? 'clothDark' : 'lining'), { top: false, bottom: false }) },
     ],
     hides: ['thigh', 'shin'],
   }),
@@ -2920,39 +3081,42 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 2,
     bits: [
       { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.01, convex: true, mesh: thighShell(b, 1.08, 'leatherDark') },
+      // A pad of doubled hide over each knee.
+      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.9, 'leatherDark') },
       { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: shinShell(1.08, -1.9, 'leatherDark') },
-      // A patch of doubled hide over each knee.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.04, mesh: ball([0, 0.42, 0.02], [0.62, 0.4, 0.62], 6, 4, 'leather') },
+      { bone: 'knee', side: 'both', over: ['shin', 'boot', 'thigh'], bias: 0.04, mesh: ball([0, 0.46, 0.02], [0.66, 0.42, 0.7], 6, 4, 'leather') },
     ],
     hides: ['thigh', 'shin'],
   }),
   chain_leggings: (b) => ({
     layer: 3,
     bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: worn(thighShell(b, 1.08, 'mail'), 'mail') },
+      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: worn(thighShell(b, 1.1, 'mail'), 'mail') },
+      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'mail') },
       { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(shinShell(1.1, -2.6, 'mail'), 'mail') },
       // A garter of hide under the knee, holding the mail up.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.04, convex: true, mesh: rings([[-0.62, 0.9, 0.94], [-0.86, 0.88, 0.92]], 6, 'leatherDark', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.04, convex: true, mesh: rings([[-0.86, 0.9, 0.94], [-0.62, 0.92, 0.96]], 6, 'leatherDark', { top: false, bottom: false }) },
     ],
     hides: ['thigh', 'shin'],
   }),
   plate_legs: (b) => ({
     layer: 5,
     bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.015, convex: true, mesh: worn(thighShell(b, 1.12, 'metal'), 'lames') },
+      // Cuisses in lames down the thigh.
+      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.015, convex: true, mesh: worn(shingled(thighRings(b, 1.14), 3, 0.1, 'metal'), 'lames') },
+      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.96, 'metal') },
       { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: shinShell(1.16, -2.7, 'metal') },
       // The poleyn: a cop over the knee with a wing to the outside.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.05, mesh: join(ball([0, 0.46, 0.08], [0.62, 0.4, 0.6], 6, 4, 'metal'), moved(slab([[-0.1, -0.35, 0.09], [0.55, -0.05, 0.09], [0.55, 0.3, 0.09], [-0.1, 0.45, 0.09]], 'metal', 'metalLit', 0.5), [0.7, 0, 0])) },
+      { bone: 'knee', side: 'both', over: ['shin', 'boot', 'thigh'], bias: 0.05, mesh: join(ball([0, 0.5, 0.08], [0.62, 0.4, 0.6], 6, 4, 'metal'), moved(slab([[-0.1, -0.35, 0.09], [0.55, -0.05, 0.09], [0.55, 0.3, 0.09], [-0.1, 0.45, 0.09]], 'metal', 'metalLit', 0.5), [0.72, 0, 0])) },
     ],
     hides: ['thigh', 'shin'],
   }),
   scale_leggings: (b) => ({
     layer: 4,
     bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: worn(thighShell(b, 1.1, 'scale'), 'scale') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(shinShell(1.12, -2.4, 'scale'), 'scale') },
-      // A tasset of great scales flaring down the outside of the thigh.
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.03, mesh: worn(arcs([[-2.0, 1.28, 1.24, 0.1], [-1.2, 1.3, 1.25, 0.05], [-0.5, 1.22, 1.16, 0]], 4, -58, 58, 'scaleDark'), 'scale') },
+      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: worn(shingled(thighRings(b, 1.12), 4, 0.09, 'scale'), 'scale') },
+      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'scaleDark') },
+      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(shingled(shinRings(1.12, -2.4), 3, 0.08, 'scale'), 'scale') },
     ],
     hides: ['thigh', 'shin'],
   }),
@@ -2962,8 +3126,8 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 1,
     bits: [
       // The leg of the trousers down to the shoe, which the boot's shaft was: under anything worn on the leg.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.01, convex: true, layer: 0, mesh: rings([[-1.3, 0.8, 0.84], [-3.0, 0.64, 0.68]], 6, 'trousers', { top: false, bottom: false }) },
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-2.75, 0.68, 0.72], [-3.1, 0.66, 0.7]], 6, 'clothDark', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.01, convex: true, layer: 0, mesh: rings([[-3.0, 0.64, 0.68], [-1.3, 0.8, 0.84]], 6, 'trousers', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-3.1, 0.66, 0.7], [-2.75, 0.68, 0.72]], 6, 'clothDark', { top: false, bottom: false }) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 0.96, 0.8), { boot: 'clothDark' }) },
     ],
     hides: ['boot', 'foot'],
@@ -2972,7 +3136,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 2,
     bits: [
       // To below the knee, the top turned down.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-0.55, 0.96, 1.0], [-0.95, 0.94, 0.98], [-1.0, 0.86, 0.9], [-3.02, 0.68, 0.72], [-3.15, 0.63, 0.66]], 6, (band) => (band === 0 ? 'leatherDark' : 'leather'), { bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-3.15, 0.63, 0.66], [-3.02, 0.68, 0.72], [-1.0, 0.86, 0.9], [-0.95, 0.94, 0.98], [-0.55, 0.96, 1.0]], 6, (band) => (band >= 2 ? 'leatherDark' : 'leather'), { top: false, bottom: false }) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leather' }) },
     ],
     hides: ['boot', 'foot'],
@@ -2980,17 +3144,17 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   chain_boots: () => ({
     layer: 3,
     bits: [
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: worn(rings([[-1.2, 0.9, 0.94], [-3.1, 0.68, 0.72]], 6, 'mail', { top: false, bottom: false }), 'mail') },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: worn(rings([[-3.1, 0.68, 0.72], [-1.2, 0.9, 0.94]], 6, 'mail', { top: false, bottom: false }), 'mail') },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.05), { boot: 'mail' }), 'mail') },
       // Strapped at the ankle over the mail.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, mesh: rings([[-2.72, 0.74, 0.78], [-2.92, 0.73, 0.77]], 6, 'leatherDark', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, mesh: rings([[-2.92, 0.73, 0.77], [-2.72, 0.74, 0.78]], 6, 'leatherDark', { top: false, bottom: false }) },
     ],
     hides: ['boot', 'foot'],
   }),
   plate_boots: () => ({
     layer: 5,
     bits: [
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-1.3, 0.84, 0.88], [-3.0, 0.72, 0.76], [-3.18, 0.7, 0.74]], 6, (band) => (band === 1 ? 'metalLit' : 'metal'), { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-3.18, 0.7, 0.74], [-3.0, 0.72, 0.76], [-1.3, 0.84, 0.88]], 6, (band) => (band === 0 ? 'metalLit' : 'metal'), { top: false, bottom: false }) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.08), { boot: 'metal' }), 'lames') },
     ],
     hides: ['boot', 'foot'],
@@ -2998,7 +3162,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   scale_boots: () => ({
     layer: 4,
     bits: [
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: worn(rings([[-1.05, 0.88, 0.92], [-3.08, 0.68, 0.72]], 6, 'scale', { top: false, bottom: false }), 'scale') },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: worn(shingled([[-3.08, 0.68, 0.72], [-1.05, 0.88, 0.92]], 3, 0.08, 'scale'), 'scale') },
       // The top of the shaft flared into a crown of scales.
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, mesh: rings([[-1.2, 0.9, 0.94], [-0.8, 1.06, 1.1]], 6, 'scaleDark', { top: false, bottom: false }) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.05), { boot: 'leatherDark' }) },
@@ -3058,6 +3222,12 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   }),
 };
 
+/** A skirt's hem, `below` under its lowest ring and `up` above it, `out` further out: a roll or a band round it. */
+function profileHem(rs: number[][], out: number, up: number, below = 0.06): number[][] {
+  const hem = profileAt(rs, 0), over = profileAt(rs, Math.min(1, up / Math.max(0.01, rs[rs.length - 1][0] - rs[0][0])));
+  return [[hem[0] - below, hem[1] + out, hem[2] + out, hem[3], hem[4]], [over[0], over[1] + out * 0.6, over[2] + out * 0.6, over[3], over[4]]];
+}
+
 /** A model for a piece on a body of this build, made once. */
 const models = new Map<string, GearModel | null>();
 function modelOf(id: string, fr: Frame, fit: number): GearModel | null {
@@ -3115,20 +3285,54 @@ interface Weapon {
   grip: Mesh;
   head: Mesh;
   /**
-   * How it is carried: in the right fist, point forward and down; upright in
-   * the right fist, as a staff is; in the left fist, a bow; or slung across
-   * the back, which is where everything goes while the hands are busy.
+   * How it is carried in the hands: in the right fist, point forward and
+   * down; upright in the right fist, as a staff is; in the left fist, a bow;
+   * or over the right shoulder, the right hand low on it and its head behind,
+   * as anything too heavy to hold out in front is.
    */
-  carry: 'fist' | 'staff' | 'bow' | 'back';
-  /** From its butt to its tip along z, for hanging it across the back by its middle. */
+  carry: 'fist' | 'staff' | 'bow' | 'shoulder';
+  /**
+   * Where it goes while the hands are wanted for something else: sheathed
+   * at the left hip, a blade; through the belt at the right hip, a hatchet
+   * or a club; or across the back on a strap.
+   */
+  stow: 'hip' | 'belt' | 'back';
+  /** From its butt to its tip along z. */
   from: number;
   to: number;
-  /** Slung head up over the right shoulder, rather than point down to the left hip. */
+  /** Slung head up over the right shoulder, rather than point down to the left hip; through the belt head up. */
   headUp?: boolean;
+  /** A blade's scabbard, and what of the weapon shows out of the top of it: the guard and the pommel. */
+  sheath?: Mesh;
+  hilt?: Mesh;
+  /** Where along it the scabbard's throat is. */
+  throat?: number;
+  /**
+   * Shouldered: where along it the fist closes, how far along from there it
+   * lies on the shoulder, how far back from upright, and turned how far
+   * about itself, in degrees.
+   */
+  fist?: number;
+  reach?: number;
+  tilt?: number;
+  spin?: number;
+  /** Carried upright: how far its top leans forward, in degrees. */
+  lean?: number;
+  /** Across the back: how far from upright, in degrees. */
+  slant?: number;
+  /** Through the belt: how far along it the belt goes, from the middle of the grip. */
+  belt?: number;
 }
 
 /** A round shaft along z, from `a` to `b`, `r0` across at `a` and `r1` at `b`. */
 const rod = (a: number, b: number, r0: number, r1: number, m: Mat, n = 5): Mesh => rings([[a, r0, r0], [b, r1, r1]], n, m);
+/** Turned `deg` about z. */
+const turnedZ = (m: Mesh, deg: number): Mesh => {
+  const c = Math.cos(deg * DEG), sn = Math.sin(deg * DEG);
+  return { ...m, v: m.v.map((p): V3 => [p[0] * c - p[1] * sn, p[0] * sn + p[1] * c, p[2]]) };
+};
+/** A shaft in lengths, each ring `[z, r]`: so it can be cut where it lies on a shoulder without a facet crossing the cut. */
+const shaft = (zr: Array<[number, number]>, m: Mat, n = 5): Mesh => rings(zr.map(([z, r]) => [z, r, r]), n, m);
 
 /**
  * A blade along z from its root at `a` to its point at `b`: `w` from its
@@ -3148,108 +3352,147 @@ const guardOf = (z: number, span: number, m: Mat = 'fitting'): Mesh => box([-0.1
 /** A pommel, a knob on the end of the grip. */
 const pommelOf = (z: number, r: number, m: Mat = 'fitting'): Mesh => ball([0, 0, z], [r, r, r * 0.85], 6, 4, m);
 
+/**
+ * A scabbard over a blade from `a` to `b`, `w` from its middle to either edge
+ * and `t` thick, `cy` off its middle: leather a little bigger round than the
+ * blade, narrowing to a metal chape at the tip, with a metal locket at the
+ * throat.
+ */
+function sheathOf(a: number, b: number, w: number, t: number, cy = 0): Mesh {
+  const W = w + 0.1, K = t + 0.1, L = b - a;
+  return join(
+    rings([[a, K, W, 0, cy], [b - L * 0.16, K * 0.94, W * 0.9, 0, cy], [b + 0.16, K * 0.55, W * 0.36, 0, cy * 0.5]], 6, (band) => (band === 1 ? 'fitting' : 'leatherDark'), { top: false }),
+    rings([[a - 0.05, K + 0.05, W + 0.05, 0, cy], [a + Math.min(0.5, L * 0.13), K + 0.05, W + 0.05, 0, cy]], 6, 'fitting'),
+  );
+}
+
+/** A weapon with a blade that goes into a scabbard: the hilt is what shows out of it, the blade what goes in, and the scabbard is cut to the blade `fits` [root, point, half-width, thickness, off-middle]. */
+const bladed = (w: Omit<Weapon, 'head' | 'sheath'> & { hilt: Mesh; blade: Mesh; fits: [number, number, number, number, number?] }): Weapon =>
+  ({ ...w, head: join(w.hilt, w.blade), sheath: sheathOf(...w.fits), throat: w.fits[0] });
+
 const WEAPONS: Record<string, () => Weapon> = {
-  hunting_knife: () => ({
-    carry: 'fist', from: -0.7, to: 2.5,
-    grip: rod(-0.55, 0.52, 0.15, 0.13, 'grip', 6),
-    head: join(pommelOf(-0.62, 0.17), guardOf(0.6, 0.3), bladeOf(0.66, 2.5, 0.2, 0.06, 0.35, 'blade', 1)),
+  // Knives: a hunting knife with its point swept up to the back, a butcher's cleaver of a blade, a long thin carving blade.
+  hunting_knife: () => bladed({
+    carry: 'fist', stow: 'hip', from: -0.7, to: 2.6,
+    grip: rod(-0.55, 0.52, 0.16, 0.14, 'grip', 6),
+    hilt: join(pommelOf(-0.62, 0.18), guardOf(0.6, 0.32)),
+    blade: bladeOf(0.66, 2.6, 0.24, 0.065, 0.38, 'blade', 1.3), fits: [0.66, 2.6, 0.24, 0.065],
   }),
-  butchering_knife: () => ({
-    carry: 'fist', from: -0.7, to: 2.7,
-    grip: rod(-0.55, 0.55, 0.15, 0.15, 'woodDark', 6),
+  butchering_knife: () => bladed({
+    carry: 'fist', stow: 'hip', from: -0.7, to: 2.8,
+    grip: rod(-0.55, 0.55, 0.16, 0.16, 'woodDark', 6),
+    hilt: rings([[0.55, 0.17, 0.21], [0.68, 0.18, 0.22]], 6, 'fitting'),
     // A broad blade, straight along its back, for going through a joint.
-    head: join(rings([[0.55, 0.16, 0.2], [0.68, 0.17, 0.21]], 6, 'fitting'), rings([[0.68, 0.06, 0.34, 0, 0.1], [2.3, 0.05, 0.42, 0, 0.16], [2.7, 0.03, 0.26, 0, 0.26]], 6, 'blade', { top: true })),
+    blade: rings([[0.68, 0.065, 0.36, 0, 0.12], [2.35, 0.055, 0.5, 0, 0.2], [2.8, 0.03, 0.3, 0, 0.32]], 6, 'blade', { top: true }),
+    fits: [0.68, 2.8, 0.46, 0.065, 0.18],
   }),
-  carving_knife: () => ({
-    carry: 'fist', from: -0.65, to: 3.1,
-    grip: rod(-0.55, 0.52, 0.13, 0.13, 'grip', 6),
-    head: join(rings([[0.52, 0.15, 0.17], [0.66, 0.12, 0.15]], 6, 'fitting'), bladeOf(0.66, 3.1, 0.16, 0.045, 0.45, 'blade', 1)),
+  carving_knife: () => bladed({
+    carry: 'fist', stow: 'hip', from: -0.65, to: 3.3,
+    grip: rod(-0.55, 0.52, 0.14, 0.14, 'grip', 6),
+    hilt: rings([[0.52, 0.16, 0.18], [0.66, 0.13, 0.16]], 6, 'fitting'),
+    blade: bladeOf(0.66, 3.3, 0.17, 0.05, 0.5, 'blade', 1), fits: [0.66, 3.3, 0.17, 0.05],
   }),
-  short_sword: () => ({
-    carry: 'fist', from: -0.8, to: 5.4,
-    grip: rod(-0.52, 0.52, 0.15, 0.14, 'grip', 6),
-    head: join(pommelOf(-0.66, 0.21), guardOf(0.6, 0.62), bladeOf(0.7, 5.4, 0.3, 0.075, 0.2), fullerOf(0.95, 3.9, 0.3, 0.075)),
+  short_sword: () => bladed({
+    carry: 'fist', stow: 'hip', from: -0.8, to: 5.4,
+    grip: rod(-0.52, 0.52, 0.16, 0.15, 'grip', 6),
+    hilt: join(pommelOf(-0.66, 0.23), guardOf(0.6, 0.66)),
+    blade: join(bladeOf(0.7, 5.4, 0.34, 0.08, 0.22), fullerOf(0.95, 3.9, 0.34, 0.08)), fits: [0.7, 5.4, 0.34, 0.08],
   }),
-  sword: () => ({
-    carry: 'fist', from: -0.9, to: 7.6,
-    grip: rod(-0.55, 0.55, 0.15, 0.14, 'grip', 6),
-    head: join(
-      rings([[-0.95, 0.24, 0.3], [-0.62, 0.24, 0.3]], 6, 'fitting'),
-      box([-0.13, -0.85, 0.58], [0.13, 0.85, 0.76], 'fitting'), box([-0.1, -0.95, 0.7], [0.1, -0.72, 0.9], 'fitting'), box([-0.1, 0.72, 0.7], [0.1, 0.95, 0.9], 'fitting'),
-      bladeOf(0.76, 7.6, 0.33, 0.08, 0.18), fullerOf(1.0, 5.6, 0.33, 0.08),
+  sword: () => bladed({
+    carry: 'fist', stow: 'hip', from: -0.9, to: 7.6,
+    grip: rod(-0.55, 0.55, 0.16, 0.15, 'grip', 6),
+    // A wheel pommel, and a guard with its ends turned toward the point.
+    hilt: join(
+      rings([[-0.95, 0.26, 0.32], [-0.62, 0.26, 0.32]], 6, 'fitting'),
+      box([-0.13, -0.9, 0.58], [0.13, 0.9, 0.76], 'fitting'), box([-0.1, -1.0, 0.7], [0.1, -0.76, 0.94], 'fitting'), box([-0.1, 0.76, 0.7], [0.1, 1.0, 0.94], 'fitting'),
     ),
+    blade: join(bladeOf(0.76, 7.6, 0.36, 0.085, 0.18), fullerOf(1.0, 5.6, 0.36, 0.085)), fits: [0.76, 7.6, 0.36, 0.085],
   }),
-  long_sword: () => ({
-    carry: 'back', from: -1.6, to: 10.4,
-    // A grip for two hands.
-    grip: rod(-1.25, 0.6, 0.16, 0.15, 'grip', 6),
-    head: join(pommelOf(-1.42, 0.25), guardOf(0.68, 1.05), bladeOf(0.78, 10.4, 0.36, 0.085, 0.16), fullerOf(1.05, 8.0, 0.36, 0.085)),
+  // Two-handed: a long grip, a long guard, and a blade to match, carried on the shoulder.
+  long_sword: () => bladed({
+    carry: 'shoulder', stow: 'back', from: -1.7, to: 10.6, fist: -0.2, reach: 3.1, tilt: 56, spin: 90, slant: 42,
+    grip: shaft([[-1.3, 0.17], [0.62, 0.16]], 'grip', 6),
+    hilt: join(pommelOf(-1.48, 0.27), guardOf(0.7, 1.25), box([-0.16, -0.3, 0.6], [0.16, 0.3, 0.98], 'fitting')),
+    blade: join(
+      rings([[0.8, 0.095, 0.44], [2.4, 0.093, 0.43], [8.6, 0.08, 0.4], [10.6, 0.012, 0.012]], 6, 'blade', { top: false }),
+      fullerOf(1.05, 8.0, 0.44, 0.095),
+    ),
+    fits: [0.8, 10.6, 0.44, 0.095],
   }),
+  // Axes: a bearded hatchet, a francisca swept up at the bit, and a battle axe with a long crescent of an edge and a spike behind.
   hatchet: () => ({
-    carry: 'fist', from: -1.1, to: 3.5,
-    grip: rod(-1.0, 0.6, 0.15, 0.14, 'wood', 5),
+    carry: 'fist', stow: 'belt', headUp: true, from: -1.2, to: 3.9, belt: 1.95,
+    grip: rod(-1.1, 0.6, 0.16, 0.15, 'wood', 5),
+    // A broad bearded bit, and a flat poll behind for driving a wedge.
     head: join(
-      rod(0.6, 3.25, 0.14, 0.13, 'wood', 5),
-      slab([[-0.4, 2.62, 0.17], [0.22, 2.56, 0.17], [1.18, 2.2, 0.04], [1.3, 2.86, 0.03], [1.18, 3.52, 0.04], [0.22, 3.2, 0.17], [-0.4, 3.12, 0.17]], 'metal', 'blade', 1.1),
-    ),
-  }),
-  battle_axe: () => ({
-    carry: 'back', headUp: true, from: -4.1, to: 6.4,
-    grip: rod(-4.0, 0.6, 0.18, 0.17, 'grip', 5),
-    head: join(
-      rod(0.6, 5.6, 0.17, 0.15, 'wood', 5),
-      rings([[4.3, 0.2, 0.2], [4.5, 0.2, 0.2]], 5, 'metalDark', { top: false, bottom: false }),
-      // A bearded bit, and a spike behind.
-      slab([[-0.3, 4.55, 0.22], [0.3, 4.5, 0.22], [1.2, 3.55, 0.08], [2.0, 3.4, 0.04], [2.25, 4.6, 0.03], [2.05, 6.0, 0.04], [0.9, 5.7, 0.1], [0.3, 5.45, 0.22], [-0.3, 5.45, 0.22]], 'metal', 'blade', 1.9),
-      slab([[-0.3, 4.72, 0.16], [-1.35, 4.95, 0.05], [-0.3, 5.25, 0.16]], 'metalDark'),
-    ),
-  }),
-  club: () => ({
-    carry: 'fist', from: -0.9, to: 4.3,
-    grip: rod(-0.85, 0.6, 0.18, 0.2, 'woodDark', 6),
-    // Swelling from the grip to the knob of the root it was cut from, with a knot or two on it.
-    head: worn(join(
-      rings([[0.6, 0.2, 0.2], [2.4, 0.36, 0.34], [3.7, 0.52, 0.5], [4.3, 0.34, 0.32]], 6, 'wood'),
-      ball([0.3, 0.12, 2.9], [0.2, 0.2, 0.2], 5, 3, 'woodDark'), ball([-0.28, -0.3, 3.5], [0.2, 0.2, 0.2], 5, 3, 'woodDark'),
-    ), 'grain'),
-  }),
-  maul: () => ({
-    carry: 'back', headUp: true, from: -4.2, to: 5.6,
-    grip: rod(-4.1, 0.6, 0.18, 0.17, 'grip', 5),
-    head: join(
-      rod(0.6, 4.8, 0.17, 0.16, 'wood', 5),
-      // The head: a block of iron, its striking faces bright.
-      box([-0.55, -1.15, 4.3], [0.55, 1.15, 5.4], 'metal', 'metalLit'),
-      box([-0.6, -1.25, 4.25], [0.6, -1.1, 5.45], 'metalLit'), box([-0.6, 1.1, 4.25], [0.6, 1.25, 5.45], 'metalLit'),
-    ),
-  }),
-  spear: () => ({
-    carry: 'staff', headUp: true, from: -5.5, to: 13.2,
-    grip: rod(-0.6, 0.6, 0.15, 0.15, 'grip', 5),
-    head: join(
-      rod(-5.3, -0.6, 0.13, 0.14, 'wood', 5), rod(0.6, 11.2, 0.14, 0.13, 'wood', 5),
-      rings([[-5.5, 0.08, 0.08], [-5.15, 0.15, 0.15]], 5, 'metal'),
-      rings([[10.9, 0.15, 0.15], [11.5, 0.12, 0.12]], 5, 'metal'),
-      // A leaf-shaped head.
-      rings([[11.5, 0.08, 0.14], [12.2, 0.07, 0.36], [13.2, 0.012, 0.012]], 6, 'blade', { top: false }),
-    ),
-  }),
-  javelin: () => ({
-    carry: 'staff', headUp: true, from: -4.4, to: 8.2,
-    grip: rod(-0.5, 0.5, 0.13, 0.13, 'grip', 5),
-    head: join(
-      rod(-4.4, -0.5, 0.1, 0.11, 'wood', 5), rod(0.5, 7.2, 0.11, 0.1, 'wood', 5),
-      rings([[7.1, 0.12, 0.12], [7.4, 0.1, 0.1]], 5, 'metal'),
-      rings([[7.4, 0.07, 0.1], [7.8, 0.06, 0.2], [8.2, 0.012, 0.012]], 6, 'blade', { top: false }),
+      rod(0.6, 3.55, 0.15, 0.14, 'wood', 5),
+      slab([[-0.3, 2.62, 0.22], [0.3, 2.58, 0.22], [1.0, 2.2, 0.08], [1.55, 1.45, 0.04], [1.95, 1.62, 0.03], [2.05, 2.7, 0.03], [1.9, 3.75, 0.03], [1.05, 3.45, 0.08], [0.3, 3.36, 0.22], [-0.3, 3.36, 0.22]], 'metal', 'blade', 1.8),
+      box([-0.26, -0.82, 2.66], [0.26, -0.28, 3.32], 'metal', 'metalLit'),
     ),
   }),
   throwing_axe: () => ({
-    carry: 'fist', from: -1.0, to: 2.9,
-    grip: rod(-0.9, 0.5, 0.14, 0.13, 'wood', 5),
-    // A short haft and a head swept down, heavy at the bit.
+    carry: 'fist', stow: 'belt', headUp: true, from: -1.0, to: 3.2, belt: 1.75,
+    grip: rod(-0.9, 0.5, 0.14, 0.13, 'woodDark', 5),
+    // A short dark haft bound in leather, and a long narrow head arched up from it: its edge sweeps up past the end of the haft.
     head: join(
-      rod(0.5, 2.75, 0.13, 0.12, 'wood', 5),
-      slab([[-0.3, 2.3, 0.15], [0.2, 2.26, 0.15], [0.9, 1.7, 0.05], [1.45, 1.55, 0.03], [1.35, 2.35, 0.03], [1.0, 2.9, 0.04], [0.2, 2.8, 0.15], [-0.3, 2.72, 0.15]], 'metal', 'blade', 1.3),
+      rod(0.5, 2.5, 0.13, 0.12, 'woodDark', 5),
+      rings([[-0.3, 0.16, 0.16], [0.1, 0.16, 0.16]], 5, 'leather'),
+      slab([[-0.26, 2.02, 0.15], [0.2, 2.0, 0.15], [0.75, 1.92, 0.08], [1.35, 1.66, 0.04], [1.72, 1.42, 0.03], [1.98, 2.05, 0.03], [2.12, 2.75, 0.03], [2.05, 3.3, 0.03], [1.55, 2.78, 0.04], [0.95, 2.44, 0.07], [0.2, 2.42, 0.15], [-0.26, 2.44, 0.15]], 'metalDark', 'blade', 1.7),
+    ),
+  }),
+  battle_axe: () => ({
+    carry: 'shoulder', stow: 'back', headUp: true, from: -4.2, to: 6.8, fist: -3.3, reach: 2.8, tilt: 42, spin: 180, slant: 38,
+    grip: shaft([[-4.1, 0.19], [-0.7, 0.18], [0.6, 0.175]], 'grip', 5),
+    head: join(
+      shaft([[0.6, 0.175], [5.9, 0.16]], 'wood', 5),
+      rings([[4.1, 0.21, 0.21], [4.35, 0.21, 0.21]], 5, 'metalDark', { top: false, bottom: false }),
+      // A bearded bit, its edge a long crescent, and a spike behind.
+      slab([[-0.36, 4.45, 0.24], [0.36, 4.4, 0.24], [1.3, 3.75, 0.09], [2.3, 3.05, 0.04], [2.72, 3.9, 0.03], [2.92, 5.0, 0.03], [2.7, 6.1, 0.03], [2.28, 6.75, 0.04], [1.25, 6.1, 0.1], [0.36, 5.6, 0.24], [-0.36, 5.6, 0.24]], 'metal', 'blade', 2.6),
+      slab([[-0.36, 4.7, 0.18], [-1.6, 5.02, 0.05], [-0.36, 5.35, 0.18]], 'metalDark'),
+    ),
+  }),
+  club: () => ({
+    carry: 'fist', stow: 'belt', from: -0.9, to: 4.4, belt: -0.35,
+    grip: rod(-0.85, 0.6, 0.19, 0.21, 'woodDark', 6),
+    // Swelling from the grip to the knob of the root it was cut from, with a knot or two on it.
+    head: worn(join(
+      rings([[0.6, 0.21, 0.21], [2.4, 0.4, 0.38], [3.7, 0.58, 0.55], [4.4, 0.36, 0.34]], 6, 'wood'),
+      ball([0.34, 0.14, 2.9], [0.22, 0.22, 0.22], 5, 3, 'woodDark'), ball([-0.3, -0.34, 3.5], [0.22, 0.22, 0.22], 5, 3, 'woodDark'),
+      ball([0.1, 0.44, 3.9], [0.2, 0.2, 0.2], 5, 3, 'woodDark'),
+    ), 'grain'),
+  }),
+  maul: () => ({
+    carry: 'shoulder', stow: 'back', headUp: true, from: -4.3, to: 5.9, fist: -3.4, reach: 2.8, tilt: 40, spin: 90, slant: 36,
+    grip: shaft([[-4.2, 0.19], [-0.8, 0.18], [0.6, 0.175]], 'grip', 5),
+    head: join(
+      shaft([[0.6, 0.175], [4.9, 0.17]], 'wood', 5),
+      // The head: a block of iron bound at either end, its striking faces bright.
+      box([-0.66, -1.35, 4.25], [0.66, 1.35, 5.85], 'metal', 'metalLit'),
+      box([-0.72, -1.47, 4.18], [0.72, -1.3, 5.92], 'metalLit'), box([-0.72, 1.3, 4.18], [0.72, 1.47, 5.92], 'metalLit'),
+      box([-0.72, -0.9, 4.18], [0.72, -0.72, 5.92], 'metalDark'), box([-0.72, 0.72, 4.18], [0.72, 0.9, 5.92], 'metalDark'),
+    ),
+  }),
+  spear: () => ({
+    carry: 'staff', stow: 'back', headUp: true, from: -4.4, to: 14.4, lean: 7, slant: 44,
+    grip: rod(-0.6, 0.6, 0.15, 0.15, 'grip', 5),
+    head: join(
+      rod(-4.2, -0.6, 0.13, 0.14, 'wood', 5), rod(0.6, 12.2, 0.14, 0.13, 'wood', 5),
+      rings([[-4.4, 0.08, 0.08], [-4.05, 0.15, 0.15]], 5, 'metal'),
+      rings([[11.9, 0.16, 0.16], [12.55, 0.13, 0.13]], 5, 'metal'),
+      // A leaf-shaped head.
+      rings([[12.55, 0.08, 0.16], [13.3, 0.07, 0.46], [14.4, 0.012, 0.012]], 6, 'blade', { top: false }),
+    ),
+  }),
+  javelin: () => ({
+    carry: 'staff', stow: 'back', headUp: true, from: -2.6, to: 10.8, lean: 22, slant: 48,
+    grip: rod(-0.5, 0.5, 0.13, 0.13, 'grip', 5),
+    head: join(
+      rod(-2.6, -0.5, 0.1, 0.11, 'wood', 5), rod(0.5, 9.2, 0.11, 0.1, 'wood', 5),
+      rings([[9.1, 0.13, 0.13], [9.5, 0.1, 0.1]], 5, 'metal'),
+      // A long thin head, for going in rather than cutting.
+      rings([[9.5, 0.07, 0.11], [10.0, 0.06, 0.24], [10.8, 0.012, 0.012]], 6, 'blade', { top: false }),
+      // And feathers at the butt, three vanes round it.
+      ...[0, 120, 240].map((d) => turnedZ(slab([[0.1, -2.45, 0.012], [0.36, -2.25, 0.012], [0.36, -1.5, 0.012], [0.1, -1.3, 0.012]], 'fletch'), d)),
     ),
   }),
   short_bow: () => bowOf(11, 0.8, 'wood'),
@@ -3275,10 +3518,11 @@ function bowOf(L: number, c: number, m: Mat, recurve = false): Weapon {
   };
   const r = (x: number): number => 0.09 + 0.08 * (1 - Math.abs(x));
   const limb = (u: number[], mat: Mat): Mesh => chain(u.map(at), u.map(r), 5, mat, false);
+  const bow = { carry: 'bow' as const, stow: 'back' as const, headUp: true, from: -h, to: h, slant: 40 };
   if (!recurve) {
     const us = [-1, -0.82, -0.6, -0.34, -0.12, 0.12, 0.34, 0.6, 0.82, 1];
     return {
-      carry: 'bow', headUp: true, from: -h, to: h,
+      ...bow,
       grip: chain([at(-0.12), at(0.12)], [0.19, 0.19], 6, 'grip'),
       head: join(
         limb(us.slice(0, 5), m), limb(us.slice(5), m),
@@ -3290,7 +3534,7 @@ function bowOf(L: number, c: number, m: Mat, recurve = false): Weapon {
   const inner = [0.14, 0.4, 0.62, EAR], ear = [EAR, 0.9, 1];
   const side = (s: number, us: number[]): number[] => us.map((u) => u * s);
   return {
-    carry: 'bow', headUp: true, from: -h, to: h,
+    ...bow,
     grip: join(chain([at(-0.14), at(0.14)], [0.2, 0.2], 6, 'grip'), ...[-0.15, 0.15].map((u) => chain([at(u - 0.02), at(u + 0.02)], [0.22, 0.22], 6, 'fitting'))),
     head: join(
       limb(side(-1, inner).reverse(), m), limb(side(1, inner), m),
@@ -3309,6 +3553,92 @@ function weaponOf(id: string): Weapon | null {
     weapons.set(id, h);
   }
   return h;
+}
+
+/** How a weapon is carried in the hands and where it goes when they are wanted, as it is drawn; nothing for one that is not drawn. */
+export function weaponCarry(id: string): { carry: Weapon['carry']; stow: Weapon['stow'] } | null {
+  const w = weaponOf(id);
+  return w && { carry: w.carry, stow: w.stow };
+}
+
+/**
+ * A mesh cut in two across its own z at `z`: what is below, and what is
+ * above. A facet that crosses is cut along the line, and the rim the cut
+ * leaves either side is not inked, so the two drawn one after the other are
+ * the one thing -- a haft in front of a shoulder and behind it.
+ */
+function cutAcross(m: Mesh, z: number): [Mesh, Mesh] {
+  const halves = [0, 1].map(() => ({ v: [] as V3[], f: [] as Face[], at: new Map<string, number>() }));
+  const vert = (h: (typeof halves)[number], key: string, p: V3): number => {
+    let i = h.at.get(key);
+    if (i === undefined) {
+      i = h.v.length;
+      h.v.push(p);
+      h.at.set(key, i);
+    }
+    return i;
+  };
+  for (const face of m.f) {
+    const zs = face.i.map((i) => m.v[i][2]);
+    const lo = Math.min(...zs), hi = Math.max(...zs);
+    if (hi <= z || lo >= z) {
+      const h = halves[hi <= z ? 0 : 1];
+      h.f.push({ ...face, i: face.i.map((i) => vert(h, `${i}`, m.v[i])) });
+      continue;
+    }
+    halves.forEach((h, side) => {
+      const keep = (i: number): boolean => (side ? m.v[i][2] >= z : m.v[i][2] <= z);
+      const idx: number[] = [];
+      face.i.forEach((a, k) => {
+        const c = face.i[(k + 1) % face.i.length];
+        if (keep(a)) idx.push(vert(h, `${a}`, m.v[a]));
+        if (keep(a) !== keep(c)) {
+          const pa = m.v[a], pc = m.v[c], t = (z - pa[2]) / (pc[2] - pa[2]);
+          idx.push(vert(h, a < c ? `${a}-${c}` : `${c}-${a}`, [pa[0] + (pc[0] - pa[0]) * t, pa[1] + (pc[1] - pa[1]) * t, z]));
+        }
+      });
+      if (idx.length >= 3) h.f.push({ ...face, i: idx, soft: true });
+    });
+  }
+  return [mesh(halves[0].v, halves[0].f), mesh(halves[1].v, halves[1].f)];
+}
+
+
+/** What of a shouldered weapon is in front of the shoulder, from its butt up, and what is behind it; its whole, and a blade in its scabbard. */
+const cuts = new WeakMap<Weapon, { fore: Mesh; aft: Mesh; whole: Mesh; sheathed?: Mesh }>();
+function cutsOf(w: Weapon): { fore: Mesh; aft: Mesh; whole: Mesh; sheathed?: Mesh } {
+  let c = cuts.get(w);
+  if (!c) {
+    const whole = join(w.grip, w.head);
+    const [fore, aft] = cutAcross(whole, (w.fist ?? 0) + (w.reach ?? 2.7));
+    c = { fore, aft, whole, sheathed: w.sheath && w.hilt && join(w.grip, w.hilt, w.sheath) };
+    cuts.set(w, c);
+  }
+  return c;
+}
+
+/**
+ * The right arm carrying `w` over the shoulder: the fist low in front of the
+ * chest and the shaft from it back up over the top of the shoulder at the
+ * weapon's slant, set in the chest's frame so it rides with the shoulders
+ * whatever the hips are doing, with the elbow out and down.
+ */
+function shoulder(r: Rig, fr: Frame, w: Weapon): void {
+  const T = fr.tall;
+  const chest = joint(joint(ROOT, [0, 0, SPINE * T], ...r.spine), [0, 0, CHEST * T], ...r.chest);
+  const tilt = (w.tilt ?? 45) * DEG;
+  const d = unit([0.2, -Math.sin(tilt), Math.cos(tilt)]);
+  const top: V3 = [2.0 * fr.sh, -0.1, ARM_AT * T + 0.8];
+  const k = w.reach ?? 2.7;
+  const fist = place(chest, [top[0] - d[0] * k, top[1] - d[1] * k, top[2] - d[2] * k]);
+  const haft = mv(chest.m, d), pole = mv(chest.m, [0.75, -0.25, -0.62]);
+  // The wrist that puts the fist there, found by moving it by however far the fist misses, a few times over.
+  let wrist = fist;
+  for (let q = 0; q < 3; q++) {
+    const at = place(hold(r, fr, 1, wrist, pole, haft), [0, 0, GRIP]);
+    wrist = [wrist[0] + fist[0] - at[0], wrist[1] + fist[1] - at[1], wrist[2] + fist[2] - at[2]];
+  }
+  hold(r, fr, 1, wrist, pole, haft);
 }
 
 /**
@@ -3389,12 +3719,51 @@ function aimed(bone: Xf, at: V3, dir: V3, out: V3): Xf {
 /** A frame turned by a matrix, whose columns are where its x, y and z go, at `at`. */
 const framed = (bone: Xf, at: V3, x: V3, y: V3, z: V3): Xf => ({ m: mm(bone.m, [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]]), t: place(bone, at) });
 
-/** How far the arm of a body standing at rest is turned forward from the shoulder down to the hand, in degrees: what a held staff or bow is kept upright against. */
-const REST_BEND = 21;
-
-/** Where across the back a thing is slung, in the chest's frame: its middle, how far out behind for a weapon and for a shield over it. */
-const BACK: V3 = [0, -1.72, 0.85];
-const BACK_SHIELD = -2.05;
+/**
+ * A strap over the left shoulder and down across the chest to under the
+ * right arm, and back up across the back: what anything slung on the back
+ * hangs from. `g` out round the chest, over whatever is worn on it. The
+ * front and the back of it, each a band lying on the surface, in the chest's
+ * frame.
+ */
+const straps = new Map<string, [Mesh, Mesh]>();
+function strapOf(fr: Frame, g: number): [Mesh, Mesh] {
+  const key = `${fr.sh}|${fr.wa}|${fr.fem}|${g}`;
+  let st = straps.get(key);
+  if (st) return st;
+  const b = buildOf(fr);
+  const rs = chestRings(b, g);
+  const z0 = rs[0][0], z1 = rs[rs.length - 1][0];
+  const ring = (z: number): number[] => profileAt(rs, Math.max(0, Math.min(1, (z - z0) / (z1 - z0))));
+  const HW = 0.21, N = 8;
+  const side = (s: number): Mesh => {
+    // From the top of the left shoulder, where front and back meet, down and across to the right side under the arm.
+    const pts: V3[] = [], out: V3[] = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const z = 2.3 + (0.15 - 2.3) * u;
+      const [, rxx, ryy, cx, cy] = ring(Math.min(z, z1));
+      const x = (-0.93 + 1.93 * u) * rxx;
+      const q = Math.sqrt(Math.max(0, 1 - Math.pow((x - cx) / rxx, 2)));
+      const y = cy + s * ryy * q * (u > 0.94 ? 0.2 : 1);
+      pts.push([x, y, z + (u < 0.08 ? 0.12 * (1 - u / 0.08) : 0)]);
+      const n = unit([(x - cx) / (rxx * rxx), (y - cy) / (ryy * ryy) + s * 0.001, u < 0.12 ? 1.2 * (1 - u / 0.12) : 0.1]);
+      out.push(n);
+    }
+    const v: V3[] = [];
+    pts.forEach((p, i) => {
+      const t = unit([pts[Math.min(N, i + 1)][0] - pts[Math.max(0, i - 1)][0], pts[Math.min(N, i + 1)][1] - pts[Math.max(0, i - 1)][1], pts[Math.min(N, i + 1)][2] - pts[Math.max(0, i - 1)][2]]);
+      const w = unit(cross(out[i], t));
+      v.push([p[0] - w[0] * HW, p[1] - w[1] * HW, p[2] - w[2] * HW], [p[0] + w[0] * HW, p[1] + w[1] * HW, p[2] + w[2] * HW]);
+    });
+    const f: Face[] = [];
+    for (let i = 0; i < N; i++) f.push(faceOut(v, [2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2], out[i], 'leatherDark'));
+    return mesh(v, f);
+  };
+  st = [side(1), side(-1)];
+  straps.set(key, st);
+  return st;
+}
 
 /* -- putting it all on ---------------------------------------------------------------- */
 
@@ -3471,52 +3840,95 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
     }
     if (leads.length) w.part.after = leads;
   }
-  wield(out, named, r, b, gear, pal, put);
+  wield(out, named, r, b, gear, pal, put, fr, fit);
   return out;
 }
 
+/** Which way `dir`, in the body's model space, is in a frame's own terms: for a part's `front`, when its frame is not the body's. */
+const within = (xf: Xf, d: V3): V3 => {
+  const m = xf.m;
+  return [m[0] * d[0] + m[3] * d[1] + m[6] * d[2], m[1] * d[0] + m[4] * d[1] + m[7] * d[2], m[2] * d[0] + m[5] * d[1] + m[8] * d[2]];
+};
+
 /**
- * What is held: a weapon in the right hand, or a bow in the left, and a
- * shield on the left forearm; and all of it slung across the back while the
- * hands are busy -- at work, swimming, at the reins, or waving.
+ * What is held, and where it goes when the hands are wanted.
+ *
+ * In the hands: a weapon in the right fist, point forward and down; a spear
+ * upright and a bow slanted across, each kept at its slant off the hips
+ * however the arm swings, which keeps a bow's lower tip and a spear's butt
+ * out of the ground; anything too heavy to hold out in front over the right
+ * shoulder, its head behind; and a shield on the left forearm, the hand
+ * behind it.
+ *
+ * At work, in the water, at the reins or waving, everything is put away: a
+ * blade in its scabbard at the left hip, a hatchet or a club through the
+ * belt at the right, and the rest across the back on a strap, with the
+ * shield over it.
  */
-function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: GearLook, pal: Palette, put: Put[]): void {
-  const busy = r.tool || r.reins || r.sink > 0;
-  const onBack = (): Part[] => [...(named.get('chest') ?? []), ...(named.get('abdomen') ?? []), ...put.filter((p) => p.on === 'chest' || p.on === 'abdomen').map((p) => p.part)];
+function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: GearLook, pal: Palette, put: Put[], fr: Frame, fit: number): void {
+  // The body's own parts under these names, and whatever of the gear is on them.
+  const on = (...keys: string[]): Part[] => keys.flatMap((k) => [...(named.get(k) ?? []), ...put.filter((p) => p.on === k).map((p) => p.part)]);
   const w = gear.weapon;
   const arm = w && weaponOf(w.id);
+  const back: Part[] = [];
+  // How far out behind a thing slung on the back is, in the chest's frame: over the chest and whatever is on it.
+  const behind = -(1.3 * fit + 0.34);
+  let strapPal: Palette | undefined;
   let slung: Part | undefined;
   if (w && arm) {
     const P = gearPalette(pal, w);
-    const rare = w.rare || undefined, seed = DRESSED.indexOf('weapon') + 1;
-    const hand = arm.carry === 'bow' ? 0 : 1;
-    const free = !busy && !r.open[hand] && arm.carry !== 'back';
-    if (free) {
-      /*
-       * A blade forward and down and out a little from the body, so it shows
-       * its length from the front as well as the side, and kept so as the
-       * elbow bends at a run rather than coming up in front of the face. A
-       * staff upright and a bow slanted across, each held at its slant
-       * however the arm swings, which is what keeps a bow's lower tip and a
-       * spear's butt out of the ground.
-       */
-      const bend = r.arm[hand][0] + r.elbow[hand] + r.hand[hand][0] - REST_BEND;
-      // The swing taken back out first, about the same axis it was put in about, and then the slant and the turn out.
-      const kept = (undo: number): Xf => joint(b[`wrist${hand}`], [0, 0, GRIP], -undo);
-      const xf = arm.carry === 'fist' ? joint(kept(0.85 * (r.elbow[1] - 18)), [0, 0, 0], -128, 0, -25)
-        : arm.carry === 'staff' ? joint(kept(bend), [0, 0, 0], -10)
-          : joint(kept(bend), [0, 0, 0], -46, 0, 30);
-      const grip: Part = { mesh: arm.grip, xf, bias: 0.02, pal: P, rare, seed };
-      out.push(grip, { mesh: arm.head, xf, bias: 0.035, pal: P, rare, seed });
-      // The fingers round the grip.
+    const bit = (m: Mesh, xf: Xf, bias: number, more: Partial<Part> = {}): Part => {
+      const p: Part = { mesh: m, xf, bias, pal: P, rare: w.rare || undefined, seed: DRESSED.indexOf('weapon') + 1, ...more };
+      out.push(p);
+      return p;
+    };
+    const c = cutsOf(arm);
+    if (!r.stowed && arm.carry === 'shoulder') {
+      // In the right fist and back over the shoulder: what is in front of the shoulder over the chest, and what is behind it under.
+      const xf = joint(joint(b.wrist1, [0, 0, GRIP], -90), [0, 0, -(arm.fist ?? 0)], 0, 0, arm.spin ?? 0);
+      const fw = within(xf, mv(b.chest.m, [0, 1, 0]));
+      const grip = bit(c.fore, xf, 0.03, { after: on('chest', 'abdomen', 'upper1'), front: fw });
+      bit(c.aft, xf, 0.03, { after: on('chest', 'abdomen', 'upper1'), front: [-fw[0], -fw[1], -fw[2]] });
+      for (const h of named.get('hand1') ?? []) h.after = grip;
+    } else if (!r.stowed && arm.carry === 'fist') {
+      // A blade forward and down and out from the body, so it shows its length from the front as well as the side, swinging with the forearm by half.
+      const xf = joint(joint(b.wrist1, [0, 0, GRIP], -0.6 * (r.elbow[1] - 18)), [0, 0, 0], -128, 0, -38);
+      const grip = bit(arm.grip, xf, 0.02);
+      bit(arm.head, xf, 0.035);
+      for (const h of named.get('hand1') ?? []) h.after = grip;
+    } else if (!r.stowed) {
+      const hand = arm.carry === 'bow' ? 0 : 1;
+      const lean = (arm.lean ?? 0) * DEG;
+      const dir: V3 = arm.carry === 'staff' ? [0.06, Math.sin(lean), Math.cos(lean)] : [-0.34, 0.66, 0.67];
+      const xf: Xf = { m: aimed(b.pelvis, [0, 0, 0], dir, [1, 0, 0]).m, t: place(b[`wrist${hand}`], [0, 0, GRIP]) };
+      const grip = bit(arm.grip, xf, 0.02);
+      bit(arm.head, xf, 0.035);
       for (const h of named.get(`hand${hand}`) ?? []) h.after = grip;
+    } else if (arm.stow === 'hip' && c.sheathed) {
+      // The scabbard's throat at the belt on the left, forward of the hip, and the blade down and back behind the leg; a knife's nearer upright and further forward.
+      const side = 1.64 * fr.wa * fit + 0.3;
+      const knife = arm.to < 3.5;
+      const dir = unit(knife ? [-0.1, -0.2, -1] : [-0.16, -0.62, -0.78]);
+      const at: V3 = knife ? [-side + 0.1, 0.95, 1.05] : [-side, 0.55, 1.15];
+      const k = arm.throat ?? 0.7;
+      const xf = aimed(b.pelvis, [at[0] - dir[0] * k, at[1] - dir[1] * k, at[2] - dir[2] * k], dir, [-1, 0, 0]);
+      bit(c.sheathed, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'thigh0'), front: within(xf, mv(b.pelvis.m, [-1, 0, 0])) });
+    } else if (arm.stow === 'belt') {
+      // Through the belt at the right hip: a hatchet by its haft with its head on the belt, a club by the end of its grip with its head hanging.
+      const side = 1.64 * fr.wa * fit + 0.25;
+      const dir = unit(arm.headUp ? [0.12, 0.2, 1] : [0.12, 0.22, -1]);
+      const k = arm.belt ?? 0;
+      const xf = aimed(b.pelvis, [side - dir[0] * k, 0.35 - dir[1] * k, 1.15 - dir[2] * k], dir, [1, 0, 0]);
+      bit(c.whole, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'thigh1'), front: within(xf, mv(b.pelvis.m, [1, 0, 0])) });
     } else {
-      const dir: V3 = arm.headUp ? [0.42, 0, 0.9] : [-0.42, 0, -0.9];
+      // Across the back by its middle, head up over the right shoulder or point down to the left hip.
+      const sl = (arm.slant ?? 30) * DEG;
+      const dir: V3 = arm.headUp ? [Math.sin(sl), 0, Math.cos(sl)] : [-Math.sin(sl), 0, -Math.cos(sl)];
       const mid = (arm.from + arm.to) / 2;
-      const d = unit(dir);
-      const xf = aimed(b.chest, [BACK[0] - d[0] * mid, BACK[1], BACK[2] - d[2] * mid], dir, [0, -1, 0]);
-      slung = { mesh: join(arm.grip, arm.head), xf, bias: 0.05, pal: P, rare, seed, after: onBack(), front: [1, 0, 0] };
-      out.push(slung);
+      const xf = aimed(b.chest, [-dir[0] * mid, behind, 0.85 - dir[2] * mid], dir, [0, -1, 0]);
+      slung = bit(c.whole, xf, 0.05, { front: within(xf, mv(b.chest.m, [0, -1, 0])) });
+      back.push(slung);
+      strapPal = P;
     }
   }
   const s = gear.offhand;
@@ -3524,15 +3936,27 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
   if (s && shield) {
     const P = gearPalette(pal, s);
     const rare = s.rare || undefined, seed = DRESSED.indexOf('offhand') + 1;
-    if (!busy && !(arm && arm.carry === 'bow')) {
-      // On the left forearm, its face out to the left and a little forward, where it reads from the front.
+    if (!r.stowed && !(arm && arm.carry === 'bow')) {
+      // On the left forearm, its face out to the left and a little forward, where it reads from the front, and the hand behind it.
       const n = unit([-0.62, 0.78, 0]);
       const xf = framed(b.elbow0, [n[0] * 0.78, n[1] * 0.78, -1.25], cross([0, 0, 1], n), [0, 0, 1], n);
-      out.push({ mesh: shield, xf, bias: 0.06, pal: P, rare, seed, front: [0, 0, 1], after: [...(named.get('lower0') ?? []), ...put.filter((p) => p.on === 'lower0').map((p) => p.part)] });
+      out.push({ mesh: shield, xf, bias: 0.06, pal: P, rare, seed, front: [0, 0, 1], after: on('lower0', 'hand0') });
     } else {
-      const xf = framed(b.chest, [0, BACK_SHIELD, 0.55], [1, 0, 0], [0, 0, 1], [0, -1, 0]);
-      out.push({ mesh: shield, xf, bias: 0.07, pal: P, rare, seed, after: [...onBack(), ...(slung ? [slung] : [])], front: [0, 0, 1] });
+      const xf = framed(b.chest, [0, behind - 0.36, 0.55], [1, 0, 0], [0, 0, 1], [0, -1, 0]);
+      const p: Part = { mesh: shield, xf, bias: 0.07, pal: P, rare, seed, front: [0, 0, 1] };
+      out.push(p);
+      back.push(p);
+      strapPal ??= P;
     }
+  }
+  if (back.length && strapPal) {
+    // The strap it all hangs from, under what hangs from it.
+    const [front, rear] = strapOf(fr, fit + 0.05);
+    const under = on('chest', 'abdomen');
+    const band = (m: Mesh, f: V3): Part => ({ mesh: m, xf: b.chest, bias: 0.02, pal: strapPal, after: under, front: f });
+    const straps = [band(front, [0, 1, 0]), band(rear, [0, -1, 0])];
+    out.push(...straps);
+    for (const p of back) p.after = [...under, ...straps, ...(p !== slung && slung ? [slung] : [])];
   }
 }
 
@@ -3670,8 +4094,8 @@ const dist = (a: V3, b: V3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2]
  * rows. Under two of a pattern to a facet it is not drawn at all.
  */
 const PATTERN: Record<Pattern, { a: number; b: number; px: number }> = {
-  mail: { a: 0.2, b: 0.2, px: 2.7 },
-  scale: { a: 0.46, b: 0.4, px: 3.8 },
+  mail: { a: 0.2, b: 0.2, px: 2.2 },
+  scale: { a: 0.46, b: 0.4, px: 3.0 },
   quilt: { a: 0.42, b: 9, px: 3.4 },
   lames: { a: 9, b: 0.5, px: 3.6 },
   grain: { a: 9, b: 0.35, px: 3 },
@@ -3783,27 +4207,32 @@ function worked(g: CanvasRenderingContext2D, l: Laid, faces: number[], P: Palett
  *
  * On the ground a rare thing sheds motes and a bloom (`drawShine`); on a body
  * that would wash the whole figure in one colour and bury the pieces that are
- * rare under it. So what is rare carries its light on itself, clipped to its
- * own outline, in the colour its rarity is written in, and more of it the
- * rarer it is:
+ * rare under it. So what is rare carries its light on itself, inside its own
+ * outline, in the colour its rarity is written in, with a line of that colour
+ * along its edges on the side away from the light, and more of it the rarer
+ * it is:
  *
  *   rare        tinted blue, and a slow glint across it now and again
- *   supreme     tinted violet, breathing, and a quicker, brighter glint
- *   fantastic   tinted gold, breathing, a glint more often still, and stars
- *               that open on it here and there as the glint goes by
+ *   supreme     tinted violet, breathing, and a quicker glint
+ *   fantastic   edged in gold over its own colour, breathing, a glint more
+ *               often still, and small stars that open on it here and there
  *
  * Everything of one rarity on a body shines as one: one tint, and one glint
  * that crosses all of it together, so a rare set reads as a set rather than
- * as a dozen things twinkling out of step. The colours are read off
- * `RARITIES`, like the ground's, so the list, the ground and the body all say
- * the same colour for the same word.
+ * as a dozen things twinkling out of step. Each part takes its shine as it is
+ * drawn, so a plain sleeve over a rare breastplate covers the breastplate's
+ * shine as it covers the breastplate. The colours are read off `RARITIES`,
+ * like the ground's, so the list, the ground and the body all say the same
+ * colour for the same word.
  */
 const GLINT = [
   null,
-  { period: 3.2, band: 0.18, core: 0.62, tint: 0.11, breathe: 0, stars: 0 },
-  { period: 2.6, band: 0.22, core: 0.72, tint: 0.16, breathe: 0.4, stars: 0 },
-  { period: 2.0, band: 0.26, core: 0.86, tint: 0.2, breathe: 0.4, stars: 2 },
+  { period: 3.2, band: 0.16, core: 0.42, tint: 0.24, glow: 0, rim: 0.34, stars: 0 },
+  { period: 2.6, band: 0.18, core: 0.46, tint: 0.26, glow: 0.1, rim: 0.36, stars: 0 },
+  { period: 2.2, band: 0.2, core: 0.5, tint: 0.12, glow: 0.12, rim: 0.44, stars: 2 },
 ] as const;
+/** Seconds to one breath of a supreme or fantastic piece's light. */
+const BREATH = 2.4;
 
 const rarityRgb = (rare: number): RGB => hex(rarityOf({ rare }).colour);
 /** A rarity's ink pushed away from grey, as the ground's shine does: the pastel blue a real blue, the lilac a violet. */
@@ -3813,84 +4242,148 @@ const deepened = (c: RGB, spread = 2): RGB => {
 };
 const rgba = (k: RGB, a: number): string => `rgba(${Math.round(k[0])}, ${Math.round(k[1])}, ${Math.round(k[2])}, ${Math.max(0, Math.min(1, a)).toFixed(3)})`;
 
-function shineOn(g: CanvasRenderingContext2D, laid: Laid[], now: number): void {
-  const groups = new Map<number, { path: Path2D; x0: number; y0: number; x1: number; y1: number; spots: Pt[]; seed: number }>();
-  for (const l of laid) {
+/** Everything of one rarity on a body, as it is laid on the screen: its extent, for the glint to cross all of it together, and where the stars open this time. */
+interface Shine {
+  rare: number;
+  c: RGB;
+  deep: RGB;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  seed: number;
+  stars: Array<{ li: number; at: Pt; life: number; k: number }>;
+}
+
+function shinesOf(laid: Laid[], now: number): Map<number, Shine> {
+  const out = new Map<number, Shine>();
+  const spots = new Map<number, Array<[number, Pt]>>();
+  laid.forEach((l, li) => {
     const rare = l.part.rare;
-    if (!rare || !GLINT[rare]) continue;
-    let p = groups.get(rare);
-    if (!p) { p = { path: new Path2D(), x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, spots: [], seed: 0 }; groups.set(rare, p); }
-    p.seed += l.part.seed ?? 0;
+    if (!rare || !GLINT[rare]) return;
+    let s = out.get(rare);
+    if (!s) {
+      const c = rarityRgb(rare);
+      s = { rare, c, deep: deepened(c), x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, seed: 0, stars: [] };
+      out.set(rare, s);
+      spots.set(rare, []);
+    }
+    s.seed += l.part.seed ?? 0;
     const f = l.part.mesh.f;
     for (let fi = 0; fi < f.length; fi++) {
       if (!l.vis[fi] || f[fi].decal) continue;
-      const idx = f[fi].i;
       let cx = 0, cy = 0;
-      p.path.moveTo(l.s[idx[0]][0], l.s[idx[0]][1]);
-      for (let q = 1; q < idx.length; q++) p.path.lineTo(l.s[idx[q]][0], l.s[idx[q]][1]);
-      p.path.closePath();
-      for (const i of idx) {
+      for (const i of f[fi].i) {
         const [x, y] = l.s[i];
-        cx += x / idx.length;
-        cy += y / idx.length;
-        if (x < p.x0) p.x0 = x;
-        if (y < p.y0) p.y0 = y;
-        if (x > p.x1) p.x1 = x;
-        if (y > p.y1) p.y1 = y;
+        cx += x / f[fi].i.length;
+        cy += y / f[fi].i.length;
+        if (x < s.x0) s.x0 = x;
+        if (y < s.y0) s.y0 = y;
+        if (x > s.x1) s.x1 = x;
+        if (y > s.y1) s.y1 = y;
       }
-      p.spots.push([cx, cy]);
+      spots.get(rare)?.push([li, [cx, cy]]);
     }
-  }
-  for (const [rare, p] of groups) {
-    const look = GLINT[rare];
-    if (!look || p.x1 < p.x0) continue;
-    const c = rarityRgb(rare), deep = deepened(c);
-    const w = p.x1 - p.x0, h = p.y1 - p.y0;
-    const t = (((now + p.seed * 0.13) / look.period) % 1 + 1) % 1;
-    g.save();
-    g.clip(p.path);
-    // The tint: the pieces take their rarity's hue, keeping their own light and shade.
-    const breath = 1 - look.breathe * (0.5 + 0.5 * Math.sin((now * TAU) / 3.1 + p.seed));
-    g.globalCompositeOperation = 'color';
-    g.fillStyle = rgba(deep, look.tint * breath);
-    g.fillRect(p.x0 - 1, p.y0 - 1, w + 2, h + 2);
-    // The glint: across all of it from upper left to lower right over the first half of the cycle, and gone the rest.
-    g.globalCompositeOperation = 'lighter';
-    if (t < 0.5) {
-      const u = t / 0.5;
-      const span = Math.max(w, h) + 1e-6;
-      const grad = g.createLinearGradient(p.x0 - span * 0.25, p.y0 - span * 0.25, p.x1 + span * 0.25, p.y1 + span * 0.25);
-      const at = 0.08 + u * 0.84, hw = look.band / 2;
-      grad.addColorStop(Math.max(0, at - hw), rgba(deep, 0));
-      grad.addColorStop(Math.max(0, at - hw * 0.35), rgba(deep, look.core * 0.55));
-      grad.addColorStop(at, rgba([255, 252, 244], look.core));
-      grad.addColorStop(Math.min(1, at + hw * 0.35), rgba(c, look.core * 0.5));
-      grad.addColorStop(Math.min(1, at + hw), rgba(c, 0));
-      g.fillStyle = grad;
-      g.fillRect(p.x0 - 1, p.y0 - 1, w + 2, h + 2);
-    }
-    g.restore();
-    // And the fantastic one's stars, each opening on a spot of it and closing again, a new spot each time round.
-    for (let k = 0; k < look.stars && p.spots.length; k++) {
-      const cyc = (now + p.seed * 0.13) / look.period + k / look.stars;
+  });
+  // The fantastic one's stars, each opening on a spot of it and closing again, a new spot each time round.
+  for (const s of out.values()) {
+    const look = GLINT[s.rare];
+    const at = spots.get(s.rare) ?? [];
+    for (let k = 0; look && k < look.stars && at.length; k++) {
+      const cyc = (now + s.seed * 0.13) / look.period + k / look.stars;
       const u = ((cyc % 1) + 1) % 1;
       if (u > 0.4) continue;
-      const life = Math.sin((u / 0.4) * Math.PI);
-      const n = Math.floor(cyc) * 7919 + k * 104729 + p.seed * 31;
-      const [sx, sy] = p.spots[((n % p.spots.length) + p.spots.length) % p.spots.length];
-      const r = Math.max(2.2, Math.min(5.5, Math.max(w, h) * 0.09)) * (0.45 + life * 0.55);
-      g.save();
-      g.translate(sx, sy);
-      g.rotate(now * 0.9 + k);
-      g.globalCompositeOperation = 'lighter';
-      g.fillStyle = rgba(deep, 0.7 * life);
-      fourPoint(g, r, r * 0.2);
-      g.fill();
-      g.fillStyle = rgba([255, 250, 236], 0.9 * life);
-      fourPoint(g, r * 0.5, r * 0.12);
-      g.fill();
-      g.restore();
+      const n = Math.floor(cyc) * 7919 + k * 104729 + s.seed * 31;
+      const [li, p] = at[((n % at.length) + at.length) % at.length];
+      s.stars.push({ li, at: p, life: Math.sin((u / 0.4) * Math.PI), k });
     }
+  }
+  return out;
+}
+
+/**
+ * The shine on one rare part, laid on as soon as the part is drawn so that
+ * whatever is drawn in front of it afterwards covers it too: its rarity's
+ * tint over its own light and shade, a breath of that colour's light on a
+ * supreme or fantastic one, the glint as it crosses, a line of the colour
+ * round its edges, and the stars that are open on it.
+ */
+function shineOn(g: CanvasRenderingContext2D, l: Laid, li: number, edges: Array<[number, number, number]>, s: Shine, ink: number, now: number): void {
+  const look = GLINT[s.rare];
+  if (!look) return;
+  const f = l.part.mesh.f;
+  // Its facets as one shape -- they all face the viewer, so wound alike, and filled once where they overlap -- which every layer of the shine is painted through.
+  const face = new Path2D();
+  let any = false;
+  for (let fi = 0; fi < f.length; fi++) {
+    if (!l.vis[fi] || f[fi].decal) continue;
+    const idx = f[fi].i;
+    face.moveTo(l.s[idx[0]][0], l.s[idx[0]][1]);
+    for (let q = 1; q < idx.length; q++) face.lineTo(l.s[idx[q]][0], l.s[idx[q]][1]);
+    face.closePath();
+    any = true;
+  }
+  if (!any) return;
+  const w = s.x1 - s.x0, h = s.y1 - s.y0;
+  const breath = 0.5 + 0.5 * Math.sin((now * TAU) / BREATH + s.seed);
+  // The tint: the piece takes its rarity's hue, keeping its own light and shade.
+  g.globalCompositeOperation = 'color';
+  g.fillStyle = rgba(s.deep, look.tint);
+  g.fill(face);
+  // Its breath: the colour's light coming and going over it.
+  g.globalCompositeOperation = 'lighter';
+  if (look.glow) {
+    g.fillStyle = rgba(s.c, look.glow * breath);
+    g.fill(face);
+  }
+  // A line of the colour along its edges on the side away from the light, which is what says what is rare from across the island.
+  if (edges.length) {
+    const rim = new Path2D();
+    for (const [a, b, fi] of edges) {
+      const idx = f[fi].i;
+      let cx = 0, cy = 0;
+      for (const i of idx) { cx += l.s[i][0] / idx.length; cy += l.s[i][1] / idx.length; }
+      const mx = (l.s[a][0] + l.s[b][0]) / 2 - cx, my = (l.s[a][1] + l.s[b][1]) / 2 - cy;
+      if (mx + 0.35 * my <= 0) continue;
+      rim.moveTo(l.s[a][0], l.s[a][1]);
+      rim.lineTo(l.s[b][0], l.s[b][1]);
+    }
+    g.strokeStyle = rgba(mixRGB(s.deep, s.c, 0.5), look.rim * (look.glow ? 0.75 + 0.25 * breath : 1));
+    g.lineWidth = ink * 0.9;
+    g.lineCap = 'round';
+    g.stroke(rim);
+  }
+  // The glint: across all of it from upper left to lower right over the first half of the cycle, and gone the rest.
+  const t = ((((now + s.seed * 0.13) / look.period) % 1) + 1) % 1;
+  if (t < 0.5) {
+    g.globalCompositeOperation = 'screen';
+    const u = t / 0.5;
+    const span = Math.max(w, h) + 1e-6;
+    const grad = g.createLinearGradient(s.x0 - span * 0.25, s.y0 - span * 0.25, s.x1 + span * 0.25, s.y1 + span * 0.25);
+    const at = 0.08 + u * 0.84, hw = look.band / 2;
+    grad.addColorStop(Math.max(0, at - hw), rgba(s.c, 0));
+    grad.addColorStop(Math.max(0, at - hw * 0.3), rgba(s.c, look.core * 0.6));
+    grad.addColorStop(at, rgba(mixRGB([255, 252, 244], s.c, 0.35), look.core));
+    grad.addColorStop(Math.min(1, at + hw * 0.3), rgba(s.c, look.core * 0.6));
+    grad.addColorStop(Math.min(1, at + hw), rgba(s.c, 0));
+    g.fillStyle = grad;
+    g.fill(face);
+  }
+  g.globalCompositeOperation = 'source-over';
+  for (const st of s.stars) {
+    if (st.li !== li) continue;
+    const r = Math.max(1.3, Math.min(2.6, Math.max(w, h) * 0.05)) * (0.45 + st.life * 0.55);
+    g.save();
+    g.translate(st.at[0], st.at[1]);
+    g.rotate(now * 0.9 + st.k);
+    g.globalCompositeOperation = 'screen';
+    g.fillStyle = rgba(s.deep, 0.75 * st.life);
+    fourPoint(g, r, r * 0.2);
+    g.fill();
+    g.fillStyle = rgba([255, 250, 236], 0.9 * st.life);
+    fourPoint(g, r * 0.5, r * 0.12);
+    g.fill();
+    g.restore();
   }
 }
 
@@ -4051,13 +4544,14 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
   // The outline: every part's own outline in its ink, fattened, so that only a rim shows round the outside once the facets go over it.
   laid.forEach((l, li) => { for (const [a, b, fi] of edges[li]) line(l, a, b, fi); });
   flush(ink * 2, false);
+  const shines = laid.some((l) => l.part.rare) ? shinesOf(laid, now) : null;
   laid.forEach((l, li) => {
     const f = l.part.mesh.f;
     const shown: number[] = [];
     for (let fi = 0; fi < f.length; fi++) if (l.vis[fi] && !f[fi].decal) shown.push(fi);
     const P = palOf(l);
     if (l.part.convex) {
-      for (const fi of shown) add(into(shade(P[f[fi].m], l.k[fi])), l, fi);
+      for (const fi of shown) add(into(toneOf(P, f[fi].m, l.k[fi], P !== pal)), l, fi);
       flush(0, true);
       worked(g, l, shown, P, px);
       for (const [a, b, fi] of edges[li]) line(l, a, b, fi);
@@ -4073,9 +4567,9 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       shown.sort((a, b) => l.d[a] - l.d[b]);
       let q = 0;
       while (q < shown.length) {
-        const c = shade(P[f[shown[q]].m], l.k[shown[q]]);
+        const c = toneOf(P, f[shown[q]].m, l.k[shown[q]], P !== pal);
         let end = q;
-        while (end < shown.length && shade(P[f[shown[end]].m], l.k[shown[end]]) === c) end++;
+        while (end < shown.length && toneOf(P, f[shown[end]].m, l.k[shown[end]], P !== pal) === c) end++;
         for (let r = q; r < end; r++) add(into(c), l, shown[r]);
         flush(0, true);
         worked(g, l, shown.slice(q, end), P, px);
@@ -4089,12 +4583,13 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       if (!l.vis[fi] || !f[fi].decal) continue;
       const path = new Path2D();
       add(path, l, fi, 0);
-      g.fillStyle = shade(P[f[fi].m], l.k[fi]);
+      g.fillStyle = toneOf(P, f[fi].m, l.k[fi], P !== pal);
       g.fill(path);
     }
+    // And if it is rare, its shine, before anything in front of it goes down.
+    const sh = shines && l.part.rare ? shines.get(l.part.rare) : undefined;
+    if (sh) shineOn(g, l, li, edges[li], sh, ink, now);
   });
-  // And over whatever of it is rare, its shine: see `drawGearShine`.
-  if (laid.some((l) => l.part.rare)) shineOn(g, laid, now);
 }
 
 const onScreen = (view: View, p: V3): Pt => [p[0] * view.ex[0] + p[1] * view.ey[0], p[0] * view.ex[1] + p[1] * view.ey[1] - p[2] * HEIGHT_SCALE];
