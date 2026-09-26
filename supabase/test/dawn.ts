@@ -241,7 +241,9 @@ end $$;
 do $$
 declare w record; v_x int := 3; v_y int := 3; v_before int; v_after int; v_grew jsonb;
 begin
-  select * into w from world where ready order by size desc limit 1;
+  -- The biggest island with land on it: another test leaves an island with none, as big as any.
+  select * into w from world where ready and exists (select 1 from land_tile t where t.world_id = world.id and t.y = v_y)
+   order by size desc limit 1;
   if w is null then insert into said values ('DAY|no island'); return; end if;
   -- A go is one island, so every other island is stamped as turned first:
   -- the question is whether this one's day is taken, not which one is drawn.

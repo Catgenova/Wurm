@@ -155,6 +155,18 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 9,
+    day: '2026-09-26',
+    lines: () => {
+      const carried = (how: string): string[] => WEAPONS.filter((w) => weaponCarry(w.id)?.carry === how).map((w) => itemDef(w.id).name.toLowerCase());
+      const shouldered = carried('shoulder');
+      return [
+        'Each class of armour has an outline of its own: cloth is padded to the knee and split for the stride, leather has a tall collar, shoulder caps and a skirt in four flared panels, mail is split front and back, and dragon scale lies in overlapping courses from the head to the feet.',
+        `A ${either(shouldered)} goes over whichever shoulder keeps it clear of your head from where you are seen. A bow is held upright at your side, higher the longer it is and higher again at a run, so its lower tip never reaches the ground, and a ${either(carried('staff'))} leans out past your face.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
