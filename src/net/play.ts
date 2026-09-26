@@ -298,8 +298,12 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   // from somebody else's.
   island.hooks.built = (ground) => game.sawGround(ground, island, island.uid || null);
   // Where the island put the body, which is only ever somewhere we did not put
-  // it ourselves — and the only thing that does that is dying.
-  island.hooks.moved = (x, y, level) => game.putBody(x, y, level);
+  // it ourselves: dying does, and so does a keeper of the island moving a
+  // stuck body, which takes it off whatever it was on as well.
+  island.hooks.moved = (x, y, level, letGo) => {
+    if (letGo) game.letGoOfAll();
+    game.putBody(x, y, level);
+  };
   /*
    * And the crates our own ask touched, which come back with the answer to it.
    *

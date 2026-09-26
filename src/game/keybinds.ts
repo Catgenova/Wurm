@@ -35,6 +35,8 @@ export interface BindDef {
   group: string;
   /** Codes it answers to, best first. Two is the most any of them keeps. */
   keys: string[];
+  /** Listed only for somebody the island says keeps it; nobody else has the window it opens. */
+  keeper?: boolean;
 }
 
 export const BIND_GROUPS = ['Moving the view', 'Windows', 'Doing things'] as const;
@@ -80,6 +82,8 @@ export const BINDS: BindDef[] = [
   { id: 'win_ledger', label: 'Ledger', hint: 'Everything you have ever made.', group: 'Windows', keys: ['KeyB'] },
   { id: 'win_stores', label: 'Stores', hint: 'What is in every crate and cupboard on your deed, in one list.', group: 'Windows', keys: ['KeyU'] },
   { id: 'win_journal', label: 'Journal', hint: 'Everything worth doing, ticking itself off.', group: 'Windows', keys: ['KeyJ'] },
+  // No key out of the box: it is for the few who keep an island, and every letter is spoken for.
+  { id: 'win_keeper', label: 'Island keeper', hint: 'Everybody with a body on the island, where they stand and whether they are muted, and a Move, Mute and Unmute for each.', group: 'Windows', keys: [], keeper: true },
   { id: 'win_settings', label: 'Settings', hint: 'This window.', group: 'Windows', keys: ['KeyO'] },
   { id: 'win_help', label: 'Help', hint: 'How any of this works.', group: 'Windows', keys: ['F1', 'KeyH'] },
   // No key out of the box: every letter is spoken for, and it opens by itself when there is something new.

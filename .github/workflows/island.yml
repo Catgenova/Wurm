@@ -1432,6 +1432,19 @@ jobs:
             --outfile=node_modules/.cache/graves.mjs --log-level=error
           node node_modules/.cache/graves.mjs
 
+      - name: An island's keepers, and the four things only they may do
+        run: |
+          # Who keeps an island: whoever founded it, and anybody the deploy's own
+          # SQL (supabase/owner.sql, run here against a test address) made an
+          # owner of every island. Every owner door refuses everybody else, and
+          # before it does anything at all. Then each tool does what it says:
+          # who is on, a body moved off a stuck spot and told who moved it, a
+          # mute that refuses talk, letters and a parcel's note and lifts on
+          # time or when lifted, a pile cleared, and the trail of all of it.
+          npx esbuild supabase/test/keeper.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/keeper.mjs --log-level=error
+          node node_modules/.cache/keeper.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where
@@ -1622,6 +1635,52 @@ jobs:
           # tree, so anything the CLI would slot in early has been checked.
           supabase db push --include-all
           supabase migration list --linked | tail -12
+      - name: Who keeps the islands
+        # The Island keeper's tools (20260925234600) open for whoever founded an
+        # island, on that island, and for anybody in `private.island_owner`, on
+        # every island. This puts the account with the address in the
+        # ISLAND_OWNER_EMAIL secret into that table, through supabase/owner.sql,
+        # which the rules job runs against a test address first.
+        #
+        # The address goes to psql as a variable and reaches the database as a
+        # quoted literal, so it is never part of any SQL written here. It is
+        # never echoed, and what psql prints back is three counts; the log says
+        # only whether an account was found. An empty secret adds nobody.
+        #
+        # Allowed to fail without failing the deploy: the migrations are in by
+        # now, and an owner who could not be added this time is added by the
+        # next deploy.
+        continue-on-error: true
+        env:
+          ISLAND_OWNER_EMAIL: ${{ secrets.ISLAND_OWNER_EMAIL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'glebtboagnafcgwjjvfy' }}
+        run: |
+          if [ -z "$ISLAND_OWNER_EMAIL" ]; then
+            echo "ISLAND_OWNER_EMAIL is empty, so this deploy makes nobody an island owner."
+            exit 0
+          fi
+          # The pooler `supabase link` wrote down in the step above, and then
+          # the database's own address, the one the readout below falls back
+          # to. The password rides in PGPASSWORD rather than in either address.
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD" PGCONNECT_TIMEOUT=20
+          urls=""
+          if [ -s supabase/.temp/pooler-url ]; then
+            urls="$(sed 's/:\[YOUR-PASSWORD\]//' supabase/.temp/pooler-url)"
+          fi
+          urls="$urls postgresql://postgres@db.$PROJECT_REF.supabase.co:5432/postgres"
+          for url in $urls; do
+            if said=$(psql "$url" -X -q -t -A -v ON_ERROR_STOP=1 -v email="$ISLAND_OWNER_EMAIL" -f supabase/owner.sql); then
+              IFS='|' read -r matched added owners <<< "$said"
+              if [ "${matched:-0}" -gt 0 ]; then
+                echo "An account has the address in ISLAND_OWNER_EMAIL: ${matched} found, ${added} newly made an island owner. Island owners on the project: ${owners}."
+              else
+                echo "::warning::No account has the address in ISLAND_OWNER_EMAIL, so no island owner was added. Island owners on the project: ${owners}. Sign up with that address, then deploy again."
+              fi
+              exit 0
+            fi
+          done
+          echo "::warning::Could not reach the database to add the island owner. The next deploy tries again."
       - name: What is alive on each island
         # Asked for: "what is the crescent island mob count currently?" — a
         # question nothing in the run could answer, because this is the only

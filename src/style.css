@@ -2647,6 +2647,29 @@ kbd {
 }
 
 /*
+ * The Island keeper window: the social window's rows, with who somebody is
+ * over where they stand, how lately they were heard from and any mute, so the
+ * three buttons keep their place however long that line gets.
+ */
+.keeper-row {
+  grid-template-columns: auto 1fr auto;
+}
+
+.keeper-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.keeper-facts {
+  white-space: normal;
+}
+
+.keeper-muted {
+  color: #ef8a7a;
+}
+
+/*
  * A conversation fills whatever room the window has, and the box you answer in
  * stays at the bottom of it. Only when a thread is open: every other page here
  * is a list that scrolls as one.

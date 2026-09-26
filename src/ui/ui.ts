@@ -77,11 +77,13 @@ import { MarketPanel } from './panels/market';
 import { BoardsPanel } from './panels/boards';
 import { GuidePanel } from './panels/guide';
 import { HoardPanel } from './panels/hoard';
+import { KeeperPanel } from './panels/keeper';
 import { TrackerPanel } from './panels/tracker';
 import { Tooltip } from './tooltip';
 import { WindowManager } from './windows';
 import type { Island } from '../net/island';
 import { awayLines } from '../game/away';
+import { clearQuestion } from '../game/keeper';
 import { uiBox } from './screen';
 
 export interface UICallbacks {
@@ -142,6 +144,12 @@ export class UI {
   private readonly boards: BoardsPanel;
   private readonly guide: GuidePanel;
   private readonly hoard: HoardPanel;
+  /**
+   * The Island keeper window, made only once the island has said this body
+   * keeps it. Null for everybody else, and in the game played alone, and then
+   * neither the window, its row on the Menu, its key nor clearing a pile exist.
+   */
+  private keeper: KeeperPanel | null = null;
   /** The island, for the one window that asks it things directly. */
   private readonly island: Island | null;
   /** What every key does, so the window menu can name them. */
@@ -323,6 +331,20 @@ export class UI {
       newsWin.el.style.top = `${Math.max(0, uiBox().h / 4 + (away.length ? 48 : 0))}px`;
       newsWin.open();
     }
+
+    // Whether this body keeps the island, asked once now that it is ashore.
+    const isle = this.island;
+    if (isle) void isle.amKeeper().then((yes) => {
+      if (yes) this.makeKeeper(isle);
+    });
+  }
+
+  /** The Island keeper window, its row on the Menu and its key: for a keeper of the island, and nobody else. */
+  private makeKeeper(island: Island): void {
+    if (this.keeper) return;
+    const win = this.windows.create({ id: 'keeper', title: 'Island keeper', x: 12, y: 56, width: 400, height: 440, anchor: 'tr', open: false });
+    this.keeper = new KeeperPanel(win, this.game, island, (x, y, title, items) => this.menu.show(x, y, title, items));
+    this.settings.showKeeper();
   }
 
   /**
@@ -501,6 +523,7 @@ export class UI {
     this.social.update(performance.now() / 1000);
     this.market.update(1 / 60);
     this.boards.update(performance.now() / 1000);
+    this.keeper?.update(performance.now() / 1000);
     this.hoard.update(performance.now() / 1000);
     this.tilePanel.update(performance.now());
     this.craftPanel.update(performance.now());
@@ -789,7 +812,9 @@ export class UI {
    * it is about to go is a list you have to try.
    */
   showWindowMenu(x: number, y: number): void {
-    const entries: MenuItem[] = WINDOWS.map((wdw) => {
+    // A window that was never made here -- the Island keeper, for anybody who
+    // does not keep the island -- is not on the list.
+    const entries: MenuItem[] = WINDOWS.filter((wdw) => this.windows.get(wdw.id)).map((wdw) => {
       const open = this.windows.get(wdw.id)?.isOpen ?? false;
       const codes = this.keys.codes(wdw.bind);
       return {
@@ -1105,6 +1130,21 @@ export class UI {
       }));
       if (pile.length > 1) children.push({ label: 'Everything', onSelect: () => this.game.requestAction(pickUp, { kind: 'ground', x: pick.x, y: pick.y, uid: null }) });
       entries.push({ label: 'Pick up', children });
+    }
+    // For a keeper of the island: a pile nobody is coming back for, deleted.
+    if (pile.length && this.keeper && this.island) {
+      const isle = this.island;
+      const things = pile.reduce((n, it) => n + it.count, 0);
+      const { x, y } = pick;
+      entries.push({
+        label: 'Clear this pile',
+        note: `Deletes ${things} ${things === 1 ? 'thing' : 'things'} in ${pile.length} ${pile.length === 1 ? 'stack' : 'stacks'}, and what is inside them`,
+        onSelect: () => void (async () => {
+          if (!(await this.game.hooks.confirm(clearQuestion(x, y, pile.length, things)))) return;
+          const why = await isle.keeperClear(x, y);
+          if (why) this.game.logMsg(why, 'error');
+        })(),
+      });
     }
     // Anything else that can be done to a thing lying here, such as butchering a corpse.
     for (const item of pile) {

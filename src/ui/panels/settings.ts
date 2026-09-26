@@ -28,6 +28,8 @@ export class SettingsPanel {
   private grabbing: { id: string; slot: number; btn: HTMLButtonElement } | null = null;
   private note: HTMLParagraphElement;
   private keyRows = new Map<string, HTMLButtonElement[]>();
+  /** Rows for a keeper of the island alone, hidden until the island says this body is one. */
+  private keeperRows: HTMLDivElement[] = [];
 
   constructor(
     win: UIWindow,
@@ -312,6 +314,10 @@ export class SettingsPanel {
         }
         this.keyRows.set(bind.id, btns);
         row.append(text, slots);
+        if (bind.keeper) {
+          row.hidden = true;
+          this.keeperRows.push(row);
+        }
         table.append(row);
       }
       keyPage.append(table);
@@ -335,6 +341,11 @@ export class SettingsPanel {
     // Who redraws on a rebinding is `UI`'s business: the toolbar has to hear
     // about it too, and this panel is not the only thing that shows a key.
     this.drawKeys();
+  }
+
+  /** The island says this body keeps it: its keys are listed with the rest. */
+  showKeeper(): void {
+    for (const row of this.keeperRows) row.hidden = false;
   }
 
   /** Switch tabs. */

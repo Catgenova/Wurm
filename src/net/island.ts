@@ -11,6 +11,7 @@ import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVER
 import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
 import type { Away } from '../game/away';
+import type { Kept, KeptBody } from '../game/keeper';
 
 /**
  * Playing on an island that lives in Postgres.
@@ -81,6 +82,10 @@ interface HeardBody {
   gone?: unknown;
   upto?: unknown;
   refresh?: unknown;
+  /** Where a keeper of the island has put this body. */
+  x?: unknown;
+  y?: unknown;
+  level?: unknown;
 }
 
 /** The body of a Broadcast message, as `supabase-js` hands it over. */
@@ -645,8 +650,11 @@ export interface IslandHooks {
    * moves a body without the browser doing it — dying, which puts you back
    * where you first came ashore — left the browser walking about from where it
    * fell until somebody refreshed the page.
+   *
+   * `letGo` when a keeper of the island put the body there: it is off
+   * whatever it rode, drove, pulled or was aboard as well.
    */
-  moved?: (x: number, y: number, level: number) => void;
+  moved?: (x: number, y: number, level: number, letGo?: boolean) => void;
   /**
    * The crates your own ask touched, laid down without touching anything else.
    *
@@ -1834,7 +1842,8 @@ export class Island {
     const wanted = new Map<string, (ch: RealtimeChannel) => RealtimeChannel>([
       [own, (ch) => ch
         .on('broadcast', { event: 'said' }, (m) => this.heardLines(heardBody(m)))
-        .on('broadcast', { event: 'pack' }, (m) => this.heardPack(heardBody(m)))],
+        .on('broadcast', { event: 'pack' }, (m) => this.heardPack(heardBody(m)))
+        .on('broadcast', { event: 'moved' }, (m) => this.heardMoved(heardBody(m)))],
       [`said:${worldId}`, (ch) => ch.on('broadcast', { event: 'said' }, (m) => this.heardLines(heardBody(m)))],
     ]);
     for (const b of this.blocksAround(here.x, here.y)) {
@@ -1922,6 +1931,25 @@ export class Island {
       this.landAsked = now;
       void this.catchUpQuietly();
     }
+  }
+
+  /**
+   * Put somewhere by a keeper of the island (`rpc_owner_move`).
+   *
+   * The body goes there now. Otherwise it would learn of it only on its next
+   * step, which claims the old ground, and the island's pull-back measures a
+   * walk's worth from the new spot towards it: a body moved off a stuck place
+   * would be walked part of the way back.
+   */
+  private heardMoved(body: HeardBody): void {
+    const { x, y, level } = body;
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    const lvl = typeof level === 'number' ? level : 0;
+    if (this.me) this.me = { ...this.me, x, y, level: lvl };
+    this.lastSaid = '';
+    this.hooks.moved?.(x, y, lvl, true);
+    // What was in hand and what was queued are gone too, which the beat says.
+    this.armBeat(0.5);
   }
 
   /** A row of ours as it now is: in the pack or a bag, or gone from both. */
@@ -2527,6 +2555,47 @@ export class Island {
   /** A word to one person, which is still there tomorrow. */
   async writeTo(uid: string, text: string): Promise<string | null> {
     return this.door('rpc_letter', { p_uid: uid, p_text: text });
+  }
+
+  /**
+   * Whether this body keeps the island: an owner of every island on the
+   * project, or the one who founded this one. Asked once, after the join; a
+   * no, or no answer, is no.
+   */
+  async amKeeper(): Promise<boolean> {
+    if (!this.info) return false;
+    const { data, error } = await supabase().rpc('rpc_owner_am_i', { p_world: this.info.id });
+    return !error && data === true;
+  }
+
+  /** Everybody with a body on the island, as its keepers see them. Null when the island did not answer. */
+  async kept(): Promise<Kept | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc('rpc_owner_online', { p_world: this.info.id });
+    if (error || !data || typeof data !== 'object') return null;
+    const got = data as Partial<Kept>;
+    return { people: rowsIn<KeptBody>(got.people), spawn: got.spawn ?? { x: 0, y: 0 } };
+  }
+
+  /** A stuck body to its settlement token, or where newcomers come ashore. */
+  async keeperMove(uid: string): Promise<string | null> {
+    return this.door('rpc_owner_move', { p_uid: uid });
+  }
+
+  /** Mute somebody for so many seconds, or with `null` until a keeper lifts it. */
+  async keeperMute(uid: string, secs: number | null): Promise<string | null> {
+    return this.door('rpc_owner_mute', { p_uid: uid, p_secs: secs });
+  }
+
+  async keeperUnmute(uid: string): Promise<string | null> {
+    return this.door('rpc_owner_unmute', { p_uid: uid });
+  }
+
+  /** Delete everything lying on the ground on one tile, and read the ground again at the quick pace. */
+  async keeperClear(x: number, y: number): Promise<string | null> {
+    const why = await this.door('rpc_owner_clear', { p_x: x, p_y: y });
+    this.stirred = true;
+    return why;
   }
 
   /** One conversation, oldest first — and read, by the reading of it. */

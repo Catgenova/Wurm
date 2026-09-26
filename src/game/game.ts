@@ -5122,6 +5122,30 @@ export class Game {
     this.events.emit('creature');
   }
 
+  /**
+   * Off everything at once, at the island's word: a place on a deck, the helm
+   * or the reins, the shafts of a cart and a saddle, each left where it is.
+   *
+   * A keeper of the island moving a stuck body has already let go of them over
+   * there (`rpc_owner_move`). Said here too, before the next ground read says
+   * it, because until then a passenger's body is put back on her deck every
+   * frame, and that read would then step it ashore beside her.
+   */
+  letGoOfAll(): void {
+    const p = this.player;
+    p.aboard = null;
+    p.seat = 0;
+    const me = this.acting.id;
+    for (const f of this.furniture.values()) {
+      if (f.driven && (f.driverId ?? me) === me) {
+        f.driven = false;
+        f.driverId = undefined;
+      }
+      if (f.hitched) f.hitched = false;
+    }
+    this.dismount();
+  }
+
   // ---- What the errand workers need to know about the world. ----
 
   /** A barrel on the deed with room in it for more water. */

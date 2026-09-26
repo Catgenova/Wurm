@@ -67,6 +67,8 @@ export const WINDOWS: Array<{ label: string; bind: string; id: string }> = [
   { label: 'Deed', bind: 'win_deed', id: 'deed' },
   { label: 'Social', bind: 'win_social', id: 'social' },
   { label: 'Leaderboards', bind: 'win_boards', id: 'boards' },
+  // Made, and so listed, only for somebody the island says keeps it.
+  { label: 'Island keeper', bind: 'win_keeper', id: 'keeper' },
   { label: 'Settings', bind: 'win_settings', id: 'settings' },
   { label: 'Help', bind: 'win_help', id: 'help' },
   { label: "What's new", bind: 'win_news', id: 'news' },

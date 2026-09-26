@@ -12,6 +12,8 @@ import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
+import { MUTE_FOR, MUTE_SHUTS } from '../../game/keeper';
+import { awayFor } from '../../game/away';
 import type { UIWindow } from '../windows';
 
 /**
@@ -52,6 +54,9 @@ const recipeBill = (id: string): string =>
 /** A solid wall's bill in a material. */
 const wallBill = (id: string): string => billWords(MATERIAL_BY_ID.get(id)?.bill ?? [], true);
 const pct = (k: number): string => `${Math.round(k * 100)}%`;
+/** "a, b or c". */
+const either = (parts: string[]): string =>
+  parts.length > 1 ? `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}` : (parts[0] ?? '');
 
 export const NEWS: News[] = [
   {
@@ -109,6 +114,14 @@ export const NEWS: News[] = [
     lines: () => [
       `Dying: your pack, what is in your hands, your toolbelt and every bag with what is in it go into a grave where you fell, or on the nearest dry ground within ${GRAVE_REACH} tiles if you fell in deep water. Only you can open it or take from it, and ${spanWords(GRAVE_KEEPS)} after you fell it crumbles with whatever is still in it. What you wear stays on you, and so does a crate with a wildermon in it.`,
       'Two payments out of one purse at the same moment no longer both go through: the second waits for the first, and is refused if what is left will not cover it.',
+    ],
+  },
+  {
+    n: 6,
+    day: '2026-09-26',
+    lines: () => [
+      'An island has keepers: whoever founded it, and whoever keeps every island. A keeper sees everybody on the island, can move a body that is stuck to the token of the settlement it founded, or to where newcomers come ashore if it founded none, and can clear everything lying on a tile.',
+      `A keeper can mute somebody ${either(MUTE_FOR.map((secs) => (secs === null ? 'until a keeper lifts it' : `for ${awayFor(secs)}`)))}. Until then the island refuses ${MUTE_SHUTS}, and says until when.`,
     ],
   },
 ];
