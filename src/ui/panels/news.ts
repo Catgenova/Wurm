@@ -210,6 +210,17 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 13,
+    day: '2026-09-26',
+    lines: () => {
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      return [
+        `A ${named('leather_jerkin')} is studded with rivets over the chest and down its skirt.`,
+        `A ${named('chain_hauberk')} bells out wider below the hips, and every skirt swings out wider the longer the stride.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

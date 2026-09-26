@@ -91,7 +91,7 @@ export type Mat = BodyMat | GearMat;
  * enough to read: the rows of a mail shirt, the courses of scale, the channels
  * of a quilted coat, the lames of plate, the grain of a board.
  */
-export type Pattern = 'mail' | 'scale' | 'quilt' | 'lames' | 'grain';
+export type Pattern = 'mail' | 'scale' | 'quilt' | 'lames' | 'grain' | 'studs';
 
 export interface Face {
   /** Corners, anticlockwise seen from outside. */
@@ -3092,7 +3092,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       bits: [
         {
           bone: 'chest', over: ['chest'], bias: 0.02, convex: true,
-          mesh: join(chestShell(b, g, 'leather', 2.18),
+          mesh: join(worn(chestShell(b, g, 'leather', 2.18), 'studs'),
             decals([
               // Laced up the front: three crossings of the lace.
               ...[0.35, 0.95, 1.5].map((z) => plate([0, 1.43 * b.bust * g / 1.07, z], [0.32, 0, 0.18], [0.05, 0, -0.18], [0, 1, 0], 'lace')),
@@ -3102,7 +3102,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'chest', over: ['chest', 'neck'], bias: 0.04, mesh: rings([[2.06, 1.14, 0.92, 0, -0.1], [2.56, 1.02, 0.84, 0, -0.1], [2.8, 1.16, 0.96, 0, -0.12]], 8, (band) => (band === 1 ? 'leather' : 'leatherDark'), { top: false, bottom: false }) },
         { bone: 'spine', over: ['abdomen', 'skirt'], bias: 0.02, convex: true, mesh: waistShell(b, g, 'leather') },
         // A stiff skirt in four panels, split at the front, the back and each side, flaring, and bound along the hem in pale rawhide.
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, mesh: join(...[[8, 82], [98, 172], [188, 262], [278, 352]].map(([a, c]) => arcs(skirt, 3, a, c, 'leather'))) },
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, mesh: worn(join(...[[8, 82], [98, 172], [188, 262], [278, 352]].map(([a, c]) => arcs(skirt, 3, a, c, 'leather'))), 'studs') },
         { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.17, skirt: true, mesh: join(...[[8, 82], [98, 172], [188, 262], [278, 352]].map(([a, c]) => arcs(profileHem(skirt, 0.05, 0.2), 3, a, c, 'lace'))) },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: join(beltRing(b, g + 0.01, 'belt', 0.9, 1.5), decals([plate([0, 1.32 * (g + 0.01) * Math.cos(Math.PI / 8) + 0.01, 1.2], [0.24, 0, 0], [0, 0, 0.22], [0, 1, 0], 'fitting')])) },
         // Stiff caps over the shoulders, edged darker.
@@ -3114,7 +3114,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   chain_hauberk: (b) => {
     const g = CHEST_FIT.chain_hauberk;
     // Hanging long and belling out well past the hips, which is what tells it from a coat at a distance.
-    const skirt = skirtRings(b, g - 0.02, -3.0, 3.4);
+    const skirt = skirtRings(b, g - 0.02, -3.0, 5.2);
     const halves: Array<[number, number]> = [[-80, 80], [100, 260]];
     return {
       layer: 3,
@@ -3452,10 +3452,15 @@ function gloveOf(hand: Mesh, mat: Mat): Mesh {
 
 /** A skirt of gear, bent with the legs as the tunic's own hem is (`skirtBent`), and further for a longer one. */
 function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
+  // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
+  const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
   return v.map((p0) => {
     const p: V3 = [...p0];
     const share = p[2] < -0.9 ? 1 : p[2] < 0.5 ? 0.4 : 0;
     if (!share) return p;
+    const swing = 1 + 0.14 * stride * share;
+    p[0] *= swing;
+    p[1] *= swing;
     for (let k = 0; k < 2; k++) {
       const s = k ? 1 : -1;
       const lever = Math.max(1.35, -p[2]);
@@ -4492,6 +4497,7 @@ const PATTERN: Record<Pattern, { a: number; b: number; px: number }> = {
   quilt: { a: 0.42, b: 9, px: 3.6 },
   lames: { a: 9, b: 0.5, px: 3.6 },
   grain: { a: 9, b: 0.35, px: 3 },
+  studs: { a: 0.62, b: 0.62, px: 5.5 },
 };
 
 /**
@@ -4507,6 +4513,8 @@ function worked(g: CanvasRenderingContext2D, l: Laid, faces: number[], P: Palett
   const v = l.part.mesh.v;
   // Mail's rows and rings, gathered by shade across the whole part and laid down together at the end.
   const mailRows = new Map<string, Path2D>(), mailRings = new Map<string, Path2D>();
+  // Studs' shadows and heads, gathered the same way.
+  const studShadows = new Map<string, Path2D>(), studHeads = new Map<string, Path2D>();
   const pathIn = (m: Map<string, Path2D>, c: string): Path2D => {
     let path = m.get(c);
     if (!path) { path = new Path2D(); m.set(c, path); }
@@ -4555,6 +4563,24 @@ function worked(g: CanvasRenderingContext2D, l: Laid, faces: number[], P: Palett
           if (a <= 0 || a > 1) continue;
           const p = at(a, b);
           beads.rect(p[0] - r0, p[1] - r0, 2 * r0, 2 * r0);
+        }
+      }
+      continue;
+    }
+    if (face.pat === 'studs') {
+      // Hide studded with rivets: a head at each crossing of a coarse grid, lit on top with its shadow below and to the side, counted
+      // off the facet as mail's rings are. It is what says leather armour rather than a coat, the shape of the two being alike.
+      const nr = Math.max(1, Math.min(Math.floor(H / cut.b), Math.round((H * HEIGHT_SCALE) / (px * cut.px))));
+      const nc = Math.max(1, Math.min(Math.floor(W / cut.a), Math.round((W * hs) / (px * cut.px))));
+      const kq = Math.round(k * 25) / 25;
+      const under = pathIn(studShadows, shade(mixRGB(P[face.m], COOL_SHADOW, 0.4), kq * 0.6));
+      const heads = pathIn(studHeads, shade(mixRGB(P.rivet, P[face.m], 0.25), Math.min(1.2, kq * 1.06)));
+      const r0 = px * 0.7;
+      for (let r = 0; r < nr; r++) {
+        for (let c = 0; c < nc; c++) {
+          const p = at((c + (r % 2 ? 0.25 : 0.75)) / nc, (r + 0.5) / nr);
+          under.rect(p[0] - r0 + px * 0.45, p[1] - r0 + px * 0.6, 2 * r0, 2 * r0);
+          heads.rect(p[0] - r0, p[1] - r0, 2 * r0, 2 * r0);
         }
       }
       continue;
@@ -4625,6 +4651,8 @@ function worked(g: CanvasRenderingContext2D, l: Laid, faces: number[], P: Palett
     for (const [c, path] of mailRows) { g.strokeStyle = c; g.stroke(path); }
     for (const [c, path] of mailRings) { g.fillStyle = c; g.fill(path); }
   }
+  for (const [c, path] of studShadows) { g.fillStyle = c; g.fill(path); }
+  for (const [c, path] of studHeads) { g.fillStyle = c; g.fill(path); }
 }
 
 /* ---- rare gear --------------------------------------------------------------------- */
