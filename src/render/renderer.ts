@@ -52,7 +52,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { crewOrder, drawFurniture, drawFurnitureGlow, drawFurnitureLive, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, pieceView, type Crew, type PieceView } from './furniture';
+import { crewOrder, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, pieceView, type Crew, type PieceView } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -609,8 +609,10 @@ export class Renderer {
   private furnitureHits: HitRect[] = [];
   /**
    * The pieces drawn this frame with a light of their own -- an altar's stars
-   * -- and where, so it can be laid over the night once the night is down
-   * rather than going under it with the rest (`drawFurnitureGlow`).
+   * -- and where, so the night can be taken back off them when it is laid
+   * down (`furnitureHoles`): they are drawn in their place among everything
+   * else, and shine because the wash is thin over them, not because they are
+   * painted over it.
    */
   private glows: Array<{ sx: number; sy: number; kind: string; view: PieceView }> = [];
   private anvilHits: HitRect[] = [];
@@ -2283,7 +2285,7 @@ export class Renderer {
           });
           // What on it moves -- an altar's stars -- over it, and outside the
           // ring under the pointer: a ring round a bloom of light is a blot.
-          drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view);
+          drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness());
           if (glowsAtNight(piece.kind)) this.glows.push({ sx: ent.sx, sy: ent.sy, kind: piece.kind, view });
         }
         // A sign is a board made to be read, so what is written on it stands
@@ -7385,7 +7387,7 @@ export class Renderer {
     const washes = skyWash(game.hourOfDay(), dark);
     if (washes.length) {
       const lights = game.lights();
-      if (!lights.length) {
+      if (!lights.length && !this.glows.length) {
         for (const wash of washes) {
           ctx.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
           ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -7417,6 +7419,19 @@ export class Renderer {
           nc.arc(sx, sy, r, 0, Math.PI * 2);
           nc.fill();
         }
+        // And off whatever has a light of its own, where it was drawn this frame.
+        for (const n of this.glows) {
+          for (const h of furnitureHoles(n.sx, n.sy, zoom, n.kind, n.view)) {
+            const grad = nc.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+            grad.addColorStop(0, `rgba(0,0,0,${h.a.toFixed(2)})`);
+            grad.addColorStop(0.5, `rgba(0,0,0,${(h.a * 0.45).toFixed(2)})`);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            nc.fillStyle = grad;
+            nc.beginPath();
+            nc.arc(h.x, h.y, h.r, 0, Math.PI * 2);
+            nc.fill();
+          }
+        }
         nc.globalCompositeOperation = 'source-over';
         ctx.drawImage(night, 0, 0);
         // A warm cast where the firelight actually falls, over the cold.
@@ -7427,9 +7442,10 @@ export class Renderer {
           const sy = cam.worldToScreenY(l.x, l.y, h);
           const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
           if (sx < -r || sy < -r || sx > this.canvas.width + r || sy > this.canvas.height + r) continue;
+          const cast = l.cast ?? '255, 186, 92';
           const warm = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-          warm.addColorStop(0, `rgba(255, 186, 92, ${(0.16 * dark * l.strength).toFixed(3)})`);
-          warm.addColorStop(1, 'rgba(255, 186, 92, 0)');
+          warm.addColorStop(0, `rgba(${cast}, ${(0.16 * dark * l.strength).toFixed(3)})`);
+          warm.addColorStop(1, `rgba(${cast}, 0)`);
           ctx.fillStyle = warm;
           ctx.beginPath();
           ctx.arc(sx, sy, r, 0, Math.PI * 2);
@@ -7438,8 +7454,6 @@ export class Renderer {
         ctx.globalCompositeOperation = 'source-over';
       }
     }
-    // And what has a light of its own, over the night rather than under it.
-    for (const n of this.glows) drawFurnitureGlow(ctx, n.sx, n.sy, zoom, n.kind, n.view, dark);
 
     // The chosen tile, marked whether or not the cursor is anywhere near it.
     const chosen = this.selected;

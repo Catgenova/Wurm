@@ -55,7 +55,7 @@ import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
-import { FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
+import { ALTAR_CAST, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { strokeOf } from '../audio/sound';
 import { lockRefusal, type Lockable } from './locks';
@@ -2119,9 +2119,10 @@ export class Game {
       out.push({ x: cx, y: cy, radius: FIRE_REACH, strength: 0.85 });
     }
     for (const f of this.furniture.values()) {
-      if (!f.lit || !near(f.x, f.y)) continue;
+      if (!near(f.x, f.y)) continue;
       const [cx, cy] = furnitureCentre(f);
-      out.push({ x: cx, y: cy, radius: OVEN_REACH, strength: 0.8 });
+      if (f.lit) out.push({ x: cx, y: cy, radius: OVEN_REACH, strength: 0.8 });
+      else if (furnitureDef(f.kind).altar) out.push({ x: cx, y: cy, radius: ALTAR_REACH, strength: ALTAR_GLOW, steady: true, cast: ALTAR_CAST });
     }
     for (const k of this.kilns.values()) if (k.lit && near(k.x, k.y)) out.push({ x: k.x + 0.5, y: k.y + 0.5, radius: OVEN_REACH, strength: 0.8 });
     for (const sm of this.smelters.values()) if (sm.lit && near(sm.x, sm.y)) out.push({ x: sm.x + 1, y: sm.y + 0.5, radius: OVEN_REACH, strength: 0.85 });

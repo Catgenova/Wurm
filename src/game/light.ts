@@ -20,6 +20,8 @@ export interface LightSource {
   strength: number;
   /** True for a light that does not breathe: a candle behind cloth, a glow. */
   steady?: boolean;
+  /** The colour it throws, as 'r, g, b'; firelight when it does not say. */
+  cast?: string;
 }
 
 /** Seconds of burning in one candle, at a lantern made perfectly. */
@@ -59,6 +61,15 @@ export const heldReach = (id: string, ql: number): number => (id === 'torch' ? t
 export const FIRE_REACH = 5;
 export const OVEN_REACH = 4;
 export const FORGE_REACH = 6;
+/**
+ * And an altar's stars: a small pool of violet round the stone, steady, and
+ * only for the look of it -- what a light reaches is drawn, never asked about
+ * by any rule. The stars themselves shine through the wash on their own
+ * (`furnitureHoles` in the renderer).
+ */
+export const ALTAR_REACH = 1.2;
+export const ALTAR_GLOW = 0.55;
+export const ALTAR_CAST = '190, 160, 255';
 
 /**
  * What the night is worth over a point, given everything burning near it: 1
