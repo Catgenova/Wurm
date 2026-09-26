@@ -181,6 +181,21 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 11,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      const knives = WEAPONS.filter((w) => weaponCarry(w.id)?.front).map((w) => named(w.id));
+      return [
+        `Your hair shows below the rim of a ${either(['wool_cap', 'leather_cap', 'helm', 'scale_helm'].map(named))}, and long hair hangs down below a ${named('wool_cap')} or a ${named('leather_cap')} as it is cut. A ${named('chain_coif')} covers all of it.`,
+        `A ${either(knives)} is put away upright at the front of your belt, left of the buckle, rather than at your hip.`,
+        `The ${named('hatchet')} has a square bit with a hammer's poll behind it, the ${named('throwing_axe')} a head sweeping up above a haft bowed toward it, the ${named('javelin')} vanes at its tail and the ${named('carving_knife')} a guard for the fingers. A ${named('chain_hauberk')} hangs longer and flares out past the hips.`,
+        `Dragon scale's scales end in a broad U rather than a point, each hanging over the course below. A ${either(shine)} piece of it shows its colour on the lit tips of its scales rather than in a line round its edge.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
