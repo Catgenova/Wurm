@@ -23,8 +23,12 @@ import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
 import { ACTION_BY_ID } from '../../src/game/actions';
 import { ITEM_DEFS } from '../../src/game/items';
-import { CLASS_CHANGE_COST, CLASSES } from '../../src/game/classes';
+import { CLASS_CHANGE_COST, CLASSES, PERK_CLASSES } from '../../src/game/classes';
 import { BAUBLE_SHARE, findKind, REGRET, REGRET_SAID, REGRET_SHARE, regretDone, regretEmpty, TARNISHED } from '../../src/game/baubles';
+import { perksOf } from '../../src/game/perks';
+
+// The Terraformer holds perks rather than a tree now: two of them, a tier apart.
+const [TF_A, , , TF_B] = perksOf('terraformer').map((p) => p.id);
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -109,7 +113,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', u)::text, true);
   update player set craft_class = 'terraformer', combat_class = 'blade' where world_id = w and uid = u;
   insert into player_node (world_id, uid, node) values
-    (w, u, 'terraformer_1_1'), (w, u, 'terraformer_1_2'), (w, u, 'blade_1_1');
+    (w, u, '${TF_A}'), (w, u, '${TF_B}'), (w, u, 'blade_1_1');
   perform class_fold(w, u);
   insert into said values ('KIND', coalesce(rpc_regret_class(w, 'fishing')->>'why', 'IT WENT THROUGH'));
   insert into said values ('NONE', coalesce(rpc_regret_class(w, 'craft')->>'why', 'IT WENT THROUGH'));
@@ -190,12 +194,14 @@ check('and what it gave is gone from the body',
     && CLASSES.find((c) => c.id === 'blade')!.skills.every((s) => say('FOLDED').split(',').includes(s)),
   say('FOLDED'));
 check('one bauble is used up of two', say('BAUBLES') === '1', say('BAUBLES'));
-check('said as the browser says it', say('UNDONESAID') === regretDone(nameOf('terraformer'), 'craft'), say('UNDONESAID'));
+check('said as the browser says it', say('UNDONESAID') === regretDone(nameOf('terraformer'), 'craft', PERK_CLASSES.has('terraformer')),
+  say('UNDONESAID'));
 check('the next crafting trade costs nothing, with an empty purse', say('NEXT') === 'miner|0|-', say('NEXT'));
 check('the fighting trade is undone the same way, with the one in the bag, and the crafting one kept',
   say('COMBAT') === 'blade|miner|none|none', say('COMBAT'));
 check('the one in the bag is the one used', say('BAGGED') === '0', say('BAGGED'));
-check('said as the browser says it', say('COMBATSAID') === regretDone(nameOf('blade'), 'combat'), say('COMBATSAID'));
+check('said as the browser says it', say('COMBATSAID') === regretDone(nameOf('blade'), 'combat', PERK_CLASSES.has('blade')),
+  say('COMBATSAID'));
 check('and with none left, it is refused', say('SPENT') === REGRET_SAID.none, say('SPENT'));
 
 /* ---- the browser ------------------------------------------------------------ */

@@ -9,7 +9,7 @@ import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } f
 import { REPORTS_A_SESSION } from '../../net/errors';
 import { article, listed, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
-import { CLASS_CHANGE_COST } from '../../game/classes';
+import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
@@ -372,8 +372,19 @@ export const NEWS: News[] = [
     day: '2026-09-26',
     lines: () => [
       `A Bauble of Regret is ${percent(REGRET_SHARE)} of what archaeology turns up, whole. A tarnished bauble is still ${percent(BAUBLE_SHARE)}.`,
-      `With one in your pack, Undo on a trade you hold in the Trades window breaks the bauble and puts that trade down with the nodes you bought for it. The next trade you take up in that slot costs nothing, where a change costs ${CLASS_CHANGE_COST} silver.`,
+      `With one in your pack, Undo on a trade you hold in the Trades window breaks the bauble and puts that trade down with the nodes you bought or the perks you took for it. The next trade you take up in that slot costs nothing, where a change costs ${CLASS_CHANGE_COST} silver.`,
     ],
+  },
+  {
+    n: 28,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'terraformer')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Terraformer has perks instead of a tree: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}. The first tier opens with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}, and at each tier you take one of the ${numberWord(PERKS_PER_TIER)} in the Trades window, where every card says what it changes and by how much.`,
+        'The nodes a Terraformer had bought went with the tree. Putting the trade down, for silver or with a Bauble of Regret, takes its perks with it the same way.',
+      ];
+    },
   },
 ];
 

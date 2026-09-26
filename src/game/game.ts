@@ -853,6 +853,25 @@ export class Game {
    * and a monotonic clock keeps running while a tab is asleep.
    */
   islandClock: (() => number) | null = null;
+  /**
+   * What the perks you hold come to, as the island folded them
+   * (`player.class_mul.fx`), key by key. Empty in a game played alone, which
+   * has no trades. Read through `perk`, which hands back the rule's own number
+   * wherever you hold no perk that changes it.
+   */
+  perkFx: Record<string, number> = {};
+  /** One number off `perkFx`, or the rule's own when no perk you hold changes it. */
+  perk(key: string, otherwise: number): number {
+    const v = this.perkFx[key];
+    return typeof v === 'number' ? v : otherwise;
+  }
+  /** Take the island's fold of your perks, and hand what it says on to the body and the pack. */
+  setPerks(fx: Record<string, number> | null | undefined): void {
+    this.perkFx = { ...(fx ?? {}) };
+    this.player.roadPace = this.perk('walk:road', 1);
+    this.inventory.weightMul = (id: string): number => this.perk(`weight:${id}`, 1);
+    this.events.emit('inventory');
+  }
   rand: () => number = Math.random;
   private foraged = new Map<number, number>();
 
@@ -1857,7 +1876,8 @@ export class Game {
    * carrying is the browser's to weigh, and the drag of it is drawn here.
    */
   carryLimit(): number {
-    return CARRY_BASE + this.skills.get('body_strength') * CARRY_PER_STRENGTH;
+    // And whatever a trade's perks add to it: a Terraformer's Strong Back.
+    return CARRY_BASE + this.skills.get('body_strength') * CARRY_PER_STRENGTH + this.perk('carry', 0);
   }
 
   /** How far past the limit you are, 0 when you are inside it. */

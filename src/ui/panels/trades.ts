@@ -1,6 +1,6 @@
 import type { Game } from '../../game/game';
 import type {
-  ChannelCard, ClassCard, ClassesSaid, Island, RiteCard, TreeNode, TreeSaid, TreeTrade,
+  ChannelCard, ClassCard, ClassesSaid, Island, RiteCard, TreeNode, TreePerk, TreeSaid, TreeTier, TreeTrade,
 } from '../../net/island';
 import { SKILL_DEFS } from '../../game/skills';
 import { REGRET } from '../../game/baubles';
@@ -109,6 +109,8 @@ export class TradesPanel {
       const [said, tree] = await Promise.all([this.island.classes(), this.island.tree()]);
       this.said = said;
       this.tree = tree;
+      // The fold, fresh: the perks it holds are also this browser's to draw by.
+      if (tree?.mul) this.game.setPerks((tree.mul as { fx?: Record<string, number> }).fx);
     } finally {
       this.asking = false;
     }
@@ -255,10 +257,84 @@ export class TradesPanel {
     }
     const chans = new Map(tree.channels.map((ch) => [ch.id, ch]));
     for (const t of tree.trades) {
+      if (t.tiers) {
+        this.page.append(this.tierHead(t));
+        for (const tier of t.tiers) this.page.append(this.tier(tier));
+        continue;
+      }
       this.page.append(this.trade(t));
       for (const r of tree.rites.filter((x) => x.class === t.class)) this.page.append(this.rite(r));
       this.page.append(this.columns(t, chans));
     }
+  }
+
+  /* ---- a perk trade: six tiers, one of three at each ----------------- */
+
+  private tierHead(t: TreeTrade): HTMLDivElement {
+    const head = document.createElement('div');
+    head.className = 'trade-tree-head';
+    const name = document.createElement('span');
+    name.className = 'trade-name';
+    name.textContent = t.name;
+    const tiers = t.tiers ?? [];
+    const open = tiers.filter((x) => x.open && !x.perks.some((p) => p.taken)).length;
+    const left = document.createElement('span');
+    left.className = 'trade-points';
+    left.textContent = open ? `${open} to choose` : `${tiers.filter((x) => x.perks.some((p) => p.taken)).length} of ${tiers.length} chosen`;
+    if (open) left.classList.add('trade-spare');
+    head.append(name, left);
+    return head;
+  }
+
+  /**
+   * A tier: the skill it opens at and its three perks side by side. Once one
+   * is taken the other two are drawn shut, since a tier gives one; before the
+   * tier opens all three are shut, with the island's reason under each.
+   */
+  private tier(tier: TreeTier): HTMLDivElement {
+    const box = document.createElement('div');
+    box.className = `trade-tier${tier.open ? '' : ' trade-tier-shut'}`;
+    const cap = document.createElement('div');
+    cap.className = 'trade-col-head';
+    cap.textContent = tier.tier === 1 ? `Tier ${tier.tier} · with the trade` : `Tier ${tier.tier} · at ${tier.at}`;
+    const row = document.createElement('div');
+    row.className = 'trade-grid';
+    for (const p of tier.perks) row.append(this.perk(p));
+    box.append(cap, row);
+    return box;
+  }
+
+  private perk(p: TreePerk): HTMLDivElement {
+    const box = document.createElement('div');
+    box.className = `trade-node${p.taken ? ' trade-node-taken' : ''}${!p.taken && p.why ? ' trade-node-shut' : ''}`;
+    const top = document.createElement('div');
+    top.className = 'trade-card-top';
+    const name = document.createElement('span');
+    name.className = 'trade-node-name';
+    name.textContent = p.name;
+    top.append(name);
+    if (p.taken) {
+      const mark = document.createElement('span');
+      mark.className = 'trade-points';
+      mark.textContent = 'taken';
+      top.append(mark);
+    }
+    // The exact benefit, as the island has it from the same rulebook.
+    const note = document.createElement('div');
+    note.className = 'trade-worth';
+    note.textContent = p.note;
+    box.append(top, note);
+    if (!p.taken) {
+      const take = document.createElement('button');
+      take.type = 'button';
+      take.className = 'tb-btn tb-small trade-buy';
+      take.textContent = 'Take this one';
+      take.disabled = !!p.why;
+      take.addEventListener('click', () => void this.doorway(this.island!.takePerk(p.id)));
+      box.append(take);
+      if (p.why) box.append(this.why(p.why));
+    }
+    return box;
   }
 
   private trade(t: TreeTrade): HTMLDivElement {

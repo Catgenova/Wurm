@@ -217,6 +217,14 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    */
   game.islandClock = () => island.time();
 
+  /*
+   * Your perks, as the island folded them onto your row: the few things they
+   * change that are this side's to draw -- your pace on a road, what your
+   * pack weighs, what your back takes, and which jobs a menu offers. The
+   * Trades window hands on a fresh fold whenever it asks the island.
+   */
+  game.setPerks(((me.class_mul as { fx?: Record<string, number> } | null) ?? {}).fx);
+
   /** What was last asked about, so the bar has something to point at. */
   let lastTarget: Target | null = null;
   /** Whether the island's book of skills has landed once, so a rise is a rise. */

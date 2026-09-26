@@ -1519,11 +1519,24 @@ jobs:
           # Asked for: a 3% chance of a Bauble of Regret in archaeology, which
           # undoes a trade. Both sides turn one up as often, off the same roll
           # as a tarnished bauble; breaking one puts the trade down with its
-          # tree, leaves the other slot alone, is refused in the browser's
+          # tree or its perks, leaves the other slot alone, is refused in the browser's
           # words, and the next trade in that slot costs nothing.
           npx esbuild supabase/test/regret.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/regret.mjs --log-level=error
           node node_modules/.cache/regret.mjs
+
+      - name: Perks, six tiers of three, and what each one does
+        run: |
+          # Asked for: every class has six tiers, at 50 and then 60 to 100 in
+          # its main skill, and at each one choice of three. Both sides hold
+          # the same perks and fold them the same way; choosing is refused in
+          # the browser's words; the Trades window's tree is every tier with
+          # its three; every key a perk has is read by an island rule; and each
+          # of the Terraformer's eighteen does what its note says, measured
+          # where the rule is.
+          npx esbuild supabase/test/perks.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/perks.mjs --log-level=error
+          node node_modules/.cache/perks.mjs
 
       - name: The exact benefit, and where its number comes from
         run: |

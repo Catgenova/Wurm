@@ -12,6 +12,7 @@ create table if not exists tile_def (
   turns_to_dirt boolean not null default false, collect boolean not null default false
 );
 alter table tile_def add column if not exists paved boolean not null default false;
+alter table tile_def add column if not exists road boolean not null default false;
 create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );
@@ -206,6 +207,16 @@ create table if not exists class_node (
   id text primary key, class text not null, col int not null, rank int not null,
   name text not null, note text not null, channel text not null,
   cost int not null, needs text, mul double precision not null
+);
+create table if not exists class_perk (
+  id text primary key, class text not null, tier int not null, num int not null,
+  name text not null, note text not null, fx jsonb not null
+);
+create table if not exists perk_fx_rule (
+  family text primary key, rule text not null
+);
+create table if not exists perk_tier (
+  tier int primary key, at int not null
 );
 create table if not exists school_def (
   id text primary key, name text not null, skill text not null, note text not null
@@ -890,6 +901,7 @@ insert into item_def values ('plate_boots_mould', 'Plate boots mould', 'tool', 1
 insert into tile_def values (0, 'Grass', 1, false, 'dirt', false, true, true, true, true, false);
 insert into tile_def values (1, 'Dirt', 1, false, 'dirt', false, false, false, true, false, false);
 insert into tile_def values (2, 'Packed dirt', 1.05, false, null, false, false, false, true, false, false);
+update tile_def set road = true where id = 2;
 insert into tile_def values (3, 'Sand', 0.9, false, 'sand', false, false, false, true, false, true);
 insert into tile_def values (4, 'Rock', 0.9, false, null, true, false, false, false, false, false);
 insert into tile_def values (5, 'Steppe', 1, false, 'dirt', false, true, true, true, true, false);
@@ -902,6 +914,7 @@ insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, tr
 insert into tile_def values (12, 'Snow', 0.8, false, null, true, false, false, false, false, false);
 insert into tile_def values (14, 'Cobblestone', 1.25, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 14;
+update tile_def set road = true where id = 14;
 insert into tile_def values (15, 'Field', 0.9, false, 'dirt', false, false, false, false, true, false);
 insert into tile_def values (16, 'Tree', 1, true, null, false, false, false, false, false, false);
 insert into tile_def values (17, 'Bush', 0.5, false, null, false, false, false, false, false, false);
@@ -910,6 +923,7 @@ insert into tile_def values (19, 'Reed', 0.8, false, null, false, false, false, 
 insert into tile_def values (20, 'Lawn', 1, false, null, false, true, true, true, true, false);
 insert into tile_def values (21, 'Stone slabs', 1.3, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 21;
+update tile_def set road = true where id = 21;
 insert into tile_def values (22, 'Stump', 0.7, false, null, false, false, false, false, false, false);
 insert into skill_def values ('body_strength', 'Body strength', 20, null);
 insert into skill_def values ('body_stamina', 'Body stamina', 20, null);
@@ -1032,6 +1046,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('collect', 'Collect', 'filling a shovel', 'digging', 'shovel', false, 0, 0.05, 7, 6, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_worms', 'Turn it over for worms', 'turning the dirt over', 'digging', 'shovel', false, null, 0.04, 6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig', 'Dig', 'digging', 'digging', 'shovel', true, null, 0.05, 6, 8, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_tile', 'Dig out the tile', 'digging out the tile', 'digging', 'shovel', false, null, 0.12, 16, 8, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dredge', 'Dredge', 'dredging', 'digging', 'shovel', true, null, 0.06, 7, 10, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('flatten', 'Flatten', 'flattening', 'digging', 'shovel', false, null, 0.03, 3.5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt', 'Drop dirt', 'dropping dirt', 'digging', null, true, null, 0.02, 2, null, false, false);
@@ -1546,6 +1561,9 @@ delete from class_def;
 delete from class_skill;
 delete from class_channel;
 delete from class_node;
+delete from class_perk;
+delete from perk_fx_rule;
+delete from perk_tier;
 delete from rite_def;
 delete from school_def;
 delete from school_stone;
@@ -3681,6 +3699,12 @@ create or replace function climb_learn_steep() returns double precision language
 create or replace function max_stand() returns double precision language sql immutable as $fn$ select 60::double precision $fn$;
 create or replace function mine_depth() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function dredge_depth() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
+create or replace function flatten_step() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function spoil_reach() returns double precision language sql immutable as $fn$ select 2.5::double precision $fn$;
+create or replace function slope_per_skill() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
+create or replace function slope_floor() returns double precision language sql immutable as $fn$ select 40::double precision $fn$;
+create or replace function corners_per_tile() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
+create or replace function dig_tile_time() returns double precision language sql immutable as $fn$ select 16::double precision $fn$;
 create or replace function melt_share() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function melt_keep() returns double precision language sql immutable as $fn$ select 0.7::double precision $fn$;
 create or replace function melt_heat() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
@@ -4188,7 +4212,7 @@ update tier_odds set level = 0 where tier = 'common';
 update tier_odds set level = 15 where tier = 'rare';
 update tier_odds set level = 35 where tier = 'supreme';
 update tier_odds set level = 60 where tier = 'fantastic';
-insert into class_def values ('terraformer', 'craft', 'Terraformer', 'Nodes apply to digging and paving.', 'digging', 'Bought out: time per action −16%, stamina per action −16%, skill gained per action +18%.');
+insert into class_def values ('terraformer', 'craft', 'Terraformer', 'A perk to take at each of six tiers: the first with the trade, then at 60, 70, 80, 90 and 100 in digging.', 'digging', 'Each tier offers three perks and you take one of them: six in all, out of eighteen.');
 insert into class_skill values ('terraformer', 'digging');
 insert into class_skill values ('terraformer', 'paving');
 insert into class_def values ('miner', 'craft', 'Miner', 'Nodes apply to mining, prospecting and archaeology.', 'mining', 'Bought out: time per action −16%, stamina per action −16%, skill gained per action +18%.');
@@ -4284,15 +4308,6 @@ insert into class_channel values ('tame', 'Quiet', 'Chance to tame', false);
 insert into class_channel values ('force', 'Force', 'Spell damage, hold and skin', false);
 insert into class_channel values ('reach', 'Reach', 'Spell range', false);
 insert into class_channel values ('thrift', 'Thrift', 'Stone wear per cast', true);
-insert into class_node values ('terraformer_1_1', 'terraformer', 1, 1, 'Spadework I', 'Time per action −3%', 'hands', 1, null, 0.97);
-insert into class_node values ('terraformer_1_2', 'terraformer', 1, 2, 'Spadework II', 'Time per action −4%', 'hands', 1, 'terraformer_1_1', 0.96);
-insert into class_node values ('terraformer_1_3', 'terraformer', 1, 3, 'Ditcher', 'Time per action −10%', 'hands', 3, 'terraformer_1_2', 0.9);
-insert into class_node values ('terraformer_2_1', 'terraformer', 2, 1, 'Back I', 'Stamina per action −3%', 'wind', 1, null, 0.97);
-insert into class_node values ('terraformer_2_2', 'terraformer', 2, 2, 'Back II', 'Stamina per action −4%', 'wind', 1, 'terraformer_2_1', 0.96);
-insert into class_node values ('terraformer_2_3', 'terraformer', 2, 3, 'Tireless', 'Stamina per action −10%', 'wind', 3, 'terraformer_2_2', 0.9);
-insert into class_node values ('terraformer_3_1', 'terraformer', 3, 1, 'Eye for a Level I', 'Skill gained per action +3%', 'learn', 1, null, 1.03);
-insert into class_node values ('terraformer_3_2', 'terraformer', 3, 2, 'Eye for a Level II', 'Skill gained per action +4%', 'learn', 1, 'terraformer_3_1', 1.04);
-insert into class_node values ('terraformer_3_3', 'terraformer', 3, 3, 'Surveyor', 'Skill gained per action +10%', 'learn', 3, 'terraformer_3_2', 1.1);
 insert into class_node values ('miner_1_1', 'miner', 1, 1, 'Swing I', 'Time per action −3%', 'hands', 1, null, 0.97);
 insert into class_node values ('miner_1_2', 'miner', 1, 2, 'Swing II', 'Time per action −4%', 'hands', 1, 'miner_1_1', 0.96);
 insert into class_node values ('miner_1_3', 'miner', 1, 3, 'Facewright', 'Time per action −10%', 'hands', 3, 'miner_1_2', 0.9);
@@ -4500,6 +4515,38 @@ insert into class_node values ('warder_2_3', 'warder', 2, 3, 'Over All', 'Spell 
 insert into class_node values ('warder_3_1', 'warder', 3, 1, 'Sparing I', 'Stone wear per cast −3%', 'thrift', 1, null, 0.97);
 insert into class_node values ('warder_3_2', 'warder', 3, 2, 'Sparing II', 'Stone wear per cast −4%', 'thrift', 1, 'warder_3_1', 0.96);
 insert into class_node values ('warder_3_3', 'warder', 3, 3, 'Deep Cut', 'Stone wear per cast −10%', 'thrift', 3, 'warder_3_2', 0.9);
+insert into class_perk values ('terraformer_clean_earth', 'terraformer', 1, 5, 'Clean Earth', 'Dirt, sand, clay, peat and tar you dig, dredge, collect or flatten off come up at +10% QL.', '{"ql:dig":1.1,"ql:dredge":1.1,"ql:collect":1.1,"ql:flatten":1.1}');
+insert into class_perk values ('terraformer_rare_earth', 'terraformer', 1, 6, 'Rare Earth', '1 in 100 goes of Dig, Dredge and Collect bring the material up rare, rolling on to supreme and fantastic at the odds crafting has. Nothing gathered is rare without it.', '{"rare:dig":0.01,"rare:dredge":0.01,"rare:collect":0.01}');
+insert into class_perk values ('terraformer_level_hand', 'terraformer', 1, 9, 'Level Hand', 'Flatten moves two height units a go (now one).', '{"flatten:step":2}');
+insert into class_perk values ('terraformer_quick_level', 'terraformer', 2, 10, 'Quick Level', 'Flatten takes 35% less time a go (3.5 s base).', '{"time:flatten":0.65}');
+insert into class_perk values ('terraformer_steep_cut', 'terraformer', 2, 12, 'Steep Cut', 'The steepest slope Dig, Drop dirt and Dredge may leave is four times your digging (now three times, and never under 40).', '{"slope:digging":4}');
+insert into class_perk values ('terraformer_wader', 'terraformer', 2, 14, 'Wader', 'Dig and Flatten work in water up to 20 deep (now 10).', '{"depth:dig":20}');
+insert into class_perk values ('terraformer_dredger', 'terraformer', 3, 15, 'Dredger', 'Dredge reaches bottoms up to 60 deep (now 30) and takes 20% less time a go.', '{"depth:dredge":60,"time:dredge":0.8}');
+insert into class_perk values ('terraformer_bed_worker', 'terraformer', 3, 17, 'Bed Worker', 'Collect takes 30% less time a go (7 s base).', '{"time:collect":0.7}');
+insert into class_perk values ('terraformer_treasure_nose', 'terraformer', 3, 20, 'Treasure Nose', 'Digging turns up a treasure map in 1 in 200 goes (now 1 in 1000).', '{"map:dig":0.005,"map:dig_tile":0.005}');
+insert into class_perk values ('terraformer_stump_puller', 'terraformer', 4, 23, 'Stump Puller', 'Dig out the stump takes 50% less time, and gives one log of the tree''s kind (now nothing).', '{"time:dig_stump":0.5,"stump:log":1}');
+insert into class_perk values ('terraformer_quick_paver', 'terraformer', 4, 25, 'Quick Paver', 'Pack, Pave (cobblestone) and Pave (slabs) take 35% less time a go.', '{"time:pack":0.65,"time:pave_cobble":0.65,"time:pave_slabs":0.65}');
+insert into class_perk values ('terraformer_bed_true', 'terraformer', 4, 26, 'Bed True', 'Pave (slabs) never fails (now a check at difficulty 10 against the slab''s QL).', '{"fail:pave_slabs":0}');
+insert into class_perk values ('terraformer_frugal_cobbler', 'terraformer', 5, 27, 'Frugal Cobbler', '1 in 3 goes of Pave (cobblestone) use no stone brick.', '{"keep:pave_cobble":0.3333333333333333}');
+insert into class_perk values ('terraformer_road_legs', 'terraformer', 5, 29, 'Road Legs', 'You walk 15% faster on packed dirt, cobblestone and stone slabs.', '{"walk:road":1.15}');
+insert into class_perk values ('terraformer_soil_porter', 'terraformer', 5, 32, 'Soil Porter', 'Dirt, sand and clay weigh 10 kg a unit in your pack (now 20 kg).', '{"weight:dirt":0.5,"weight:sand":0.5,"weight:clay":0.5}');
+insert into class_perk values ('terraformer_strong_back', 'terraformer', 6, 33, 'Strong Back', 'You carry 40 kg more before the load slows you (now 120 kg, and 5 more for every level of body strength).', '{"carry":40}');
+insert into class_perk values ('terraformer_long_reach', 'terraformer', 6, 34, 'Long Reach', 'Drop dirt and Flatten take soil from carts and containers within 5 tiles (now 2.5), and what you dig goes into the nearest unlocked cart or wagon within 5 tiles that nobody else is pulling or driving (now into your pack).', '{"reach:soil":5}');
+insert into class_perk values ('terraformer_dig_out_the_tile', 'terraformer', 6, 44, 'Dig Out the Tile', 'A new job, Dig out the tile: all four corners of a tile come down by one in a single go of 16 s base (four digs take 24 s), and it gives four of the material.', '{"dig_tile":1}');
+insert into perk_fx_rule values ('time', 'mul');
+insert into perk_fx_rule values ('ql', 'mul');
+insert into perk_fx_rule values ('weight', 'mul');
+insert into perk_fx_rule values ('walk', 'mul');
+insert into perk_fx_rule values ('fail', 'mul');
+insert into perk_fx_rule values ('wear', 'mul');
+insert into perk_fx_rule values ('carry', 'add');
+insert into perk_fx_rule values ('jobs', 'add');
+insert into perk_tier values (1, 50);
+insert into perk_tier values (2, 60);
+insert into perk_tier values (3, 70);
+insert into perk_tier values (4, 80);
+insert into perk_tier values (5, 90);
+insert into perk_tier values (6, 100);
 insert into school_def values ('kindling', 'Kindling', 'kindling', 'Heat, out of the warm stones. What it touches burns, and goes on burning.');
 insert into school_stone values ('kindling', 'garnet', 0);
 insert into school_stone values ('kindling', 'ruby', 1);

@@ -77,9 +77,14 @@ export const REGRET_SAID = {
 const slotWord = (kind: 'craft' | 'combat'): string => (kind === 'craft' ? 'crafting' : 'fighting');
 /** Why there is nothing to undo in one of the two slots. */
 export const regretEmpty = (kind: 'craft' | 'combat'): string => `You have no ${slotWord(kind)} trade to undo.`;
-/** And what it says when one is undone: the trade by name, and what the next one in its slot costs. */
-export const regretDone = (trade: string, kind: 'craft' | 'combat'): string =>
-  `The Bauble of Regret breaks, and the ${trade.toLowerCase()}’s trade is put down as though you had never taken it up, its tree with it. `
+/**
+ * And what it says when one is undone: the trade by name, what goes with it --
+ * the perks taken in it, or the tree of a trade not moved to perks yet -- and
+ * what the next one in its slot costs.
+ */
+export const regretDone = (trade: string, kind: 'craft' | 'combat', perks = false): string =>
+  `The Bauble of Regret breaks, and the ${trade.toLowerCase()}’s trade is put down as though you had never taken it up, `
+  + `its ${perks ? 'perks' : 'tree'} with it. `
   + `The next ${slotWord(kind)} trade you take up costs nothing, not ${CLASS_CHANGE_COST} silver.`;
 
 export type BaubleTier = 'minor' | 'major' | 'ancient';

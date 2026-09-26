@@ -11,7 +11,11 @@ import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import { INDOORS_DECAY, MAX_LEVELS, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID } from '../../game/building';
 import { FIRE_COST, FIRE_SUBTILES } from '../../game/campfire';
-import { CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, riteDef, RITES, type Channel } from '../../game/classes';
+import {
+  CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, PERK_CLASSES, PERK_TIER_AT,
+  PERKS_PER_TIER, riteDef, RITES, type Channel,
+} from '../../game/classes';
+import { perksOf } from '../../game/perks';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
 import {
@@ -232,7 +236,7 @@ const crateBill = (): string => {
 // ---- What the help counts and compares, each off the table that decides it. ----
 
 /** A trade's tree: its columns, and the ranks in each. */
-const COLUMNS = CLASS_COLUMNS[CLASSES[0].id].length;
+const COLUMNS = CLASS_COLUMNS[CLASS_NODES[0].class].length;
 const RANKS = NODES_PER_TRADE / COLUMNS;
 /** What a node of this rank costs. */
 const costOf = (rank: number): number => CLASS_NODES.find((n) => n.rank === rank)?.cost ?? 0;
@@ -240,6 +244,9 @@ const costOf = (rank: number): number => CLASS_NODES.find((n) => n.rank === rank
 const pointsFor = (rank: number): string => (costOf(rank) === 1 ? 'a point' : `${numberWord(costOf(rank))} points`);
 /** What a node of this channel and rank says on its card. */
 const nodeSays = (ch: Channel, rank: number): string => CLASS_NODES.find((n) => n.channel === ch && n.rank === rank)?.note ?? '';
+/** The trades moved over to perks, and the first perk of the first of them, as its card says it. */
+const PERK_TRADES = CLASSES.filter((c) => PERK_CLASSES.has(c.id));
+const FIRST_PERK = PERK_TRADES.length ? perksOf(PERK_TRADES[0].id)[0] : undefined;
 /** How many channels the rites push, from the narrowest to the widest. */
 const riteWidths = [...new Set(RITES.map((r) => Object.keys(r.muls).length))].sort((a, b) => a - b);
 /** What a rite does to its channels, as its card says it. */
@@ -539,7 +546,7 @@ export function helpText(): string {
       <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Look at the storey above or below</td></tr>
       <tr><td><kbd>X</kbd></td><td>Cut away the walls facing you</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills</td></tr>
-      <tr><td><kbd>F</kbd></td><td>Trades: the trade you took up, its tree, and its rite</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Trades: the trade you took up, its tree or its perks, and its rite</td></tr>
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
@@ -556,26 +563,31 @@ export function helpText(): string {
     <p>A trade is the thing you are, on top of the things you know. Take one to <b>${CLASS_AT}</b> in any skill it
     covers and it opens; you may hold <b>one craft trade and one fighting trade</b> at once, and the
     <b>Trades</b> window (<kbd>F</kbd>) is where you take them up and spend what they earn.</p>
-    <p>Each trade earns <b>points</b> off the best skill it covers, and its tree is <b>${numberWord(COLUMNS)} columns of
+    <p>A trade on a <b>tree</b> earns <b>points</b> off the best skill it covers, and its tree is <b>${numberWord(COLUMNS)} columns of
     ${numberWord(RANKS)}</b>. A column is one <b>channel</b>: one number in the rules, and every card names it and says
     exactly what that node does to it &mdash; ${(['hands', 'aim', 'knit'] as Channel[]).map((ch, i) => `<i>${nodeSays(ch, [1, 1, RANKS][i])}</i>`).join(', ')}.
     The lower nodes cost ${pointsFor(1)} each, the one above them costs ${numberWord(costOf(RANKS))}, and the lower must be
     bought first. A few channels are better lower &mdash; ${listed(Object.values(CHANNELS).filter((c) => c.lower).map((c) => c.note.toLowerCase()))}
     &mdash; and the sign on the card is the change to the number, so those read as a minus.</p>
+    ${FIRST_PERK ? `<p>A trade on <b>perks</b> &mdash; ${listed(PERK_TRADES.map((c) => `the ${c.name}`))} &mdash; has no tree and no points.
+    It has <b>${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}</b>: the first opens with the trade and the others
+    at ${listed(PERK_TIER_AT.slice(1).map(String))} in its main skill, and at each tier you take <b>one</b> of the
+    ${numberWord(PERKS_PER_TIER)}. Every card says exactly what that perk changes and by how much &mdash;
+    ${FIRST_PERK.name}: <i>${FIRST_PERK.note}</i> A perk taken is kept for as long as the trade is.</p>` : ''}
     <p>A <b>rite</b> is the one thing a trade may ask for out loud: ${listed(riteWidths.map(numberWord)).replace(' and ', ' or ')} channels pushed much
     harder for a fixed number of seconds, paid out of the same <b>favour</b> a prayer is paid from, and
     then a rest before you may ask again. The card gives each of those figures. Some trade one channel away
     for another &mdash; ${riteDef('redhour')?.name} is <i>${riteSays('redhour')}</i> &mdash; so read both halves before you call one.
-    Only the <b>fighting</b> trades have a rite; a craft trade has its ${numberWord(NODES_PER_TRADE)} nodes and none. It sits at
+    Only the <b>fighting</b> trades have a rite; a craft trade has its nodes or its perks and none. It sits at
     the head of its trade's tree, with the reason underneath when you cannot call it.</p>
     <p>Everything on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
     what you have spent, what is in your purse, whether the altar will hear you &mdash; so when a button
     will not press, the sentence under it is the island's own, and it is the truth.</p>
-    <p>Putting a trade down for another costs <b>${CLASS_CHANGE_COST} silver</b>, and the nodes you bought for the old one go
-    with it. The other slot keeps what it had.</p>
+    <p>Putting a trade down for another costs <b>${CLASS_CHANGE_COST} silver</b>, and the nodes you bought or the perks you
+    took for the old one go with it. The other slot keeps what it had.</p>
     <p>A <b>Bauble of Regret</b> undoes a trade instead. ${capital(percent(REGRET_SHARE))} of what a trowel turns up is one,
     whole. With one in your pack, the card of a trade you hold has <i>Undo</i>: it breaks the bauble and puts
-    that trade down with the nodes you bought for it, leaving its slot empty, so the next trade you take up in
+    that trade down with the nodes you bought or the perks you took for it, leaving its slot empty, so the next trade you take up in
     that slot costs nothing. The other slot keeps what it had.</p>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
     <p><b>How you look</b> can be changed at any time: <i>Change…</i> under <b>How you look</b> in

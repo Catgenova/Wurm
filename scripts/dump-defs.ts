@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { BURYABLE, BUSH_DEFS, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
+import { BURYABLE, BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
 import { SKILL_DEFS, isQuiet } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -53,7 +53,10 @@ import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
-import { DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS } from '../src/game/actions';
+import {
+  DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS, FLATTEN_STEP, SPOIL_REACH, SLOPE_PER_SKILL, SLOPE_FLOOR,
+  TILE_CORNERS, DIG_TILE_TIME,
+} from '../src/game/actions';
 import { MELT_HEAT, MELT_KEEP, MELT_SHARE, METAL_CONTENT } from '../src/game/melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR } from '../src/game/metal';
 import { ORDER_LIFE } from '../src/game/orders';
@@ -64,8 +67,9 @@ import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLES
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
 import {
   CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
-  CLASS_POINT_FLOOR, CLASS_POINT_STEP,
+  CLASS_POINT_FLOOR, CLASS_POINT_STEP, PERK_TIER_AT,
 } from '../src/game/classes';
+import { FX_RULE, PERKS } from '../src/game/perks';
 import { SCHOOLS, SPELLS } from '../src/game/arcane';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
@@ -123,6 +127,8 @@ out.push(`create table if not exists tile_def (
 );`);
 /* Laid stone: a shod mount goes quicker on it. */
 out.push(`alter table tile_def add column if not exists paved boolean not null default false;`);
+// A made road -- packed, cobbled or slabbed -- which a Terraformer's Road Legs walk faster.
+out.push(`alter table tile_def add column if not exists road boolean not null default false;`);
 out.push(`create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );`);
@@ -456,6 +462,23 @@ out.push(`create table if not exists class_node (
   id text primary key, class text not null, col int not null, rank int not null,
   name text not null, note text not null, channel text not null,
   cost int not null, needs text, mul double precision not null
+);`);
+/*
+ * And the perks, for a trade moved off its tree: eighteen to a trade, three
+ * to each of six tiers, one of which is taken at each. `fx` is what it does,
+ * key by key, as `perks.ts` has it; `perk_fx_rule` says how two perks' numbers
+ * for one key add up, which is the key's family; and `perk_tier` the skill
+ * each tier opens at.
+ */
+out.push(`create table if not exists class_perk (
+  id text primary key, class text not null, tier int not null, num int not null,
+  name text not null, note text not null, fx jsonb not null
+);`);
+out.push(`create table if not exists perk_fx_rule (
+  family text primary key, rule text not null
+);`);
+out.push(`create table if not exists perk_tier (
+  tier int primary key, at int not null
 );`);
 /*
  * And the rites: one per class, and the only thing a class may ask the island
@@ -858,6 +881,7 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
 for (const [id, d] of Object.entries(TILE_DEFS)) {
   out.push(`insert into tile_def values (${q(Number(id))}, ${q(d.name)}, ${q(d.speed)}, ${q(!!d.blocks)}, ${q(d.digYield)}, ${q(!!d.mineable)}, ${q(!!d.forage)}, ${q(!!d.botanize)}, ${q(!!d.pavable)}, ${q(!!d.turnsToDirt)}, ${q(!!d.collect)});`);
   if (d.paved) out.push(`update tile_def set paved = true where id = ${q(Number(id))};`);
+  if (ROAD_TILES.includes(Number(id))) out.push(`update tile_def set road = true where id = ${q(Number(id))};`);
 }
 for (const d of SKILL_DEFS) {
   out.push(`insert into skill_def values (${q(d.id)}, ${q(d.name)}, ${q(d.start)}, ${q((d as { parent?: string }).parent)});`);
@@ -939,7 +963,8 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'pottery_def', 'mould_def', 'improve_material_def', 'improve_tool', 'improve_stock',
   'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
-  'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'rite_def',
+  'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
+  'perk_fx_rule', 'perk_tier', 'rite_def',
   'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'brew_def',
   'dyeable_item', 'dyeable_class']));
 
@@ -1193,6 +1218,10 @@ for (const [fn, v] of [
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
   ['dredge_depth', DREDGE_DEPTH],
+  /* A go of Flatten, the reach for soil, the slope a spade may leave, and the tile a Terraformer digs out whole. */
+  ['flatten_step', FLATTEN_STEP], ['spoil_reach', SPOIL_REACH],
+  ['slope_per_skill', SLOPE_PER_SKILL], ['slope_floor', SLOPE_FLOOR],
+  ['corners_per_tile', TILE_CORNERS], ['dig_tile_time', DIG_TILE_TIME],
   /* What the fire gives back of a thing melted down, and the heat it takes. */
   ['melt_share', MELT_SHARE], ['melt_keep', MELT_KEEP], ['melt_heat', MELT_HEAT],
   /* Coins: how many a lump strikes, what a strike costs the die, and how hard a strike is. */
@@ -1531,6 +1560,14 @@ for (const n of CLASS_NODES) {
   out.push(`insert into class_node values (` + [q(n.id), q(n.class), q(n.col),
     q(n.rank), q(n.name), q(n.note), q(n.channel), q(n.cost), q(n.needs), q(n.mul)].join(', ') + `);`);
 }
+for (const pk of PERKS) {
+  out.push(`insert into class_perk values (` + [q(pk.id), q(pk.class), q(pk.tier), q(pk.num),
+    q(pk.name), q(pk.note), q(JSON.stringify(pk.fx))].join(', ') + `);`);
+}
+for (const [family, rule] of Object.entries(FX_RULE)) {
+  out.push(`insert into perk_fx_rule values (${q(family)}, ${q(rule)});`);
+}
+PERK_TIER_AT.forEach((at, i) => out.push(`insert into perk_tier values (${q(i + 1)}, ${q(at)});`));
 for (const sc of SCHOOLS) {
   out.push(`insert into school_def values (${q(sc.id)}, ${q(sc.name)}, ${q(sc.skill)}, ${q(sc.note)});`);
   sc.stones.forEach((g, i) => out.push(`insert into school_stone values (${q(sc.id)}, ${q(g)}, ${q(i)});`));

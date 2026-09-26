@@ -24,7 +24,8 @@
  *
  *   **The source, read.** Every fixed piece of text in the fields a player
  *   reads -- `description`, `note`, `lever`, `done`, `fail`, `hint`, `how`,
- *   `said`, whether written in or worked out by a getter, what goes to
+ *   `said`, whether written in or worked out by a getter or by a function
+ *   of the numbers it describes (a perk's note), what goes to
  *   `logMsg` and `say`, a piece's `done`, a dye's note, a setting's hint
  *   and the whole of the help -- is scanned for a figure, a number
  *   word from two up, and a multiplier ("twice", "half again", "a fifth").
@@ -219,6 +220,11 @@ function fragments(node: ts.Expression | undefined, out: Fragment[]): void {
   else if (ts.isArrayLiteralExpression(node)) for (const e of node.elements) fragments(e as ts.Expression, out);
   else if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
     && node.expression.name.text === 'join') fragments(node.expression.expression, out);
+  // A text made from the numbers it describes, `note: (fx) => `...``, is what it returns.
+  else if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+    if (!ts.isBlock(node.body)) fragments(node.body, out);
+    else for (const st of node.body.statements) if (ts.isReturnStatement(st)) fragments(st.expression, out);
+  }
 }
 
 /** The definition a piece of text belongs to: its `id`, or the key it is filed under. */

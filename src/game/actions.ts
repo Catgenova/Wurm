@@ -353,7 +353,8 @@ export function spoilFrom(g: Game, want: string[], uid?: number): { id: string; 
     const held = g.inventory.items.find((it) => it.id === id);
     if (held) return { id, take: () => !!g.inventory.remove(held.uid, 1) };
   }
-  const near = (at: [number, number]): boolean => Math.hypot(at[0] - g.player.x, at[1] - g.player.y) <= 2.5;
+  const reach = g.perk('reach:soil', SPOIL_REACH);
+  const near = (at: [number, number]): boolean => Math.hypot(at[0] - g.player.x, at[1] - g.player.y) <= reach;
   // One spadeful off the top of the pile, not the pile: a stack of five dirt
   // is one row, and lifting the row out of the crate would take all five.
   const one = (it: { count: number }, whole: () => boolean): boolean => {
@@ -444,12 +445,30 @@ export const FRUIT_OLD = 5;
  */
 export const MINE_DEPTH = 10;
 
+/** How far a spade reaches down through water, for this body: a Wader works deeper. */
+export const digDepth = (g: Game): number => g.perk('depth:dig', MINE_DEPTH);
+
 /**
  * How deep a bottom may lie and still be worked from a boat, in height
  * units: three times what a pick or a shovel works to from the shore. Past
  * that a spadeful comes up empty. The island reads the same number.
  */
 export const DREDGE_DEPTH = 30;
+
+/** How much a go of Flatten moves, in height units. */
+export const FLATTEN_STEP = 1;
+
+/** A tile's corners, which a Terraformer's Dig out the tile takes down together. */
+export const TILE_CORNERS = 4;
+/** And the base time of that one go, against four digs one after another. */
+export const DIG_TILE_TIME = 16;
+
+/**
+ * How far soil is reached for when you drop it or flatten with it: the pack,
+ * and then a cart or a container within this many tiles. A Terraformer's Long
+ * Reach takes it further (`reach:soil`).
+ */
+export const SPOIL_REACH = 2.5;
 
 /** Ground with anything living in it, and the damp ground that is full of them. */
 export const WORMY = new Set<TileType>([TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Marsh, TileType.Moss]);
@@ -464,13 +483,21 @@ export const PROSPECT_REACH = 3;
 export const PROSPECT_STEP = 10;
 export const prospectRadius = (skill: number): number => PROSPECT_REACH + Math.floor(skill / PROSPECT_STEP);
 
+/**
+ * The steepest slope a spade or a trowel may leave: this many times the skill,
+ * and never less than `SLOPE_FLOOR`. A Terraformer's Steep Cut raises the
+ * digger's multiple (`slope:digging`).
+ */
+export const SLOPE_PER_SKILL = 3;
+export const SLOPE_FLOOR = 40;
+
 function maxDigSlope(g: Game): number {
-  return Math.max(40, Math.floor(g.skills.get('digging') * 3));
+  return Math.max(SLOPE_FLOOR, Math.floor(g.skills.get('digging') * g.perk('slope:digging', SLOPE_PER_SKILL)));
 }
 
 /** The same rule for a mason raising rock as for a digger moving soil. */
 function maxMasonSlope(g: Game): number {
-  return Math.max(40, Math.floor(g.skills.get('masonry') * 3));
+  return Math.max(SLOPE_FLOOR, Math.floor(g.skills.get('masonry') * g.perk('slope:masonry', SLOPE_PER_SKILL)));
 }
 
 /**
@@ -480,7 +507,7 @@ function maxMasonSlope(g: Game): number {
  * reaches it, so a third of the slope is what it takes, and a tenth of a point
  * is as fine as a skill is ever shown.
  */
-export const slopeNeeds = (slope: number): number => Math.ceil((slope / 3) * 10) / 10;
+export const slopeNeeds = (slope: number, per = SLOPE_PER_SKILL): number => Math.ceil((slope / per) * 10) / 10;
 
 /**
  * Why a cut is too steep, in numbers, or null when it is not.
@@ -495,7 +522,8 @@ export function slopeRefusal(g: Game, skill: 'digging' | 'masonry', cx: number, 
   const would = slopeAfter(g, cx, cy, delta);
   const cap = skill === 'digging' ? maxDigSlope(g) : maxMasonSlope(g);
   if (would <= cap) return null;
-  return `That would leave a slope of ${would}. Your ${skill} allows ${cap}; it would take ${skill} ${slopeNeeds(would).toFixed(1)}.`;
+  const per = g.perk(`slope:${skill}`, SLOPE_PER_SKILL);
+  return `That would leave a slope of ${would}. Your ${skill} allows ${cap}; it would take ${skill} ${slopeNeeds(would, per).toFixed(1)}.`;
 }
 
 /**
@@ -688,7 +716,7 @@ export const ACTIONS: ActionDef[] = [
        * and the same off-by-one that mining was fixed for, and digging was
        * left with.
        */
-      if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
+      if (g.world.getHeight(t.cx, t.cy) < -digDepth(g)) return 'The water is too deep here to work in.';
       if (g.world.getDirt(t.cx, t.cy) <= 0) return 'That corner is bare rock. Only a pickaxe will take it lower.';
       return levelStop(g, t.cx, t.cy, -1) ?? slopeRefusal(g, 'digging', t.cx, t.cy, -1);
     },
@@ -714,6 +742,57 @@ export const ACTIONS: ActionDef[] = [
       g.logMsg(`You dig up some ${itemDef(yieldId).name.toLowerCase()} from the ${cornerName(t)} corner. (QL ${item.ql.toFixed(1)})`, 'event');
       // And one spadeful in a thousand that is not dirt at all.
       maybeMap(g, 'digging', 'shovel');
+    },
+  },
+  /*
+   * A Terraformer's Dig out the tile: all four corners down by one in a
+   * single go, which is four digs' worth of ground in rather less than four
+   * digs' time. Offered only to somebody holding the perk (`dig_tile`); the
+   * island asks the same of it in `act_refusal_rules` and does it in
+   * `perform_dig_tile`.
+   */
+  {
+    id: 'dig_tile',
+    label: 'Dig out the tile',
+    verb: 'digging out the tile',
+    skill: 'digging',
+    tool: 'shovel',
+    stamina: 0.12,
+    baseTime: DIG_TILE_TIME,
+    difficulty: 8,
+    applies: (t, g) => t.kind === 'tile' && g.perk('dig_tile', 0) > 0 && !!TILE_DEFS[tile(t, g)].digYield,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.perk('dig_tile', 0) <= 0) return 'That wants a Terraformer who has learned to dig out a whole tile.';
+      if (!g.inventory.has('shovel')) return 'You need a shovel to dig.';
+      for (const [cx, cy] of tileCorners(t.x, t.y)) {
+        const under = cornerUnderBuilding(g, cx, cy);
+        if (under) return under;
+        if (g.world.getHeight(cx, cy) < -digDepth(g)) return 'The water is too deep here to work in.';
+        if (g.world.getDirt(cx, cy) <= 0) return 'A corner of it is bare rock. Only a pickaxe will take that lower.';
+        const why = levelStop(g, cx, cy, -1) ?? slopeRefusal(g, 'digging', cx, cy, -1);
+        if (why) return why;
+      }
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const w = g.world;
+      const def = TILE_DEFS[w.getTile(t.x, t.y)];
+      if (!g.skillCheck('digging', 8, g.toolQl('shovel'))) {
+        g.missed();
+        g.logMsg('You fail to dig anything useful.', 'event');
+        return;
+      }
+      for (const [cx, cy] of tileCorners(t.x, t.y)) {
+        w.setHeight(cx, cy, w.getHeight(cx, cy) - 1);
+        w.setDirt(cx, cy, w.getDirt(cx, cy) - 1);
+        if (w.getDirt(cx, cy) <= 0) g.exposeRock(cx, cy);
+      }
+      if (def.turnsToDirt) w.setTile(t.x, t.y, TileType.Dirt);
+      const yieldId = def.digYield ?? 'dirt';
+      const item = g.gather(yieldId, { count: TILE_CORNERS, ql: g.productQl('digging', g.toolQl('shovel')) });
+      g.logMsg(`You dig the whole tile down and come away with ${TILE_CORNERS} × ${itemDef(yieldId).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {
@@ -774,8 +853,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('shovel')) return 'You need a shovel to flatten.';
       // Shallows are workable, to the depth a pick works to.
-      if (g.world.centerHeight(t.x, t.y) < -MINE_DEPTH) return 'The water is too deep here to work in.';
-      if (flattenTarget(g, t.x, t.y) < -MINE_DEPTH) return 'The ground you stand on is too deep to work from.';
+      if (g.world.centerHeight(t.x, t.y) < -digDepth(g)) return 'The water is too deep here to work in.';
+      if (flattenTarget(g, t.x, t.y) < -digDepth(g)) return 'The ground you stand on is too deep to work from.';
       const under = underBuilding(g, t.x, t.y);
       if (under) return under;
       return null;

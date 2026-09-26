@@ -514,6 +514,25 @@ export interface TreeTrade {
   points: number;
   spent: number;
   nodes: TreeNode[];
+  /** A trade moved over to perks has these instead of nodes: six tiers of three. */
+  tiers?: TreeTier[];
+}
+
+/** One perk of a tier, and why it may not be taken right now. */
+export interface TreePerk {
+  id: string;
+  name: string;
+  note: string;
+  taken: boolean;
+  why: string | null;
+}
+
+/** One tier of a perk trade: the skill it opens at, whether it has, and its three. */
+export interface TreeTier {
+  tier: number;
+  at: number;
+  open: boolean;
+  perks: TreePerk[];
 }
 
 /** The one thing a trade may ask for out loud, and why it may not right now. */
@@ -2413,8 +2432,8 @@ export class Island {
 
   /**
    * Break a Bauble of Regret to undo one of your two trades: it is put down as
-   * though it had never been taken up, its tree with it, and taking up another
-   * costs nothing.
+   * though it had never been taken up, its perks or its tree with it, and
+   * taking up another costs nothing.
    */
   async regretClass(kind: 'craft' | 'combat'): Promise<string | null> {
     return this.door('rpc_regret_class', { p_kind: kind });
@@ -2423,6 +2442,11 @@ export class Island {
   /** Buy one node of a tree with the points that trade has earned. */
   async takeNode(id: string): Promise<string | null> {
     return this.door('rpc_take_node', { p_node: id });
+  }
+
+  /** Take one perk of a tier: one of the three, for good, until the trade is put down. */
+  async takePerk(id: string): Promise<string | null> {
+    return this.door('rpc_take_perk', { p_perk: id });
   }
 
   /** Call your trade's rite, out of the same favour every prayer is paid from. */

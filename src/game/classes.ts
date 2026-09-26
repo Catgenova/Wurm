@@ -32,6 +32,8 @@
  * it up.
  */
 
+import { numberWord } from './words';
+
 /** Fifty in any skill the class covers, and the card is on the table. */
 export const CLASS_AT = 50;
 
@@ -43,6 +45,29 @@ export const CLASS_AT = 50;
  * purpose -- a class you can swap cheaply is a menu, not a trade.
  */
 export const CLASS_CHANGE_COST = 500;
+
+/**
+ * The craft trades that have been moved from a tree of nodes to perks.
+ *
+ * Asked for: "We are replacing the current bonuses." A trade in this set has
+ * no nodes at all. It has six tiers of perks instead, and at each tier its
+ * holder takes one perk of the three offered there (`perks.ts`). A trade is
+ * moved over whole, when all eighteen of its perks do what they say, so that
+ * nobody is ever offered a card with nothing behind it; the rest keep their
+ * trees until then.
+ */
+export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer']);
+
+/**
+ * The six tiers, as the skill each one opens at.
+ *
+ * The first opens with the trade itself, whichever of its skills took it to
+ * fifty. The other five open at sixty, seventy, eighty, ninety and a hundred
+ * in the trade's main skill, the one it is named for.
+ */
+export const PERK_TIER_AT = [CLASS_AT, 60, 70, 80, 90, 100] as const;
+/** How many perks each tier offers, of which one is taken. */
+export const PERKS_PER_TIER = 3;
 
 export type ClassKind = 'craft' | 'combat';
 
@@ -578,6 +603,14 @@ const skillWords = (id: string): string => id.replace(/_/g, ' ');
  * when you take the trade up, which is exactly when the number is wanted.
  */
 for (const c of CLASSES) {
+  if (PERK_CLASSES.has(c.id)) {
+    const later = PERK_TIER_AT.slice(1);
+    c.note = `A perk to take at each of ${numberWord(PERK_TIER_AT.length)} tiers: the first with the trade, `
+      + `then at ${listed(later.map(String))} in ${skillWords(c.main)}.`;
+    c.lever = `Each tier offers ${numberWord(PERKS_PER_TIER)} perks and you take one of them: `
+      + `${numberWord(PERK_TIER_AT.length)} in all, out of ${numberWord(PERK_TIER_AT.length * PERKS_PER_TIER)}.`;
+    continue;
+  }
   const chans = CLASS_COLUMNS[c.id].map((col) => col.channel);
   c.note = `Nodes apply to ${listed(c.skills.map(skillWords))}.`;
   c.lever = `Bought out: ${chans
@@ -586,7 +619,7 @@ for (const c of CLASSES) {
 }
 
 /** Every node there is, built from the columns rather than written out twice. */
-export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
+export const CLASS_NODES: NodeDef[] = CLASSES.filter((c) => !PERK_CLASSES.has(c.id)).flatMap((c) =>
   CLASS_COLUMNS[c.id].flatMap((col, ci) => ([1, 2, 3] as const).map((rank) => {
     const mul = STEP[col.channel][rank - 1];
     return {
@@ -613,7 +646,7 @@ export const CLASS_NODES: NodeDef[] = CLASSES.flatMap((c) =>
 export const nodeDef = (id: string): NodeDef | undefined => CLASS_NODES.find((n) => n.id === id);
 
 /** How many nodes a trade's tree holds: every trade's the same, three columns of three. */
-export const NODES_PER_TRADE = CLASS_NODES.filter((n) => n.class === CLASSES[0].id).length;
+export const NODES_PER_TRADE = CLASS_COLUMNS[COMBAT_CLASSES[0].id].length * COST.length;
 
 /** What a set of taken nodes comes to, channel by channel. */
 export function foldNodes(taken: readonly string[]): Record<string, number> {

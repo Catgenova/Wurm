@@ -6,7 +6,7 @@ import { emptyNutrition, type Nutrient } from './nutrition';
 import { BELT_MAX } from './belt';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
-import { groundRoll, TILE_DEFS } from '../world/tiles';
+import { groundRoll, ROAD_TILES, TILE_DEFS } from '../world/tiles';
 import type { World } from '../world/world';
 import { cleanLook, DEFAULT_LOOK, type Look } from './look';
 
@@ -176,6 +176,11 @@ export class Player {
    */
   speedMul = 1;
   /**
+   * What a Terraformer's Road Legs are worth on a made road (`ROAD_TILES`), on
+   * foot: one for everybody else. Set from the perks by `Game.setPerks`.
+   */
+  roadPace = 1;
+  /**
    * How full whatever is under you is, 0..1, and 0 when you are on your own
    * feet. It decides how much the ground tells on you.
    */
@@ -253,6 +258,8 @@ export class Player {
     // Feet hardly care what is under them. A laden wheel cares about little
     // else, and that is what makes a paved road worth the stone in it.
     let speed = BASE_SPEED * tileDef.speed * this.speedMul * groundRoll(tileDef.roll, this.wheelLoad);
+    // Your own legs on a made road, if a trade has taught them one.
+    if (this.speedMul === 1 && this.roadPace !== 1 && ROAD_TILES.includes(world.getTile(this.tileX, this.tileY))) speed *= this.roadPace;
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;

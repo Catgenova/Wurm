@@ -1091,6 +1091,13 @@ export class Inventory {
    * it, and everything above this is carried at a price in pace and wind.
    */
   totalWeight(): number {
-    return this.items.reduce((sum, it) => sum + itemWeight(it), 0);
+    return this.items.reduce((sum, it) => sum + itemWeight(it) * (this.weightMul?.(it.id) ?? 1), 0);
   }
+
+  /**
+   * What a trade's perks make of a thing's weight in this pack, by its id: a
+   * Terraformer's Soil Porter halves dirt, sand and clay. Nothing, in a game
+   * without trades. The island weighs a pack the same way in `carried_weight`.
+   */
+  weightMul: ((id: string) => number) | null = null;
 }

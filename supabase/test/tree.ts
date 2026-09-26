@@ -1,15 +1,15 @@
 /**
  * Nine nodes to a trade.
  *
- * Each of the fourteen trades carries three columns of three: two minor at a
- * point each and a major over them at three, which wants the two under it
- * first. A trade is worth two points at fifty and twelve at a hundred, so
+ * Each trade that has not moved to perks yet (`PERK_CLASSES`) carries three
+ * columns of three: two minor at a point each and a major over them at three,
+ * which wants the two under it first. A trade is worth two points at fifty and twelve at a hundred, so
  * twelve buys two whole columns and two over -- never all three.
  *
  * What this asks:
  *
- *   * both sides hold the same hundred and twenty-six nodes, field for field,
- *     and the same four channels;
+ *   * both sides hold the same nodes, field for field, and the same four
+ *     channels;
  *   * the point rule is the same arithmetic on both sides, and the budget is
  *     deliberately smaller than the tree;
  *   * all four refusals are the same sentence on both sides -- the major
@@ -29,7 +29,7 @@
 import { execFileSync } from 'node:child_process';
 import {
   CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES,
-  classPoints, foldNodes, nodeDef, nodeRefusal,
+  classPoints, foldNodes, nodeDef, nodeRefusal, PERK_CLASSES,
 } from '../../src/game/classes';
 
 const psql = (sql: string): string =>
@@ -235,7 +235,7 @@ const said = (key: string): string =>
 const island = said('NODES').split('|').sort();
 const browser = CLASS_NODES.map((n) => [n.id, n.class, n.col, n.rank, n.name, n.channel,
   n.cost, n.needs ?? '-', n.mul].join(':')).sort();
-check('both sides hold the same hundred and twenty-six nodes, field for field',
+check('both sides hold the same nodes, field for field',
   island.join() === browser.join(),
   island.join() === browser.join() ? `${island.length} of them`
     : `island ${island.length}, browser ${browser.length}; first difference ${
@@ -247,12 +247,13 @@ const browserCh = Object.entries(CHANNELS)
 check('and the same four channels', islandCh.join() === browserCh.join(),
   islandCh.join(' / '));
 
-check('nine nodes to a trade, in three columns of three',
-  CLASSES.every((c) => {
+const treed = CLASSES.filter((c) => !PERK_CLASSES.has(c.id));
+check('nine nodes to every trade still on a tree, in three columns of three, and none to a perk trade',
+  CLASS_NODES.every((n) => !PERK_CLASSES.has(n.class)) && treed.every((c) => {
     const mine = CLASS_NODES.filter((n) => n.class === c.id);
     return mine.length === 9 && [1, 2, 3].every((col) =>
       mine.filter((n) => n.col === col).map((n) => n.rank).sort().join() === '1,2,3');
-  }), `${CLASS_NODES.length} over ${CLASSES.length} trades`);
+  }), `${CLASS_NODES.length} over ${treed.length} trades`);
 check('a minor is a point, a major is three, and a major wants the one under it',
   CLASS_NODES.every((n) => n.cost === (n.rank === 3 ? 3 : 1)
     && (n.rank === 1 ? n.needs === null : nodeDef(n.needs ?? '')?.rank === n.rank - 1)));

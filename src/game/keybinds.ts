@@ -19,7 +19,7 @@
  */
 
 import { SIDE_NAMES } from './building';
-import { NODES_PER_TRADE } from './classes';
+import { NODES_PER_TRADE, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import { TURNS } from '../render/view';
 import { capital, numberWord, share } from './words';
 
@@ -67,7 +67,7 @@ export const BINDS: BindDef[] = [
   { id: 'win_craft', label: 'Crafting', hint: 'Everything you could make with what you have.', group: 'Windows', keys: ['KeyR'] },
   { id: 'win_tile', label: 'Tile', hint: 'Everything you could do to whatever you last clicked.', group: 'Windows', keys: ['KeyT'] },
   { id: 'win_skills', label: 'Skills', hint: 'What you know and how well.', group: 'Windows', keys: ['KeyK'] },
-  { id: 'win_trades', label: 'Trades', hint: `The trade you have taken up, the ${numberWord(NODES_PER_TRADE)} nodes behind it, and its rite.`, group: 'Windows', keys: ['KeyF'] },
+  { id: 'win_trades', label: 'Trades', hint: `The trade you have taken up, the ${numberWord(NODES_PER_TRADE)} nodes or ${numberWord(PERK_TIER_AT.length * PERKS_PER_TIER)} perks behind it, and its rite.`, group: 'Windows', keys: ['KeyF'] },
   { id: 'win_tracker', label: 'Tracker', hint: 'The few trades you are watching today, with a bar apiece.', group: 'Windows', keys: ['KeyV'] },
   { id: 'win_events', label: 'Event log', hint: 'What has been happening, and the box you talk in.', group: 'Windows', keys: ['KeyL'] },
   { id: 'win_map', label: 'Map', hint: 'The island as far as you have seen it.', group: 'Windows', keys: ['KeyM'] },

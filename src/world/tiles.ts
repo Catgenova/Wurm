@@ -867,3 +867,9 @@ export const treeVariant = (data: number): number => (data >> 4) & 7;
 export const treeAge = (data: number): TreeAge => TREE_AGES[treeVariant(data)] ?? TREE_AGES[0];
 export const bushSpecies = (data: number): number => Math.min(BUSH_DEFS.length - 1, data & 15);
 export const packTreeData = (species: number, variant: number): number => (species & 15) | ((variant & 7) << 4) | ((species >> 4) << 7);
+
+/**
+ * The made roads: ground packed hard, cobbles and slabs. A Terraformer with
+ * Road Legs walks them faster (`walk:road`), and the island reads the same list.
+ */
+export const ROAD_TILES: TileType[] = [TileType.PackedDirt, TileType.Cobblestone, TileType.Slabs];

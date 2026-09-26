@@ -2980,3 +2980,15 @@ kbd {
   opacity: 0.6;
 }
 
+/* A perk trade's tier: its head, then its three perks side by side. */
+.trade-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.trade-tier-shut .trade-col-head {
+  color: var(--ui-dim);
+}
+
