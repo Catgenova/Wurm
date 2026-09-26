@@ -111,6 +111,28 @@ try {
   const [farStill, nearStill] = round.split('|');
   check('a whole round of the clock leaves the far wild one standing', farStill === 'true', round);
   check('and walks the near one', nearStill === 'false', round);
+
+  /*
+   * And which island a round serves first, which is the quiet one.
+   *
+   * The budget for the wildlife is one for the whole round, and islands used
+   * to be served in the order of their ids: an island with six people on it
+   * and a low id spent all of it, and the wildlife on every island after it
+   * stood still for as long as anybody was playing. The live run's own island
+   * found it, "0 of 96 are somewhere else 15s later". Whatever the ids, the
+   * island with the fewest people awake on it now comes first.
+   */
+  const order = psql(`begin;
+    update player set away = true where world_id <> '${id}';
+    update player set seen_at = now(), away = false where world_id = '${id}' and uid = '${WHO}';
+    update player set seen_at = now(), away = false where world_id = (select id from world where name = 'Stonehaven');
+    select coalesce(string_agg(case when t = '${id}' then 'quiet' when t = (select id from world where name = 'Stonehaven') then 'busy' else 'other' end, ','), 'none')
+      || '|' || (select count(*) from player where world_id = (select id from world where name = 'Stonehaven') and not away)
+      from tick_order() t;
+    rollback;`).split('\n').pop() ?? '';
+  const [served, busy] = order.split('|');
+  check('a round serves the island with one body on it before one with more', served === 'quiet,busy' && Number(busy) > 1,
+    `${served}, ${busy} awake on the busy one`);
 } finally {
   psql(`select rpc_abandon('${id}')`);
 }
