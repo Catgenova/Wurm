@@ -81,7 +81,6 @@ begin
   perform give(w, u, 'stone_brick', 64, 30);
   perform give(w, u, 'mortar', 32, 30);
   perform give(w, u, 'stone_slab', 4, 30);
-  perform give(w, u, 'gold_lump', 1, 30);
   perform give(w, u, 'mallet', 1, 50);
   alt := give(w, u, 'altar', 1, 50);
   box := give(w, u, 'chest', 1, 50);
@@ -184,7 +183,7 @@ if (ALTAR) {
     game.world.setDirt(x, y, 5);
     game.world.setTile(x, y, TileType.Grass, 0);
   }
-  for (const [id, count] of [['trowel', 1], ['stone_brick', 64], ['mortar', 32], ['stone_slab', 4], ['gold_lump', 1]] as Array<[string, number]>) {
+  for (const [id, count] of [['trowel', 1], ['stone_brick', 64], ['mortar', 32], ['stone_slab', 4]] as Array<[string, number]>) {
     game.inventory.add(id, { ql: 30, count });
   }
   game.deed = null;

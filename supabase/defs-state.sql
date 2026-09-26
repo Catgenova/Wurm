@@ -5179,12 +5179,11 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_brazier', 0, 'stone_brick', 24);
 insert into recipe_input values ('make_brazier', 1, 'mortar', 8);
 insert into recipe_input values ('make_brazier', 2, 'ribbon', 4);
-insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_altar', 'altar', 1, 'trowel', null, 'masonry', 'Build altar', 'building a altar', 40, 0.05, 40, false, false, null, null, null, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn. Set it down on any spot of a tile.', 'The courses will not run true and you knock the altar down again.');
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_altar', 'altar', 1, 'trowel', null, 'masonry', 'Build altar', 'building a altar', 40, 0.05, 40, false, false, null, null, null, 'You lay the courses and bed the slab on top. Kneel here at dawn. Set it down on any spot of a tile.', 'The courses will not run true and you knock the altar down again.');
 update recipe set deed = true where id = 'make_altar';
 insert into recipe_input values ('make_altar', 0, 'stone_brick', 64);
 insert into recipe_input values ('make_altar', 1, 'mortar', 32);
 insert into recipe_input values ('make_altar', 2, 'stone_slab', 4);
-insert into recipe_input values ('make_altar', 3, 'gold_lump', 1);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_banner', 'banner', 1, 'mallet', null, 'tailoring', 'Build banner', 'building a banner', 10, 0.05, 10, false, false, 'wood', null, null, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour. Set it down on any spot of a tile.', 'The joints will not pull up square and you pull the banner apart again.');
 insert into recipe_input values ('make_banner', 0, 'cloth', 16);
 insert into recipe_input values ('make_banner', 1, 'shaft', 2);

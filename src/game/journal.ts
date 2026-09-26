@@ -6,12 +6,12 @@ import { METALS } from './metal';
 import { canImprove } from './improve';
 import { traitTier } from './traits';
 import { FIRE_COST } from './campfire';
-import { DEED_DECAY, rarityChance } from './items';
+import { billWords, DEED_DECAY, rarityChance } from './items';
 import { CHOOSE_AT, PATH_LIST } from './meditation';
 import { KNACK_CAP, KNACK_ODDS, TITLE_STEPS } from './titles';
 import { BLESS_CAP } from './faith';
 import { FURNITURE_BY_ID } from './furniture';
-import { fill, NumberWord, numberWord, times } from './words';
+import { capital, fill, NumberWord, numberWord, times } from './words';
 
 /**
  * A journal of goals. There is a great deal to do on this island and nothing
@@ -159,7 +159,15 @@ export const JOURNAL: Chapter[] = [
       { id: 'sat', text: 'Sit on a rug and meditate', hint: 'Weave a rug on a loom', met: did('sat') },
       { id: 'path', text: 'Choose a meditation path', hint: `Offered at meditation ${CHOOSE_AT}, at the rug; the choice is for good`, met: (g) => !!g.player.way },
       { id: 'walked', text: `Reach meditation ${PATH_END} on your path`, met: (g) => !!g.player.way && g.skills.get('meditation') >= PATH_END },
-      { id: 'altar', text: 'Build an altar', hint: 'Stone bricks, mortar, stone slabs and a gold lump, standing on a settlement of yours', met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'altar') },
+      {
+        id: 'altar',
+        text: 'Build an altar',
+        // What it takes, off its own bill.
+        get hint() {
+          return `${capital(billWords(FURNITURE_BY_ID.get('altar')?.bill ?? []))}, standing on a settlement of yours`;
+        },
+        met: (g) => ours(g.furniture.values()).some((f) => f.kind === 'altar'),
+      },
       { id: 'prayed', text: 'Pray at an altar', met: did('prayed') },
       { id: 'cunning', text: 'Cast a circle of cunning on a tool', hint: 'A favour bought at an altar', met: (g) => g.inventory.items.some((it) => (it.bless ?? 0) > 0) },
       { id: 'thrice', text: `Cast ${numberWord(BLESS_CAP)} circles of cunning on one tool`, met: (g) => g.inventory.items.some((it) => (it.bless ?? 0) >= BLESS_CAP) },

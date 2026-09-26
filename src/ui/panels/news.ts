@@ -350,6 +350,13 @@ export const NEWS: News[] = [
       'A settlement that already had more than one keeps them, but it cannot get another. Its bauble sockets were always the settlement\'s, so an altar picked up and set down again keeps what is set in it.',
     ],
   },
+  {
+    n: 25,
+    day: '2026-09-26',
+    lines: () => [
+      `An altar no longer takes a gold lump. It takes ${billWords(furnitureDef('altar').bill)}.`,
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

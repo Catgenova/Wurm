@@ -293,7 +293,7 @@ export const FURNITURE: FurnitureDef[] = [
    * burns.
    */
   piece('brazier', 'Brazier', 1, 1, [['stone_brick', 24], ['mortar', 8], ['ribbon', 4]], 20, 12, 'You lay a shallow bowl of brick and band it with iron. A brazier.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
-  piece('altar', 'Altar', 2, 2, [['stone_brick', 64], ['mortar', 32], ['stone_slab', 4], ['gold_lump', 1]], 40, 40, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true, deed: true }),
+  piece('altar', 'Altar', 2, 2, [['stone_brick', 64], ['mortar', 32], ['stone_slab', 4]], 40, 40, 'You lay the courses and bed the slab on top. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true, deed: true }),
   piece('banner', 'Banner', 1, 1, [['cloth', 16], ['shaft', 2], ['rope', 1], ['nail', 12]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
   piece('well', 'Well', 2, 2, [['stone_brick', 48], ['mortar', 16], ['shaft', 4], ['thick_rope', 1], ['nail', 16]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: raw materials, rubbish, and something to pull it in.
