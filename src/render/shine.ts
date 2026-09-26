@@ -65,8 +65,8 @@ function deepen(hex: string, spread: number): string {
   return c.map((v) => Math.max(0, Math.round(top - (top - v) * spread))).join(', ');
 }
 
-/** A four-pointed star, tapered, centred on the origin. */
-function star(g: CanvasRenderingContext2D, r: number, waist: number): void {
+/** A four-pointed star, tapered, centred on the origin: the one a rare thing wears, and the altar's stars (`render/furniture.ts`). */
+export function star(g: CanvasRenderingContext2D, r: number, waist: number): void {
   g.beginPath();
   g.moveTo(0, -r);
   g.quadraticCurveTo(waist * 0.3, -waist * 0.3, waist, 0);

@@ -2,6 +2,7 @@ import { FURNITURE, furnitureDef } from '../game/furniture';
 import { materialOf } from '../game/materials';
 import type { Side } from '../game/building';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { star } from './shine';
 import { VIEWS } from './view';
 
 /**
@@ -1329,6 +1330,264 @@ function sailCloth(sc: Scene, grid: V3[][], p: Paint): RigItem[] {
   return out;
 }
 
+/* ---- the stars over an altar ----------------------------------------------- */
+
+/**
+ * The stars over an altar, which move.
+ *
+ * A piece is baked once for each way it is seen and blitted from then on,
+ * which is right for a chest and wrong for anything that moves: a fire gets
+ * four flickers, and a figure of stars turned through four pictures would
+ * jerk round rather than turn. So what stands over the altar's dish is not in
+ * the bake. The model keeps room for it -- a part that draws nothing, so the
+ * piece is measured and clicked as tall as it stands -- and `drawFurniture`
+ * draws it over the bake every frame, as it is at that moment.
+ *
+ * It is a figure of ten stars -- a head, two shoulders, a belt of three, two
+ * feet and two raised hands -- set out in depth rather than on a card, joined
+ * by lines, turning once in `SKY_TURN` seconds over the dish and bobbing as it
+ * goes. Loose stars hang round it, and a ring of light leans across the lot,
+ * turning the other way with a mote running round it. Each star is the
+ * four-pointed star a rare thing wears (`shine.ts`): coloured spikes, a pale
+ * body and a white heart, twinkling on a beat of its own, and larger and
+ * brighter on the side of the figure nearer you, so it reads as round.
+ *
+ * The lines are the violet the island marks an altar with (`marks.ts`); the
+ * stars are the gold in the dish, but for one rose shoulder and one blue foot.
+ */
+type Star = readonly [number, number, number, number];
+/**
+ * The figure's stars from its middle, in units -- across, toward the front and
+ * up -- and how bright each is. A unit up is nearly twice as far on the screen
+ * as a unit across, so the figure is set out wide and low to stand on the
+ * screen about as wide as it is tall.
+ */
+const SKY_STARS: Star[] = [
+  [0.5, 1.4, 3.1, 0.8],
+  [-3.9, 2, 1.9, 1.25], [3.7, -1.9, 1.9, 1],
+  [-1.5, 0.8, 0.1, 0.9], [0, 0, 0, 0.95], [1.5, -0.8, -0.1, 0.9],
+  [-3.1, -2.4, -2.4, 1], [3.4, 2.6, -2.2, 1.3],
+  [-5.4, 3.4, 3.5, 0.75], [5.6, -3.1, 3.3, 0.75],
+];
+/** Which stars a line joins: head to shoulders, shoulders to belt, belt to feet, and each shoulder up to its hand. */
+const SKY_LINKS: Array<[number, number]> = [[0, 1], [0, 2], [1, 3], [2, 5], [3, 4], [4, 5], [3, 6], [5, 7], [1, 8], [2, 9]];
+/** The loose stars round it, dimmer and joined to nothing. */
+const SKY_DUST: Star[] = [[-6.8, -2.8, 0.8, 0.45], [6.4, 3.6, -0.6, 0.5], [-1.6, 6.6, -1.4, 0.4], [2.4, -6.6, 1.6, 0.45], [-5.2, 4.4, 2.8, 0.4], [5.8, -4, -2.2, 0.45]];
+/** Each star's colours, deep and pale: the rose shoulder, the blue foot, and gold for the rest. */
+const STAR_INK = (i: number): [string, string] =>
+  i === 1 ? ['226, 110, 104', '255, 206, 196'] : i === 7 ? ['96, 156, 230', '206, 228, 255'] : ['222, 160, 48', '255, 228, 150'];
+const LINE_DEEP = '112, 76, 176', LINE_PALE = '214, 186, 246';
+/** The top of the dish the stars stand over, and where the middle of the figure hangs, in units over the floor. */
+const DISH_Z = 11.25, SKY_Z = 15.2;
+/** Seconds to a turn of the figure, to a bob, to a turn of the ring the other way, and to a lap of the mote on it. */
+const SKY_TURN = 26, SKY_BOB = 5.5, RING_TURN = 41, MOTE_LAP = 7;
+/** The ring: how far out it runs, and how far it leans off level. */
+const RING_R = 8, RING_LEAN = 0.3;
+/** The highest a star reaches, bob and all: the top of the room the model keeps. */
+const SKY_TOP = SKY_Z + 4.8;
+
+/**
+ * Draw the stars over an altar standing at (sx, sy), at `t` seconds.
+ *
+ * `glow`, when it is over nought, is the dark of the night it is being drawn
+ * over: then only the light is drawn, added onto the night after it has gone
+ * down (the renderer's night pass), so the stars shine at night instead of
+ * going under the wash with everything else. By day it is nought and the
+ * whole of it is drawn in its place among the rest.
+ */
+function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, view: PieceView, t: number, glow = 0): void {
+  const sc = new Scene(g, view, zoom);
+  const turn = (t / SKY_TURN) * TAU, c = Math.cos(turn), s = Math.sin(turn);
+  const mid = SKY_Z + Math.sin((t / SKY_BOB) * TAU) * 0.35;
+  const at = (x: number, y: number, z: number): Pt => {
+    const [px, py] = sc.P(x, y, z);
+    return [sx + px * zoom, sy + py * zoom];
+  };
+  /** A star of the figure where it has turned to: its place on the screen and how near you it is. */
+  const place = ([x, y, z]: Star): { p: Pt; d: number } => {
+    const wx = x * c - y * s, wy = x * s + y * c;
+    return { p: at(wx, wy, mid + z), d: sc.depth(wx, wy, mid + z) };
+  };
+  const figure = SKY_STARS.map(place);
+  const dust = SKY_DUST.map(place);
+  const ds = [...figure, ...dust].map((q) => q.d);
+  const dMin = Math.min(...ds), dSpan = Math.max(1e-6, Math.max(...ds) - dMin);
+  /** 0 on the far side of the figure, 1 on the near. */
+  const near = (d: number): number => (d - dMin) / dSpan;
+  // A unit across the screen, in pixels: what the light is measured in.
+  const unit = Math.hypot(view.ux, view.vx) * zoom;
+  const lit = glow > 0;
+  g.save();
+
+  /*
+   * The light off it first: a bloom round the figure, breathing, and the pool
+   * in the dish lit from above, with a beam between them -- the stars stand
+   * on the altar rather than floating somewhere near it. As for a rare thing,
+   * the colour goes down in the ordinary way and the light is added on top;
+   * after dark, only the light.
+   */
+  const breath = 0.8 + 0.2 * Math.sin(t * 1.3);
+  const bloom = (x: number, y: number, r: number, ink: string, a: number): void => {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(${ink}, ${a.toFixed(3)})`);
+    grad.addColorStop(0.5, `rgba(${ink}, ${(a * 0.4).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${ink}, 0)`);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, r, 0, TAU);
+    g.fill();
+  };
+  const [cx, cy] = at(0, 0, mid);
+  const [dx, dy] = at(0, 0, DISH_Z);
+  if (!lit) {
+    g.globalCompositeOperation = 'source-over';
+    bloom(cx, cy, unit * 10, LINE_DEEP, 0.1 * breath);
+  }
+  g.globalCompositeOperation = 'lighter';
+  bloom(cx, cy, unit * 10, LINE_PALE, (lit ? 0.3 * glow : 0.12) * breath);
+  bloom(dx, dy, unit * 4.6, LINE_PALE, (lit ? 0.45 * glow : 0.2) * breath);
+  const [, by] = at(0, 0, mid - 2.4);
+  const beam = g.createLinearGradient(dx, dy, dx, by);
+  beam.addColorStop(0, `rgba(${LINE_PALE}, ${((lit ? 0.3 * glow : 0.16) * breath).toFixed(3)})`);
+  beam.addColorStop(1, `rgba(${LINE_PALE}, 0)`);
+  g.fillStyle = beam;
+  g.beginPath();
+  g.moveTo(dx - unit * 2.6, dy);
+  g.lineTo(dx - unit * 0.9, by);
+  g.lineTo(dx + unit * 0.9, by);
+  g.lineTo(dx + unit * 2.6, dy);
+  g.closePath();
+  g.fill();
+
+  /*
+   * The ring, leaning and turning the other way. Cut into short lengths, each
+   * as bright as it is near, so the far side of it goes behind the figure
+   * and the near side comes in front of it; and a mote running round it.
+   */
+  const ringTurn = -(t / RING_TURN) * TAU, rc = Math.cos(ringTurn), rs = Math.sin(ringTurn);
+  const onRing = (a: number): { p: Pt; d: number } => {
+    const x = Math.cos(a) * RING_R, y = Math.sin(a) * RING_R * Math.cos(RING_LEAN), z = Math.sin(a) * RING_R * Math.sin(RING_LEAN);
+    const wx = x * rc - y * rs, wy = x * rs + y * rc;
+    return { p: at(wx, wy, mid + z), d: sc.depth(wx, wy, mid + z) };
+  };
+  const dMid = sc.depth(0, 0, mid);
+  const RING_N = 48;
+  const ringPts = Array.from({ length: RING_N + 1 }, (_, j) => onRing((j / RING_N) * TAU));
+  const ringHalf = (front: boolean): void => {
+    for (let j = 0; j < RING_N; j++) {
+      const a = ringPts[j], b = ringPts[j + 1];
+      if ((a.d + b.d) / 2 > dMid !== front) continue;
+      const k = front ? 1 : 0.55;
+      if (!lit) {
+        g.globalCompositeOperation = 'source-over';
+        g.strokeStyle = `rgba(${LINE_DEEP}, ${(0.3 * k).toFixed(3)})`;
+        g.lineWidth = Math.max(0.8, 0.45 * zoom);
+        g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+      }
+      g.globalCompositeOperation = 'lighter';
+      g.strokeStyle = `rgba(${LINE_PALE}, ${((lit ? 0.5 * glow : 0.32) * k).toFixed(3)})`;
+      g.lineWidth = Math.max(0.5, 0.24 * zoom);
+      g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+    }
+    for (const lap of [0, 0.5]) {
+      const m = onRing(((t / MOTE_LAP + lap) % 1) * TAU);
+      if (m.d > dMid !== front) continue;
+      drawStar(m.p, 0.55, front ? 1 : 0.6, [LINE_DEEP, '246, 238, 255'], 0);
+    }
+  };
+
+  /**
+   * One star: short spikes in its deep colour, a pale body over them and a
+   * round white heart added on top -- a point of light rather than a spark.
+   * After dark, the light alone.
+   */
+  function drawStar([x, y]: Pt, mag: number, bright: number, [deep, pale]: [string, string], tilt: number): void {
+    const r = (0.6 + mag * 0.8) * zoom;
+    g.save();
+    g.translate(x, y);
+    g.rotate(tilt);
+    if (!lit) {
+      g.globalCompositeOperation = 'source-over';
+      g.fillStyle = `rgba(${deep}, ${(0.9 * bright).toFixed(3)})`;
+      star(g, r * 2.2, r * 0.55);
+      g.fill();
+      g.fillStyle = `rgba(${pale}, ${(0.95 * bright).toFixed(3)})`;
+      star(g, r * 1.3, r * 0.5);
+      g.fill();
+    } else {
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = `rgba(${pale}, ${(0.7 * bright * glow).toFixed(3)})`;
+      star(g, r * 1.9, r * 0.5);
+      g.fill();
+    }
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = `rgba(255, 255, 255, ${(0.8 * bright * (lit ? glow : 1)).toFixed(3)})`;
+    g.beginPath();
+    g.arc(0, 0, r * 0.4, 0, TAU);
+    g.fill();
+    g.restore();
+  }
+
+  ringHalf(false);
+
+  // The lines, the far ones first, as bright as they are near.
+  const links = SKY_LINKS.map(([i, j]) => ({ a: figure[i], b: figure[j], n: (near(figure[i].d) + near(figure[j].d)) / 2 }));
+  links.sort((p, q) => p.n - q.n);
+  for (const { a, b, n } of links) {
+    const k = 0.45 + 0.4 * n;
+    if (!lit) {
+      g.globalCompositeOperation = 'source-over';
+      g.strokeStyle = `rgba(${LINE_DEEP}, ${(0.7 * k).toFixed(3)})`;
+      g.lineWidth = Math.max(1.1, 0.4 * zoom + 0.5);
+      g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+    }
+    g.globalCompositeOperation = 'lighter';
+    g.strokeStyle = `rgba(${LINE_PALE}, ${((lit ? 0.55 * glow : 0.55) * k).toFixed(3)})`;
+    g.lineWidth = Math.max(0.6, 0.2 * zoom + 0.25);
+    g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+  }
+
+  // And the stars, far to near, each twinkling on its own beat.
+  const stars = [
+    ...figure.map((q, i) => ({ ...q, mag: SKY_STARS[i][3], ink: STAR_INK(i), i })),
+    ...dust.map((q, i) => ({ ...q, mag: SKY_DUST[i][3], ink: STAR_INK(-1), i: i + SKY_STARS.length })),
+  ];
+  stars.sort((p, q) => p.d - q.d);
+  for (const q of stars) {
+    const beat = 1.7 + ((q.i * 0.37) % 1.4);
+    const twinkle = 0.72 + 0.28 * Math.sin((t / beat) * TAU + q.i * 2.1);
+    const n = near(q.d);
+    drawStar(q.p, q.mag * (0.86 + 0.24 * n) * (0.92 + 0.08 * twinkle), (0.62 + 0.38 * n) * twinkle, q.ink, ((q.i % 3) - 1) * 0.12);
+  }
+
+  ringHalf(true);
+  g.restore();
+}
+
+/** What is drawn over a piece's bake every frame, by the kind of piece: only the altar's stars, so far. */
+const LIVE: Record<string, typeof drawSky> = { altar: drawSky };
+
+/**
+ * Whatever on a piece moves, drawn over its bake as it is this frame -- for
+ * most pieces, nothing. `drawFurniture` draws it too unless it is told not
+ * to, which the renderer does when it wants the piece's ring under the
+ * pointer round the stone and not round the light.
+ */
+export function drawFurnitureLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, view: PieceView): void {
+  LIVE[kind]?.(ctx, sx, sy, zoom, view, performance.now() / 1000);
+}
+
+/** Whether a piece has a light of its own to lay over the night (`drawFurnitureGlow`). */
+export const glowsAtNight = (kind: string): boolean => kind in LIVE;
+
+/**
+ * What a piece gives off after dark, at the dark `dark` is: laid over the
+ * night once it is down, so it shines through it rather than going under it.
+ */
+export function drawFurnitureGlow(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, view: PieceView, dark: number): void {
+  if (dark > 0.02) LIVE[kind]?.(ctx, sx, sy, zoom, view, performance.now() / 1000, dark);
+}
+
 /* ---- the pieces --------------------------------------------------------------- */
 
 /** What a piece is drawn with, besides its frame: its wood, whether it is alight, its dye and its one number. */
@@ -2202,9 +2461,11 @@ const MODELS: Record<string, Model> = {
    * back and an arched mouth at the front with a niche for the wood under
    * it; lit, the mouth is full of fire. The brazier is a shallow bowl of
    * brick on a turned foot, banded in iron, holding coals, and a fire over
-   * them when it is lit. The altar is a block of coursed brick on a plinth
-   * under a slab, a gold sun set into its face, a step to kneel on, a runner
-   * down the slab, a gold bowl and two candles. The well is a round kerb of
+   * them when it is lit. The altar is a pedestal: a coursed shaft on a
+   * stepped plinth with a gold sun set into its face, a slab bedded on its
+   * capital and a gold dish on the slab holding a pool of night; over the dish
+   * a figure of stars stands turning, which is drawn as it moves rather than
+   * baked (`drawSky`). The well is a round kerb of
    * stone with the water deep in it, a windlass on two posts with the rope
    * wound on its drum and the bucket hung over the hole, under a shingled
    * roof.
@@ -2293,36 +2554,44 @@ const MODELS: Record<string, Model> = {
     if (lit) sc.fire([0, 0, 7.7], 5.6, 7.6, frame);
   },
   altar: ({ sc }) => {
-    const SLAB = paintOf(hex('#ece6da')), GOLD = paintOf(hex('#e9c35c'), 0.5), RUNNER = paintOf(hex('#a4473f'));
-    sc.box(-8.6, 8.6, -7, 5.6, 0, 1.2, STONE);
-    sc.box(-6, 6, 5.6, 8.8, 0, 1.4, STONE, { top: (F, w, h) => rectOn(sc, F, w * 0.25, h * 0.2, w * 0.75, h * 0.8, rgb(RUNNER.body, 1.05), RUNNER.ink, 0.6) });
+    const SLAB = paintOf(hex('#ece6da')), GOLD = paintOf(hex('#e9c35c'), 0.5), POOL = paintOf(hex('#3f3572'), 0.5);
     const coursed = bricks(sc, STONE, 1.15);
-    sc.box(-7.2, 7.2, -5.8, 4.6, 1.2, 8.2, STONE, {
+    // The plinth, and a step up all round it to kneel on.
+    sc.box(-8.6, 8.6, -8.6, 8.6, 0, 1.1, STONE);
+    sc.box(-6.6, 6.6, -6.6, 6.6, 1.1, 2.1, STONE);
+    // The shaft on its base moulding, coursed, and the gold set into its face: a sun, its rays alternately long and short.
+    sc.box(-5, 5, -5, 5, 2.1, 3, SLAB);
+    sc.box(-3.8, 3.8, -3.8, 3.8, 3, 8.6, STONE, {
       front: (F, w, h) => {
         coursed(F, w, h);
-        // The gold set into the face: a sun, its rays alternately long and short.
-        const c = w / 2, t = h * 0.52;
+        const c = w / 2, t = h * 0.5;
         const rays: Pt[] = [];
-        for (let i = 0; i < 24; i++) { const a = (i / 24) * TAU, r = i % 2 ? 1.9 : i % 4 ? 2.5 : 3; rays.push(F(c + Math.cos(a) * r, t + Math.sin(a) * r)); }
+        for (let i = 0; i < 24; i++) { const a = (i / 24) * TAU, r = i % 2 ? 1.25 : i % 4 ? 1.65 : 2; rays.push(F(c + Math.cos(a) * r, t + Math.sin(a) * r)); }
         sc.fillInk(rays, rgb(GOLD.body, 0.96), GOLD.ink);
-        sc.fillInk(circleOn(F, c, t, 1.35, 16), rgb(GOLD.body, 1.1), GOLD.ink);
+        sc.fillInk(circleOn(F, c, t, 0.9, 16), rgb(GOLD.body, 1.1), GOLD.ink);
       },
       back: coursed, left: coursed, right: coursed,
     });
-    sc.box(-8.2, 8.2, -6.6, 5.4, 8.2, 9.4, SLAB, { front: grain(sc, SLAB, 1, true, 0.3) });
-    sc.panel([[-2.6, -6.6, 9.42], [2.6, -6.6, 9.42], [2.6, 5.4, 9.42], [-2.6, 5.4, 9.42]], RUNNER, (F, k) => {
-      for (const u of [0.1, 0.86]) sc.fillInk([F(u, 0), F(u + 0.04, 0), F(u + 0.04, 1), F(u, 1)], rgb(GOLD.body, k), GOLD.ink, 0);
+    // The capital, and the slab bedded on it.
+    sc.box(-4.8, 4.8, -4.8, 4.8, 8.6, 9.3, SLAB);
+    sc.box(-5.8, 5.8, -5.8, 5.8, 9.3, 10.2, SLAB, { front: grain(sc, SLAB, 1, true, 0.3) });
+    // The gold dish, its lip round a pool of night with the first of the stars already in it.
+    sc.lathe(0, 0, [[10.2, 2.6], [10.5, 3.3], [11, 4.1], [DISH_Z, 4.3]], GOLD, 24, {
+      cap: paintOf(mix(GOLD.body, [255, 246, 214], 0.25), 0.5),
+      lid: (F) => {
+        const pool: Pt[] = [];
+        for (let j = 0; j < 28; j++) pool.push(F((j / 28) * TAU, 3.5));
+        sc.fillInk(pool, rgb(POOL.body), GOLD.ink);
+        const g = sc.g;
+        for (let i = 0; i < 7; i++) {
+          const [x, y] = F(i * 2.4 + 0.5, 0.6 + ((i * 7) % 5) * 0.6);
+          g.fillStyle = i % 3 ? '#f4e4b4' : '#d6c4f4';
+          g.beginPath(); g.arc(x, y, i % 3 ? 0.42 : 0.55, 0, TAU); g.fill();
+        }
+      },
     });
-    sc.panel([[-2.6, 5.45, 9.42], [2.6, 5.45, 9.42], [2.6, 5.45, 7.3], [-2.6, 5.45, 7.3]], RUNNER, (F, k) => {
-      for (const u of [0.1, 0.86]) sc.fillInk([F(u, 0), F(u + 0.04, 0), F(u + 0.04, 1), F(u, 1)], rgb(GOLD.body, k), GOLD.ink, 0);
-      sc.fillInk([F(0, 0.86), F(1, 0.86), F(1, 1), F(0, 1)], rgb(GOLD.body, k), GOLD.ink, 0.4);
-    });
-    sc.lathe(0, -3.2, [[9.42, 0.8], [9.8, 0.9], [10.6, 1.6], [10.8, 1.7]], GOLD, 16, { cap: paintOf(hex('#7a5a2a')) });
-    for (const cx of [-6.2, 6.2]) {
-      sc.lathe(cx, -3.6, [[9.4, 0.8], [9.7, 0.6], [9.9, 0.35]], GOLD, 12);
-      sc.lathe(cx, -3.6, [[9.9, 0.38], [12, 0.38]], paintOf(hex('#f7f0dc')), 10, { cap: paintOf(hex('#fbf6e8')) });
-      sc.fire([cx, -3.6, 12], 0.8, 1.6, 0);
-    }
+    // Room for the stars over the dish: measured, so the piece is as tall as it is drawn and is clicked there, but drawn by `drawSky`, not here.
+    sc.part(-RING_R, RING_R, -RING_R, RING_R, DISH_Z, SKY_TOP, () => undefined);
   },
   well: ({ sc, wood }) => {
     const R = 7.4, zk = 5.4, hole = 5.2;
@@ -3097,13 +3366,15 @@ const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.
  * sailed from baking a new one every frame.
  */
 export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, view: PieceView = pieceView('s', 0), material?: string,
-  crew?: Crew, layer: number | 'all' = 'all'): [number, number, number, number] {
+  crew?: Crew, layer: number | 'all' = 'all', live = true): [number, number, number, number] {
   const b = bakedFor(zoom, kind, lit, tint, trim, view, material, crew);
   const k = zoom / b.scale;
   const sheets = [b.canvas, ...(b.layers ?? [])];
   for (const [i, c] of sheets.entries()) {
     if (layer === 'all' || layer === i) ctx.drawImage(c, sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k);
   }
+  // And whatever on it moves, over the last of it, as it is this frame.
+  if (live && (layer === 'all' || layer === sheets.length - 1)) drawFurnitureLive(ctx, sx, sy, zoom, kind, view);
   // What it covers on the screen, from its floor contact: the box it is clicked by.
   return [b.bounds[0] * zoom, b.bounds[1] * zoom, b.bounds[2] * zoom, b.bounds[3] * zoom];
 }

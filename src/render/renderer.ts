@@ -52,7 +52,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { crewOrder, drawFurniture, furnitureSpan, FURNITURE_HEIGHT, headingView, pieceView, type Crew, type PieceView } from './furniture';
+import { crewOrder, drawFurniture, drawFurnitureGlow, drawFurnitureLive, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, pieceView, type Crew, type PieceView } from './furniture';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -607,6 +607,12 @@ export class Renderer {
   private smelterHits: HitRect[] = [];
   private kilnHits: HitRect[] = [];
   private furnitureHits: HitRect[] = [];
+  /**
+   * The pieces drawn this frame with a light of their own -- an altar's stars
+   * -- and where, so it can be laid over the night once the night is down
+   * rather than going under it with the rest (`drawFurnitureGlow`).
+   */
+  private glows: Array<{ sx: number; sy: number; kind: string; view: PieceView }> = [];
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
@@ -1551,6 +1557,7 @@ export class Renderer {
     this.smelterHits.length = 0;
     this.kilnHits.length = 0;
     this.furnitureHits.length = 0;
+    this.glows.length = 0;
     this.anvilHits.length = 0;
     this.postHits.length = 0;
     this.trapHits.length = 0;
@@ -2272,8 +2279,12 @@ export class Renderer {
            */
           const crew = ent.layer === 0 ? crewOf(piece.kind) ?? undefined : undefined;
           this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
-            drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all');
+            drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all', false);
           });
+          // What on it moves -- an altar's stars -- over it, and outside the
+          // ring under the pointer: a ring round a bloom of light is a blot.
+          drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view);
+          if (glowsAtNight(piece.kind)) this.glows.push({ sx: ent.sx, sy: ent.sy, kind: piece.kind, view });
         }
         // A sign is a board made to be read, so what is written on it stands
         // over it in the world rather than waiting in a tooltip.
@@ -7427,6 +7438,8 @@ export class Renderer {
         ctx.globalCompositeOperation = 'source-over';
       }
     }
+    // And what has a light of its own, over the night rather than under it.
+    for (const n of this.glows) drawFurnitureGlow(ctx, n.sx, n.sy, zoom, n.kind, n.view, dark);
 
     // The chosen tile, marked whether or not the cursor is anywhere near it.
     const chosen = this.selected;

@@ -309,6 +309,13 @@ export const NEWS: News[] = [
       `A step between tiles of more than ${share(CLIMB_LEARN_FROM)} of ${MAX_STEP} up or down trains it on your own feet only: not in a saddle, on a cart or a boat, on a bridge or on an upper floor.`,
     ],
   },
+  {
+    n: 20,
+    day: '2026-09-26',
+    lines: () => [
+      'An altar is a coursed stone pedestal with the gold sun in its face and a gold dish on top. Over the dish a figure of stars joined by lines turns, with a ring of light round it, and at night the stars shine through the dark.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */
