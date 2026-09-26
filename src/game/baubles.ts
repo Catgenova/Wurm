@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Deed, Game } from './game';
-import { rankAtLeast } from './game';
+// From `ranks.ts` and not `game.ts`: `game.ts` imports the actions list, which spreads ours.
+import { rankAtLeast } from './ranks';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture';
 import { describeWith, itemName, rarityOf, rarityStep, type Item } from './items';
 import { times } from './words';

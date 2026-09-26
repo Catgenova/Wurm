@@ -1,5 +1,6 @@
 import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
+import { rankAtLeast, type DeedRole } from './ranks';
 import { defaultKey } from './keybinds';
 import { listed, numberWord, share, spanWords } from './words';
 import { brazierBurn, shoreNear } from './placeables';
@@ -130,25 +131,8 @@ export interface Deed {
   baubles?: DeedBauble[];
 }
 
-/**
- * What somebody is on a settlement.
- *
- * `deed_member` was a flat list: in or out, and everybody in it could dig up
- * the gardens, empty the stores and pull the walls down. Inviting anybody to
- * anything was therefore a decision nobody could take back short of throwing
- * them out, which is not a thing you want to have to do to somebody you are
- * merely unsure about.
- *
- *   founder   planted the stake. Cannot be demoted, may do everything, and
- *             holds the master key to every lock on their own land.
- *   mayor     everything but founding: invites, expels, ranks, upgrades,
- *             and may disband.
- *   builder   the ordinary citizen, and what an invitation makes you: shapes
- *             the ground, builds, takes from the stores.
- *   guest     walks the land and opens nothing. What you offer somebody you
- *             want to show round rather than hand the keys to.
- */
-export type DeedRole = 'founder' | 'mayor' | 'builder' | 'guest';
+// The ranks live in `ranks.ts`, which imports nothing; see there for why.
+export { DEED_RANKS, rankAtLeast, type DeedRole } from './ranks';
 
 /**
  * How far a go's quality is spread when it is not simply your skill: from
@@ -170,13 +154,6 @@ export function productQlRange(skill: number, toolQl = 0): [number, number] {
   if (toolQl <= 0) return [Math.min(100, s * QL_LOW + QL_BARE), Math.min(100, s * (QL_LOW + QL_SPAN) + QL_BARE)];
   return [Math.min(s, Math.max(1, toolQl * QL_LOW)), s];
 }
-
-/** The ranks in order, so "at least a builder" is one comparison. */
-export const DEED_RANKS: DeedRole[] = ['guest', 'builder', 'mayor', 'founder'];
-
-/** Whether a rank is at least another. Absent means the solo game: founder. */
-export const rankAtLeast = (have: DeedRole | undefined, want: DeedRole): boolean =>
-  DEED_RANKS.indexOf(have ?? 'founder') >= DEED_RANKS.indexOf(want);
 
 export const DEED_RADIUS = 5;
 // A deed stake says how much land it claims: the token and this far each way.
