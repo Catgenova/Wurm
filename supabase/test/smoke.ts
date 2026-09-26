@@ -743,9 +743,19 @@ async function main(): Promise<void> {
     let cx = Math.floor(me.x);
     let cy = Math.floor(me.y);
     let found = false;
-    for (let r = 0; r <= 12 && !found; r++) {
+    /*
+     * Out as far as the island goes, a ring at a time, rather than twelve
+     * tiles. Twelve was the whole of a live run's search the day it came
+     * ashore on a spur of rock, and it said "all rock and water" of an island
+     * with soil a short walk off -- a fault in where the island put us, now
+     * put right in `findBaySpawn`, reported as a fault in digging. Each ring
+     * looks only at its own edge, so no tile is asked about twice.
+     */
+    const farthest = Math.max(back.w, back.h);
+    for (let r = 0; r <= farthest && !found; r++) {
       for (let dy = -r; dy <= r && !found; dy++) {
         for (let dx = -r; dx <= r && !found; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = Math.floor(me.x) + dx;
           const y = Math.floor(me.y) + dy;
           if (x < 1 || y < 1 || x >= back.w || y >= back.h) continue;
@@ -806,7 +816,7 @@ async function main(): Promise<void> {
     check('everything we started has finished', left === 0,
       left === 0 ? 'the head is empty' : 'jobs still waiting after thirty seconds of sweeping');
     check('there is somewhere on this island worth digging', found,
-      found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water within twelve tiles');
+      found ? `corner ${cx},${cy}: ${back.getDirt(cx, cy)} of soil over the rock` : 'all rock and water, or none of it to be walked to, on the whole island');
     /*
      * And the walk has to have happened.
      *

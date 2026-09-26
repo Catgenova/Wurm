@@ -2,6 +2,7 @@ import { hash2, mulberry32, Noise2D } from './noise';
 import { SAPLING_SHARE, TileType, packTreeData } from './tiles';
 import { ORE_DENSITY } from './ore';
 import { World } from './world';
+import { groundStep, standsOn } from '../game/player';
 import { ATLAS_PNG } from './atlas-data';
 import { BAY, REGIONS, SPAWN_RADIUS, SPAWN_REGION, buildRegionMap, rockKindFor, speciesFor } from './regions';
 
@@ -570,34 +571,77 @@ export function findBaySpawn(atlas: Atlas, seed: number, size = 4096): { x: numb
    * bay is marginal.
    */
   const start = Math.floor(hash2(seed, 7, 13) * zone.length);
-  let best: { x: number; y: number } | null = null;
-  let bestScore = -Infinity;
-  let bestUnder = -Infinity;
   const W = 16;
-  for (let k = 0; k < 48; k++) {
-    const spot = where(zone[(start + k * 37) % zone.length]);
-    const win = generateAtlasWindow(seed, atlas, spot.x - W / 2, spot.y - W / 2, W, W, size);
-    const cw = W + 1;
+  /*
+   * How a spot measures up, rolled in a sixteen square window round it: how
+   * far over the water the lowest corner of its own tile is, how many of the
+   * window's tiles are dry and not too steep, and how many of them a body put
+   * down on it can walk to without getting its feet wet, by the walk's own
+   * rules -- `groundStep` between tiles, `standsOn` the tile stepped onto, and
+   * nothing on it that blocks.
+   *
+   * The last is what the first two could not say. A live smoke test came
+   * ashore at the top of a sea cliff: its tile's lowest corner five over the
+   * water, the tiles round it dry enough to count, and the tile itself 52
+   * from its highest corner to its lowest, with a drop of more than a body
+   * can step on every side of it. Nothing could walk it off, so there was
+   * nowhere to dig, to found or to go.
+   */
+  const measure = (gx: number, gy: number): { under: number; dry: number; reach: number } => {
+    const win = generateAtlasWindow(seed, atlas, gx, gy, W, W, size);
+    const ground = new World(W, W, win.heights, win.tiles, win.data, win.dirt, win.rock);
+    const corners = (x: number, y: number): number[] =>
+      [ground.getHeight(x, y), ground.getHeight(x + 1, y), ground.getHeight(x + 1, y + 1), ground.getHeight(x, y + 1)];
     const mid = W / 2;
-    const c = [win.heights[mid * cw + mid], win.heights[mid * cw + mid + 1],
-      win.heights[(mid + 1) * cw + mid + 1], win.heights[(mid + 1) * cw + mid]];
-    const under = Math.min(...c);
+    const under = Math.min(...corners(mid, mid));
     let dry = 0;
     for (let y = 0; y < W; y++) {
       for (let x = 0; x < W; x++) {
-        const q = [win.heights[y * cw + x], win.heights[y * cw + x + 1],
-          win.heights[(y + 1) * cw + x + 1], win.heights[(y + 1) * cw + x]];
+        const q = corners(x, y);
         if (Math.min(...q) >= 0 && Math.max(...q) - Math.min(...q) <= 52) dry++;
       }
     }
-    // Standing on dry ground, and over half of what is around you walkable.
-    if (under >= 4 && dry >= W * W * 0.55) return spot;
-    const score = Math.min(under, 4) * 1000 + dry;
-    if (score > bestScore) { bestScore = score; best = spot; bestUnder = under; }
+    const footing = (x: number, y: number): boolean => Math.min(...corners(x, y)) >= 0 && ground.isPassable(x, y) && standsOn(ground, x, y);
+    let reach = 0;
+    if (footing(mid, mid)) {
+      const seen = new Uint8Array(W * W);
+      const open = [mid * W + mid];
+      seen[open[0]] = 1;
+      while (open.length) {
+        const at = open.pop()!;
+        const x = at % W, y = (at / W) | 0;
+        reach++;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= W || seen[ny * W + nx]) continue;
+            if (!footing(nx, ny) || !groundStep(ground, x, y, nx, ny)) continue;
+            seen[ny * W + nx] = 1;
+            open.push(ny * W + nx);
+          }
+        }
+      }
+    }
+    return { under, dry, reach };
+  };
+  // Standing on dry ground, over half of what is around you walkable, and a quarter of it within walking distance of where you stand.
+  const good = (m: { under: number; dry: number; reach: number }): boolean => m.under >= 4 && m.dry >= W * W * 0.55 && m.reach >= W * W * 0.25;
+  // Failing that, out of the water first, then as much to walk to as there is, then the margin over the water, then the dry.
+  const scoreOf = (m: { under: number; dry: number; reach: number }): number =>
+    (m.under >= 0 ? 1e7 : 0) + Math.min(m.reach, W * W * 0.25) * 1e4 + Math.min(Math.max(m.under, 0), 4) * 1e3 + m.dry;
+  let best: { x: number; y: number } | null = null;
+  let bestScore = -Infinity;
+  let bestGood = false;
+  for (let k = 0; k < 48; k++) {
+    const spot = where(zone[(start + k * 37) % zone.length]);
+    const m = measure(spot.x - W / 2, spot.y - W / 2);
+    if (good(m)) return spot;
+    const score = scoreOf(m);
+    if (score > bestScore) { bestScore = score; best = spot; bestGood = good(m); }
   }
 
   /*
-   * And if the bay has nothing dry on it, look at the island instead.
+   * And if the bay has nowhere dry to walk about on, look at the island instead.
    *
    * The loop above rolls each candidate and *measures* how far under the water
    * it is, and then the fallback handed back the best of them whatever that
@@ -607,7 +651,7 @@ export function findBaySpawn(atlas: Atlas, seed: number, size = 4096): { x: numb
    * instead of getting it back, so it is exhausted inside a minute and stays
    * exhausted until something walks it to dry land. Nothing does.
    *
-   * It has never happened on a real island — 4096, 1024 and 256 all answer dry
+   * It has never happened on a real island -- 4096, 1024 and 256 all answer dry
    * on every seed tried. It happens on 27 seeds in 60 at 64 tiles a side,
    * which is the size the live smoke test rolls, with a fresh random seed
    * every run: a coin flip on whether the run means anything. Fourteen checks
@@ -615,32 +659,19 @@ export function findBaySpawn(atlas: Atlas, seed: number, size = 4096): { x: numb
    * changed.
    *
    * So the last resort is a coarse sweep of the whole island rather than a
-   * shrug: the same window and the same two questions, over a grid of at most
-   * 24 by 24. It is the wrong shore — nobody meant to start here — but it is
-   * ground, and the alternative is the sea.
+   * shrug: the same window and the same questions, over a grid of at most
+   * 24 by 24. It is the wrong shore -- nobody meant to start here -- but it is
+   * ground, and the alternative is the sea or a ledge.
    */
-  if (bestUnder < 4) {
+  if (!bestGood) {
     const step = Math.max(1, Math.floor((size - W) / 23));
     for (let gy = 0; gy + W < size; gy += step) {
       for (let gx = 0; gx + W < size; gx += step) {
         const spot = { x: gx + W / 2, y: gy + W / 2 };
-        const win = generateAtlasWindow(seed, atlas, gx, gy, W, W, size);
-        const cw = W + 1;
-        const mid = W / 2;
-        const c = [win.heights[mid * cw + mid], win.heights[mid * cw + mid + 1],
-          win.heights[(mid + 1) * cw + mid + 1], win.heights[(mid + 1) * cw + mid]];
-        const under = Math.min(...c);
-        let dry = 0;
-        for (let y = 0; y < W; y++) {
-          for (let x = 0; x < W; x++) {
-            const q = [win.heights[y * cw + x], win.heights[y * cw + x + 1],
-              win.heights[(y + 1) * cw + x + 1], win.heights[(y + 1) * cw + x]];
-            if (Math.min(...q) >= 0 && Math.max(...q) - Math.min(...q) <= 52) dry++;
-          }
-        }
-        if (under >= 4 && dry >= W * W * 0.55) return spot;
-        const score = Math.min(under, 4) * 1000 + dry;
-        if (score > bestScore) { bestScore = score; best = spot; bestUnder = under; }
+        const m = measure(gx, gy);
+        if (good(m)) return spot;
+        const score = scoreOf(m);
+        if (score > bestScore) { bestScore = score; best = spot; }
       }
     }
   }
