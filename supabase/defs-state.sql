@@ -3646,7 +3646,11 @@ create or replace function knack_home() returns double precision language sql im
 create or replace function table_best() returns double precision language sql immutable as $fn$ select 0.2::double precision $fn$;
 create or replace function kept_best() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
 create or replace function nutrient_decay() returns double precision language sql immutable as $fn$ select 0.00013333333333333334::double precision $fn$;
+create or replace function max_step() returns double precision language sql immutable as $fn$ select 32::double precision $fn$;
 create or replace function climb_per_level() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
+create or replace function climb_learn_from() returns double precision language sql immutable as $fn$ select 0.3333333333333333::double precision $fn$;
+create or replace function climb_learn() returns double precision language sql immutable as $fn$ select 0.04::double precision $fn$;
+create or replace function climb_learn_steep() returns double precision language sql immutable as $fn$ select 0.12::double precision $fn$;
 create or replace function max_stand() returns double precision language sql immutable as $fn$ select 60::double precision $fn$;
 create or replace function mine_depth() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function dredge_depth() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;

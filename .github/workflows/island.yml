@@ -1456,6 +1456,19 @@ jobs:
             --outfile=node_modules/.cache/worn.mjs --log-level=error
           node node_modules/.cache/worn.mjs
 
+      - name: Climbing that stays climbed
+        run: |
+          # Reported: "climbing seems to level up then resets to 1". The browser
+          # raised it for itself and the island never did, so the book the
+          # island sends wrote it back. The same hillside goes to both sides:
+          # the island pays a go a step off the walk it is told about, at the
+          # browser's rate; the browser pays nothing where the island owns the
+          # body and the same goes where it does not; and flat ground, a gentle
+          # slope, a storey and a saddle teach nothing on either.
+          npx esbuild supabase/test/climb.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/climb.mjs --log-level=error
+          node node_modules/.cache/climb.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

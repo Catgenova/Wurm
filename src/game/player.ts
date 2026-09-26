@@ -30,6 +30,16 @@ export const MAX_STEP = 32;
  */
 export const CLIMB_PER_LEVEL = 0.4;
 /**
+ * What a step between tiles teaches the feet that take it: nothing flatter
+ * than a third of `MAX_STEP`, which is ground that would not have turned you
+ * back when you started, and above that `CLIMB_LEARN`, and `CLIMB_LEARN_STEEP`
+ * more for every `MAX_STEP` of height in it. On an island the island pays it,
+ * off the walk it is told about (`rpc_move`); it reads these three.
+ */
+export const CLIMB_LEARN_FROM = 1 / 3;
+export const CLIMB_LEARN = 0.04;
+export const CLIMB_LEARN_STEEP = 0.12;
+/**
  * The steepest tile a body can stand on: sixty between its highest corner and
  * its lowest, before climbing, which raises it at the rate it raises the
  * step. The step between tiles is asked about separately; this is the tile
@@ -303,7 +313,9 @@ export class Player {
     if (fx !== tx || fy !== ty) {
       const level = step(fx, fy, tx, ty);
       if (level === null) return false;
-      this.lastClimb = Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy));
+      // The ground's own step, taken on the ground: a floor is flat whatever
+      // the land under it does.
+      this.lastClimb = this.level === 0 && level === 0 ? Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy)) : 0;
       this.level = level;
     }
     this.x = nx;

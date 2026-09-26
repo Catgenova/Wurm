@@ -31,7 +31,7 @@ import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
-import { BASE_SPEED, CARRY_CRAWL, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot, SLOTS } from './gear';
@@ -2423,11 +2423,10 @@ export class Game {
     /*
      * A knack and a title are the island's to hand out where there is one.
      *
-     * Climbing and swimming are still earned off your own feet here, so this
-     * still runs on an island — and `earn_knacks` and `earn_titles` run over
-     * there for everything else. Both rolling would be two knacks for one go
-     * and a title announced twice, and then the next answer disagreeing with
-     * whichever of them wrote last.
+     * `earn_knacks` and `earn_titles` run over there, off every raise the
+     * island makes. Both rolling would be two knacks for one go and a title
+     * announced twice, and then the next answer disagreeing with whichever of
+     * them wrote last.
      */
     if (!this.bodyFromIsland) {
       this.earnKnacks(id);
@@ -2695,8 +2694,22 @@ export class Game {
     p.maxStand = this.standSlope();
     p.swimSpeed = Math.min(0.85, SWIM_SPEED + this.skills.get('swimming') * 0.0033);
     if (p.lastClimb > 0) {
-      // Only ground that would have turned you back at the start teaches you anything.
-      if (p.lastClimb > MAX_STEP / 3) this.gainSkill('climbing', 0.04 + (p.lastClimb / MAX_STEP) * 0.12);
+      /*
+       * Only ground that would have turned you back at the start teaches you
+       * anything, and only to your own feet: a saddle's climb is the beast's,
+       * a hull and a cart seat climb nothing, and a bridge deck is not the
+       * ground under it.
+       *
+       * And on an island, not here at all. Reported as climbing going up and
+       * then back to one: this raised it into the browser's copy of the book,
+       * the island had never raised it, and the book the island sends every
+       * beat is the island's -- so the number went up, was written over, and
+       * was gone at the next refresh, as swimming's was before it. The island
+       * pays it now, off the walk it is told about (`rpc_move`), by this rule.
+       */
+      if (!this.bodyFromIsland && !p.carried && !this.bridgeAt(p.tileX, p.tileY) && p.lastClimb > MAX_STEP * CLIMB_LEARN_FROM) {
+        this.gainSkill('climbing', CLIMB_LEARN + (p.lastClimb / MAX_STEP) * CLIMB_LEARN_STEEP);
+      }
       p.lastClimb = 0;
     }
     this.checkJournal();

@@ -7,7 +7,7 @@ import { RECIPE_BY_ID } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { numberWord, spanWords } from '../../game/words';
+import { numberWord, share, spanWords } from '../../game/words';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
@@ -18,6 +18,7 @@ import { ARMOUR, SHIELDS, WEAPONS } from '../../game/gear';
 import { JEWEL_PIECES } from '../../game/gems';
 import { itemDef, RARITIES } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
+import { CLIMB_LEARN_FROM, MAX_STEP } from '../../game/player';
 import type { UIWindow } from '../windows';
 
 /**
@@ -299,6 +300,14 @@ export const NEWS: News[] = [
         `A ${named('chain_coif')}'s face opening comes to a point under the chin; a ${named('scale_helm')}'s fins stand on its crown; long hair under a cap or helm falls as one curtain.`,
       ];
     },
+  },
+  {
+    n: 19,
+    day: '2026-09-26',
+    lines: () => [
+      'Climbing is kept. It went up as you walked and then back to where the island had it at its next update or when you reloaded, because only your browser was raising it; the island raises it now.',
+      `A step between tiles of more than ${share(CLIMB_LEARN_FROM)} of ${MAX_STEP} up or down trains it on your own feet only: not in a saddle, on a cart or a boat, on a bridge or on an upper floor.`,
+    ],
   },
 ];
 

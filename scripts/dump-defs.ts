@@ -91,7 +91,7 @@ import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECOND
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from '../src/game/body';
 import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, GUIDE_BATCH, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, MOBS_RANGE, PEACE_REACH, REGION, SENT_INLINE, STIR_COARSE_EVERY, STIR_SLACK, STORED_SETTLE, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../src/game/keep';
-import { CLIMB_PER_LEVEL, MAX_STAND, SWIM_DEPTH } from '../src/game/player';
+import { CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../src/game/graves';
@@ -1158,8 +1158,14 @@ for (const [fn, v] of [
    * Real seconds rather than world seconds — a crop ripening answers to
    * `WORLD_PACE`, a database tidying up after itself does not.
    */
-  /* What a level of climbing adds to the steepest step a body can take. */
+  /* The steepest step between tiles a body can take, and what a level of
+     climbing adds to it. `max_step` was written out by hand in the riding
+     migration; it is read from here now, so the two cannot come apart. */
+  ['max_step', MAX_STEP],
   ['climb_per_level', CLIMB_PER_LEVEL],
+  /* And what a step between tiles teaches: nothing under a share of `max_step`,
+     and above it a base and a part more for every `max_step` of height in it. */
+  ['climb_learn_from', CLIMB_LEARN_FROM], ['climb_learn', CLIMB_LEARN], ['climb_learn_steep', CLIMB_LEARN_STEEP],
   /* The steepest tile a body can stand on, before climbing. */
   ['max_stand', MAX_STAND],
   /* And how far under the waterline a rock face may still be worked. */

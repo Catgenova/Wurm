@@ -50,7 +50,7 @@ import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
 import { OVEN_CAPACITY } from '../../game/placeables';
-import { BASE_SPEED, CARRY_CRAWL } from '../../game/player';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP } from '../../game/player';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
 import { CRAFT_REACH, RECIPE_BY_ID, RECIPES } from '../../game/recipes';
 import { MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
@@ -477,8 +477,11 @@ export function helpText(): string {
       <tr><td><b>Mind logic</b></td><td>Jobs you can line up, and difficult crafts come out right more often. Earned by crafting.</td></tr>
       <tr><td><b>Soul strength</b></td><td>A wild animal is readier to trust you. Earned by taming, success or not.</td></tr>
     </table>
-    <p><b>Climbing</b> raises the step you can take between tiles &mdash; ground that turns you back at
-    the start is walkable once you have worked at it &mdash; and it is earned by walking steep ground.
+    <p><b>Climbing</b> raises the step you can take between tiles from ${MAX_STEP} and the slope of a tile
+    you can stand on from ${MAX_STAND}, both by ${CLIMB_PER_LEVEL} a level &mdash; ground that turns you back
+    at the start is walkable once you have worked at it. It is earned on your own feet, by every step
+    between tiles more than ${share(CLIMB_LEARN_FROM)} of ${MAX_STEP} up or down, and more for a steeper
+    one: not in a saddle, on a cart or a boat, on a bridge or on an upper floor.
     <b>Swimming</b> makes deep water less of a wade and costs less wind, and is earned by being out of
     your depth. Neither announces every scrap it picks up; both say so as they pass each whole point,
     and the Skills window (<kbd>K</kbd>) shows what each one is worth right now.</p>

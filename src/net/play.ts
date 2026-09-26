@@ -349,10 +349,11 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
        * Reported as "floating text only shows for climbing". It was exactly
        * that: `gainSkill` is what raises a skill *and* emits the event the
        * floating number is drawn from, and on an island the island raises
-       * them, so the only ones left running through it here are the two the
-       * browser still owns — climbing and swimming, off your own feet in
-       * `update`. Everything else came down this line, which set the numbers
-       * and then emitted a nameless gain of nothing:
+       * them, so the only ones left running through it here were the two the
+       * browser still owned then — climbing and swimming, off your own feet
+       * in `update`, both of which the island raises now too. Everything else
+       * came down this line, which set the numbers and then emitted a
+       * nameless gain of nothing:
        *
        *     game.events.emit('skill', '', 0);
        *
