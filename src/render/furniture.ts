@@ -1373,13 +1373,20 @@ type Star = readonly [number, number, number, number];
  * as a unit across, so the figure is set out wide and low to stand on the
  * screen about as wide as it is tall; and the brightest of it is at the top:
  * the head, then the raised hands, the shoulders, the belt and the feet.
+ *
+ * Face on it is a person with both arms up: the head clear over the
+ * shoulders, the hands out past them, the feet an even stride below the belt.
+ * What depth it has is in the arms, which is what keeps it more than a line
+ * of beads edge on; the head, belt and feet stay near one plane, since a unit
+ * toward you is a unit down the screen and a foot out of the plane hangs
+ * lower than the other.
  */
 const SKY_STARS: Star[] = [
-  [0.81, 2.1, 5.35, 1.5],
-  [-6.34, 3, 3.28, 1.1], [6.01, -2.85, 3.28, 1.1],
-  [-3.25, 1.2, 0.17, 1], [0, 0, 0, 1], [3.25, -1.2, -0.17, 1],
-  [-5.04, -3.6, -3.14, 0.85], [5.53, 3.9, -2.79, 0.85],
-  [-8.77, 5.1, 6.04, 1.3], [9.1, -4.65, 5.69, 1.3],
+  [0, -1.2, 7.6, 1.5],
+  [-7, 1.6, 3.3, 1.1], [7, -1.6, 3.3, 1.1],
+  [-3.9, 0.4, 0.1, 1], [0, 0, 0, 1], [3.9, -0.4, -0.1, 1],
+  [-4.4, 2.6, -4.8, 0.85], [4.4, -2.6, -4.8, 0.85],
+  [-9.4, 4.8, 6.2, 1.3], [9.4, -4.8, 6.2, 1.3],
 ];
 /** Which stars a line joins: head to shoulders, shoulders to belt, belt to feet, and each shoulder up to its hand. */
 const SKY_LINKS: Array<[number, number]> = [[0, 1], [0, 2], [1, 3], [2, 5], [3, 4], [4, 5], [3, 6], [5, 7], [1, 8], [2, 9]];
@@ -1397,15 +1404,15 @@ const SKY_TURN = 26, SKY_BOB = 5.5, BOB = 0.7, RING_TURN = 24, MOTE_LAP = 7;
 /**
  * How much the turn lingers face-on: a figure of stars laid out across and up
  * is a string of beads end on, so it turns slowly while it faces you and
- * quickly past its edge -- still once in `SKY_TURN` -- a fifth as fast at its
- * slowest. `SKY_FACE` is how far round from square the figure is widest,
+ * quickly past its edge -- still once in `SKY_TURN` -- two fifths as fast at
+ * its slowest. `SKY_FACE` is how far round from square the figure is widest,
  * since its hands and feet do not sit on one plane.
  */
-const SKY_EASE = 0.4, SKY_FACE = 0.5;
+const SKY_EASE = 0.3, SKY_FACE = 0.47;
 /** The ring: how far out it runs, and how far it leans off level. */
 const RING_R = 12, RING_LEAN = 0.1;
 /** The highest a star reaches, bob and spikes and all: the top of the room the model keeps. */
-const SKY_TOP = SKY_Z + 8.5;
+const SKY_TOP = SKY_Z + 10.5;
 
 /** Where everything over an altar is at `t`, on a screen with the altar's floor at (sx, sy). */
 function skyAt(view: PieceView, zoom: number, sx: number, sy: number, t: number) {
@@ -1503,18 +1510,24 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
       bloom(q.p[0], q.p[1], r, '255, 244, 208', (0.2 + 0.2 * starFlare(t, i)) * day);
     }
   }
+  // And after dark a gold glow round every star, so what shows round each through the wash is its own light, not the grass.
+  if (night > 0.02) {
+    figure.forEach((q, i) => bloom(q.p[0], q.p[1], starR(SKY_STARS[i][3], zoom) * 2.2, '255, 214, 150', 0.3 * night));
+  }
   /*
    * And a beam between the two, so the stars stand on the altar rather than
    * hanging somewhere near it. It comes up out of the pool rather than
    * starting at its surface, and it is laid three times, each narrower, so
    * its sides are soft and nothing in it is an edge.
    */
-  const [, by] = at(0, 0, mid - 3.8);
+  const [, by] = at(0, 0, mid - 5.2);
   const beamA = (0.3 + 0.2 * night) * breath;
+  // Violet by day, which lands on green grass as lilac -- the pale of the lines lands there as mint -- and the pale by night.
+  const beamInk = [200, 90, 230].map((v, i) => Math.round(v + ([214, 186, 246][i] - v) * night)).join(', ');
   const beam = g.createLinearGradient(dx, dy, dx, by);
-  beam.addColorStop(0, `rgba(${LINE_PALE}, 0)`);
-  beam.addColorStop(0.3, `rgba(${LINE_PALE}, ${(beamA / 3).toFixed(3)})`);
-  beam.addColorStop(1, `rgba(${LINE_PALE}, 0)`);
+  beam.addColorStop(0, `rgba(${beamInk}, 0)`);
+  beam.addColorStop(0.3, `rgba(${beamInk}, ${(beamA / 3).toFixed(3)})`);
+  beam.addColorStop(1, `rgba(${beamInk}, 0)`);
   g.fillStyle = beam;
   for (const k of [1, 0.75, 0.5]) {
     g.beginPath();
@@ -1551,7 +1564,7 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
     g.translate(x, y);
     g.rotate(tilt);
     g.globalCompositeOperation = 'source-over';
-    const R = r * 2 * (0.9 + 0.22 * flare);
+    const R = r * 2 * (0.8 + 0.5 * flare);
     star(g, R, R * 0.6);
     if (day > 0.02) {
       g.strokeStyle = `rgba(${SKY_EDGE}, ${(0.85 * day).toFixed(3)})`;
@@ -1564,9 +1577,9 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
     star(g, r * 1.3, r * 0.95);
     g.fill();
     g.globalCompositeOperation = 'lighter';
-    g.fillStyle = `rgba(255, 255, 255, ${(0.35 + 0.55 * flare).toFixed(3)})`;
+    g.fillStyle = `rgba(255, 255, 255, ${(0.2 + 0.8 * flare).toFixed(3)})`;
     g.beginPath();
-    g.arc(0, 0, r * 0.45, 0, TAU);
+    g.arc(0, 0, Math.max(1, r * 0.45), 0, TAU);
     g.fill();
     g.restore();
   };
@@ -1586,14 +1599,17 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
     const a = ringPts[j], b = ringPts[j + 1];
     const k = 0.55 + 0.45 * nearRing((a.d + b.d) / 2);
     draws.push({ d: Math.min(a.d, b.d), draw: () => {
+      // By day the violet alone, which shows on the grass; a pale core only after dark, when it has the wash to show against.
       g.globalCompositeOperation = 'source-over';
-      g.strokeStyle = `rgba(${LINE_DEEP}, ${(0.22 * k * (1 - 0.4 * night)).toFixed(3)})`;
-      g.lineWidth = Math.max(1, 0.45 * zoom);
+      g.strokeStyle = `rgba(${LINE_DEEP}, ${(k * (0.5 * day + 0.25 * night)).toFixed(3)})`;
+      g.lineWidth = Math.max(1.2, 0.5 * zoom);
       g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
-      g.globalCompositeOperation = 'lighter';
-      g.strokeStyle = `rgba(${LINE_PALE}, ${((0.22 + 0.25 * night) * k).toFixed(3)})`;
-      g.lineWidth = Math.max(0.5, 0.22 * zoom);
-      g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+      if (night > 0.02) {
+        g.globalCompositeOperation = 'lighter';
+        g.strokeStyle = `rgba(${LINE_PALE}, ${(0.47 * k * night).toFixed(3)})`;
+        g.lineWidth = Math.max(0.5, 0.22 * zoom);
+        g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+      }
     } });
   }
   for (const b of beads) {
@@ -1667,7 +1683,7 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
       const r = starR(SKY_DUST[i][3], zoom) * 0.5;
       draws.push({ d: q.d, draw: () => {
         g.globalCompositeOperation = 'lighter';
-        g.fillStyle = `rgba(255, 236, 190, ${(0.9 * Math.sqrt(night)).toFixed(3)})`;
+        g.fillStyle = `rgba(255, 236, 190, ${(0.9 * Math.sqrt(Math.max(0, (night - 0.02) / 0.98))).toFixed(3)})`;
         g.save(); g.translate(q.p[0], q.p[1]); star(g, r * 1.8, r * 1.3); g.fill(); g.restore();
       } });
     });
@@ -1700,11 +1716,11 @@ function skyHoles(sx: number, sy: number, zoom: number, view: PieceView, t: numb
     const n = Math.max(1, Math.floor(Math.hypot(bx - ax, by - ay) / 4));
     for (let k = 1; k < n; k++) out.push({ x: ax + ((bx - ax) * k) / n, y: ay + ((by - ay) * k) / n, r: wDeep * 2, a: 0.35 });
   }
-  // And round the ring, every six pixels or so.
-  const around = Math.max(12, Math.round((TAU * RING_R * unit) / 6));
+  // And round the ring, close enough that it runs as one line rather than a dotted one.
+  const around = Math.max(24, Math.ceil((TAU * RING_R * unit) / (2 * zoom)));
   for (let j = 0; j < around; j++) {
     const q = onRing((j / around) * TAU);
-    out.push({ x: q.p[0], y: q.p[1], r: 1.2 * zoom, a: 0.3 });
+    out.push({ x: q.p[0], y: q.p[1], r: 2 * zoom, a: 0.3 });
   }
   return out;
 }
@@ -2704,7 +2720,8 @@ const MODELS: Record<string, Model> = {
     if (lit) sc.fire([0, 0, 7.7], 5.6, 7.6, frame);
   },
   altar: ({ sc }) => {
-    const SLAB = paintOf(hex('#ece6da')), GOLD = paintOf(hex('#eec766'), 0.5), POOL = paintOf(hex('#3f3572'), 0.5);
+    // The dressed stone of the step, capital and slab, a shade off white and inked like the rest of the masonry.
+    const SLAB: Paint = { body: hex('#e5dfd2'), ink: STONE.ink }, GOLD = paintOf(hex('#eec766'), 0.5), POOL = paintOf(hex('#3f3572'), 0.5);
     const coursed = bricks(sc, STONE, 1.15);
     /*
      * The gold let into each face of the shaft over its coursing, so every
@@ -2719,17 +2736,20 @@ const MODELS: Record<string, Model> = {
      * its height, since a unit up the face is nearly twice as far on the
      * screen as a unit across it and a round sun would stand as an egg.
      */
-    const inlay = (shapes: (c: number, t: number) => Array<Array<[number, number]>>) => (F: FaceAt, w: number, h: number): void => {
+    // In the light of the face it is on, as the face itself is, so a panel on the shaded side is sunk into shade rather than standing out of it.
+    const inlay = (shapes: (c: number, t: number) => Array<Array<[number, number]>>, nx: number, ny: number) => (F: FaceAt, w: number, h: number): void => {
       coursed(F, w, h);
-      sc.fillInk([F(0.7, 1.5), F(w - 0.7, 1.5), F(w - 0.7, h - 1.5), F(0.7, h - 1.5)], rgb(STONE.body, 0.93), STONE.ink, 0.7);
+      const k = sc.light(nx, ny, 0);
+      sc.fillInk([F(0.7, 1.5), F(w - 0.7, 1.5), F(w - 0.7, h - 1.5), F(0.7, h - 1.5)], rgb(STONE.body, 0.93 * k), STONE.ink, 0.7);
       const c = w / 2, t = h * 0.5;
+      const lit = 0.55 + 0.47 * k;
       // Edged in a darker gold and thinly: an outline as wide as the rest of the ink is wider than a ray.
       const g = sc.g;
       for (const shape of shapes(0, 0)) {
         sc.poly(shape.map(([u, v]) => F(c + u, t + v * 0.65)));
-        g.fillStyle = rgb(GOLD.body, 1.02);
+        g.fillStyle = rgb(GOLD.body, 1.02 * lit);
         g.fill();
-        g.strokeStyle = '#a8843a';
+        g.strokeStyle = rgb(hex('#a8843a'), lit);
         g.lineWidth = sc.ink * 0.4;
         g.lineJoin = 'round';
         g.stroke();
@@ -2764,7 +2784,7 @@ const MODELS: Record<string, Model> = {
     sc.box(-8.6, 8.6, -8.6, 8.6, 0, 1.4, STONE, { front: course, back: course, left: course, right: course });
     sc.box(-6, 6, -6, 6, 1.4, 2.8, SLAB, { front: dressed, back: dressed, left: dressed, right: dressed });
     // The shaft, coursed, with the gold let into its faces.
-    sc.box(-3.5, 3.5, -3.5, 3.5, 2.8, 9.6, STONE, { front: inlay(sun), back: inlay(crescent), left: inlay(fourStar), right: inlay(fourStar) });
+    sc.box(-3.5, 3.5, -3.5, 3.5, 2.8, 9.6, STONE, { front: inlay(sun, 0, 1), back: inlay(crescent, 0, -1), left: inlay(fourStar, -1, 0), right: inlay(fourStar, 1, 0) });
     // The capital, and the slab bedded on it.
     sc.box(-4.5, 4.5, -4.5, 4.5, 9.6, 10.3, SLAB);
     sc.box(-5.6, 5.6, -5.6, 5.6, 10.3, 11.2, SLAB, { front: grain(sc, SLAB, 1, true, 0.3) });
