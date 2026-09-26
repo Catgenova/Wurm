@@ -221,6 +221,25 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 14,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      const onBack = WEAPONS.filter((w) => weaponCarry(w.id)?.stow === 'back').map((w) => named(w.id));
+      const bows = WEAPONS.filter((w) => weaponCarry(w.id)?.carry === 'bow').map((w) => named(w.id));
+      return [
+        `A ${either(onBack)} put away on your back goes up over whichever shoulder shows it from where you are seen, with an axe's bit and a bow's bend turned to face you. A ${named('battle_axe')} or ${named('maul')} carried on the shoulder rises back over it, its head above and behind.`,
+        `A ${either(bows)} is held upright at your side with its lower tip clear of your boots.`,
+        `A ${named('chain_coif')} closes under the chin and over the ears, leaving the face framed in mail.`,
+        `A ${shine[2]} piece's sheen is gold, and its glint gold rather than white. The colour of any ${either(shine)} piece goes under the rings of mail and the edges of scale rather than over them, and none of it goes on a thin rim.`,
+        `Leather is lighter in colour. A ${named('leather_jerkin')} has a strap and buckle across the chest, stitching down the front and a pale collar and shoulders; a ${named('leather_cap')} has a rolled rim, seams from the rim to the crown and narrower ear flaps.`,
+        `The ${named('hatchet')} has a bearded bit, and put away it and the ${named('throwing_axe')} turn their blades out from the hip. The ${named('butchering_knife')} has a broad sheath, scabbards are dark leather, and seated, a sword's lies back along the seat. A ${named('jewelled_ring')} is a band on one finger.`,
+        `Plate arms have one domed plate over two lames at the shoulder, a ${named('helm')}'s cheek plates curve round the jaw, and a ${named('scale_helm')}'s spines are fins. Long hair narrows in under a cap or helm.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
