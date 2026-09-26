@@ -1491,6 +1491,16 @@ jobs:
             --outfile=node_modules/.cache/baubles.mjs --log-level=error
           node node_modules/.cache/baubles.mjs
 
+      - name: A sacrifice at the altar, and the motes it leaves
+        run: |
+          # Asked for: rare, supreme and fantastic things given up at the
+          # altar fill every nutrient; one in a hundred leaves a mote of the
+          # same rarity, which gives an ordinary thing that rarity. Both sides
+          # refuse the same things in the same words and do the same.
+          npx esbuild supabase/test/sacrifice.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/sacrifice.mjs --log-level=error
+          node node_modules/.cache/sacrifice.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

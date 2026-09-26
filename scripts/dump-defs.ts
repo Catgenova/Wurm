@@ -98,6 +98,7 @@ import { GRAVE_KEEPS, GRAVE_REACH } from '../src/game/graves';
 import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, YIELD_TIMES } from '../src/game/baubles';
+import { MOTE_CHANCE } from '../src/game/sacrifice';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -1576,7 +1577,11 @@ Object.entries(BAUBLE_KINDS).forEach(([id, k], ord) => out.push(`insert into bau
 for (const [fn, v] of [
   ['bauble_share', BAUBLE_SHARE], ['bauble_low', BAUBLE_LOW], ['bauble_high', BAUBLE_HIGH], ['ancient_plus', ANCIENT_PLUS],
   ['bauble_yield_times', YIELD_TIMES],
+  // What a sacrifice at the altar may leave (`src/game/sacrifice.ts`).
+  ['mote_chance', MOTE_CHANCE],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
+/* The four things a body wants (`src/game/nutrition.ts`), which a sacrifice fills to the top. */
+out.push(`create or replace function nutrients() returns text[] language sql immutable as $fn$ select array[${NUTRIENTS.map(q).join(', ')}]::text[] $fn$;`);
 console.log(out.join('\n'));

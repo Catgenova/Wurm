@@ -731,6 +731,7 @@ insert into item_def values ('statuette', 'Statuette', 'misc', 1.4, false, 2, nu
 insert into item_def values ('tarnished_bauble', 'Tarnished bauble', 'misc', 0.1, false, 3, null);
 insert into item_def values ('bauble_minor', 'Minor bauble', 'misc', 0.1, false, null, null);
 insert into item_def values ('bauble_major', 'Major bauble', 'misc', 0.1, false, null, null);
+insert into item_def values ('mote', 'Mote', 'misc', 0.01, true, null, null);
 insert into item_def values ('bauble_ancient', 'Ancient bauble', 'misc', 0.1, false, null, null);
 insert into item_def values ('old_lamp', 'Old lamp', 'misc', 0.9, false, 3, null);
 insert into item_def values ('bronze_mirror', 'Bronze mirror', 'misc', 0.8, false, 3, null);
@@ -1137,6 +1138,8 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cast', 'Call on it', 'calling on it', 'prayer', null, false, null, 0.03, 6, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pray', 'Pray', 'praying', 'prayer', null, false, null, 0.02, 14, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('set_bauble', 'Set into the altar', 'setting a bauble', null, null, false, null, 0.01, 4, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('sacrifice', 'Sacrifice', 'making a sacrifice', null, null, false, null, 0.01, 4, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('absorb_mote', 'Absorb a mote', 'absorbing a mote', null, null, false, null, 0.01, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('meditate', 'Sit and think about nothing', 'sitting', 'meditation', null, false, null, 0, 25, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('choose_path', 'Choose a path', 'choosing', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('use_ability', 'Call on what you know', 'calling on it', null, null, false, null, 0, 0, null, true, false);
@@ -2250,6 +2253,7 @@ update item_def set description = 'A small figure in worn stone, carried by peop
 update item_def set description = 'Gives nothing until it is restored. Restore it (restoration: difficulty 15 for a minor one, 30 major, 45 ancient) and what it gives is rolled then, with its rarity.' where id = 'tarnished_bauble';
 update item_def set description = 'Set it into one of the 21 minor sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then gets what is written on it: less time per action, or more skill gained, in that one skill.' where id = 'bauble_minor';
 update item_def set description = 'Set it into one of the 5 major sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then has the chance written on it of twice the yield from each action in that one skill.' where id = 'bauble_major';
+update item_def set description = 'Left by 1% of sacrifices at an altar, with the rarity of what was given up. Absorb it into an ordinary thing in your pack (Absorb into, on the mote) and that thing, or one of it where it is a stack, takes the mote''s rarity. The mote is used up.' where id = 'mote';
 update item_def set description = 'Set it into one of the 3 ancient sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then gets what is written on it added to every yield of that one action.' where id = 'bauble_ancient';
 update item_def set description = 'A closed clay lamp with a wick hole. It still smells faintly of oil.' where id = 'old_lamp';
 update item_def set description = 'A disc of bronze polished on one face. It gives back a dim, honest likeness.' where id = 'bronze_mirror';
@@ -5419,3 +5423,5 @@ create or replace function bauble_low() returns double precision language sql im
 create or replace function bauble_high() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function ancient_plus() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function bauble_yield_times() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
+create or replace function mote_chance() returns double precision language sql immutable as $fn$ select 0.01::double precision $fn$;
+create or replace function nutrients() returns text[] language sql immutable as $fn$ select array['starch', 'flesh', 'fat', 'greens']::text[] $fn$;

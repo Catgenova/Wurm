@@ -1,5 +1,5 @@
 import { CARRY_STOP, type Game } from '../../game/game';
-import { itemDef, itemName, type Item, type ItemCategory, itemWeight, bagRoom, bagUnits, isBag } from '../../game/items';
+import { itemDef, itemName, type Item, type ItemCategory, itemWeight, bagRoom, bagUnits, isBag, RARITIES } from '../../game/items';
 import { damageCell, nameCell, qualityCell } from '../itemcells';
 import { occupantOf } from '../../game/creaturecrate';
 import type { ContextMenu, MenuItem } from '../contextmenu';
@@ -7,7 +7,8 @@ import { makeDraggable, makeDropZone, type DragPayload } from '../dragdrop';
 import type { UIWindow } from '../windows';
 import { COUNTS, pinEntry, pinnable } from '../beltmenu';
 import { orderBy, sortSelect, type SortKey } from '../sorting';
-import type { ActionDef } from '../../game/actions';
+import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
+import { ABSORB_SAID, absorbable, MOTE } from '../../game/sacrifice';
 import { improvable, improveCeiling } from '../../game/improve';
 
 const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
@@ -212,6 +213,22 @@ export class InventoryPanel {
      * you do once, at the end, somewhere else entirely.
      */
     if (item.id === 'treasure_map') entries.push({ label: 'Read', note: 'Look at the country on it', onSelect: () => this.readMap?.(item.uid) });
+    // A mote goes into something else, which is chosen here.
+    const absorb = item.id === MOTE ? ACTION_BY_ID.get('absorb_mote') : undefined;
+    if (absorb) {
+      const into = absorbable(this.game);
+      entries.push({
+        label: 'Absorb into',
+        note: `makes one ordinary thing ${RARITIES[item.rare ?? 0].name}`,
+        hint: into.length ? undefined : ABSORB_SAID.pickItem,
+        disabled: !into.length,
+        children: into.map((it) => {
+          const t = { kind: 'item' as const, uid: it.uid, mote: item.uid };
+          const why = absorb.check?.(t, this.game) ?? null;
+          return { label: itemName(it), note: it.count > 1 ? `one of ${it.count}` : undefined, hint: why ?? undefined, disabled: !!why, onSelect: () => this.game.requestAction(absorb, t) };
+        }),
+      });
+    }
     entries.push(...this.game.actionsFor(target).map(({ def, reason }) => {
       const all = def.maxRepeat ? def.maxRepeat(target, this.game) : item.count;
       if (def.quantity && all > 1 && !reason) {

@@ -123,8 +123,8 @@ export const HUSHED: ReadonlySet<string> = new Set([
   // Eating, drinking and sleeping. A body doing something to itself.
   'eat', 'drink', 'drink_skin', 'drink_from_vessel', 'sleep', 'study_book',
   // Faith and the paths, which are the two things on this island done by
-  // sitting still.
-  'pray', 'cast', 'meditate',
+  // sitting still; and what is given up at the altar, and what it gives back.
+  'pray', 'cast', 'meditate', 'sacrifice', 'absorb_mote',
   // Getting on and off things, and being pulled along by one.
   'board_vehicle', 'board_passenger', 'mount_creature', 'dismount_creature', 'pull_cart', 'unhitch_team',
   // Winning an animal over, which is done by standing very quietly.

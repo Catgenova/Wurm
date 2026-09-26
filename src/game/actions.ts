@@ -36,6 +36,7 @@ import { NAMING_ACTIONS } from './naming';
 import { LANTERN_ACTIONS } from './lantern';
 import { FAITH_ACTIONS } from './faith';
 import { BAUBLE_ACTIONS } from './baubles';
+import { SACRIFICE_ACTIONS } from './sacrifice';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
@@ -122,6 +123,8 @@ export type Target =
        * same words, so "take it to sixty" means the same thing on both sides.
        */
       upto?: number;
+      /** The mote going into this thing, for `absorb_mote`: the thing is the target, and the mote this. */
+      mote?: number;
     }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string };
@@ -2209,6 +2212,7 @@ export const ACTIONS: ActionDef[] = [
   ...FOUNDATION_ACTIONS,
   ...FAITH_ACTIONS,
   ...BAUBLE_ACTIONS,
+  ...SACRIFICE_ACTIONS,
   ...MEDITATION_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...TREASURE_ACTIONS,

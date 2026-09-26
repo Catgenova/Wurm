@@ -9,6 +9,7 @@ import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } f
 import { REPORTS_A_SESSION } from '../../net/errors';
 import { article, listed, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, YIELD_TIMES } from '../../game/baubles';
+import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
@@ -355,6 +356,14 @@ export const NEWS: News[] = [
     day: '2026-09-26',
     lines: () => [
       `An altar no longer takes a gold lump. It takes ${billWords(furnitureDef('altar').bill)}.`,
+    ],
+  },
+  {
+    n: 26,
+    day: '2026-09-26',
+    lines: () => [
+      `Sacrifice, on an altar's menu, gives up one rare, supreme or fantastic thing from your pack. ${FED_SAID}`,
+      `${percent(MOTE_CHANCE)} of sacrifices leave a mote of the same rarity. Absorb it into an ordinary thing in your pack (Absorb into, on the mote) and that thing takes the mote's rarity.`,
     ],
   },
 ];

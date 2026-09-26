@@ -23,6 +23,7 @@ import { DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, cropYield, RIPE, STAGE_NAMES } from '../../game/farming';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, YIELD_TIMES } from '../../game/baubles';
+import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { biteShare, FISH, LINE_REACH } from '../../game/fishing';
 import { PER_ROLL, rollsAt } from '../../game/forage';
@@ -49,7 +50,7 @@ import { CHOOSE_AT, PATH_LIST, SIT_REST, SIT_WORTH } from '../../game/meditation
 import { COIN_METALS, METALS, MOULDS, NAILS_PER_LUMP, RARE_METALS } from '../../game/metal';
 import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
-import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
+import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
 import { OVEN_CAPACITY } from '../../game/placeables';
 import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP } from '../../game/player';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
@@ -1805,6 +1806,12 @@ export function helpText(): string {
     than a rough one. Favour also trickles back on its own, slowly, up to whatever your faith carries
     &mdash; ${Math.round(favourCap(startOf(FAITH)))} at the start and ${FAVOUR_CEILING} at the very top.</p>
     <p>It also holds the settlement's bauble sockets: see <b>Baubles</b>, under digging up the past.</p>
+    <p><b>Sacrifice</b>, on the altar's menu, gives up one ${RARITIES.slice(1, -1).map((r) => r.name).join(', ')} or ${RARITIES[RARITIES.length - 1].name} thing from your
+    pack, one of a stack where it is a stack, and fills ${listed(NUTRIENTS.map((k) => NUTRIENT_NAMES[k].toLowerCase()))} to the top.
+    ${capital(percent(MOTE_CHANCE))} of sacrifices also leave a <b>mote</b> of the rarity of what was given up. Absorb a mote
+    (<b>Absorb into</b>, on the mote) into an ordinary thing in your pack and that thing, or one of it where it is a stack,
+    takes the mote's rarity. A locked thing, a worn one, a bag with anything in it and a crate with a wildermon in it
+    are not given up, and a bauble takes no mote: its rarity is rolled when it is restored.</p>
     <p>${NumberWord(CASTS.length)} things it buys, and none of them can be had any other way:</p>
     <table>
       ${CASTS.map((c) => `<tr><td><b>${c.name}</b></td><td>${c.cost} favour, prayer ${c.level}. ${c.note}</td></tr>`).join('\n      ')}

@@ -36,6 +36,7 @@ import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } f
 import { foundationState } from '../game/foundations';
 import { BLESS_CAP, CASTS, FAITH, favourCap } from '../game/faith';
 import { BAUBLE_SAID, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, readBauble, socketsOf, socketText, TARNISHED } from '../game/baubles';
+import { FED_SAID, SACRIFICE_SAID, sacrificeable } from '../game/sacrifice';
 import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sittingWorth } from '../game/meditation';
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
@@ -1478,6 +1479,23 @@ export class UI {
     return entries;
   }
 
+  /** Every rare, supreme and fantastic thing in the pack, each to be given up at this altar. */
+  private sacrificeEntry(f: PlacedFurniture): MenuItem {
+    const g = this.game;
+    const def = ACTION_BY_ID.get('sacrifice');
+    const offered = sacrificeable(g);
+    if (!def || !offered.length) return { label: 'Sacrifice', hint: SACRIFICE_SAID.pick, disabled: true };
+    return {
+      label: 'Sacrifice',
+      note: FED_SAID,
+      children: offered.map((it) => {
+        const t: Target = { kind: 'furniture', id: f.id, itemUid: it.uid };
+        const why = def.check?.(t, g) ?? null;
+        return { label: itemName(it), note: it.count > 1 ? `one of ${it.count}` : undefined, hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(def, t) };
+      }),
+    };
+  }
+
   /**
    * The settlement's sockets at one of its altars: what is in each, and every
    * bauble in the pack, to be set into the next empty socket of its tier or in
@@ -1578,6 +1596,7 @@ export class UI {
           }),
         });
       }
+      entries.push(this.sacrificeEntry(f));
       entries.push(this.baubleEntry(f));
     }
     if (furnitureHolds(f)) {
