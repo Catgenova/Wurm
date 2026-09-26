@@ -731,6 +731,7 @@ insert into item_def values ('statuette', 'Statuette', 'misc', 1.4, false, 2, nu
 insert into item_def values ('tarnished_bauble', 'Tarnished bauble', 'misc', 0.1, false, 3, null);
 insert into item_def values ('bauble_minor', 'Minor bauble', 'misc', 0.1, false, null, null);
 insert into item_def values ('bauble_major', 'Major bauble', 'misc', 0.1, false, null, null);
+insert into item_def values ('bauble_regret', 'Bauble of Regret', 'misc', 0.1, false, null, null);
 insert into item_def values ('mote', 'Mote', 'misc', 0.01, true, null, null);
 insert into item_def values ('bauble_ancient', 'Ancient bauble', 'misc', 0.1, false, null, null);
 insert into item_def values ('old_lamp', 'Old lamp', 'misc', 0.9, false, 3, null);
@@ -2253,6 +2254,7 @@ update item_def set description = 'A small figure in worn stone, carried by peop
 update item_def set description = 'Gives nothing until it is restored. Restore it (restoration: difficulty 15 for a minor one, 30 major, 45 ancient) and what it gives is rolled then, with its rarity.' where id = 'tarnished_bauble';
 update item_def set description = 'Set it into one of the 21 minor sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then gets what is written on it: less time per action, or more skill gained, in that one skill.' where id = 'bauble_minor';
 update item_def set description = 'Set it into one of the 5 major sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then has the chance written on it of twice the yield from each action in that one skill.' where id = 'bauble_major';
+update item_def set description = 'Undoes one of your trades. In the Trades window, Undo on your crafting or your fighting trade puts it down as though you had never taken it up, clears its tree, and uses this up; the next trade you take up in its place costs nothing, where a change costs 500 silver. Only on an island, where trades are kept.' where id = 'bauble_regret';
 update item_def set description = 'Left by 1% of sacrifices at an altar, with the rarity of what was given up. Absorb it into an ordinary thing in your pack (Absorb into, on the mote) and that thing, or one of it where it is a stack, takes the mote''s rarity. The mote is used up.' where id = 'mote';
 update item_def set description = 'Set it into one of the 3 ancient sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then gets what is written on it added to every yield of that one action.' where id = 'bauble_ancient';
 update item_def set description = 'A closed clay lamp with a wick hole. It still smells faintly of oil.' where id = 'old_lamp';
@@ -5419,6 +5421,7 @@ insert into bauble_kind values ('time', 0, '', '% less time', 50);
 insert into bauble_kind values ('learn', 1, '+', '% skill gain', 100);
 insert into bauble_kind values ('double', 2, '', '% chance of twice the yield', 50);
 create or replace function bauble_share() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
+create or replace function regret_share() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
 create or replace function bauble_low() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function bauble_high() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function ancient_plus() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;

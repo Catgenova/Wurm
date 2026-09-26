@@ -2411,6 +2411,15 @@ export class Island {
     return this.door('rpc_take_class', { p_class: id });
   }
 
+  /**
+   * Break a Bauble of Regret to undo one of your two trades: it is put down as
+   * though it had never been taken up, its tree with it, and taking up another
+   * costs nothing.
+   */
+  async regretClass(kind: 'craft' | 'combat'): Promise<string | null> {
+    return this.door('rpc_regret_class', { p_kind: kind });
+  }
+
   /** Buy one node of a tree with the points that trade has earned. */
   async takeNode(id: string): Promise<string | null> {
     return this.door('rpc_take_node', { p_node: id });

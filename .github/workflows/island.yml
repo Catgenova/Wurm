@@ -1501,6 +1501,17 @@ jobs:
             --outfile=node_modules/.cache/sacrifice.mjs --log-level=error
           node node_modules/.cache/sacrifice.mjs
 
+      - name: The Bauble of Regret, and a trade undone
+        run: |
+          # Asked for: a 3% chance of a Bauble of Regret in archaeology, which
+          # undoes a trade. Both sides turn one up as often, off the same roll
+          # as a tarnished bauble; breaking one puts the trade down with its
+          # tree, leaves the other slot alone, is refused in the browser's
+          # words, and the next trade in that slot costs nothing.
+          npx esbuild supabase/test/regret.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/regret.mjs --log-level=error
+          node node_modules/.cache/regret.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

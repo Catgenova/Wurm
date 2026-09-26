@@ -11,7 +11,7 @@ import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import { INDOORS_DECAY, MAX_LEVELS, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID } from '../../game/building';
 import { FIRE_COST, FIRE_SUBTILES } from '../../game/campfire';
-import { CHANNELS, CLASS_AT, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, riteDef, RITES, type Channel } from '../../game/classes';
+import { CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, riteDef, RITES, type Channel } from '../../game/classes';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
 import {
@@ -22,7 +22,7 @@ import { DEED_UPGRADES } from '../../game/deed';
 import { DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, cropYield, RIPE, STAGE_NAMES } from '../../game/farming';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
-import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, YIELD_TIMES } from '../../game/baubles';
+import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { biteShare, FISH, LINE_REACH } from '../../game/fishing';
@@ -571,8 +571,12 @@ export function helpText(): string {
     <p>Everything on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
     what you have spent, what is in your purse, whether the altar will hear you &mdash; so when a button
     will not press, the sentence under it is the island's own, and it is the truth.</p>
-    <p>Putting a trade down for another costs <b>silver</b>, and the nodes you bought for the old one go
+    <p>Putting a trade down for another costs <b>${CLASS_CHANGE_COST} silver</b>, and the nodes you bought for the old one go
     with it. The other slot keeps what it had.</p>
+    <p>A <b>Bauble of Regret</b> undoes a trade instead. ${capital(percent(REGRET_SHARE))} of what a trowel turns up is one,
+    whole. With one in your pack, the card of a trade you hold has <i>Undo</i>: it breaks the bauble and puts
+    that trade down with the nodes you bought for it, leaving its slot empty, so the next trade you take up in
+    that slot costs nothing. The other slot keeps what it had.</p>
     <p>Drag a window by its title bar and resize it from the bottom-right corner. The layout is remembered.</p>
     <p><b>How you look</b> can be changed at any time: <i>Change…</i> under <b>How you look</b> in
     Settings (<kbd>O</kbd>) opens the creator from the account page on the look you have on. Nothing
@@ -1591,7 +1595,8 @@ export function helpText(): string {
     its own, on restoration, at difficulty ${listed(BAUBLE_TIERS.map((t) => `${t.difficulty} for ${article(t.name.toLowerCase())} ${t.name.toLowerCase()} one`))}; a failure
     damages it, as it does a relic's pieces. What it gives is rolled when it comes clean, with its rarity, and
     written on it: a rare bauble gives ${times(baubleTimes(1))} what an ordinary one rolls, a supreme ${times(baubleTimes(2))} and a
-    fantastic ${times(baubleTimes(3))}.</p>
+    fantastic ${times(baubleTimes(3))}. Another ${percent(REGRET_SHARE)} is a <b>Bauble of Regret</b>, whole, which undoes one
+    of your trades: see <b>Trades</b>.</p>
     <table>
       ${BAUBLE_TIERS.map((t) => `<tr><td><b>${t.name}</b></td><td>${NumberWord(t.slots)} sockets. ${
         t.id === 'minor' ? `${BAUBLE_LOW} to ${BAUBLE_HIGH}% less time per action, or ${BAUBLE_LOW} to ${BAUBLE_HIGH}% more skill gained, in one of the ${numberWord(MINOR_SKILLS.length)} skills an action is done with.`

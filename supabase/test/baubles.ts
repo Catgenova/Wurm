@@ -35,7 +35,7 @@ import { SKILL_DEFS } from '../../src/game/skills';
 import {
   ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SAID, BAUBLE_SHARE, BAUBLE_TIER_BY_ID,
   BAUBLE_TIERS, baubleText, baubleTimes, fullSaid, MAJOR_SKILLS, MINOR_SKILLS, readBauble, rollBauble, rollTier,
-  TARNISHED, YIELD_TIMES, type BaubleKind, type BaubleTier,
+  REGRET, TARNISHED, YIELD_TIMES, type BaubleKind, type BaubleTier,
 } from '../../src/game/baubles';
 import { rarityStep } from '../../src/game/items';
 import { TileType } from '../../src/world/tiles';
@@ -220,7 +220,7 @@ begin
   insert into said values ('FINDS', fragments || '|' || tarnished || '|' || bad_tier || '|' || bad_dmg);
   insert into said select 'FOUNDSAID', e.text from event e where e.world_id = w and e.uid = u and e.text like 'Your trowel turns up a tarnished%'
     order by e.n desc limit 1;
-  delete from item where world_id = w and holder = 'player' and holder_uid = u and def in ('fragment', 'tarnished_bauble');
+  delete from item where world_id = w and holder = 'player' and holder_uid = u and def in ('fragment', 'tarnished_bauble', 'bauble_regret');
 
   /* Restoring one. */
   b := give(w, u, 'tarnished_bauble', 1, 60, 'major');
@@ -228,7 +228,13 @@ begin
   insert into said values ('GONETOOFAR', coalesce(act_refusal(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b)), 'null'));
   update item set dmg = 20 where id = b;
   insert into said values ('RESTORE', coalesce(act_refusal(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b)), 'null'));
-  perform act_perform(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b));
+  -- A go can fail its skill check (one in five, at a hundred against a major's thirty), which is what the
+  -- part after this asks about: go again until it comes clean, as a restorer would.
+  for tx in 1..12 loop
+    update item set dmg = 20 where id = b;
+    perform act_perform(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b));
+    exit when not exists (select 1 from item where id = b);
+  end loop;
   insert into said select 'RESTORED', (select count(*) from item where id = b) || '|'
     || coalesce((select string_agg(i.def || '|' || coalesce(r.kind, 'unread'), ',') from item i cross join lateral bauble_read(i.def, i.extra) r
                   where i.world_id = w and i.holder = 'player' and i.holder_uid = u and i.def like 'bauble\\_%'), 'none');
@@ -357,11 +363,16 @@ begin
 
   -- Through the clock: a dig, what the ancient bauble adds to it, said after the go's own words, and the next go's time.
   perform give(w, u, 'shovel', 1, 50);
-  insert into skill (world_id, uid, id, value) values (w, u, 'digging', 50)
-    on conflict (world_id, uid, id) do update set value = excluded.value;
-  update player set act = 'dig', act_target = dig, act_left = 3, act_goes = 3,
-    act_started = now() - interval '10 seconds', act_ends = now() - interval '1 second' where world_id = w and uid = u;
-  perform settle(w, u);
+  -- A go can fail its skill check (one in six, at fifty with a shovel of fifty), which is not what this
+  -- asks about: go again until one comes up, from the same skill each time.
+  for tx in 1..12 loop
+    insert into skill (world_id, uid, id, value) values (w, u, 'digging', 50)
+      on conflict (world_id, uid, id) do update set value = excluded.value;
+    update player set act = 'dig', act_target = dig, act_left = 3, act_goes = 3,
+      act_started = now() - interval '10 seconds', act_ends = now() - interval '1 second' where world_id = w and uid = u;
+    perform settle(w, u);
+    exit when exists (select 1 from item where world_id = w and holder = 'player' and holder_uid = u and def = 'dirt');
+  end loop;
   select extract(epoch from act_ends - act_started) into d0 from player where world_id = w and uid = u;
   insert into said select 'DUG', coalesce(sum(count), 0)::text from item where world_id = w and holder = 'player' and holder_uid = u and def = 'dirt';
   insert into said select 'DUGSAID', string_agg(e.text, ' / ' order by e.n) from (
@@ -480,14 +491,17 @@ check(`the browser turns up a bauble for about ${BAUBLE_SHARE * 100}% of finds t
   `${bFound} baubles and ${bFrags} fragments`);
 check('each with its tier on it and the damage of the ground',
   pack.filter((i) => i.id === TARNISHED).every((i) => BAUBLE_TIER_BY_ID.has(i.extra as BaubleTier) && i.dmg >= 18 && i.dmg <= 68));
-for (const i of pack) if (i.id === TARNISHED || i.id === 'fragment') game.inventory.remove(i.uid, i.count);
+for (const i of pack) if (i.id === TARNISHED || i.id === 'fragment' || i.id === REGRET) game.inventory.remove(i.uid, i.count);
 const restoreDef = ACTION_BY_ID.get('restore_relic')!;
 const tarn = game.inventory.add(TARNISHED, { ql: 60, extra: 'major' });
 tarn.dmg = 90;
 check('the browser refuses one too far gone in the island\'s words', restoreDef.check?.({ kind: 'item', uid: tarn.uid }, game) === say('GONETOOFAR'));
-tarn.dmg = 20;
 game.skills.values.set('restoration', 100);
-restoreDef.perform({ kind: 'item', uid: tarn.uid }, game);
+// A go can fail its skill check, as on the island: go again until it comes clean.
+for (let i = 0; i < 12 && game.inventory.get(tarn.uid); i++) {
+  tarn.dmg = 20;
+  restoreDef.perform({ kind: 'item', uid: tarn.uid }, game);
+}
 const restored = game.inventory.items.find((i) => i.id === 'bauble_major');
 check('and restores one to a major bauble it can read', !game.inventory.get(tarn.uid) && readBauble(restored ?? { id: '', extra: '' })?.kind === 'double',
   restored?.extra ?? 'nothing');

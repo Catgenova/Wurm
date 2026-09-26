@@ -97,7 +97,7 @@ import { FUELS, FUEL_SAID } from '../src/game/campfire';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../src/game/graves';
 import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
-import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, YIELD_TIMES } from '../src/game/baubles';
+import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../src/game/baubles';
 import { MOTE_CHANCE } from '../src/game/sacrifice';
 
 const q = (v: unknown): string => {
@@ -1575,7 +1575,7 @@ for (const skill of [...new Set([...MINOR_SKILLS, ...MAJOR_SKILLS])]) {
 ANCIENT_EFFECTS.forEach((e, ord) => out.push(`insert into bauble_ancient values (${[q(e.id), q(ord), q(e.action), q(e.said)].join(', ')});`));
 Object.entries(BAUBLE_KINDS).forEach(([id, k], ord) => out.push(`insert into bauble_kind values (${[q(id), q(ord), q(k.lead), q(k.tail), q(k.cap)].join(', ')});`));
 for (const [fn, v] of [
-  ['bauble_share', BAUBLE_SHARE], ['bauble_low', BAUBLE_LOW], ['bauble_high', BAUBLE_HIGH], ['ancient_plus', ANCIENT_PLUS],
+  ['bauble_share', BAUBLE_SHARE], ['regret_share', REGRET_SHARE], ['bauble_low', BAUBLE_LOW], ['bauble_high', BAUBLE_HIGH], ['ancient_plus', ANCIENT_PLUS],
   ['bauble_yield_times', YIELD_TIMES],
   // What a sacrifice at the altar may leave (`src/game/sacrifice.ts`).
   ['mote_chance', MOTE_CHANCE],

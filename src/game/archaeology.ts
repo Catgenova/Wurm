@@ -3,7 +3,7 @@ import { TileType } from '../world/tiles';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
 import { itemName, RARITY_WORD, rollRarity, type Item } from './items';
-import { BAUBLE_SHARE, BAUBLE_TIER_BY_ID, rollBauble, rollTier, TARNISHED, type BaubleTier } from './baubles';
+import { BAUBLE_TIER_BY_ID, findKind, REGRET, rollBauble, rollTier, TARNISHED, type BaubleTier } from './baubles';
 
 /** What one go at putting a relic back together teaches. */
 export const RESTORE_GAIN = 0.4;
@@ -153,8 +153,16 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
         return;
       }
       // A share of whatever comes up is a bauble, whatever the archaeologist
-      // knows: whole, but black with age, and good for nothing until restored.
-      if (g.rand() < BAUBLE_SHARE) {
+      // knows: now and again a Bauble of Regret, whole; otherwise whole but
+      // black with age, and good for nothing until restored.
+      const kind = findKind(g.rand());
+      if (kind === 'regret') {
+        const found = g.gather(REGRET, { ql: Math.max(1, g.productQl('archaeology', toolQl) * (0.55 + g.rand() * 0.35)) });
+        g.events.emit('inventory');
+        g.logMsg(`Your trowel turns up a Bauble of Regret, whole. It undoes one of your trades, in the Trades window. (QL ${found.ql.toFixed(1)})`, 'event');
+        return;
+      }
+      if (kind === 'bauble') {
         const tier = rollTier(g.rand);
         const found = g.gather(TARNISHED, { ql: Math.max(1, g.productQl('archaeology', toolQl) * (0.55 + g.rand() * 0.35)), extra: tier });
         found.dmg = 18 + g.rand() * 50;

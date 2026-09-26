@@ -3,6 +3,7 @@ import type {
   ChannelCard, ClassCard, ClassesSaid, Island, RiteCard, TreeNode, TreeSaid, TreeTrade,
 } from '../../net/island';
 import { SKILL_DEFS } from '../../game/skills';
+import { REGRET } from '../../game/baubles';
 import type { UIWindow } from '../windows';
 
 /**
@@ -203,6 +204,23 @@ export class TradesPanel {
       worn.className = 'trade-worn';
       worn.textContent = 'Yours.';
       row.append(worn);
+      /*
+       * And the way back out of it, for somebody carrying a Bauble of Regret,
+       * loose or in a bag: the island breaks the bauble and puts the trade
+       * down as though it had never been taken up, so the next one taken up
+       * in its place is free. One that is put by shows the button too, and
+       * the island says why it will not break.
+       */
+      const carried = this.game.inventory.items.some((it) => it.id === REGRET || it.inside?.some((b) => b.id === REGRET));
+      if (carried) {
+        const undo = document.createElement('button');
+        undo.type = 'button';
+        undo.className = 'tb-btn tb-small trade-take';
+        undo.textContent = 'Undo, breaking the Bauble of Regret';
+        undo.title = `Puts the ${c.name.toLowerCase()}’s trade down and clears its tree. The next trade you take up in its place costs nothing, not ${said.change_cost} silver.`;
+        undo.addEventListener('click', () => void this.doorway(this.island!.regretClass(c.kind)));
+        row.append(undo);
+      }
       return row;
     }
 

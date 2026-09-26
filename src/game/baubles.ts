@@ -4,6 +4,7 @@ import { rankAtLeast } from './game';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture';
 import { describeWith, itemName, rarityOf, rarityStep, type Item } from './items';
 import { times } from './words';
+import { CLASS_CHANGE_COST } from './classes';
 
 /**
  * Baubles: small things the old people left in the ground, which a settlement
@@ -43,6 +44,42 @@ import { times } from './words';
 
 /** Of what archaeology turns up, the share that is a bauble rather than a piece of a relic. */
 export const BAUBLE_SHARE = 0.3;
+
+/**
+ * And the share that is a Bauble of Regret, asked first, out of the same
+ * roll: so of every find this share is one, `BAUBLE_SHARE` a tarnished
+ * bauble, and the rest pieces of relics.
+ *
+ * Asked for: "Add a 3% chance for Bauble of Regret in archaeology. Bauble of
+ * regret allows for the undoing of Class selection." It comes out of the
+ * ground whole, and is broken in the Trades window to put one of your trades
+ * down as though it had never been taken up (`rpc_regret_class`): its tree
+ * cleared with it, and nothing to pay for taking up another, where changing
+ * one otherwise costs `CLASS_CHANGE_COST` silver. Trades are the island's, so
+ * that is where it is broken.
+ */
+export const REGRET_SHARE = 0.03;
+export const REGRET = 'bauble_regret';
+// What breaking one saves, for its description: the silver a change otherwise costs.
+describeWith({ regret: { saves: CLASS_CHANGE_COST } });
+
+/** Which of these a find is, off one roll: a Bauble of Regret, a tarnished bauble, or a piece of a relic. */
+export const findKind = (roll: number): 'regret' | 'bauble' | 'relic' =>
+  roll < REGRET_SHARE ? 'regret' : roll < REGRET_SHARE + BAUBLE_SHARE ? 'bauble' : 'relic';
+
+/** What the island says when a trade cannot be undone: `rpc_regret_class`. */
+export const REGRET_SAID = {
+  none: 'You need a Bauble of Regret to undo a trade.',
+  locked: 'Your Bauble of Regret is put by. Unlock it first.',
+  kind: 'There is no such trade.',
+} as const;
+const slotWord = (kind: 'craft' | 'combat'): string => (kind === 'craft' ? 'crafting' : 'fighting');
+/** Why there is nothing to undo in one of the two slots. */
+export const regretEmpty = (kind: 'craft' | 'combat'): string => `You have no ${slotWord(kind)} trade to undo.`;
+/** And what it says when one is undone: the trade by name, and what the next one in its slot costs. */
+export const regretDone = (trade: string, kind: 'craft' | 'combat'): string =>
+  `The Bauble of Regret breaks, and the ${trade.toLowerCase()}’s trade is put down as though you had never taken it up, its tree with it. `
+  + `The next ${slotWord(kind)} trade you take up costs nothing, not ${CLASS_CHANGE_COST} silver.`;
 
 export type BaubleTier = 'minor' | 'major' | 'ancient';
 export type BaubleKind = 'time' | 'learn' | 'double' | 'plus';
