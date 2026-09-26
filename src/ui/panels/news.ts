@@ -261,6 +261,29 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 17,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      const bows = WEAPONS.filter((w) => weaponCarry(w.id)?.carry === 'bow').map((w) => named(w.id));
+      const shouldered = WEAPONS.filter((w) => weaponCarry(w.id)?.carry === 'shoulder').map((w) => named(w.id));
+      const slungHeavy = WEAPONS.filter((w) => { const c = weaponCarry(w.id); return c?.carry === 'shoulder' && c.stow === 'back' && c.headUp; }).map((w) => named(w.id));
+      const slungPoles = WEAPONS.filter((w) => weaponCarry(w.id)?.carry === 'staff' && weaponCarry(w.id)?.stow === 'back').map((w) => named(w.id));
+      return [
+        `A ${either(shine)} piece is its rarity's colour over the whole of its lit side, wood and leather as well as metal, and keeps it between glints.`,
+        `A ${either(bows)} is held out past the hip, where it shows from every side, and turned so its bend shows rather than its edge.`,
+        `Seen from behind, a ${either(shouldered)} carried on the shoulder rises from behind it, its haft showing under an axe's or a maul's head, and the arm that carries it goes round the far side of the body.`,
+        `While you work, a ${either(slungHeavy)} on your back hangs head down, and a ${either(slungPoles)} hangs lower, clear of the hammer.`,
+        `Leather is red-brown, apart from the colour of skin, with a sheen on its lit side. The knee pads on ${named('leather_trousers')} are flat and darker.`,
+        `${itemDef('cloth_sleeves').name} run into the coat at the shoulder and bend at the elbow without a joint showing. A ${named('cloth_tunic')}'s collar, hem and cuffs are faced in a lighter shade of its cloth.`,
+        `A ${named('helm')}'s cheek plates narrow toward the chin and its neck guard flares; a ${named('scale_helm')} has a crest of splayed fins and cheek plates of scale. Long hair under a cap or helm is drawn in at the nape and falls in locks.`,
+        `A ${named('chain_coif')}'s face opening narrows at the chin and is cut back at the cheek, so the face shows side on.`,
+        `The hammer on a ${named('toolbelt')} hangs head down from a loop with its handle above the belt; a ${named('jewelled_ring')} shows a point of gold from every side; a ${named('wooden_shield')} has weathered boards and a dark rawhide rim; a ${named('chain_hauberk')}'s skirt flies out behind at a run; and an axe through the belt shows its blade from three-quarters on.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
