@@ -1353,74 +1353,86 @@ function sailCloth(sc: Scene, grid: V3[][], p: Paint): RigItem[] {
  *
  * It is a figure of ten stars -- a head, two shoulders, a belt of three, two
  * feet and two raised hands -- set out in depth rather than on a card, joined
- * by lines, turning once in `SKY_TURN` seconds high over the dish and bobbing
- * as it goes. Loose stars hang round it, and a ring of light leans across the
- * lot, turning the other way with a mote running round it.
+ * by lines, turning to and fro high over the dish and bobbing as it goes.
+ * Loose stars hang round it, and under its feet a ring of light goes round
+ * and round, with two motes running round it.
  *
  * It has to hold its own on pale grass by day, where nothing pale can: white
  * itself is under two to one against it. So what carries it is dark -- the
- * lines are a deep violet, each star has a gold body and a warm ink edge like
- * everything else on the island, and a haze of the same violet stands behind
- * the figure, a patch of night for the pale middles to shine against. At
+ * lines are a deep violet and each star has a gold body and a warm ink edge
+ * like everything else on the island -- and the light by day is put where it
+ * tells, in a halo behind the head and hands and a beam up from the dish. At
  * night the wash is taken back off the stars (`furnitureHoles`) rather than
  * the stars being painted over it, so whoever stands in front of them still
  * stands in front of them.
  */
 type Star = readonly [number, number, number, number];
 /**
- * The figure's stars from its middle, in units -- across, toward the front and
- * up -- and how bright each is. A unit up is nearly twice as far on the screen
- * as a unit across, so the figure is set out wide and low to stand on the
- * screen about as wide as it is tall; and the brightest of it is at the top:
- * the head, then the raised hands, the shoulders, the belt and the feet.
+ * The figure's stars from its middle, in units -- across, toward you and up --
+ * and how bright each is. A unit up is a third as far again on the screen as
+ * a unit across, so the figure is set out wider than it is tall to stand on
+ * the screen about square; and the brightest of it is at the top: the head,
+ * then the raised hands, the shoulders, the belt and the feet.
  *
  * Face on it is a person with both arms up: the head clear over the
- * shoulders, the hands out past them, the feet an even stride below the belt.
- * What depth it has is in the arms, which is what keeps it more than a line
- * of beads edge on; the head, belt and feet stay near one plane, since a unit
- * toward you is a unit down the screen and a foot out of the plane hangs
- * lower than the other.
+ * shoulders, the hands higher still and out past them, the feet a stride
+ * below the belt. It stands in depth, not on a card -- the hands reach 3
+ * units out toward you, the head leans 1 back and the feet stride 1.5 each
+ * way -- so as it turns the near hand swings wide of the far one and the
+ * figure is seen to turn, not to narrow.
  */
 const SKY_STARS: Star[] = [
-  [0, -1.2, 7.6, 1.5],
-  [-7, 1.6, 3.3, 1.1], [7, -1.6, 3.3, 1.1],
-  [-3.9, 0.4, 0.1, 1], [0, 0, 0, 1], [3.9, -0.4, -0.1, 1],
-  [-4.4, 2.6, -4.8, 0.85], [4.4, -2.6, -4.8, 0.85],
-  [-9.4, 4.8, 6.2, 1.3], [9.4, -4.8, 6.2, 1.3],
+  [0, -1, 5.8, 1.5],
+  [-6.5, 0, 3.1, 1.1], [6.5, 0, 3.1, 1.1],
+  [-3.9, 0, 0.1, 1], [0, 0, 0, 1], [3.9, 0, -0.1, 1],
+  [-4.6, 1.5, -4.4, 0.85], [4.6, -1.5, -4.4, 0.85],
+  [-10, 3, 10, 1.3], [10, 3, 10, 1.3],
 ];
 /** Which stars a line joins: head to shoulders, shoulders to belt, belt to feet, and each shoulder up to its hand. */
 const SKY_LINKS: Array<[number, number]> = [[0, 1], [0, 2], [1, 3], [2, 5], [3, 4], [4, 5], [3, 6], [5, 7], [1, 8], [2, 9]];
-/** The loose stars round it: small, dim and joined to nothing, so the figure is what is seen. */
-const SKY_DUST: Star[] = [[-10.25, -2.56, 1.61, 1.3], [9.75, 3.52, -1.38, 1.3], [-2.5, 6.4, -2.76, 1.3], [3.75, -6.72, 2.99, 1.3], [-7.5, 4.16, 4.83, 1.3], [8.25, -3.84, -3.22, 1.3]];
+/**
+ * The loose stars round it: small, dim and joined to nothing, so the figure is
+ * what is seen -- each in a gap of it that no star or line of the figure
+ * crosses at any point of its turn: three over its shoulders, one by each hip
+ * and one between its feet.
+ */
+const SKY_DUST: Star[] = [[-5, 2, 11, 1.3], [5, -4, 10, 1.3], [1, 1, 12, 1.3], [-9, 1, -1, 1.3], [10, -1, -4, 1.3], [0, 3, -5, 1.3]];
 /** Each star's colours, deep and pale: a rose shoulder, a blue foot, and gold for the rest. */
 const STAR_INK = (i: number): [string, string] =>
   i === 1 ? ['214, 92, 92', '255, 214, 200'] : i === 7 ? ['64, 132, 220', '210, 232, 255'] : ['232, 176, 60', '255, 236, 170'];
 /** The warm ink every piece on the island is edged in, and the violet of the lines, deep and pale. */
 const SKY_EDGE = '74, 48, 40', LINE_DEEP = '90, 60, 158', LINE_PALE = '214, 186, 246';
-/** The top of the dish the stars stand over, and where the middle of the figure hangs, in units over the floor. */
-const DISH_Z = 13.1, SKY_Z = 23.5;
-/** Seconds to a turn of the figure and to a bob, and how far it bobs in units; seconds to a turn of the ring the other way, and to a lap of the mote on it. */
-const SKY_TURN = 26, SKY_BOB = 5.5, BOB = 0.7, RING_TURN = 24, MOTE_LAP = 7;
+/** The top of the dish the stars stand over and how far its lip runs out, and where the middle of the figure hangs, in units over the floor. */
+const DISH_Z = 13.65, DISH_R = 4.3, SKY_Z = 24.05;
+/** How far under the middle of the figure its feet are: where the beam up to it ends. */
+const FEET = -Math.min(...SKY_STARS.map((q) => q[2]));
+/** Seconds to a bob of the figure, and how far it bobs in units; seconds to a turn of the ring, and to a lap of a mote round it. */
+const SKY_BOB = 5.5, BOB = 0.7, RING_TURN = 24, MOTE_LAP = 7;
 /**
- * How much the turn lingers face-on: a figure of stars laid out across and up
- * is a string of beads end on, so it turns slowly while it faces you and
- * quickly past its edge -- still once in `SKY_TURN` -- two fifths as fast at
- * its slowest. `SKY_FACE` is how far round from square the figure is widest,
- * since its hands and feet do not sit on one plane.
+ * The figure's turn: to and fro about facing you, `SKY_SWAY` radians each
+ * way, once there and back in `SKY_SWING` seconds. A figure of stars is a
+ * string of beads seen end on, so it never goes all the way round: at the
+ * far end of its turn it is still seven tenths as wide as it is face on, and
+ * the ring under it is what goes all the way round.
  */
-const SKY_EASE = 0.3, SKY_FACE = 0.47;
-/** The ring: how far out it runs, and how far it leans off level. */
-const RING_R = 12, RING_LEAN = 0.1;
-/** The highest a star reaches, bob and spikes and all: the top of the room the model keeps. */
-const SKY_TOP = SKY_Z + 10.5;
+const SKY_SWAY = 0.8, SKY_SWING = 20;
+/**
+ * The ring: how far out it runs, how far it leans off level, and how far
+ * under the middle of the figure it turns -- below its feet and over the
+ * dish, the orbit it stands on, with the beam coming up through it.
+ */
+const RING_R = 11, RING_LEAN = 0.1, RING_DROP = 7.5;
+/** The furthest a star stands out from the middle, or the ring runs: the sides of the room the model keeps. */
+const SKY_REACH = Math.max(RING_R, ...[...SKY_STARS, ...SKY_DUST].map(([x, y]) => Math.hypot(x, y)));
+/** The highest a star reaches, bob and spikes and all: the top of that room. */
+const SKY_TOP = SKY_Z + BOB + Math.max(...[...SKY_STARS, ...SKY_DUST].map((q) => q[2])) + 2.4;
 
 /** Where everything over an altar is at `t`, on a screen with the altar's floor at (sx, sy). */
 function skyAt(view: PieceView, zoom: number, sx: number, sy: number, t: number) {
   const sc = new Scene(null as unknown as CanvasRenderingContext2D, view, zoom);
-  // Square to you is where a step across the figure goes straight across the screen.
-  const square = Math.atan2(-view.uy, view.vy) + SKY_FACE;
-  const round = (t / SKY_TURN) * TAU;
-  const turn = round - SKY_EASE * Math.sin(2 * (round - square)), c = Math.cos(turn), s = Math.sin(turn);
+  // Square to you is where a step across the figure goes straight across the screen and a step toward it straight down.
+  const square = Math.atan2(-view.uy, view.vy);
+  const turn = square + SKY_SWAY * Math.sin((t / SKY_SWING) * TAU), c = Math.cos(turn), s = Math.sin(turn);
   const mid = SKY_Z + Math.sin((t / SKY_BOB) * TAU) * BOB;
   const at = (x: number, y: number, z: number): Pt => {
     const [px, py] = sc.P(x, y, z);
@@ -1442,9 +1454,9 @@ function skyAt(view: PieceView, zoom: number, sx: number, sy: number, t: number)
   // The ring, turning the other way, and what rides it: eight beads and two motes, half a lap apart.
   const ringTurn = -(t / RING_TURN) * TAU, rc = Math.cos(ringTurn), rs = Math.sin(ringTurn);
   const onRing = (a: number): { p: Pt; d: number } => {
-    const x = Math.cos(a) * RING_R, y = Math.sin(a) * RING_R * Math.cos(RING_LEAN), z = Math.sin(a) * RING_R * Math.sin(RING_LEAN);
+    const x = Math.cos(a) * RING_R, y = Math.sin(a) * RING_R * Math.cos(RING_LEAN), z = mid - RING_DROP + Math.sin(a) * RING_R * Math.sin(RING_LEAN);
     const wx = x * rc - y * rs, wy = x * rs + y * rc;
-    return { p: at(wx, wy, mid + z), d: sc.depth(wx, wy, mid + z) };
+    return { p: at(wx, wy, z), d: sc.depth(wx, wy, z) };
   };
   const beads = Array.from({ length: 8 }, (_, j) => onRing((j / 8) * TAU + 0.2));
   const motes = [0, 0.5].map((lap) => { const a = ((t / MOTE_LAP + lap) % 1) * TAU; return { a, ...onRing(a) }; });
@@ -1516,25 +1528,31 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
   }
   /*
    * And a beam between the two, so the stars stand on the altar rather than
-   * hanging somewhere near it. It comes up out of the pool rather than
-   * starting at its surface, and it is laid three times, each narrower, so
-   * its sides are soft and nothing in it is an edge.
+   * hanging somewhere near it: from the far lip of the dish, so the gold of
+   * the rim is not tinted by it, up to the figure's feet. It is brightest
+   * halfway, where there is nothing behind it but grass or whoever stands
+   * there, and still six tenths of that four fifths of the way up; and it is
+   * laid three times, each narrower, so its sides are soft and nothing in it
+   * is an edge.
    */
-  const [, by] = at(0, 0, mid - 5.2);
-  const beamA = (0.3 + 0.2 * night) * breath;
+  const lip = Math.hypot(view.uy, view.vy);
+  const [, ry] = at((-view.uy / lip) * DISH_R, (-view.vy / lip) * DISH_R, DISH_Z);
+  const [, by] = at(0, 0, mid - FEET);
+  const beamA = 0.48 * breath;
   // Violet by day, which lands on green grass as lilac -- the pale of the lines lands there as mint -- and the pale by night.
   const beamInk = [200, 90, 230].map((v, i) => Math.round(v + ([214, 186, 246][i] - v) * night)).join(', ');
-  const beam = g.createLinearGradient(dx, dy, dx, by);
+  const beam = g.createLinearGradient(dx, ry, dx, by);
   beam.addColorStop(0, `rgba(${beamInk}, 0)`);
-  beam.addColorStop(0.3, `rgba(${beamInk}, ${(beamA / 3).toFixed(3)})`);
+  beam.addColorStop(0.5, `rgba(${beamInk}, ${(beamA / 3).toFixed(3)})`);
+  beam.addColorStop(0.8, `rgba(${beamInk}, ${((0.6 * beamA) / 3).toFixed(3)})`);
   beam.addColorStop(1, `rgba(${beamInk}, 0)`);
   g.fillStyle = beam;
   for (const k of [1, 0.75, 0.5]) {
     g.beginPath();
-    g.moveTo(dx - unit * 2.6 * k, dy);
+    g.moveTo(dx - unit * 2.6 * k, ry);
     g.lineTo(dx - unit * 1.5 * k, by);
     g.lineTo(dx + unit * 1.5 * k, by);
-    g.lineTo(dx + unit * 2.6 * k, dy);
+    g.lineTo(dx + unit * 2.6 * k, ry);
     g.closePath();
     g.fill();
   }
@@ -1586,12 +1604,12 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
 
   /*
    * The ring: level but for a tenth of a radian, so it is an orbit from every
-   * side; faint by day, behind the figure's own lines. Eight beads ride it so
-   * its turn the other way can be seen, and two motes run round it, each a
-   * point of light with a fading wake -- as bright as they are near, smoothly,
-   * so nothing flicks from dim to bright where the ring passes behind.
+   * side; faint by day, under the figure's feet. Eight beads ride it so its
+   * turn can be seen, and two motes run round it, each a point of light with
+   * a fading wake -- as bright as they are near, smoothly, so nothing flicks
+   * from dim to bright where the ring passes behind.
    */
-  const dMid = sc.depth(0, 0, mid);
+  const dMid = sc.depth(0, 0, mid - RING_DROP);
   const nearRing = (d: number): number => Math.max(0, Math.min(1, (d - dMid) / 3 + 0.5));
   const RING_N = 56;
   const ringPts = Array.from({ length: RING_N + 1 }, (_, j) => onRing((j / RING_N) * TAU));
@@ -1599,6 +1617,8 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
     const a = ringPts[j], b = ringPts[j + 1];
     const k = 0.55 + 0.45 * nearRing((a.d + b.d) / 2);
     draws.push({ d: Math.min(a.d, b.d), draw: () => {
+      // Butt-ended, so where two lengths meet they meet, and do not lay a darker dot of both.
+      g.lineCap = 'butt';
       // By day the violet alone, which shows on the grass; a pale core only after dark, when it has the wash to show against.
       g.globalCompositeOperation = 'source-over';
       g.strokeStyle = `rgba(${LINE_DEEP}, ${(k * (0.5 * day + 0.25 * night)).toFixed(3)})`;
@@ -1610,6 +1630,7 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
         g.lineWidth = Math.max(0.5, 0.22 * zoom);
         g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
       }
+      g.lineCap = 'round';
     } });
   }
   for (const b of beads) {
@@ -2757,13 +2778,18 @@ const MODELS: Record<string, Model> = {
     };
     const round = (c: number, t: number, r: number, n = 20): Array<[number, number]> =>
       Array.from({ length: n }, (_, i) => [c + Math.cos((i / n) * TAU) * r, t + Math.sin((i / n) * TAU) * r]);
-    // The sun: eight long rays and eight short, each its own broad blade, rising from a disc.
+    /*
+     * The sun: eight rays, each a blade standing 1.5 past the disc, so there
+     * is grey between every two of them and it is a sun and not a gold egg.
+     * They are turned an eighth of a ray off square, which keeps the four
+     * nearest the panel's sides inside it.
+     */
     const sun = (c: number, t: number): Array<Array<[number, number]>> => [
-      ...Array.from({ length: 16 }, (_, i): Array<[number, number]> => {
-        const a = (i / 16) * TAU, tip = i % 2 ? 1.8 : 2.3, half = i % 2 ? 0.2 : 0.26;
-        return [[c + Math.cos(a - half) * 1.4, t + Math.sin(a - half) * 1.4], [c + Math.cos(a) * tip, t + Math.sin(a) * tip], [c + Math.cos(a + half) * 1.4, t + Math.sin(a + half) * 1.4]];
+      ...Array.from({ length: 8 }, (_, i): Array<[number, number]> => {
+        const a = ((i + 0.5) / 8) * TAU, half = 0.3;
+        return [[c + Math.cos(a - half) * 1.2, t + Math.sin(a - half) * 1.2], [c + Math.cos(a) * 2.8, t + Math.sin(a) * 2.8], [c + Math.cos(a + half) * 1.2, t + Math.sin(a + half) * 1.2]];
       }),
-      round(c, t, 1.5),
+      round(c, t, 1.3),
     ];
     // The crescent: a disc with a bite out of one side, as the rim of the one and the edge of the bite.
     const crescent = (c: number, t: number): Array<Array<[number, number]>> => {
@@ -2785,14 +2811,16 @@ const MODELS: Record<string, Model> = {
     sc.box(-6, 6, -6, 6, 1.4, 2.8, SLAB, { front: dressed, back: dressed, left: dressed, right: dressed });
     // The shaft, coursed, with the gold let into its faces.
     sc.box(-3.5, 3.5, -3.5, 3.5, 2.8, 9.6, STONE, { front: inlay(sun, 0, 1), back: inlay(crescent, 0, -1), left: inlay(fourStar, -1, 0), right: inlay(fourStar, 1, 0) });
-    // The capital, and the slab bedded on it.
-    sc.box(-4.5, 4.5, -4.5, 4.5, 9.6, 10.3, SLAB);
+    // The capital, two courses each stepping out over the one under it, and the slab bedded on them.
+    sc.box(-4.1, 4.1, -4.1, 4.1, 9.6, 9.95, SLAB);
+    sc.box(-4.8, 4.8, -4.8, 4.8, 9.95, 10.3, SLAB);
     sc.box(-5.6, 5.6, -5.6, 5.6, 10.3, 11.2, SLAB, { front: grain(sc, SLAB, 1, true, 0.3) });
-    // The gold dish on a short turned stem, a chalice, its lip round a pool of night with the first of the stars already in it.
+    // The gold dish on a turned stem, a chalice: a foot, a waist and a knop, its lip round a pool of night with the first of the stars already in it.
     // Inked lighter than the stone, so a bowl this shallow is gold and not its own outline.
     const CHALICE = paintOf(GOLD.body, 0.3);
-    sc.lathe(0, 0, [[11.2, 1.9], [11.4, 1.25], [11.6, 1.05], [11.75, 1.5]], CHALICE, 20, { cap: null });
-    sc.lathe(0, 0, [[11.75, 2.2], [12.1, 3.1], [12.7, 4], [DISH_Z, 4.3]], CHALICE, 24, {
+    const BOWL = DISH_Z - 1.35;
+    sc.lathe(0, 0, [[11.2, 1.8], [11.4, 1.7], [11.55, 0.85], [11.8, 0.7], [11.95, 0.95], [12.1, 0.7], [BOWL, 1.5]], CHALICE, 20, { cap: null });
+    sc.lathe(0, 0, [[BOWL, 2.2], [BOWL + 0.35, 3.1], [BOWL + 0.95, 4], [DISH_Z, DISH_R]], CHALICE, 24, {
       cap: paintOf(mix(GOLD.body, [255, 246, 214], 0.25), 0.3),
       lid: (F) => {
         const pool: Pt[] = [];
@@ -2807,7 +2835,7 @@ const MODELS: Record<string, Model> = {
       },
     });
     // Room for the stars over the dish: measured, so the piece is as tall as it is drawn and is clicked there, but drawn by `drawSky`, not here.
-    sc.room(-RING_R, RING_R, -RING_R, RING_R, DISH_Z, SKY_TOP);
+    sc.room(-SKY_REACH, SKY_REACH, -SKY_REACH, SKY_REACH, DISH_Z, SKY_TOP);
   },
   well: ({ sc, wood }) => {
     const R = 7.4, zk = 5.4, hole = 5.2;

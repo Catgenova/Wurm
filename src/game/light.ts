@@ -71,8 +71,8 @@ export const FORGE_REACH = 6;
  */
 export const ALTAR_REACH = 1.2;
 export const ALTAR_GLOW = 0.4;
-export const ALTAR_CAST = '200, 110, 255';
-export const ALTAR_CAST_ALPHA = 0.25;
+export const ALTAR_CAST = '225, 80, 255';
+export const ALTAR_CAST_ALPHA = 0.45;
 
 /**
  * What the night is worth over a point, given everything burning near it: 1
