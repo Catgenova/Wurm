@@ -82,6 +82,19 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: The built page starts
+        env:
+          # A check that cannot open a browser here fails rather than passes.
+          BOOT_CHECK_STRICT: '1'
+        run: |
+          # The page players get is the one Vite built into index.html and
+          # assets/, whose modules run in the order Rolldown chooses, and no
+          # other check here loads it. A ring of imports once made that order
+          # run actions.ts before baubles.ts, so the page threw as it loaded
+          # and stood on "Raising an island..." for everybody, with every test
+          # green. This opens the committed build in Chrome, starts the game
+          # on its own and the landing page, and fails on anything thrown.
+          node scripts/boot-check.mjs
       - name: No migration has been deleted or renamed
         run: |
           # A migration the project has already run is a fact about its

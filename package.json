@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build && node scripts/copy-site.mjs && node scripts/bundle-sql.mjs && node scripts/emit-wildermon.mjs",
+    "build": "npm run typecheck && vite build && node scripts/copy-site.mjs && node scripts/bundle-sql.mjs && node scripts/emit-wildermon.mjs && node scripts/boot-check.mjs",
+    "check:boot": "node scripts/boot-check.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "defs": "node scripts/emit-defs.mjs",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^26.5.1",
     "esbuild": "^0.28.2",
+    "playwright-core": "^1.63.0",
     "typescript": "^6.0.2",
     "vite": "^8.3.0"
   },
